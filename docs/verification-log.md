@@ -27668,3 +27668,57 @@ authoritative losers, one stored timestamp, wrong-account refusal, explicit
 admin-unscoped behavior, and both rotation/revocation commit orders. Strict
 server test TypeScript, targeted ESLint/Prettier, server compilation,
 diff/whitespace checks, and the full configured workspace build are green.
+
+## V-660 — Session destruction has one serialized terminal authority
+
+**Date:** 2026-07-14
+
+Customer deletion, admin force-destroy, the duration sweeper and account
+suspension previously shared the same read-driver-write gap. Five concurrent
+customer deletes or admin force-actions could all read a nonterminal row, all
+invoke the driver, overwrite `destroyed_at`, append five destroyed events and
+emit duplicate customer/system success effects. Terminal-sticky status writes
+prevented resurrection but could not identify the one authoritative destroy
+winner. The admin lookup also occurred before its D-025 audit boundary, so a
+missing row or repository-read failure was not recorded.
+
+`SessionRepo` now exposes one explicit serialized destroy operation. Customer
+and system callers must supply the owner account; admin force-actions must opt
+into the unscoped form with `accountId: null`. The Drizzle implementation locks
+the scoped session row `FOR UPDATE`, recognizes both terminal states as
+authoritative idempotent outcomes, runs the idempotent driver callback under
+that row authority, and transitions to destroyed. A successful terminal update
+and exactly one destroyed event commit in the same transaction. A driver error
+commits the terminal concurrency-slot release without a success event and is
+returned so the route/service rethrows the original error. A database or
+process failure rolls back the row/event transaction; a later idempotent driver
+retry can complete it.
+
+Every driver callback is bounded to 30 seconds before entering the failure
+outcome, so a hung context shutdown cannot retain an idle transaction and block
+same-session waiters indefinitely. Customer, duration-sweep and suspension
+webhooks/audits now run only for the `destroyed` winner. Concurrent losers are
+silent. Admin force-actions execute the serialized operation inside D-025,
+derive the target account from the locked row, record every loser/retry with
+`idempotent:true`, audit missing rows and repository/driver failures, and return
+the one persisted timestamp. The in-memory integration repository mirrors the
+contract with a per-session promise tail.
+
+The affected connected matrix passes 14 files and 201/201 tests. It covers
+five-way customer and admin route races, mixed customer/admin real-PostgreSQL
+contenders across multiple connections, one callback/event/timestamp winner,
+four authoritative losers, wrong-account refusal, explicit admin scope,
+duration and suspension concurrency, driver error, hung-driver timeout,
+transactional event-write rollback/retry, winner-only customer audit and D-025
+success/error/idempotent history. Strict server source-and-test TypeScript,
+targeted ESLint/Prettier, diff/whitespace checks, the full workspace typecheck
+and the configured full workspace build are green.
+
+The broad connected server run passed 1,844 files and 20,067 tests. It exposed
+one directly affected stale security guard that still required the retired
+unscoped finder calls; that guard now proves zero legacy unscoped callers plus
+both explicit `accountId:null` admin atomic operations and passes its focused
+rerun. Twelve other files remained red from out-of-lane stale documentation,
+archetype/profile fixtures, generated OpenAPI, public disabled-copy and crypto
+quote guards. They are preserved as a separate cleanup queue rather than being
+mixed into this session-lifecycle change.

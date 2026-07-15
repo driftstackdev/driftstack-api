@@ -42,6 +42,23 @@ import { redactText } from '../lib/redact-url.js';
 
 const SESSION_FAILURE_MESSAGE_MAX_CHARS = 500;
 const SESSION_FAILURE_NAME_MAX_CHARS = 100;
+export const SESSION_DESTROY_DRIVER_TIMEOUT_MS = 30_000;
+
+export async function destroyDriverSessionWithTimeout(
+  destroy: () => Promise<void>,
+  timeoutMs = SESSION_DESTROY_DRIVER_TIMEOUT_MS,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('Session driver destroy timed out.')), timeoutMs);
+    timer.unref();
+  });
+  try {
+    await Promise.race([destroy(), timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 
 function safeSessionFailureDiagnostic(value: string, maxChars: number, fallback: string): string {
   // Driver errors cross durable + customer-visible boundaries below. Bound
@@ -160,6 +177,20 @@ export interface SessionEventInput {
   durationMs: number | null;
 }
 
+export interface SerializedSessionDestroyInput {
+  id: string;
+  /** Customer/system callers must supply the owner account. Admin force-actions
+   *  must opt into the unscoped path explicitly with null. */
+  accountId: string | null;
+  destroyedAt: Date;
+  event: Omit<SessionEventInput, 'sessionId' | 'type'> & { type: 'destroyed' };
+}
+
+export type SerializedSessionDestroyResult =
+  | { kind: 'destroyed' | 'already_terminal'; session: SessionRecord }
+  | { kind: 'driver_error'; session: SessionRecord; error: unknown }
+  | { kind: 'not_found' };
+
 export interface SessionListPage {
   items: SessionRecord[];
   /** Cursor for the next page; null when this is the last page. */
@@ -202,6 +233,16 @@ export interface SessionRepo {
   findSession(id: string, accountId: string): Promise<SessionRecord | null>;
   /** Find a session by id WITHOUT account scoping (admin force-actions only). */
   findSessionUnscoped(id: string): Promise<SessionRecord | null>;
+  /**
+   * Serialize one terminal transition across processes while the supplied
+   * idempotent driver callback runs. The successful status update and event
+   * insert commit together; a driver failure commits only the terminal slot
+   * release and is returned for the caller to rethrow.
+   */
+  destroySessionSerialized(
+    input: SerializedSessionDestroyInput,
+    destroyDriverSession: (session: SessionRecord) => Promise<void>,
+  ): Promise<SerializedSessionDestroyResult>;
   updateSessionStatus(
     id: string,
     status: SessionRecord['status'],
@@ -780,50 +821,40 @@ export class SessionsService {
     // sessions before the early-return short-circuit could run. The
     // result was DELETE returning 410 on a destroyed session, which
     // breaks REST idempotency conventions + contradicted the comment
-    // claim. Now: lookup directly + short-circuit on terminal status.
+    // claim. The serialized repo primitive now owns lookup, terminal check,
+    // driver teardown, terminal transition, and event insertion under one
+    // per-session lock, so every concurrent destroy source shares one winner.
     // V-326e2 — when effectiveAccountId is set, the destroy targets
     // a session owned by the team OWNER. Route layer enforces
     // 'admin' role per Q1 before reaching here.
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
-    const session = await this.deps.repo.findSession(sessionId, accountId);
-    if (!session) throw new NotFoundError(`Session "${sessionId}" not found.`);
-    // Terminal-status no-ops. 'destroyed' is the obvious one; 'errored'
-    // also short-circuits per V-090 (a failed session has nothing
-    // useful left to destroy).
-    if (session.status === 'destroyed' || session.status === 'errored') return;
     const destroyedAt = new Date();
-    // Backstop: if driver.destroy() throws (driver/network fault), STILL release
-    // the concurrency slot by marking the row terminal — otherwise the row stays
-    // in a non-terminal status (counts as active) forever, and the legacy
-    // /v1/sessions surface has no backstop reaper for paid tiers (null minute-cap
-    // → autoDestroyExpired never sweeps it), so the slot is permanently consumed.
-    // Mirror the create() dispatch-failure release. We mark 'destroyed' (not
-    // 'errored') so this stays idempotent with a later successful destroy + the
-    // session.completed fan-out below still reflects an intended teardown; the
-    // original driver error is re-thrown so the caller sees the failure.
-    try {
-      await this.deps.driver.destroy(session.driverSessionId);
-    } catch (err) {
-      await this.deps.repo
-        .updateSessionStatus(session.id, 'destroyed', { destroyedAt })
-        .catch(() => {
-          /* release is best-effort; don't mask the driver error */
-        });
-      throw err;
+    const outcome = await this.deps.repo.destroySessionSerialized(
+      {
+        id: sessionId,
+        accountId,
+        destroyedAt,
+        event: { type: 'destroyed', payload: null, durationMs: null },
+      },
+      (current) =>
+        destroyDriverSessionWithTimeout(() => this.deps.driver.destroy(current.driverSessionId)),
+    );
+    if (outcome.kind === 'not_found') {
+      throw new NotFoundError(`Session "${sessionId}" not found.`);
     }
-    await this.deps.repo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
-    await this.deps.repo.recordEvent({
-      sessionId: session.id,
-      type: 'destroyed',
-      payload: null,
-      durationMs: null,
-    });
+    if (outcome.kind === 'already_terminal') return;
+    if (outcome.kind === 'driver_error') throw outcome.error;
+
+    const session = outcome.session;
+    if (session.destroyedAt === null) {
+      throw new Error('destroySessionSerialized returned destroyed without destroyedAt');
+    }
 
     // Emit session.completed webhook event (best-effort; failures here
     // never affect destroy correctness).
     // V-326e2 — webhook fan-out goes to the OWNER (so the owner's
     // configured webhooks receive the completion event).
-    const durationMs = destroyedAt.getTime() - session.createdAt.getTime();
+    const durationMs = session.destroyedAt.getTime() - session.createdAt.getTime();
     if (this.deps.webhooks) {
       try {
         await this.deps.webhooks.enqueueEvent(accountId, 'session.completed', {
@@ -890,35 +921,37 @@ export class SessionsService {
     session: SessionRecord,
     opts: { maxMinutes: number },
   ): Promise<{ destroyed: boolean }> {
-    // Re-read current status before acting. The duration sweeper lists
-    // candidates then destroys them SERIALLY (each awaiting driver.destroy),
-    // so a candidate can be manually destroyed by the customer SECONDS
-    // after the list query. Guarding only on the stale passed-in status
-    // would double-process it: a redundant driver.destroy, an overwritten
-    // destroyedAt, and a DUPLICATE session.completed webhook + destroyed
-    // event. A fresh read collapses that window to the read→destroy gap.
-    // Scoped read by the session's own accountId (NOT findSessionUnscoped —
-    // that's the admin-force-actions-only finder; this is the session owner).
-    const current = await this.deps.repo.findSession(session.id, session.accountId);
-    if (current === null || current.status === 'destroyed' || current.status === 'errored') {
-      return { destroyed: false };
-    }
     const reason = 'auto-destroyed: free-tier session duration cap';
     const destroyedAt = new Date();
-    await this.deps.driver.destroy(session.driverSessionId);
-    await this.deps.repo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
-    await this.deps.repo.recordEvent({
-      sessionId: session.id,
-      type: 'destroyed',
-      payload: { auto_destroyed: true, reason, max_session_minutes: opts.maxMinutes },
-      durationMs: null,
-    });
+    const outcome = await this.deps.repo.destroySessionSerialized(
+      {
+        id: session.id,
+        accountId: session.accountId,
+        destroyedAt,
+        event: {
+          type: 'destroyed',
+          payload: { auto_destroyed: true, reason, max_session_minutes: opts.maxMinutes },
+          durationMs: null,
+        },
+      },
+      (current) =>
+        destroyDriverSessionWithTimeout(() => this.deps.driver.destroy(current.driverSessionId)),
+    );
+    if (outcome.kind === 'not_found' || outcome.kind === 'already_terminal') {
+      return { destroyed: false };
+    }
+    if (outcome.kind === 'driver_error') throw outcome.error;
 
-    const durationMs = destroyedAt.getTime() - session.createdAt.getTime();
+    const destroyedSession = outcome.session;
+    if (destroyedSession.destroyedAt === null) {
+      throw new Error('destroySessionSerialized returned destroyed without destroyedAt');
+    }
+    const durationMs =
+      destroyedSession.destroyedAt.getTime() - destroyedSession.createdAt.getTime();
     if (this.deps.webhooks) {
       try {
-        await this.deps.webhooks.enqueueEvent(session.accountId, 'session.completed', {
-          session_id: `ses_${session.id}`,
+        await this.deps.webhooks.enqueueEvent(destroyedSession.accountId, 'session.completed', {
+          session_id: `ses_${destroyedSession.id}`,
           duration_ms: durationMs,
           auto_destroyed: true,
           reason,
@@ -930,10 +963,10 @@ export class SessionsService {
     if (this.deps.accountAudit) {
       try {
         await this.deps.accountAudit.record({
-          accountId: session.accountId,
+          accountId: destroyedSession.accountId,
           actorType: 'system',
           action: 'session.destroyed',
-          targetResourceId: `ses_${session.id}`,
+          targetResourceId: `ses_${destroyedSession.id}`,
           payload: { duration_ms: durationMs, auto_destroyed: true, reason },
         });
       } catch {
@@ -961,20 +994,41 @@ export class SessionsService {
     for (const session of active) {
       try {
         const destroyedAt = new Date();
-        await this.deps.driver.destroy(session.driverSessionId);
-        await this.deps.repo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
-        await this.deps.repo.recordEvent({
-          sessionId: session.id,
-          type: 'destroyed',
-          payload: { auto_destroyed: true, reason },
-          durationMs: null,
-        });
+        const outcome = await this.deps.repo.destroySessionSerialized(
+          {
+            id: session.id,
+            accountId,
+            destroyedAt,
+            event: {
+              type: 'destroyed',
+              payload: { auto_destroyed: true, reason },
+              durationMs: null,
+            },
+          },
+          (current) =>
+            destroyDriverSessionWithTimeout(() =>
+              this.deps.driver.destroy(current.driverSessionId),
+            ),
+        );
+        if (
+          outcome.kind === 'not_found' ||
+          outcome.kind === 'already_terminal' ||
+          outcome.kind === 'driver_error'
+        ) {
+          continue;
+        }
+
+        const destroyedSession = outcome.session;
+        if (destroyedSession.destroyedAt === null) {
+          throw new Error('destroySessionSerialized returned destroyed without destroyedAt');
+        }
         destroyed += 1;
-        const durationMs = destroyedAt.getTime() - session.createdAt.getTime();
+        const durationMs =
+          destroyedSession.destroyedAt.getTime() - destroyedSession.createdAt.getTime();
         if (this.deps.webhooks) {
           try {
             await this.deps.webhooks.enqueueEvent(accountId, 'session.completed', {
-              session_id: `ses_${session.id}`,
+              session_id: `ses_${destroyedSession.id}`,
               duration_ms: durationMs,
               auto_destroyed: true,
               reason,
@@ -989,7 +1043,7 @@ export class SessionsService {
               accountId,
               actorType: 'system',
               action: 'session.destroyed',
-              targetResourceId: `ses_${session.id}`,
+              targetResourceId: `ses_${destroyedSession.id}`,
               payload: { duration_ms: durationMs, auto_destroyed: true, reason },
             });
           } catch {

@@ -10,7 +10,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AdminAuditService, AdminAuditAction } from '../services/admin-audit.js';
-import type { SessionRepo } from '../services/sessions.js';
+import { destroyDriverSessionWithTimeout, type SessionRepo } from '../services/sessions.js';
 import type { ApiKeysRepo } from '../services/api-keys.js';
 import type { Driver } from '../drivers/types.js';
 import type { AuthCache } from '../services/auth-cache.js';
@@ -114,52 +114,48 @@ export function registerAdminForceActionRoutes(
       if (!parsed.success) throw new BadRequestError('Invalid body.');
       const reason = parsed.data?.reason;
 
-      const session = await sessionRepo.findSessionUnscoped(sessionId);
-      if (!session) throw new NotFoundError(`Session "${sessionId}" not found.`);
-
-      // Admin destroy is idempotent — already-destroyed session returns the
-      // same shape without re-firing the driver / repo writes.
-      const targetAccountId = session.accountId;
       const inputPayload = reason !== undefined ? { reason } : {};
-
-      if (session.status === 'destroyed') {
-        await audit.record({
-          adminAccountId: ctx.account.id,
-          adminKeyId: ctx.apiKey.id,
-          action: 'session.destroyed_by_admin',
-          targetAccountId,
-          targetResourceId: sessionId,
-          inputPayload: { ...inputPayload, idempotent: true },
-          result: 'success',
-          ipAddress: readClientIp(request),
-        });
-        return {
-          id: `ses_${session.id}`,
-          status: 'destroyed',
-          destroyed_at: session.destroyedAt?.toISOString() ?? null,
-        };
-      }
-
-      const destroyedAt = new Date();
-      await withAudit(request, 'session.destroyed_by_admin', {
-        targetAccountId,
+      let targetAccountId: string | null = null;
+      let resolvedInputPayload: Record<string, unknown> = inputPayload;
+      const outcome = await withAudit(request, 'session.destroyed_by_admin', {
+        targetAccountId: () => targetAccountId,
         targetResourceId: sessionId,
-        inputPayload,
+        inputPayload: () => resolvedInputPayload,
         perform: async () => {
-          await driver.destroy(session.driverSessionId);
-          await sessionRepo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
-          await sessionRepo.recordEvent({
-            sessionId: session.id,
-            type: 'destroyed',
-            payload: { force: true, by_admin: true, ...(reason !== undefined ? { reason } : {}) },
-            durationMs: null,
-          });
+          const result = await sessionRepo.destroySessionSerialized(
+            {
+              id: sessionId,
+              accountId: null,
+              destroyedAt: new Date(),
+              event: {
+                type: 'destroyed',
+                payload: {
+                  force: true,
+                  by_admin: true,
+                  ...(reason !== undefined ? { reason } : {}),
+                },
+                durationMs: null,
+              },
+            },
+            (session) =>
+              destroyDriverSessionWithTimeout(() => driver.destroy(session.driverSessionId)),
+          );
+          if (result.kind === 'not_found') {
+            throw new NotFoundError(`Session "${sessionId}" not found.`);
+          }
+          targetAccountId = result.session.accountId;
+          if (result.kind === 'already_terminal') {
+            resolvedInputPayload = { ...inputPayload, idempotent: true };
+            return result;
+          }
+          if (result.kind === 'driver_error') throw result.error;
+          return result;
         },
       });
       return {
-        id: `ses_${session.id}`,
+        id: `ses_${outcome.session.id}`,
         status: 'destroyed',
-        destroyed_at: destroyedAt.toISOString(),
+        destroyed_at: outcome.session.destroyedAt?.toISOString() ?? null,
       };
     },
   );

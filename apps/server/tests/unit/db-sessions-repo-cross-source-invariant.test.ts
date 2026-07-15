@@ -7,8 +7,8 @@
 //   use an in-memory impl from tests/integration/_helpers/in-memory-
 //   sessions-repo.ts'.
 //
-//   DrizzleSessionRepo 9-method surface — insertSession + findSession
-//     (account-scoped) + findSessionUnscoped (admin) +
+//   DrizzleSessionRepo method surface — insertSession + findSession
+//     (account-scoped) + serialized terminal destroy authority +
 //     updateSessionStatus + countActiveSessions + listSessions
 //     (account-scoped paged) + recordEvent + listAllSessions (admin
 //     paged) + listExpiredForAutoDestroy (6.g free-tier duration sweep;
@@ -64,7 +64,7 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
 
   // ─── 9-method surface ────────────────────────────────────────
 
-  it('CRITICAL 10-method surface — insertSession + insertSessionIfUnderLimit + findSession + findSessionUnscoped + updateSessionStatus + countActiveSessions + listSessions + recordEvent + listAllSessions + listExpiredForAutoDestroy. The SessionRepo covers CRUD + atomic cap-enforced create + event-recording + admin lookup + 6.g duration sweep.', () => {
+  it('CRITICAL 11-method surface includes destroySessionSerialized between lookup and general status mutation', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
     expect(p).toMatch(/async insertSession\(input: NewSessionInput\): Promise<SessionRecord> \{/);
     expect(p).toMatch(
@@ -74,6 +74,7 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
       /async findSession\(id: string, accountId: string\): Promise<SessionRecord \| null> \{/,
     );
     expect(p).toMatch(/async findSessionUnscoped\(id: string\): Promise<SessionRecord \| null> \{/);
+    expect(p).toMatch(/async destroySessionSerialized\(/);
     expect(p).toMatch(/async updateSessionStatus\(/);
     expect(p).toMatch(/async countActiveSessions\(accountId: string\): Promise<number> \{/);
     expect(p).toMatch(/async listSessions\(/);
@@ -120,6 +121,23 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
       /\.where\(and\(eq\(sessions\.id, id\), eq\(sessions\.accountId, accountId\)\)\)/,
     );
     expect(p).toMatch(/\.where\(eq\(sessions\.id, id\)\)/);
+  });
+
+  it('CRITICAL serialized destroy authority — row-level FOR UPDATE lock, explicit nullable admin scope, terminal sinks, callback before terminal write, driver-error before event insert', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(
+      /input\.accountId === null \? undefined : eq\(sessions\.accountId, input\.accountId\)/,
+    );
+    expect(p).toMatch(/\.for\('update'\)/);
+    expect(p).toMatch(/current\.status === 'destroyed' \|\| current\.status === 'errored'/);
+    const callbackIdx = p.indexOf('await destroyDriverSession(current);');
+    const terminalWriteIdx = p.indexOf(".set({ status: 'destroyed'");
+    const driverErrorIdx = p.indexOf("if (driverFailed) return { kind: 'driver_error'");
+    const eventIdx = p.indexOf('await tx.insert(sessionEvents).values({');
+    expect(callbackIdx).toBeGreaterThan(0);
+    expect(terminalWriteIdx).toBeGreaterThan(callbackIdx);
+    expect(driverErrorIdx).toBeGreaterThan(terminalWriteIdx);
+    expect(eventIdx).toBeGreaterThan(driverErrorIdx);
   });
 
   // ─── updateSessionStatus conditional-spreads ─────────────────

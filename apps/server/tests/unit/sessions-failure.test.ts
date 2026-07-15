@@ -5,14 +5,16 @@
 // operations on the same session 410 SessionDestroyed (founder-approved
 // semantic).
 
-import { describe, expect, it } from 'vitest';
-import { SessionsService } from '../../src/services/sessions.js';
+import { describe, expect, it, vi } from 'vitest';
+import { SESSION_DESTROY_DRIVER_TIMEOUT_MS, SessionsService } from '../../src/services/sessions.js';
 import { ConcurrencyLimitError } from '../../src/lib/errors.js';
 import type {
   SessionRepo,
   SessionRecord,
   SessionEventInput,
   NewSessionInput,
+  SerializedSessionDestroyInput,
+  SerializedSessionDestroyResult,
 } from '../../src/services/sessions.js';
 import type { Driver } from '../../src/drivers/types.js';
 import type { AccountContext } from '../../src/services/auth.js';
@@ -68,6 +70,7 @@ function buildCtx(): AccountContext {
 
 class StubRepo implements SessionRepo {
   private readonly sessions = new Map<string, SessionRecord>();
+  private readonly destroyTails = new Map<string, Promise<void>>();
   readonly events: SessionEventInput[] = [];
   /** Opt-in (default null): when set, insertSession /
    *  insertSessionIfUnderLimit reject with it.
@@ -135,6 +138,62 @@ class StubRepo implements SessionRepo {
   }
   findSessionUnscoped(id: string): Promise<SessionRecord | null> {
     return Promise.resolve(this.sessions.get(id) ?? null);
+  }
+  async destroySessionSerialized(
+    input: SerializedSessionDestroyInput,
+    destroyDriverSession: (session: SessionRecord) => Promise<void>,
+  ): Promise<SerializedSessionDestroyResult> {
+    const previous = this.destroyTails.get(input.id) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.destroyTails.set(input.id, tail);
+    await previous;
+    try {
+      const current = this.sessions.get(input.id);
+      if (!current || (input.accountId !== null && current.accountId !== input.accountId)) {
+        return { kind: 'not_found' };
+      }
+      if (current.status === 'destroyed' || current.status === 'errored') {
+        return { kind: 'already_terminal', session: current };
+      }
+      if (current.destroyedAt !== null) {
+        throw new Error('destroySessionSerialized found a non-terminal row with destroyedAt');
+      }
+
+      try {
+        await destroyDriverSession(current);
+      } catch (error) {
+        const failed: SessionRecord = {
+          ...current,
+          status: 'destroyed',
+          destroyedAt: input.destroyedAt,
+          updatedAt: new Date(),
+        };
+        this.sessions.set(input.id, failed);
+        return { kind: 'driver_error', session: failed, error };
+      }
+
+      const updated: SessionRecord = {
+        ...current,
+        status: 'destroyed',
+        destroyedAt: input.destroyedAt,
+        updatedAt: new Date(),
+      };
+      this.sessions.set(input.id, updated);
+      try {
+        await this.recordEvent({ sessionId: updated.id, ...input.event });
+      } catch (error) {
+        this.sessions.set(input.id, current);
+        throw error;
+      }
+      return { kind: 'destroyed', session: updated };
+    } finally {
+      release();
+      if (this.destroyTails.get(input.id) === tail) this.destroyTails.delete(input.id);
+    }
   }
   // Terminal statuses ('destroyed', 'errored') are STICKY — mirrors the Drizzle
   // repo's notInArray(status, ['destroyed','errored']) WHERE clause so service
@@ -222,6 +281,7 @@ class ThrowingDriver implements Driver {
   /** Opt-in: when set, the NEXT destroy() rejects (simulates a driver/network
    *  fault on teardown — exercises the destroy() slot-release backstop, #4). */
   private throwOnDestroy: Error | null = null;
+  private hangOnDestroy = false;
 
   /** Opt-in: runs at the START of getState() — a seam to simulate a CONCURRENT
    *  destroy landing during the box round-trip (before getState's stale write-
@@ -238,6 +298,10 @@ class ThrowingDriver implements Driver {
 
   primeDestroyThrow(err: Error): void {
     this.throwOnDestroy = err;
+  }
+
+  primeDestroyHang(): void {
+    this.hangOnDestroy = true;
   }
 
   private throwIfArmed(): void {
@@ -328,6 +392,10 @@ class ThrowingDriver implements Driver {
   }
   destroy(driverSessionId: string): Promise<void> {
     this.destroyedIds.push(driverSessionId);
+    if (this.hangOnDestroy) {
+      this.hangOnDestroy = false;
+      return new Promise(() => {});
+    }
     if (this.throwOnDestroy !== null) {
       const err = this.throwOnDestroy;
       this.throwOnDestroy = null;
@@ -649,7 +717,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     // (counts as active) forever — and the paid-tier surface has no backstop
     // reaper (null minute-cap → autoDestroyExpired never sweeps it). The slot
     // must be released even when the driver faults.
-    const { service, repo, driver } = buildService();
+    const { service, repo, driver, webhookEvents } = buildService();
     const ctx = buildCtx();
     const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
     const destroyErr = new Error('driver teardown faulted');
@@ -667,6 +735,65 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     const after = repo.read(session.id);
     expect(after?.status).toBe('destroyed');
     expect(after?.destroyedAt).toBeInstanceOf(Date);
+    // A failed driver callback is not a successful destroy: no destroyed event
+    // or session.completed fan-out is emitted, but the terminal row makes a
+    // retry idempotent and prevents another uncertain driver call.
+    expect(repo.events.filter((event) => event.type === 'destroyed')).toHaveLength(0);
+    expect(webhookEvents.filter((event) => event.eventType === 'session.completed')).toHaveLength(
+      0,
+    );
+    await expect(service.destroy(ctx, session.id)).resolves.toBeUndefined();
+    expect(driver.destroyedIds).toHaveLength(1);
+  });
+
+  it('destroy: an event-write failure rolls back terminal state; an idempotent driver retry commits status + one event', async () => {
+    const { service, repo, driver, webhookEvents } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    const eventError = new Error('destroyed event write failed');
+    repo.throwOnRecordEventType = { type: 'destroyed', error: eventError };
+
+    await expect(service.destroy(ctx, session.id)).rejects.toBe(eventError);
+    expect(repo.read(session.id)?.status).toBe('ready');
+    expect(repo.read(session.id)?.destroyedAt).toBeNull();
+    expect(repo.events.filter((event) => event.type === 'destroyed')).toHaveLength(0);
+    expect(webhookEvents.filter((event) => event.eventType === 'session.completed')).toHaveLength(
+      0,
+    );
+
+    repo.throwOnRecordEventType = null;
+    await service.destroy(ctx, session.id);
+    expect(driver.destroyedIds).toHaveLength(2);
+    expect(repo.read(session.id)?.status).toBe('destroyed');
+    expect(repo.events.filter((event) => event.type === 'destroyed')).toHaveLength(1);
+    expect(webhookEvents.filter((event) => event.eventType === 'session.completed')).toHaveLength(
+      1,
+    );
+  });
+
+  it('destroy: a hung driver is bounded so terminal release commits and waiters cannot hold the lock forever', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, repo, driver, webhookEvents } = buildService();
+      const ctx = buildCtx();
+      const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+      driver.primeDestroyHang();
+
+      const rejection = expect(service.destroy(ctx, session.id)).rejects.toThrow(
+        'Session driver destroy timed out.',
+      );
+      await vi.advanceTimersByTimeAsync(SESSION_DESTROY_DRIVER_TIMEOUT_MS);
+      await rejection;
+
+      expect(repo.read(session.id)?.status).toBe('destroyed');
+      expect(repo.read(session.id)?.destroyedAt).toBeInstanceOf(Date);
+      expect(repo.events.filter((event) => event.type === 'destroyed')).toHaveLength(0);
+      expect(webhookEvents.filter((event) => event.eventType === 'session.completed')).toHaveLength(
+        0,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('successful ops do NOT emit session.failed', async () => {

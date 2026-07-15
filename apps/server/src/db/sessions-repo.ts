@@ -23,6 +23,8 @@ import type {
   SessionListPage,
   SessionRecord,
   SessionRepo,
+  SerializedSessionDestroyInput,
+  SerializedSessionDestroyResult,
 } from '../services/sessions.js';
 import type { Database } from './client.js';
 import { accounts, agentSessions, sessionEvents, sessions } from './schema.js';
@@ -173,6 +175,54 @@ export class DrizzleSessionRepo implements SessionRepo {
       .where(eq(sessions.id, id))
       .limit(1);
     return row ? toSessionRecord(row) : null;
+  }
+
+  async destroySessionSerialized(
+    input: SerializedSessionDestroyInput,
+    destroyDriverSession: (session: SessionRecord) => Promise<void>,
+  ): Promise<SerializedSessionDestroyResult> {
+    return this.database.db.transaction(async (tx) => {
+      const scope = and(
+        eq(sessions.id, input.id),
+        input.accountId === null ? undefined : eq(sessions.accountId, input.accountId),
+      );
+      const [locked] = await tx.select().from(sessions).where(scope).limit(1).for('update');
+      if (!locked) return { kind: 'not_found' };
+
+      const current = toSessionRecord(locked);
+      if (current.status === 'destroyed' || current.status === 'errored') {
+        return { kind: 'already_terminal', session: current };
+      }
+      if (current.destroyedAt !== null) {
+        throw new Error('destroySessionSerialized found a non-terminal row with destroyedAt');
+      }
+
+      let driverFailed = false;
+      let driverError: unknown;
+      try {
+        await destroyDriverSession(current);
+      } catch (err) {
+        driverFailed = true;
+        driverError = err;
+      }
+
+      const [updated] = await tx
+        .update(sessions)
+        .set({ status: 'destroyed', destroyedAt: input.destroyedAt, updatedAt: new Date() })
+        .where(and(scope, notInArray(sessions.status, ['destroyed', 'errored'])))
+        .returning();
+      if (!updated) throw new Error('destroySessionSerialized terminal update returned no row');
+      const session = toSessionRecord(updated);
+
+      if (driverFailed) return { kind: 'driver_error', session, error: driverError };
+      await tx.insert(sessionEvents).values({
+        sessionId: session.id,
+        type: input.event.type,
+        payload: input.event.payload,
+        durationMs: input.event.durationMs,
+      });
+      return { kind: 'destroyed', session };
+    });
   }
 
   // Terminal statuses ('destroyed', 'errored') are STICKY: once a row reaches

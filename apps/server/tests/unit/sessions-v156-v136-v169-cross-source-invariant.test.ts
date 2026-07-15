@@ -179,9 +179,9 @@ describe('W946 V-156 + V-136 + V-169 sessions cross-source invariant', () => {
     expect(p).toMatch(/\| 'errored';/);
   });
 
-  // ─── SessionRepo admin-only findSessionUnscoped ──────────────
+  // ─── SessionRepo scoped lookup + serialized destroy authority ─
 
-  it("CRITICAL SessionRepo declares findSession + findSessionUnscoped. findSessionUnscoped is flagged 'Find a session by id WITHOUT account scoping (admin force-actions only)' — only V-100 admin-paths use the unscoped lookup.", () => {
+  it('CRITICAL SessionRepo retains scoped/unscoped reads and requires explicit string|null scope on serialized destroy', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'));
     expect(p).toMatch(/\/\*\* Find a session by id, scoped to the supplied account\. \*\//);
     expect(p).toMatch(
@@ -191,6 +191,13 @@ describe('W946 V-156 + V-136 + V-169 sessions cross-source invariant', () => {
       /\/\*\* Find a session by id WITHOUT account scoping \(admin force-actions only\)\. \*\//,
     );
     expect(p).toMatch(/findSessionUnscoped\(id: string\): Promise<SessionRecord \| null>;/);
+    expect(p).toMatch(/export interface SerializedSessionDestroyInput \{/);
+    expect(p).toMatch(/accountId: string \| null;/);
+    expect(p).toMatch(
+      /event: Omit<SessionEventInput, 'sessionId' \| 'type'> & \{ type: 'destroyed' \};/,
+    );
+    expect(p).toMatch(/destroySessionSerialized\(/);
+    expect(p).toMatch(/Promise<SerializedSessionDestroyResult>;/);
   });
 
   // ─── 3-error class import ────────────────────────────────────

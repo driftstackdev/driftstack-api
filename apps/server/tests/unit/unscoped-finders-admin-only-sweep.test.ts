@@ -1,17 +1,17 @@
-// Security drift-guard — the `*Unscoped` by-id finders must stay
-// admin-only. Customer-facing by-id lookups are account-scoped at the repo
+// Security drift-guard — the legacy `*Unscoped` by-id finders must have no
+// callers. Customer-facing by-id lookups are account-scoped at the repo
 // layer (`findSession(id, accountId)`, `findApiKey(id, accountId)`, ...) so
 // a non-owned id returns null -> 404 (no IDOR). The two deliberate escape
 // hatches, `findSessionUnscoped(id)` + `findApiKeyUnscoped(id)`, skip that
-// scoping and are meant to be reachable ONLY from the staff cross-account
-// force-action route (`routes/admin-force-actions.ts`), which is
-// double-gated by `driftstack_internal_admin`.
+// scoping. Admin force-actions now use the stronger atomic repository
+// primitives with an explicit `accountId: null` opt-in inside their D-025
+// audit boundary instead of performing a separate unscoped read.
 //
 // This sweep pins that invariant: if a future change calls an `*Unscoped`
 // finder from any other route/service, a non-owned id could be acted on
 // without the account check — a customer-reachable IDOR. The guard fails
-// the moment such a call appears anywhere in apps/server/src except the
-// admin route.
+// the moment such a call appears anywhere in apps/server/src. A second
+// non-vacuous assertion pins both deliberate admin-unscoped atomic calls.
 //
 // Discrimination: a CALL is a dot-invocation (`repo.findSessionUnscoped(`),
 // whereas the repo definition (`async findSessionUnscoped(id`) and the repo
@@ -52,8 +52,8 @@ function listFiles(dir: string, exts: string[]): string[] {
 const CALL_PATTERNS = [/\.findSessionUnscoped\(/, /\.findApiKeyUnscoped\(/];
 const ALLOWED_CALLER = 'apps/server/src/routes/admin-force-actions.ts';
 
-describe('security: *Unscoped finders are admin-only (IDOR drift-guard)', () => {
-  it('CRITICAL only admin-force-actions.ts calls findSessionUnscoped / findApiKeyUnscoped — any other caller is a customer-reachable IDOR (the unscoped finder skips the account check)', () => {
+describe('security: unscoped access requires explicit admin atomic authority', () => {
+  it('CRITICAL findSessionUnscoped / findApiKeyUnscoped have zero callers — any new invocation bypasses the account check', () => {
     const files = listFiles(resolve(REPO_ROOT, 'apps/server/src'), ['.ts']);
     const callers = new Set<string>();
     for (const f of files) {
@@ -62,13 +62,21 @@ describe('security: *Unscoped finders are admin-only (IDOR drift-guard)', () => 
         callers.add(relative(REPO_ROOT, f).split('\\').join('/'));
       }
     }
-    expect([...callers].sort()).toEqual([ALLOWED_CALLER]);
+    expect([...callers].sort()).toEqual([]);
   });
 
-  it('non-vacuous: admin-force-actions.ts still calls BOTH unscoped finders (so this guard tracks real usage, not a dead invariant)', () => {
+  it('non-vacuous: admin force-actions explicitly opt into null scope on BOTH atomic primitives inside D-025', () => {
     const adminBody = read(resolve(REPO_ROOT, ALLOWED_CALLER));
-    expect(/\.findSessionUnscoped\(/.test(adminBody)).toBe(true);
-    expect(/\.findApiKeyUnscoped\(/.test(adminBody)).toBe(true);
+    const apiRouteStart = adminBody.indexOf('// ── POST /v1/admin/api-keys/:id/revoke');
+    expect(apiRouteStart).toBeGreaterThan(0);
+    const sessionSection = adminBody.slice(0, apiRouteStart);
+    const apiKeySection = adminBody.slice(apiRouteStart);
+    expect(sessionSection).toMatch(
+      /withAudit\(request, 'session\.destroyed_by_admin',[\s\S]+?perform: async \(\) => \{[\s\S]+?sessionRepo\.destroySessionSerialized\([\s\S]+?accountId: null,/,
+    );
+    expect(apiKeySection).toMatch(
+      /withAudit\(request, 'api_key\.revoked_by_admin',[\s\S]+?perform: async \(\) => \{[\s\S]+?apiKeysRepo\.revokeApiKeyAtomic\(\{[\s\S]+?accountId: null,/,
+    );
   });
 
   it('sanity: the call regex matches a dot-invocation but NOT the repo definition or interface declaration', () => {

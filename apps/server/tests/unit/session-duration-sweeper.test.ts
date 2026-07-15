@@ -147,13 +147,12 @@ describe('SessionDurationSweeperService — free-tier auto-destroy safety', () =
     expect(destroyed).toHaveLength(0);
   });
 
-  it('TOCTOU: a candidate manually destroyed AFTER the list query is not double-processed (fresh-read guard)', async () => {
+  it('TOCTOU: a candidate manually destroyed AFTER the list query is not double-processed (serialized terminal guard)', async () => {
     // The sweeper lists candidates then destroys them serially (each awaiting
     // driver.destroy), so a customer can manually destroy a session in that
-    // window. autoDestroyExpired must re-read current status rather than trust
-    // the stale listed record — otherwise it redundantly driver.destroys,
-    // overwrites destroyedAt, and re-fires the session.completed webhook +
-    // destroyed event.
+    // window. autoDestroyExpired must resolve current status inside the same
+    // serialized terminal operation as teardown — otherwise a separate fresh
+    // read still leaves a read→driver gap that duplicates every success effect.
     const repo = new InMemorySessionsRepo();
     const { driver, destroyed } = stubDriver();
     const sessions = new SessionsService({ repo, driver });
@@ -176,6 +175,32 @@ describe('SessionDurationSweeperService — free-tier auto-destroy safety', () =
     expect(result.destroyed).toBe(false);
     expect(destroyed).toHaveLength(0); // no redundant driver.destroy
     expect(repo.getSession(listed.id)?.status).toBe('destroyed');
+  });
+
+  it('five concurrent sweep attempts elect one driver/event winner', async () => {
+    const repo = new InMemorySessionsRepo();
+    const { driver, destroyed } = stubDriver();
+    const sessions = new SessionsService({ repo, driver });
+    const listed = repo.seedSession({
+      accountId: 'acc-free',
+      status: 'ready',
+      createdAt: new Date(NOW.getTime() - 21 * MIN),
+      driverSessionId: 'drv-concurrent-sweep',
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        sessions.autoDestroyExpired({ ...listed }, { maxMinutes: 20 }),
+      ),
+    );
+
+    expect(results.filter((result) => result.destroyed)).toHaveLength(1);
+    expect(destroyed).toEqual(['drv-concurrent-sweep']);
+    expect(
+      repo
+        .getEvents()
+        .filter((event) => event.sessionId === listed.id && event.type === 'destroyed'),
+    ).toHaveLength(1);
   });
 
   it('mixed batch: destroys only the expired FREE session out of a free-expired / free-recent / paid-expired / destroyed set', async () => {

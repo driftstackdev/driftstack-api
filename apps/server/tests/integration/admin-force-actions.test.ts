@@ -3,7 +3,7 @@
 //   POST /v1/admin/sessions/:id/destroy   — admin force-destroy a session
 //   POST /v1/admin/api-keys/:id/revoke    — admin force-revoke an API key
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import {
   buildTestApp,
@@ -81,14 +81,125 @@ describe('POST /v1/admin/sessions/:id/destroy', () => {
     expect(second.json<{ status: string }>().status).toBe('destroyed');
   });
 
-  it('404 NotFound on unknown session id', async () => {
+  it('serializes five concurrent force-destroys into one driver call/event/timestamp and four idempotent audits', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { archetype: 'iphone16pro_ios18_7_safari26_4' },
+    });
+    const sessionId = create.json<{ id: string }>().id;
+    const bareSessionId = sessionId.replace(/^ses_/, '');
+    const destroySpy = vi.spyOn(fx.driver, 'destroy');
+
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        fx.app.inject({
+          method: 'POST',
+          url: `/v1/admin/sessions/${sessionId}/destroy`,
+          headers: auth(fx),
+          payload: { reason: 'concurrent operator cleanup' },
+        }),
+      ),
+    );
+
+    expect(responses.map((response) => response.statusCode)).toEqual([200, 200, 200, 200, 200]);
+    const timestamps = responses.map(
+      (response) => response.json<{ destroyed_at: string }>().destroyed_at,
+    );
+    expect(new Set(timestamps).size).toBe(1);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(
+      fx.sessionsRepo
+        .getEvents()
+        .filter((event) => event.sessionId === bareSessionId && event.type === 'destroyed'),
+    ).toHaveLength(1);
+
+    const audits = fx.adminAuditRepo
+      .getAll()
+      .filter(
+        (row) =>
+          row.action === 'session.destroyed_by_admin' && row.targetResourceId === bareSessionId,
+      );
+    expect(audits).toHaveLength(5);
+    expect(audits.filter((row) => row.inputPayload?.idempotent === true)).toHaveLength(4);
+    expect(audits.filter((row) => row.inputPayload?.idempotent !== true)).toHaveLength(1);
+    expect(audits.every((row) => row.result === 'success')).toBe(true);
+  });
+
+  it('404 NotFound on unknown session id and records the failed D-025 attempt', async () => {
     fx = await buildTestApp();
+    const sessionId = '00000000-0000-4000-8000-000000000099';
     const res = await fx.app.inject({
       method: 'POST',
-      url: '/v1/admin/sessions/ses_00000000-0000-4000-8000-000000000099/destroy',
+      url: `/v1/admin/sessions/ses_${sessionId}/destroy`,
       headers: auth(fx),
     });
     expect(res.statusCode).toBe(404);
+    const event = fx.adminAuditRepo
+      .getAll()
+      .find(
+        (row) => row.action === 'session.destroyed_by_admin' && row.targetResourceId === sessionId,
+      );
+    expect(event?.targetAccountId).toBeNull();
+    expect(event?.inputPayload).toEqual({});
+    expect(event?.result).toBe('error: notfound');
+  });
+
+  it('driver failure releases the slot, records an error audit/no success event, and makes retry inert', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { archetype: 'iphone16pro_ios18_7_safari26_4' },
+    });
+    const sessionId = create.json<{ id: string }>().id;
+    const bareSessionId = sessionId.replace(/^ses_/, '');
+    const destroySpy = vi
+      .spyOn(fx.driver, 'destroy')
+      .mockRejectedValueOnce(new Error('bounded driver teardown failure'));
+
+    const failed = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/sessions/${sessionId}/destroy`,
+      headers: auth(fx),
+      payload: { reason: 'operator cleanup' },
+    });
+
+    expect(failed.statusCode).toBe(500);
+    expect(fx.sessionsRepo.getSession(bareSessionId)?.status).toBe('destroyed');
+    expect(
+      fx.sessionsRepo
+        .getEvents()
+        .filter((event) => event.sessionId === bareSessionId && event.type === 'destroyed'),
+    ).toHaveLength(0);
+    const failureAudit = fx.adminAuditRepo
+      .getAll()
+      .find(
+        (row) =>
+          row.action === 'session.destroyed_by_admin' && row.targetResourceId === bareSessionId,
+      );
+    expect(failureAudit?.targetAccountId).toBe(fx.accountId);
+    expect(failureAudit?.result).toBe('error: unknown');
+
+    const retry = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/sessions/${sessionId}/destroy`,
+      headers: auth(fx),
+      payload: { reason: 'operator cleanup' },
+    });
+    expect(retry.statusCode).toBe(200);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    const audits = fx.adminAuditRepo
+      .getAll()
+      .filter(
+        (row) =>
+          row.action === 'session.destroyed_by_admin' && row.targetResourceId === bareSessionId,
+      );
+    expect(audits).toHaveLength(2);
+    expect(audits[1]?.inputPayload).toMatchObject({ idempotent: true });
   });
 
   it('400 BadRequest on malformed id', async () => {

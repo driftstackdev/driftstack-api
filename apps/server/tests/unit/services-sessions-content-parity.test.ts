@@ -22,8 +22,8 @@
 //     opts); ConcurrencyLimitError when active >= limit.
 //   • V-202c first-failure email + V-304a first-success email
 //     dedup at lifecycle service.
-//   • destroy V-167: lookup-directly + terminal short-circuit
-//     ('destroyed' OR 'errored' → no-op) for REST idempotency.
+//   • destroy V-167: serialized repository outcome elects one
+//     driver/status/event winner across every destroy source.
 //   • V-090 errored = destroyed for customer (subsequent ops 410);
 //     terminal short-circuit in requireOwned.
 //   • V-326e3 runWithFailureCapture: session.failed webhook +
@@ -103,7 +103,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
-  it('SessionRepo methods (insert/findSession/findSessionUnscoped/updateSessionStatus/countActiveSessions/listSessions/listAllSessions/listExpiredForAutoDestroy + recordEvent + setEgressCapabilityReport)', () => {
+  it('SessionRepo methods include one serialized destroy authority shared by customer/admin/system callers', () => {
     expect(body).toMatch(/export interface SessionRepo \{/);
     expect(body).toMatch(/insertSession\(input: NewSessionInput\): Promise<SessionRecord>;/);
     // The atomic insert-if-under-cap (TOCTOU fix) is part of the contract.
@@ -124,6 +124,15 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
     expect(body).toMatch(
       /\/\*\* Find a session by id WITHOUT account scoping \(admin force-actions only\)\. \*\/\s*\n?\s*findSessionUnscoped\(id: string\): Promise<SessionRecord \| null>;/,
+    );
+    expect(body).toMatch(
+      /export interface SerializedSessionDestroyInput \{[\s\S]+?accountId: string \| null;[\s\S]+?destroyedAt: Date;[\s\S]+?event: Omit<SessionEventInput, 'sessionId' \| 'type'> & \{ type: 'destroyed' \};/,
+    );
+    expect(body).toMatch(
+      /export type SerializedSessionDestroyResult =\s*\n?\s*\| \{ kind: 'destroyed' \| 'already_terminal'; session: SessionRecord \}\s*\n?\s*\| \{ kind: 'driver_error'; session: SessionRecord; error: unknown \}\s*\n?\s*\| \{ kind: 'not_found' \};/,
+    );
+    expect(body).toMatch(
+      /destroySessionSerialized\(\s*\n?\s*input: SerializedSessionDestroyInput,\s*\n?\s*destroyDriverSession: \(session: SessionRecord\) => Promise<void>,\s*\n?\s*\): Promise<SerializedSessionDestroyResult>;/,
     );
     expect(body).toMatch(/countActiveSessions\(accountId: string\): Promise<number>;/);
     expect(body).toMatch(
@@ -215,13 +224,36 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
-  it("V-167 destroy: lookup-directly + terminal short-circuit ('destroyed' OR 'errored' → no-op) for REST idempotency", () => {
+  it('V-167 destroy: serialized customer-scoped outcome preserves not-found, idempotent terminal, and original driver-error semantics', () => {
     expect(body).toMatch(
       /\/\/ V-167 — true idempotent destroy\. Pre-V-167 this called requireOwned\(\)\s*\n?\s*\/\/ which threw SessionDestroyedError \(HTTP 410\) on already-destroyed\s*\n?\s*\/\/ sessions before the early-return short-circuit could run\./,
     );
+    expect(body).toMatch(/const outcome = await this\.deps\.repo\.destroySessionSerialized\(/);
+    expect(body).toMatch(/id: sessionId,\s*\n?\s*accountId,\s*\n?\s*destroyedAt,/);
     expect(body).toMatch(
-      /\/\/ Terminal-status no-ops\. 'destroyed' is the obvious one; 'errored'\s*\n?\s*\/\/ also short-circuits per V-090 \(a failed session has nothing\s*\n?\s*\/\/ useful left to destroy\)\.\s*\n?\s*if \(session\.status === 'destroyed' \|\| session\.status === 'errored'\) return;/,
+      /destroyDriverSessionWithTimeout\(\(\) =>\s*\n?\s*this\.deps\.driver\.destroy\(current\.driverSessionId\)\)/,
     );
+    expect(body).toMatch(/if \(outcome\.kind === 'not_found'\) \{/);
+    expect(body).toMatch(/if \(outcome\.kind === 'already_terminal'\) return;/);
+    expect(body).toMatch(/if \(outcome\.kind === 'driver_error'\) throw outcome\.error;/);
+  });
+
+  it('all system destroy paths consume the same serialized authority before winner-only fan-out', () => {
+    const methodCalls = body.match(/this\.deps\.repo\.destroySessionSerialized\(/g) ?? [];
+    expect(methodCalls).toHaveLength(3);
+    expect(body).toMatch(/async autoDestroyExpired\([\s\S]+?destroySessionSerialized\(/);
+    expect(body).toMatch(/async destroyAllForAccount\([\s\S]+?destroySessionSerialized\(/);
+    expect(body).toMatch(/outcome\.kind === 'not_found' \|\| outcome\.kind === 'already_terminal'/);
+  });
+
+  it('serialized destroy driver callbacks are bounded at 30 seconds so a hung teardown cannot retain the row lock indefinitely', () => {
+    expect(body).toContain('export const SESSION_DESTROY_DRIVER_TIMEOUT_MS = 30_000;');
+    expect(body).toMatch(/export async function destroyDriverSessionWithTimeout\(/);
+    expect(body).toMatch(/await Promise\.race\(\[destroy\(\), timeout\]\);/);
+    expect(body).toContain("new Error('Session driver destroy timed out.')");
+    const boundedCalls = body.match(/destroyDriverSessionWithTimeout\(/g) ?? [];
+    // One declaration + customer destroy + duration sweep + suspension reclaim.
+    expect(boundedCalls).toHaveLength(4);
   });
 
   it('destroy: emits session.completed webhook + V-304a session.success.first email + V-216 session.destroyed audit all try/catch swallow', () => {

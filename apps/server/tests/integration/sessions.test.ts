@@ -2,7 +2,7 @@
 // Uses the in-memory test fixture; verifies HTTP shapes, error mapping,
 // ownership scoping, and concurrency limits.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PROBLEM_TYPES,
   SESSION_METADATA_MAX_BYTES,
@@ -616,6 +616,36 @@ describe('DELETE /v1/sessions/:id', () => {
     expect(navigate.statusCode).toBe(410);
     const body = navigate.json<Record<string, unknown>>();
     expect(body.type).toBe(PROBLEM_TYPES.SessionDestroyed);
+  });
+
+  it('serializes five concurrent deletes into one driver call, event, and customer audit', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const session = await createSession(fx);
+    const bareSessionId = session.id.replace(/^ses_/, '');
+    const destroySpy = vi.spyOn(fx.driver, 'destroy');
+
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        fx.app.inject({
+          method: 'DELETE',
+          url: `/v1/sessions/${session.id}`,
+          headers: auth(fx),
+        }),
+      ),
+    );
+
+    expect(responses.map((response) => response.statusCode)).toEqual([204, 204, 204, 204, 204]);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(
+      fx.sessionsRepo
+        .getEvents()
+        .filter((event) => event.sessionId === bareSessionId && event.type === 'destroyed'),
+    ).toHaveLength(1);
+    expect(
+      fx.accountAuditRepo
+        .getAll()
+        .filter((row) => row.action === 'session.destroyed' && row.targetResourceId === session.id),
+    ).toHaveLength(1);
   });
 });
 

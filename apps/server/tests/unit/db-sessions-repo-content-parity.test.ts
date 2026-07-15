@@ -8,8 +8,8 @@
 //   • In-memory impl in tests/integration/_helpers/ rationale.
 //   • insertSession: 7-field values; returning(); throws on no-row.
 //   • findSession: account-scoped via and(eq(id), eq(accountId)).
-//   • findSessionUnscoped: id-only lookup (admin force-actions
-//     path).
+//   • destroySessionSerialized: row lock + bounded driver callback
+//     + atomic terminal/event commit with driver-error slot release.
 //   • updateSessionStatus: always-bump updatedAt; optional
 //     lastStateAt + destroyedAt selectively spread.
 //   • countActiveSessions: count(*) where accountId + isNull
@@ -60,7 +60,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     // session-per-profile guard inside insertSessionIfUnderLimit.
     expect(body).toMatch(/import \{ ProfileInUseError \} from '\.\.\/lib\/errors\.js';/);
     expect(body).toMatch(
-      /import type \{\s*\n?\s*NewSessionInput,\s*\n?\s*SessionEventInput,\s*\n?\s*SessionListPage,\s*\n?\s*SessionRecord,\s*\n?\s*SessionRepo,\s*\n?\s*\} from '\.\.\/services\/sessions\.js';/,
+      /import type \{\s*\n?\s*NewSessionInput,\s*\n?\s*SessionEventInput,\s*\n?\s*SessionListPage,\s*\n?\s*SessionRecord,\s*\n?\s*SessionRepo,\s*\n?\s*SerializedSessionDestroyInput,\s*\n?\s*SerializedSessionDestroyResult,\s*\n?\s*\} from '\.\.\/services\/sessions\.js';/,
     );
     // 6.g — accounts joined in for the duration-sweep tier resolution. The agent
     // table participates in the global single-profile launch guard.
@@ -113,6 +113,30 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     expect(body).toMatch(
       /async findSessionUnscoped\(id: string\): Promise<SessionRecord \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(sessions\)\s*\n?\s*\.where\(eq\(sessions\.id, id\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toSessionRecord\(row\) : null;\s*\n?\s*\}/,
     );
+  });
+
+  it('destroySessionSerialized: scoped SELECT FOR UPDATE; one terminal callback winner; driver failure commits no success event; success update + event share the transaction', () => {
+    expect(body).toMatch(
+      /async destroySessionSerialized\(\s*\n?\s*input: SerializedSessionDestroyInput,\s*\n?\s*destroyDriverSession: \(session: SessionRecord\) => Promise<void>,\s*\n?\s*\): Promise<SerializedSessionDestroyResult> \{/,
+    );
+    expect(body).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
+    expect(body).toMatch(
+      /input\.accountId === null \? undefined : eq\(sessions\.accountId, input\.accountId\)/,
+    );
+    expect(body).toMatch(
+      /tx\.select\(\)\.from\(sessions\)\.where\(scope\)\.limit\(1\)\.for\('update'\)/,
+    );
+    expect(body).toMatch(
+      /if \(current\.status === 'destroyed' \|\| current\.status === 'errored'\) \{\s*\n?\s*return \{ kind: 'already_terminal', session: current \};/,
+    );
+    expect(body).toMatch(/await destroyDriverSession\(current\);/);
+    expect(body).toMatch(
+      /\.set\(\{ status: 'destroyed', destroyedAt: input\.destroyedAt, updatedAt: new Date\(\) \}\)/,
+    );
+    const driverFailureIdx = body.indexOf("if (driverFailed) return { kind: 'driver_error'");
+    const eventInsertIdx = body.indexOf('await tx.insert(sessionEvents).values({');
+    expect(driverFailureIdx).toBeGreaterThan(0);
+    expect(eventInsertIdx).toBeGreaterThan(driverFailureIdx);
   });
 
   it('updateSessionStatus: always-bump updatedAt:new Date(); selective spread of lastStateAt + destroyedAt when present', () => {

@@ -19,11 +19,10 @@
 //   • withAudit wrapper: takes args object with targetAccountId +
 //     targetResourceId + inputPayload + perform thunk; dual-write
 //     success + error.
-//   • Idempotency: already-destroyed session OR already-revoked key
-//     → still record audit with { ...inputPayload, idempotent: true }
-//     + return existing destroyedAt/revokedAt.
-//   • Session destroy: driver.destroy + repo.updateSessionStatus +
-//     recordEvent {force:true, by_admin:true, reason?}.
+//   • Idempotency: authoritative serialized loser outcomes mark the
+//     audit payload idempotent and return the persisted timestamp.
+//   • Session destroy: explicit unscoped serialized repo authority
+//     contains driver callback + terminal/event transaction.
 //   • API key revoke: D-020 auth-cache invalidation; cache failure
 //     non-fatal (swallow).
 
@@ -94,22 +93,20 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     expect(body).toContain("const code = normalizedCode || 'unknown';");
   });
 
-  it("Session destroy idempotency: status === 'destroyed' → audit with idempotent:true + return existing destroyed_at", () => {
+  it('Session destroy idempotency comes from the authoritative serialized outcome inside D-025', () => {
+    expect(body).toContain('const outcome = await withAudit(request,');
+    expect(body).toContain("if (result.kind === 'already_terminal') {");
+    expect(body).toContain('resolvedInputPayload = { ...inputPayload, idempotent: true };');
     expect(body).toMatch(
-      /\/\/ Admin destroy is idempotent — already-destroyed session returns the\s*\n?\s*\/\/ same shape without re-firing the driver \/ repo writes\./,
-    );
-    expect(body).toMatch(
-      /if \(session\.status === 'destroyed'\) \{\s*\n?\s*await audit\.record\(\{\s*\n?\s*adminAccountId: ctx\.account\.id,\s*\n?\s*adminKeyId: ctx\.apiKey\.id,\s*\n?\s*action: 'session\.destroyed_by_admin',\s*\n?\s*targetAccountId,\s*\n?\s*targetResourceId: sessionId,\s*\n?\s*inputPayload: \{ \.\.\.inputPayload, idempotent: true \},\s*\n?\s*result: 'success',\s*\n?\s*ipAddress: readClientIp\(request\),\s*\n?\s*\}\);/,
-    );
-    expect(body).toMatch(
-      /return \{\s*\n?\s*id: `ses_\$\{session\.id\}`,\s*\n?\s*status: 'destroyed',\s*\n?\s*destroyed_at: session\.destroyedAt\?\.toISOString\(\) \?\? null,\s*\n?\s*\};/,
+      /destroyed_at: outcome\.session\.destroyedAt\?\.toISOString\(\) \?\? null,/,
     );
   });
 
-  it("Session destroy fresh path: driver.destroy + repo.updateSessionStatus + recordEvent type='destroyed' payload {force:true, by_admin:true, reason?}", () => {
+  it('Session destroy fresh path: explicit admin-unscoped serialized authority with driver callback + destroyed {force:true, by_admin:true, reason?} event', () => {
     expect(body).toMatch(
-      /await withAudit\(request, 'session\.destroyed_by_admin', \{\s*\n?\s*targetAccountId,\s*\n?\s*targetResourceId: sessionId,\s*\n?\s*inputPayload,\s*\n?\s*perform: async \(\) => \{\s*\n?\s*await driver\.destroy\(session\.driverSessionId\);\s*\n?\s*await sessionRepo\.updateSessionStatus\(session\.id, 'destroyed', \{ destroyedAt \}\);\s*\n?\s*await sessionRepo\.recordEvent\(\{\s*\n?\s*sessionId: session\.id,\s*\n?\s*type: 'destroyed',\s*\n?\s*payload: \{ force: true, by_admin: true, \.\.\.\(reason !== undefined \? \{ reason \} : \{\}\) \},\s*\n?\s*durationMs: null,\s*\n?\s*\}\);/,
+      /const result = await sessionRepo\.destroySessionSerialized\([\s\S]+?id: sessionId,\s*\n?\s*accountId: null,[\s\S]+?type: 'destroyed',[\s\S]+?force: true,\s*\n?\s*by_admin: true,[\s\S]+?destroyDriverSessionWithTimeout\(\(\) => driver\.destroy\(session\.driverSessionId\)\)/,
     );
+    expect(body).toContain("if (result.kind === 'driver_error') throw result.error;");
   });
 
   it('API key revoke uses atomic authoritative outcome and marks concurrent losers idempotent', () => {
@@ -134,9 +131,8 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
   it("404 NotFoundError on session-not-found OR key-not-found (uses uuidFromPrefixedId 'ses'|'key' for params)", () => {
     expect(body).toMatch(/const sessionId = uuidFromPrefixedId\(request\.params\.id, 'ses'\);/);
     expect(body).toMatch(/const keyId = uuidFromPrefixedId\(request\.params\.id, 'key'\);/);
-    expect(body).toMatch(
-      /if \(!session\) throw new NotFoundError\(`Session "\$\{sessionId\}" not found\.`\);/,
-    );
+    expect(body).toMatch(/if \(result\.kind === 'not_found'\) \{/);
+    expect(body).toMatch(/throw new NotFoundError\(`Session "\$\{sessionId\}" not found\.`\);/);
     expect(body).toMatch(/if \(result\.kind === 'not_found'\) \{/);
     expect(body).toMatch(/throw new NotFoundError\(`API key "\$\{keyId\}" not found\.`\);/);
   });
@@ -147,7 +143,9 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     expect(body).toMatch(
       /import type \{ AdminAuditService, AdminAuditAction \} from '\.\.\/services\/admin-audit\.js';/,
     );
-    expect(body).toMatch(/import type \{ SessionRepo \} from '\.\.\/services\/sessions\.js';/);
+    expect(body).toMatch(
+      /import \{ destroyDriverSessionWithTimeout, type SessionRepo \} from '\.\.\/services\/sessions\.js';/,
+    );
     expect(body).toMatch(/import type \{ ApiKeysRepo \} from '\.\.\/services\/api-keys\.js';/);
     expect(body).toMatch(/import type \{ Driver \} from '\.\.\/drivers\/types\.js';/);
     expect(body).toMatch(/import type \{ AuthCache \} from '\.\.\/services\/auth-cache\.js';/);

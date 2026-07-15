@@ -19,9 +19,8 @@
 //   PUBLIC_ID_RE prefix_uuid pattern shared with admin-incidents /
 //   admin-webhooks.
 //
-//   Session destroy: ses_-prefixed id, idempotent on already-destroyed,
-//   uses sessionRepo.findSessionUnscoped (NOT findSession — admin
-//   bypasses account-scoping).
+//   Session destroy: ses_-prefixed id, explicit admin-unscoped
+//   serialized repo outcome inside D-025, authoritative idempotency.
 //
 //   API-key revoke: key_-prefixed id, idempotent on already-revoked,
 //   uses an explicitly admin-unscoped atomic outcome inside D-025,
@@ -102,30 +101,31 @@ describe('W1046 routes/admin-force-actions V-100 + D-020/D-025 cross-source inva
 
   // ─── Session destroy ─────────────────────────────────────────
 
-  it('CRITICAL session destroy — ses_-prefixed id + findSessionUnscoped (admin bypasses account-scoping) + idempotent on already-destroyed status (audit row with idempotent: true marker, no driver call). The double-write skip on idempotent replay prevents double-driver-destroy attempts.', () => {
+  it('CRITICAL session destroy — ses_-prefixed id + explicit null admin scope + authoritative serialized outcome inside D-025', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
     expect(p).toMatch(/uuidFromPrefixedId\(request\.params\.id, 'ses'\)/);
-    expect(p).toMatch(/sessionRepo\.findSessionUnscoped\(sessionId\)/);
-    expect(p).toMatch(/if \(session\.status === 'destroyed'\) \{/);
+    expect(p).toMatch(/sessionRepo\.destroySessionSerialized\(/);
+    expect(p).toMatch(/id: sessionId,\s*\n?\s*accountId: null,/);
+    expect(p).toMatch(/if \(result\.kind === 'already_terminal'\) \{/);
     expect(p).toMatch(/idempotent: true/);
-    expect(p).toMatch(/driver\.destroy\(session\.driverSessionId\)/);
-    expect(p).toMatch(/sessionRepo\.updateSessionStatus\(session\.id, 'destroyed'/);
+    expect(p).toMatch(
+      /destroyDriverSessionWithTimeout\(\(\) => driver\.destroy\(session\.driverSessionId\)\)/,
+    );
+    expect(p).toMatch(/if \(result\.kind === 'driver_error'\) throw result\.error;/);
   });
 
   it("CRITICAL session destroy response — { id: ses_<uuid>, status: 'destroyed', destroyed_at: ISO|null }. The 3-field envelope is identical between fresh-destroy and idempotent-replay paths.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
-    expect(p).toMatch(/id: `ses_\$\{session\.id\}`,/);
+    expect(p).toMatch(/id: `ses_\$\{outcome\.session\.id\}`,/);
     expect(p).toMatch(/status: 'destroyed',/);
-    expect(p).toMatch(/destroyed_at: session\.destroyedAt\?\.toISOString\(\) \?\? null,/);
-    expect(p).toMatch(/destroyed_at: destroyedAt\.toISOString\(\),/);
+    expect(p).toMatch(/destroyed_at: outcome\.session\.destroyedAt\?\.toISOString\(\) \?\? null,/);
   });
 
   it("CRITICAL session destroy event payload — 'destroyed' event type with { force: true, by_admin: true, reason? } shape. The by_admin marker distinguishes admin force-destroys from customer-initiated destroys in event history.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
     expect(p).toMatch(/type: 'destroyed',/);
-    expect(p).toMatch(
-      /payload: \{ force: true, by_admin: true, \.\.\.\(reason !== undefined \? \{ reason \} : \{\}\) \},/,
-    );
+    expect(p).toMatch(/force: true,\s*\n?\s*by_admin: true,/);
+    expect(p).toMatch(/\.\.\.\(reason !== undefined \? \{ reason \} : \{\}\),/);
   });
 
   // ─── API-key revoke + D-020 ──────────────────────────────────

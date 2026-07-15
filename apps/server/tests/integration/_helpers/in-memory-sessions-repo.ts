@@ -9,6 +9,8 @@ import type {
   SessionListPage,
   SessionRecord,
   SessionRepo,
+  SerializedSessionDestroyInput,
+  SerializedSessionDestroyResult,
 } from '../../../src/services/sessions.js';
 
 interface StoredEvent extends SessionEventInput {
@@ -19,6 +21,7 @@ interface StoredEvent extends SessionEventInput {
 export class InMemorySessionsRepo implements SessionRepo {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly events: StoredEvent[] = [];
+  private readonly destroyTails = new Map<string, Promise<void>>();
   /**
    * 6.g — account_id → tier. The real Drizzle repo JOINs sessions to the
    * `accounts` table to resolve tier for `listExpiredForAutoDestroy`; this
@@ -105,6 +108,60 @@ export class InMemorySessionsRepo implements SessionRepo {
 
   findSessionUnscoped(id: string): Promise<SessionRecord | null> {
     return Promise.resolve(this.sessions.get(id) ?? null);
+  }
+
+  async destroySessionSerialized(
+    input: SerializedSessionDestroyInput,
+    destroyDriverSession: (session: SessionRecord) => Promise<void>,
+  ): Promise<SerializedSessionDestroyResult> {
+    const previous = this.destroyTails.get(input.id) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.destroyTails.set(input.id, tail);
+    await previous;
+    try {
+      const current = this.sessions.get(input.id);
+      if (!current || (input.accountId !== null && current.accountId !== input.accountId)) {
+        return { kind: 'not_found' };
+      }
+      if (current.status === 'destroyed' || current.status === 'errored') {
+        return { kind: 'already_terminal', session: { ...current } };
+      }
+      if (current.destroyedAt !== null) {
+        throw new Error('destroySessionSerialized found a non-terminal row with destroyedAt');
+      }
+
+      let driverFailed = false;
+      let driverError: unknown;
+      try {
+        await destroyDriverSession({ ...current });
+      } catch (err) {
+        driverFailed = true;
+        driverError = err;
+      }
+      const updated: SessionRecord = {
+        ...current,
+        status: 'destroyed',
+        destroyedAt: input.destroyedAt,
+        updatedAt: new Date(),
+      };
+      this.sessions.set(input.id, updated);
+      if (driverFailed)
+        return { kind: 'driver_error', session: { ...updated }, error: driverError };
+      this.events.push({
+        sessionId: updated.id,
+        ...input.event,
+        id: randomUUID(),
+        createdAt: new Date(),
+      });
+      return { kind: 'destroyed', session: { ...updated } };
+    } finally {
+      release();
+      if (this.destroyTails.get(input.id) === tail) this.destroyTails.delete(input.id);
+    }
   }
 
   // Terminal statuses ('destroyed', 'errored') are STICKY — mirrors the

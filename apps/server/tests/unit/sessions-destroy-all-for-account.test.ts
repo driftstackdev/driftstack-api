@@ -83,7 +83,7 @@ describe('SessionsService.destroyAllForAccount — suspend reclaim', () => {
     const { driver, destroyed } = stubDriver(['boom']);
     const sessions = new SessionsService({ repo, driver });
 
-    repo.seedSession({
+    const failed = repo.seedSession({
       accountId: 'acc-1',
       status: 'ready',
       createdAt: NOW,
@@ -100,6 +100,47 @@ describe('SessionsService.destroyAllForAccount — suspend reclaim', () => {
 
     expect(count).toBe(1);
     expect(destroyed).toEqual(['ok']);
+    expect(repo.getSession(failed.id)?.status).toBe('destroyed');
+    expect(
+      repo
+        .getEvents()
+        .filter((event) => event.sessionId === failed.id && event.type === 'destroyed'),
+    ).toHaveLength(0);
+  });
+
+  it('two concurrent suspension reclaims destroy each session exactly once', async () => {
+    const repo = new InMemorySessionsRepo();
+    const { driver, destroyed } = stubDriver();
+    const sessions = new SessionsService({ repo, driver });
+    const first = repo.seedSession({
+      accountId: 'acc-1',
+      status: 'ready',
+      createdAt: NOW,
+      driverSessionId: 'first',
+    });
+    const second = repo.seedSession({
+      accountId: 'acc-1',
+      status: 'busy',
+      createdAt: NOW,
+      driverSessionId: 'second',
+    });
+
+    const counts = await Promise.all([
+      sessions.destroyAllForAccount('acc-1'),
+      sessions.destroyAllForAccount('acc-1'),
+    ]);
+
+    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(2);
+    expect([...destroyed].sort()).toEqual(['first', 'second']);
+    expect(
+      repo
+        .getEvents()
+        .filter(
+          (event) =>
+            (event.sessionId === first.id || event.sessionId === second.id) &&
+            event.type === 'destroyed',
+        ),
+    ).toHaveLength(2);
   });
 
   it('returns 0 when the account has no active sessions', async () => {
