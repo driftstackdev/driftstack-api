@@ -305,6 +305,39 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     expect(frozenBadge(container)).toBeNull();
   });
 
+  it('starts a fresh frame-progress epoch after reconnect before arming freeze recovery', () => {
+    vi.useFakeTimers();
+    conn.decodeFps = 30;
+    const { container } = renderSim();
+
+    // Establish a genuinely live first connection, then hold a reconnect longer than
+    // the freeze window. The pre-reconnect timestamp must not arm the next epoch.
+    advance(1, () => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(1);
+    });
+    act(() => panelCbs.onStateChange?.({ kind: 'reconnecting' }));
+    advance(5);
+    act(() => panelCbs.onStateChange?.({ kind: 'connected' }));
+
+    // The resumed room has not painted a frame yet. Reusing the old timestamp would
+    // show the badge immediately here and eventually trigger resubscribe/rebuild.
+    expect(frozenBadge(container)).toBeNull();
+    advance(6);
+    expect(frozenBadge(container)).toBeNull();
+    expect(panelCbs.recoverActions).toHaveLength(0);
+
+    // Once the new epoch produces a frame it becomes eligible for freeze detection;
+    // a real post-reconnect stall still surfaces after the normal window.
+    advance(1, () => {
+      panelCbs.video?.__fireFrame();
+      panelCbs.video?.__setCurrentTime(2);
+    });
+    expect(frozenBadge(container)).toBeNull();
+    advance(5);
+    expect(frozenBadge(container)).not.toBeNull();
+  });
+
   // #5/#9 — a SUSTAINED true freeze (while connected) must actively recover, not just
   // show a badge: first toggle the remote subscription (resubscribe → fresh keyframe),
   // then escalate ONCE to a Room rebuild if frame-progress still hasn't resumed. The

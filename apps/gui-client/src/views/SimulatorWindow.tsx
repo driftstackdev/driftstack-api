@@ -2844,6 +2844,10 @@ export function SimulatorWindow(): JSX.Element {
     if (fpsArmedElRef.current === el) return;
     fpsArmedElRef.current = el;
     const tick = (now: number): void => {
+      // A replaced video element can still deliver one queued rVFC callback. It no
+      // longer owns the stream, so it must not stamp progress into the new room's
+      // freeze epoch or perpetuate its callback chain.
+      if (fpsArmedElRef.current !== el) return;
       // Every rVFC tick is a real produced frame → the element is live.
       lastVideoFrameAtRef.current = Date.now();
       const c = fpsCounterRef.current;
@@ -2916,21 +2920,32 @@ export function SimulatorWindow(): JSX.Element {
   const SUSTAINED_PROGRESS_TICKS = 3; // ~3 consecutive advancing 1s ticks = sustained
   const MAX_FREEZE_REBUILDS = 3; // generous — a transient freeze recovers in one rebuild
   useEffect(() => {
+    // Every room/connection transition starts a new frame-progress epoch. In
+    // particular, a reconnect can last longer than FREEZE_AFTER_MS; carrying the
+    // previous connected epoch's last rVFC timestamp into the new connected epoch
+    // would instantly paint "Video frozen" and start recovery before the resumed
+    // stream had a chance to produce its first frame. Reset both progress sources
+    // and the FPS sample here, then arm only on a frame/currentTime advance observed
+    // after this effect starts. The rVFC chain itself remains attached to the current
+    // video element and will repopulate these values on its next real frame.
+    lastVideoFrameAtRef.current = 0;
+    fpsCounterRef.current = { frames: 0, windowStart: 0 };
+    fpsStore.set(null);
+    sawFramesRef.current = false;
+    freezeSinceRef.current = null;
+    lastSampledCurrentTimeRef.current = null;
+    lastCurrentTimeAdvanceAtRef.current = 0;
+    consecutiveAdvancesRef.current = 0;
+    setVideoFrozen(false);
     // Suppress the freeze badge when the LiveKit connection itself isn't connected: a
     // transport drop (disconnected/reconnecting) naturally stops frame progress, and the
     // panel's own "The live stream disconnected" overlay + Reconnect is the single
     // source of truth there. Without this the parent's "Video frozen" pill contradicted
     // the panel's overlay. Only a freeze WHILE connected is a genuine client decode stall.
     if (room === null || connState !== 'connected') {
-      sawFramesRef.current = false;
-      freezeSinceRef.current = null;
-      lastSampledCurrentTimeRef.current = null;
-      lastCurrentTimeAdvanceAtRef.current = 0;
       // A connState blip (incl. the one a stage-2 rebuild causes) is NOT frame recovery:
       // zero the sustained-progress run, but DELIBERATELY leave rebuildAttemptsRef alone
       // so the cross-cycle cap survives the blip (the whole point of the fix).
-      consecutiveAdvancesRef.current = 0;
-      setVideoFrozen(false);
       return;
     }
     const FREEZE_AFTER_MS = 4000;
