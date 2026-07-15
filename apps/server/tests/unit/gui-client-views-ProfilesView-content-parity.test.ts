@@ -99,6 +99,67 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(handlers).not.toMatch(/profiles\s*\.update\([\s\S]{0,120}?catch\(\(\) => undefined\)/);
   });
 
+  it('binds offline taxonomy to validated non-secret identity and never falls back to global keys', () => {
+    expect(body).toMatch(
+      /function buildTaxonomyCacheScope\(baseUrl: string, effectiveAccountId: string\): string \| null/,
+    );
+    const scopeHelper = body.slice(
+      body.indexOf('function buildTaxonomyCacheScope('),
+      body.indexOf('function railTaxonomySyncMessage('),
+    );
+    expect(scopeHelper).toContain('url.origin.toLowerCase()');
+    expect(scopeHelper).toContain('effectiveAccountId');
+    expect(scopeHelper).not.toMatch(/apiKey|email/i);
+    expect(body).toMatch(
+      /\(accountMe\?\.teams \?\? \[\]\)\.some\(\(team\) => team\.owner_account_id === activeWorkspace\)/,
+    );
+    expect(body).toContain('loadFolders(scope)');
+    expect(body).toContain('loadFolderIcons(scope)');
+    expect(body).toContain('loadTags(scope)');
+    expect(body).toContain('const taxonomyReconcileGenerationRef = useRef(0);');
+    expect(body).toContain('generation === taxonomyReconcileGenerationRef.current');
+    expect(body).toContain('taxonomyReconcileGenerationRef.current += 1;');
+    expect(body).toContain('replaceAllFolders(names, icons, scope)');
+    expect(body).toContain('replaceAllTags(org.tags, scope)');
+    expect(body).not.toMatch(/loadFolders\(\)|loadFolderIcons\(\)|loadTags\(\)/);
+  });
+
+  it('generation-fences core, detached agent and metadata refresh publications through unmount', () => {
+    expect(body).toContain('const refreshGenerationRef = useRef(0);');
+    expect(body).toContain('refreshClientOwnerRef.current === client');
+    expect(body).toContain('refreshWorkspaceOwnerRef.current === activeWorkspace');
+    expect(body).toMatch(/const generation = \+\+refreshGenerationRef\.current;/);
+    expect(body.match(/if \(!isCurrentRefresh\(\)\) return;/g)?.length ?? 0).toBeGreaterThanOrEqual(
+      3,
+    );
+    expect(body).toMatch(/\.then\(\(page\) => \{\s*if \(!isCurrentRefresh\(\)\) return;/);
+    expect(body).toMatch(
+      /setProfilesMeta\(\(local\) => \{\s*if \(!isCurrentRefresh\(\)\) return local;/,
+    );
+    expect(body).toContain('refreshGenerationRef.current += 1;');
+  });
+
+  it('keeps one tokenized rail taxonomy owner and scope-retained retry remainder', () => {
+    expect(body).toContain('const railTaxonomyMutationOwnerRef = useRef<symbol | null>(null);');
+    expect(body).toContain('railTaxonomyMutationOwnerRef.current === owner');
+    expect(body).toContain('const admittedTransport: RailTaxonomyTransport = {');
+    expect(body).toContain('rememberRailTaxonomyRetry(scope, retry);');
+    expect(body).toContain(
+      'const railTaxonomyRetriesByScope = new Map<string, RailTaxonomySyncPlan>();',
+    );
+    expect(body).toContain('MAX_RETAINED_TAXONOMY_RETRIES = 16');
+    expect(body).toContain('if (railTaxonomyRetriesByScope.has(scope)) return;');
+    expect(body).toContain("(!hasAccountTransport || accountResults[0]?.status === 'rejected')");
+    expect(body).toMatch(
+      /profileClient === null\s*\? plan\.profileUpdates\s*: plan\.profileUpdates\.filter/,
+    );
+    expect(body).toContain('role="alert"');
+    expect(body).toContain('data-component="profiles-taxonomy-sync-issue"');
+    expect(body).toContain('onClick={() => void retryRailTaxonomySync()}');
+    expect(body).not.toContain('Keep local');
+    expect(body).not.toMatch(/catch\(\(\) => undefined\)[\s\S]{0,100}pushOrg/);
+  });
+
   it('states the shipped protected-local and encrypted owner-account proxy sync boundary honestly', () => {
     expect(body).toMatch(
       /Proxy credentials are\s*\n?\s*protected locally and synced encrypted to your account when used for a session\./,
@@ -153,9 +214,9 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toMatch(/void refreshAccountMe\(\);/);
   });
 
-  it('2026-05-20 — auto-poll lifecycle: useEffect runs refresh(true) initially (showLoading hint) + setInterval refresh(false) at REFRESH_MS (no flicker on background ticks); cleanup clearInterval keeps unchanged; client.profiles.iterate({ limit: 50 }) still caps per-poll in-memory accumulation', () => {
+  it('2026-05-20 — auto-poll lifecycle: useEffect runs refresh(true) initially (showLoading hint) + setInterval refresh(false) at REFRESH_MS (no flicker on background ticks); cleanup clears the interval and invalidates late publications; client.profiles.iterate({ limit: 50 }) still caps per-poll in-memory accumulation', () => {
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(true\);[\s\S]*?const id = window\.setInterval\(\(\) => \{[\s\S]*?void refresh\(false\);\s*\n?\s*\}, REFRESH_MS\);\s*\n?\s*return \(\) => window\.clearInterval\(id\);\s*\n?\s*\}, \[refresh\]\);/,
+      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(true\);[\s\S]*?const id = window\.setInterval\(\(\) => \{[\s\S]*?void refresh\(false\);\s*\n?\s*\}, REFRESH_MS\);[\s\S]*?return \(\) => \{\s*window\.clearInterval\(id\);[\s\S]*?refreshGenerationRef\.current \+= 1;\s*\};\s*\}, \[refresh\]\);/,
     );
     expect(body).toMatch(
       /for await \(const profile of client\.profiles\.iterate\(\{ limit: 50 \}\)\)/,

@@ -28589,3 +28589,47 @@ rejects executable bare `ssh`/`scp` bypasses and invokes `bash -n` on the bridge
 The expanded bridge/workflow/runbook/migration/infra matrix passes 6 files and 66/66
 tests. Strict server-test TypeScript, targeted ESLint/Prettier, Bash syntax and
 diff/whitespace checks are green.
+
+---
+
+## V-685 — Profile organization stays inside its validated account
+
+**Date:** 2026-07-15
+
+The workspace-keyed App correction intentionally remounts ProfilesView when the
+effective account changes. The old organization seed guard depended on a ref inside
+that view, so the new Team instance classified itself as a first run, loaded the one
+global `folders.json`/`tags.json` cache and could push Personal folders/tags into an
+empty Team server record. The same view also allowed older overlapping profile and
+agent-list refreshes to publish last. Rail taxonomy writes were local-first but
+detached every account and affected-profile update, making failure look identical to
+complete sync and allowing rapid alternate mutations to overlap.
+
+Folder/tag store operations now require an explicit namespace derived only from the
+normalized API origin plus the `/account/me`-validated effective owner id. Production
+never falls back to legacy global keys, and no taxonomy renders or seeds until that
+identity is valid. An empty server may be seeded only from values loaded through that
+exact scoped cache. A taxonomy GET/cache reconciliation has its own generation so a
+newer local rail mutation wins rather than being overwritten by a held older fetch.
+No API credential or email is accepted by, logged from, or persisted into this cache
+identity.
+
+Core Profiles refresh, detached agent-session publication and metadata seed-down now
+share latest generation, client and workspace ownership; effect cleanup invalidates
+all late work. Every rail create/delete/re-icon/rename/retry uses one token owner,
+awaits local persistence, the account taxonomy PUT and all affected profile PATCHes,
+and retains only the failed remote remainder. An admitted write captures its exact
+base/key/workspace/client transport before the first await and still settles after a
+scope change, while its token controls UI publication only. A bounded process-memory
+map retains safe, non-secret retry intent by cache scope across the keyed view remount;
+another workspace sees no warning/data, returning to the failed scope restores its
+local cache and sticky retry, and older server reconciliation pauses until successful
+sync. There is no dismissal that can silently discard this dirty authority.
+
+The direct store/remount/refresh/rail/content proof passes 6 files and 80/80 tests.
+It includes legacy non-claim, Personal→Team keyed remount with zero Team seed,
+newest-first/oldest-last core and detached-agent polls, unmount invalidation, missing
+transport, partial profile retry, A-held→B-held→late-A owner identity and held A remote
+failure→clean B→restored A retry. The complete Profiles matrix passes 17 files with
+144 tests passing and 6 intentional skips. Strict GUI and server-test TypeScript,
+targeted ESLint/Prettier and diff/whitespace checks are green.

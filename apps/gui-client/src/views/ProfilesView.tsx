@@ -38,7 +38,11 @@ import {
   replaceAllFolders,
 } from '../lib/folders-store';
 import { loadTags, addTag, removeTag, renameTag, replaceAllTags } from '../lib/tags-store';
-import { fetchOrganization, saveOrganization } from '../lib/account-organization';
+import {
+  fetchOrganization,
+  saveOrganization,
+  type AccountOrganization,
+} from '../lib/account-organization';
 import {
   loadProbeCache,
   saveProbeResult,
@@ -217,6 +221,77 @@ interface ProfilesState {
    *  normal launch must keep its progress indicator until the success/error
    *  branch overwrites it (audit #15). null when nothing is in flight. */
   progressNotice: string | null;
+}
+
+interface RailTaxonomyProfileUpdate {
+  id: string;
+  body: UpdateProfileRequest;
+}
+
+interface RailTaxonomySyncPlan {
+  action: string;
+  organization: AccountOrganization | null;
+  profileUpdates: RailTaxonomyProfileUpdate[];
+  profileTotal: number;
+}
+
+interface RailTaxonomyLocalResult<T> {
+  value: T;
+  organization: AccountOrganization;
+  profileUpdates?: RailTaxonomyProfileUpdate[];
+}
+
+interface RailTaxonomyTransport {
+  baseUrl: string;
+  apiKey: string | null;
+  workspace: string | null;
+  client: {
+    profiles: {
+      update: (id: string, body: UpdateProfileRequest) => Promise<unknown>;
+    };
+  } | null;
+}
+
+// ProfilesView is intentionally remounted at the workspace boundary. Retain a
+// small failed-write plan outside that keyed subtree so a late A failure is not
+// lost while B is mounted. Entries contain only bounded taxonomy/profile intent
+// and the public cache scope — never credentials or raw errors.
+const MAX_RETAINED_TAXONOMY_RETRIES = 16;
+const railTaxonomyRetriesByScope = new Map<string, RailTaxonomySyncPlan>();
+
+function rememberRailTaxonomyRetry(scope: string, retry: RailTaxonomySyncPlan | null): void {
+  railTaxonomyRetriesByScope.delete(scope);
+  if (retry === null) return;
+  railTaxonomyRetriesByScope.set(scope, retry);
+  while (railTaxonomyRetriesByScope.size > MAX_RETAINED_TAXONOMY_RETRIES) {
+    const oldest = railTaxonomyRetriesByScope.keys().next().value;
+    if (oldest === undefined) break;
+    railTaxonomyRetriesByScope.delete(oldest);
+  }
+}
+
+/** Build a persisted taxonomy namespace from public endpoint/account identity
+ * only. An API credential is deliberately neither accepted nor derivable here. */
+function buildTaxonomyCacheScope(baseUrl: string, effectiveAccountId: string): string | null {
+  try {
+    const url = new URL(baseUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return `${url.origin.toLowerCase()}|account:${effectiveAccountId}`;
+  } catch {
+    return null;
+  }
+}
+
+function railTaxonomySyncMessage(plan: RailTaxonomySyncPlan): string {
+  const account = plan.organization === null ? '' : 'organization';
+  const profiles = plan.profileUpdates.length;
+  const detail =
+    account.length > 0 && profiles > 0
+      ? `${account} and ${profiles.toString()} of ${plan.profileTotal.toString()} profiles`
+      : account.length > 0
+        ? account
+        : `${profiles.toString()} of ${plan.profileTotal.toString()} profiles`;
+  return `Saved on this Mac, but couldn’t sync the ${plan.action} to your account (${detail}). Retry the remaining sync.`;
 }
 
 /** Friendly device label for the simulator toolbar, derived from the archetype
@@ -462,6 +537,22 @@ export function ProfilesView({
 }: ProfilesViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe, activeWorkspace, setActiveWorkspace } =
     useSettings();
+  // Offline taxonomy may render or seed only after /account/me validates the
+  // effective owner. A persisted/revoked workspace id is not sufficient: it
+  // must still be present in the authenticated caller's memberships.
+  const effectiveTaxonomyAccountId =
+    activeWorkspace === null
+      ? (accountMe?.id ?? null)
+      : (accountMe?.teams ?? []).some((team) => team.owner_account_id === activeWorkspace)
+        ? activeWorkspace
+        : null;
+  const taxonomyCacheScope = useMemo(
+    () =>
+      effectiveTaxonomyAccountId === null
+        ? null
+        : buildTaxonomyCacheScope(settings.baseUrl, effectiveTaxonomyAccountId),
+    [effectiveTaxonomyAccountId, settings.baseUrl],
+  );
   // 2026-05-20 — antidetect-browser-style hub: profiles are first-class,
   // sessions are an implementation detail of "this profile is running".
   // Track live sessions + GUI-local bindings so we can show per-profile
@@ -540,6 +631,15 @@ export function ProfilesView({
     notice: null,
     progressNotice: null,
   });
+  // A React loading flag is not an admission/publication authority: same-scope
+  // polls can overlap, and an old client can settle after account replacement.
+  // Every async publication below must still own both the latest generation and
+  // the client/workspace captured by its invocation.
+  const refreshGenerationRef = useRef(0);
+  const refreshClientOwnerRef = useRef(client);
+  const refreshWorkspaceOwnerRef = useRef(activeWorkspace);
+  refreshClientOwnerRef.current = client;
+  refreshWorkspaceOwnerRef.current = activeWorkspace;
   const [busyId, setBusyId] = useState<string | null>(null);
   // `busyId` is shared by launch, stop, reopen, clone, trim, and delete. Keep the
   // launch identity separate so only a REAL launch shows the long-running
@@ -616,6 +716,20 @@ export function ProfilesView({
   const [customTags, setCustomTags] = useState<string[]>([]);
   const [creatingTag, setCreatingTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
+  // Folder/tag create/delete/re-icon/rename plus retry share one synchronous
+  // owner. The retry plan stores only bounded organization/profile intent — no
+  // credential, raw error, or filesystem detail.
+  const [railTaxonomyBusy, setRailTaxonomyBusy] = useState(false);
+  const [railTaxonomyRetry, setRailTaxonomyRetry] = useState<RailTaxonomySyncPlan | null>(null);
+  const railTaxonomyMutationOwnerRef = useRef<symbol | null>(null);
+  const railTaxonomyMutationGenerationRef = useRef(0);
+  const taxonomyReconcileGenerationRef = useRef(0);
+  const railTaxonomyClientOwnerRef = useRef(client);
+  const railTaxonomyScopeOwnerRef = useRef(taxonomyCacheScope);
+  railTaxonomyClientOwnerRef.current = client;
+  railTaxonomyScopeOwnerRef.current = taxonomyCacheScope;
+  const railTaxonomyControlsBlocked =
+    railTaxonomyBusy || railTaxonomyRetry !== null || taxonomyCacheScope === null;
   // Increment 3 — bulk select: client-side organize actions over a selection.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkFolder, setBulkFolder] = useState('');
@@ -696,9 +810,6 @@ export function ProfilesView({
   useEffect(() => {
     void loadProfilesMeta().then(setProfilesMeta);
     void loadProbeCache().then(setProbeCache);
-    void loadFolders().then(setCustomFolders);
-    void loadFolderIcons().then(setCustomFolderIcons);
-    void loadTags().then(setCustomTags);
   }, []);
 
   // F1 deep-link — once the list has loaded WITH the requested profile, select it,
@@ -728,111 +839,303 @@ export function ProfilesView({
     }, 0);
   }, [initialProfileId, state.profiles]);
 
-  // org-sync phase 3c (2026-06-16) — pull the account-level taxonomy (empty
-  // folders/icons + tags) from the server so it follows the account across
-  // machines. Server WINS on a successful load; the local folders/tags store
-  // (loaded above) is the offline cache, kept aligned via replaceAll*. Re-runs
-  // if the key/baseUrl/workspace change. Failure (offline/unauth) keeps cache.
-  //
-  // The folders.json / tags.json caches are a SINGLE global store (NOT keyed by
-  // workspace), so on a workspace SWITCH they still hold the PRIOR workspace's
-  // taxonomy. The seed-from-local branch below would then push that prior
-  // taxonomy into the newly-active (empty) workspace's SERVER record —
-  // cross-contaminating one workspace's folders/tags into another. So the seed
-  // only fires for the SAME scope as last run (the genuine #441 offline-then-
-  // online case for the current account/workspace); a scope CHANGE accepts the
-  // empty server taxonomy and reconciles the cache to it. (audit)
-  const prevOrgScopeRef = useRef<string | null>(null);
+  // Pull the account taxonomy and reconcile its identity-bound offline cache.
+  // A cache snapshot is eligible only when /account/me validated its effective
+  // owner above. Legacy global folders.json/tags.json keys are never read here,
+  // and the API credential is never part of a persisted cache key.
   useEffect(() => {
+    const scope = taxonomyCacheScope;
+    if (scope === null) {
+      // Fail closed while identity is unavailable/revoked: neither render nor
+      // seed taxonomy whose owner cannot be proven.
+      setCustomFolders([]);
+      setCustomFolderIcons({});
+      setCustomTags([]);
+      return;
+    }
     const apiKey = settings.apiKey;
-    if (apiKey === null || apiKey.length === 0) return;
-    const scope = `${apiKey} ${settings.baseUrl} ${activeWorkspace ?? ''}`;
-    const prevScope = prevOrgScopeRef.current;
-    // Seed the empty server taxonomy from the local cache on the FIRST run
-    // (prevScope === null — genuine #441 offline-then-online, where the global
-    // cache IS this scope's data) or a same-scope re-run. Block ONLY on a scope
-    // CHANGE (a workspace switch): the global cache then still holds the prior
-    // workspace's taxonomy, so seeding would leak it into the new workspace.
-    const seedAllowed = prevScope === null || prevScope === scope;
-    prevOrgScopeRef.current = scope;
+    const generation = ++taxonomyReconcileGenerationRef.current;
     let cancelled = false;
+    const isCurrentReconciliation = (): boolean =>
+      !cancelled && generation === taxonomyReconcileGenerationRef.current;
     void (async () => {
+      const [localFolders, localIcons, localTags] = await Promise.all([
+        loadFolders(scope),
+        loadFolderIcons(scope),
+        loadTags(scope),
+      ]);
+      if (!isCurrentReconciliation()) return;
+      setCustomFolders(localFolders);
+      setCustomFolderIcons(localIcons);
+      setCustomTags(localTags);
+      // A failed admitted local-first mutation owns newer truth than the server.
+      // Keep showing this scoped cache until its retained remote remainder is
+      // successfully retried; otherwise an older successful GET could overwrite
+      // the local change on return to this workspace.
+      if (railTaxonomyRetriesByScope.has(scope)) return;
+      if (apiKey === null || apiKey.length === 0) return;
       try {
         const org = await fetchOrganization(settings.baseUrl, apiKey, activeWorkspace);
-        if (cancelled) return; // a newer scope superseded this fetch — don't clobber it
-        // Don't let a fresh/empty server taxonomy WIPE locally-created (offline) folders/tags:
-        // if the server has nothing but the local cache has entries, SEED the server from local
-        // instead of clobbering local to empty. (#441 data-loss) — but ONLY when seeding is
-        // allowed (first run / same scope), so a workspace switch can't leak the prior
-        // workspace's taxonomy into the newly-active (empty) workspace.
-        if (seedAllowed && org.folders.length === 0 && org.tags.length === 0) {
-          const [localFolders, localIcons, localTags] = await Promise.all([
-            loadFolders(),
-            loadFolderIcons(),
-            loadTags(),
-          ]);
-          if (cancelled) return;
-          if (localFolders.length > 0 || localTags.length > 0) {
-            void saveOrganization(
-              settings.baseUrl,
-              apiKey,
-              {
-                folders: localFolders.map((name) =>
-                  localIcons[name] !== undefined && localIcons[name].length > 0
-                    ? { name, icon: localIcons[name] }
-                    : { name },
-                ),
-                tags: localTags,
-              },
-              activeWorkspace,
-            ).catch(() => undefined);
-            setCustomFolders([...localFolders].sort((a, b) => a.localeCompare(b)));
-            setCustomFolderIcons(localIcons);
-            setCustomTags([...localTags].sort((a, b) => a.localeCompare(b)));
-            return;
-          }
+        if (!isCurrentReconciliation()) return;
+        const hasBoundLocalValues = localFolders.length > 0 || localTags.length > 0;
+        if (hasBoundLocalValues && org.folders.length === 0 && org.tags.length === 0) {
+          // #441 offline-then-online: only a cache already bound to this exact
+          // endpoint/account may seed its empty server record.
+          await saveOrganization(
+            settings.baseUrl,
+            apiKey,
+            {
+              folders: localFolders.map((name) =>
+                localIcons[name] !== undefined && localIcons[name].length > 0
+                  ? { name, icon: localIcons[name] }
+                  : { name },
+              ),
+              tags: localTags,
+            },
+            activeWorkspace,
+          );
+          return;
         }
         const names = org.folders.map((f) => f.name);
         const icons: Record<string, string> = {};
         for (const f of org.folders)
           if (f.icon !== undefined && f.icon.length > 0) icons[f.name] = f.icon;
+        await Promise.all([
+          replaceAllFolders(names, icons, scope),
+          replaceAllTags(org.tags, scope),
+        ]);
+        if (!isCurrentReconciliation()) return;
         setCustomFolders([...names].sort((a, b) => a.localeCompare(b)));
         setCustomFolderIcons(icons);
         setCustomTags([...org.tags].sort((a, b) => a.localeCompare(b)));
-        await replaceAllFolders(names, icons);
-        await replaceAllTags(org.tags);
       } catch {
-        /* offline / unauth → keep the local cache loaded on mount */
+        /* offline / unauth → keep only this validated identity's local cache */
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [settings.apiKey, settings.baseUrl, activeWorkspace]);
+  }, [settings.apiKey, settings.baseUrl, activeWorkspace, taxonomyCacheScope]);
 
-  // org-sync — push the full account taxonomy to the server after a local
-  // mutation (best-effort; the local store stays the source if it fails).
-  const pushOrg = useCallback(
-    (folders: string[], icons: Record<string, string>, tags: string[]): void => {
-      if (settings.apiKey === null || settings.apiKey.length === 0) return;
-      const org = {
-        folders: folders.map((name) =>
-          icons[name] !== undefined && icons[name].length > 0
-            ? { name, icon: icons[name] }
-            : { name },
-        ),
-        tags,
-      };
-      void saveOrganization(settings.baseUrl, settings.apiKey, org, activeWorkspace).catch(
-        () => undefined,
-      );
-    },
-    [settings.apiKey, settings.baseUrl, activeWorkspace],
+  const buildRailOrganization = useCallback(
+    (folders: string[], icons: Record<string, string>, tags: string[]): AccountOrganization => ({
+      folders: folders.map((name) =>
+        icons[name] !== undefined && icons[name].length > 0
+          ? { name, icon: icons[name] }
+          : { name },
+      ),
+      tags,
+    }),
+    [],
   );
+
+  const syncRailTaxonomy = useCallback(
+    async (
+      plan: RailTaxonomySyncPlan,
+      transport: RailTaxonomyTransport,
+    ): Promise<RailTaxonomySyncPlan | null> => {
+      const { apiKey } = transport;
+      const profileClient = transport.client;
+      const hasAccountTransport = apiKey !== null && apiKey.length > 0;
+      const accountSettlements =
+        plan.organization !== null && hasAccountTransport
+          ? Promise.allSettled([
+              saveOrganization(transport.baseUrl, apiKey, plan.organization, transport.workspace),
+            ])
+          : Promise.resolve([]);
+      const profileSettlements =
+        profileClient === null
+          ? Promise.resolve([])
+          : Promise.allSettled(
+              plan.profileUpdates.map(async ({ id, body }) =>
+                profileClient.profiles.update(id, body),
+              ),
+            );
+      const [accountResults, profileResults] = await Promise.all([
+        accountSettlements,
+        profileSettlements,
+      ]);
+      const organizationFailed =
+        plan.organization !== null &&
+        (!hasAccountTransport || accountResults[0]?.status === 'rejected');
+      const failedProfileUpdates =
+        profileClient === null
+          ? plan.profileUpdates
+          : plan.profileUpdates.filter(
+              (_update, index) => profileResults[index]?.status === 'rejected',
+            );
+      if (!organizationFailed && failedProfileUpdates.length === 0) return null;
+      return {
+        ...plan,
+        organization: organizationFailed ? plan.organization : null,
+        profileUpdates: failedProfileUpdates,
+      };
+    },
+    [],
+  );
+
+  const runRailTaxonomyMutation = useCallback(
+    async <T,>(
+      action: string,
+      saveLocal: (scope: string) => Promise<RailTaxonomyLocalResult<T>>,
+      publishLocal: (value: T) => void,
+    ): Promise<boolean> => {
+      const scope = taxonomyCacheScope;
+      if (scope === null) {
+        setState((s) => ({
+          ...s,
+          error:
+            'Couldn’t verify which account owns this organization. Refresh your account and try again.',
+        }));
+        return false;
+      }
+      if (railTaxonomyMutationOwnerRef.current !== null || railTaxonomyRetry !== null) return false;
+      const owner = Symbol('rail-taxonomy-mutation');
+      railTaxonomyMutationOwnerRef.current = owner;
+      // A rail mutation is newer than any GET/cache reconciliation already in
+      // flight for this scope. Its local-first write must win that race.
+      taxonomyReconcileGenerationRef.current += 1;
+      const generation = ++railTaxonomyMutationGenerationRef.current;
+      const ownedClient = client;
+      const admittedTransport: RailTaxonomyTransport = {
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+        workspace: activeWorkspace,
+        client,
+      };
+      const isCurrentOwner = (): boolean =>
+        railTaxonomyMutationOwnerRef.current === owner &&
+        generation === railTaxonomyMutationGenerationRef.current &&
+        railTaxonomyClientOwnerRef.current === ownedClient &&
+        railTaxonomyScopeOwnerRef.current === scope;
+      setRailTaxonomyBusy(true);
+      setState((s) => ({ ...s, error: null }));
+      try {
+        const saved = await saveLocal(scope);
+        if (isCurrentOwner()) publishLocal(saved.value);
+        const profileUpdates = saved.profileUpdates ?? [];
+        // Owner invalidation suppresses stale UI only. The already-admitted,
+        // identity-scoped write still settles through its captured A transport.
+        const retry = await syncRailTaxonomy(
+          {
+            action,
+            organization: saved.organization,
+            profileUpdates,
+            profileTotal: profileUpdates.length,
+          },
+          admittedTransport,
+        );
+        rememberRailTaxonomyRetry(scope, retry);
+        if (isCurrentOwner()) setRailTaxonomyRetry(retry);
+        return true;
+      } catch {
+        if (isCurrentOwner()) {
+          setState((s) => ({
+            ...s,
+            error: `Couldn’t save the ${action} on this Mac. Check app storage and try again.`,
+          }));
+        }
+        return false;
+      } finally {
+        if (railTaxonomyMutationOwnerRef.current === owner) {
+          railTaxonomyMutationOwnerRef.current = null;
+          if (
+            generation === railTaxonomyMutationGenerationRef.current &&
+            railTaxonomyClientOwnerRef.current === ownedClient &&
+            railTaxonomyScopeOwnerRef.current === scope
+          ) {
+            setRailTaxonomyBusy(false);
+          }
+        }
+      }
+    },
+    [
+      activeWorkspace,
+      client,
+      railTaxonomyRetry,
+      settings.apiKey,
+      settings.baseUrl,
+      syncRailTaxonomy,
+      taxonomyCacheScope,
+    ],
+  );
+
+  const retryRailTaxonomySync = useCallback(async (): Promise<void> => {
+    const retry = railTaxonomyRetry;
+    const scope = taxonomyCacheScope;
+    if (retry === null || scope === null || railTaxonomyMutationOwnerRef.current !== null) return;
+    const owner = Symbol('rail-taxonomy-retry');
+    railTaxonomyMutationOwnerRef.current = owner;
+    const generation = ++railTaxonomyMutationGenerationRef.current;
+    const ownedClient = client;
+    const isCurrentOwner = (): boolean =>
+      railTaxonomyMutationOwnerRef.current === owner &&
+      generation === railTaxonomyMutationGenerationRef.current &&
+      railTaxonomyClientOwnerRef.current === ownedClient &&
+      railTaxonomyScopeOwnerRef.current === scope;
+    setRailTaxonomyBusy(true);
+    try {
+      const remaining = await syncRailTaxonomy(retry, {
+        baseUrl: settings.baseUrl,
+        apiKey: settings.apiKey,
+        workspace: activeWorkspace,
+        client,
+      });
+      rememberRailTaxonomyRetry(scope, remaining);
+      if (!isCurrentOwner()) return;
+      setRailTaxonomyRetry(remaining);
+      if (remaining === null) {
+        setState((s) => ({ ...s, notice: 'Profile organization is fully synced.' }));
+      }
+    } finally {
+      if (railTaxonomyMutationOwnerRef.current === owner) {
+        railTaxonomyMutationOwnerRef.current = null;
+        if (
+          generation === railTaxonomyMutationGenerationRef.current &&
+          railTaxonomyClientOwnerRef.current === ownedClient &&
+          railTaxonomyScopeOwnerRef.current === scope
+        ) {
+          setRailTaxonomyBusy(false);
+        }
+      }
+    }
+  }, [
+    activeWorkspace,
+    client,
+    railTaxonomyRetry,
+    settings.apiKey,
+    settings.baseUrl,
+    syncRailTaxonomy,
+    taxonomyCacheScope,
+  ]);
+
+  useEffect(() => {
+    setRailTaxonomyBusy(false);
+    setRailTaxonomyRetry(
+      taxonomyCacheScope === null
+        ? null
+        : (railTaxonomyRetriesByScope.get(taxonomyCacheScope) ?? null),
+    );
+    return () => {
+      railTaxonomyMutationGenerationRef.current += 1;
+      railTaxonomyMutationOwnerRef.current = null;
+    };
+  }, [client, taxonomyCacheScope]);
 
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
+      const generation = ++refreshGenerationRef.current;
+      const isCurrentRefresh = (): boolean =>
+        generation === refreshGenerationRef.current &&
+        refreshClientOwnerRef.current === client &&
+        refreshWorkspaceOwnerRef.current === activeWorkspace;
       if (!client) {
+        if (!isCurrentRefresh()) return;
+        setActiveSessions([]);
+        setAgentSessions([]);
+        setAgentSessionsLoaded(false);
+        setBindings([]);
+        setProxies([]);
         setState({
           profiles: [],
           refreshedAt: null,
@@ -859,6 +1162,7 @@ export function ProfilesView({
           listBindings(),
           listProxies(),
         ]);
+        if (!isCurrentRefresh()) return;
         setActiveSessions(sessionsPage.data);
         setBindings(currentBindings);
         setProxies(currentProxies);
@@ -871,6 +1175,7 @@ export function ProfilesView({
           void client.agentSessions
             .list()
             .then((page) => {
+              if (!isCurrentRefresh()) return;
               // W2679 — carry the server-reported `liveness` (state + fresh)
               // through so boundSession can demote a stale/idle session straight
               // from the list, no separate client-side page-state probe.
@@ -886,24 +1191,29 @@ export function ProfilesView({
             })
             .catch(() => undefined);
         }
-        setState((s) => ({
-          ...s,
-          profiles: profilesPage,
-          refreshedAt: Date.now(),
-          loading: false,
-          loadError: null,
-          // Preserve the existing error: unlike SessionsView, ProfilesView's
-          // `error` also carries LAUNCH errors (e.g. "didn't get a video
-          // channel — try again"), which must survive the background 15s poll
-          // that races right after a failed launch. Clearing it here wiped a
-          // legitimate launch error (caught by profiles-launch-stream tests).
-          error: s.error,
-        }));
+        setState((s) =>
+          isCurrentRefresh()
+            ? {
+                ...s,
+                profiles: profilesPage,
+                refreshedAt: Date.now(),
+                loading: false,
+                loadError: null,
+                // Preserve the existing error: unlike SessionsView, ProfilesView's
+                // `error` also carries LAUNCH errors (e.g. "didn't get a video
+                // channel — try again"), which must survive the background 15s poll
+                // that races right after a failed launch. Clearing it here wiped a
+                // legitimate launch error (caught by profiles-launch-stream tests).
+                error: s.error,
+              }
+            : s,
+        );
         // Organization sync Phase 2 — seed-down: profiles organized on
         // another device (server folder/tags set, no local entry) get a
         // local entry so the hub shows them immediately. Local-vs-server
         // conflicts: local wins; the next edit's write-through reconciles.
         setProfilesMeta((local) => {
+          if (!isCurrentRefresh()) return local;
           const seeded = seedMetaFromServer(local, profilesPage);
           if (!seeded.changed) return local;
           void persistProfilesMeta(
@@ -919,6 +1229,7 @@ export function ProfilesView({
           return seeded.map;
         });
       } catch (err) {
+        if (!isCurrentRefresh()) return;
         setState((s) => ({
           ...s,
           loading: false,
@@ -930,7 +1241,7 @@ export function ProfilesView({
         }));
       }
     },
-    [client, settings.baseUrl],
+    [client, settings.baseUrl, activeWorkspace],
   );
 
   // L4b — load the account's trashed profiles for the recycle-bin view.
@@ -1167,7 +1478,12 @@ export function ProfilesView({
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       void refresh(false);
     }, REFRESH_MS);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      // Invalidate core, detached agent-list and metadata publications from the
+      // invocation owned by this effect/client, including on final unmount.
+      refreshGenerationRef.current += 1;
+    };
   }, [refresh]);
 
   // Auto-dismiss transient success notices (audit #41) — the notice banner is a
@@ -1470,75 +1786,130 @@ export function ProfilesView({
   }, [scopedMeta, customTags]);
 
   // Create a tag from the rail's inline input (mirrors handleCreateFolder).
-  const handleCreateTag = useCallback(async () => {
-    const next = await addTag(newTagName);
-    setCustomTags(next);
-    pushOrg(customFolders, customFolderIcons, next); // org-sync write-through
+  const handleCreateTag = useCallback(async (): Promise<boolean> => {
     const created = newTagName.trim().replace(/^#+/, '').trim();
-    if (created.length > 0) setTagFilter(created);
-    setNewTagName('');
-    setCreatingTag(false);
-  }, [newTagName, pushOrg, customFolders, customFolderIcons]);
+    const saved = await runRailTaxonomyMutation(
+      'new tag',
+      async (scope) => {
+        const next = await addTag(newTagName, scope);
+        return {
+          value: next,
+          organization: buildRailOrganization(customFolders, customFolderIcons, next),
+        };
+      },
+      (next) => {
+        setCustomTags(next);
+        if (created.length > 0) setTagFilter(created);
+      },
+    );
+    if (saved) {
+      setNewTagName('');
+      setCreatingTag(false);
+    }
+    return saved;
+  }, [
+    buildRailOrganization,
+    customFolderIcons,
+    customFolders,
+    newTagName,
+    runRailTaxonomyMutation,
+  ]);
 
   // Create a folder from the rail's inline input: persist the name, refresh the
   // list, jump the filter to the new folder, and close the input.
-  const handleCreateFolder = useCallback(async () => {
-    const next = await addFolder(newFolderName, newFolderIcon);
-    setCustomFolders(next);
+  const handleCreateFolder = useCallback(async (): Promise<boolean> => {
     const created = newFolderName.trim();
     const nextIcons =
       created.length > 0 && newFolderIcon.length > 0
         ? { ...customFolderIcons, [created]: newFolderIcon }
         : customFolderIcons;
-    if (created.length > 0 && newFolderIcon.length > 0) {
-      setCustomFolderIcons(nextIcons);
+    const saved = await runRailTaxonomyMutation(
+      'new folder',
+      async (scope) => {
+        const next = await addFolder(newFolderName, scope, newFolderIcon);
+        return {
+          value: next,
+          organization: buildRailOrganization(next, nextIcons, customTags),
+        };
+      },
+      (next) => {
+        setCustomFolders(next);
+        if (created.length > 0 && newFolderIcon.length > 0) {
+          setCustomFolderIcons(nextIcons);
+        }
+        if (created.length > 0 && next.includes(created)) setFolderFilter(created);
+      },
+    );
+    if (saved) {
+      setNewFolderName('');
+      setNewFolderIcon('');
+      setCreatingFolder(false);
     }
-    pushOrg(next, nextIcons, customTags); // org-sync write-through
-    if (created.length > 0 && next.includes(created)) setFolderFilter(created);
-    setNewFolderName('');
-    setNewFolderIcon('');
-    setCreatingFolder(false);
-  }, [newFolderName, newFolderIcon, pushOrg, customFolderIcons, customTags]);
+    return saved;
+  }, [
+    buildRailOrganization,
+    customFolderIcons,
+    customTags,
+    newFolderIcon,
+    newFolderName,
+    runRailTaxonomyMutation,
+  ]);
 
   // 2026-06-19 (founder GUI-improvement audit) — folder/tag MANAGEMENT from the
   // rail: delete, re-icon (folders only), rename. The stores' remove*/rename*/
   // setFolderIcon existed but were never wired, and — the known gap — removals/
   // re-icons never pushed to the account org (only CREATE did). Every mutation
-  // here calls pushOrg so the shrunk/edited taxonomy syncs across machines.
+  // now shares one synchronous owner and awaits both local + account outcomes.
 
   // Delete a folder from the rail. Removes the custom name (+ its icon) from the
   // local store, syncs the shrunk org, and resets the filter if it was active.
   // Profiles still carrying the name keep deriving it (per removeFolder's
   // contract) — this clears the EMPTY-folder taxonomy entry, not the profiles.
   const handleDeleteFolder = useCallback(
-    async (name: string) => {
-      const next = await removeFolder(name);
-      setCustomFolders(next);
+    async (name: string): Promise<boolean> => {
       const nextIcons = { ...customFolderIcons };
       delete nextIcons[name];
-      setCustomFolderIcons(nextIcons);
-      pushOrg(next, nextIcons, customTags); // org-sync the removal (the known gap)
-      if (folderFilter === name) setFolderFilter('all');
+      return runRailTaxonomyMutation(
+        'folder deletion',
+        async (scope) => {
+          const next = await removeFolder(name, scope);
+          return {
+            value: next,
+            organization: buildRailOrganization(next, nextIcons, customTags),
+          };
+        },
+        (next) => {
+          setCustomFolders(next);
+          setCustomFolderIcons(nextIcons);
+          if (folderFilter === name) setFolderFilter('all');
+        },
+      );
     },
-    [customFolderIcons, customTags, pushOrg, folderFilter],
+    [buildRailOrganization, customFolderIcons, customTags, folderFilter, runRailTaxonomyMutation],
   );
 
   // Re-icon a folder from the rail (the existing PROFILE_ICONS picker; '' clears
   // back to the deterministic glyph). Persists via setFolderIcon, then pushes.
   const handleReiconFolder = useCallback(
-    async (name: string, icon: string) => {
-      const nextIcons = await setFolderIcon(name, icon);
-      setCustomFolderIcons(nextIcons);
-      // Re-iconing a profile-derived folder seeds it into the custom names so the
-      // icon has a stable home in the synced taxonomy.
-      let names = customFolders;
-      if (!names.includes(name)) {
-        names = await addFolder(name);
-        setCustomFolders(names);
-      }
-      pushOrg(names, nextIcons, customTags); // org-sync the re-icon (the known gap)
-    },
-    [customFolders, customTags, pushOrg],
+    async (name: string, icon: string): Promise<boolean> =>
+      runRailTaxonomyMutation(
+        'folder icon',
+        async (scope) => {
+          const nextIcons = await setFolderIcon(name, icon, scope);
+          // Re-iconing a profile-derived folder seeds it into the custom names so the
+          // icon has a stable home in the synced taxonomy.
+          const names = customFolders.includes(name) ? customFolders : await addFolder(name, scope);
+          return {
+            value: { names, icons: nextIcons },
+            organization: buildRailOrganization(names, nextIcons, customTags),
+          };
+        },
+        ({ names, icons }) => {
+          setCustomFolders(names);
+          setCustomFolderIcons(icons);
+        },
+      ),
+    [buildRailOrganization, customFolders, customTags, runRailTaxonomyMutation],
   );
 
   // Rename a folder: re-key the custom name + icon (renameFolder), BULK re-assign
@@ -1546,101 +1917,123 @@ export function ProfilesView({
   // each), then push the edited taxonomy. Keeps the filter pinned to the folder
   // (now under its new name) if it was active.
   const handleRenameFolder = useCallback(
-    async (oldName: string, rawNew: string) => {
+    async (oldName: string, rawNew: string): Promise<boolean> => {
       const newName = rawNew.trim().slice(0, MAX_FOLDER_NAME_CHARS);
-      if (newName.length === 0 || newName === oldName) return;
-      const nextNames = await renameFolder(oldName, newName);
-      setCustomFolders(nextNames);
+      if (newName.length === 0 || newName === oldName) return true;
       const nextIcons = { ...customFolderIcons };
       if (nextIcons[oldName] !== undefined) {
         if (nextIcons[newName] === undefined) nextIcons[newName] = nextIcons[oldName];
         delete nextIcons[oldName];
       }
-      setCustomFolderIcons(nextIcons);
-      // Move every profile in the old folder into the new one (single round-trip
-      // local; per-profile PATCH best-effort, same contract as handleBulkApply).
       const affected = state.profiles
         .filter((p) => profilesMeta[p.id]?.folder === oldName)
         .map((p) => p.id);
-      if (affected.length > 0) {
-        const nextMeta = await saveProfilesMetaBulk(
-          affected,
-          { folder: newName },
-          'replace',
-          activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
-        );
-        setProfilesMeta(nextMeta);
-        if (client) {
-          for (const id of affected) {
-            void client.profiles.update(id, { folder: newName }).catch(() => undefined);
-          }
-        }
-      }
-      pushOrg(nextNames, nextIcons, customTags); // org-sync the rename (the known gap)
-      if (folderFilter === oldName) setFolderFilter(newName);
+      return runRailTaxonomyMutation(
+        'folder rename',
+        async (scope) => {
+          const nextNames = await renameFolder(oldName, newName, scope);
+          const nextMeta =
+            affected.length === 0
+              ? profilesMeta
+              : await saveProfilesMetaBulk(
+                  affected,
+                  { folder: newName },
+                  'replace',
+                  activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+                );
+          return {
+            value: { nextNames, nextMeta },
+            organization: buildRailOrganization(nextNames, nextIcons, customTags),
+            profileUpdates: affected.map((id) => ({ id, body: { folder: newName } })),
+          };
+        },
+        ({ nextNames, nextMeta }) => {
+          setCustomFolders(nextNames);
+          setCustomFolderIcons(nextIcons);
+          if (affected.length > 0) setProfilesMeta(nextMeta);
+          if (folderFilter === oldName) setFolderFilter(newName);
+        },
+      );
     },
     [
+      activeWorkspace,
+      buildRailOrganization,
       customFolderIcons,
       customTags,
-      pushOrg,
       folderFilter,
-      state.profiles,
       profilesMeta,
-      activeWorkspace,
-      client,
+      runRailTaxonomyMutation,
+      state.profiles,
     ],
   );
 
   // Delete a tag from the rail. Drops the custom name, syncs, clears the filter.
   const handleDeleteTag = useCallback(
-    async (name: string) => {
-      const next = await removeTag(name);
-      setCustomTags(next);
-      pushOrg(customFolders, customFolderIcons, next); // org-sync the removal (the known gap)
-      if (tagFilter === name) setTagFilter(null);
-    },
-    [customFolders, customFolderIcons, pushOrg, tagFilter],
+    async (name: string): Promise<boolean> =>
+      runRailTaxonomyMutation(
+        'tag deletion',
+        async (scope) => {
+          const next = await removeTag(name, scope);
+          return {
+            value: next,
+            organization: buildRailOrganization(customFolders, customFolderIcons, next),
+          };
+        },
+        (next) => {
+          setCustomTags(next);
+          if (tagFilter === name) setTagFilter(null);
+        },
+      ),
+    [buildRailOrganization, customFolderIcons, customFolders, runRailTaxonomyMutation, tagFilter],
   );
 
   // Rename a tag: re-key the custom name (renameTag), BULK swap the tag on every
   // profile carrying it (subtract old + union new, local meta + a PATCH each),
   // then push. Keeps the filter on the tag (now renamed) if it was active.
   const handleRenameTag = useCallback(
-    async (oldName: string, rawNew: string) => {
+    async (oldName: string, rawNew: string): Promise<boolean> => {
       const newName = rawNew.trim().replace(/^#+/, '').trim().slice(0, MAX_TAG_NAME_CHARS);
-      if (newName.length === 0 || newName === oldName) return;
-      const nextNames = await renameTag(oldName, newName);
-      setCustomTags(nextNames);
+      if (newName.length === 0 || newName === oldName) return true;
       const affected = state.profiles
         .filter((p) => (profilesMeta[p.id]?.tags ?? []).includes(oldName))
         .map((p) => p.id);
-      if (affected.length > 0) {
-        const live = activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined;
-        // Subtract the old tag, then union the new one — two passes so a profile
-        // that already carried both doesn't end up with a duplicate.
-        await saveProfilesMetaBulk(affected, { tags: [oldName] }, 'remove', live);
-        const nextMeta = await saveProfilesMetaBulk(affected, { tags: [newName] }, 'merge', live);
-        setProfilesMeta(nextMeta);
-        if (client) {
-          for (const id of affected) {
-            const saved = nextMeta[id];
-            if (!saved) continue;
-            void client.profiles.update(id, { tags: saved.tags }).catch(() => undefined);
+      return runRailTaxonomyMutation(
+        'tag rename',
+        async (scope) => {
+          const nextNames = await renameTag(oldName, newName, scope);
+          let nextMeta = profilesMeta;
+          if (affected.length > 0) {
+            const live = activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined;
+            // Subtract the old tag, then union the new one — two passes so a profile
+            // that already carried both doesn't end up with a duplicate.
+            await saveProfilesMetaBulk(affected, { tags: [oldName] }, 'remove', live);
+            nextMeta = await saveProfilesMetaBulk(affected, { tags: [newName] }, 'merge', live);
           }
-        }
-      }
-      pushOrg(customFolders, customFolderIcons, nextNames); // org-sync the rename (the known gap)
-      if (tagFilter === oldName) setTagFilter(newName);
+          return {
+            value: { nextNames, nextMeta },
+            organization: buildRailOrganization(customFolders, customFolderIcons, nextNames),
+            profileUpdates: affected.flatMap((id) => {
+              const saved = nextMeta[id];
+              return saved === undefined ? [] : [{ id, body: { tags: saved.tags } }];
+            }),
+          };
+        },
+        ({ nextNames, nextMeta }) => {
+          setCustomTags(nextNames);
+          if (affected.length > 0) setProfilesMeta(nextMeta);
+          if (tagFilter === oldName) setTagFilter(newName);
+        },
+      );
     },
     [
+      activeWorkspace,
+      buildRailOrganization,
       customFolders,
       customFolderIcons,
-      pushOrg,
-      tagFilter,
-      state.profiles,
       profilesMeta,
-      activeWorkspace,
-      client,
+      runRailTaxonomyMutation,
+      state.profiles,
+      tagFilter,
     ],
   );
 
@@ -3133,6 +3526,25 @@ export function ProfilesView({
           />
         )
       )}
+      {railTaxonomyRetry !== null && (
+        <div
+          role="alert"
+          data-component="profiles-taxonomy-sync-issue"
+          className="flex flex-wrap items-center gap-3 rounded border border-status-warning/30 bg-status-warning/10 px-3 py-2"
+        >
+          <span className="min-w-0 flex-1 text-sm text-ink-primary">
+            {railTaxonomySyncMessage(railTaxonomyRetry)}
+          </span>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => void retryRailTaxonomySync()}
+            disabled={railTaxonomyBusy}
+          >
+            {railTaxonomyBusy ? 'Retrying…' : 'Retry sync'}
+          </button>
+        </div>
+      )}
       {state.notice !== null && (
         <div
           role="status"
@@ -3228,7 +3640,11 @@ export function ProfilesView({
               NAV rail (vertical, full-width rows) instead of the old horizontal
               shelf + the redundant filter dropdown. Counts derive from the same
               organization map; selection drives folderFilter unchanged. */}
-          <aside aria-label="Folders and tags" className={PROFILES_RAIL_CLASS}>
+          <aside
+            aria-label="Folders and tags"
+            aria-busy={railTaxonomyBusy}
+            className={PROFILES_RAIL_CLASS}
+          >
             <span className="section-label px-2.5 pb-1">Folders</span>
             <FolderItem
               variant="rail"
@@ -3248,11 +3664,13 @@ export function ProfilesView({
                   onSelect={() => setFolderFilter(f)}
                 />
                 <RailRowMenu
+                  key={`${taxonomyCacheScope ?? 'unowned'}:${f}`}
                   label={`folder ${f}`}
                   maxChars={MAX_FOLDER_NAME_CHARS}
-                  onRename={(next) => void handleRenameFolder(f, next)}
-                  onReicon={(emoji) => void handleReiconFolder(f, emoji)}
-                  onDelete={() => void handleDeleteFolder(f)}
+                  disabled={railTaxonomyControlsBlocked}
+                  onRename={(next) => handleRenameFolder(f, next)}
+                  onReicon={(emoji) => handleReiconFolder(f, emoji)}
+                  onDelete={() => handleDeleteFolder(f)}
                 />
               </div>
             ))}
@@ -3275,6 +3693,7 @@ export function ProfilesView({
                   aria-label="New folder name"
                   placeholder="Folder name…"
                   value={newFolderName}
+                  disabled={railTaxonomyControlsBlocked}
                   maxLength={MAX_FOLDER_NAME_CHARS}
                   onChange={(e) => setNewFolderName(e.target.value)}
                   onKeyDown={(e) => {
@@ -3290,6 +3709,7 @@ export function ProfilesView({
                 <select
                   aria-label="New folder icon"
                   value={newFolderIcon}
+                  disabled={railTaxonomyControlsBlocked}
                   onChange={(e) => setNewFolderIcon(e.target.value)}
                   className="w-full rounded border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary focus:border-accent focus:outline-none"
                 >
@@ -3304,7 +3724,7 @@ export function ProfilesView({
                   <button
                     type="button"
                     onClick={() => void handleCreateFolder()}
-                    disabled={newFolderName.trim().length === 0}
+                    disabled={railTaxonomyControlsBlocked || newFolderName.trim().length === 0}
                     className="flex-1 rounded bg-accent-subtle px-2 py-1 text-xs font-medium text-ink-primary disabled:opacity-50"
                   >
                     Add
@@ -3316,6 +3736,7 @@ export function ProfilesView({
                       setNewFolderIcon('');
                       setCreatingFolder(false);
                     }}
+                    disabled={railTaxonomyBusy}
                     className="rounded px-2 py-1 text-xs text-ink-muted hover:text-ink-primary"
                   >
                     Cancel
@@ -3326,6 +3747,7 @@ export function ProfilesView({
               <button
                 type="button"
                 onClick={() => setCreatingFolder(true)}
+                disabled={railTaxonomyControlsBlocked}
                 className="mt-0.5 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-surface-divider px-2.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:border-ink-muted/60 hover:text-ink-primary"
               >
                 <span aria-hidden="true" className="text-sm leading-none">
@@ -3367,10 +3789,12 @@ export function ProfilesView({
                     </span>
                   </button>
                   <RailRowMenu
+                    key={`${taxonomyCacheScope ?? 'unowned'}:${tag}`}
                     label={`tag ${tag}`}
                     maxChars={MAX_TAG_NAME_CHARS}
-                    onRename={(next) => void handleRenameTag(tag, next)}
-                    onDelete={() => void handleDeleteTag(tag)}
+                    disabled={railTaxonomyControlsBlocked}
+                    onRename={(next) => handleRenameTag(tag, next)}
+                    onDelete={() => handleDeleteTag(tag)}
                   />
                 </div>
               );
@@ -3381,6 +3805,7 @@ export function ProfilesView({
                 aria-label="New tag name"
                 placeholder="Tag name…"
                 value={newTagName}
+                disabled={railTaxonomyControlsBlocked}
                 maxLength={MAX_TAG_NAME_CHARS}
                 onChange={(e) => setNewTagName(e.target.value)}
                 onKeyDown={(e) => {
@@ -3400,6 +3825,7 @@ export function ProfilesView({
               <button
                 type="button"
                 onClick={() => setCreatingTag(true)}
+                disabled={railTaxonomyControlsBlocked}
                 className="mt-0.5 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-surface-divider px-2.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:border-ink-muted/60 hover:text-ink-primary"
               >
                 <span aria-hidden="true" className="text-sm leading-none">
@@ -5562,20 +5988,23 @@ function RailRowMenu({
   onReicon,
   onDelete,
   maxChars,
+  disabled,
 }: {
   /** Accessible disambiguator, e.g. "folder Work" / "tag aged". */
   label: string;
-  onRename: (next: string) => void;
-  onReicon?: (emoji: string) => void;
-  onDelete: () => void;
+  onRename: (next: string) => Promise<boolean>;
+  onReicon?: (emoji: string) => Promise<boolean>;
+  onDelete: () => Promise<boolean>;
   /** P2 #8 — the name cap for THIS row's kind (folder 32 / tag 24) so the rename
    *  input can't type past what the rename handler + server will accept. */
   maxChars: number;
+  disabled: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState('');
   const ref = useRef<HTMLDivElement | null>(null);
+  const actionOwnerRef = useRef<symbol | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -5589,12 +6018,32 @@ function RailRowMenu({
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
-  function commitRename(): void {
+  async function commitRename(): Promise<void> {
     const next = draft.trim();
-    if (next.length > 0) onRename(next);
-    setRenaming(false);
-    setOpen(false);
-    setDraft('');
+    if (next.length === 0 || disabled || actionOwnerRef.current !== null) return;
+    const owner = Symbol('rail-row-rename');
+    actionOwnerRef.current = owner;
+    try {
+      const saved = await onRename(next);
+      if (actionOwnerRef.current !== owner || !saved) return;
+      setRenaming(false);
+      setOpen(false);
+      setDraft('');
+    } finally {
+      if (actionOwnerRef.current === owner) actionOwnerRef.current = null;
+    }
+  }
+
+  async function commitMenuAction(action: () => Promise<boolean>): Promise<void> {
+    if (disabled || actionOwnerRef.current !== null) return;
+    const owner = Symbol('rail-row-action');
+    actionOwnerRef.current = owner;
+    try {
+      const saved = await action();
+      if (actionOwnerRef.current === owner && saved) setOpen(false);
+    } finally {
+      if (actionOwnerRef.current === owner) actionOwnerRef.current = null;
+    }
   }
 
   return (
@@ -5603,6 +6052,7 @@ function RailRowMenu({
         type="button"
         aria-label={`Manage ${label}`}
         title="Manage"
+        disabled={disabled}
         onClick={(e) => {
           e.stopPropagation();
           setOpen((v) => !v);
@@ -5626,19 +6076,21 @@ function RailRowMenu({
               maxLength={maxChars}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Enter') void commitRename();
                 else if (e.key === 'Escape') {
                   setRenaming(false);
                   setOpen(false);
                 }
               }}
-              onBlur={commitRename}
+              onBlur={() => void commitRename()}
+              disabled={disabled}
               className="m-1 w-[calc(100%-0.5rem)] rounded border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary focus:border-accent focus:outline-none"
             />
           ) : (
             <button
               type="button"
               role="menuitem"
+              disabled={disabled}
               onClick={() => {
                 setDraft(label.replace(/^(folder|tag) /, ''));
                 setRenaming(true);
@@ -5654,11 +6106,11 @@ function RailRowMenu({
               <select
                 aria-label={`Re-icon ${label}`}
                 value=""
+                disabled={disabled}
                 onChange={(e) => {
                   const v = e.target.value;
                   if (v === '__noop') return;
-                  onReicon(v === '__none' ? '' : v);
-                  setOpen(false);
+                  void commitMenuAction(() => onReicon(v === '__none' ? '' : v));
                 }}
                 className="ml-auto rounded border border-surface-divider bg-surface-base px-1 py-0.5 text-xs text-ink-primary"
               >
@@ -5676,10 +6128,8 @@ function RailRowMenu({
             <button
               type="button"
               role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onDelete();
-              }}
+              disabled={disabled}
+              onClick={() => void commitMenuAction(onDelete)}
               className="block w-full px-3 py-1.5 text-left text-xs font-medium text-status-error hover:bg-status-error/10"
             >
               Delete

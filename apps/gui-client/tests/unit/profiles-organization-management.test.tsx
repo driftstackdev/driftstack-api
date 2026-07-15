@@ -45,21 +45,36 @@ const stableClient = {
   agentSessions: { list: () => Promise.resolve({ data: [] }) },
 };
 const stableAccountMe = {
+  id: 'acc_personal',
   tier: 'solo_manual',
   concurrent_session_cap: 5,
   concurrent_session_active: 0,
   profile_cap: 10,
   profile_count: 2,
+  teams: [
+    {
+      owner_account_id: 'acc_team',
+      owner_email: 'owner@example.test',
+      owner_name: 'Team owner',
+      role: 'admin',
+      membership_id: 'mem_1',
+    },
+  ],
 };
 const stableSettings = { apiKey: 'ds_test_x', baseUrl: 'http://localhost:3000' };
+const settingsCtl: {
+  apiKey: string | null;
+  activeWorkspace: string | null;
+  client: typeof stableClient | null;
+} = { apiKey: stableSettings.apiKey, activeWorkspace: null, client: stableClient };
 vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({
-    client: stableClient,
-    settings: stableSettings,
+    client: settingsCtl.client,
+    settings: { ...stableSettings, apiKey: settingsCtl.apiKey },
     accountMe: stableAccountMe,
     refreshAccountMe: vi.fn(() => Promise.resolve()),
     loading: false,
-    activeWorkspace: null,
+    activeWorkspace: settingsCtl.activeWorkspace,
     setActiveWorkspace: vi.fn(),
   }),
 }));
@@ -101,13 +116,23 @@ const removeFolder = vi.fn(() => Promise.resolve([]));
 const renameFolder = vi.fn(() => Promise.resolve(['Retail']));
 const setFolderIcon = vi.fn(() => Promise.resolve({ Work: '🛒' }));
 const addFolder = vi.fn(() => Promise.resolve(['Work']));
+const folderCaches = new Map<
+  string,
+  { exists: boolean; names: string[]; icons: Record<string, string> }
+>();
+const loadFolders = vi.fn((scope: string) =>
+  Promise.resolve(folderCaches.get(scope)?.names ?? ['Work']),
+);
+const loadFolderIcons = vi.fn((scope: string) =>
+  Promise.resolve(folderCaches.get(scope)?.icons ?? {}),
+);
 vi.mock('../../src/lib/folders-store', () => ({
-  loadFolders: () => Promise.resolve(['Work']),
+  loadFolders: (...a: unknown[]) => loadFolders(...(a as [string])),
+  loadFolderIcons: (...a: unknown[]) => loadFolderIcons(...(a as [string])),
   addFolder: (...a: unknown[]) => addFolder(...(a as [])),
   removeFolder: (...a: unknown[]) => removeFolder(...(a as [])),
   renameFolder: (...a: unknown[]) => renameFolder(...(a as [])),
   setFolderIcon: (...a: unknown[]) => setFolderIcon(...(a as [])),
-  loadFolderIcons: () => Promise.resolve({}),
   replaceAllFolders: vi.fn(() => Promise.resolve()),
 }));
 const removeTag = vi.fn(() => Promise.resolve([]));
@@ -120,10 +145,11 @@ vi.mock('../../src/lib/tags-store', () => ({
   replaceAllTags: vi.fn(() => Promise.resolve()),
 }));
 
+const fetchOrganization = vi.fn(() => Promise.reject(new Error('offline')));
 const saveOrganization = vi.fn(() => Promise.resolve());
 vi.mock('../../src/lib/account-organization', () => ({
   // Reject the pull so the local cache (loaded above) is what the rail shows.
-  fetchOrganization: () => Promise.reject(new Error('offline')),
+  fetchOrganization: (...a: unknown[]) => fetchOrganization(...(a as [])),
   saveOrganization: (...a: unknown[]) => saveOrganization(...(a as [])),
 }));
 vi.mock('../../src/lib/proxy-probe-cache', () => ({
@@ -171,15 +197,30 @@ function reseedMeta(): void {
 
 describe('ProfilesView organization management', () => {
   beforeEach(() => {
+    settingsCtl.apiKey = stableSettings.apiKey;
+    settingsCtl.activeWorkspace = null;
+    settingsCtl.client = stableClient;
     profilesUpdate.mockReset();
     profilesUpdate.mockResolvedValue({ id: 'prof_1' });
-    saveOrganization.mockClear();
-    removeFolder.mockClear();
-    renameFolder.mockClear();
-    setFolderIcon.mockClear();
-    addFolder.mockClear();
-    removeTag.mockClear();
-    renameTag.mockClear();
+    saveOrganization.mockReset();
+    saveOrganization.mockResolvedValue(undefined);
+    removeFolder.mockReset();
+    removeFolder.mockResolvedValue([]);
+    renameFolder.mockReset();
+    renameFolder.mockResolvedValue(['Retail']);
+    setFolderIcon.mockReset();
+    setFolderIcon.mockResolvedValue({ Work: '🛒' });
+    addFolder.mockReset();
+    addFolder.mockResolvedValue(['Work']);
+    removeTag.mockReset();
+    removeTag.mockResolvedValue([]);
+    renameTag.mockReset();
+    renameTag.mockResolvedValue(['warmup']);
+    folderCaches.clear();
+    loadFolders.mockClear();
+    loadFolderIcons.mockClear();
+    fetchOrganization.mockReset();
+    fetchOrganization.mockRejectedValue(new Error('offline'));
     setDefaultProxy.mockReset();
     setDefaultProxy.mockResolvedValue(undefined);
     saveProfileMeta.mockClear();
@@ -195,7 +236,7 @@ describe('ProfilesView organization management', () => {
       // Open the folder row's ⋯ menu, then Delete.
       fireEvent.click(await screen.findByRole('button', { name: 'Manage folder Work' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
-      await waitFor(() => expect(removeFolder).toHaveBeenCalledWith('Work'));
+      await waitFor(() => expect(removeFolder).toHaveBeenCalledWith('Work', expect.any(String)));
       // The known gap: removal must sync to the account org (tags carried through).
       await waitFor(() => expect(saveOrganization).toHaveBeenCalled());
       const org = saveOrganization.mock.calls.at(-1)?.[2] as { folders: unknown[]; tags: string[] };
@@ -208,7 +249,9 @@ describe('ProfilesView organization management', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Manage folder Work' }));
       const picker = await screen.findByRole('combobox', { name: 'Re-icon folder Work' });
       fireEvent.change(picker, { target: { value: '🛒' } });
-      await waitFor(() => expect(setFolderIcon).toHaveBeenCalledWith('Work', '🛒'));
+      await waitFor(() =>
+        expect(setFolderIcon).toHaveBeenCalledWith('Work', '🛒', expect.any(String)),
+      );
       await waitFor(() => expect(saveOrganization).toHaveBeenCalled());
       const org = saveOrganization.mock.calls.at(-1)?.[2] as {
         folders: { name: string; icon?: string }[];
@@ -220,10 +263,201 @@ describe('ProfilesView organization management', () => {
       render(<ProfilesView onGoToSettings={vi.fn()} />);
       fireEvent.click(await screen.findByRole('button', { name: 'Manage tag aged' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
-      await waitFor(() => expect(removeTag).toHaveBeenCalledWith('aged'));
+      await waitFor(() => expect(removeTag).toHaveBeenCalledWith('aged', expect.any(String)));
       await waitFor(() => expect(saveOrganization).toHaveBeenCalled());
       const org = saveOrganization.mock.calls.at(-1)?.[2] as { tags: string[] };
       expect(org.tags).toEqual([]); // shrunk
+    });
+
+    it('retains account retry intent when the API credential transport is absent', async () => {
+      settingsCtl.apiKey = null;
+      const { rerender } = render(<ProfilesView onGoToSettings={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage folder Work' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+
+      expect(
+        await screen.findByText(
+          'Saved on this Mac, but couldn’t sync the folder deletion to your account (organization). Retry the remaining sync.',
+        ),
+      ).toBeInTheDocument();
+      expect(saveOrganization).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Retry sync' })).toBeInTheDocument();
+      settingsCtl.apiKey = stableSettings.apiKey;
+      rerender(<ProfilesView onGoToSettings={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry sync' }));
+      expect(await screen.findByText('Profile organization is fully synced.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry sync' })).toBeNull();
+    });
+
+    it('retains only the failed account write and releases it after an honest retry', async () => {
+      saveOrganization.mockRejectedValueOnce(new Error('/private/credential.txt'));
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage folder Work' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+
+      await screen.findByRole('button', { name: 'Retry sync' });
+      expect(screen.queryByText(/private\/credential/)).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry sync' }));
+      expect(await screen.findByText('Profile organization is fully synced.')).toBeInTheDocument();
+      expect(saveOrganization).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole('button', { name: 'Retry sync' })).toBeNull();
+    });
+
+    it('keeps B owned when a late admitted A mutation settles after a scope change', async () => {
+      let releaseA: ((value: string[]) => void) | undefined;
+      let releaseB: ((value: string[]) => void) | undefined;
+      const heldA = new Promise<string[]>((resolve) => {
+        releaseA = resolve;
+      });
+      const heldB = new Promise<string[]>((resolve) => {
+        releaseB = resolve;
+      });
+      removeFolder.mockImplementationOnce(() => heldA).mockImplementationOnce(() => heldB);
+
+      const { rerender } = render(<ProfilesView onGoToSettings={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage folder Work' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+      await waitFor(() => expect(removeFolder).toHaveBeenCalledTimes(1));
+
+      settingsCtl.activeWorkspace = 'acc_team';
+      rerender(<ProfilesView onGoToSettings={vi.fn()} />);
+      const teamManage = await screen.findByRole('button', { name: 'Manage folder Work' });
+      await waitFor(() => expect(teamManage).not.toBeDisabled());
+      fireEvent.click(teamManage);
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+      await waitFor(() => expect(removeFolder).toHaveBeenCalledTimes(2));
+
+      await act(async () => {
+        releaseA?.([]);
+        await heldA;
+      });
+      await waitFor(() =>
+        expect(saveOrganization).toHaveBeenCalledWith(
+          stableSettings.baseUrl,
+          stableSettings.apiKey,
+          expect.objectContaining({ folders: [] }),
+          null,
+        ),
+      );
+      // A's late local result is scoped/written remotely, but cannot erase B's
+      // visible taxonomy or release B's still-held mutation owner.
+      expect(screen.getByText('Work')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Manage folder Work' })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Manage folder Work' }));
+      expect(removeFolder).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        releaseB?.([]);
+        await heldB;
+      });
+      await waitFor(() =>
+        expect(saveOrganization).toHaveBeenCalledWith(
+          stableSettings.baseUrl,
+          stableSettings.apiKey,
+          expect.objectContaining({ folders: [] }),
+          'acc_team',
+        ),
+      );
+    });
+
+    it('retains a late failed A write by scope without exposing it in B', async () => {
+      const personalScope = 'http://localhost:3000|account:acc_personal';
+      const teamScope = 'http://localhost:3000|account:acc_team';
+      folderCaches.set(personalScope, { exists: true, names: ['Work'], icons: {} });
+      folderCaches.set(teamScope, { exists: true, names: ['Work'], icons: {} });
+      addFolder.mockImplementationOnce((_name: string, scope: string) => {
+        const names = ['Local A', 'Work'];
+        folderCaches.set(scope, { exists: true, names, icons: {} });
+        return Promise.resolve(names);
+      });
+      let rejectA: ((reason?: unknown) => void) | undefined;
+      const heldA = new Promise<void>((_resolve, reject) => {
+        rejectA = reject;
+      });
+      saveOrganization.mockImplementationOnce(() => heldA);
+
+      const { rerender } = render(<ProfilesView onGoToSettings={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'New folder' }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'New folder name' }), {
+        target: { value: 'Local A' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+      expect(await screen.findByText('Local A')).toBeInTheDocument();
+      await waitFor(() => expect(saveOrganization).toHaveBeenCalledTimes(1));
+
+      settingsCtl.activeWorkspace = 'acc_team';
+      rerender(<ProfilesView onGoToSettings={vi.fn()} />);
+      await waitFor(() => expect(screen.queryByText('Local A')).toBeNull());
+      expect(screen.queryByRole('button', { name: 'Retry sync' })).toBeNull();
+
+      await act(async () => {
+        rejectA?.(new Error('/private/account-key'));
+        await heldA.catch(() => undefined);
+      });
+      expect(screen.queryByText('Local A')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Retry sync' })).toBeNull();
+
+      // If return reconciliation fetched the older server here, it could erase
+      // Local A. The retained A plan restores A's cache and pauses that GET.
+      fetchOrganization.mockResolvedValue({ folders: [{ name: 'Work' }], tags: ['aged'] });
+      const fetchesBeforeReturn = fetchOrganization.mock.calls.length;
+      settingsCtl.activeWorkspace = null;
+      rerender(<ProfilesView onGoToSettings={vi.fn()} />);
+      expect(await screen.findByText('Local A')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Retry sync' })).toBeInTheDocument();
+      expect(fetchOrganization).toHaveBeenCalledTimes(fetchesBeforeReturn);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry sync' }));
+      expect(await screen.findByText('Profile organization is fully synced.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry sync' })).toBeNull();
+      expect(screen.getByText('Local A')).toBeInTheDocument();
+      expect(saveOrganization).toHaveBeenLastCalledWith(
+        stableSettings.baseUrl,
+        stableSettings.apiKey,
+        expect.any(Object),
+        null,
+      );
+      const retriedOrg = saveOrganization.mock.calls.at(-1)?.[2] as {
+        folders: Array<{ name: string }>;
+      };
+      expect(retriedOrg.folders).toContainEqual({ name: 'Local A' });
+    });
+
+    it('does not let an older taxonomy GET overwrite a newer local rail mutation', async () => {
+      let releasePull:
+        ((value: { folders: Array<{ name: string }>; tags: string[] }) => void) | undefined;
+      const heldPull = new Promise<{ folders: Array<{ name: string }>; tags: string[] }>(
+        (resolve) => {
+          releasePull = resolve;
+        },
+      );
+      fetchOrganization.mockImplementationOnce(() => heldPull);
+      addFolder.mockImplementationOnce(() => Promise.resolve(['Local newer', 'Work']));
+
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      await waitFor(() => expect(fetchOrganization).toHaveBeenCalledTimes(1));
+      fireEvent.click(await screen.findByRole('button', { name: 'New folder' }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'New folder name' }), {
+        target: { value: 'Local newer' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+      expect(await screen.findByText('Local newer')).toBeInTheDocument();
+
+      await act(async () => {
+        releasePull?.({ folders: [{ name: 'Work' }], tags: ['aged'] });
+        await heldPull;
+      });
+      expect(screen.getByText('Local newer')).toBeInTheDocument();
+      expect(saveOrganization).toHaveBeenCalledWith(
+        stableSettings.baseUrl,
+        stableSettings.apiKey,
+        expect.any(Object),
+        null,
+      );
+      const savedOrganization = saveOrganization.mock.calls.at(-1)?.[2] as {
+        folders: Array<{ name: string }>;
+      };
+      expect(savedOrganization.folders).toContainEqual({ name: 'Local newer' });
     });
   });
 
@@ -235,7 +469,9 @@ describe('ProfilesView organization management', () => {
       const input = await screen.findByRole('textbox', { name: 'Rename folder Work' });
       fireEvent.change(input, { target: { value: 'Retail' } });
       fireEvent.keyDown(input, { key: 'Enter' });
-      await waitFor(() => expect(renameFolder).toHaveBeenCalledWith('Work', 'Retail'));
+      await waitFor(() =>
+        expect(renameFolder).toHaveBeenCalledWith('Work', 'Retail', expect.any(String)),
+      );
       // Both profiles live in Work → both re-assigned in one bulk call + PATCHed.
       await waitFor(() =>
         expect(saveProfilesMetaBulk).toHaveBeenCalledWith(
@@ -259,7 +495,9 @@ describe('ProfilesView organization management', () => {
       const input = await screen.findByRole('textbox', { name: 'Rename tag aged' });
       fireEvent.change(input, { target: { value: 'warmup' } });
       fireEvent.keyDown(input, { key: 'Enter' });
-      await waitFor(() => expect(renameTag).toHaveBeenCalledWith('aged', 'warmup'));
+      await waitFor(() =>
+        expect(renameTag).toHaveBeenCalledWith('aged', 'warmup', expect.any(String)),
+      );
       // Subtract the old tag then union the new one (two bulk passes).
       await waitFor(() =>
         expect(saveProfilesMetaBulk).toHaveBeenCalledWith(
@@ -278,6 +516,27 @@ describe('ProfilesView organization management', () => {
       await waitFor(() =>
         expect(profilesUpdate).toHaveBeenCalledWith('prof_1', { tags: ['warmup'] }),
       );
+    });
+
+    it('surfaces failed profile PATCH counts and retries only the failed remainder', async () => {
+      profilesUpdate.mockRejectedValueOnce(new Error('/Users/customer/private-key'));
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage folder Work' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+      const input = await screen.findByRole('textbox', { name: 'Rename folder Work' });
+      fireEvent.change(input, { target: { value: 'Retail' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      expect(
+        await screen.findByText(
+          'Saved on this Mac, but couldn’t sync the folder rename to your account (1 of 2 profiles). Retry the remaining sync.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/private-key/)).toBeNull();
+      expect(profilesUpdate).toHaveBeenCalledTimes(2);
+      fireEvent.click(screen.getByRole('button', { name: 'Retry sync' }));
+      expect(await screen.findByText('Profile organization is fully synced.')).toBeInTheDocument();
+      expect(profilesUpdate).toHaveBeenCalledTimes(3);
     });
   });
 

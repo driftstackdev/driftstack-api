@@ -15,24 +15,45 @@
 // it to RESOLVE EMPTY so the seed gate itself is under test.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 
 // A mutable settings controller so a test can flip the active workspace and
 // re-render to simulate a workspace switch (the org-sync effect keys on it).
 const settingsCtl: { activeWorkspace: string | null } = { activeWorkspace: null };
 const stableSettings = { apiKey: 'ds_test_x', baseUrl: 'http://localhost:3000' };
 const stableAccountMe = {
+  id: 'acc_personal',
   tier: 'solo_manual',
   concurrent_session_cap: 5,
   concurrent_session_active: 0,
   profile_cap: 10,
   profile_count: 0,
+  teams: [
+    {
+      owner_account_id: 'acct_team_b',
+      owner_email: 'owner@example.test',
+      owner_name: 'Team owner',
+      role: 'admin',
+      membership_id: 'mem_1',
+    },
+  ],
+};
+const profile = {
+  id: 'prof_1',
+  name: 'Visible profile',
+  archetype: 'iphone16pro_ios18_7_safari26_4',
+  description: null,
+  created_at: '2026-06-08T00:00:00Z',
+  updated_at: '2026-06-08T00:00:00Z',
+  last_used_at: null,
+  deleted_at: null,
 };
 const stableClient = {
   profiles: {
-    list: () => Promise.resolve({ data: [] }),
-    iterate: function* () {
-      /* no profiles — the rail/taxonomy is what we assert on */
+    list: () => Promise.resolve({ data: [profile] }),
+    // eslint-disable-next-line @typescript-eslint/require-await
+    iterate: async function* () {
+      yield profile;
     },
     update: vi.fn(() => Promise.resolve({ id: 'prof_1' })),
   },
@@ -51,31 +72,38 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   }),
 }));
 
-// Local cache (single global store) holds folder "Work" + tag "aged" — the
-// PRIOR workspace's taxonomy that must not leak into a switched-to workspace.
+// Profile metadata itself is empty: every taxonomy label in this test comes
+// from the identity-bound folders/tags cache, never from a listed profile.
 vi.mock('../../src/lib/profiles-meta', () => ({
   loadProfilesMeta: () => Promise.resolve({}),
   persistProfilesMeta: vi.fn(() => Promise.resolve()),
   saveProfileMeta: vi.fn(() => Promise.resolve({})),
   saveProfilesMetaBulk: vi.fn(() => Promise.resolve({})),
   seedMetaFromServer: (local: unknown) => ({ map: local, changed: false }),
-  folderList: () => ['Work'],
-  aggregateTags: () => [{ tag: 'aged', count: 1 }],
+  folderList: () => [],
+  aggregateTags: () => [],
 }));
 
 const replaceAllFolders = vi.fn(() => Promise.resolve());
 const replaceAllTags = vi.fn(() => Promise.resolve());
+const loadFolders = vi.fn((scope: string) =>
+  Promise.resolve(scope.includes('account:acc_personal') ? ['Work'] : []),
+);
+const loadFolderIcons = vi.fn(() => Promise.resolve({}));
+const loadTags = vi.fn((scope: string) =>
+  Promise.resolve(scope.includes('account:acc_personal') ? ['aged'] : []),
+);
 vi.mock('../../src/lib/folders-store', () => ({
-  loadFolders: () => Promise.resolve(['Work']),
+  loadFolders: (...a: unknown[]) => loadFolders(...(a as [string])),
+  loadFolderIcons: (...a: unknown[]) => loadFolderIcons(...(a as [string])),
   addFolder: vi.fn(() => Promise.resolve(['Work'])),
   removeFolder: vi.fn(() => Promise.resolve([])),
   renameFolder: vi.fn(() => Promise.resolve(['Work'])),
   setFolderIcon: vi.fn(() => Promise.resolve({})),
-  loadFolderIcons: () => Promise.resolve({}),
   replaceAllFolders: (...a: unknown[]) => replaceAllFolders(...(a as [])),
 }));
 vi.mock('../../src/lib/tags-store', () => ({
-  loadTags: () => Promise.resolve(['aged']),
+  loadTags: (...a: unknown[]) => loadTags(...(a as [string])),
   addTag: vi.fn(() => Promise.resolve(['aged'])),
   removeTag: vi.fn(() => Promise.resolve([])),
   renameTag: vi.fn(() => Promise.resolve(['aged'])),
@@ -127,12 +155,20 @@ describe('ProfilesView org-sync seed gate (workspace scope)', () => {
     saveOrganization.mockClear();
     replaceAllFolders.mockClear();
     replaceAllTags.mockClear();
+    loadFolders.mockClear();
+    loadFolderIcons.mockClear();
+    loadTags.mockClear();
   });
+
+  function WorkspaceBoundProfiles(): JSX.Element {
+    const workspace = settingsCtl.activeWorkspace;
+    return <ProfilesView key={workspace ?? 'personal'} onGoToSettings={vi.fn()} />;
+  }
 
   // (1) #441: on the FIRST run (prevScope === null), an empty server taxonomy +
   // a non-empty local cache must SEED the server from local, not wipe local.
   it('SEEDS the server from the local cache on the first run (empty server, #441)', async () => {
-    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    render(<WorkspaceBoundProfiles />);
     await waitFor(() => expect(fetchOrganization).toHaveBeenCalled());
     await waitFor(() => expect(saveOrganization).toHaveBeenCalled());
     const org = saveOrganization.mock.calls.at(-1)?.[2] as {
@@ -144,6 +180,11 @@ describe('ProfilesView org-sync seed gate (workspace scope)', () => {
     // The seed branch returns BEFORE the replaceAll* clobber, so local survives.
     expect(replaceAllFolders).not.toHaveBeenCalled();
     expect(replaceAllTags).not.toHaveBeenCalled();
+    expect(await screen.findByText('Work')).toBeInTheDocument();
+    expect(await screen.findByText('#aged')).toBeInTheDocument();
+    const scope = loadFolders.mock.calls[0]?.[0];
+    expect(scope).toContain('account:acc_personal');
+    expect(scope).not.toContain(stableSettings.apiKey);
   });
 
   // (2) On a workspace SWITCH (scope change) the global cache still holds the
@@ -151,7 +192,7 @@ describe('ProfilesView org-sync seed gate (workspace scope)', () => {
   // workspace would leak it — so saveOrganization must NOT be called, and the
   // empty server taxonomy is reconciled into the local cache via replaceAll*.
   it('does NOT push the prior taxonomy when switching to an empty workspace (no leak)', async () => {
-    const { rerender } = render(<ProfilesView onGoToSettings={vi.fn()} />);
+    const { rerender } = render(<WorkspaceBoundProfiles />);
     // First run seeds (covered above) — wait for it then clear the spies.
     await waitFor(() => expect(saveOrganization).toHaveBeenCalled());
     saveOrganization.mockClear();
@@ -161,7 +202,7 @@ describe('ProfilesView org-sync seed gate (workspace scope)', () => {
 
     // Switch into a team workspace whose server taxonomy is empty.
     settingsCtl.activeWorkspace = 'acct_team_b';
-    rerender(<ProfilesView onGoToSettings={vi.fn()} />);
+    rerender(<WorkspaceBoundProfiles />);
 
     // The effect re-runs for the new scope and fetches the (empty) team org.
     await waitFor(() =>
@@ -172,10 +213,27 @@ describe('ProfilesView org-sync seed gate (workspace scope)', () => {
       ),
     );
     // Reconcile the global cache DOWN to the empty server taxonomy…
-    await waitFor(() => expect(replaceAllFolders).toHaveBeenCalledWith([], {}));
-    await waitFor(() => expect(replaceAllTags).toHaveBeenCalledWith([]));
+    const teamScope = 'http://localhost:3000|account:acct_team_b';
+    await waitFor(() => expect(replaceAllFolders).toHaveBeenCalledWith([], {}, teamScope));
+    await waitFor(() => expect(replaceAllTags).toHaveBeenCalledWith([], teamScope));
     // …and CRUCIALLY: the prior workspace's "Work"/"aged" was NOT pushed into
     // the new workspace's server record.
     expect(saveOrganization).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText('Work')).toBeNull());
+    expect(screen.queryByText('#aged')).toBeNull();
+    expect(loadFolders).toHaveBeenLastCalledWith(teamScope);
+  });
+
+  it('fails closed when a persisted workspace is not validated by account membership', async () => {
+    settingsCtl.activeWorkspace = 'acct_revoked';
+    render(<WorkspaceBoundProfiles />);
+    await screen.findByText('Visible profile');
+
+    expect(loadFolders).not.toHaveBeenCalled();
+    expect(loadTags).not.toHaveBeenCalled();
+    expect(fetchOrganization).not.toHaveBeenCalled();
+    expect(saveOrganization).not.toHaveBeenCalled();
+    expect(screen.queryByText('Work')).toBeNull();
+    expect(screen.queryByText('#aged')).toBeNull();
   });
 });

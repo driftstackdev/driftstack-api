@@ -16,6 +16,7 @@ import { makeWriteLock } from './store-write-lock';
 
 const STORE_FILE = 'folders.json';
 const KEY = 'names';
+const SCOPED_KEY_PREFIX = 'account-scope:';
 // 2026-06-16 (founder: "attach an icon to a folder") — a SEPARATE map keyed by
 // folder name → emoji, so the `names` array shape stays unchanged (old
 // folders.json still loads) and an icon can attach to ANY folder name (custom
@@ -38,6 +39,40 @@ function getStore(): LazyStore {
 
 const writeLock = makeWriteLock();
 
+export interface FolderTaxonomyCache {
+  /** False means this identity has never owned a cache entry on this Mac. */
+  exists: boolean;
+  names: string[];
+  icons: Record<string, string>;
+}
+
+function scopedKey(key: typeof KEY | typeof ICONS_KEY, scope: string): string {
+  return `${SCOPED_KEY_PREFIX}${encodeURIComponent(scope)}:${key}`;
+}
+
+function cleanFolderNames(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== 'string') continue;
+    const name = normalizeFolderName(v);
+    if (name !== null && !out.includes(name)) out.push(name);
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+function cleanFolderIcons(raw: unknown): Record<string, string> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const name = normalizeFolderName(k);
+    if (name !== null && typeof v === 'string' && v.length > 0) {
+      out[name] = v.slice(0, MAX_ICON_CHARS);
+    }
+  }
+  return out;
+}
+
 /** Normalize a raw folder name: trim, collapse the unfiled sentinel, cap length.
  *  Returns null when the name is empty after trimming (not a real folder). */
 export function normalizeFolderName(raw: string): string | null {
@@ -45,17 +80,9 @@ export function normalizeFolderName(raw: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export async function loadFolders(): Promise<string[]> {
+export async function loadFolders(scope: string): Promise<string[]> {
   try {
-    const raw = await getStore().get<unknown>(KEY);
-    if (!Array.isArray(raw)) return [];
-    const out: string[] = [];
-    for (const v of raw) {
-      if (typeof v !== 'string') continue;
-      const name = normalizeFolderName(v);
-      if (name !== null && !out.includes(name)) out.push(name);
-    }
-    return out.sort((a, b) => a.localeCompare(b));
+    return cleanFolderNames(await getStore().get<unknown>(scopedKey(KEY, scope)));
   } catch {
     return [];
   }
@@ -63,33 +90,47 @@ export async function loadFolders(): Promise<string[]> {
 
 /** Folder-name → icon (emoji) map. Absent / unknown names just have no icon
  *  (the rail falls back to the deterministic folderGlyph). */
-export async function loadFolderIcons(): Promise<Record<string, string>> {
+export async function loadFolderIcons(scope: string): Promise<Record<string, string>> {
   try {
-    const raw = await getStore().get<unknown>(ICONS_KEY);
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-      const name = normalizeFolderName(k);
-      if (name !== null && typeof v === 'string' && v.length > 0) {
-        out[name] = v.slice(0, MAX_ICON_CHARS);
-      }
-    }
-    return out;
+    return cleanFolderIcons(await getStore().get<unknown>(scopedKey(ICONS_KEY, scope)));
   } catch {
     return {};
   }
 }
 
+/** Load one identity-bound offline snapshot without ever falling back to the
+ * legacy global keys. `exists` lets the caller distinguish an intentionally
+ * empty cache from unrelated/legacy data that must never seed this account. */
+export async function loadFolderTaxonomyCache(scope: string): Promise<FolderTaxonomyCache> {
+  try {
+    const [rawNames, rawIcons] = await Promise.all([
+      getStore().get<unknown>(scopedKey(KEY, scope)),
+      getStore().get<unknown>(scopedKey(ICONS_KEY, scope)),
+    ]);
+    return {
+      exists: rawNames !== undefined || rawIcons !== undefined,
+      names: cleanFolderNames(rawNames),
+      icons: cleanFolderIcons(rawIcons),
+    };
+  } catch {
+    return { exists: false, names: [], icons: {} };
+  }
+}
+
 /** Set (or clear, with '') the icon for a folder name. Returns the updated map. */
-export function setFolderIcon(rawName: string, icon: string): Promise<Record<string, string>> {
+export function setFolderIcon(
+  rawName: string,
+  icon: string,
+  scope: string,
+): Promise<Record<string, string>> {
   return writeLock(async () => {
     const name = normalizeFolderName(rawName);
-    if (name === null) return loadFolderIcons();
-    const icons = await loadFolderIcons();
+    if (name === null) return loadFolderIcons(scope);
+    const icons = await loadFolderIcons(scope);
     const trimmed = icon.trim().slice(0, MAX_ICON_CHARS);
     if (trimmed.length === 0) delete icons[name];
     else icons[name] = trimmed;
-    await getStore().set(ICONS_KEY, icons);
+    await getStore().set(scopedKey(ICONS_KEY, scope), icons);
     await getStore().save();
     return icons;
   });
@@ -98,26 +139,26 @@ export function setFolderIcon(rawName: string, icon: string): Promise<Record<str
 /** Add a folder name (idempotent, deduped case-sensitively against the stored
  *  set), optionally with an icon. Returns the updated sorted list. A no-op for
  *  the names list when blank/already present, but still sets the icon if given. */
-export function addFolder(rawName: string, icon?: string): Promise<string[]> {
+export function addFolder(rawName: string, scope: string, icon?: string): Promise<string[]> {
   return writeLock(async () => {
     const name = normalizeFolderName(rawName);
-    if (name === null) return loadFolders();
-    const current = await loadFolders();
+    if (name === null) return loadFolders(scope);
+    const current = await loadFolders(scope);
     const alreadyPresent = current.includes(name);
     const atCap = current.length >= MAX_FOLDERS;
     // Only persist the icon if the folder will actually exist (already present, or about to be
     // added) — otherwise an at-cap add stores an orphan icon for a name that's never in the list.
     if (icon !== undefined && icon.trim().length > 0 && (alreadyPresent || !atCap)) {
-      const icons = await loadFolderIcons();
+      const icons = await loadFolderIcons(scope);
       icons[name] = icon.trim().slice(0, MAX_ICON_CHARS);
-      await getStore().set(ICONS_KEY, icons);
+      await getStore().set(scopedKey(ICONS_KEY, scope), icons);
     }
     if (alreadyPresent || atCap) {
       await getStore().save();
       return current;
     }
     const next = [...current, name].sort((a, b) => a.localeCompare(b));
-    await getStore().set(KEY, next);
+    await getStore().set(scopedKey(KEY, scope), next);
     await getStore().save();
     return next;
   });
@@ -126,7 +167,11 @@ export function addFolder(rawName: string, icon?: string): Promise<string[]> {
 /** org-sync (2026-06-16) — bulk-replace the local cache (names + icons) from
  *  the server's authoritative taxonomy. Server wins on a successful load; this
  *  keeps the offline cache aligned. */
-export function replaceAllFolders(names: string[], icons: Record<string, string>): Promise<void> {
+export function replaceAllFolders(
+  names: string[],
+  icons: Record<string, string>,
+  scope: string,
+): Promise<void> {
   return writeLock(async () => {
     const cleanNames: string[] = [];
     for (const n of names) {
@@ -143,10 +188,10 @@ export function replaceAllFolders(names: string[], icons: Record<string, string>
       }
     }
     await getStore().set(
-      KEY,
+      scopedKey(KEY, scope),
       cleanNames.sort((a, b) => a.localeCompare(b)),
     );
-    await getStore().set(ICONS_KEY, cleanIcons);
+    await getStore().set(scopedKey(ICONS_KEY, scope), cleanIcons);
     await getStore().save();
   });
 }
@@ -155,23 +200,23 @@ export function replaceAllFolders(names: string[], icons: Record<string, string>
  *  carrying that folder keep deriving it (so it only disappears from the rail
  *  once it's both removed here AND empty of profiles). Also drops any icon
  *  attached to that name so a stale icon can't reattach if the name comes back. */
-export function removeFolder(name: string): Promise<string[]> {
+export function removeFolder(name: string, scope: string): Promise<string[]> {
   return writeLock(async () => {
-    const current = await loadFolders();
-    const icons = await loadFolderIcons();
+    const current = await loadFolders(scope);
+    const icons = await loadFolderIcons(scope);
     const hadName = current.includes(name);
     const hadIcon = icons[name] !== undefined;
     if (!hadName && !hadIcon) return current;
     if (hadIcon) {
       delete icons[name];
-      await getStore().set(ICONS_KEY, icons);
+      await getStore().set(scopedKey(ICONS_KEY, scope), icons);
     }
     if (!hadName) {
       await getStore().save();
       return current;
     }
     const next = current.filter((f) => f !== name);
-    await getStore().set(KEY, next);
+    await getStore().set(scopedKey(KEY, scope), next);
     await getStore().save();
     return next;
   });
@@ -182,18 +227,18 @@ export function removeFolder(name: string): Promise<string[]> {
  *  list. A no-op when old/new normalize equal, the old name isn't present, or
  *  the new name is blank. Re-assigning the profiles that carry the old folder
  *  is the caller's job (the names list here is the empty-folder taxonomy). */
-export function renameFolder(rawOld: string, rawNew: string): Promise<string[]> {
+export function renameFolder(rawOld: string, rawNew: string, scope: string): Promise<string[]> {
   return writeLock(async () => {
     const oldName = normalizeFolderName(rawOld);
     const newName = normalizeFolderName(rawNew);
-    const current = await loadFolders();
+    const current = await loadFolders(scope);
     if (oldName === null || newName === null || oldName === newName) return current;
     // Re-key the icon if the old name carried one (only when not already taken).
-    const icons = await loadFolderIcons();
+    const icons = await loadFolderIcons(scope);
     if (icons[oldName] !== undefined) {
       if (icons[newName] === undefined) icons[newName] = icons[oldName];
       delete icons[oldName];
-      await getStore().set(ICONS_KEY, icons);
+      await getStore().set(scopedKey(ICONS_KEY, scope), icons);
     }
     if (!current.includes(oldName)) {
       // Old name was profile-derived only (not in the persisted set). The icon
@@ -205,7 +250,7 @@ export function renameFolder(rawOld: string, rawNew: string): Promise<string[]> 
     const next = (withoutOld.includes(newName) ? withoutOld : [...withoutOld, newName]).sort(
       (a, b) => a.localeCompare(b),
     );
-    await getStore().set(KEY, next);
+    await getStore().set(scopedKey(KEY, scope), next);
     await getStore().save();
     return next;
   });

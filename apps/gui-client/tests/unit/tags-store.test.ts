@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const stores = new Map<string, Map<string, unknown>>();
+const TEST_SCOPE = 'https://api.example.test|account:acc_test';
 
 vi.mock('@tauri-apps/plugin-store', () => ({
   LazyStore: class {
@@ -33,7 +34,15 @@ vi.mock('@tauri-apps/plugin-store', () => ({
   },
 }));
 
-import { loadTags, addTag, removeTag, renameTag, normalizeTagName } from '../../src/lib/tags-store';
+import {
+  loadTags,
+  addTag,
+  removeTag,
+  renameTag,
+  normalizeTagName,
+  loadTagTaxonomyCache,
+  replaceAllTags,
+} from '../../src/lib/tags-store';
 
 beforeEach(() => {
   stores.clear();
@@ -57,41 +66,66 @@ describe('tags-store', () => {
   });
 
   it('addTag persists, sorts, and round-trips through load', async () => {
-    await addTag('shopping');
-    const list = await addTag('aged');
+    await addTag('shopping', TEST_SCOPE);
+    const list = await addTag('aged', TEST_SCOPE);
     expect(list).toEqual(['aged', 'shopping']); // sorted
-    expect(await loadTags()).toEqual(['aged', 'shopping']);
+    expect(await loadTags(TEST_SCOPE)).toEqual(['aged', 'shopping']);
   });
 
   it('addTag is idempotent + strips # (no dupes from #-prefixed variants)', async () => {
-    await addTag('aged');
-    const list = await addTag('#aged');
+    await addTag('aged', TEST_SCOPE);
+    const list = await addTag('#aged', TEST_SCOPE);
     expect(list).toEqual(['aged']);
   });
 
   it('addTag ignores a blank name', async () => {
-    expect(await addTag('   ')).toEqual([]);
+    expect(await addTag('   ', TEST_SCOPE)).toEqual([]);
   });
 
   it('removeTag drops a name; missing name is a no-op', async () => {
-    await addTag('aged');
-    await addTag('vip');
-    expect(await removeTag('aged')).toEqual(['vip']);
-    expect(await removeTag('nope')).toEqual(['vip']);
+    await addTag('aged', TEST_SCOPE);
+    await addTag('vip', TEST_SCOPE);
+    expect(await removeTag('aged', TEST_SCOPE)).toEqual(['vip']);
+    expect(await removeTag('nope', TEST_SCOPE)).toEqual(['vip']);
   });
 
   it('renameTag re-keys the name; sorts; no-ops on blank/equal/missing', async () => {
-    await addTag('aged');
-    await addTag('vip');
-    expect(await renameTag('aged', 'warmup')).toEqual(['vip', 'warmup']);
+    await addTag('aged', TEST_SCOPE);
+    await addTag('vip', TEST_SCOPE);
+    expect(await renameTag('aged', 'warmup', TEST_SCOPE)).toEqual(['vip', 'warmup']);
     // No-ops: equal-after-normalize (# stripped), blank new, missing old.
-    expect(await renameTag('warmup', '#warmup')).toEqual(['vip', 'warmup']);
-    expect(await renameTag('warmup', '   ')).toEqual(['vip', 'warmup']);
-    expect(await renameTag('ghost', 'x')).toEqual(['vip', 'warmup']);
+    expect(await renameTag('warmup', '#warmup', TEST_SCOPE)).toEqual(['vip', 'warmup']);
+    expect(await renameTag('warmup', '   ', TEST_SCOPE)).toEqual(['vip', 'warmup']);
+    expect(await renameTag('ghost', 'x', TEST_SCOPE)).toEqual(['vip', 'warmup']);
   });
 
   it('loadTags degrades to [] on a corrupt (non-array) value', async () => {
-    stores.set('tags.json', new Map([['names', 'not-an-array']]));
-    expect(await loadTags()).toEqual([]);
+    stores.set(
+      'tags.json',
+      new Map([[`account-scope:${encodeURIComponent(TEST_SCOPE)}:names`, 'not-an-array']]),
+    );
+    expect(await loadTags(TEST_SCOPE)).toEqual([]);
+  });
+
+  it('isolates names by non-secret effective-account scope', async () => {
+    const personal = 'https://api.driftstack.dev|account:acc_personal';
+    const team = 'https://api.driftstack.dev|account:acc_team';
+    await addTag('personal', personal);
+    await addTag('team', team);
+
+    expect(await loadTags(personal)).toEqual(['personal']);
+    expect(await loadTags(team)).toEqual(['team']);
+  });
+
+  it('never claims a legacy global tag list for a scoped account cache', async () => {
+    stores.set('tags.json', new Map([['names', ['legacy']]]));
+    const team = 'https://api.driftstack.dev|account:acc_team';
+
+    expect(await loadTagTaxonomyCache(team)).toEqual({ exists: false, names: [] });
+    expect(await loadTags(team)).toEqual([]);
+
+    await replaceAllTags([], team);
+    expect(await loadTagTaxonomyCache(team)).toEqual({ exists: true, names: [] });
+    expect(stores.get('tags.json')?.get('names')).toEqual(['legacy']);
   });
 });
