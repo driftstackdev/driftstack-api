@@ -10,13 +10,13 @@
 //     only `z` imported (no api-types dependency).
 //   • Drive-bridge gate (item 9) + the open inputParams/outputData
 //     codec caveat documented.
-//   • 11-intent dispatchable vocab + the 3 reserved JSBridge names.
+//   • Exact 18-intent live IntentExecutor vocabulary.
 //   • Caps/defaults: behavioral_pause 300_000ms, wait_for 300s,
 //     scroll default 600px/down, wait_for default 30s.
 //   • Per-intent param shapes (navigate/click/send_keys/scroll/
 //     behavioral_pause/wait_for/execute_script + no-param intents).
 //   • intentName→schema map roster.
-//   • IntentDispatch + IntentResult envelopes + 6 error codes.
+//   • IntentDispatch + exclusive IntentResult envelopes + 10 live error codes.
 //
 // Plus a behavioral block that exercises the schemas (accept/reject)
 // so the contract is enforced, not just pinned by regex.
@@ -27,7 +27,6 @@ import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   HARNESS_INTENT_NAMES,
-  HARNESS_RESERVED_INTENT_NAMES,
   HARNESS_ERROR_CODES,
   HARNESS_BEHAVIORAL_PAUSE_CAP_MS,
   HARNESS_WAIT_FOR_CAP_SECONDS,
@@ -53,6 +52,7 @@ import {
   PROFILE_SAVED_INLINE_MAX_BYTES,
   PROFILE_SAVED_SIZE_MAX_BYTES,
   HARNESS_INTENT_PARAM_SCHEMAS,
+  HARNESS_INTENT_RESULT_SCHEMAS,
   TERMINAL_SESSION_STATUSES,
   HarnessIntentNameSchema,
   NavigateParamsSchema,
@@ -120,16 +120,27 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toMatch(/cross the wire as a BASE64\s*\n?\s*\/\/ STRING of the UTF-8 JSON/);
   });
 
-  it('12-intent dispatchable vocab pinned in canonical order (press_key added A3 W1221, after send_keys)', () => {
-    expect(body).toMatch(
-      /export const HARNESS_INTENT_NAMES = \[\s*\n?\s*'navigate',\s*\n?\s*'back',\s*\n?\s*'forward',\s*\n?\s*'click',\s*\n?\s*'send_keys',\s*\n?\s*'press_key',\s*\n?\s*'scroll',\s*\n?\s*'behavioral_pause',\s*\n?\s*'wait_for',\s*\n?\s*'execute_script',\s*\n?\s*'screenshot',\s*\n?\s*'get_page_source',\s*\n?\s*\] as const;/,
-    );
-  });
-
-  it('3 reserved JSBridge intents pinned (server must NOT dispatch these)', () => {
-    expect(body).toMatch(
-      /export const HARNESS_RESERVED_INTENT_NAMES = \['fill_form', 'login', 'search'\] as const;/,
-    );
+  it('18 live IntentExecutor names are dispatchable in canonical order', () => {
+    expect([...HARNESS_INTENT_NAMES]).toEqual([
+      'navigate',
+      'back',
+      'forward',
+      'click',
+      'send_keys',
+      'press_key',
+      'execute_script',
+      'detect_challenge',
+      'extract',
+      'screenshot',
+      'get_page_source',
+      'perceive',
+      'wait_for',
+      'scroll',
+      'behavioral_pause',
+      'fill_form',
+      'search',
+      'login',
+    ]);
   });
 
   it('caps + defaults pinned: behavioral_pause 300_000ms, wait_for 300s, scroll 600px/down, wait_for 30s', () => {
@@ -156,16 +167,18 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toMatch(/return parsed\.protocol === 'http:' \|\| parsed\.protocol === 'https:';/);
   });
 
-  it('click params pinned: { element_id } OR { strategy, value } (union, strict)', () => {
-    expect(body).toMatch(
-      /export const ClickParamsSchema = z\.union\(\[\s*\n?\s*z\.object\(\{ element_id: z\.string\(\)\.min\(1\) \}\)\.strict\(\),\s*\n?\s*z\.object\(\{ strategy: z\.string\(\)\.min\(1\), value: z\.string\(\) \}\)\.strict\(\),\s*\n?\s*\]\);/,
+  it('click params pin element, W3C locator, and coordinate target variants', () => {
+    expect(body).toContain('export const ClickParamsSchema = z.union([');
+    expect(body).toContain('strategy: HarnessLocatorStrategySchema,');
+    expect(body).toContain(
+      'z.object({ x: z.number(), y: z.number(), wait_after: WaitAfterSchema }).strict(),',
     );
   });
 
   it('send_keys params pinned: strategy + value + text required, sensitive optional (strict)', () => {
-    expect(body).toMatch(
-      /export const SendKeysParamsSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*strategy: z\.string\(\)\.min\(1\),\s*\n?\s*value: z\.string\(\),\s*\n?\s*text: z\.string\(\),\s*\n?\s*sensitive: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
-    );
+    expect(body).toContain('export const SendKeysParamsSchema = z');
+    expect(body).toContain('text: z.string().max(HARNESS_SEND_KEYS_MAX_CHARS),');
+    expect(body).toContain('sensitive: z.boolean().optional(),');
   });
 
   it('press_key params pinned: key string 1..20 (strict) — A3 W1221, one DOM KeyboardEvent.key on the focused element', () => {
@@ -174,14 +187,11 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('scroll params pinned: direction up|down, distance_px int>0, start_x/start_y int — all optional; SDK surfaces direction+distance_px only', () => {
-    expect(body).toMatch(/direction: z\.enum\(\['up', 'down'\]\)\.optional\(\),/);
-    expect(body).toMatch(/distance_px: z\.number\(\)\.int\(\)\.positive\(\)\.optional\(\),/);
-    expect(body).toMatch(/start_x: z\.number\(\)\.int\(\)\.optional\(\),/);
-    expect(body).toMatch(/start_y: z\.number\(\)\.int\(\)\.optional\(\),/);
-    expect(body).toMatch(
-      /SDK surfaces direction \+ distance_px\s*\n?\s*\/\/ ONLY; start_x\/start_y are server\/harness internals/,
-    );
+  it('scroll params pin vertical/horizontal directions and amount/start/pause controls', () => {
+    expect(body).toContain("direction: z.enum(['up', 'down', 'left', 'right']).optional(),");
+    expect(body).toContain('distance_px: z.number().nonnegative().optional(),');
+    expect(body).toContain('amount: ScrollAmountSchema.optional(),');
+    expect(body).toContain('pause_after_ms: z.number().nonnegative().optional(),');
   });
 
   it('behavioral_pause params pinned: { duration_ms } OR { kind:reading, word_count, scroll_through? } OR none (idle)', () => {
@@ -190,34 +200,39 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // multi-line (W1223 added the optional scroll_through read-through flag).
     expect(body).toContain('export const BehavioralPauseParamsSchema = z.union([');
     // duration_ms variant (strict, single-line).
-    expect(body).toMatch(
-      /z\.object\(\{ duration_ms: z\.number\(\)\.int\(\)\.nonnegative\(\) \}\)\.strict\(\),/,
-    );
+    expect(body).toContain('z.object({ duration_ms: z.number().nonnegative() }).strict(),');
     // reading variant — W1223 adds the optional scroll_through (read→scroll→read).
-    expect(body).toMatch(
-      /z\s*\n?\s*\.object\(\{\s*\n?\s*kind: z\.literal\('reading'\),\s*\n?\s*word_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*scroll_through: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\),/,
-    );
+    expect(body).toContain("kind: z.literal('reading'),");
+    expect(body).toContain('word_count: z.number().nonnegative(),');
+    expect(body).toContain('scroll_through: z.boolean().optional(),');
     // idle variant + union close.
     expect(body).toMatch(/NoParamsSchema,\s*\n?\s*\]\);/);
   });
 
-  it('wait_for params pinned: predicate required + timeout_seconds int>0 optional', () => {
-    expect(body).toMatch(/predicate: z\.string\(\)\.min\(1\),/);
-    expect(body).toMatch(/timeout_seconds: z\.number\(\)\.int\(\)\.positive\(\)\.optional\(\),/);
+  it('wait_for pins raw predicate and structured safe-template variants', () => {
+    expect(body).toContain('export const WaitForParamsSchema = z.union([');
+    expect(body).toContain('predicate: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),');
+    expect(body).toContain('for: WaitForStructuredSchema,');
   });
 
   it('execute_script params pinned: script required + args unknown[] optional', () => {
-    expect(body).toMatch(/script: z\.string\(\)\.min\(1\),/);
+    expect(body).toContain('script: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),');
     expect(body).toMatch(/args: z\.array\(z\.unknown\(\)\)\.optional\(\),/);
   });
 
-  it('intentName→schema map pinned (all 12 routed, incl. press_key)', () => {
+  it('intentName→param and result schema maps cover all 18 live names', () => {
     expect(body).toMatch(
       /export const HARNESS_INTENT_PARAM_SCHEMAS: Record<HarnessIntentName, z\.ZodTypeAny> = \{/,
     );
     for (const name of HARNESS_INTENT_NAMES) {
       expect(body).toMatch(new RegExp(`${name}: \\w+Schema,`));
     }
+    expect(Object.keys(HARNESS_INTENT_PARAM_SCHEMAS).sort()).toEqual(
+      [...HARNESS_INTENT_NAMES].sort(),
+    );
+    expect(Object.keys(HARNESS_INTENT_RESULT_SCHEMAS).sort()).toEqual(
+      [...HARNESS_INTENT_NAMES].sort(),
+    );
   });
 
   it('IntentDispatch envelope pinned: type:intentDispatch discriminator + sessionId, intentId, intentName (enum), inputParams (base64 string)', () => {
@@ -226,8 +241,11 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('IntentResult envelope pinned: type:intentResult discriminator + sessionId, intentId, success, durationMs, outputData? (base64 string), errorCode?, errorMessage?', () => {
-    expect(body).toContain('export const IntentResultEnvelopeSchema = z.object({');
+  it('IntentResult envelopes are an exclusive success/failure union with a cheap routing header', () => {
+    expect(body).toContain('export const IntentResultHeaderSchema = z');
+    expect(body).toContain(
+      "export const IntentResultEnvelopeSchema = z.discriminatedUnion('success', [",
+    );
     expect(body).toContain("type: z.literal('intentResult'),");
     expect(body).toContain('sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
     expect(body).toContain('intentId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
@@ -235,9 +253,9 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'durationMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),',
     );
     expect(body).toMatch(
-      /outputData: boundedBase64Schema\(\s*\n?\s*HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH,\s*\n?\s*HARNESS_INTENT_OUTPUT_MAX_BYTES,\s*\n?\s*\)\.optional\(\),/,
+      /outputData: boundedBase64Schema\(\s*\n?\s*HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH,\s*\n?\s*HARNESS_INTENT_OUTPUT_MAX_BYTES,\s*\n?\s*\),/,
     );
-    expect(body).toContain('errorCode: HarnessErrorCodeSchema.optional(),');
+    expect(body).toContain('errorCode: HarnessErrorCodeSchema,');
     expect(body).toContain(
       'errorMessage: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),',
     );
@@ -881,7 +899,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(true);
   });
 
-  it('6 error codes pinned in canonical order (runtime exact-order — comment-agnostic; intent_invalid_parameter added A3 W135)', () => {
+  it('10 live error codes are pinned in canonical order', () => {
     // Exact .toEqual (not a source regex): order-sensitive + tolerant of the
     // inline rationale comments now interleaved in the source array.
     expect([...HARNESS_ERROR_CODES]).toEqual([
@@ -890,21 +908,129 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'intent_missing_parameter',
       'intent_invalid_parameter',
       'intent_webdriver_failed',
+      'intent_script_failed',
       'intent_dispatch_error',
       'result_too_large',
+      'session_paused',
+      'session_intent_in_flight',
     ]);
   });
 });
 
 describe('harness-control-protocol behavioral contract', () => {
-  it('intent vocab + reserved set + error codes match the canonical counts', () => {
-    expect(HARNESS_INTENT_NAMES).toHaveLength(12); // +press_key (A3 W1221)
-    expect(HARNESS_RESERVED_INTENT_NAMES).toEqual(['fill_form', 'login', 'search']);
-    expect(HARNESS_ERROR_CODES).toHaveLength(7);
-    // The param-schema map covers exactly the dispatchable vocab.
+  it('intent vocab, strict schema maps, and error codes match canonical counts', () => {
+    expect(HARNESS_INTENT_NAMES).toHaveLength(18);
+    expect(HARNESS_ERROR_CODES).toHaveLength(10);
     expect(Object.keys(HARNESS_INTENT_PARAM_SCHEMAS).sort()).toEqual(
       [...HARNESS_INTENT_NAMES].sort(),
     );
+    expect(Object.keys(HARNESS_INTENT_RESULT_SCHEMAS).sort()).toEqual(
+      [...HARNESS_INTENT_NAMES].sort(),
+    );
+  });
+
+  it('all 18 live parameter and success-result shapes validate against their correlated maps', () => {
+    const params: Record<(typeof HARNESS_INTENT_NAMES)[number], unknown> = {
+      navigate: { url: 'https://example.com' },
+      back: {},
+      forward: {},
+      click: { x: 12, y: 34 },
+      send_keys: { strategy: 'css selector', value: '#q', text: 'hello' },
+      press_key: { key: 'Enter' },
+      execute_script: { script: 'return arguments[0]', args: [1] },
+      detect_challenge: {},
+      extract: { extractions: [{ name: 'title', selector: 'h1', type: 'text' }] },
+      screenshot: { format: 'png' },
+      get_page_source: {},
+      perceive: { max_elements: 25 },
+      wait_for: { for: { selector: '.ready', appears: true }, timeout_seconds: 5 },
+      scroll: { direction: 'right', amount: { pixels: 120 } },
+      behavioral_pause: { kind: 'decision' },
+      fill_form: { fields: [{ selector: '#email', value: 'a@example.com' }] },
+      search: { query: 'driftstack' },
+      login: { username: 'user', password: 'pass' },
+    };
+    const results: Record<(typeof HARNESS_INTENT_NAMES)[number], unknown> = {
+      navigate: { url: 'https://example.com' },
+      back: { url: 'https://example.com/a', action: 'back' },
+      forward: { url: 'https://example.com/b', action: 'forward' },
+      click: { clicked: 'coords', behavioral: true, activated: null },
+      send_keys: { typed_into: 'el_1', length: 5, truncated: false, behavioral: true },
+      press_key: { pressed: 'Enter' },
+      execute_script: { value: null },
+      detect_challenge: { challenge_detected: false },
+      extract: { value: { title: 'Example' } },
+      screenshot: {
+        screenshot_b64: 'aGk=',
+        format: 'png',
+        full_page: false,
+        annotated: false,
+      },
+      get_page_source: { source: '<html></html>', truncated: false },
+      perceive: {
+        value: {
+          url: 'https://example.com',
+          title: 'Example',
+          elements: [],
+          truncated: false,
+          total_matched: 0,
+        },
+      },
+      wait_for: { waited: true, timeout_capped: false },
+      scroll: {
+        scrolled: -120,
+        requested: -120,
+        scrolled_measured: true,
+        flicks: 1,
+        steps: 8,
+        behavioral: true,
+        distance_capped: false,
+      },
+      behavioral_pause: { paused_ms: 500, capped: false, behavioral: true },
+      fill_form: { fields_filled: 1, submitted: false, truncated: false },
+      search: { submitted: true, query_truncated: false },
+      login: {
+        logged_in: true,
+        post_login_url: 'https://example.com/account',
+        credentials_truncated: false,
+      },
+    };
+    for (const name of HARNESS_INTENT_NAMES) {
+      expect(HARNESS_INTENT_PARAM_SCHEMAS[name].safeParse(params[name]).success, name).toBe(true);
+      expect(HARNESS_INTENT_RESULT_SCHEMAS[name].safeParse(results[name]).success, name).toBe(true);
+    }
+    expect(HARNESS_INTENT_RESULT_SCHEMAS.navigate.safeParse({ pressed: 'Enter' }).success).toBe(
+      false,
+    );
+    expect(
+      HARNESS_INTENT_RESULT_SCHEMAS.back.safeParse({
+        url: 'https://example.com',
+        action: 'forward',
+      }).success,
+    ).toBe(false);
+    expect(
+      HARNESS_INTENT_RESULT_SCHEMAS.fill_form.safeParse({
+        fields_filled: 1,
+        submitted: false,
+        truncated: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('every live failure code is accepted by the exclusive failure envelope', () => {
+    for (const errorCode of HARNESS_ERROR_CODES) {
+      expect(
+        IntentResultEnvelopeSchema.safeParse({
+          type: 'intentResult',
+          sessionId: 'ses_x',
+          intentId: 'int_1',
+          success: false,
+          durationMs: 1,
+          errorCode,
+        }).success,
+        errorCode,
+      ).toBe(true);
+    }
   });
 
   it('A3 W135 — an intentResult carrying errorCode intent_invalid_parameter PARSES (the decode-enum gap: before adding it, IntentResultEnvelopeSchema rejected the frame → the correlator silently dropped it → the dispatch hung to its timeout)', () => {
@@ -1326,9 +1452,16 @@ describe('harness-control-protocol behavioral contract', () => {
     ).toBe(false);
   });
 
-  it('reserved JSBridge intents are NOT in the dispatchable enum', () => {
-    for (const reserved of HARNESS_RESERVED_INTENT_NAMES) {
-      expect(HarnessIntentNameSchema.safeParse(reserved).success).toBe(false);
+  it('formerly omitted live handlers are accepted by the dispatchable enum', () => {
+    for (const name of [
+      'detect_challenge',
+      'extract',
+      'perceive',
+      'fill_form',
+      'search',
+      'login',
+    ]) {
+      expect(HarnessIntentNameSchema.safeParse(name).success).toBe(true);
     }
   });
 
@@ -1369,27 +1502,34 @@ describe('harness-control-protocol behavioral contract', () => {
 
   it('click accepts element_id OR strategy+value, rejects mixing/neither', () => {
     expect(ClickParamsSchema.safeParse({ element_id: 'btn-1' }).success).toBe(true);
-    expect(ClickParamsSchema.safeParse({ strategy: 'css', value: '.btn' }).success).toBe(true);
+    expect(ClickParamsSchema.safeParse({ strategy: 'css selector', value: '.btn' }).success).toBe(
+      true,
+    );
+    expect(ClickParamsSchema.safeParse({ x: 12.5, y: 44 }).success).toBe(true);
     expect(ClickParamsSchema.safeParse({}).success).toBe(false);
-    expect(ClickParamsSchema.safeParse({ strategy: 'css' }).success).toBe(false);
+    expect(ClickParamsSchema.safeParse({ strategy: 'css selector' }).success).toBe(false);
+    expect(ClickParamsSchema.safeParse({ strategy: 'css', value: '.btn' }).success).toBe(false);
   });
 
   it('send_keys requires locator/text and accepts optional sensitive only', () => {
     expect(
-      SendKeysParamsSchema.safeParse({ strategy: 'css', value: '#in', text: 'hi' }).success,
+      SendKeysParamsSchema.safeParse({ strategy: 'css selector', value: '#in', text: 'hi' })
+        .success,
     ).toBe(true);
     expect(
       SendKeysParamsSchema.safeParse({
-        strategy: 'css',
+        strategy: 'css selector',
         value: '#password',
         text: 'secret',
         sensitive: true,
       }).success,
     ).toBe(true);
-    expect(SendKeysParamsSchema.safeParse({ strategy: 'css', value: '#in' }).success).toBe(false);
+    expect(SendKeysParamsSchema.safeParse({ strategy: 'css selector', value: '#in' }).success).toBe(
+      false,
+    );
     expect(
       SendKeysParamsSchema.safeParse({
-        strategy: 'css',
+        strategy: 'css selector',
         value: '#in',
         text: 'hi',
         sensitive: 'true',
@@ -1397,9 +1537,13 @@ describe('harness-control-protocol behavioral contract', () => {
     ).toBe(false);
   });
 
-  it('scroll: all-optional, direction enum + positive distance', () => {
+  it('scroll: all-optional, full direction enum + nonnegative distance and amount', () => {
     expect(ScrollParamsSchema.safeParse({}).success).toBe(true);
     expect(ScrollParamsSchema.safeParse({ direction: 'up', distance_px: 800 }).success).toBe(true);
+    expect(ScrollParamsSchema.safeParse({ direction: 'right', amount: 'one_screen' }).success).toBe(
+      true,
+    );
+    expect(ScrollParamsSchema.safeParse({ amount: { pixels: 0 } }).success).toBe(true);
     expect(ScrollParamsSchema.safeParse({ direction: 'sideways' }).success).toBe(false);
     expect(ScrollParamsSchema.safeParse({ distance_px: -5 }).success).toBe(false);
   });
@@ -1413,11 +1557,13 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(BehavioralPauseParamsSchema.safeParse({ duration_ms: -1 }).success).toBe(false);
   });
 
-  it('wait_for requires predicate; timeout optional positive int', () => {
+  it('wait_for requires a predicate or structured safe-template condition', () => {
     expect(WaitForParamsSchema.safeParse({ predicate: 'document.title' }).success).toBe(true);
     expect(WaitForParamsSchema.safeParse({ predicate: 'x', timeout_seconds: 10 }).success).toBe(
       true,
     );
+    expect(WaitForParamsSchema.safeParse({ for: { selector: '.ready' } }).success).toBe(true);
+    expect(WaitForParamsSchema.safeParse({ for: { seconds: 0.5 } }).success).toBe(true);
     expect(WaitForParamsSchema.safeParse({}).success).toBe(false);
     expect(WaitForParamsSchema.safeParse({ predicate: 'x', timeout_seconds: 0 }).success).toBe(
       false,
@@ -1465,17 +1611,15 @@ describe('harness-control-protocol behavioral contract', () => {
   });
 
   it('IntentResult envelope: success + error variants', () => {
-    expect(
-      IntentResultEnvelopeSchema.safeParse({
-        type: 'intentResult',
-        sessionId: 'ses_x',
-        intentId: 'int_1',
-        success: true,
-        durationMs: 42,
-        outputData: Buffer.from('{"url":"https://x"}', 'utf8').toString('base64'),
-      }).success,
-    ).toBe(true);
-    const err = IntentResultEnvelopeSchema.safeParse({
+    const success = {
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'int_1',
+      success: true,
+      durationMs: 42,
+      outputData: Buffer.from('{"url":"https://x"}', 'utf8').toString('base64'),
+    };
+    const failure = {
       type: 'intentResult',
       sessionId: 'ses_x',
       intentId: 'int_1',
@@ -1483,8 +1627,22 @@ describe('harness-control-protocol behavioral contract', () => {
       durationMs: 0,
       errorCode: 'intent_missing_parameter',
       errorMessage: 'url is required',
-    });
-    expect(err.success).toBe(true);
+    };
+    expect(IntentResultEnvelopeSchema.safeParse(success).success).toBe(true);
+    expect(IntentResultEnvelopeSchema.safeParse(failure).success).toBe(true);
+    // Success must carry output and no error; failure must carry errorCode and
+    // no output. This prevents contradictory envelopes entering the correlator.
+    const { outputData: _outputData, ...successMissingOutput } = success;
+    expect(IntentResultEnvelopeSchema.safeParse(successMissingOutput).success).toBe(false);
+    expect(
+      IntentResultEnvelopeSchema.safeParse({ ...success, errorCode: 'intent_dispatch_error' })
+        .success,
+    ).toBe(false);
+    const { errorCode: _errorCode, ...failureMissingCode } = failure;
+    expect(IntentResultEnvelopeSchema.safeParse(failureMissingCode).success).toBe(false);
+    expect(
+      IntentResultEnvelopeSchema.safeParse({ ...failure, outputData: success.outputData }).success,
+    ).toBe(false);
     // Unknown error code rejected.
     expect(HarnessErrorCodeSchema.safeParse('boom').success).toBe(false);
   });

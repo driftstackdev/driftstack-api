@@ -391,8 +391,9 @@ server-local driver abstraction. The harness consumes:
 over the control-plane WSS, routed by `intentName` through one `IntentExecutor.dispatch`. The AgentExecutor must:
 decompose → for EACH step emit a `ControlInbound.intentDispatch(intentName, inputParams=JSON(params))` over the
 control plane → harness (the harness does NOT consume the decomposer plan directly; one IntentDispatch per intent).
-intentName vocab the harness routes today: navigate, click, send_keys, execute_script, screenshot,
-get_page_source, wait_for, scroll, behavioral_pause, back, forward (fill_form/login/search = intent_not_implemented, JSBridge-gated).
+Current intentName vocabulary is the exact 18-name list in the 2026-07-15
+protocol-truth correction below; the original 11-name planning roster here is
+historical and must not be used as a sender allow-list.
 
 **IMPACT on the shipped RealAgentExecutor (AI-B2.b/c, `aa37f891`/`26fce854`) — MISALIGNED, unwired (no harm):**
 it dispatches AgentIntent → SessionsService.{navigate,interact,wait,capture} → DRIVER. That's the wrong layer
@@ -421,14 +422,15 @@ Build-relevant deltas beyond the scroll/dispatch notes already recorded:
 
 - **Transport:** one `ControlInbound.intentDispatch(IntentDispatch{ sessionId, intentId, intentName, inputParams: JSON(paramsObj) })`
   per intent over the control-plane WSS. Result = `HarnessOutbound.IntentResult{ sessionId, intentId, success,
-durationMs, outputData: JSON?, errorCode?, errorMessage? }`.
+durationMs, outputData: base64(JSON) on success | errorCode + errorMessage? on failure }`.
 - **Full param/result table** (in the ref): navigate{url}→{url}; back/forward{}→{url,action}; click{element_id}|{strategy,value}→{clicked,behavioral};
   send_keys{strategy,value,text}→{typed_into,length,behavioral}; scroll{direction?,distance_px?,start_x?,start_y?}→{scrolled,flicks,steps,behavioral}
   (SDK exposes direction+distance_px only); behavioral_pause{duration_ms}|{kind:'reading',word_count}|none→{paused_ms,capped,behavioral}
   (cap ≤300_000ms); wait_for{predicate,timeout_seconds?}→{waited,timeout_capped} (cap ≤300s); execute_script{script,args?}→{value};
-  screenshot{}→{screenshot_b64}; get_page_source{}→{source}; fill_form/login/search = intent_not_implemented (JSBridge-gated).
-- **Error codes:** intent_session_not_established / intent_not_implemented / intent_missing_parameter /
-  intent_webdriver_failed / intent_dispatch_error. The SDK should map these to typed errors.
+  screenshot{}→{screenshot_b64,format,full_page,annotated}; get_page_source{}→{source,truncated}; the
+  additional live handlers and their strict result shapes are enumerated in the 2026-07-15 correction below.
+- **Error codes:** this original five-code planning roster is historical; the exact live ten-code set is
+  enumerated in the 2026-07-15 correction below and must be mapped exhaustively.
 - **`behavioral` flag** in results = persona attached (realistic dynamics) vs false (plain). Surface caps via capped/timeout_capped flags.
 
 **STATUS: Increment-2 spec fully unblocked.** Remaining = the BUILD, gated only on the founder's go for the
@@ -443,11 +445,13 @@ Founder greenlit the control-plane WSS arc ("you choose and do as recommended").
 `apps/server/src/schemas/harness-control-protocol.ts` + 32-test drift-guard/behavioral test
 (`schemas-harness-control-protocol-content-parity.test.ts`). Mirrors A3's harness-intent-contract.md as Zod:
 
-- `HARNESS_INTENT_NAMES` (11 dispatchable) + `HARNESS_RESERVED_INTENT_NAMES` (fill_form/login/search, not-impl).
+- Historical first slice: 11 dispatchable names plus three reserved names. The
+  2026-07-15 correction below replaces that roster with all 18 live handlers.
 - Per-intent param schemas (strict) + `HARNESS_INTENT_PARAM_SCHEMAS` map (intentName→schema) for server-side
   validation before dispatch.
-- `IntentDispatchSchema` {sessionId,intentId,intentName,inputParams} + `IntentResultEnvelopeSchema`
-  {sessionId,intentId,success,durationMs,outputData?,errorCode?,errorMessage?} + `HarnessErrorCodeSchema` (5).
+- Historical first slice: permissive optional result fields and five errors.
+  The 2026-07-15 correction below replaces this with exclusive envelopes,
+  strict per-intent results, and all ten live error codes.
 - Caps/defaults as exported consts (pause 300_000ms, wait_for 300s, scroll 600px/down, wait_for 30s).
 - **Server-internal** (gui-input.ts/L-001 precedent) — NOT @driftstack/api-types (harness ≠ customer).
 
@@ -478,6 +482,36 @@ Founder greenlit the control-plane WSS arc ("you choose and do as recommended").
 All 3 wire questions are ANSWERED and the entire non-gated API data path is built + tested. This section is
 the turnkey checklist for going live once the founder/infra gates clear.
 
+### 2026-07-15 protocol-truth correction (supersedes every older roster/count above)
+
+The live Swift `IntentExecutor` routes exactly 18 names, all of which are valid
+internal dispatch vocabulary: `navigate`, `back`, `forward`, `click`, `send_keys`,
+`press_key`, `execute_script`, `detect_challenge`, `extract`, `screenshot`,
+`get_page_source`, `perceive`, `wait_for`, `scroll`, `behavioral_pause`, `fill_form`,
+`search`, and `login`. The older 11/12-name lists and the claim that
+`fill_form`/`search`/`login` were reserved or unimplemented are historical and
+must not be used to build a sender.
+
+The live result failure vocabulary is exactly 10 codes:
+`intent_session_not_established`, `intent_not_implemented`,
+`intent_missing_parameter`, `intent_invalid_parameter`,
+`intent_webdriver_failed`, `intent_script_failed`, `intent_dispatch_error`,
+`result_too_large`, `session_paused`, and `session_intent_in_flight`.
+`intent_script_failed` is a non-retryable invalid script request;
+`session_paused` is retryable after resume; `session_intent_in_flight` is a
+retryable session-state condition after the active operation settles.
+
+Every logical parameter object and every successful decoded result now has an
+intent-specific strict schema. A success envelope must carry only `outputData`;
+a failure envelope must carry `errorCode` and may carry `errorMessage`, but must
+not carry `outputData`. The correlator stores the originating `intentName` and
+validates a success against that exact result schema. It first reads only the
+bounded `type`/`sessionId`/`intentId` header: unknown ids and cross-session echoes
+are discarded before full envelope validation or base64/JSON decoding. Once an
+id/session pair matches pending state, malformed envelopes, malformed payloads,
+and cross-intent result shapes settle deterministically as
+`intent_dispatch_error` rather than hanging to timeout.
+
 ### Resolved wire facts (A3-confirmed; build to these)
 
 - `inputParams`/`outputData` = **base64 string** of UTF-8 JSON (Swift `Data` default). Envelope keys = **camelCase**.
@@ -485,8 +519,14 @@ the turnkey checklist for going live once the founder/infra gates clear.
   the audited `services/fleet-node-auth.ts` (claims iss=sub=nodeId/iat/exp≤300/nonce; alg header ignored;
   `Authorization: Bearer <jwt>` on the WS upgrade). Harness signer wired to it (A3 `d1482885`).
 - Dispatch correlation/timeout (A3 W106): 1:1 by `intentId`; fast-fail on the errored SessionStatus
-  `intent_dispatch_no_session: <intentName>`; per-intent timeout `max(30s, cap+15s)` (315s for
-  behavioral_pause/wait_for) → `intent_dispatch_error`; no result on connection-drop → timeout.
+  `intent_dispatch_no_session: <intentName>`; per-intent timeout follows the live producer budget plus
+  15 seconds of transport slack where that budget is proved: 615s for search/login (300s typing plus a separate
+  300s result wait), 315s for click/send_keys/behavioral_pause/wait_for, 70s for navigate/back/forward and 30s
+  for remaining short observation/key/script intents. fill_form and scroll retain a provisional 315s bounded
+  lost-reply detector, not a claimed producer maximum: per-field typing and slow successful flick calls lack a
+  whole-intent wall clock. Runtime activation requires a harness-wide per-intent fence and cancellation contract
+  for those two. A blanket long timeout is deliberately avoided so genuine connection loss remains fast for
+  short operations. No result on connection-drop settles as `intent_dispatch_error` at the applicable deadline.
 
 ### DONE on the API side (all unwired → zero prod change until the bootstrap swap)
 

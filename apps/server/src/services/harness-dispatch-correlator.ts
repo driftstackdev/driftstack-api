@@ -16,8 +16,12 @@
 //     (detail "intent_dispatch_no_session: <intentName>"), NOT an IntentResult →
 //     FAST-FAIL the in-flight dispatch for that session (don't wait the timeout).
 //   - Connection drop mid-intent → no result, not replayed → the timeout covers it.
-//   - Per-intent timeout = max(30s, cap + 15s): behavioral_pause / wait_for can
-//     run to their 300s caps, everything else is sub-second-to-a-few-seconds.
+//   - Per-intent timeout = producer execution budget + 15s transport slack.
+//     Explicit post-action waits and aggregate behavioral pacing can legally
+//     consume 300s; search/login compose TWO such phases; navigation/history
+//     has a 55s WebDriver budget. fill_form/scroll still lack a producer-wide
+//     wall fence (documented residual below). Only remaining short intents use
+//     the 30s base.
 //
 // dispatch() ALWAYS resolves with a ParsedIntentResult (success or a synthesized
 // failure) — it never rejects — so the executor gets a uniform result per intent.
@@ -26,7 +30,7 @@
 // unambiguous even though the SessionStatus names the intentName, not the intentId.
 
 import {
-  IntentResultEnvelopeSchema,
+  IntentResultHeaderSchema,
   HARNESS_BEHAVIORAL_PAUSE_CAP_MS,
   HARNESS_WAIT_FOR_CAP_SECONDS,
   type IntentDispatch,
@@ -42,21 +46,51 @@ export interface DispatchTransport {
 
 export const DISPATCH_TIMEOUT_BASE_MS = 30_000;
 export const DISPATCH_TIMEOUT_SLACK_MS = 15_000;
+export const DISPATCH_NAVIGATION_BUDGET_MS = 55_000;
 
-/** Per-intent dispatch timeout = max(30s, harness cap + 15s slack). Only
- *  behavioral_pause + wait_for exceed the 30s base (they self-cap at 300s). */
+const SINGLE_CAP_LONG_INTENTS = new Set<HarnessIntentName>([
+  'click',
+  'send_keys',
+  'behavioral_pause',
+  'wait_for',
+]);
+
+const COMPOSITE_LONG_INTENTS = new Set<HarnessIntentName>(['search', 'login']);
+
+// Provisional bounded loss detectors, NOT claimed producer maxima. fill_form
+// applies the typing wall independently per field and scroll has no top-level
+// fence across slow successful flick calls before pause_after. Runtime
+// activation therefore remains blocked on a harness-wide per-intent wall-clock
+// fence + cancellation semantics; until then these prevent an unbounded lost
+// reply while acknowledging a legal extreme operation could outlive the timer.
+const UNFENCED_COMPOSITE_INTENTS = new Set<HarnessIntentName>(['fill_form', 'scroll']);
+
+const NAVIGATION_INTENTS = new Set<HarnessIntentName>(['navigate', 'back', 'forward']);
+
+/** Per-intent loss-detection deadline. Proved bounded classes use the live
+ *  producer budget plus transport slack; fill_form/scroll use the explicitly
+ *  provisional bound above until the producer supplies a whole-intent fence.
+ *  Short operations stay fail-fast instead of inheriting a blanket long timer. */
 export function dispatchTimeoutMs(intentName: HarnessIntentName): number {
-  if (intentName === 'behavioral_pause') {
-    return Math.max(
-      DISPATCH_TIMEOUT_BASE_MS,
-      HARNESS_BEHAVIORAL_PAUSE_CAP_MS + DISPATCH_TIMEOUT_SLACK_MS,
+  if (COMPOSITE_LONG_INTENTS.has(intentName)) {
+    return (
+      HARNESS_BEHAVIORAL_PAUSE_CAP_MS +
+      HARNESS_WAIT_FOR_CAP_SECONDS * 1000 +
+      DISPATCH_TIMEOUT_SLACK_MS
     );
   }
-  if (intentName === 'wait_for') {
-    return Math.max(
-      DISPATCH_TIMEOUT_BASE_MS,
-      HARNESS_WAIT_FOR_CAP_SECONDS * 1000 + DISPATCH_TIMEOUT_SLACK_MS,
-    );
+  if (SINGLE_CAP_LONG_INTENTS.has(intentName)) {
+    const capMs =
+      intentName === 'wait_for'
+        ? HARNESS_WAIT_FOR_CAP_SECONDS * 1000
+        : HARNESS_BEHAVIORAL_PAUSE_CAP_MS;
+    return Math.max(DISPATCH_TIMEOUT_BASE_MS, capMs + DISPATCH_TIMEOUT_SLACK_MS);
+  }
+  if (UNFENCED_COMPOSITE_INTENTS.has(intentName)) {
+    return HARNESS_BEHAVIORAL_PAUSE_CAP_MS + DISPATCH_TIMEOUT_SLACK_MS;
+  }
+  if (NAVIGATION_INTENTS.has(intentName)) {
+    return DISPATCH_NAVIGATION_BUDGET_MS + DISPATCH_TIMEOUT_SLACK_MS;
   }
   return DISPATCH_TIMEOUT_BASE_MS;
 }
@@ -65,6 +99,7 @@ interface PendingDispatch {
   resolve: (result: ParsedIntentResult) => void;
   timer: ReturnType<typeof setTimeout>;
   sessionId: string;
+  intentName: HarnessIntentName;
 }
 
 function synthFailure(
@@ -97,7 +132,12 @@ export class IntentDispatchCorrelator {
           ),
         );
       }, ms);
-      this.pending.set(d.intentId, { resolve, timer, sessionId: d.sessionId });
+      this.pending.set(d.intentId, {
+        resolve,
+        timer,
+        sessionId: d.sessionId,
+        intentName: d.intentName,
+      });
       try {
         this.transport.send(d);
       } catch (err) {
@@ -123,21 +163,14 @@ export class IntentDispatchCorrelator {
   /** Feed an inbound frame expected to be an IntentResult. Non-IntentResult
    *  frames are ignored; a malformed outputData settles a typed failure. */
   onResultFrame(frame: unknown): void {
-    const env = IntentResultEnvelopeSchema.safeParse(frame);
-    if (!env.success) return; // not an IntentResult — caller routes other frame types
-    let parsed: ParsedIntentResult;
-    try {
-      parsed = parseIntentResult(env.data);
-    } catch {
-      // Valid envelope but malformed base64/JSON outputData — surface as a typed
-      // dispatch failure rather than crashing the receive loop.
-      parsed = synthFailure(
-        env.data.sessionId,
-        env.data.intentId,
-        'intent_dispatch_error',
-        'malformed IntentResult outputData',
-      );
-    }
+    // Route on the three bounded identity fields BEFORE parsing the full
+    // envelope or decoding outputData. Unknown ids and cross-session echoes are
+    // untrusted traffic for some other request and must consume no payload work.
+    const header = IntentResultHeaderSchema.safeParse(frame);
+    if (!header.success) return;
+    const target = this.pending.get(header.data.intentId);
+    if (target === undefined) return;
+
     // Cross-session spoof guard — a shared fleet connection carries every
     // session on the node, so a misrouted / id-echoed IntentResult whose
     // sessionId disagrees with the pending dispatch it would settle must NOT
@@ -147,11 +180,23 @@ export class IntentDispatchCorrelator {
     // (cookies / download / navigate-history / upload / set-cookies /
     // trim-profile). Drop the frame but LEAVE the pending entry so the
     // legitimate result — or the per-intent timeout — still settles it.
-    const target = this.pending.get(parsed.intentId);
-    if (target !== undefined && target.sessionId !== parsed.sessionId) {
-      return;
+    if (target.sessionId !== header.data.sessionId) return;
+
+    let parsed: ParsedIntentResult;
+    try {
+      parsed = parseIntentResult(frame, target.intentName);
+    } catch {
+      // Once the id/session pair is authenticated by pending state, malformed
+      // envelope/base64/JSON or a wrong-intent success is terminal for this
+      // request. Settle deterministically rather than waiting for its timeout.
+      parsed = synthFailure(
+        header.data.sessionId,
+        header.data.intentId,
+        'intent_dispatch_error',
+        'malformed IntentResult result shape or outputData',
+      );
     }
-    this.settle(parsed.intentId, parsed);
+    this.settle(header.data.intentId, parsed);
   }
 
   /** Feed an errored SessionStatus. Fast-fails the in-flight dispatch for the

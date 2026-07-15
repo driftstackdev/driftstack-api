@@ -114,7 +114,7 @@ describe('parseIntentResult', () => {
       outputData: encodeWireData({ url: 'https://example.com' }),
     };
     expect(IntentResultEnvelopeSchema.safeParse(frame).success).toBe(true);
-    const r = parseIntentResult(frame);
+    const r = parseIntentResult(frame, 'navigate');
     expect(r.success).toBe(true);
     expect(r.durationMs).toBe(42);
     expect(r.outputData).toEqual({ url: 'https://example.com' });
@@ -122,15 +122,18 @@ describe('parseIntentResult', () => {
   });
 
   it('decodes a failure frame (no outputData, errorCode + errorMessage preserved)', () => {
-    const r = parseIntentResult({
-      type: 'intentResult',
-      sessionId: 'ses_x',
-      intentId: 'int_2',
-      success: false,
-      durationMs: 0,
-      errorCode: 'intent_missing_parameter',
-      errorMessage: 'url is required',
-    });
+    const r = parseIntentResult(
+      {
+        type: 'intentResult',
+        sessionId: 'ses_x',
+        intentId: 'int_2',
+        success: false,
+        durationMs: 0,
+        errorCode: 'intent_missing_parameter',
+        errorMessage: 'url is required',
+      },
+      'navigate',
+    );
     expect(r.success).toBe(false);
     expect(r.outputData).toBeUndefined();
     expect(r.errorCode).toBe('intent_missing_parameter');
@@ -139,27 +142,33 @@ describe('parseIntentResult', () => {
 
   it('throws on a frame that is not a valid IntentResultEnvelope (unknown errorCode)', () => {
     expect(() =>
-      parseIntentResult({
-        type: 'intentResult',
-        sessionId: 'ses_x',
-        intentId: 'int_3',
-        success: false,
-        durationMs: 0,
-        errorCode: 'totally_made_up',
-      }),
+      parseIntentResult(
+        {
+          type: 'intentResult',
+          sessionId: 'ses_x',
+          intentId: 'int_3',
+          success: false,
+          durationMs: 0,
+          errorCode: 'totally_made_up',
+        },
+        'navigate',
+      ),
     ).toThrow();
   });
 
   it('throws HarnessWireCodecError when outputData is malformed base64/JSON', () => {
     expect(() =>
-      parseIntentResult({
-        type: 'intentResult',
-        sessionId: 'ses_x',
-        intentId: 'int_4',
-        success: true,
-        durationMs: 1,
-        outputData: Buffer.from('nope', 'utf8').toString('base64'),
-      }),
+      parseIntentResult(
+        {
+          type: 'intentResult',
+          sessionId: 'ses_x',
+          intentId: 'int_4',
+          success: true,
+          durationMs: 1,
+          outputData: Buffer.from('nope', 'utf8').toString('base64'),
+        },
+        'navigate',
+      ),
     ).toThrow(HarnessWireCodecError);
   });
 
@@ -171,16 +180,35 @@ describe('parseIntentResult', () => {
       intentName: 'navigate',
       params: { url: 'https://x' },
     });
-    const r = parseIntentResult({
-      type: 'intentResult',
-      sessionId: d.sessionId,
-      intentId: d.intentId,
-      success: true,
-      durationMs: 10,
-      outputData: encodeWireData({ url: 'https://x' }),
-    });
+    const r = parseIntentResult(
+      {
+        type: 'intentResult',
+        sessionId: d.sessionId,
+        intentId: d.intentId,
+        success: true,
+        durationMs: 10,
+        outputData: encodeWireData({ url: 'https://x' }),
+      },
+      d.intentName,
+    );
     expect(r.intentId).toBe('int_5');
     expect(r.outputData).toEqual({ url: 'https://x' });
+  });
+
+  it('rejects a valid result for a different intent than the correlated dispatch', () => {
+    expect(() =>
+      parseIntentResult(
+        {
+          type: 'intentResult',
+          sessionId: 'ses_x',
+          intentId: 'int_cross',
+          success: true,
+          durationMs: 1,
+          outputData: encodeWireData({ pressed: 'Enter' }),
+        },
+        'navigate',
+      ),
+    ).toThrow(HarnessWireCodecError);
   });
 });
 

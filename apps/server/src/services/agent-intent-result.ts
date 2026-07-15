@@ -136,10 +136,14 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   intent_missing_parameter: 'a required parameter was missing',
   intent_invalid_parameter: 'a parameter was invalid',
   intent_webdriver_failed: 'the browser failed to perform this action',
+  intent_script_failed: 'the browser script for this action was invalid',
   intent_dispatch_error: 'the action could not be dispatched',
   // A3 W227 — the harness caps inline result output at 8 MiB; an over-cap
   // result is a terminal client error (narrow the selector / paginate).
   result_too_large: 'the result was too large to return — narrow the selector or paginate',
+  session_paused: 'the browser session is paused — resume it before retrying this action',
+  session_intent_in_flight:
+    'the browser session is still processing another action — wait, then retry this action',
 };
 
 // doc-132 §5.3 auto-debug (deterministic slice) — `intent_webdriver_failed` is
@@ -183,10 +187,13 @@ function diagnose(intent: AgentIntent, code: HarnessErrorCode | undefined): Fail
       return { category: WEBDRIVER_CATEGORY_BY_KIND[intent.kind] ?? 'unknown', retryable: true };
     case 'intent_session_not_established':
     case 'intent_dispatch_error':
+    case 'session_paused':
+    case 'session_intent_in_flight':
       return { category: 'session_error', retryable: true };
     case 'intent_missing_parameter':
     case 'intent_invalid_parameter':
     case 'intent_not_implemented':
+    case 'intent_script_failed':
       return { category: 'invalid_request', retryable: false };
     case 'result_too_large':
       return { category: 'result_too_large', retryable: false };

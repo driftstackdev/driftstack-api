@@ -1,6 +1,6 @@
 // Increment-2 — unit tests for intentResultToCustomer: harness ParsedIntentResult
 // → customer IntentResult. Covers per-intent success summaries, the failure-reason
-// mapping for all 5 error codes (+ message append/cap), and that the output is a
+// mapping for all live error codes (+ message append/cap), and that the output is a
 // valid api-types IntentResult.
 
 import { describe, expect, it } from 'vitest';
@@ -279,6 +279,8 @@ describe('intentResultToCustomer — failure reasons', () => {
         true,
       ],
       [{ kind: 'navigate', url: 'https://x' }, 'intent_dispatch_error', 'session_error', true],
+      [{ kind: 'navigate', url: 'https://x' }, 'session_paused', 'session_error', true],
+      [{ kind: 'navigate', url: 'https://x' }, 'session_intent_in_flight', 'session_error', true],
       [
         { kind: 'navigate', url: 'https://x' },
         'intent_missing_parameter',
@@ -292,6 +294,7 @@ describe('intentResultToCustomer — failure reasons', () => {
         false,
       ],
       [{ kind: 'navigate', url: 'https://x' }, 'intent_not_implemented', 'invalid_request', false],
+      [{ kind: 'navigate', url: 'https://x' }, 'intent_script_failed', 'invalid_request', false],
       [{ kind: 'capture', capture: 'dom_snapshot' }, 'result_too_large', 'result_too_large', false],
     ];
     for (const [caseIntent, code, category, retryable] of cases) {
@@ -308,6 +311,32 @@ describe('intentResultToCustomer — failure reasons', () => {
     });
     if (noCode.kind !== 'failure') throw new Error('narrow');
     expect(noCode.diagnosis).toEqual({ category: 'unknown', retryable: false });
+  });
+
+  it('maps script failures as non-retryable and paused sessions as resume-guided retryable failures', () => {
+    const script = intentResultToCustomer(
+      { kind: 'navigate', url: 'https://x' },
+      fail('intent_script_failed', 'SyntaxError'),
+    );
+    if (script.kind !== 'failure') throw new Error('narrow');
+    expect(script.reason).toContain('script for this action was invalid');
+    expect(script.diagnosis).toEqual({ category: 'invalid_request', retryable: false });
+
+    const paused = intentResultToCustomer(
+      { kind: 'interact', action: 'tap', selector: '#continue' },
+      fail('session_paused'),
+    );
+    if (paused.kind !== 'failure') throw new Error('narrow');
+    expect(paused.reason).toContain('resume it before retrying');
+    expect(paused.diagnosis).toEqual({ category: 'session_error', retryable: true });
+
+    const busy = intentResultToCustomer(
+      { kind: 'navigate', url: 'https://x' },
+      fail('session_intent_in_flight'),
+    );
+    if (busy.kind !== 'failure') throw new Error('narrow');
+    expect(busy.reason).toContain('wait, then retry');
+    expect(busy.diagnosis).toEqual({ category: 'session_error', retryable: true });
   });
 
   it('handles a failure with no code + no message (defensive)', () => {

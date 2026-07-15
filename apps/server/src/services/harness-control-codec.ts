@@ -32,6 +32,7 @@ import {
   FetchDownloadRequestSchema,
   TrimProfileRequestSchema,
   HARNESS_INTENT_PARAM_SCHEMAS,
+  HARNESS_INTENT_RESULT_SCHEMAS,
   type IntentDispatch,
   type IntentResultEnvelope,
   type SessionAssign,
@@ -511,22 +512,40 @@ export interface ParsedIntentResult {
 
 /**
  * Validate + decode an inbound IntentResult frame. The envelope is validated
- * against IntentResultEnvelopeSchema first; then `outputData` (if present) is
- * base64-decoded to its logical JSON.
+ * against IntentResultEnvelopeSchema first; a successful `outputData` is then
+ * base64-decoded and validated against the exact originating intent's result
+ * schema. A cross-intent or drifted success must never enter the agent loop.
  *
  * @throws ZodError if the frame is not a valid IntentResultEnvelope.
  * @throws HarnessWireCodecError if `outputData` is malformed base64/JSON.
  */
-export function parseIntentResult(frame: unknown): ParsedIntentResult {
+export function parseIntentResult(
+  frame: unknown,
+  expectedIntentName: HarnessIntentName,
+): ParsedIntentResult {
   const env: IntentResultEnvelope = IntentResultEnvelopeSchema.parse(frame);
-  const out: ParsedIntentResult = {
+  if (env.success) {
+    const decoded = decodeWireData(env.outputData);
+    const result = HARNESS_INTENT_RESULT_SCHEMAS[expectedIntentName].safeParse(decoded);
+    if (!result.success) {
+      throw new HarnessWireCodecError(
+        `${expectedIntentName} result failed the harness contract: ${result.error.message}`,
+      );
+    }
+    return {
+      sessionId: env.sessionId,
+      intentId: env.intentId,
+      success: true,
+      durationMs: env.durationMs,
+      outputData: result.data,
+    };
+  }
+  return {
     sessionId: env.sessionId,
     intentId: env.intentId,
-    success: env.success,
+    success: false,
     durationMs: env.durationMs,
+    errorCode: env.errorCode,
+    ...(env.errorMessage !== undefined ? { errorMessage: env.errorMessage } : {}),
   };
-  if (env.outputData !== undefined) out.outputData = decodeWireData(env.outputData);
-  if (env.errorCode !== undefined) out.errorCode = env.errorCode;
-  if (env.errorMessage !== undefined) out.errorMessage = env.errorMessage;
-  return out;
 }

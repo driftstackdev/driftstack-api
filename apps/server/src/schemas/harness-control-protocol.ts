@@ -33,10 +33,9 @@
 import { z } from 'zod';
 
 // ── Intent vocabulary ────────────────────────────────────────────────
-// The 11 intentNames the harness IntentExecutor dispatches. The 3 JSBridge
-// intents (fill_form / login / search) are reserved but currently return
-// `intent_not_implemented` (JSBridge channel unwired), so the server must
-// not emit them — they are intentionally excluded from the dispatchable set.
+// Every intentName implemented by the live Swift IntentExecutor. This is an
+// INTERNAL transport vocabulary, not a list of customer-advertised API
+// capabilities: public routes expose only operations they can map faithfully.
 export const HARNESS_INTENT_NAMES = [
   'navigate',
   'back',
@@ -44,21 +43,22 @@ export const HARNESS_INTENT_NAMES = [
   'click',
   'send_keys',
   'press_key',
-  'scroll',
-  'behavioral_pause',
-  'wait_for',
   'execute_script',
+  'detect_challenge',
+  'extract',
   'screenshot',
   'get_page_source',
+  'perceive',
+  'wait_for',
+  'scroll',
+  'behavioral_pause',
+  'fill_form',
+  'search',
+  'login',
 ] as const;
 
 export const HarnessIntentNameSchema = z.enum(HARNESS_INTENT_NAMES);
 export type HarnessIntentName = z.infer<typeof HarnessIntentNameSchema>;
-
-// JSBridge intents the harness recognises but does NOT implement yet
-// (returns intent_not_implemented). Reserved for forward-compat; the
-// server must not dispatch these.
-export const HARNESS_RESERVED_INTENT_NAMES = ['fill_form', 'login', 'search'] as const;
 
 // ── Caps + defaults (harness-enforced; documented here for the sender) ──
 // The harness clamps these server-side and reports `capped` / `timeout_capped`
@@ -69,6 +69,13 @@ export const HARNESS_WAIT_FOR_CAP_SECONDS = 300;
 export const HARNESS_SCROLL_DEFAULT_DISTANCE_PX = 600;
 export const HARNESS_SCROLL_DEFAULT_DIRECTION = 'down' as const;
 export const HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS = 30;
+export const HARNESS_SCRIPT_MAX_CHARS = 262_144;
+export const HARNESS_SEND_KEYS_MAX_CHARS = 10_000;
+export const HARNESS_WAIT_ARG_MAX_CHARS = 4096;
+export const HARNESS_EXTRACTIONS_MAX = 100;
+export const HARNESS_PERCEIVE_MAX_ELEMENTS = 200;
+export const HARNESS_FILL_FORM_MAX_FIELDS = 50;
+export const HARNESS_FILL_FORM_MAX_TOTAL_VALUE_CHARS = 20_000;
 
 // Security-audit hardening (2026-06-30) — hard cap on Heartbeat.
 // activeSessionStates' key count. This map feeds the process-wide
@@ -195,81 +202,218 @@ export const NavigateParamsSchema = z
 // back / forward take no params.
 export const HistoryNavParamsSchema = NoParamsSchema;
 
-// click: target by element_id OR by (strategy, value).
-export const ClickParamsSchema = z.union([
-  z.object({ element_id: z.string().min(1) }).strict(),
-  z.object({ strategy: z.string().min(1), value: z.string() }).strict(),
+export const HarnessLocatorStrategySchema = z.enum([
+  'css selector',
+  'xpath',
+  'link text',
+  'partial link text',
+  'tag name',
 ]);
 
-// send_keys: locator + text required; sensitive optionally suppresses typo
-// correction/loggable typing behavior in the harness.
+const WaitAfterSchema = z.number().nonnegative().optional();
+
+// click: target by element_id, a W3C locator, or viewport coordinates.
+export const ClickParamsSchema = z.union([
+  z
+    .object({
+      element_id: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
+      wait_after: WaitAfterSchema,
+    })
+    .strict(),
+  z
+    .object({
+      strategy: HarnessLocatorStrategySchema,
+      value: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
+      wait_after: WaitAfterSchema,
+    })
+    .strict(),
+  z.object({ x: z.number(), y: z.number(), wait_after: WaitAfterSchema }).strict(),
+]);
+
 export const SendKeysParamsSchema = z
   .object({
-    strategy: z.string().min(1),
-    value: z.string(),
-    text: z.string(),
+    strategy: HarnessLocatorStrategySchema,
+    value: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
+    text: z.string().max(HARNESS_SEND_KEYS_MAX_CHARS),
     sensitive: z.boolean().optional(),
   })
   .strict();
 
-// scroll: all optional (harness defaults direction='down', distance_px=600,
-// and a per-direction start point). SDK surfaces direction + distance_px
-// ONLY; start_x/start_y are server/harness internals (omit on the SDK).
-export const ScrollParamsSchema = z
-  .object({
-    direction: z.enum(['up', 'down']).optional(),
-    distance_px: z.number().int().positive().optional(),
-    start_x: z.number().int().optional(),
-    start_y: z.number().int().optional(),
-  })
-  .strict();
-
-// behavioral_pause: explicit ms, OR reading-time by word_count, OR idle (none).
-// duration_ms is clamped to HARNESS_BEHAVIORAL_PAUSE_CAP_MS by the harness
-// (capped:true reported) — sender passes through.
-// W1223 (A3) — the reading variant carries an optional `scroll_through`: when set,
-// the harness segmentedReadingPlan traverses long content (read→scroll→read) instead
-// of a single frozen multi-minute dwell (a behavioural tell); it measures page
-// geometry itself + degrades to ONE in-place dwell (byte-identical) when content fits.
-export const BehavioralPauseParamsSchema = z.union([
-  z.object({ duration_ms: z.number().int().nonnegative() }).strict(),
-  z
-    .object({
-      kind: z.literal('reading'),
-      word_count: z.number().int().nonnegative(),
-      scroll_through: z.boolean().optional(),
-    })
-    .strict(),
-  NoParamsSchema,
-]);
-
-// wait_for: predicate (JS returning truthy) required; timeout clamped to
-// HARNESS_WAIT_FOR_CAP_SECONDS by the harness (timeout_capped:true reported).
-export const WaitForParamsSchema = z
-  .object({
-    predicate: z.string().min(1),
-    timeout_seconds: z.number().int().positive().optional(),
-  })
-  .strict();
+export const PressKeyParamsSchema = z.object({ key: z.string().min(1).max(20) }).strict();
 
 export const ExecuteScriptParamsSchema = z
   .object({
-    script: z.string().min(1),
+    script: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
     args: z.array(z.unknown()).optional(),
   })
   .strict();
 
-// screenshot / get_page_source take no params.
-export const ScreenshotParamsSchema = NoParamsSchema;
-export const GetPageSourceParamsSchema = NoParamsSchema;
+export const DetectChallengeParamsSchema = NoParamsSchema;
 
-// press_key (A3 W677/W1221): ONE key press on the FOCUSED element — a DOM
-// KeyboardEvent.key name (Enter/Tab/Escape/Backspace/Delete/Arrow*/Home/End/
-// Page*) or a single printable char. Shape-only here (key: string, bounded to
-// the customer InteractAction's 1..20); the harness does the resolves-to-a-real-
-// key semantic validation (unmapped/over-long → intent_invalid_parameter).
-// Modifiers deferred (v1 = single key).
-export const PressKeyParamsSchema = z.object({ key: z.string().min(1).max(20) }).strict();
+const ListFieldExtractionParamsSchema = z
+  .object({
+    type: z.enum(['text', 'attribute']),
+    attribute: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS).optional(),
+    selector: z.string().max(HARNESS_SCRIPT_MAX_CHARS).optional(),
+  })
+  .strict();
+
+const ListFieldExtractionMapSchema = z
+  .record(ListFieldExtractionParamsSchema)
+  .refine((value) => Object.keys(value).length <= HARNESS_EXTRACTIONS_MAX, {
+    message: `nested extract map must contain at most ${HARNESS_EXTRACTIONS_MAX.toString()} fields`,
+  });
+
+const ExtractionParamsSchema = z
+  .object({
+    name: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
+    selector: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
+    type: z.enum(['text', 'attribute', 'list']),
+    attribute: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS).optional(),
+    transform: z.literal('number').optional(),
+    extract: ListFieldExtractionMapSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.type === 'attribute' && value.attribute === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['attribute'],
+        message: 'attribute is required when type is attribute',
+      });
+    }
+    if (value.type !== 'list' && value.extract !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['extract'],
+        message: 'extract is valid only when type is list',
+      });
+    }
+  });
+
+export const ExtractParamsSchema = z
+  .object({ extractions: z.array(ExtractionParamsSchema).min(1).max(HARNESS_EXTRACTIONS_MAX) })
+  .strict();
+
+export const ScreenshotParamsSchema = z
+  .object({
+    format: z.enum(['png', 'jpeg']).optional(),
+    quality: z.number().min(1).max(100).optional(),
+    full_page: z.boolean().optional(),
+    annotate: z.boolean().optional(),
+  })
+  .strict();
+export const GetPageSourceParamsSchema = NoParamsSchema;
+export const PerceiveParamsSchema = z
+  .object({ max_elements: z.number().int().min(1).max(HARNESS_PERCEIVE_MAX_ELEMENTS).optional() })
+  .strict();
+
+const WaitForStructuredSchema = z.union([
+  z.object({ seconds: z.number().nonnegative() }).strict(),
+  z
+    .object({
+      selector: z.string().min(1).max(HARNESS_WAIT_ARG_MAX_CHARS),
+      appears: z.boolean().optional(),
+    })
+    .strict(),
+  z.object({ text: z.string().max(HARNESS_WAIT_ARG_MAX_CHARS) }).strict(),
+  z.object({ url_matches: z.string().max(HARNESS_WAIT_ARG_MAX_CHARS) }).strict(),
+]);
+
+export const WaitForParamsSchema = z.union([
+  z
+    .object({
+      predicate: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
+      timeout_seconds: z.number().positive().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      for: WaitForStructuredSchema,
+      timeout_seconds: z.number().positive().optional(),
+    })
+    .strict(),
+]);
+
+const ScrollAmountSchema = z.union([
+  z.enum(['one_screen', 'to_bottom', 'to_top']),
+  z.object({ pixels: z.number().nonnegative() }).strict(),
+]);
+
+export const ScrollParamsSchema = z
+  .object({
+    direction: z.enum(['up', 'down', 'left', 'right']).optional(),
+    distance_px: z.number().nonnegative().optional(),
+    amount: ScrollAmountSchema.optional(),
+    start_x: z.number().int().optional(),
+    start_y: z.number().int().optional(),
+    pause_after_ms: z.number().nonnegative().optional(),
+  })
+  .strict();
+
+export const BehavioralPauseParamsSchema = z.union([
+  z.object({ duration_ms: z.number().nonnegative() }).strict(),
+  z
+    .object({
+      kind: z.literal('reading'),
+      word_count: z.number().nonnegative(),
+      image_count: z.number().nonnegative().optional(),
+      scroll_through: z.boolean().optional(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('decision') }).strict(),
+  NoParamsSchema,
+]);
+
+const FillFormFieldParamsSchema = z
+  .object({
+    selector: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
+    value: z.string().max(HARNESS_SEND_KEYS_MAX_CHARS),
+    sensitive: z.boolean().optional(),
+  })
+  .strict();
+
+const FillFormSubmitTargetSchema = z.union([
+  z.object({ selector: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS) }).strict(),
+  z.object({ x: z.number(), y: z.number() }).strict(),
+  z.object({ text: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS) }).strict(),
+]);
+
+export const FillFormParamsSchema = z
+  .object({
+    fields: z.array(FillFormFieldParamsSchema).min(1).max(HARNESS_FILL_FORM_MAX_FIELDS),
+    submit: z.boolean().optional(),
+    submit_target: FillFormSubmitTargetSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.fields.reduce((total, field) => total + field.value.length, 0) <=
+      HARNESS_FILL_FORM_MAX_TOTAL_VALUE_CHARS,
+    `field values must contain at most ${HARNESS_FILL_FORM_MAX_TOTAL_VALUE_CHARS.toString()} total characters`,
+  );
+
+export const SearchParamsSchema = z
+  .object({
+    query: z.string().min(1).max(HARNESS_SEND_KEYS_MAX_CHARS),
+    search_selector: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS).optional(),
+    submit: z.boolean().optional(),
+    wait_for_results_selector: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS).optional(),
+    timeout_seconds: z.number().positive().optional(),
+  })
+  .strict();
+
+export const LoginParamsSchema = z
+  .object({
+    username: z.string().min(1).max(HARNESS_SEND_KEYS_MAX_CHARS),
+    password: z.string().min(1).max(HARNESS_SEND_KEYS_MAX_CHARS),
+    username_selector: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS).optional(),
+    password_selector: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS).optional(),
+    submit_selector: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS).optional(),
+    success_selector: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS).optional(),
+    timeout_seconds: z.number().positive().optional(),
+  })
+  .strict();
 
 // intentName → param schema. The AgentExecutor validates the logical params
 // it builds against this map before serialising into inputParams, so a wrong
@@ -282,12 +426,244 @@ export const HARNESS_INTENT_PARAM_SCHEMAS: Record<HarnessIntentName, z.ZodTypeAn
   click: ClickParamsSchema,
   send_keys: SendKeysParamsSchema,
   press_key: PressKeyParamsSchema,
-  scroll: ScrollParamsSchema,
-  behavioral_pause: BehavioralPauseParamsSchema,
-  wait_for: WaitForParamsSchema,
   execute_script: ExecuteScriptParamsSchema,
+  detect_challenge: DetectChallengeParamsSchema,
+  extract: ExtractParamsSchema,
   screenshot: ScreenshotParamsSchema,
   get_page_source: GetPageSourceParamsSchema,
+  perceive: PerceiveParamsSchema,
+  wait_for: WaitForParamsSchema,
+  scroll: ScrollParamsSchema,
+  behavioral_pause: BehavioralPauseParamsSchema,
+  fill_form: FillFormParamsSchema,
+  search: SearchParamsSchema,
+  login: LoginParamsSchema,
+};
+
+// ── Per-intent result schemas (decoded `outputData` JSON) ────────────
+// A successful envelope is not sufficient proof that the reply belongs to the
+// dispatched operation: every decoded payload is checked against the expected
+// intent below. Keep these exact mirrors of IntentExecutor.swift so a wrong or
+// drifted result fails closed as intent_dispatch_error at the correlator.
+const NavigateResultSchema = z.union([
+  z.object({ url: z.string() }).strict(),
+  z.object({ url: z.string(), loadedAtTimeout: z.literal(true) }).strict(),
+]);
+
+function historyNavResultSchema(action: 'back' | 'forward') {
+  return z.union([
+    z.object({ url: z.string(), action: z.literal(action) }).strict(),
+    z.object({ action: z.literal(action), loadedAtTimeout: z.literal(true) }).strict(),
+  ]);
+}
+
+const BackResultSchema = historyNavResultSchema('back');
+const ForwardResultSchema = historyNavResultSchema('forward');
+
+const ClickResultSchema = z
+  .object({
+    clicked: z.string(),
+    behavioral: z.boolean(),
+    activated: z.boolean().nullable(),
+  })
+  .strict();
+
+const SendKeysResultSchema = z
+  .object({
+    typed_into: z.string(),
+    length: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+    behavioral: z.boolean(),
+  })
+  .strict();
+
+const PressKeyResultSchema = z.object({ pressed: z.string().min(1).max(20) }).strict();
+
+const ExecuteScriptResultSchema = z
+  .object({ value: z.unknown() })
+  .strict()
+  .superRefine((value, ctx) => {
+    // z.unknown() accepts undefined, so explicitly distinguish a present JSON
+    // `value:null` from an object that omitted the required WebDriver key.
+    if (!Object.prototype.hasOwnProperty.call(value, 'value')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['value'],
+        message: 'execute_script result must contain value',
+      });
+    }
+  });
+
+const HARNESS_CHALLENGE_TYPES = [
+  'recaptcha',
+  'hcaptcha',
+  'turnstile',
+  'cloudflare_challenge',
+  'email_verification',
+  'sms_verification',
+  'otp',
+  'login_required',
+  'arkose',
+  'datadome',
+  'press_and_hold',
+  'access_blocked',
+  'aws_waf',
+  'geetest',
+] as const;
+
+const DetectChallengeResultSchema = z.discriminatedUnion('challenge_detected', [
+  z.object({ challenge_detected: z.literal(false) }).strict(),
+  z
+    .object({
+      challenge_detected: z.literal(true),
+      type: z.enum(HARNESS_CHALLENGE_TYPES),
+      confidence: z.number().min(0).max(1),
+      detail: z.string(),
+    })
+    .strict(),
+]);
+
+const ExtractResultSchema = z.object({ value: z.record(z.unknown()) }).strict();
+
+const ScreenshotResultSchema = z
+  .object({
+    screenshot_b64: z.string(),
+    format: z.enum(['png', 'jpeg']),
+    full_page: z.literal(false),
+    annotated: z.boolean(),
+  })
+  .strict();
+
+const GetPageSourceResultSchema = z.object({ source: z.string(), truncated: z.boolean() }).strict();
+
+const PerceiveElementSchema = z
+  .object({
+    id: z.number().int().nonnegative(),
+    type: z.enum([
+      'button',
+      'link',
+      'select',
+      'textarea',
+      'checkbox',
+      'radio',
+      'input',
+      'image',
+      'other',
+    ]),
+    label: z.string(),
+    selector: z.string(),
+    bounds: z
+      .object({
+        x: z.number(),
+        y: z.number(),
+        width: z.number(),
+        height: z.number(),
+      })
+      .strict(),
+    state: z
+      .object({
+        visible: z.boolean(),
+        enabled: z.boolean(),
+        focused: z.boolean(),
+        checked: z.boolean().optional(),
+        selected: z.boolean().optional(),
+      })
+      .strict(),
+    position_summary: z.string(),
+  })
+  .strict();
+
+const PerceiveResultSchema = z
+  .object({
+    value: z
+      .object({
+        url: z.string(),
+        title: z.string(),
+        elements: z.array(PerceiveElementSchema).max(HARNESS_PERCEIVE_MAX_ELEMENTS),
+        truncated: z.boolean(),
+        total_matched: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
+
+const WaitForResultSchema = z
+  .object({ waited: z.literal(true), timeout_capped: z.boolean() })
+  .strict();
+
+const ScrollResultSchema = z
+  .object({
+    scrolled: z.number(),
+    requested: z.number(),
+    scrolled_measured: z.boolean(),
+    flicks: z.number().int().nonnegative(),
+    steps: z.number().int().nonnegative(),
+    behavioral: z.boolean(),
+    distance_capped: z.boolean(),
+  })
+  .strict();
+
+const BehavioralPauseResultSchema = z
+  .object({
+    paused_ms: z.number().int().nonnegative(),
+    capped: z.boolean(),
+    behavioral: z.boolean(),
+  })
+  .strict();
+
+const FillFormResultSchema = z
+  .object({
+    fields_filled: z.number().int().nonnegative(),
+    submitted: z.boolean(),
+    truncated: z.boolean(),
+    truncated_fields: z.array(z.number().int().nonnegative()).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.truncated !== (value.truncated_fields !== undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['truncated_fields'],
+        message: 'truncated_fields must be present exactly when truncated is true',
+      });
+    }
+  });
+
+const SearchResultSchema = z
+  .object({
+    submitted: z.boolean(),
+    query_truncated: z.boolean(),
+    results_visible: z.boolean().optional(),
+  })
+  .strict();
+
+const LoginResultSchema = z
+  .object({
+    logged_in: z.boolean(),
+    post_login_url: z.string(),
+    credentials_truncated: z.boolean(),
+  })
+  .strict();
+
+export const HARNESS_INTENT_RESULT_SCHEMAS: Record<HarnessIntentName, z.ZodTypeAny> = {
+  navigate: NavigateResultSchema,
+  back: BackResultSchema,
+  forward: ForwardResultSchema,
+  click: ClickResultSchema,
+  send_keys: SendKeysResultSchema,
+  press_key: PressKeyResultSchema,
+  execute_script: ExecuteScriptResultSchema,
+  detect_challenge: DetectChallengeResultSchema,
+  extract: ExtractResultSchema,
+  screenshot: ScreenshotResultSchema,
+  get_page_source: GetPageSourceResultSchema,
+  perceive: PerceiveResultSchema,
+  wait_for: WaitForResultSchema,
+  scroll: ScrollResultSchema,
+  behavioral_pause: BehavioralPauseResultSchema,
+  fill_form: FillFormResultSchema,
+  search: SearchResultSchema,
+  login: LoginResultSchema,
 };
 
 // ── Wire envelope (A3 bus W122, commit 2a5639dc) ──────────────────────
@@ -526,6 +902,7 @@ export const HARNESS_ERROR_CODES = [
   // silently drops the frame → the dispatch hangs to its timeout.
   'intent_invalid_parameter',
   'intent_webdriver_failed',
+  'intent_script_failed',
   'intent_dispatch_error',
   // A3 W227 (harness f711840f) — inline outputData is capped at 8 MiB harness-side;
   // an over-cap result FAILS with this code (no outputData) rather than returning a
@@ -533,6 +910,8 @@ export const HARNESS_ERROR_CODES = [
   // intentResult fails IntentResultEnvelopeSchema → the correlator drops the frame →
   // the dispatch hangs to its timeout (same reasoning as intent_invalid_parameter).
   'result_too_large',
+  'session_paused',
+  'session_intent_in_flight',
 ] as const;
 
 export const HarnessErrorCodeSchema = z.enum(HARNESS_ERROR_CODES);
@@ -541,19 +920,46 @@ export type HarnessErrorCode = z.infer<typeof HarnessErrorCodeSchema>;
 // ── HarnessOutbound.intentResult (harness → server) ───────────────────
 // `outputData` is the BASE64 string of the per-intent result JSON; decode it
 // with parseIntentResult() in harness-control-codec.ts.
-export const IntentResultEnvelopeSchema = z.object({
+const IntentResultIdentitySchema = {
   type: z.literal('intentResult'),
   sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   intentId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
-  success: z.boolean(),
   durationMs: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  outputData: boundedBase64Schema(
-    HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH,
-    HARNESS_INTENT_OUTPUT_MAX_BYTES,
-  ).optional(),
-  errorCode: HarnessErrorCodeSchema.optional(),
-  errorMessage: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
-});
+};
+
+/** Cheap routing header used before any full-envelope parse or base64 decode. */
+export const IntentResultHeaderSchema = z
+  .object({
+    type: z.literal('intentResult'),
+    sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+    intentId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  })
+  .passthrough();
+
+const IntentResultSuccessEnvelopeSchema = z
+  .object({
+    ...IntentResultIdentitySchema,
+    success: z.literal(true),
+    outputData: boundedBase64Schema(
+      HARNESS_INTENT_OUTPUT_MAX_BASE64_LENGTH,
+      HARNESS_INTENT_OUTPUT_MAX_BYTES,
+    ),
+  })
+  .strict();
+
+const IntentResultFailureEnvelopeSchema = z
+  .object({
+    ...IntentResultIdentitySchema,
+    success: z.literal(false),
+    errorCode: HarnessErrorCodeSchema,
+    errorMessage: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),
+  })
+  .strict();
+
+export const IntentResultEnvelopeSchema = z.discriminatedUnion('success', [
+  IntentResultSuccessEnvelopeSchema,
+  IntentResultFailureEnvelopeSchema,
+]);
 export type IntentResultEnvelope = z.infer<typeof IntentResultEnvelopeSchema>;
 
 // ── HarnessOutbound.sessionStatus (harness → server) ──────────────────

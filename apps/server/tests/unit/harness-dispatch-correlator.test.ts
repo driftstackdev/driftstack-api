@@ -8,6 +8,7 @@ import {
   IntentDispatchCorrelator,
   dispatchTimeoutMs,
   DISPATCH_TIMEOUT_BASE_MS,
+  DISPATCH_NAVIGATION_BUDGET_MS,
   type DispatchTransport,
 } from '../../src/services/harness-dispatch-correlator.js';
 import { encodeWireData } from '../../src/services/harness-control-codec.js';
@@ -37,20 +38,42 @@ function recorder(): { transport: DispatchTransport; sent: IntentDispatch[] } {
 }
 
 describe('dispatchTimeoutMs', () => {
-  it('is 30s for fast intents', () => {
+  it('keeps only short read/key/script intents at the 30s loss-detection base', () => {
     for (const n of [
-      'navigate',
-      'click',
-      'send_keys',
-      'scroll',
+      'press_key',
+      'execute_script',
+      'detect_challenge',
+      'extract',
       'screenshot',
+      'get_page_source',
+      'perceive',
     ] as HarnessIntentName[]) {
       expect(dispatchTimeoutMs(n)).toBe(DISPATCH_TIMEOUT_BASE_MS);
     }
   });
-  it('is cap+15s (315s) for behavioral_pause and wait_for', () => {
-    expect(dispatchTimeoutMs('behavioral_pause')).toBe(300_000 + 15_000);
-    expect(dispatchTimeoutMs('wait_for')).toBe(300 * 1000 + 15_000);
+
+  it('uses the single 300s producer cap + 15s slack for bounded paced/wait intents', () => {
+    for (const n of ['click', 'send_keys', 'behavioral_pause', 'wait_for'] as HarnessIntentName[]) {
+      expect(dispatchTimeoutMs(n), n).toBe(315_000);
+    }
+  });
+
+  it('allows search/login both a 300s typing phase and a separate 300s result wait plus slack', () => {
+    for (const n of ['search', 'login'] as HarnessIntentName[]) {
+      expect(dispatchTimeoutMs(n), n).toBe(615_000);
+    }
+  });
+
+  it('keeps fill_form/scroll loss detection bounded at a documented provisional 315s', () => {
+    for (const n of ['fill_form', 'scroll'] as HarnessIntentName[]) {
+      expect(dispatchTimeoutMs(n), n).toBe(315_000);
+    }
+  });
+
+  it('uses the 55s WebDriver navigation budget + 15s slack for navigate/history', () => {
+    for (const n of ['navigate', 'back', 'forward'] as HarnessIntentName[]) {
+      expect(dispatchTimeoutMs(n), n).toBe(DISPATCH_NAVIGATION_BUDGET_MS + 15_000);
+    }
   });
 });
 
@@ -91,6 +114,12 @@ describe('IntentDispatchCorrelator', () => {
       intentId: 'b',
       success: true,
       durationMs: 1,
+      outputData: encodeWireData({
+        screenshot_b64: 'aGk=',
+        format: 'png',
+        full_page: false,
+        annotated: false,
+      }),
     });
     c.onResultFrame({
       type: 'intentResult',
@@ -98,6 +127,7 @@ describe('IntentDispatchCorrelator', () => {
       intentId: 'a',
       success: true,
       durationMs: 1,
+      outputData: encodeWireData({ url: 'https://1' }),
     });
     expect((await p1).intentId).toBe('a');
     expect((await p2).intentId).toBe('b');
@@ -106,7 +136,7 @@ describe('IntentDispatchCorrelator', () => {
   it('times out a fast intent at 30s with a synthesized intent_dispatch_error', async () => {
     const { transport } = recorder();
     const c = new IntentDispatchCorrelator(transport);
-    const p = c.dispatch(dispatch('int_1', 'navigate', { url: 'https://x' }));
+    const p = c.dispatch(dispatch('int_1', 'press_key', { key: 'Enter' }));
     await vi.advanceTimersByTimeAsync(DISPATCH_TIMEOUT_BASE_MS);
     const r = await p;
     expect(r.success).toBe(false);
@@ -127,7 +157,7 @@ describe('IntentDispatchCorrelator', () => {
       intentId: 'int_1',
       success: true,
       durationMs: 300_000,
-      outputData: encodeWireData({ paused_ms: 300_000, capped: false }),
+      outputData: encodeWireData({ paused_ms: 300_000, capped: false, behavioral: true }),
     });
     expect((await p).success).toBe(true);
   });
@@ -157,6 +187,7 @@ describe('IntentDispatchCorrelator', () => {
       intentId: 'int_1',
       success: true,
       durationMs: 1,
+      outputData: encodeWireData({ url: 'https://x' }),
     });
     expect((await p).success).toBe(true);
   });
@@ -200,6 +231,7 @@ describe('IntentDispatchCorrelator', () => {
       intentId: 'int_1',
       success: true,
       durationMs: 1,
+      outputData: encodeWireData({ url: 'https://x' }),
     });
     await p;
     // A duplicate result for the now-settled id is a harmless no-op.
@@ -229,7 +261,9 @@ describe('IntentDispatchCorrelator', () => {
       intentId: 'int_1',
       success: true,
       durationMs: 1,
-      outputData: encodeWireData({ source: '<html>ses_B secret</html>' }),
+      // Deliberately invalid base64/result shape: the cross-session header must
+      // be rejected before the payload is parsed.
+      outputData: '***',
     });
     expect(c.inFlight()).toBe(1); // still pending — the spoof frame was dropped
     // The legitimate same-session result still settles it.
@@ -239,12 +273,67 @@ describe('IntentDispatchCorrelator', () => {
       intentId: 'int_1',
       success: true,
       durationMs: 2,
-      outputData: encodeWireData({ source: '<html>ses_A</html>' }),
+      outputData: encodeWireData({ source: '<html>ses_A</html>', truncated: false }),
     });
     const r = await p;
     expect(r.success).toBe(true);
-    expect(r.outputData).toEqual({ source: '<html>ses_A</html>' });
+    expect(r.outputData).toEqual({ source: '<html>ses_A</html>', truncated: false });
     expect(c.inFlight()).toBe(0);
+  });
+
+  it('settles a known same-session wrong-intent result as intent_dispatch_error', async () => {
+    const { transport } = recorder();
+    const c = new IntentDispatchCorrelator(transport);
+    const p = c.dispatch(dispatch('int_shape', 'navigate', { url: 'https://x' }));
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'int_shape',
+      success: true,
+      durationMs: 1,
+      outputData: encodeWireData({ pressed: 'Enter' }),
+    });
+    const r = await p;
+    expect(r).toMatchObject({ success: false, errorCode: 'intent_dispatch_error' });
+    expect(c.inFlight()).toBe(0);
+  });
+
+  it('settles a known success missing outputData, but pre-decode ignores the same malformed unknown id', async () => {
+    const { transport } = recorder();
+    const c = new IntentDispatchCorrelator(transport);
+    const p = c.dispatch(dispatch('int_missing', 'navigate', { url: 'https://x' }));
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'unknown',
+      success: true,
+      durationMs: 1,
+    });
+    expect(c.inFlight()).toBe(1);
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'int_missing',
+      success: true,
+      durationMs: 1,
+    });
+    expect(await p).toMatchObject({ success: false, errorCode: 'intent_dispatch_error' });
+  });
+
+  it('settles the live session_paused failure immediately with its retry signal intact', async () => {
+    const { transport } = recorder();
+    const c = new IntentDispatchCorrelator(transport);
+    const p = c.dispatch(dispatch('int_paused', 'click', { element_id: 'el_1' }));
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'int_paused',
+      success: false,
+      durationMs: 0,
+      errorCode: 'session_paused',
+      errorMessage: 'resume the session before retrying',
+    });
+    expect(await p).toMatchObject({ success: false, errorCode: 'session_paused' });
   });
 
   it('failAll fails every in-flight dispatch (connection drop)', async () => {

@@ -28672,3 +28672,49 @@ The direct bootstrap/index/cross-source proof passes 3 files and 65/65 tests. Th
 expanded lifecycle/bootstrap matrix passes 10 files and 145/145 tests. Strict server
 source and server-test TypeScript, targeted ESLint/Prettier, diff/whitespace checks,
 the full workspace typecheck and the configured production build are green.
+
+---
+
+## V-687 — Intent results prove which operation produced them
+
+**Date:** 2026-07-15
+
+The server's internal harness mirror exposed only 12 of the 18 handlers implemented
+by the live Swift `IntentExecutor`, treated three working handlers as reserved and
+accepted only 7 of the producer's 10 failure codes. Successful result data was
+decoded as unknown without checking the originating intent. The correlator performed
+full envelope validation and payload decoding before rejecting unknown or
+cross-session identities, and a permissive envelope admitted contradictory success
+and failure fields. Its 30-second default timeout also expired legal click, typing,
+form, search, login, scroll and navigation work before the producer's own execution
+budgets, making the later valid result look unknown and encouraging a retry while the
+session was still busy.
+
+The mirror now carries the exact 18 live intent names, strict bounded parameter
+schemas and a strict success-result schema for each name. Success envelopes require
+only bounded base64 output; failures require one of the exact 10 live error codes and
+cannot carry output. The pending record retains its expected intent, so a successful
+payload is decoded and validated only against that result schema; even back and
+forward have distinct action literals. `intent_script_failed` maps to a non-retryable
+invalid request, while `session_paused` and `session_intent_in_flight` map to
+retryable session errors with resume or wait guidance.
+
+Inbound results first pass only a bounded type/session/id header. Unknown ids and
+cross-session echoes are dropped before full validation or base64/JSON decoding.
+Once that identity matches pending state, a malformed envelope, malformed payload or
+cross-intent result settles deterministically as `intent_dispatch_error`. Proved
+deadlines follow live producer budgets plus transport slack: 615 seconds for
+search/login's two independently capped phases, 315 seconds for single-cap
+pacing/wait operations, 70 seconds for navigation/history and 30 seconds for
+genuinely short observation/key/script operations. fill_form and scroll retain a
+provisional bounded 315-second loss detector, not a claimed producer maximum;
+runtime activation requires a harness-wide per-intent wall-clock fence and
+cancellation contract for their unfenced composite work. This avoids a blanket long
+loss detector without claiming certainty the producer does not yet provide.
+
+The direct schema/codec/correlator/result-mapper proof passes 4 files and 132/132
+tests. The expanded control-plane, fleet routing, relay, liveness, profile and
+request-correlator union passes 26 files and 454/454 tests. Strict server source and
+server-test TypeScript, targeted ESLint/Prettier and diff/whitespace checks are green.
+This slice changes no public route, driver selection, persistence schema, native
+binary or activation state.
