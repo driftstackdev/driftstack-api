@@ -113,6 +113,17 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
+  it('states the current egress contract without future or backend-implementation copy', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/intentionally have no per-session\s*\n?egress field/);
+    expect(p).toContain('`POST /v1/agent-sessions`');
+    expect(p).toContain('`proxy_id`');
+    expect(p).not.toMatch(
+      /not available on\s*\n?this endpoint|execution backend behind both|real device fleet/i,
+    );
+  });
+
   it('CRITICAL description max 2048 chars + nullable framing pinned. Drift to a different bound would let SDK validation diverge from server enforcement.', () => {
     const p = read(PAGE);
 

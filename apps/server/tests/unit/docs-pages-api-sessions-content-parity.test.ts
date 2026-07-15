@@ -109,6 +109,13 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
+  it('documents delay_ms as a public request bound without exposing driver implementation posture', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/`delay_ms` \(requested inter-key delay, integer 0-500ms\)/);
+    expect(p).not.toMatch(/mock driver|real driver/i);
+  });
+
   it('CRITICAL label-max-120-char + metadata-arbitrary-JSON framing pinned. Drift to different field bounds would diverge from server validation.', () => {
     const p = read(PAGE);
 

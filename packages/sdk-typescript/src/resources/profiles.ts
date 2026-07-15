@@ -121,15 +121,12 @@ export class ProfilesResource {
    * {label?} — everything else flows from the profile. Returns the
    * freshly-minted Session (use sessions.destroy to stop).
    *
-   * Per-session customer-configurable egress is NOT available on this
-   * resource (or on `sessions.create()`) yet — `/v1/sessions`' execution
-   * backend has no driver-layer proxy plumbing today, so there used to be
-   * a `proxy` field here that silently did nothing; it's been removed so
-   * passing one is a compile error instead of a no-op. If you need
-   * customer-controlled egress today, use
-   * `client.agentSessions.create({ proxy_id })` instead — that resource
-   * dispatches to the real device fleet and routes traffic through one of
-   * your saved `account_proxies`.
+   * This resource and `sessions.create()` intentionally accept no
+   * per-session egress field. A previously accepted `proxy` field silently
+   * did nothing, so passing one is now a compile error rather than a no-op.
+   * For customer-controlled egress, use
+   * `client.agentSessions.create({ proxy_id })` with one of your saved
+   * `account_proxies`; the assigned browser runtime applies that proxy.
    */
   launch(id: string, body: { label?: string } = {}): Promise<Session> {
     return this.http.request<Session>({

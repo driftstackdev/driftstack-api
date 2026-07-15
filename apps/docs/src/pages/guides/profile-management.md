@@ -117,14 +117,14 @@ For the antidetect-browser flow (where the typical action is "give me a session 
 ```ts
 const session = await client.profiles.launch('prof_01HV...', {
   // `label` for human-readable identification in the dashboard — the
-  // only override this endpoint accepts today.
+  // only override this endpoint accepts.
   label: 'checkout-run-2026-05-20',
 });
 ```
 
 Returns the freshly-minted session (same shape as `sessions.create`). The dashboard `/profiles` page exposes a per-row **Launch** button that calls this endpoint and surfaces the returned `session.id`; from there the customer drives the session via the desktop GUI client's Live session view or the standard `navigate`/`interact`/`wait`/`capture`/`destroy` verbs from any SDK.
 
-`profiles.launch()` does not support customer-configurable egress yet — there's no `proxy` field to set, since `/v1/sessions`' execution backend has no driver-layer proxy plumbing today. If you need customer-controlled egress today, use `client.agentSessions.create({ proxy_id })` instead, which dispatches to the real device fleet and routes traffic through one of your saved account proxies.
+`profiles.launch()` and `sessions.create()` intentionally have no per-session egress field. For customer-controlled egress, use `client.agentSessions.create({ proxy_id })` with one of your saved account proxies; the assigned browser runtime applies that saved proxy.
 
 Profile-bound sessions inherit the profile's storage state on launch and write new state back on clean destroy. (There is no idle timeout on any tier — the only auto-destroy is the free tier's 20-minute duration cap.) Without a `profile_id`, sessions start ephemeral.
 
@@ -206,7 +206,7 @@ Names ARE visible in the dashboard and any team-member access logs. Don't put PI
 
 ## Archetypes
 
-An **archetype** is the device + OS + browser fingerprint a session impersonates. The locked default (`iphone17_ios18_7_safari26_4`) tracks current iPhone — when iOS 18.8 ships, the locked archetype slug bumps and new profiles default to the new fingerprint.
+An **archetype** is the device + OS + browser fingerprint a session impersonates. The server-authoritative default is returned by [`GET /v1/archetypes`](/api/archetypes/) and is used for new profiles that omit `archetype`; clients should read it at runtime instead of predicting or constructing a slug.
 
 Profiles pin to one archetype at creation time. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the locked default rolls forward. This stability is intentional — re-using a profile shouldn't surprise downstream behavioural-detection systems with a sudden iOS bump.
 

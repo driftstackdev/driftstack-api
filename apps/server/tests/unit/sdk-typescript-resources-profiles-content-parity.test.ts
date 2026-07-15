@@ -115,6 +115,14 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
+  it('launch JSDoc exposes the current saved-proxy egress path without future/backend claims', () => {
+    expect(body).toMatch(/intentionally accept no\s*\n?\s*\* per-session egress field/);
+    expect(body).toContain('client.agentSessions.create({ proxy_id })');
+    expect(body).not.toMatch(
+      /not available on this|execution backend has no driver-layer proxy plumbing|real device fleet/i,
+    );
+  });
+
   it('CRITICAL V-313 clone verb — POST /v1/profiles/${encodeURIComponent(id)}/clone with CloneProfileRequest body (DEFAULT `= {}`). The default-empty parameter lets callers write `profiles.clone(id)` without specifying a body — covering the "just duplicate this" UX. Server auto-derives "(copy)" / "(copy 2)" / ... name when body.name is OMITTED. Tier-cap + name-conflict checks mirror create. Drift to requiring body.name would break the convenience UX (dashboard "duplicate" button calls clone(id) without prompting).', () => {
     expect(body).toMatch(
       /\*\s*V-313 — duplicate a profile\. Server auto-derives a "\(copy\)" \/\s*\n?\s*\*\s*"\(copy 2\)" \/ \.\.\. name when `body\.name` is omitted\. Tier-cap \+\s*\n?\s*\*\s*name-conflict checked the same as create\./,

@@ -34,10 +34,14 @@ describe('locked-archetype-slug cross-source invariant', () => {
     expect(occurrences).toBeGreaterThanOrEqual(2);
   });
 
-  it("docs/guides/profile-management.md customer copy explicitly names the locked slug + the 'current iPhone 17 on iOS 18.7 with Safari 26.4' decode + 'when iOS 18.8 ships, the locked archetype slug bumps' framing", () => {
+  it('docs/guides/profile-management.md names the locked slug + current device decode while directing clients to the server-authoritative live default', () => {
     expect(profileDoc).toMatch(/`iphone17_ios18_7_safari26_4`/);
     expect(profileDoc).toMatch(/current iPhone 17 on iOS 18\.7 with Safari 26\.4/);
-    expect(profileDoc).toMatch(/when iOS 18\.8 ships, the locked archetype slug bumps/);
+    expect(profileDoc).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
+    expect(profileDoc).toMatch(
+      /clients should read it at runtime instead of predicting or constructing a slug/,
+    );
+    expect(profileDoc).not.toMatch(/when iOS 18\.8 ships/);
   });
 
   it("docs/api/profiles.md exposes the locked slug in the resource shape example: 'archetype': 'iphone17_ios18_7_safari26_4'", () => {

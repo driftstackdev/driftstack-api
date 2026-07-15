@@ -146,6 +146,20 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
+  it('uses the live archetype default and present-tense saved-proxy egress contracts', () => {
+    const p = read(PAGE);
+
+    expect(p).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
+    expect(p).toMatch(
+      /clients should read it at runtime instead of predicting or constructing a slug/,
+    );
+    expect(p).toMatch(/intentionally have no per-session egress field/);
+    expect(p).toContain('client.agentSessions.create({ proxy_id })');
+    expect(p).not.toMatch(
+      /when iOS 18\.8 ships|does not support customer-configurable egress yet|execution backend has no driver-layer proxy plumbing|real device fleet/i,
+    );
+  });
+
   it('CRITICAL profile-delete framing pinned (L4b recycle bin): soft-delete → recycle bin → 30-day restore → purge; idempotent 204; still no `force` flag (the route never implemented one). Stale "Permanent — storage state is wiped" framing removed.', () => {
     const p = read(PAGE);
 

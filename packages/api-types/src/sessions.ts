@@ -211,7 +211,7 @@ export const InteractActionSchema = z.discriminatedUnion('kind', [
     kind: z.literal('type'),
     selector: z.string().min(1),
     text: z.string().max(10_000),
-    // ms between keystrokes; mock driver respects bounds, real driver clamps.
+    // Requested inter-key delay in ms; the public contract accepts only 0..500.
     delay_ms: z.number().int().min(0).max(500).optional(),
     // W1150 (A3 W1149) — mark the field sensitive (card number / OTP / PIN):
     // the harness suppresses visible typo-corrections while typing it (a

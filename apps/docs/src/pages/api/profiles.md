@@ -178,14 +178,11 @@ normal `navigate` / `interact` / `wait` / `capture` /
 `destroy` verbs (or via the desktop GUI's Live session view, which
 mounts on the returned `session.id`).
 
-Per-session customer-configurable egress is **not available** on
-this endpoint (or on `POST /v1/sessions`) yet — the execution
-backend behind both has no driver-layer proxy plumbing today, so
-there is no `proxy` body field to set here. If you need customer-
-controlled egress today, use `POST /v1/agent-sessions` with a
-`proxy_id` referencing one of your saved `/v1/account/me/proxies`
-configs instead — that resource dispatches to the real device
-fleet and actually routes traffic through the attached proxy.
+This endpoint and `POST /v1/sessions` intentionally have no per-session
+egress field. For customer-controlled egress, use
+`POST /v1/agent-sessions` with a `proxy_id` referencing one of your saved
+`/v1/account/me/proxies` configurations. Agent sessions apply that saved proxy
+to the assigned browser runtime.
 
 Errors:
 
