@@ -28560,3 +28560,32 @@ passes 2 files and 18/18 tests; the expanded shell, boundary, sidebar, palette,
 deep-link and sign-out matrix passes 14 files and 102/102
 tests. Strict GUI and server-test TypeScript, targeted ESLint/Prettier and
 diff/whitespace checks are green.
+
+---
+
+## V-684 — Deploy transports fail closed instead of hanging half-open
+
+**Date:** 2026-07-15
+
+An immutable staging promotion completed its remote build, swap and restart while
+the local bare SSH client remained established and waiting for roughly 54 minutes.
+The bridge therefore never reached public verification or its last-good/history
+tail even though no remote deploy or corresponding server-side SSH process remained.
+Most bridge transports had no non-interactive mode, connect bound or protocol
+keepalive; only the two database-isolation probes carried a connect timeout.
+
+The bridge now defines one SSH transport option array and uses it through the only
+SSH and SCP wrappers. `BatchMode=yes` prevents unattended credential prompts, an
+eight-second connect timeout bounds setup, and a ten-second server-alive interval
+with three missed responses terminates a half-open channel in roughly 30 seconds.
+All six SSH operations and the bundle SCP—including isolation probes, previous-SHA
+read, bundle copy, main mutation, last-good write and history append—cross those
+wrappers. Bundle/GitHub modes, exact checkout, build/migration/swap/rollback,
+health/public verification, auto-revert and metadata semantics are unchanged.
+
+The new exhaustive source guard passes 5/5 tests. It pins the shared options and
+sub-minute connect-plus-liveness budget, enumerates every transport operation,
+rejects executable bare `ssh`/`scp` bypasses and invokes `bash -n` on the bridge.
+The expanded bridge/workflow/runbook/migration/infra matrix passes 6 files and 66/66
+tests. Strict server-test TypeScript, targeted ESLint/Prettier, Bash syntax and
+diff/whitespace checks are green.

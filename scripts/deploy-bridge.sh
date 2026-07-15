@@ -32,6 +32,26 @@
 
 set -euo pipefail
 
+# Every SSH-family operation shares one fail-closed transport policy. Batch mode
+# prevents an unattended deploy from waiting for a password/passphrase prompt;
+# connect timeout bounds setup; protocol keepalives terminate a half-open client
+# after roughly 30 seconds without a server response. Keep both wrappers on this
+# one array so preflight, bundle copy, mutation and metadata calls cannot drift.
+readonly -a SSH_TRANSPORT_OPTIONS=(
+  -o BatchMode=yes
+  -o ConnectTimeout=8
+  -o ServerAliveInterval=10
+  -o ServerAliveCountMax=3
+)
+
+run_ssh() {
+  command ssh "${SSH_TRANSPORT_OPTIONS[@]}" "$@"
+}
+
+run_scp() {
+  command scp "${SSH_TRANSPORT_OPTIONS[@]}" "$@"
+}
+
 ENV="${1:-}"
 SHA="${2:-main}"
 
@@ -59,9 +79,9 @@ echo "=== deploy-bridge: $ENV ($HOST) → $SHA ===" >&2
 # .env to point at a separate Neon project per the Slice E
 # remediation path.
 if [ "$ENV" = "staging" ] && [ "${DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK:-0}" != "1" ]; then
-  PROD_DB_HOST=$(ssh -o BatchMode=yes -o ConnectTimeout=5 root@128.140.37.74 \
+  PROD_DB_HOST=$(run_ssh root@128.140.37.74 \
     "grep '^DATABASE_URL=' /opt/driftstack/api/.env 2>/dev/null | cut -d= -f2- | cut -d'@' -f2 | cut -d/ -f1" 2>/dev/null || echo "")
-  STAGING_DB_HOST=$(ssh -o BatchMode=yes -o ConnectTimeout=5 root@116.203.22.197 \
+  STAGING_DB_HOST=$(run_ssh root@116.203.22.197 \
     "grep '^DATABASE_URL=' /opt/driftstack/api/.env 2>/dev/null | cut -d= -f2- | cut -d'@' -f2 | cut -d/ -f1" 2>/dev/null || echo "")
   if [ -z "$PROD_DB_HOST" ] || [ -z "$STAGING_DB_HOST" ]; then
     echo "[bridge] ERROR: could not verify staging DB isolation — refusing staging deploy" >&2
@@ -108,7 +128,7 @@ DEPLOY_STARTED_AT=$(date +%s)
 # Capture the SHA we're replacing so the post-deploy summary can
 # show "X over Y" — answers "what did I just kick off?" without a
 # separate SSH. Empty if no .last-good-sha existed yet (fresh server).
-PREVIOUS_SHA=$(ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo ''" 2>/dev/null || echo "")
+PREVIOUS_SHA=$(run_ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo ''" 2>/dev/null || echo "")
 
 # GitHub-independent deploy path (2026-06-09): when DEPLOY_VIA_BUNDLE=1 we ship
 # the repo to the host as a git bundle over scp instead of having the host
@@ -135,7 +155,7 @@ if [ "${DEPLOY_VIA_BUNDLE:-0}" = "1" ]; then
     echo "[bridge] bundle create failed" >&2; git branch -D __deploy_bundle_tmp >/dev/null 2>&1; rm -f "$BUNDLE"; exit 1
   fi
   git branch -D __deploy_bundle_tmp >/dev/null 2>&1
-  if ! scp -q "$BUNDLE" "root@${HOST}:/tmp/ds-deploy.bundle"; then
+  if ! run_scp -q "$BUNDLE" "root@${HOST}:/tmp/ds-deploy.bundle"; then
     echo "[bridge] scp bundle failed" >&2; rm -f "$BUNDLE"; exit 1
   fi
   rm -f "$BUNDLE"
@@ -146,7 +166,7 @@ fi
 
 # All work happens in /tmp/driftstack-deploy-<unix> on the host so we
 # can atomic-swap at the end.
-ssh "root@${HOST}" "set -euo pipefail; \
+run_ssh "root@${HOST}" "set -euo pipefail; \
   STAMP=\$(date +%s); \
   BUILD_DIR=/tmp/driftstack-deploy-\$STAMP; \
   mkdir -p \$BUILD_DIR; \
@@ -298,7 +318,7 @@ fi
 # reverts to a SHA that previously passed all 8 post-deploy-verify
 # invariants. Idempotent overwrite.
 if [ -n "$EXPECTED_SHORT_SHA" ]; then
-  ssh "root@${HOST}" "echo '$EXPECTED_SHORT_SHA' > /opt/driftstack/api/.last-good-sha && chown driftstack:driftstack /opt/driftstack/api/.last-good-sha"
+  run_ssh "root@${HOST}" "echo '$EXPECTED_SHORT_SHA' > /opt/driftstack/api/.last-good-sha && chown driftstack:driftstack /opt/driftstack/api/.last-good-sha"
   echo "[bridge] recorded $EXPECTED_SHORT_SHA as $ENV last-good-sha" >&2
 fi
 
@@ -309,5 +329,5 @@ fi
 # adjacent rows = thrash). Tail-only — no rotation needed; file is
 # tiny (~80 bytes/deploy × ~10 deploys/day × 365 days ≈ 290 KB/year).
 if [ -n "$EXPECTED_SHORT_SHA" ]; then
-  ssh "root@${HOST}" "echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) $EXPECTED_SHORT_SHA ${PREVIOUS_SHA:-fresh} ${DEPLOY_ELAPSED}s\" >> /opt/driftstack/api/.deploy-history.log && chown driftstack:driftstack /opt/driftstack/api/.deploy-history.log"
+  run_ssh "root@${HOST}" "echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) $EXPECTED_SHORT_SHA ${PREVIOUS_SHA:-fresh} ${DEPLOY_ELAPSED}s\" >> /opt/driftstack/api/.deploy-history.log && chown driftstack:driftstack /opt/driftstack/api/.deploy-history.log"
 fi
