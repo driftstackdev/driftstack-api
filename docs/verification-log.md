@@ -28198,3 +28198,35 @@ and 24/24 tests; the expanded GUI Escape and server source-parity matrix passes
 4 files and 36/36 tests. Strict GUI and server-test TypeScript, targeted
 lint/format/diff, full workspace typechecking and the configured production
 build are green.
+
+---
+
+## V-673 — Public status streams bound setup slots and stalled-client buffers
+
+**Date:** 2026-07-15
+
+The unauthenticated status SSE route enforced 500 process-wide connections and
+ten per IP, but acquired both counters before writing raw headers, subscribing,
+starting its heartbeat or registering cleanup. A synchronous setup failure
+therefore had no handler that could release the slot. A bounded fake-socket
+reproduction made `writeHead` throw once; only nine of the next ten same-IP
+streams could open. Incident and heartbeat writes also omitted the
+`writableLength` ceiling used by the authenticated SSE routes, so a stalled
+socket could remain subscribed while queued bytes kept growing.
+
+Capacity is now checked before setup but acquired only after the response has
+been hijacked and subscription, heartbeat and close/error cleanup are wired.
+Release is inert until acquisition and idempotent afterward. Incident and
+heartbeat writes share a four-megabyte high-water check; crossing it invokes
+one idempotent cleanup that cancels the timer, unsubscribes, releases capacity
+and ends the response. Healthy public event names, JSON data, heartbeat
+comments, CORS/cache headers, 500/10 caps, typed capacity error and SLA route
+are unchanged.
+
+Behavioral verification proves a failed setup consumes zero capacity and all
+ten successors open, healthy incident framing remains live, incident backlog
+and heartbeat backlog each clean up exactly once, and capacity is reusable.
+The direct status/SLA and source-guard matrix passes 3 files and 44/44 tests;
+the expanded status route/bus/docs/site matrix passes 17 files and 192/192
+tests. Strict server source/test TypeScript, targeted ESLint/Prettier and
+diff/whitespace checks are green.

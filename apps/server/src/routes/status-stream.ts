@@ -21,6 +21,11 @@ import type { RateLimitStore } from '../services/rate-limit.js';
 import type { SlaReportingService } from '../services/sla-reporting.js';
 import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 
+// Same per-stream high-water mark as the authenticated notification/transcript
+// SSE routes. Connection caps bound socket count; this independently bounds the
+// bytes a single stalled public client can retain between writes.
+const MAX_SSE_BUFFER_BYTES = 4_000_000;
+
 export interface StatusStreamRoutesOptions {
   bus: IncidentEventBus;
   sla: SlaReportingService;
@@ -65,11 +70,13 @@ export function registerStatusStreamRoutes(
       reply.header('retry-after', '30');
       throw new FeatureUnavailableError('Status stream at capacity; retry shortly.');
     }
-    openTotal += 1;
-    openPerIp.set(ip, perIp + 1);
+    // Acquire capacity only after the raw response, subscription, timer and
+    // close/error cleanup are all established below. A synchronous setup failure
+    // must not consume a slot that has no handler capable of releasing it.
+    let acquired = false;
     let released = false;
     const releaseConn = (): void => {
-      if (released) return;
+      if (!acquired || released) return;
       released = true;
       openTotal -= 1;
       const n = (openPerIp.get(ip) ?? 1) - 1;
@@ -88,32 +95,49 @@ export function registerStatusStreamRoutes(
     // Initial comment to flush headers immediately on some proxies.
     reply.raw.write(': stream open\n\n');
 
-    const send = (event: IncidentEvent): void => {
-      const data = JSON.stringify(event);
-      // SSE framing: `event:` (named) + `data:` + blank-line terminator.
-      reply.raw.write(`event: ${event.event}\n`);
-      reply.raw.write(`data: ${data}\n\n`);
-    };
-
-    const unsubscribe = bus.subscribe(send);
-    const heartbeat = setInterval(() => {
-      // SSE comment lines (start with `:`) are heartbeats — no data.
-      reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
-    }, heartbeatMs);
-    heartbeat.unref();
-
+    let closed = false;
+    let heartbeat: ReturnType<typeof setInterval> | undefined = undefined;
+    let unsubscribe: () => void = () => {};
     const cleanup = (): void => {
-      clearInterval(heartbeat);
+      // Idempotent across event/heartbeat backpressure and both socket signals.
+      if (closed) return;
+      closed = true;
+      if (heartbeat !== undefined) clearInterval(heartbeat);
       unsubscribe();
       releaseConn();
       reply.raw.end();
     };
+
+    const closeIfBackpressured = (): void => {
+      if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) cleanup();
+    };
+
+    const send = (event: IncidentEvent): void => {
+      if (closed) return;
+      const data = JSON.stringify(event);
+      // SSE framing: `event:` (named) + `data:` + blank-line terminator.
+      reply.raw.write(`event: ${event.event}\n`);
+      reply.raw.write(`data: ${data}\n\n`);
+      closeIfBackpressured();
+    };
+
+    unsubscribe = bus.subscribe(send);
+    heartbeat = setInterval(() => {
+      if (closed) return;
+      // SSE comment lines (start with `:`) are heartbeats — no data.
+      reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
+      closeIfBackpressured();
+    }, heartbeatMs);
+    heartbeat.unref();
 
     request.raw.on('close', cleanup);
     request.raw.on('error', cleanup);
 
     // Keep Fastify from completing the response — we'll end manually.
     reply.hijack();
+    openTotal += 1;
+    openPerIp.set(ip, perIp + 1);
+    acquired = true;
   });
 
   // /v1/status/sla — same public/no-auth posture as /v1/status/incidents.

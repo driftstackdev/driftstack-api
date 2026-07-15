@@ -17,8 +17,10 @@
 //     immediately on some proxies.
 //   • Event framing pinned: `event:` named + `data:` JSON + blank-line
 //     terminator.
-//   • Cleanup pinned: clearInterval + unsubscribe + releaseConn + reply.raw.end()
-//     fires on request.raw 'close' AND 'error'.
+//   • Cleanup pinned: idempotent clearInterval + unsubscribe + releaseConn +
+//     reply.raw.end() fires on request.raw 'close' AND 'error'. Capacity is
+//     acquired only after that cleanup is wired, so setup failures leak no slot.
+//   • Event and heartbeat writes enforce the 4MB per-stream buffer ceiling.
 //   • setInterval handle .unref() (don't pin event loop).
 //   • reply.hijack() at end so Fastify doesn't complete response.
 //   • Public-resource gates pinned: SSE allows at most 500 total / 10
@@ -58,7 +60,7 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     expect(body).not.toContain('NO app-level');
   });
 
-  it('SSE capacity gate rejects before hijack and releases its counters idempotently', () => {
+  it('SSE capacity gate rejects before hijack, acquires after cleanup wiring, and releases idempotently', () => {
     expect(body).toContain('const MAX_TOTAL_CONNECTIONS = 500;');
     expect(body).toContain('const MAX_CONNECTIONS_PER_IP = 10;');
     expect(body).toContain(
@@ -68,8 +70,12 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     expect(body).toContain(
       "throw new FeatureUnavailableError('Status stream at capacity; retry shortly.');",
     );
-    expect(body).toContain('if (released) return;');
+    expect(body).toContain('if (!acquired || released) return;');
     expect(body).toContain('releaseConn();');
+    const cleanupWired = body.indexOf("request.raw.on('error', cleanup);");
+    const acquired = body.indexOf('openTotal += 1;');
+    expect(cleanupWired).toBeGreaterThan(-1);
+    expect(acquired).toBeGreaterThan(cleanupWired);
   });
 
   it('Heartbeat default 30_000ms with proxy-timeout rationale (Cloudflare 60s)', () => {
@@ -95,20 +101,28 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
 
   it('Event framing: send() emits `event: <name>` + `data: <json>` + blank-line terminator', () => {
     expect(body).toMatch(
-      /const send = \(event: IncidentEvent\): void => \{\s*\n?\s*const data = JSON\.stringify\(event\);\s*\n?\s*\/\/ SSE framing: `event:` \(named\) \+ `data:` \+ blank-line terminator\.\s*\n?\s*reply\.raw\.write\(`event: \$\{event\.event\}\\n`\);\s*\n?\s*reply\.raw\.write\(`data: \$\{data\}\\n\\n`\);/,
+      /const send = \(event: IncidentEvent\): void => \{\s*\n?\s*if \(closed\) return;\s*\n?\s*const data = JSON\.stringify\(event\);\s*\n?\s*\/\/ SSE framing: `event:` \(named\) \+ `data:` \+ blank-line terminator\.\s*\n?\s*reply\.raw\.write\(`event: \$\{event\.event\}\\n`\);\s*\n?\s*reply\.raw\.write\(`data: \$\{data\}\\n\\n`\);\s*\n?\s*closeIfBackpressured\(\);/,
     );
   });
 
   it('Heartbeat: setInterval emits SSE comment `: heartbeat <iso>` + .unref() (no event-loop pin)', () => {
-    expect(body).toMatch(/const unsubscribe = bus\.subscribe\(send\);/);
+    expect(body).toMatch(/unsubscribe = bus\.subscribe\(send\);/);
     expect(body).toMatch(
-      /const heartbeat = setInterval\(\(\) => \{\s*\n?\s*\/\/ SSE comment lines \(start with `:`\) are heartbeats — no data\.\s*\n?\s*reply\.raw\.write\(`: heartbeat \$\{new Date\(\)\.toISOString\(\)\}\\n\\n`\);\s*\n?\s*\}, heartbeatMs\);\s*\n?\s*heartbeat\.unref\(\);/,
+      /heartbeat = setInterval\(\(\) => \{\s*\n?\s*if \(closed\) return;\s*\n?\s*\/\/ SSE comment lines \(start with `:`\) are heartbeats — no data\.\s*\n?\s*reply\.raw\.write\(`: heartbeat \$\{new Date\(\)\.toISOString\(\)\}\\n\\n`\);\s*\n?\s*closeIfBackpressured\(\);\s*\n?\s*\}, heartbeatMs\);\s*\n?\s*heartbeat\.unref\(\);/,
     );
   });
 
-  it('Cleanup: clearInterval + unsubscribe + releaseConn + reply.raw.end() on request.raw close AND error', () => {
+  it('Event and heartbeat writes close a stream past the established 4MB buffer ceiling', () => {
+    expect(body).toContain('const MAX_SSE_BUFFER_BYTES = 4_000_000;');
     expect(body).toMatch(
-      /const cleanup = \(\): void => \{\s*\n?\s*clearInterval\(heartbeat\);\s*\n?\s*unsubscribe\(\);\s*\n?\s*releaseConn\(\);\s*\n?\s*reply\.raw\.end\(\);\s*\n?\s*\};/,
+      /const closeIfBackpressured = \(\): void => \{\s*\n?\s*if \(reply\.raw\.writableLength > MAX_SSE_BUFFER_BYTES\) cleanup\(\);\s*\n?\s*\};/,
+    );
+    expect(body.match(/closeIfBackpressured\(\);/g)).toHaveLength(2);
+  });
+
+  it('Cleanup: exactly-once clearInterval + unsubscribe + releaseConn + reply.raw.end() on close/error', () => {
+    expect(body).toMatch(
+      /const cleanup = \(\): void => \{[\s\S]*?if \(closed\) return;\s*\n?\s*closed = true;\s*\n?\s*if \(heartbeat !== undefined\) clearInterval\(heartbeat\);\s*\n?\s*unsubscribe\(\);\s*\n?\s*releaseConn\(\);\s*\n?\s*reply\.raw\.end\(\);\s*\n?\s*\};/,
     );
     expect(body).toMatch(/request\.raw\.on\('close', cleanup\);/);
     expect(body).toMatch(/request\.raw\.on\('error', cleanup\);/);

@@ -4,17 +4,136 @@
 // fetch client). The bus is tested in-process via direct subscribe.
 // SLA endpoint is HTTP-tested with seeded probe history.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+import type { FastifyInstance } from 'fastify';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
-import type { IncidentEvent } from '../../src/services/incident-event-bus.js';
+import {
+  registerStatusStreamRoutes,
+  type StatusStreamRoutesOptions,
+} from '../../src/routes/status-stream.js';
+import type { IncidentEvent, IncidentEventBus } from '../../src/services/incident-event-bus.js';
 
 let fx: TestAppFixture;
 
 afterEach(async () => {
+  vi.useRealTimers();
   if (fx) await fx.cleanup();
 });
 
 const headers = { 'content-type': 'application/json' };
+
+class TestIncidentEventBus {
+  private readonly listeners = new Set<(event: IncidentEvent) => void>();
+
+  subscribe(listener: (event: IncidentEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  publish(event: IncidentEvent): void {
+    for (const listener of this.listeners) listener(event);
+  }
+
+  listenerCount(): number {
+    return this.listeners.size;
+  }
+}
+
+interface CapturedStatusRequest {
+  ip: string;
+  headers: { origin?: string };
+  raw: EventEmitter;
+}
+
+interface CapturedStatusReplyRaw {
+  writableLength: number;
+  writeHead: () => void;
+  write: (chunk: string) => boolean;
+  end: () => void;
+}
+
+interface CapturedStatusReply {
+  raw: CapturedStatusReplyRaw;
+  header: (name: string, value: string) => CapturedStatusReply;
+  hijack: () => void;
+}
+
+type CapturedStatusHandler = (request: CapturedStatusRequest, reply: CapturedStatusReply) => void;
+
+function captureStatusHandler(heartbeatMs = 30_000): {
+  handler: CapturedStatusHandler;
+  bus: TestIncidentEventBus;
+} {
+  let handler: CapturedStatusHandler | undefined;
+  const app = {
+    get(path: string, ...args: unknown[]): void {
+      if (path === '/v1/status/stream') handler = args.at(-1) as CapturedStatusHandler;
+    },
+  };
+  const bus = new TestIncidentEventBus();
+  registerStatusStreamRoutes(app as unknown as FastifyInstance, {
+    bus: bus as unknown as IncidentEventBus,
+    sla: { report: () => Promise.resolve([]) } as unknown as StatusStreamRoutesOptions['sla'],
+    rateLimitStore: {} as StatusStreamRoutesOptions['rateLimitStore'],
+    heartbeatMs,
+  });
+  if (handler === undefined) throw new Error('status stream handler was not registered');
+  return { handler, bus };
+}
+
+function makeCapturedConnection(failWriteHead = false): {
+  request: CapturedStatusRequest;
+  reply: CapturedStatusReply;
+  rawReply: CapturedStatusReplyRaw;
+  writes: string[];
+  readonly endCount: number;
+  readonly hijackCount: number;
+} {
+  const requestRaw = new EventEmitter();
+  const writes: string[] = [];
+  let endCount = 0;
+  let hijackCount = 0;
+  const rawReply: CapturedStatusReplyRaw = {
+    writableLength: 0,
+    writeHead: () => {
+      if (failWriteHead) throw new Error('synthetic status stream setup failure');
+    },
+    write: (chunk) => {
+      writes.push(chunk);
+      return true;
+    },
+    end: () => {
+      endCount += 1;
+    },
+  };
+  const reply: CapturedStatusReply = {
+    raw: rawReply,
+    header: () => reply,
+    hijack: () => {
+      hijackCount += 1;
+    },
+  };
+  return {
+    request: { ip: '198.51.100.9', headers: {}, raw: requestRaw },
+    reply,
+    rawReply,
+    writes,
+    get endCount() {
+      return endCount;
+    },
+    get hijackCount() {
+      return hijackCount;
+    },
+  };
+}
+
+const TEST_INCIDENT_EVENT = {
+  event: 'incident.created',
+  generated_at: '2026-07-15T00:00:00.000Z',
+  incident: { id: 'inc_test' },
+  update: { id: 'incu_test' },
+} as unknown as IncidentEvent;
 
 describe('IncidentEventBus — published on lifecycle', () => {
   it('emits incident.created when public incident is posted', async () => {
@@ -261,6 +380,104 @@ describe('GET /v1/status/sla', () => {
     expect(denied.statusCode).toBe(429);
     expect(denied.headers['retry-after']).toBe('1');
     expect(denied.headers['x-ratelimit-bucket']).toBe('status_sla');
+  });
+});
+
+describe('GET /v1/status/stream bounded lifecycle', () => {
+  it('a synchronous setup failure consumes no slot, so ten same-IP successors still open', () => {
+    const { handler, bus } = captureStatusHandler();
+    const failed = makeCapturedConnection(true);
+    expect(() => handler(failed.request, failed.reply)).toThrow(
+      'synthetic status stream setup failure',
+    );
+    expect(failed.hijackCount).toBe(0);
+    expect(bus.listenerCount()).toBe(0);
+
+    const open = Array.from({ length: 10 }, () => makeCapturedConnection());
+    try {
+      for (const connection of open) {
+        expect(() => handler(connection.request, connection.reply)).not.toThrow();
+        expect(connection.hijackCount).toBe(1);
+      }
+      expect(bus.listenerCount()).toBe(10);
+
+      const eleventh = makeCapturedConnection();
+      expect(() => handler(eleventh.request, eleventh.reply)).toThrow(
+        'Status stream at capacity; retry shortly.',
+      );
+      expect(eleventh.hijackCount).toBe(0);
+    } finally {
+      for (const connection of open) connection.request.raw.emit('close');
+    }
+    expect(bus.listenerCount()).toBe(0);
+  });
+
+  it('healthy incidents retain the public SSE frame and remain subscribed', () => {
+    const { handler, bus } = captureStatusHandler();
+    const connection = makeCapturedConnection();
+    handler(connection.request, connection.reply);
+
+    bus.publish(TEST_INCIDENT_EVENT);
+
+    expect(connection.writes).toEqual([
+      ': stream open\n\n',
+      'event: incident.created\n',
+      `data: ${JSON.stringify(TEST_INCIDENT_EVENT)}\n\n`,
+    ]);
+    expect(connection.endCount).toBe(0);
+    expect(bus.listenerCount()).toBe(1);
+
+    connection.request.raw.emit('close');
+    expect(connection.endCount).toBe(1);
+    expect(bus.listenerCount()).toBe(0);
+  });
+
+  it('incident backlog closes exactly once, unsubscribes, and releases its capacity slot', () => {
+    const { handler, bus } = captureStatusHandler();
+    const stalled = makeCapturedConnection();
+    handler(stalled.request, stalled.reply);
+    stalled.rawReply.writableLength = 4_000_001;
+
+    bus.publish(TEST_INCIDENT_EVENT);
+
+    expect(stalled.endCount).toBe(1);
+    expect(bus.listenerCount()).toBe(0);
+    stalled.request.raw.emit('close');
+    stalled.request.raw.emit('error', new Error('late duplicate socket signal'));
+    expect(stalled.endCount).toBe(1);
+
+    const replacements = Array.from({ length: 10 }, () => makeCapturedConnection());
+    try {
+      for (const connection of replacements) {
+        expect(() => handler(connection.request, connection.reply)).not.toThrow();
+      }
+    } finally {
+      for (const connection of replacements) connection.request.raw.emit('close');
+    }
+    expect(bus.listenerCount()).toBe(0);
+  });
+
+  it('heartbeat backlog uses the same exactly-once cleanup', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-15T00:00:00.000Z'));
+    const { handler, bus } = captureStatusHandler(25);
+    const stalled = makeCapturedConnection();
+    handler(stalled.request, stalled.reply);
+    stalled.rawReply.writableLength = 4_000_001;
+
+    vi.advanceTimersByTime(25);
+
+    expect(stalled.endCount).toBe(1);
+    expect(bus.listenerCount()).toBe(0);
+    expect(stalled.writes).toEqual([
+      ': stream open\n\n',
+      ': heartbeat 2026-07-15T00:00:00.025Z\n\n',
+    ]);
+    stalled.request.raw.emit('close');
+    expect(stalled.endCount).toBe(1);
+
+    vi.advanceTimersByTime(100);
+    expect(stalled.writes).toHaveLength(2);
   });
 });
 
