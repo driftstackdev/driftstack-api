@@ -3,7 +3,7 @@
 // T-1h / T-0 cutover sequence (would risk an undocumented launch),
 // drops the 10-step smoke-test (would re-allow launching without
 // signup+pay+session+revoke verification), or weakens the 3-tier
-// rollback procedure (image-level + workflow-level + full).
+// rollback procedure (immutable-SHA + workflow-level + full).
 //
 //   • Pre-condition: V-279 pre-launch checklist first-paying-
 //     customer-acceptable section all READY.
@@ -14,7 +14,7 @@
 //   • Smoke test happy-path: signup → verify → paid subscription →
 //     Stripe Checkout → GUI sign-in → session → screenshot →
 //     destroy → revoke key.
-//   • 3-rollback tier: image-level (1-2min) + workflow-level
+//   • 3-rollback tier: immutable SHA (1-2min) + workflow-level
 //     (5-10min) + full (worst case).
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -75,7 +75,7 @@ describe('W552.B /docs/operations/launch-day-runbook.md content parity', () => {
     expect(body).toMatch(/### Smoke test \(full happy path\)/);
   });
 
-  it("T-0 + Day-1 + Rollback sections framing pinned: '## T-1h: Final preparation' + '## T-0: Cutover sequence' + '### 1. Flip Stripe to live mode' + '### 2. DNS go-live (if not already)' + '### 3. Marketing site goes public' + '### 4. Watch the first hour' + '## Day-1 monitoring thresholds' + '## Rollback procedures' + '### Image-level rollback (1-2 minutes; safest)' + '### Workflow-level rollback (5-10 minutes; tracked)' + '### Full rollback (worst case)' + '## Day 2-7: stabilisation' — pinned so the T-1h + T-0-Cutover-4-step + Day-1-monitoring + 3-tier-Rollback (image-1-2min + workflow-5-10min + full-worst-case) + Day-2-7-stabilisation commitment survives", () => {
+  it("T-0 + Day-1 + Rollback sections framing pinned: '## T-1h: Final preparation' + '## T-0: Cutover sequence' + '### 1. Flip Stripe to live mode' + '### 2. DNS go-live (if not already)' + '### 3. Marketing site goes public' + '### 4. Watch the first hour' + '## Day-1 monitoring thresholds' + '## Rollback procedures' + '### Immutable SHA rollback (about 1-2 minutes; safest)' + '### Workflow-level rollback (5-10 minutes; tracked)' + '### Full rollback (worst case)' + '## Day 2-7: stabilisation' — pinned so the T-1h + T-0-Cutover-4-step + Day-1-monitoring + 3-tier-Rollback + Day-2-7-stabilisation commitment survives", () => {
     expect(body).toMatch(/## T-1h: Final preparation/);
     expect(body).toMatch(/## T-0: Cutover sequence/);
     expect(body).toMatch(/### 1\. Flip Stripe to live mode/);
@@ -84,10 +84,23 @@ describe('W552.B /docs/operations/launch-day-runbook.md content parity', () => {
     expect(body).toMatch(/### 4\. Watch the first hour/);
     expect(body).toMatch(/## Day-1 monitoring thresholds/);
     expect(body).toMatch(/## Rollback procedures/);
-    expect(body).toMatch(/### Image-level rollback \(1-2 minutes; safest\)/);
+    expect(body).toMatch(/### Immutable SHA rollback \(about 1-2 minutes; safest\)/);
     expect(body).toMatch(/### Workflow-level rollback \(5-10 minutes; tracked\)/);
     expect(body).toMatch(/### Full rollback \(worst case\)/);
     expect(body).toMatch(/## Day 2-7: stabilisation/);
+  });
+
+  it('operator commands match the deployed systemd + immutable bridge topology and forbid stale Compose/image rollback instructions', () => {
+    expect(body).toMatch(/journalctl -u driftstack-api -f --no-pager/);
+    expect(body).toMatch(/bash scripts\/deploy-status\.sh --check prod/);
+    expect(body).toMatch(
+      /DEPLOY_VIA_BUNDLE=1 bash scripts\/deploy-bridge\.sh prod <exact-full-sha>/,
+    );
+    expect(body).toMatch(/DEPLOY_VIA_BUNDLE=1 bash scripts\/revert-bridge\.sh/);
+    expect(body).toMatch(/--to-sha <previous-known-good-full-sha> prod/);
+    expect(body).toMatch(/node scripts\/post-deploy-verify\.mjs/);
+    expect(body).not.toMatch(/docker compose|docker images|ghcr\.io\/driftstackdev/);
+    expect(body).not.toMatch(/sed -i 's\/\^STRIPE_SECRET_KEY/);
   });
 
   it('Smoke test 10-step recurring-subscription happy path remains pinned', () => {

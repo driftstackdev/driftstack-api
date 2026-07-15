@@ -72,8 +72,9 @@ If any step fails, **abort launch** and triage in step 14 below.
   - Neon dashboard (DB connections)
   - Upstash dashboard (Redis ops/sec)
   - Postmark dashboard (sending volume + bounces)
-- [ ] Have `ssh driftstack@<production-host>` ready in a terminal.
-- [ ] Have a second terminal with `tail -F` on the deploy log: `ssh driftstack@<host> "cd /opt/driftstack && docker compose logs -f api"`.
+- [ ] Have `ssh root@<production-host>` ready in a terminal.
+- [ ] Have a second terminal following the actual systemd service: `ssh root@<production-host> "journalctl -u driftstack-api -f --no-pager"`.
+- [ ] From the repository root, run `bash scripts/deploy-status.sh --check prod`; resolve any activation or migration drift before cutover.
 - [ ] Open the V-279 pre-launch checklist + this runbook in a third tab.
 
 ---
@@ -86,17 +87,16 @@ The actual cutover is small — most work was front-loaded into the V-258/V-259/
 
 - Stripe dashboard → toggle from Test → Live (top-right).
 - Verify that the canonical 12 recurring prices are present in live mode (they're separate from test-mode prices). Use `node scripts/stripe-bootstrap-prices.mjs --dry-run` with the live key to validate exact names, intervals and amounts before changing runtime configuration.
-- Update production .env on the Hetzner VM via SSH (NEVER via `gh secret set` from a chat-readable terminal):
+- Stage the live values through the established SSH-only, root-owned mode-600 pending-file procedure. Never paste a live key into chat, a commit, or command-line arguments. Atomically merge the reviewed values into `/opt/driftstack/api/.env`, preserve owner `driftstack:driftstack` and mode `600`, remove the pending file, then use the current immutable release as the restart boundary:
   ```sh
-  ssh driftstack@<production-host>
-  cd /opt/driftstack
-  sed -i 's/^STRIPE_SECRET_KEY=.*$/STRIPE_SECRET_KEY=sk_live_…/' .env
-  sed -i 's/^DRIFTSTACK_TIER_PRICE_IDS=.*$/DRIFTSTACK_TIER_PRICE_IDS=…/' .env
-  sed -i 's/^STRIPE_WEBHOOK_SECRET=.*$/STRIPE_WEBHOOK_SECRET=whsec_…/' .env
-  docker compose up -d --force-recreate
-  curl -fsS http://127.0.0.1:7780/health  # confirms restart succeeded
+  # Run from a clean repository checkout; use the reviewed full SHA.
+  DEPLOY_VIA_BUNDLE=1 bash scripts/deploy-bridge.sh prod <exact-full-sha>
+  node scripts/post-deploy-verify.mjs \
+    --base-url https://api.driftstack.dev \
+    --expected-sha <exact-full-sha>
+  bash scripts/deploy-status.sh --check prod
   ```
-- Verify in the bootstrap log: `BillingService NOT wired` warning is gone (replaced by silent success).
+- Verify `/v1/billing/checkout-session` is auth-gated (`401`, not disabled `503`), the missing-signature webhook boundary rejects, and the bootstrap log records `BillingService wired with StripeBillingProvider` without printing configuration values.
 
 ### 2. DNS go-live (if not already)
 
@@ -119,7 +119,7 @@ If any record is wrong, fix in Cloudflare DNS dashboard. TLS provisions in ~2-5 
 Eyeballs on:
 
 - **Sentry production** — any new issue → triage immediately (step 14 below).
-- **`docker compose logs -f api`** — error patterns, scrypt latency, DB connection issues.
+- **`journalctl -u driftstack-api -f`** — error patterns, scrypt latency, DB connection issues.
 - **Stripe live dashboard** → events / payments / webhook deliveries.
 - **Postmark** → email send volume + bounce rate.
 - **GitHub Actions** → no failed deploys / no CI red.
@@ -134,8 +134,8 @@ If any of these fire, treat as escalation:
 | -------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Sentry error rate (production)               | > 5 events/min sustained for 2 min | Triage the top issue; if customer-facing (auth, billing, sessions), consider rollback (step 15).                   |
 | Sentry "AccountAuthError" or "AuthFlowError" | > 10/min                           | Likely Redis or DB connection issue. Check Upstash + Neon dashboards.                                              |
-| `/health` returning non-200                  | any                                | Restart container (`docker compose restart api`); if persistent, full rollback (step 15).                          |
-| `docker compose logs` "fatal"                | any                                | Bootstrap failure; rollback to last-known-good image immediately (step 15).                                        |
+| `/health` returning non-200                  | any                                | Run `deploy-status.sh`, inspect systemd, then immutably revert to the previous proven SHA (step 15).               |
+| `journalctl -u driftstack-api` "fatal"       | any                                | Bootstrap failure; immutably revert to the previous proven SHA immediately (step 15).                              |
 | Stripe webhook signature-verify failures     | > 0                                | Webhook secret mismatch. Verify Stripe dashboard's webhook signing secret matches `STRIPE_WEBHOOK_SECRET` in .env. |
 | Postmark bounce rate                         | > 5%                               | Email deliverability issue. Check sender reputation, SPF/DKIM/DMARC records on `driftstack.dev`.                   |
 | Customer support inbox                       | unread message > 1 hour            | Personal triage. Day-1 SLO is "respond within 1 hour to anything paying-customer-flagged."                         |
@@ -162,11 +162,8 @@ If any of these fire, treat as escalation:
 ### Refund procedure (manual, pre-V-281)
 
 ```sh
-# Find the customer + their Stripe customer ID
-ssh driftstack@<host>
-docker compose exec api node -e "
-  // (or use a real query — admin panel V-281 ships this UI)
-"
+# Find the customer and Stripe customer ID through the owner admin panel/API.
+# Do not run ad-hoc database or container commands on the production host.
 
 # Refund via Stripe dashboard
 # Stripe → Customers → search by email → Charges → Refund
@@ -182,47 +179,45 @@ curl -X POST https://api.driftstack.dev/v1/admin/accounts/{acc_id}/audit \
 
 ## Rollback procedures
 
-### Image-level rollback (1-2 minutes; safest)
+### Immutable SHA rollback (about 1-2 minutes; safest)
 
 If the first hour shows a clear bug introduced by the most-recent deploy:
 
 ```sh
-ssh driftstack@<production-host>
-cd /opt/driftstack
+# Inspect current SHA, migration parity and recent immutable deploy history.
+bash scripts/deploy-status.sh prod
 
-# Find the previous good image:
-docker images | grep driftstack-api | head -5
+# Choose the previous independently verified full SHA from that history.
+DEPLOY_VIA_BUNDLE=1 bash scripts/revert-bridge.sh \
+  --to-sha <previous-known-good-full-sha> prod
 
-# Or check the last green deploy in GitHub Actions:
-# Actions → Deploy → previous successful run → output → image-tag
-
-# Set IMAGE_TAG to the previous good one:
-export IMAGE_TAG=ghcr.io/driftstackdev/driftstack-api:<previous-sha>
-docker compose up -d --force-recreate
-curl -fsS http://127.0.0.1:7780/health  # verify
+node scripts/post-deploy-verify.mjs \
+  --base-url https://api.driftstack.dev \
+  --expected-sha <previous-known-good-full-sha>
+bash scripts/deploy-status.sh --check prod
 ```
 
-This restores the binary; .env file is unchanged.
+This rebuilds and atomically installs the reviewed Git object; `.env` is unchanged. Do not use bare `revert-bridge.sh prod` after a subtly bad deploy has already been recorded as last-good—select the prior known-good SHA explicitly from deploy history.
 
 ### Workflow-level rollback (5-10 minutes; tracked)
 
-For tracked rollback that gets reflected in main:
+For a tracked correction that becomes the new forward state:
 
 ```sh
 git revert <bad-sha>
-git push origin main
-# deploy.yml re-fires; image rebuilds at the reverted state.
+# Review and merge the revert through the normal protected-main workflow.
+# Then deploy and verify that exact merged full SHA with deploy-bridge.sh.
 ```
 
 ### Full rollback (worst case)
 
-If both image-level + workflow-level rollback fail (e.g. DB schema migration that's not down-revertable), put the marketing site into "we're temporarily down for maintenance" mode:
+If both immutable-SHA + workflow-level rollback fail (for example, a DB schema migration is not down-revertable), put the marketing site into "we're temporarily down for maintenance" mode:
 
 - Cloudflare Pages → swap to a static "we'll be back shortly" deploy.
 - Cloudflare DNS → point `api.driftstack.dev` at a maintenance page (or 503 it via a Worker).
 - Triage + fix + re-deploy.
 
-This is the worst case; the goal is to never need it. The image-level rollback handles 95% of plausible launch-day issues.
+This is the worst case; the goal is to never need it. The immutable-SHA rollback handles most plausible launch-day issues.
 
 ---
 
@@ -241,7 +236,7 @@ This is the worst case; the goal is to never need it. The image-level rollback h
 After day 3:
 
 - If error rate trends up: pause new-customer signups (gate via tier-select page), triage, ship fixes.
-- If error rate trends flat or down: continue accepting customers; resume normal release cadence (deploy.yml push-on-main).
+- If error rate trends flat or down: continue accepting customers; resume the reviewed exact-SHA staging-then-production release cadence.
 - If a critical bug surfaces post-launch: document in `docs/postmortems/YYYY-MM-DD-<slug>.md` (folder lands when first incident happens).
 
 After day 7:
@@ -262,7 +257,7 @@ Before flipping the switch, confirm each:
 - [ ] Sentry receives test events from production.
 - [ ] All four customer-support email addresses functional (`support@`, `privacy@`, `legal@`, `abuse@`, `security@`).
 - [ ] Founder available + in front of the launch dashboard for at least the first 4 hours.
-- [ ] Image-level rollback procedure rehearsed at least once on staging.
+- [ ] Immutable SHA rollback procedure rehearsed at least once on staging.
 
 If all green: proceed with T-0 cutover.
 
