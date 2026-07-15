@@ -16,6 +16,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 GUI_DIR="$ROOT_DIR/apps/gui-client"
 ENTITLEMENTS="$GUI_DIR/src-tauri/Entitlements.plist"
 LOCAL_SIGNING_IDENTITY="Driftstack Local Development Signing"
+SIGNING_STATE_DIR="${HOME}/Library/Application Support/Driftstack"
+SIGNING_READY_MARKER="$SIGNING_STATE_DIR/local-signing-partition-v1.sha256"
 
 list_signing_identities() {
   security find-identity -v -p codesigning 2>/dev/null \
@@ -55,6 +57,48 @@ resolve_signing_identity() {
   return 1
 }
 
+local_signing_certificate_fingerprint() {
+  local identity="$1"
+  local certificate
+  local fingerprint
+
+  if ! certificate="$(security find-certificate -c "$identity" -p 2>/dev/null)" || [[ -z "$certificate" ]]; then
+    echo "error: could not read the selected local signing certificate: $identity" >&2
+    return 1
+  fi
+  fingerprint="$(printf '%s\n' "$certificate" \
+    | openssl x509 -noout -fingerprint -sha256 2>/dev/null \
+    | cut -d= -f2 \
+    | tr -d '[:space:]:' \
+    | tr '[:lower:]' '[:upper:]')"
+  if [[ ! "$fingerprint" =~ ^[0-9A-F]{64}$ ]]; then
+    echo "error: could not derive the selected local signing certificate fingerprint" >&2
+    return 1
+  fi
+  printf '%s\n' "$fingerprint"
+}
+
+verify_local_signing_authorization() {
+  local identity="$1"
+  local fingerprint
+  local marker=""
+
+  # Developer ID identities have their own Apple-issued keychain policy. The
+  # local marker belongs only to setup-local-gui-signing.sh's exact identity.
+  [[ "$identity" == "$LOCAL_SIGNING_IDENTITY" ]] || return 0
+
+  fingerprint="$(local_signing_certificate_fingerprint "$identity")"
+  if [[ -f "$SIGNING_READY_MARKER" ]]; then
+    marker="$(tr -d '[:space:]' <"$SIGNING_READY_MARKER")"
+  fi
+  if [[ "$marker" != "$fingerprint" ]]; then
+    echo "error: the exact local signing key is not authorized for prompt-free codesign." >&2
+    echo "Run scripts/setup-local-gui-signing.sh once, then rerun this command." >&2
+    echo "No GUI build, codesign, or install work was started." >&2
+    return 1
+  fi
+}
+
 signature_requirement() {
   codesign -d -r- "$1" 2>&1 | sed -nE 's/^#? ?designated => /designated => /p'
 }
@@ -78,7 +122,11 @@ verify_stable_signature() {
 }
 
 SIGNING_IDENTITY="$(resolve_signing_identity)"
+verify_local_signing_authorization "$SIGNING_IDENTITY"
 echo "==> stable signing identity: $SIGNING_IDENTITY"
+if [[ "$SIGNING_IDENTITY" == "$LOCAL_SIGNING_IDENTITY" ]]; then
+  echo "==> prompt-free signing authorization: exact certificate marker verified"
+fi
 
 if [[ "${1:-}" == "--preflight" ]]; then
   exit 0

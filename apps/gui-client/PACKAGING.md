@@ -133,11 +133,18 @@ scripts/build-install-gui.sh --preflight
 scripts/build-install-gui.sh
 ```
 
-`--preflight` resolves a valid stable identity without compiling. The full command
-builds and signs both bundles with the same certificate anchor, rejects CDHash-only
-requirements, checks each bundle identifier, and proves the installed copy retained
-the exact designated requirement. This local path requests only the macOS `.app`
-target that it installs, so unrelated distribution packaging (DMG, NSIS, AppImage,
-and deb) cannot block a developer update. `APPLE_SIGNING_IDENTITY` overrides local
-discovery for real Developer ID builds and is validated against the login keychain
-first.
+`--preflight` resolves a valid stable identity without compiling. For the local-only
+identity, it also reads the selected certificate fingerprint and requires the exact
+owner-only authorization marker written by `setup-local-gui-signing.sh`. A missing or
+rotated marker stops once with the setup instruction before either Tauri build, any
+`codesign`, or installation can start. This prevents one incomplete setup from
+turning a two-bundle update into several nested Keychain password prompts.
+
+The full command builds and signs both bundles with the same certificate anchor,
+rejects CDHash-only requirements, checks each bundle identifier, and proves the
+installed copy retained the exact designated requirement. This local path requests
+only the macOS `.app` target that it installs, so unrelated distribution packaging
+(DMG, NSIS, AppImage, and deb) cannot block a developer update.
+`APPLE_SIGNING_IDENTITY` overrides local discovery for a valid Developer ID identity;
+that Apple-issued identity is validated against the keychain but does not use the
+local setup marker.
