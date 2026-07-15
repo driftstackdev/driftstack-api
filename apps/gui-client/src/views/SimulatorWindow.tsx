@@ -334,7 +334,7 @@ export function shouldRefitForAspectChange(
  *  that state (agent-sessions.ts) that read as raw debug strings, not customer copy.
  *  Map ONLY those three to a single friendly line; pass everything else through
  *  unchanged so genuinely-actionable reasons (RELAY_BUSY "too many concurrent
- *  requests…", harness outcome messages) and the calm fallback "not available yet"
+ *  requests…", harness outcome messages) and the calm session fallback
  *  still surface. Pure + exported for unit tests. */
 export function friendlyUnavailableNote(reason: string | null | undefined): string {
   switch (reason) {
@@ -342,8 +342,10 @@ export function friendlyUnavailableNote(reason: string | null | undefined): stri
     case 'session node is not connected':
     case 'fleet control plane not enabled':
       return "the session isn't live on a device right now";
+    case 'not available yet':
+      return 'unavailable for this session';
     default:
-      return reason ?? 'not available yet';
+      return reason ?? 'unavailable for this session';
   }
 }
 // The iPhone CSS-logical width of the launch archetype (iphone17). Fallback for the
@@ -952,8 +954,7 @@ const MODE_OPTIONS: { value: SessionMode; label: string }[] = [
 ];
 
 export type SessionControlAction =
-  | { kind: 'mode'; target: SessionMode }
-  | { kind: 'takeover' | 'handback' | 'message' | 'end' };
+  { kind: 'mode'; target: SessionMode } | { kind: 'takeover' | 'handback' | 'message' | 'end' };
 
 type OwnedSessionControlAction = SessionControlAction & {
   sessionId: string;

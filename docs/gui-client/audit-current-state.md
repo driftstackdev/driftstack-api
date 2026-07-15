@@ -93,21 +93,13 @@ The endpoint contract for "give me my tier + cap" needs verification — see Sec
 
 ### 9. Self-hosted variant
 
-**Current:** Single build, dual-mode via runtime config. `SettingsView.tsx:94–113` exposes API base URL with default `http://localhost:7780` (`settings.ts:19`); helper text in the UI suggests `https://api.driftstack.dev` for cloud. No separate build targets; same binary serves cloud + self-hosted customers. Tauri identifier `dev.driftstack.gui` is hardcoded (`tauri.conf.json:5`); App titlebar shows "Driftstack · self-hosted" universally (`App.tsx:143`).
-
-**Gap:** "self-hosted" label is hardcoded — cloud customers see it too. Either strip the label or make it config-driven. Also: the URL default of `localhost:7780` is self-hosted-friendly but cloud customers need to know to swap; better to default to a "first-run setup" prompt that asks "cloud or self-hosted?" and pre-fills accordingly.
-
-**Priority:** **P1 launch-recommended.** Estimated ~30min Tier-1 work to make the titlebar label conditional on URL match. First-run wizard is **P2** (post-launch UX polish).
+**Current:** Single build, dual-mode via runtime config. The first-run wizard asks Cloud or Self-hosted, pins Cloud to `https://api.driftstack.dev`, preserves a custom self-hosted URL, and defaults a fresh self-hosted entry to `http://localhost:3000`. The titlebar derives `cloud` versus `self-hosted` from the configured hostname; cloud customers no longer see a hardcoded self-hosted label. API keys are stored in base-URL-scoped OS keychain entries so deployment switching cannot reuse the wrong bearer credential.
 
 ### 10. Update mechanism
 
-**Current:** Not implemented. README explicitly notes "No auto-update mechanism." No Sparkle, no Tauri Updater plugin, no GitHub Releases automation. Manual `.dmg` re-download is the only upgrade path.
+**Current:** Implemented with `tauri-plugin-updater`. `tauri.conf.json` points at the GitHub Releases `latest.json` endpoint and injects the updater public key at build time. `src/lib/updater.ts` performs the programmatic startup check, rejects non-newer versions, and exposes a signed install/relaunch flow through `UpdateBanner`. Network errors and missing releases degrade quietly without weakening signature verification.
 
-**Gap:** First-paid-customer update story: "we ship a security fix, how does the customer get it?" Email + manual download works at low scale; Sparkle / Tauri Updater is the right shape once volume justifies.
-
-**Priority:** **P2 post-launch.** Pre-launch: zero customers, zero updates. Add when first signed release is cut.
-
-**Distribution mechanism (signed installer / DMG / Sparkle / GitHub Releases) is Tier-3 — surface for founder when reaching PHASE 3.**
+**Distribution boundary:** the current supported artifact is the signed Apple-silicon `.app`. Customer-distributed builds must satisfy Developer ID, hardened-runtime, notarisation, stapling, and Gatekeeper checks; the updater accepts only signed manifests.
 
 ### 11. Telemetry / Sentry
 

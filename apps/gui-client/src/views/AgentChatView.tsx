@@ -1211,13 +1211,13 @@ const LiveAutomationPanel = memo(function LiveAutomationPanel({
             <span>Starting the live view…</span>
           </div>
         )}
-        {/* finding #2 — simulated deployment: a calm steady-state that mirrors the
-            chat banner. NO Retry (it would 503 forever) — this is the honest "not
-            available yet", not a failure the user can act on. */}
+        {/* Simulated deployment: a calm steady-state that mirrors the chat banner.
+            NO Retry (it would 503 forever); this is a deployment capability, not a
+            transient failure the user can act on. */}
         {watch.kind === 'simulated' && (
           <WatchPlaceholder
-            title="Live view not available yet"
-            body="Browser actions are simulated in this deployment — the live device view turns on when the live driver is enabled."
+            title="Live view unavailable"
+            body="Browser actions are simulated in this deployment, so no live device stream is available."
             tone="muted"
           />
         )}

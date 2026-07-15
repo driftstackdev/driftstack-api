@@ -130,18 +130,20 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     expect(p).not.toMatch(/Showing preview data below/);
   });
 
-  it("W588: on a 503 (Stripe activation-gated) the subscription card is reset to an honest 'Billing not configured yet' state — NOT left showing the SSG mock tier/renew, which a real customer reads as their actual plan", () => {
+  it('W588: on a 503 the subscription card states the current deployment capability and gives a support path without a roadmap promise', () => {
     const p = read(PAGE);
     expect(p).toMatch(/if \(err && err\.status === 503\) \{/);
     expect(p).toMatch(
-      /renderBillingUnavailable\(\s*'Billing not configured yet',\s*'Paid-plan billing activates once Stripe setup completes — nothing to pay or manage here yet\.',\s*'pending setup',\s*\);/,
+      /renderBillingUnavailable\(\s*'Billing unavailable',\s*'There is no self-service billing portal for this deployment\. Contact support for plan changes or invoices\.',\s*'unavailable',\s*\);/,
     );
+    expect(p).toContain('Contact support@driftstack.dev for plan or invoice help.');
     // The shared unavailable renderer clears account state, disables portal
     // authority, and hides both portal actions.
     expect(p).toMatch(/function renderBillingUnavailable\(tier, summary, badge\)/);
     expect(p).toMatch(/setPortalAvailability\(false\);/);
     // The old misleading "Showing preview data below" wording is gone from 503.
     expect(p).not.toMatch(/finishing Stripe setup\. Showing preview data below/);
+    expect(p).not.toMatch(/when it ships|once Stripe setup completes|pending setup/i);
   });
 
   it('CRITICAL friendly portal-error banner framing pinned. Drift to silent error would leave customers stranded on a non-responding button.', () => {

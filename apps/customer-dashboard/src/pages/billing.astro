@@ -457,23 +457,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
         })
         .catch((err) => {
-          // 2026-05-21 — 503 = activation-gate (server-side: Stripe
-          // env not fully wired). User shouldn't see "HTTP 503" —
-          // soft-message it. Other failures keep the generic shape
-          // but surface body.detail via err.message.
+          // 503 = billing unavailable for this deployment. User shouldn't see
+          // an infrastructure-shaped "HTTP 503"; give a stable current-state
+          // message and an actionable support path instead.
           if (err && err.status === 503) {
-            // W588 — billing is activation-gated (Stripe not wired yet). Don't
-            // leave an unverified static subscription (fabricated tier + renew date) on
-            // screen — a real customer reads it as their actual plan. Replace
-            // the card with an honest "not configured" state.
             showBanner(
-              'Live billing is not available yet — Driftstack is finishing Stripe setup. ' +
-                'We will email you when it ships. Your account access is unaffected.',
+              'Billing is unavailable for this deployment. Your account access is unaffected. ' +
+                'Contact support@driftstack.dev for plan or invoice help.',
             );
             renderBillingUnavailable(
-              'Billing not configured yet',
-              'Paid-plan billing activates once Stripe setup completes — nothing to pay or manage here yet.',
-              'pending setup',
+              'Billing unavailable',
+              'There is no self-service billing portal for this deployment. Contact support for plan changes or invoices.',
+              'unavailable',
             );
           } else {
             // 2026-06-24 — on a generic (non-503) failure, don't leave the

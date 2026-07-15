@@ -109,12 +109,12 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(existsSync(QUICK)).toBe(true);
   });
 
-  it('license-activation.md: GUI client (Tauri 2.x macOS/Windows/Linux) + same-API-key-as-SDK + 5-step wizard (Welcome / Deployment mode / API key + GET /v1/account/me validation / First profile / Done) + keyring-rs OS keychain + cross-platform signing notes + Tauri Updater + troubleshooting pinned', () => {
+  it('license-activation.md: supported macOS GUI + same-API-key-as-SDK + 5-step wizard + macOS Keychain + signing notes + updater + troubleshooting pinned', () => {
     const body = read(LICENSE);
     expect(body).toMatch(/^title: License activation \(GUI client\)$/m);
     expect(body).toMatch(/^# License activation \(GUI client\)$/m);
     expect(body).toMatch(
-      /The Driftstack desktop GUI client \(Tauri 2\.x — macOS, Windows, Linux\) doesn't use a separate license-key system\./,
+      /The Driftstack macOS desktop GUI client doesn't use a separate license-key system\./,
     );
     expect(body).toMatch(/^## What you need$/m);
     expect(body).toMatch(/Same shape as the API key your SDK calls use\./);
@@ -134,18 +134,17 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(/The wizard calls `POST \/v1\/profiles`/);
     expect(body).toMatch(/5\. \*\*Done\*\* — flag flipped; main app shell takes over\./);
     expect(body).toMatch(/^## Where credentials live$/m);
-    expect(body).toMatch(
-      /\*\*API key\*\* — stored in the OS keychain \(`keyring-rs`\): macOS Keychain, Windows Credential Manager, Linux Secret Service \/ kwallet\./,
-    );
+    expect(body).toMatch(/\*\*API key\*\* — stored in macOS Keychain through `keyring-rs`\./);
     expect(body).toMatch(/The key never lands in `settings\.json` on disk\./);
     expect(body).toMatch(/^## Switching deployments$/m);
     expect(body).toMatch(/^## Self-hosted activation$/m);
-    expect(body).toMatch(/^## Cross-platform notes$/m);
-    expect(body).toMatch(/\*\*macOS\*\* — primary build target/);
-    expect(body).toMatch(/Apple Developer ID program/);
-    expect(body).toMatch(/\*\*Windows\*\* — EV cert \+ Tauri Updater pending pre-launch/);
-    expect(body).toMatch(/SmartScreen may flag the binary on first launch\./);
-    expect(body).toMatch(/\*\*Linux\*\* — `\.AppImage` and `\.deb` artifacts unsigned/);
+    expect(body).toMatch(/^## Platform support$/m);
+    expect(body).toMatch(
+      /\*\*macOS on Apple silicon\*\* is the current supported distribution target\./,
+    );
+    expect(body).toMatch(/Developer ID signature, hardened-runtime, notarisation, and Gatekeeper/);
+    expect(body).toMatch(/does not publish Windows or Linux installers\./);
+    expect(body).not.toMatch(/pending pre-launch|once the first ones ship|page is not live yet/i);
     expect(body).toMatch(/^## Updates$/m);
     expect(body).toMatch(/Tauri Updater \+ GitHub Releases ship updates automatically\./);
     expect(body).toMatch(/^## Troubleshooting$/m);

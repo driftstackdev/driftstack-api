@@ -4,10 +4,8 @@
 //
 // Data-driven by design: every device row is derived from the shared
 // ARCHETYPE_REGISTRY, and the engine/family/iOS filter axes are computed from
-// whatever entries exist — so a future engine (e.g. Chrome) or a 200+ device
-// catalog needs DATA, not a redesign. The Chrome engine chip is rendered from a
-// declared-but-empty engine axis (disabled "soon") exactly so adding Chrome
-// later is a registry change only.
+// whatever entries exist. Engine chips are rendered only for engines present
+// in the live catalog, so the picker never advertises unavailable roadmap work.
 //
 // Selectability is the caller's contract: a device is `selectable` iff the
 // caller marked it so (SELECTABLE_STATUSES.has(status) at the call site). A
@@ -32,18 +30,6 @@ export interface PickerDevice {
    *  render as muted "reference" rows. */
   readonly selectable: boolean;
 }
-
-/** Engine filter axis. `available:false` renders a disabled "soon" chip — kept
- *  declarative so a future engine is a data add, not a code change. */
-interface EngineAxis {
-  readonly value: 'webkit' | 'chrome';
-  readonly label: string;
-  readonly available: boolean;
-}
-const ENGINE_AXES: readonly EngineAxis[] = [
-  { value: 'webkit', label: 'Safari · WebKit', available: true },
-  { value: 'chrome', label: 'Chrome', available: false },
-];
 
 // Illustrative logical viewport + DPR per model family, for the hero spec
 // strip. Keyed on the marketing device name; an unknown device falls back to a
@@ -89,17 +75,15 @@ interface ChipProps {
   label: string;
   on: boolean;
   disabled?: boolean;
-  soonHint?: string;
   onClick?: () => void;
 }
-function Chip({ label, on, disabled, soonHint, onClick }: ChipProps): JSX.Element {
+function Chip({ label, on, disabled, onClick }: ChipProps): JSX.Element {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={on}
       disabled={disabled}
-      title={soonHint}
       onClick={onClick}
       className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-2xs transition-colors ${
         on
@@ -108,7 +92,6 @@ function Chip({ label, on, disabled, soonHint, onClick }: ChipProps): JSX.Elemen
       } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
     >
       {label}
-      {disabled === true && soonHint !== undefined ? ' · soon' : ''}
     </button>
   );
 }
@@ -163,6 +146,10 @@ export function DevicePicker({
 
   // Filter axes derived from the catalog (data-driven, no hardcoded lists).
   const familyOptions = useMemo(() => orderedFamilies(devices), [devices]);
+  const engineOptions = useMemo(
+    () => [...new Set(devices.map((device) => device.engine))],
+    [devices],
+  );
   // Sort iOS versions NUMERICALLY by major then minor (mirrors the numeric
   // approach orderedFamilies uses) — a lexicographic sort would place "18.10"
   // before "18.7".
@@ -348,14 +335,13 @@ export function DevicePicker({
           >
             <span className="section-label mr-0.5">Engine</span>
             <Chip label="All" on={engineFilter === 'all'} onClick={() => setEngineFilter('all')} />
-            {ENGINE_AXES.map((eng) => (
+            {engineOptions.map((engine) => (
               <Chip
-                key={eng.value}
-                label={eng.label}
-                on={engineFilter === eng.value}
-                disabled={!eng.available || disabled}
-                soonHint={eng.available ? undefined : 'Coming soon'}
-                onClick={eng.available ? () => setEngineFilter(eng.value) : undefined}
+                key={engine}
+                label={engine === 'webkit' ? 'Safari · WebKit' : engineLabel(engine)}
+                on={engineFilter === engine}
+                disabled={disabled}
+                onClick={() => setEngineFilter(engine)}
               />
             ))}
           </div>

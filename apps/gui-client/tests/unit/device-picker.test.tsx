@@ -149,11 +149,12 @@ describe('DevicePicker', () => {
     );
   });
 
-  it('the Chrome engine chip is present but disabled ("soon")', () => {
+  it('engine filters advertise only engines present in the current catalog', () => {
     render(<Harness />);
     const engineGroup = screen.getByRole('radiogroup', { name: 'Engine' });
-    const chrome = within(engineGroup).getByRole('radio', { name: /Chrome/ });
-    expect(chrome).toBeDisabled();
+    expect(within(engineGroup).getByRole('radio', { name: 'Safari · WebKit' })).toBeEnabled();
+    expect(within(engineGroup).queryByRole('radio', { name: /Chrome/ })).toBeNull();
+    expect(screen.queryByText(/soon/i)).toBeNull();
   });
 
   it('selectable rows select; reference rows do not', () => {

@@ -166,30 +166,17 @@ describe('W573.B /docs/gui-client/audit-current-state.md content parity', () => 
     expect(body).toMatch(/### 9\. Self-hosted variant/);
     expect(body).toMatch(/\*\*Current:\*\* Single build, dual-mode via runtime config\./);
     expect(body).toMatch(
-      /Tauri identifier `dev\.driftstack\.gui` is hardcoded \(`tauri\.conf\.json:5`\);/,
+      /The first-run wizard asks Cloud or Self-hosted, pins Cloud to `https:\/\/api\.driftstack\.dev`/,
     );
     expect(body).toMatch(
-      /App titlebar shows "Driftstack · self-hosted" universally \(`App\.tsx:143`\)\./,
+      /The titlebar derives `cloud` versus `self-hosted` from the configured hostname/,
     );
-    expect(body).toMatch(
-      /\*\*Gap:\*\* "self-hosted" label is hardcoded — cloud customers see it too\./,
-    );
-    expect(body).toMatch(
-      /\*\*Priority:\*\* \*\*P1 launch-recommended\.\*\* Estimated ~30min Tier-1 work to make the titlebar label conditional on URL match\./,
-    );
+    expect(body).toMatch(/base-URL-scoped OS keychain entries/);
     expect(body).toMatch(/### 10\. Update mechanism/);
-    expect(body).toMatch(
-      /\*\*Current:\*\* Not implemented\. README explicitly notes "No auto-update mechanism\."/,
-    );
-    expect(body).toMatch(/No Sparkle, no Tauri Updater plugin, no GitHub Releases automation\./);
-    expect(body).toMatch(/Manual `\.dmg` re-download is the only upgrade path\./);
-    expect(body).toMatch(
-      /\*\*Priority:\*\* \*\*P2 post-launch\.\*\* Pre-launch: zero customers, zero updates\./,
-    );
-    expect(body).toMatch(/Add when first signed release is cut\./);
-    expect(body).toMatch(
-      /\*\*Distribution mechanism \(signed installer \/ DMG \/ Sparkle \/ GitHub Releases\) is Tier-3 — surface for founder when reaching PHASE 3\.\*\*/,
-    );
+    expect(body).toMatch(/\*\*Current:\*\* Implemented with `tauri-plugin-updater`\./);
+    expect(body).toMatch(/`src\/lib\/updater\.ts` performs the programmatic startup check/);
+    expect(body).toMatch(/the updater accepts only signed manifests\./);
+    expect(body).not.toMatch(/No auto-update mechanism|Add when first signed release is cut/);
     expect(body).toMatch(/### 11\. Telemetry \/ Sentry/);
     expect(body).toMatch(
       /\*\*Current:\*\* Not implemented\. No `@sentry\/\*` imports, no error reporting, no telemetry crates in `Cargo\.toml`\./,

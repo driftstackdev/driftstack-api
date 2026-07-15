@@ -722,7 +722,7 @@ const ARCHETYPE_LABELS: Record<string, string> = {
 };
 const ARCHETYPE_DESCRIPTIONS: Record<string, string> = {
   iphone17_ios18_7_safari26_4:
-    'The v1.0 launch archetype — the device profile verified bit-for-bit against a real iPhone 17. Additional models are coming soon.',
+    'The default launch archetype — verified bit-for-bit against a real iPhone 17. Choose another verified device from the live catalog when its model or Safari version better matches your traffic.',
   iphone17_ios18_7_safari26_5:
     'iPhone 17 on the Safari 26.5 point release — verified bit-for-bit against a real device. Pick this to match visitors on the latest Safari.',
 };

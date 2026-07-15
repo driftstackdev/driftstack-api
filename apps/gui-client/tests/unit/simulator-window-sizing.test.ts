@@ -251,7 +251,7 @@ describe('shouldRefitForAspectChange — re-fit only on a real aspect change (no
 
 // Finding #4 — the cookies/downloads LIST polls map the three INTERNAL server
 // 'unavailable' reasons to one friendly line, while passing every other reason through
-// (RELAY_BUSY, harness messages, the calm 'not available yet' fallback) so actionable
+// (RELAY_BUSY, harness messages, the calm session fallback) so actionable
 // copy still shows.
 describe('friendlyUnavailableNote — map internal diagnostics, pass through the rest', () => {
   it('maps the three known internal reasons to a single friendly line', () => {
@@ -267,10 +267,10 @@ describe('friendlyUnavailableNote — map internal diagnostics, pass through the
     expect(friendlyUnavailableNote('proxy handshake failed')).toBe('proxy handshake failed');
   });
 
-  it('falls back to the calm pending copy when no reason is given', () => {
-    expect(friendlyUnavailableNote(null)).toBe('not available yet');
-    expect(friendlyUnavailableNote(undefined)).toBe('not available yet');
-    // The pinned legacy string is preserved (a server that already sends it stays calm).
-    expect(friendlyUnavailableNote('not available yet')).toBe('not available yet');
+  it('falls back to calm current-session copy when no reason is given', () => {
+    expect(friendlyUnavailableNote(null)).toBe('unavailable for this session');
+    expect(friendlyUnavailableNote(undefined)).toBe('unavailable for this session');
+    // Normalize the retired roadmap phrasing if an older server still sends it.
+    expect(friendlyUnavailableNote('not available yet')).toBe('unavailable for this session');
   });
 });

@@ -1,10 +1,10 @@
 # Driftstack self-hosted GUI — macOS packaging runbook
 
-The GUI ships as a notarised `.app` bundle inside a `.dmg`, distributed
-outside the App Store. Sandboxing is off (the app needs to talk to
-arbitrary HTTP/HTTPS Driftstack servers, including localhost during
-self-host); hardened runtime + notarisation are on (Gatekeeper requires
-both for distribution).
+The current build emits a macOS `.app` for Apple silicon and is distributed
+outside the App Store. Sandboxing is off because the app connects to arbitrary
+HTTPS Driftstack servers, including private self-hosted endpoints. Every
+customer-distributed build must use the hardened runtime, Developer ID signing,
+notarisation, stapling, and Gatekeeper verification.
 
 ## One-time setup (founder)
 
@@ -14,8 +14,8 @@ both for distribution).
 2. Generate two certs in
    <https://developer.apple.com/account/resources/certificates>:
    - **Developer ID Application** (signs the `.app` bundle).
-   - **Developer ID Installer** (signs `.pkg` if we ever ship one;
-     currently `.dmg` only, so optional).
+   - **Developer ID Installer** (required only for a signed `.pkg`; the current
+     app-only target does not use it).
      Download both; install into the **login keychain**.
 3. Create an **app-specific password** at
    <https://account.apple.com/account/manage> → Sign-in security →
@@ -59,7 +59,6 @@ Tauri will:
 5. Submit the bundle to Apple for notarisation
    (`xcrun notarytool submit --wait`).
 6. Staple the notarisation ticket to the bundle.
-7. Wrap it as `Driftstack_<version>_aarch64.dmg`.
 
 If notarisation fails, Apple's response is logged in the build output
 — most failures are "missing entitlement" or "unsigned framework";
@@ -69,7 +68,7 @@ re-check `Entitlements.plist` and ensure the signing identity is
 ## Smoke-test the unsigned build (no env vars set)
 
 `tauri:build` works without signing env vars — it produces an unsigned
-`.app` and `.dmg`. macOS will block it with a Gatekeeper warning, but
+`.app`. macOS will block it with a Gatekeeper warning, but
 right-click → Open → Open bypasses the warning for local QA.
 
 ## Known limits
@@ -86,19 +85,16 @@ right-click → Open → Open bypasses the warning for local QA.
   2. Swap to a non-AppleScript DMG tool (e.g. `create-dmg` via
      Homebrew, called from a postbuild script).
      V-035 captures the empirical detail.
-- **Universal binary not configured.** Current build is single-arch
-  (`aarch64-apple-darwin`). Adding `x86_64-apple-darwin` requires
-  installing the cross-target via `rustup target add` and configuring
-  `tauri.conf.json bundle.macOS.frameworks` appropriately. Surface to
-  founder when it matters; Apple Silicon-only is fine for the
-  founder's personal dev tool.
-- **No auto-update mechanism.** Tauri's updater plugin can sign and
-  publish update manifests; queued for a later phase once the
-  release cadence stabilises.
-- **Sandbox off.** As noted above. If we ever distribute through the
-  Mac App Store we'd need to re-architect for sandbox compatibility,
-  primarily around the proxy config and self-hosted server
-  connectivity — non-trivial.
+- **Apple silicon only.** The current build target is
+  `aarch64-apple-darwin`; no Intel binary is distributed.
+- **Signed updater active.** `tauri-plugin-updater` checks the configured
+  GitHub Releases `latest.json` endpoint on startup. Tauri verifies the
+  manifest signature with the configured public key before the GUI offers an
+  install/relaunch action. A missing release or network failure degrades to
+  “no update available” and never bypasses signature verification.
+- **Sandbox off.** This is a direct-distribution application. Its self-hosted
+  connectivity and proxy workflows are outside the Mac App Store sandbox
+  contract.
 
 ## Local build + install without repeated Keychain prompts
 

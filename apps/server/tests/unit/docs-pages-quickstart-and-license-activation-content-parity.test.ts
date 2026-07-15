@@ -153,20 +153,18 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(
       /^---\nlayout: \.\.\/layouts\/DocLayout\.astro\ntitle: License activation \(GUI client\)\n/,
     );
-    // S22.5 (2026-07-06) — plain-words-first description: leads with
-    // what you do (unlock with the key you already have) and keeps the
-    // no-separate-license-key + cloud/self-hosted facts, with the
-    // precise term (GUI client) in the parenthetical gloss.
+    // Plain-words-first description: leads with the supported macOS app
+    // and keeps the no-separate-license-key + cloud/self-hosted facts.
     expect(p).toMatch(
-      /description: Unlock the Driftstack desktop app \(the GUI client\) with the API key you already have — no separate license key, for both cloud and self-hosted deployments\./,
+      /description: Activate the Driftstack macOS desktop app with the API key you already have — no separate license key, for both cloud and self-hosted deployments\./,
     );
   });
 
-  it("CRITICAL Tauri 2.x desktop framing pinned. The 'The Driftstack desktop GUI client (Tauri 2.x — macOS, Windows, Linux) doesn\\'t use a separate license-key system. It activates against the same API key you use for SDK calls, and points at either the cloud control plane or your own self-hosted instance' wording matches W780 guides index license-activation cross-reference.", () => {
+  it('CRITICAL supported macOS desktop framing and shared API-key activation are pinned.', () => {
     const p = read(LIC);
 
     expect(p).toMatch(
-      /The Driftstack desktop GUI client \(Tauri 2\.x — macOS, Windows, Linux\) doesn't use a separate license-key system\./,
+      /The Driftstack macOS desktop GUI client doesn't use a separate license-key system\./,
     );
     expect(p).toMatch(
       /It activates against the same API key you use for SDK calls, and points at either the cloud control plane or your own self-hosted instance\./,
@@ -203,11 +201,11 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     );
   });
 
-  it("CRITICAL credentials-in-OS-keychain framing pinned. The 'API key — stored in the OS keychain (keyring-rs): macOS Keychain, Windows Credential Manager, Linux Secret Service / kwallet. The key never lands in settings.json on disk' wording is the load-bearing security framing.", () => {
+  it('CRITICAL credentials-in-macOS-Keychain framing pinned.', () => {
     const p = read(LIC);
 
     expect(p).toMatch(
-      /\*\*API key\*\* — stored in the OS keychain \(`keyring-rs`\): macOS Keychain, Windows Credential Manager, Linux Secret Service \/ kwallet\. The key never lands in `settings\.json` on disk\./,
+      /\*\*API key\*\* — stored in macOS Keychain through `keyring-rs`\. The key never lands in `settings\.json` on disk\./,
     );
     expect(p).toMatch(
       /\*\*Base URL\*\* — stored in the Tauri settings store \(`settings\.json`\)\. Plaintext is fine here; the URL alone confers no access\./,
@@ -222,17 +220,19 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     );
   });
 
-  it('CRITICAL 3-platform notes pinned — macOS Apple Developer ID + Windows EV cert + Linux unsigned AppImage/deb. Drift to claiming a different signing posture would mismatch security/trust expectations.', () => {
+  it('CRITICAL current platform support and signing posture are explicit without future distribution promises.', () => {
     const p = read(LIC);
 
     expect(p).toMatch(
-      /\*\*macOS\*\* — primary build target\. Signed and notarised under the Apple Developer ID program/,
+      /\*\*macOS on Apple silicon\*\* is the current supported distribution target\./,
     );
-    expect(p).toMatch(/\*\*Windows\*\* — EV cert \+ Tauri Updater pending pre-launch/);
-    expect(p).toMatch(/Until cert lands, SmartScreen may flag the binary on first launch\./);
     expect(p).toMatch(
-      /\*\*Linux\*\* — `\.AppImage` and `\.deb` artifacts unsigned; technical operators run them as-is\./,
+      /Distributed builds must pass Developer ID signature, hardened-runtime, notarisation, and Gatekeeper verification before installation\./,
     );
+    expect(p).toMatch(
+      /The current distribution channel does not publish Windows or Linux installers\./,
+    );
+    expect(p).not.toMatch(/pending|coming soon|once the first ones ship|page is not live yet/i);
   });
 
   it("CRITICAL Tauri Updater + GitHub Releases framing pinned. The 'Tauri Updater + GitHub Releases ship updates automatically. The app polls the manifest URL on startup, downloads + signature-verifies new versions in the background, and prompts you on next launch' wording is the canonical update-protocol contract.", () => {
@@ -252,7 +252,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(/Settings also re-validates the key on every save/);
     expect(p).toMatch(/\*\*"Couldn't reach control plane"\*\* — for cloud, check/);
     expect(p).toMatch(
-      /\*\*Wizard re-fires on every launch\*\* — the keychain backend may be unavailable/,
+      /\*\*Wizard re-fires on every launch\*\* — macOS Keychain may be unavailable to the app/,
     );
     expect(p).toMatch(
       /\*\*Tier-suspended on activation\*\* — the account is in a suspended state in billing/,
@@ -262,7 +262,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
   it('CRITICAL self-hosted activation 3-step framing pinned. (1) Stand up control plane + (2) Create API key + (3) Wizard choose Self-hosted + paste URL. Matches the SH-runbook + W762 /api/api-keys + V-NNN cross-references.', () => {
     const p = read(LIC);
 
-    expect(p).toMatch(/1\. Stand up the control plane on your own hardware per the/);
+    expect(p).toMatch(/1\. Stand up the control plane on your own hardware with the/);
     expect(p).toMatch(
       /2\. Create an API key against your local control plane \(same `\/v1\/api-keys` flow — requires the `account_owner` scope\)\./,
     );

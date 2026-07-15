@@ -132,17 +132,15 @@ describe('W624 app tsconfigs + READMEs + tailwind content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/gui-client/README.md'))).toBe(true);
   });
 
-  it('apps/gui-client/PACKAGING.md: macOS notarised .app + .dmg outside-App-Store + sandbox-off + hardened-runtime+notarisation on + 4-env-var table (APPLE_SIGNING_IDENTITY/APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID) + tauri:build 7-step (vite+rust+wrap+codesign+notarytool+staple+dmg) + 4-known-limit (DMG-bundling-disabled-AppleScript + no-universal-binary + no-auto-update + sandbox-off) pinned', () => {
+  it('apps/gui-client/PACKAGING.md: current Apple-silicon app-only target + direct-distribution signing/notarisation + 4-env-var table + 6-step build + honest DMG/architecture/updater/sandbox boundaries pinned', () => {
     const body = read('apps/gui-client/PACKAGING.md');
     expect(body).toMatch(/^# Driftstack self-hosted GUI — macOS packaging runbook$/m);
-    expect(body).toMatch(
-      /The GUI ships as a notarised `\.app` bundle inside a `\.dmg`, distributed/,
-    );
-    expect(body).toMatch(/outside the App Store\. Sandboxing is off/);
-    expect(body).toMatch(/hardened runtime \+ notarisation are on/);
+    expect(body).toMatch(/The current build emits a macOS `\.app` for Apple silicon/);
+    expect(body).toMatch(/distributed\s*\n?outside the App Store\. Sandboxing is off/);
+    expect(body).toMatch(/customer-distributed build must use the hardened runtime/);
     expect(body).toMatch(/^## One-time setup \(founder\)$/m);
     expect(body).toMatch(/\*\*Developer ID Application\*\* \(signs the `\.app` bundle\)\./);
-    expect(body).toMatch(/\*\*Developer ID Installer\*\* \(signs `\.pkg` if we ever ship one;/);
+    expect(body).toMatch(/\*\*Developer ID Installer\*\* \(required only for a signed `\.pkg`/);
     expect(body).toMatch(/Create an \*\*app-specific password\*\*/);
     expect(body).toMatch(/^## Per-build env vars$/m);
     expect(body).toMatch(/`APPLE_SIGNING_IDENTITY` \| The cert's common name/);
@@ -156,15 +154,15 @@ describe('W624 app tsconfigs + READMEs + tailwind content parity', () => {
     expect(body).toMatch(/Submit the bundle to Apple for notarisation/);
     expect(body).toMatch(/\(`xcrun notarytool submit --wait`\)\./);
     expect(body).toMatch(/Staple the notarisation ticket to the bundle\./);
-    expect(body).toMatch(/Wrap it as `Driftstack_<version>_aarch64\.dmg`\./);
     expect(body).toMatch(/^## Known limits$/m);
     expect(body).toMatch(/\*\*DMG bundling currently disabled\*\* \(`targets: \["app"\]`\)/);
     expect(body).toMatch(/`AppleEvent timed out \(-1712\)`/);
-    expect(body).toMatch(/\*\*Universal binary not configured\.\*\*/);
-    expect(body).toMatch(/Apple Silicon-only is fine for the/);
-    expect(body).toMatch(/founder's personal dev tool\./);
-    expect(body).toMatch(/\*\*No auto-update mechanism\.\*\*/);
+    expect(body).toMatch(/\*\*Apple silicon only\.\*\*/);
+    expect(body).toMatch(/no Intel binary is distributed\./);
+    expect(body).toMatch(/\*\*Signed updater active\.\*\*/);
+    expect(body).toMatch(/Tauri verifies the\s*\n?manifest signature/);
     expect(body).toMatch(/\*\*Sandbox off\.\*\*/);
+    expect(body).not.toMatch(/queued for a later phase|if we ever|when it matters/i);
     expect(existsSync(resolve(REPO_ROOT, 'apps/gui-client/PACKAGING.md'))).toBe(true);
   });
 

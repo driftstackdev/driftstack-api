@@ -158,8 +158,9 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     );
     // The launch-archetype customer copy survives in the per-id lookup.
     expect(body).toMatch(
-      /'The v1.0 launch archetype — the device profile verified bit-for-bit against a real iPhone 17\. Additional models are coming soon\.',/,
+      /'The default launch archetype — verified bit-for-bit against a real iPhone 17\. Choose another verified device from the live catalog when its model or Safari version better matches your traffic\.',/,
     );
+    expect(body).not.toMatch(/coming soon/i);
     // No hardcoded option-object literals remain (the source-of-truth is the
     // registry now, not a parallel list).
     expect(body).not.toMatch(/value: 'iphone17_ios18_7_safari26_4',/);

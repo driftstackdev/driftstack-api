@@ -294,12 +294,12 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
     chatState = baseChat({ session: SESSION, turns: [] });
     render(<AgentChatView />);
 
-    // The simulated-deployment copy mirrors the chat banner — honest "not available
-    // yet", not an alarming failure — and never leaks the raw "HTTP 503" jargon.
-    expect(await screen.findByText('Live view not available yet')).toBeTruthy();
+    // The simulated-deployment copy states the current capability without a roadmap
+    // promise or alarming failure, and never leaks the raw "HTTP 503" jargon.
+    expect(await screen.findByText('Live view unavailable')).toBeTruthy();
     expect(
       screen.getByText(
-        'Browser actions are simulated in this deployment — the live device view turns on when the live driver is enabled.',
+        'Browser actions are simulated in this deployment, so no live device stream is available.',
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/HTTP 503/)).toBeNull();
