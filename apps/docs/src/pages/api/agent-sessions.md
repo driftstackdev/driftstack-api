@@ -489,14 +489,13 @@ mode after takeover-grant), the eventual response shape is:
 { "kind": "forwarded", "duration_ms": 3 }
 ```
 
-**This branch does not exist on any current deployment.** Manual-mode
-and pair-mode-after-takeover input-events always return `503
-feature-unavailable` today, with no exceptions — the route has no
-transport to forward events to the harness until Agent 1's Swift
-harness end-to-end work lands (v1.0 Mac fleet harness rollout). Until
-then, drive manual/pair-mode input through the LiveKit DataChannel
-documented in the [Live video guide](/guides/live-video/)
-(`room.localParticipant.publishData(...)`) instead of this endpoint.
+**HTTP manual-input dispatch is unavailable.** Manual-mode and
+pair-mode-after-takeover input-events return `503 feature-unavailable`;
+the HTTP route does not forward input to the harness. For live manual
+or pair-mode control, use the desktop Simulator or publish input through
+the LiveKit DataChannel documented in the
+[Live video guide](/guides/live-video/)
+(`room.localParticipant.publishData(...)`).
 `duration_ms` is server-side dispatch latency, not round-trip latency to the
 session harness.
 

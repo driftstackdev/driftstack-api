@@ -81,4 +81,14 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).toMatch(/"status": "active \| paused \| closed"/);
     expect(body).toMatch(/Closed sessions return 409\./);
   });
+
+  it('documents the current HTTP 503 boundary and supported live-control channels without internal ownership or roadmap prose', () => {
+    expect(body).toMatch(
+      /\*\*HTTP manual-input dispatch is unavailable\.\*\* Manual-mode and\s*\n?\s*pair-mode-after-takeover input-events return `503 feature-unavailable`;\s*\n?\s*the HTTP route does not forward input to the harness\./,
+    );
+    expect(body).toMatch(
+      /use the desktop Simulator or publish input through\s*\n?\s*the LiveKit DataChannel documented in the/,
+    );
+    expect(body).not.toMatch(/Agent\s+[123]|until[^.]{0,120}lands/iu);
+  });
 });

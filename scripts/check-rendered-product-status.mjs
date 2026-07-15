@@ -29,6 +29,8 @@ const INTERNAL_MARKERS = [
   /\bv2-#\d+\b/giu,
   /\bsub-slice\b/giu,
   /\bArc\s+\d+\b/gu,
+  /\bAgent\s+[123](?:'s)?\b/giu,
+  /\buntil\b[^.]{0,120}\blands\b/giu,
 ];
 
 // Current request-timing semantics, not an unshipped-product promise.
@@ -89,6 +91,13 @@ function hasForbidden(text) {
   });
 }
 
+function hasInternalMarker(text) {
+  return INTERNAL_MARKERS.some((pattern) => {
+    pattern.lastIndex = 0;
+    return pattern.test(text);
+  });
+}
+
 // Keep the verifier honest: customer-visible aspirational copy must fail, while
 // implementation text and the one current request-timing phrase must not.
 assert.equal(hasForbidden(renderedText('<main>Feature coming soon</main>')), true);
@@ -100,17 +109,17 @@ assert.equal(
 );
 
 assert.equal(hasForbidden(customerVisibleText('<main>Live</main><pre>V-666.BY</pre>')), false);
+assert.equal(hasInternalMarker(customerVisibleText('<pre>V-666.BY</pre>')), true);
 assert.equal(
-  INTERNAL_MARKERS.some((pattern) => pattern.test(customerVisibleText('<pre>V-666.BY</pre>'))),
+  hasInternalMarker(customerVisibleText('<!-- V-666 --><script>"W393"</script><main>Live</main>')),
+  false,
+);
+assert.equal(
+  hasInternalMarker(customerVisibleText("<main>until Agent 1's work lands</main>")),
   true,
 );
 assert.equal(
-  INTERNAL_MARKERS.some((pattern) => {
-    pattern.lastIndex = 0;
-    return pattern.test(
-      customerVisibleText('<!-- V-666 --><script>"W393"</script><main>Live</main>'),
-    );
-  }),
+  hasInternalMarker(customerVisibleText('<!-- until Agent 2 work lands --><main>Live</main>')),
   false,
 );
 
