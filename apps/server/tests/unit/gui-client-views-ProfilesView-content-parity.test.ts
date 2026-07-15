@@ -37,6 +37,16 @@ function read(p: string): string {
 describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () => {
   const body = read(LIB);
 
+  it('serializes all recycle-bin mutations before confirmation/network work', () => {
+    expect(body).toContain('const trashMutationInFlightRef = useRef(false);');
+    expect(body.match(/trashMutationInFlightRef\.current = true;/g)).toHaveLength(4);
+    expect(body.match(/trashMutationInFlightRef\.current = false;/g)).toHaveLength(4);
+    expect(body).toContain('aria-busy={anyBusy}');
+    expect(body).toContain("{...(anyBusy ? { inert: '' } : {})}");
+    expect(body).toContain("bulkAction === 'restore'");
+    expect(body).toContain("bulkAction === 'empty'");
+  });
+
   it('states the shipped protected-local and encrypted owner-account proxy sync boundary honestly', () => {
     expect(body).toMatch(
       /Proxy credentials are\s*\n?\s*protected locally and synced encrypted to your account when used for a session\./,

@@ -635,6 +635,12 @@ export function ProfilesView({
   // restoreAll/emptyTrash follow-up note on the SDK). `bulkTrashBusy` flags an
   // in-flight Restore-all / Empty-trash so the row + bulk buttons disable.
   const [bulkTrashBusy, setBulkTrashBusy] = useState(false);
+  const [bulkTrashAction, setBulkTrashAction] = useState<'restore' | 'empty' | null>(null);
+  // All recycle-bin mutations share one synchronous owner. React state disables
+  // the rendered controls, but it cannot stop two callbacks in the same turn;
+  // without this latch a double activation (or row action + bulk action) can
+  // issue duplicate/overlapping restore and irreversible purge requests.
+  const trashMutationInFlightRef = useRef(false);
   const confirm = useConfirm();
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
@@ -942,7 +948,8 @@ export function ProfilesView({
   // notice telling the customer to rename first.
   const handleRestore = useCallback(
     async (id: string): Promise<void> => {
-      if (!client) return;
+      if (!client || trashMutationInFlightRef.current) return;
+      trashMutationInFlightRef.current = true;
       setRestoringId(id);
       try {
         await client.profiles.restore(id);
@@ -957,6 +964,7 @@ export function ProfilesView({
         );
       } finally {
         setRestoringId(null);
+        trashMutationInFlightRef.current = false;
       }
     },
     [client, loadTrash, refresh, confirm, settings.baseUrl],
@@ -967,20 +975,27 @@ export function ProfilesView({
   // auto-purge). Irreversible, so we gate it behind a destructive confirm.
   const handlePurge = useCallback(
     async (id: string, name: string): Promise<void> => {
-      if (!client || typeof client.profiles.purge !== 'function') return;
-      const ok = await confirm(
-        `Permanently delete “${name}”? This frees a profile slot but can’t be undone — the profile is gone for good.`,
-        { confirmLabel: 'Delete permanently' },
-      );
-      if (!ok) return;
-      setPurgingId(id);
+      if (
+        !client ||
+        typeof client.profiles.purge !== 'function' ||
+        trashMutationInFlightRef.current
+      )
+        return;
+      trashMutationInFlightRef.current = true;
       try {
+        const ok = await confirm(
+          `Permanently delete “${name}”? This frees a profile slot but can’t be undone — the profile is gone for good.`,
+          { confirmLabel: 'Delete permanently' },
+        );
+        if (!ok) return;
+        setPurgingId(id);
         await client.profiles.purge(id);
         await Promise.all([loadTrash(), refresh(false)]);
       } catch (err) {
         await confirm(friendlyError(err, settings.baseUrl), { confirmLabel: 'OK' });
       } finally {
         setPurgingId(null);
+        trashMutationInFlightRef.current = false;
       }
     },
     [client, loadTrash, refresh, confirm, settings.baseUrl],
@@ -995,8 +1010,10 @@ export function ProfilesView({
   // surfaces a single summary if anything was skipped.
   const handleRestoreAll = useCallback(
     async (ids: ReadonlyArray<string>): Promise<void> => {
-      if (!client || ids.length === 0) return;
+      if (!client || ids.length === 0 || trashMutationInFlightRef.current) return;
+      trashMutationInFlightRef.current = true;
       setBulkTrashBusy(true);
+      setBulkTrashAction('restore');
       let nameClashes = 0;
       let otherErrors = 0;
       try {
@@ -1019,7 +1036,9 @@ export function ProfilesView({
           await confirm(`Restored what it could. ${parts.join('; ')}.`, { confirmLabel: 'OK' });
         }
       } finally {
+        setBulkTrashAction(null);
         setBulkTrashBusy(false);
+        trashMutationInFlightRef.current = false;
       }
     },
     [client, loadTrash, refresh, confirm],
@@ -1032,15 +1051,23 @@ export function ProfilesView({
   // atomic instead of N irreversible calls.
   const handleEmptyTrash = useCallback(
     async (ids: ReadonlyArray<string>): Promise<void> => {
-      if (!client || typeof client.profiles.purge !== 'function' || ids.length === 0) return;
-      const ok = await confirm(
-        `Permanently delete all ${ids.length.toString()} profile${ids.length === 1 ? '' : 's'} in the trash? This frees their slots but can’t be undone — they’re gone for good.`,
-        { confirmLabel: 'Empty trash' },
-      );
-      if (!ok) return;
+      if (
+        !client ||
+        typeof client.profiles.purge !== 'function' ||
+        ids.length === 0 ||
+        trashMutationInFlightRef.current
+      )
+        return;
+      trashMutationInFlightRef.current = true;
       setBulkTrashBusy(true);
+      setBulkTrashAction('empty');
       let failures = 0;
       try {
+        const ok = await confirm(
+          `Permanently delete all ${ids.length.toString()} profile${ids.length === 1 ? '' : 's'} in the trash? This frees their slots but can’t be undone — they’re gone for good.`,
+          { confirmLabel: 'Empty trash' },
+        );
+        if (!ok) return;
         for (const id of ids) {
           try {
             await client.profiles.purge(id);
@@ -1054,7 +1081,9 @@ export function ProfilesView({
             confirmLabel: 'OK',
           });
       } finally {
+        setBulkTrashAction(null);
         setBulkTrashBusy(false);
+        trashMutationInFlightRef.current = false;
       }
     },
     [client, loadTrash, refresh, confirm],
@@ -3353,6 +3382,7 @@ export function ProfilesView({
                   restoringId={restoringId}
                   purgingId={purgingId}
                   bulkBusy={bulkTrashBusy}
+                  bulkAction={bulkTrashAction}
                   onRestore={(id) => void handleRestore(id)}
                   onPurge={(id, name) => void handlePurge(id, name)}
                   onRestoreAll={(ids) => void handleRestoreAll(ids)}
@@ -5779,6 +5809,7 @@ function TrashPanel({
   restoringId,
   purgingId,
   bulkBusy,
+  bulkAction,
   onRestore,
   onPurge,
   onRestoreAll,
@@ -5790,6 +5821,7 @@ function TrashPanel({
   restoringId: string | null;
   purgingId: string | null;
   bulkBusy: boolean;
+  bulkAction: 'restore' | 'empty' | null;
   onRestore: (id: string) => void;
   onPurge: (id: string, name: string) => void;
   onRestoreAll: (ids: ReadonlyArray<string>) => void;
@@ -5833,7 +5865,7 @@ function TrashPanel({
   const anyBusy = bulkBusy || restoringId !== null || purgingId !== null;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div aria-busy={anyBusy} {...(anyBusy ? { inert: '' } : {})} className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-ink-primary">Recycle bin</h3>
@@ -5891,7 +5923,9 @@ function TrashPanel({
             title="Restore every profile shown — names already in use are skipped"
             className="rounded-lg border border-surface-divider px-2.5 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:text-ink-primary disabled:opacity-50"
           >
-            {bulkBusy ? 'Working…' : `Restore all (${visibleIds.length.toString()})`}
+            {bulkAction === 'restore'
+              ? 'Restoring…'
+              : `Restore all (${visibleIds.length.toString()})`}
           </button>
           <button
             type="button"
@@ -5900,7 +5934,7 @@ function TrashPanel({
             title="Permanently delete every profile shown — can’t be undone"
             className="rounded-lg border border-status-error/40 px-2.5 py-1.5 text-xs font-medium text-status-error transition-colors hover:bg-status-error/15 disabled:opacity-50"
           >
-            Empty trash
+            {bulkAction === 'empty' ? 'Deleting…' : 'Empty trash'}
           </button>
         </div>
       )}

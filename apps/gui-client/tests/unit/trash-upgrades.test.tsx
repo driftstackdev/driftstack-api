@@ -5,7 +5,7 @@
 // There is no server bulk endpoint yet — these are pure-GUI loops.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 
 // One live profile (so the rail + Trash toggle render) and three trashed ones
 // with distinct names / devices / deleted-at so search + sort are observable.
@@ -64,6 +64,18 @@ function trashedProfiles() {
 // Mutable spies the SettingsContext mock closes over, reset per test.
 const restoreSpy = vi.fn((_id: string) => Promise.resolve({}));
 const purgeSpy = vi.fn((_id: string) => Promise.resolve({}));
+const confirmSpy = vi.fn(() => Promise.resolve(true));
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 vi.mock('../../src/lib/SettingsContext', () => {
   const stable = {
@@ -100,7 +112,7 @@ vi.mock('../../src/lib/SettingsContext', () => {
 
 // Auto-confirm so the Empty-trash confirm() resolves true.
 vi.mock('../../src/components/ConfirmProvider', () => ({
-  useConfirm: () => () => Promise.resolve(true),
+  useConfirm: () => confirmSpy,
 }));
 
 vi.mock('../../src/lib/profile-bindings', () => ({
@@ -157,6 +169,8 @@ beforeEach(() => {
   restoreSpy.mockImplementation((_id: string) => Promise.resolve({}));
   purgeSpy.mockReset();
   purgeSpy.mockImplementation((_id: string) => Promise.resolve({}));
+  confirmSpy.mockReset();
+  confirmSpy.mockImplementation(() => Promise.resolve(true));
 });
 
 describe('TrashPanel search / sort', () => {
@@ -185,6 +199,47 @@ describe('TrashPanel search / sort', () => {
 });
 
 describe('TrashPanel bulk actions', () => {
+  it('synchronously excludes duplicate and cross-action recycle-bin mutations', async () => {
+    const gate = deferred<object>();
+    restoreSpy.mockImplementation(() => gate.promise);
+    await openTrash();
+    const rowRestore = screen.getAllByRole('button', { name: 'Restore' })[0]!;
+    const restoreAll = screen.getByRole('button', { name: /Restore all/ });
+    const emptyTrash = screen.getByRole('button', { name: 'Empty trash' });
+
+    act(() => {
+      rowRestore.click();
+      rowRestore.click();
+      restoreAll.click();
+      emptyTrash.click();
+    });
+
+    expect(restoreSpy).toHaveBeenCalledTimes(1);
+    expect(purgeSpy).not.toHaveBeenCalled();
+    expect(screen.getByText('Restoring…')).toBeTruthy();
+    expect(screen.getByText('Recycle bin').closest('[aria-busy="true"]')).toHaveAttribute('inert');
+
+    gate.resolve({});
+    await waitFor(() =>
+      expect(screen.getByText('Recycle bin').closest('[aria-busy="false"]')).toBeTruthy(),
+    );
+    cleanup();
+  });
+
+  it('releases the destructive-operation owner after a cancelled confirmation', async () => {
+    confirmSpy.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    await openTrash();
+    const deleteButton = screen.getAllByRole('button', { name: 'Delete permanently' })[0]!;
+
+    fireEvent.click(deleteButton);
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalledTimes(1));
+    expect(purgeSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(deleteButton);
+    await waitFor(() => expect(purgeSpy).toHaveBeenCalledTimes(1));
+    cleanup();
+  });
+
   it('Restore all restores every shown profile sequentially', async () => {
     await openTrash();
     fireEvent.click(screen.getByRole('button', { name: /Restore all/ }));
