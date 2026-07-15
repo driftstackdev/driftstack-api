@@ -83,12 +83,12 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
     );
   });
 
-  it('POST /v1/sessions 201 + 10-field publicSession shape pinned: id (ses_) + account_id (acc_) + api_key_id (key_) + status creating + archetype + purpose + label + metadata + created_at + updated_at + last_state_at null + destroyed_at null — pinned so the 11-field flat-no-envelope shape + key_-prefix on api_key_id + null-defaults-on-fresh-session commitments survive (drift to changing the field set would create marketing↔publicSession-in-routes/sessions.ts divergence)', () => {
+  it('POST /v1/sessions 201 response pins the flat ready session shape', () => {
     expect(body).toMatch(/→ 201 Created/);
     expect(body).toMatch(/"id": "ses_…"/);
     expect(body).toMatch(/"account_id": "acc_…"/);
     expect(body).toMatch(/"api_key_id": "key_…"/);
-    expect(body).toMatch(/"status": "creating"/);
+    expect(body).toMatch(/"status": "ready"/);
     expect(body).toMatch(/"last_state_at": null/);
     expect(body).toMatch(/"destroyed_at": null/);
     expect(body).toMatch(
@@ -96,9 +96,12 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
     );
   });
 
-  it("Ready-in-10-seconds + poll-or-subscribe framing pinned: 'The session moves to ready within ~10 seconds (the driver bootstrap time). Poll GET /v1/sessions/:id or subscribe to the session.completed / session.failed webhooks for status changes.' — pinned so the ~10-second-bootstrap + 2-status-discovery-path (poll vs subscribe) + 2-webhook-events (session.completed + session.failed) commitments survive", () => {
+  it('pins synchronous ready creation, later polling, and terminal-only webhook semantics', () => {
     expect(body).toMatch(
-      /The\s*\n?\s*session moves to <code>ready<\/code> within ~10 seconds \(the\s*\n?\s*driver bootstrap time\)\. Poll\s*\n?\s*<code>GET \/v1\/sessions\/:id<\/code> or subscribe to the\s*\n?\s*<code>session\.completed<\/code> \/ <code>session\.failed<\/code>\s*\n?\s*webhooks for status changes\./,
+      /create call returns only after the browser driver is ready, so\s*\n?\s*an intermediate <code>creating<\/code> state is not directly\s*\n?\s*observable\. Poll <code>GET \/v1\/sessions\/:id<\/code> for later\s*\n?\s*state changes\./,
+    );
+    expect(body).toMatch(
+      /The <code>session\.completed<\/code> and\s*\n?\s*<code>session\.failed<\/code> webhooks signal clean or errored\s*\n?\s*end-of-life, not readiness\./,
     );
   });
 

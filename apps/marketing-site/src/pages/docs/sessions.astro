@@ -66,7 +66,7 @@ Content-Type: application/json
   "id": "ses_…",
   "account_id": "acc_…",
   "api_key_id": "key_…",
-  "status": "creating",
+  "status": "ready",
   "archetype": "iphone17_ios18_7_safari26_4",
   "purpose": "production_customer",
   "label": "ticket-JIRA-1234",
@@ -79,11 +79,12 @@ Content-Type: application/json
     <p>
       The response is a flat session object — no <code>{`{"session": …}`}</code>
       envelope. Session ids are prefixed <code>ses_</code>. The
-      session moves to <code>ready</code> within ~10 seconds (the
-      driver bootstrap time). Poll
-      <code>GET /v1/sessions/:id</code> or subscribe to the
-      <code>session.completed</code> / <code>session.failed</code>
-      webhooks for status changes.
+      create call returns only after the browser driver is ready, so
+      an intermediate <code>creating</code> state is not directly
+      observable. Poll <code>GET /v1/sessions/:id</code> for later
+      state changes. The <code>session.completed</code> and
+      <code>session.failed</code> webhooks signal clean or errored
+      end-of-life, not readiness.
     </p>
     <p>
       The create call does not take a target URL. Drive the session
