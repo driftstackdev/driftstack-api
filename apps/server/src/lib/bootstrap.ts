@@ -1497,6 +1497,42 @@ export async function createProductionDeps(
         'legacy profile DEKs migrated to profile-bound v2 before serving',
       );
     }
+    const MAX_ACCOUNT_PROXY_SECRET_BOOT_MIGRATION_ROWS = 10_000;
+    let proxyScanned = 0;
+    let proxyConverted = 0;
+    let proxyRemaining = 0;
+    do {
+      const batch = await accountProxiesRepo.migrateSecretEnvelopes(profileMasterKeyBuf, 500);
+      proxyScanned += batch.scanned;
+      proxyConverted += batch.converted;
+      proxyRemaining = batch.remaining;
+      if (proxyRemaining > 0 && (batch.scanned === 0 || batch.converted === 0)) {
+        throw new Error(
+          `Account proxy secret migration made no progress with ${proxyRemaining.toString()} legacy rows remaining.`,
+        );
+      }
+      if (proxyRemaining > 0 && proxyScanned >= MAX_ACCOUNT_PROXY_SECRET_BOOT_MIGRATION_ROWS) {
+        throw new Error(
+          `Account proxy secret migration exceeded the ${MAX_ACCOUNT_PROXY_SECRET_BOOT_MIGRATION_ROWS.toString()}-row boot bound with ${proxyRemaining.toString()} legacy rows remaining.`,
+        );
+      }
+    } while (proxyRemaining > 0);
+    if (proxyScanned > 0) {
+      logger.info(
+        {
+          component: 'account-proxy-secret-encryption',
+          scanned: proxyScanned,
+          converted: proxyConverted,
+          remaining: proxyRemaining,
+        },
+        'legacy account proxy secrets migrated to record-bound v2 before serving',
+      );
+    }
+  } else {
+    logger.warn(
+      { component: 'account-proxy-secret-encryption' },
+      'PROFILE_MASTER_KEY not set — encrypted account proxies are unreadable and credentialed writes fail closed',
+    );
   }
   // ARC A — proxies service (owner-scoped resolve + unwrap + SSRF guard) shares
   // the same master key as the profile DEK.

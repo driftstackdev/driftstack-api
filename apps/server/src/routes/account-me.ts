@@ -9,6 +9,7 @@
 // and `/v1/account/audit-log` (event ledger) — this is the dashboard
 // header view.
 
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   AccountOrganizationSchema,
@@ -19,6 +20,7 @@ import {
   TIER_CONCURRENT_SESSION_LIMITS,
   UpdateAccountMeRequestSchema,
   UploadAvatarRequestSchema,
+  UuidSchema,
   type AccountProxyMetadata,
   type AccountTier,
 } from '@driftstack/api-types';
@@ -34,7 +36,10 @@ import type {
   AccountProxyRow,
   AccountProxyRowUpdates,
 } from '../db/account-proxies-repo.js';
-import { wrapAccountSecret } from '../lib/profile-key-hierarchy.js';
+import {
+  encryptAccountProxySecret,
+  type AccountProxySecretSlot,
+} from '../lib/account-proxy-secret-encryption.js';
 import { classifyUnsafeHost, classifyUnsafeVpnTargets } from '../lib/webhook-target-guard.js';
 import { defaultTcpProbe } from '../services/proxy-backends/socks5.js';
 import { avatarKey, type R2 } from '../lib/r2.js';
@@ -49,6 +54,7 @@ import {
  *  dashboard render doesn't churn signed URLs but short enough that
  *  rotating the bucket secret invalidates outstanding URLs in <1h. */
 const AVATAR_PRESIGN_TTL_SECONDS = 60 * 60;
+const MAX_PROXIES_PER_ACCOUNT = 100;
 
 export interface AccountMeRoutesOptions {
   /** Session count source — same repo SessionsService uses. */
@@ -396,27 +402,47 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     }
   }
 
-  // Wrap a plaintext proxy password under the account TMK for storage. Empty /
-  // null → null (no secret). A non-empty password with no master key configured
+  // Wrap a plaintext proxy password under the account TMK with exact proxy/slot
+  // AAD. Empty/null → null (no secret). A non-empty password with no master key
+  // configured
   // is a 503 — we NEVER store a proxy password in the clear.
-  function wrapProxyPassword(accountId: string, password: string | null): string | null {
+  function wrapProxyPassword(
+    accountId: string,
+    proxyId: string,
+    password: string | null,
+  ): string | null {
     if (password === null || password.length === 0) return null;
     if (proxyMasterKey === null) {
       throw new FeatureUnavailableError(
         'Proxy passwords are unavailable (encryption not configured).',
       );
     }
-    return wrapAccountSecret(proxyMasterKey, accountId, Buffer.from(password, 'utf8'));
+    return encryptAccountProxySecret(
+      proxyMasterKey,
+      { accountId, proxyId, slot: 'password' },
+      password,
+    );
   }
 
-  // Wrap a non-empty VPN secret payload under the account TMK. Like
+  // Wrap a non-empty VPN secret payload under the account TMK + proxy/slot AAD. Like
   // wrapProxyPassword but mandatory (a VPN proxy always carries a secret) — 503
   // if encryption isn't configured (NEVER store a VPN key in the clear).
-  function wrapProxySecret(accountId: string, secret: string): string {
+  function wrapProxySecret(
+    accountId: string,
+    proxyId: string,
+    slot: Exclude<AccountProxySecretSlot, 'password'>,
+    secret: string,
+  ): string {
     if (proxyMasterKey === null) {
       throw new FeatureUnavailableError('VPN proxies are unavailable (encryption not configured).');
     }
-    return wrapAccountSecret(proxyMasterKey, accountId, Buffer.from(secret, 'utf8'));
+    return encryptAccountProxySecret(proxyMasterKey, { accountId, proxyId, slot }, secret);
+  }
+
+  function parseProxyId(value: string): string {
+    const parsed = UuidSchema.safeParse(value);
+    if (!parsed.success) throw new BadRequestError('Proxy id must be a valid UUID.');
+    return parsed.data.toLowerCase();
   }
 
   // Resolve the encrypted-secret + non-secret config for a VPN scheme. Returns
@@ -426,6 +452,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   // `config` (jsonb) so the GUI/dispatch can read them without decrypting.
   function buildVpnSecretAndConfig(
     accountId: string,
+    proxyId: string,
     input: {
       scheme?: string;
       openvpn?: { config_blob: string; username?: string; password?: string };
@@ -454,7 +481,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       }
       const secret = JSON.stringify({ config_blob, ...(password ? { password } : {}) });
       return {
-        wrappedSecret: wrapProxySecret(accountId, secret),
+        wrappedSecret: wrapProxySecret(accountId, proxyId, 'openvpn-config', secret),
         config: { ...(username ? { username } : {}) },
       };
     }
@@ -470,7 +497,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         );
       }
       return {
-        wrappedSecret: wrapProxySecret(accountId, private_key),
+        wrappedSecret: wrapProxySecret(accountId, proxyId, 'wireguard-private-key', private_key),
         config: {
           peer_public_key,
           endpoint,
@@ -520,29 +547,31 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
       }
       assertSafeProxyHost(parsed.data.host);
-      // Per-account cap (resource bound; audit #5). A generous fixed cap counted before
-      // insert — a strict tx-lock is unnecessary for a 100-row bound (a race overage of 1-2
-      // is harmless); this just prevents unbounded proxy creation.
-      const MAX_PROXIES_PER_ACCOUNT = 100;
-      if ((await accountProxiesRepo.list(ctx.account.id)).length >= MAX_PROXIES_PER_ACCOUNT) {
+      const id = randomUUID();
+      // VPN schemes carry an encrypted secret (config_blob / private_key) + a
+      // non-secret config block; socks5/http use the write-only password.
+      const vpn = buildVpnSecretAndConfig(ctx.account.id, id, parsed.data);
+      const wrappedPassword =
+        vpn === null ? wrapProxyPassword(ctx.account.id, id, parsed.data.password) : null;
+      const row = await accountProxiesRepo.createIfUnderLimit(
+        ctx.account.id,
+        {
+          id,
+          label: parsed.data.label,
+          scheme: parsed.data.scheme,
+          host: parsed.data.host,
+          port: parsed.data.port,
+          username: parsed.data.username,
+          wrappedPassword,
+          ...(vpn !== null ? { wrappedSecret: vpn.wrappedSecret, config: vpn.config } : {}),
+        },
+        MAX_PROXIES_PER_ACCOUNT,
+      );
+      if (row === null) {
         throw new BadRequestError(
           `Proxy limit reached (${String(MAX_PROXIES_PER_ACCOUNT)}). Delete an existing proxy to add another.`,
         );
       }
-      // VPN schemes carry an encrypted secret (config_blob / private_key) + a
-      // non-secret config block; socks5/http use the write-only password.
-      const vpn = buildVpnSecretAndConfig(ctx.account.id, parsed.data);
-      const wrappedPassword =
-        vpn === null ? wrapProxyPassword(ctx.account.id, parsed.data.password) : null;
-      const row = await accountProxiesRepo.create(ctx.account.id, {
-        label: parsed.data.label,
-        scheme: parsed.data.scheme,
-        host: parsed.data.host,
-        port: parsed.data.port,
-        username: parsed.data.username,
-        wrappedPassword,
-        ...(vpn !== null ? { wrappedSecret: vpn.wrappedSecret, config: vpn.config } : {}),
-      });
       await emitProxyAudit(request, ctx.account.id, 'proxy.created', row);
       reply.code(201);
       return proxyToMetadata(row);
@@ -556,11 +585,22 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
-      const { id } = request.params as { id: string };
+      const id = parseProxyId((request.params as { id: string }).id);
       const body = (request.body ?? {}) as Record<string, unknown>;
       const parsed = AccountProxyUpdateSchema.safeParse(body);
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
+      }
+      const existing = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
+      if (existing === null) throw new NotFoundError('Proxy not found.');
+      if (
+        parsed.data.scheme === undefined &&
+        (existing.scheme === 'openvpn' || existing.scheme === 'wireguard') &&
+        'password' in body
+      ) {
+        throw new BadRequestError(
+          'A VPN password can only be changed by resubmitting the matching VPN configuration.',
+        );
       }
       if (parsed.data.host !== undefined) assertSafeProxyHost(parsed.data.host);
       const updates: AccountProxyRowUpdates = {};
@@ -572,14 +612,18 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // VPN re-config: a VPN block (with its matching scheme) re-wraps the secret
       // + rewrites config + clears any password. Otherwise the socks5/http
       // password path: key absent = keep existing; null = clear; string = (re)wrap.
-      const vpn = buildVpnSecretAndConfig(ctx.account.id, parsed.data);
+      const vpn = buildVpnSecretAndConfig(ctx.account.id, id, parsed.data);
       if (vpn !== null) {
         updates.wrappedSecret = vpn.wrappedSecret;
         updates.config = vpn.config;
         updates.wrappedPassword = null;
       } else {
         if ('password' in body) {
-          updates.wrappedPassword = wrapProxyPassword(ctx.account.id, parsed.data.password ?? null);
+          updates.wrappedPassword = wrapProxyPassword(
+            ctx.account.id,
+            id,
+            parsed.data.password ?? null,
+          );
         }
         // Moving AWAY from a VPN scheme (openvpn/wireguard -> socks5/http) must
         // clear the stale wrapped VPN secret + config — otherwise the old
@@ -594,8 +638,17 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           updates.config = {};
         }
       }
-      const row = await accountProxiesRepo.update({ id, accountId: ctx.account.id, updates });
-      if (row === null) throw new NotFoundError('Proxy not found.');
+      const row = await accountProxiesRepo.update({
+        id,
+        accountId: ctx.account.id,
+        expectedScheme: existing.scheme,
+        updates,
+      });
+      if (row === null) {
+        const current = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
+        if (current === null) throw new NotFoundError('Proxy not found.');
+        throw new ConflictError('Proxy changed concurrently. Retry the update.');
+      }
       await emitProxyAudit(request, ctx.account.id, 'proxy.updated', row);
       return proxyToMetadata(row);
     },
@@ -608,7 +661,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
-      const { id } = request.params as { id: string };
+      const id = parseProxyId((request.params as { id: string }).id);
       // Read the row first so the audit entry carries its label/scheme (delete
       // returns only a boolean). Best-effort — a missing read still deletes.
       const existing = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
@@ -633,7 +686,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
-      const { id } = request.params as { id: string };
+      const id = parseProxyId((request.params as { id: string }).id);
       const row = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
       if (row === null) throw new NotFoundError('Proxy not found.');
       if (classifyUnsafeHost(row.host) !== null) {

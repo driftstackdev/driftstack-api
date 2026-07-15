@@ -6,12 +6,14 @@
 // proxy is addressable only within its own account (404 on unknown id; the
 // repo-level cross-account isolation is unit-tested separately).
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { InMemoryAccountProxiesRepo } from '../../src/db/account-proxies-repo.js';
 
 let fx: TestAppFixture;
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   if (fx) await fx.cleanup();
 });
 
@@ -146,6 +148,45 @@ describe('DELETE /v1/account/me/proxies/:id', () => {
       headers: auth(fx),
     });
     expect(again.statusCode).toBe(404);
+  });
+});
+
+describe('proxy path-id validation', () => {
+  it('returns a stable 400 before any repository call on PUT, DELETE and test', async () => {
+    const find = vi.spyOn(InMemoryAccountProxiesRepo.prototype, 'findById');
+    const remove = vi.spyOn(InMemoryAccountProxiesRepo.prototype, 'delete');
+    fx = await buildTestApp();
+    find.mockClear();
+    remove.mockClear();
+
+    const requests = [
+      fx.app.inject({
+        method: 'PUT',
+        url: '/v1/account/me/proxies/not-a-uuid',
+        headers: { ...auth(fx), 'content-type': 'application/json' },
+        payload: { label: 'x' },
+      }),
+      fx.app.inject({
+        method: 'DELETE',
+        url: '/v1/account/me/proxies/not-a-uuid',
+        headers: auth(fx),
+      }),
+      fx.app.inject({
+        method: 'POST',
+        url: '/v1/account/me/proxies/not-a-uuid/test',
+        headers: auth(fx),
+      }),
+    ];
+    const responses = await Promise.all(requests);
+    for (const response of responses) {
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toContain('Proxy id must be a valid UUID.');
+      expect(response.body).not.toContain('22P02');
+    }
+    expect(find).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    find.mockRestore();
+    remove.mockRestore();
   });
 });
 
@@ -360,6 +401,46 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
       },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects a password-only partial update on an existing VPN row', async () => {
+    fx = await buildTestApp();
+    const created = (
+      await fx.app.inject({
+        method: 'POST',
+        url: '/v1/account/me/proxies',
+        headers: auth(fx),
+        payload: {
+          label: 'wg-password-guard',
+          scheme: 'wireguard',
+          host: 'vpn.example.com',
+          port: 51820,
+          wireguard: {
+            private_key: WG_PRIV,
+            peer_public_key: WG_PUB,
+            endpoint: 'vpn.example.com:51820',
+            allowed_ips: '0.0.0.0/0',
+          },
+        },
+      })
+    ).json<ProxyMeta>();
+
+    const response = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${created.id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { password: 'must-not-be-stored' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toContain('matching VPN configuration');
+    const listed = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    const row = listed.json<{ data: ProxyMeta[] }>().data.find((proxy) => proxy.id === created.id);
+    expect(row?.has_secret).toBe(true);
+    expect(row?.has_password).toBe(false);
   });
 
   // Regression: PUT switching a VPN row AWAY from openvpn/wireguard must wipe

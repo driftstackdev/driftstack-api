@@ -206,6 +206,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
   });
 
   it('imports: FastifyInstance + AVATAR_MAX_BYTES/PROFILES_PER_TIER/TIER_CONCURRENT_SESSION_LIMITS/UpdateAccountMe/UploadAvatar + AccountAuthRepo/AuthCache/SessionRepo/ProfilesRepo/MfaService + avatarKey/R2 + BadRequest/Conflict/FeatureUnavailable/NotFound errors', () => {
+    expect(body).toMatch(/import \{ randomUUID \} from 'node:crypto';/);
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     // Audit emit for proxy lifecycle (proxy.created / proxy.deleted).
     expect(body).toMatch(
@@ -213,7 +214,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     );
     expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
     expect(body).toMatch(
-      /import \{\s*\n?\s*AccountOrganizationSchema,\s*\n?\s*AccountProxyInputSchema,\s*\n?\s*AccountProxyUpdateSchema,\s*\n?\s*AVATAR_MAX_BYTES,\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,\s*\n?\s*UpdateAccountMeRequestSchema,\s*\n?\s*UploadAvatarRequestSchema,\s*\n?\s*type AccountProxyMetadata,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*\n?\s*AccountOrganizationSchema,\s*\n?\s*AccountProxyInputSchema,\s*\n?\s*AccountProxyUpdateSchema,\s*\n?\s*AVATAR_MAX_BYTES,\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,\s*\n?\s*UpdateAccountMeRequestSchema,\s*\n?\s*UploadAvatarRequestSchema,\s*\n?\s*UuidSchema,\s*\n?\s*type AccountProxyMetadata,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ AccountAuthRepo \} from '\.\.\/services\/auth\.js';/);
     expect(body).toMatch(/import type \{ AuthCache \} from '\.\.\/services\/auth-cache\.js';/);
@@ -223,6 +224,28 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     expect(body).toMatch(/import \{ avatarKey, type R2 \} from '\.\.\/lib\/r2\.js';/);
     expect(body).toMatch(
       /import \{\s*\n?\s*BadRequestError,\s*\n?\s*ConflictError,\s*\n?\s*FeatureUnavailableError,\s*\n?\s*NotFoundError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
+    );
+  });
+
+  it('proxy writes preallocate a UUID, use record-bound slots, enforce the cap atomically, validate path UUIDs, and scheme-CAS partial updates', () => {
+    expect(body).toContain("from '../lib/account-proxy-secret-encryption.js'");
+    expect(body).toContain("{ accountId, proxyId, slot: 'password' }");
+    expect(body).toContain("wrapProxySecret(accountId, proxyId, 'openvpn-config', secret)");
+    expect(body).toContain(
+      "wrapProxySecret(accountId, proxyId, 'wireguard-private-key', private_key)",
+    );
+    expect(body).toMatch(
+      /const id = randomUUID\(\);[\s\S]*?createIfUnderLimit\([\s\S]*?MAX_PROXIES_PER_ACCOUNT/,
+    );
+    expect(body).not.toContain('accountProxiesRepo.list(ctx.account.id)).length');
+    expect(body).toMatch(
+      /function parseProxyId\(value: string\): string \{[\s\S]*?UuidSchema\.safeParse\(value\)[\s\S]*?BadRequestError\('Proxy id must be a valid UUID\.'\)/,
+    );
+    expect(body.match(/const id = parseProxyId\(/g)).toHaveLength(3);
+    expect(body).toContain("existing.scheme === 'openvpn' || existing.scheme === 'wireguard'");
+    expect(body).toContain('expectedScheme: existing.scheme');
+    expect(body).toContain(
+      "throw new ConflictError('Proxy changed concurrently. Retry the update.')",
     );
   });
 

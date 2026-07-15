@@ -257,6 +257,23 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
+  it('synchronously drains legacy account-proxy secrets to record-bound v2 before constructing the dispatch service', () => {
+    expect(body).toContain('const accountProxiesRepo = new DrizzleAccountProxiesRepo(dbHandle);');
+    expect(body).toContain('const MAX_ACCOUNT_PROXY_SECRET_BOOT_MIGRATION_ROWS = 10_000;');
+    expect(body).toContain(
+      'await accountProxiesRepo.migrateSecretEnvelopes(profileMasterKeyBuf, 500)',
+    );
+    expect(body).toContain('batch.scanned === 0 || batch.converted === 0');
+    expect(body).toContain('proxyScanned >= MAX_ACCOUNT_PROXY_SECRET_BOOT_MIGRATION_ROWS');
+    expect(body).toContain(
+      'legacy account proxy secrets migrated to record-bound v2 before serving',
+    );
+    expect(body.indexOf('migrateSecretEnvelopes')).toBeLessThan(
+      body.indexOf('const accountProxiesService = new AccountProxiesService'),
+    );
+    expect(body).toContain('encrypted account proxies are unreadable');
+  });
+
   it('V-295c2 status-snapshot framing pinned: separate public-readable R2 bucket (recordings bucket intentionally NOT used — recordings contain Customer Data and must remain private); fall-back when live API fetch fails; active ONLY when R2_BUCKET_PUBLIC configured', () => {
     expect(body).toMatch(
       /\/\/ V-295c2 — public status snapshot writer\. Writes the same data the\s*\n?\s*\/\/ public \/v1\/status\/incidents endpoint surfaces to a SEPARATE\s*\n?\s*\/\/ public-readable R2 bucket so the status site can fall back to the\s*\n?\s*\/\/ snapshot when the live API fetch fails\. The recordings bucket is\s*\n?\s*\/\/ intentionally NOT used — recordings contain Customer Data and must\s*\n?\s*\/\/ remain private\. Active only when R2_BUCKET_PUBLIC is configured\./,

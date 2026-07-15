@@ -27384,3 +27384,59 @@ nulling readability, whole-page prevalidation, successor wrong-key probing, and
 a deterministically blocked five-field compare-and-swap that preserves the
 concurrent v2 successor. Strict server source-and-test TypeScript, targeted
 ESLint/Prettier and the server build are green.
+
+## V-653 — Account proxy credentials authenticate their row and semantic slot
+
+**Date:** 2026-07-14
+
+Proxy passwords, OpenVPN payloads and WireGuard private keys were previously
+encrypted only under the account-derived tenant key. That prevented
+cross-account decryption but allowed a complete valid envelope to authenticate
+after same-account row relocation or substitution between the password and VPN
+secret columns. This required corruption or write access at the database
+boundary rather than an unauthenticated request, but the encrypted value could
+not authenticate its proxy identity or role.
+
+New writes preallocate the final proxy UUID and use an explicit v2 envelope with
+canonical JSON-array GCM context containing a dedicated purpose/version,
+normalized account and proxy UUIDs, and the `password`, `openvpn-config`, or
+`wireguard-private-key` slot. Ordinary dispatch accepts v2 only and supplies the
+exact tuple. Complete canonical-base64 and per-slot byte bounds are checked
+before allocation/decryption; authenticated bytes must be exact UTF-8 and pass
+the established password, strict OpenVPN secret, or WireGuard key schema. Wrong
+account, proxy, slot, purpose, master key, malformed encoding, truncation,
+extension or ciphertext modification fails closed.
+
+The no-DDL bootstrap converter authenticates an existing v2 probe, prevalidates
+the complete bounded legacy page before its first write, and compares proxy ID,
+account, scheme and both exact old wrappers while updating only the wrapper
+columns. Nullable and partially migrated rows are supported, timestamps/config
+are preserved, and invalid non-VPN `wrapped_secret` state stops startup. The
+prefixless account-only reader is bootstrap-only. Startup drains to zero with
+no-progress and 10,000-row guards.
+
+Three related correctness boundaries close in the same repository/route cut:
+creation now uses a per-account transaction-scoped advisory lock around count
+plus insert, making the 100-row cap exact under concurrency; every proxy ID route
+rejects malformed UUIDs with a stable 400 before a repository call; and a
+password-only update on an existing VPN row is rejected. Updates exact-condition
+the previously read scheme, so a concurrent SOCKS-to-VPN transition cannot admit
+a stale password write. Full VPN resubmission and ordinary SOCKS/HTTP partial
+updates remain compatible.
+
+The expanded affected proxy/session/bootstrap/SDK matrix passes 16 files and
+381/381 tests. The isolated connected PostgreSQL proof passes 4/4 cases,
+including wrong-key byte/timestamp preservation, mixed-null conversion,
+same-account/cross-account/cross-slot relocation refusal, whole-page no-write
+failure, invalid scheme/column refusal, a deterministically blocked wrapper-CAS
+loser, a five-way limit-1 race with exactly one winner, and expected-scheme loss.
+Strict source-and-test TypeScript, targeted ESLint/Prettier and the server build
+are green.
+
+The full connected server run produced 1,842 passing files and 20,008 passing
+tests, plus nine out-of-scope baseline failing files: stale OpenAPI/SDK inventory
+snapshots, documentation guards that still require removed future promises, and
+guards that still open the deleted customer-dashboard mock module. One durable
+webhook reclaim timing assertion also failed under the full parallel load and
+immediately passed 7/7 in isolation. None intersects this proxy change; the
+baseline drift was reported to its owning lane rather than altered here.

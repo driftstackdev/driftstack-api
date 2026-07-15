@@ -6,11 +6,12 @@
 // A's proxy), password unwrap, SSRF fail-closed, http-scheme skip, no-key
 // behaviour.
 
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { SocksProxyConfig } from '@driftstack/api-types';
 import { InMemoryAccountProxiesRepo } from '../../src/db/account-proxies-repo.js';
 import { AccountProxiesService, UnsafeProxyHostError } from '../../src/services/account-proxies.js';
-import { wrapAccountSecret } from '../../src/lib/profile-key-hierarchy.js';
+import { encryptAccountProxySecret } from '../../src/lib/account-proxy-secret-encryption.js';
 
 const MASTER = Buffer.alloc(32, 7);
 const ACCT_A = '11111111-1111-1111-1111-111111111111';
@@ -21,14 +22,20 @@ async function seed(
   accountId: string,
   over: Partial<Parameters<InMemoryAccountProxiesRepo['create']>[1]> = {},
 ) {
+  const id = over.id ?? randomUUID();
   return repo.create(accountId, {
     label: 'p',
     scheme: 'socks5',
     host: 'proxy.customer.example',
     port: 1080,
     username: 'user',
-    wrappedPassword: wrapAccountSecret(MASTER, accountId, Buffer.from('hunter2', 'utf8')),
+    wrappedPassword: encryptAccountProxySecret(
+      MASTER,
+      { accountId, proxyId: id, slot: 'password' },
+      'hunter2',
+    ),
     ...over,
+    id,
   });
 }
 
@@ -137,16 +144,15 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     expect(await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A })).toBeNull();
   });
 
-  it('no master key → resolves without a password (can’t unwrap)', async () => {
+  it('no master key with a stored password fails closed', async () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, null);
     const row = await seed(repo, ACCT_A);
-    const cfg = (await svc.resolveForDispatch({
+    const cfg = await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
-    })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
-    expect(cfg?.password).toBeUndefined();
-    expect(cfg?.host).toBe('proxy.customer.example');
+    });
+    expect(cfg).toBeNull();
   });
 
   it('a proxy with no stored password resolves without one', async () => {
@@ -166,17 +172,19 @@ describe('AccountProxiesService.resolveForDispatch', () => {
   it('resolves a WireGuard proxy to the FLAT wire (type sibling fields, secret unwrapped)', async () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, MASTER);
+    const id = randomUUID();
     const row = await repo.create(ACCT_A, {
+      id,
       label: 'wg',
       scheme: 'wireguard',
       host: 'vpn.example.com',
       port: 51820,
       username: null,
       wrappedPassword: null,
-      wrappedSecret: wrapAccountSecret(
+      wrappedSecret: encryptAccountProxySecret(
         MASTER,
-        ACCT_A,
-        Buffer.from('yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=', 'utf8'),
+        { accountId: ACCT_A, proxyId: id, slot: 'wireguard-private-key' },
+        'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
       ),
       config: {
         peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
@@ -199,20 +207,19 @@ describe('AccountProxiesService.resolveForDispatch', () => {
   it('resolves an OpenVPN proxy to the FLAT wire (config_blob from the unwrapped secret)', async () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, MASTER);
+    const id = randomUUID();
     const row = await repo.create(ACCT_A, {
+      id,
       label: 'ovpn',
       scheme: 'openvpn',
       host: 'vpn.example.com',
       port: 1194,
       username: null,
       wrappedPassword: null,
-      wrappedSecret: wrapAccountSecret(
+      wrappedSecret: encryptAccountProxySecret(
         MASTER,
-        ACCT_A,
-        Buffer.from(
-          JSON.stringify({ config_blob: 'client\nremote vpn.example.com 1194\n' }),
-          'utf8',
-        ),
+        { accountId: ACCT_A, proxyId: id, slot: 'openvpn-config' },
+        JSON.stringify({ config_blob: 'client\nremote vpn.example.com 1194\n' }),
       ),
       config: { username: 'u' },
     });
@@ -227,14 +234,20 @@ describe('AccountProxiesService.resolveForDispatch', () => {
   it('OWNER SCOPING (VPN): account B cannot resolve account A’s WireGuard secret → null (GCM unwrap fails)', async () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, MASTER);
+    const id = randomUUID();
     const row = await repo.create(ACCT_A, {
+      id,
       label: 'wg',
       scheme: 'wireguard',
       host: 'vpn.example.com',
       port: 51820,
       username: null,
       wrappedPassword: null,
-      wrappedSecret: wrapAccountSecret(MASTER, ACCT_A, Buffer.from('secret-key', 'utf8')),
+      wrappedSecret: encryptAccountProxySecret(
+        MASTER,
+        { accountId: ACCT_A, proxyId: id, slot: 'wireguard-private-key' },
+        'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+      ),
       config: {
         peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
         endpoint: 'vpn.example.com:51820',

@@ -7,7 +7,7 @@
 import type { InlineVpnProxyWire, SocksProxyConfig } from '@driftstack/api-types';
 import { InlineVpnProxyWireSchema } from '@driftstack/api-types';
 import type { AccountProxiesRepo, AccountProxyRow } from '../db/account-proxies-repo.js';
-import { unwrapAccountSecret } from '../lib/profile-key-hierarchy.js';
+import { readAccountProxySecret } from '../lib/account-proxy-secret-encryption.js';
 import { classifyUnsafeHost, classifyUnsafeVpnTargets } from '../lib/webhook-target-guard.js';
 
 /** Thrown when a stored proxy's host resolves to an internal-reachable address
@@ -60,8 +60,8 @@ export class AccountProxiesService {
    * Resolve a stored proxy to a dispatch-ready SocksProxyConfig. Owner-scoped.
    * Returns null when the proxy isn't found for this account, or isn't `socks5`
    * (http proxies aren't injectable through the SocksProxyConfig dispatch slot
-   * yet). Unwraps the password under THIS account's TMK (a row wrapped under a
-   * different account can't be decrypted) and re-asserts the SSRF host-guard —
+   * yet). Unwraps the password only for this exact account + proxy + password
+   * slot and re-asserts the SSRF host-guard —
    * an internal-reachable host throws UnsafeProxyHostError (fail-closed).
    */
   async resolveForDispatch(args: {
@@ -82,13 +82,14 @@ export class AccountProxiesService {
     if (row.scheme !== 'socks5') return null; // http isn't an inline-dispatch target
 
     let password: string | undefined;
-    if (row.wrappedPassword !== null && this.masterKey !== null) {
+    if (row.wrappedPassword !== null) {
+      if (this.masterKey === null) return null;
       try {
-        password = unwrapAccountSecret(
+        password = readAccountProxySecret(
           this.masterKey,
-          args.accountId,
+          { accountId: args.accountId, proxyId: row.id, slot: 'password' },
           row.wrappedPassword,
-        ).toString('utf8');
+        );
       } catch {
         // wrong-account TMK / corrupted blob / post-rotation un-rewrapped row → GCM
         // auth fails. Fail CLOSED to null (mirror the VPN branch below) so the
@@ -118,9 +119,8 @@ export class AccountProxiesService {
 
   /**
    * Build the FLAT inline VPN dispatch wire (A3 W2163: sibling fields, NOT
-   * nested) from a stored VPN row. Unwraps the secret under THIS account's TMK —
-   * a row wrapped under a different account CANNOT be decrypted (GCM auth fails),
-   * the same cross-account isolation the socks5 password + profile DEK rely on.
+   * nested) from a stored VPN row. Unwraps only the exact account + proxy +
+   * protocol slot, so moving a valid envelope to another row or slot fails GCM.
    * The non-secret fields ride `config` (jsonb). Returns null when encryption
    * isn't configured or the row is malformed (fail-closed; the session just runs
    * without this proxy rather than dispatching a broken VPN).
@@ -132,7 +132,15 @@ export class AccountProxiesService {
     if (row.wrappedSecret === null || this.masterKey === null) return null;
     let secret: string;
     try {
-      secret = unwrapAccountSecret(this.masterKey, accountId, row.wrappedSecret).toString('utf8');
+      secret = readAccountProxySecret(
+        this.masterKey,
+        {
+          accountId,
+          proxyId: row.id,
+          slot: row.scheme === 'openvpn' ? 'openvpn-config' : 'wireguard-private-key',
+        },
+        row.wrappedSecret,
+      );
     } catch {
       return null; // wrong-account TMK / corrupted blob → fail-closed
     }
