@@ -144,12 +144,12 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
     );
   });
 
-  it("Archetype-slug framing pinned: 'archetype is a lowercase slug (3–60 chars, [a-z0-9_]) identifying a persona / device profile stored on your account.' + 'Mint reusable archetypes via the Profiles API and pass the slug at session create time; for one-shot anonymous sessions, omit the field and the server applies your account's default archetype.' — pinned so the 3-60-char + [a-z0-9_]-regex + profiles-API-cross-ref + default-archetype-fallback commitments survive (drift to a different slug regex would create marketing↔Zod-schema divergence)", () => {
+  it('Archetype framing pins live catalog selection, reusable profile IDs, and the server-authoritative default_archetype_id fallback', () => {
     expect(body).toMatch(
-      /<code>archetype<\/code> is a lowercase slug \(3–60 chars,\s*\n?\s*<code>\[a-z0-9_\]<\/code>\) identifying a persona \/ device profile\s*\n?\s*stored on your account\./,
+      /<code>archetype<\/code> identifies an exact device, iOS, and\s*\n?\s*Safari combination from the live <code>GET \/v1\/archetypes<\/code>\s*\n?\s*catalog\./,
     );
     expect(body).toMatch(
-      /Mint reusable archetypes via the\s*\n?\s*Profiles API and pass the slug at session create time; for\s*\n?\s*one-shot anonymous sessions, omit the field and the server\s*\n?\s*applies your account's default archetype\./,
+      /Profiles pin one returned id for reuse\. For a one-shot\s*\n?\s*session, omit the field and the server uses the catalog's\s*\n?\s*<code>default_archetype_id<\/code>\./,
     );
   });
 

@@ -192,12 +192,11 @@ Authorization: Bearer ds_live_…
 
     <h2>Archetype slugs</h2>
     <p>
-      <code>archetype</code> is a lowercase slug (3–60 chars,
-      <code>[a-z0-9_]</code>) identifying a persona / device profile
-      stored on your account. Mint reusable archetypes via the
-      Profiles API and pass the slug at session create time; for
-      one-shot anonymous sessions, omit the field and the server
-      applies your account's default archetype.
+      <code>archetype</code> identifies an exact device, iOS, and
+      Safari combination from the live <code>GET /v1/archetypes</code>
+      catalog. Profiles pin one returned id for reuse. For a one-shot
+      session, omit the field and the server uses the catalog's
+      <code>default_archetype_id</code>.
     </p>
 
     <h2>Support</h2>
