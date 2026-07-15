@@ -3,6 +3,7 @@ import type { SessionStatus } from '../../src/schemas/harness-control-protocol.j
 import {
   SESSION_READINESS_DEFAULT_TIMEOUT_MS,
   SESSION_READINESS_MAX_PENDING,
+  SESSION_READINESS_MAX_TIMEOUT_MS,
   SessionReadinessCorrelator,
 } from '../../src/services/session-readiness-correlator.js';
 
@@ -60,6 +61,16 @@ describe('SessionReadinessCorrelator', () => {
     const correlator = new SessionReadinessCorrelator();
     const pending = correlator.waitForActive('agt_a', 2_500);
     await vi.advanceTimersByTimeAsync(2_499);
+    expect(correlator.inFlight()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toEqual({ status: 'timeout' });
+    expect(correlator.inFlight()).toBe(0);
+  });
+
+  it('clamps an overflowing override instead of letting Node turn it into a 1ms timeout', async () => {
+    const correlator = new SessionReadinessCorrelator();
+    const pending = correlator.waitForActive('agt_a', SESSION_READINESS_MAX_TIMEOUT_MS + 1);
+    await vi.advanceTimersByTimeAsync(SESSION_READINESS_MAX_TIMEOUT_MS - 1);
     expect(correlator.inFlight()).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(await pending).toEqual({ status: 'timeout' });

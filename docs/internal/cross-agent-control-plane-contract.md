@@ -714,5 +714,6 @@ claim about the harness producer's maximum. The current harness launch watchdog
 defaults to 90 seconds but is operator-tunable. Runtime activation remains blocked
 until the watchdog is fixed/clamped fleet-wide or its effective deadline is carried
 through an authenticated capability and the control-plane policy is derived from
-that value. This slice adds the owner and proofs only; no route, driver, provisioner
-or bootstrap path calls it.
+that value. Finite overrides are capped at Node's 2,147,483,647ms timer ceiling;
+larger `setTimeout` values otherwise become a dangerous 1ms timeout. This slice adds
+the owner and proofs only; no route, driver, provisioner or bootstrap path calls it.

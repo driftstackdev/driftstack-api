@@ -19,6 +19,10 @@ import type { SessionStatus } from '../schemas/harness-control-protocol.js';
  * authenticated reported watchdog capability. */
 export const SESSION_READINESS_DEFAULT_TIMEOUT_MS = 105_000;
 
+/** Node truncates larger setTimeout delays to 1ms. Clamp rather than letting
+ * a future authenticated capability/config override fail almost immediately. */
+export const SESSION_READINESS_MAX_TIMEOUT_MS = 2_147_483_647;
+
 /** One authenticated connection may not retain unbounded session ids/timers. */
 export const SESSION_READINESS_MAX_PENDING = 256;
 
@@ -58,10 +62,12 @@ export class SessionReadinessCorrelator {
       return Promise.resolve({ status: 'capacity' });
     }
 
-    const effectiveTimeoutMs =
+    const effectiveTimeoutMs = Math.min(
       Number.isFinite(timeoutMs) && timeoutMs > 0
         ? Math.floor(timeoutMs)
-        : SESSION_READINESS_DEFAULT_TIMEOUT_MS;
+        : SESSION_READINESS_DEFAULT_TIMEOUT_MS,
+      SESSION_READINESS_MAX_TIMEOUT_MS,
+    );
 
     return new Promise<SessionReadinessOutcome>((resolve) => {
       const timer = setTimeout(() => {

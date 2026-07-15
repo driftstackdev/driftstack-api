@@ -28780,9 +28780,10 @@ The default 105-second deadline is a caller-overridable control-plane policy, no
 a producer maximum. The harness launch watchdog currently defaults to 90 seconds
 but is operator-tunable; Fleet-backed activation remains blocked until that value
 is fixed/clamped across the fleet or reported through an authenticated capability
-and used by the policy.
+and used by the policy. Overrides clamp at Node's maximum safe timer delay rather
+than allowing an overflowing delay to be converted into a one-millisecond timeout.
 
-The direct correlator/connection proof passes 2 files and 52/52 tests. The expanded
+The direct correlator/connection proof passes 2 files and 53/53 tests. The expanded
 Fleet registry, routing, dispatch, request-correlator, profile and bootstrap matrix
-passes 19 files and 335/335 tests. Strict server source and test TypeScript,
+passes 19 files and 336/336 tests. Strict server source and test TypeScript,
 targeted ESLint/Prettier and diff/whitespace checks are green.
