@@ -26,9 +26,12 @@ import { customerSafeNodeDiagnostic } from './scrub-node-diagnostics.js';
 
 /** Narrow structural deps so the relay is unit-testable without standing up the
  *  full repo / WebhooksService (the real instances satisfy these). `nodeId` is the
- *  session's owning node — the audit-M1 cross-node gate; the real repo returns it. */
+ *  session's owning node — the audit-M1 cross-node gate. `profileId` is the exact
+ *  persisted dispatch binding; both are returned by the real repo. */
 interface ProfileSaveFailedRelaySessions {
-  get(id: string): Promise<{ accountId: string; nodeId: string | null } | null>;
+  get(
+    id: string,
+  ): Promise<{ accountId: string; nodeId: string | null; profileId: string | null } | null>;
 }
 interface ProfileSaveFailedRelayWebhooks {
   enqueueEvent(
@@ -76,12 +79,29 @@ export function makeProfileSaveFailedRelay(
       );
       return;
     }
+    // Match the successful profileSaved path: owning the session is necessary
+    // but not sufficient. The node-supplied profile_id must also match the
+    // immutable profile bound when this session was created. Ephemeral sessions
+    // have no legitimate profile save-back failure and therefore fail closed.
+    if (session.profileId === null || session.profileId !== frame.profile_id) {
+      logger.warn(
+        {
+          component: 'profile-save-failed-relay',
+          sessionId: frame.sessionId,
+          assignedProfileId: session.profileId,
+          reportedProfileId: frame.profile_id,
+          reportingNodeId,
+        },
+        'dropped profileSaveFailed whose profile does not match the session binding',
+      );
+      return;
+    }
     const endpoints = await webhooks.enqueueEvent(
       session.accountId,
       'session.profile_save_failed',
       {
         session_id: frame.sessionId,
-        profile_id: frame.profile_id,
+        profile_id: session.profileId,
         reason: frame.reason,
         // Scrub credentials plus the node's real egress IP before the free-form
         // detail reaches the customer webhook.
@@ -92,7 +112,7 @@ export function makeProfileSaveFailedRelay(
       {
         component: 'profile-save-failed-relay',
         sessionId: frame.sessionId,
-        profileId: frame.profile_id,
+        profileId: session.profileId,
         reason: frame.reason,
         endpoints,
       },

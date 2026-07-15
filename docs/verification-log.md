@@ -28000,3 +28000,36 @@ targeted ESLint/Prettier and diff/whitespace checks, and the configured
 full-workspace production build are green. The build includes 15 admin pages,
 24 dashboard pages, 62 docs pages plus 61 indexed pages, 546 GUI modules, 69
 marketing pages, the server and 7 status pages.
+
+---
+
+## V-667 — Profile save-failure webhooks use the session's bound profile
+
+**Date:** 2026-07-15
+
+Successful profile persistence already required an authenticated owner-node
+match and the exact persisted `session.profileId === frame.profile_id` binding
+before constructing an object key or updating save metadata. The customer-facing
+failure relay checked only node ownership, then copied the node-supplied profile
+ID into `session.profile_save_failed`. A faulty owning node could therefore
+attribute a legitimate session's failure event to an unrelated profile ID even
+though it could not overwrite that profile's bytes.
+
+The relay's narrow structural lookup now includes the profile ID already
+returned by the production session repository. After the existing exact
+owner-node check, an ephemeral session or any reported/persisted profile
+mismatch is warned and dropped before webhook enqueue. A valid event uses the
+persisted bound profile ID in both the customer payload and success log, rather
+than trusting the frame a second time. This changes no database, schema,
+control-frame or webhook response shape.
+
+Deterministic coverage proves a matching owner/profile relays normally, a
+different reported profile and a null session binding each enqueue zero
+webhooks, and latest-state coalescing still emits the first in-flight and newest
+pending outcome for the same bound profile. Existing unknown-session,
+cross-node/null-owner, detail omission and credential/IP scrubbing paths remain
+green. The direct relay file passes 12/12 tests; the expanded profile,
+bounded-relay, fleet-routing, diagnostic, bootstrap and protocol matrix passes
+8 files and 202/202 tests. Strict server source/test TypeScript,
+full-workspace typechecking, targeted ESLint/Prettier and diff/whitespace checks,
+and the configured full-workspace production build are green.

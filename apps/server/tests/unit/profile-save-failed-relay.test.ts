@@ -29,7 +29,7 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 describe('A3-W1364 makeProfileSaveFailedRelay', () => {
   it('resolves accountId from the session + enqueues session.profile_save_failed', async () => {
     const sessions = {
-      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1' }),
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1', profileId: 'prof_1' }),
     };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(2) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
@@ -46,7 +46,7 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
 
   it('omits detail from the payload when the frame carries none (no undefined key)', async () => {
     const sessions = {
-      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1' }),
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1', profileId: 'prof_1' }),
     };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
@@ -62,7 +62,7 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
 
   it('preserves a benign superseded save instead of reporting an upload failure', async () => {
     const sessions = {
-      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1' }),
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node_1', profileId: 'prof_1' }),
     };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
@@ -104,7 +104,9 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
   // audit M1 — cross-node ownership gate (the frame's sessionId is attacker-
   // controllable; only the OWNING node may fire its webhook).
   it('M1 — enqueues when the reporting node OWNS the session', async () => {
-    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
+    const sessions = {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1', profileId: 'prof_1' }),
+    };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
     relay(FRAME, 'node-1');
@@ -113,7 +115,9 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
   });
 
   it('M1 — DROPS (no webhook) when a NON-owning node reports the save failure', async () => {
-    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
+    const sessions = {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1', profileId: 'prof_1' }),
+    };
     const webhooks = { enqueueEvent: vi.fn() };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
     relay(FRAME, 'node-evil');
@@ -122,7 +126,9 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
   });
 
   it('M1 — DROPS when an authenticated node targets a NULL-owner session', async () => {
-    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: null }) };
+    const sessions = {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: null, profileId: 'prof_1' }),
+    };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
     relay(FRAME, 'node-anything');
@@ -130,9 +136,43 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
     expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
   });
 
+  it('drops a save failure whose profile differs from the persisted session binding', async () => {
+    const sessions = {
+      get: vi
+        .fn()
+        .mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1', profileId: 'prof_bound' }),
+    };
+    const webhooks = { enqueueEvent: vi.fn() };
+    const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
+    relay(FRAME, 'node-1');
+    await flush();
+    expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'agt_1',
+        assignedProfileId: 'prof_bound',
+        reportedProfileId: 'prof_1',
+      }),
+      expect.stringContaining('profile does not match the session binding'),
+    );
+  });
+
+  it('drops a save failure for an ephemeral session with no persisted profile binding', async () => {
+    const sessions = {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1', profileId: null }),
+    };
+    const webhooks = { enqueueEvent: vi.fn() };
+    const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
+    relay(FRAME, 'node-1');
+    await flush();
+    expect(webhooks.enqueueEvent).not.toHaveBeenCalled();
+  });
+
   // audit M2 — scrub node IPs and credential-shaped text before the webhook.
   it('M2 — scrubs node IP and credentials from detail', async () => {
-    const sessions = { get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1' }) };
+    const sessions = {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_9', nodeId: 'node-1', profileId: 'prof_1' }),
+    };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
     relay(
@@ -164,15 +204,15 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
       get: vi.fn(async () => {
         lookups += 1;
         if (lookups === 1) await first;
-        return { accountId: 'acc_9', nodeId: 'node-1' };
+        return { accountId: 'acc_9', nodeId: 'node-1', profileId: 'prof_1' };
       }),
     };
     const webhooks = { enqueueEvent: vi.fn().mockResolvedValue(1) };
     const relay = makeProfileSaveFailedRelay(sessions, webhooks, logger);
 
-    relay({ ...FRAME, profile_id: 'prof_first' }, 'node-1');
-    relay({ ...FRAME, profile_id: 'prof_superseded' }, 'node-1');
-    relay({ ...FRAME, profile_id: 'prof_latest' }, 'node-1');
+    relay({ ...FRAME, reason: 'upload_failed' }, 'node-1');
+    relay({ ...FRAME, reason: 'too_large' }, 'node-1');
+    relay({ ...FRAME, reason: 'superseded' }, 'node-1');
     expect(sessions.get).toHaveBeenCalledTimes(1);
 
     releaseFirst();
@@ -182,13 +222,13 @@ describe('A3-W1364 makeProfileSaveFailedRelay', () => {
       1,
       'acc_9',
       'session.profile_save_failed',
-      expect.objectContaining({ profile_id: 'prof_first' }),
+      expect.objectContaining({ profile_id: 'prof_1', reason: 'upload_failed' }),
     );
     expect(webhooks.enqueueEvent).toHaveBeenNthCalledWith(
       2,
       'acc_9',
       'session.profile_save_failed',
-      expect.objectContaining({ profile_id: 'prof_latest' }),
+      expect.objectContaining({ profile_id: 'prof_1', reason: 'superseded' }),
     );
   });
 });
