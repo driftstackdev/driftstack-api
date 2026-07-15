@@ -615,7 +615,7 @@ function aiLabel(tier: AccountTier): string {
                   return Promise.reject(
                     window.driftstackResponseError(r, {
                       detail:
-                        'Billing setup is still in progress on this server. Check back shortly — you can keep exploring the dashboard in the meantime.',
+                        'Card checkout is unavailable on this server. Use crypto checkout if it is offered below, or email billing@driftstack.dev.',
                     }),
                   );
                 }
@@ -840,10 +840,10 @@ function aiLabel(tier: AccountTier): string {
             }
             if (body.provider === 'stub' || !body.payment_address) {
               showCryptoError(
-                "Crypto checkout isn't fully live yet — please email " +
-                  'billing@driftstack.dev with your order_id ' +
+                'Crypto checkout is unavailable on this server. Use card checkout, or email ' +
+                  'billing@driftstack.dev with order_id ' +
                   (body.order_id || 'unknown') +
-                  ' for manual wire instructions.',
+                  ' for manual payment instructions.',
               );
               return;
             }

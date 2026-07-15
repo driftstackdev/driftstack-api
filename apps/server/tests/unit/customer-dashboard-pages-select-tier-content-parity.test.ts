@@ -147,6 +147,17 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     expect(body).not.toMatch(/drive them from the API or GUI/);
   });
 
+  it('uses present-tense actionable configuration errors instead of roadmap or check-back promises', () => {
+    expect(body).toMatch(
+      /Card checkout is unavailable on this server\. Use crypto checkout if it is offered below, or email billing@driftstack\.dev\./,
+    );
+    expect(body).toMatch(
+      /Crypto checkout is unavailable on this server\. Use card checkout, or email /,
+    );
+    expect(body).toMatch(/billing@driftstack\.dev with order_id/);
+    expect(body).not.toMatch(/still in progress|Check back shortly|isn't fully live yet/i);
+  });
+
   it("Enterprise framing: 'Enterprise tier (~$4,000/mo, custom) — contact sales' with mailto:sales@driftstack.dev — pinned so the enterprise tier surfaces as a sales-only path (no self-serve checkout for ~$4k/mo) and the contact email stays canonical", () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
