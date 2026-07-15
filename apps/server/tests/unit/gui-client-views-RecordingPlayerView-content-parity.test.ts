@@ -88,6 +88,17 @@ describe('W482.B apps/gui-client/src/views/RecordingPlayerView.tsx content parit
     );
   });
 
+  it('recording export is ref-single-flighted, visibly busy, and contains thrown writes', () => {
+    expect(body).toContain('const exportingRef = useRef(false);');
+    expect(body).toContain('if (exportingRef.current || recording === null');
+    expect(body).toContain('exportingRef.current = true;');
+    expect(body).toContain("body: humanizeError(err, 'Could not save the file.')");
+    expect(body).toContain('exportingRef.current = false;');
+    expect(body).toContain('disabled={exporting || recording.frames.length === 0}');
+    expect(body).toContain('aria-busy={exporting}');
+    expect(body).toContain("{exporting ? 'Exporting…' : 'Export'}");
+  });
+
   it('Lazy-hydrate effect humanizes disk errors, clears loading in finally, and retains the recording-not-found branch', () => {
     expect(body).toMatch(/import \{ humanizeError \} from '\.\.\/lib\/humanize-error';/);
     expect(body).toMatch(

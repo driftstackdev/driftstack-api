@@ -43,6 +43,8 @@ export function RecordingPlayerView({
   // which is misleading when the read actually errored. Track it separately
   // and offer a retry.
   const [hydrateError, setHydrateError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const exportingRef = useRef(false);
   const tickRef = useRef<number | null>(null);
   // Wall-clock anchor for the playback loop: { wallStart, cursorBase }
   const playStateRef = useRef<{ wallStart: number; cursorBase: number } | null>(null);
@@ -194,30 +196,43 @@ export function RecordingPlayerView({
   // Export the open recording as a portable JSON envelope. Frames are already
   // hydrated by the time the player is interactive, so no async hydrate here.
   async function handleExport(): Promise<void> {
-    if (recording === null || recording.frames.length === 0) return;
-    const now = new Date();
-    const stillLive = recording.endedAt === null;
-    // AWAIT + gate on the CONFIRMED-write boolean: in the Tauri WKWebView the anchor
-    // fallback writes NOTHING but returns true, so the unconditional (un-awaited)
-    // "Exported" toast was a lie. Only claim success when the file actually landed.
-    const saved = await downloadJson(
-      recordingExportFilename(recording, now),
-      buildRecordingExport(recording, now),
-    );
-    if (!saved) {
-      pushToast({ title: 'Export failed', body: 'Could not save the file.', tone: 'error' });
-      return;
+    if (exportingRef.current || recording === null || recording.frames.length === 0) return;
+    exportingRef.current = true;
+    setExporting(true);
+    try {
+      const now = new Date();
+      const stillLive = recording.endedAt === null;
+      // AWAIT + gate on the CONFIRMED-write boolean: in the Tauri WKWebView the anchor
+      // fallback writes NOTHING but returns true, so the unconditional (un-awaited)
+      // "Exported" toast was a lie. Only claim success when the file actually landed.
+      const saved = await downloadJson(
+        recordingExportFilename(recording, now),
+        buildRecordingExport(recording, now),
+      );
+      if (!saved) {
+        pushToast({ title: 'Export failed', body: 'Could not save the file.', tone: 'error' });
+        return;
+      }
+      // A still-recording session exports a partial envelope (endedAt:null + only
+      // the frames captured so far). Be honest about that in the toast rather than
+      // claiming a 'complete' export — the user might think they have the whole run.
+      pushToast({
+        title: stillLive ? 'Exported (still recording)' : 'Exported',
+        body: stillLive
+          ? `${recording.frames.length} frames captured so far — this recording is still live, so the export is a partial snapshot.`
+          : `${recording.frames.length} frames saved as JSON.`,
+        tone: stillLive ? 'warn' : 'success',
+      });
+    } catch (err) {
+      pushToast({
+        title: 'Export failed',
+        body: humanizeError(err, 'Could not save the file.'),
+        tone: 'error',
+      });
+    } finally {
+      exportingRef.current = false;
+      setExporting(false);
     }
-    // A still-recording session exports a partial envelope (endedAt:null + only
-    // the frames captured so far). Be honest about that in the toast rather than
-    // claiming a 'complete' export — the user might think they have the whole run.
-    pushToast({
-      title: stillLive ? 'Exported (still recording)' : 'Exported',
-      body: stillLive
-        ? `${recording.frames.length} frames captured so far — this recording is still live, so the export is a partial snapshot.`
-        : `${recording.frames.length} frames saved as JSON.`,
-      tone: stillLive ? 'warn' : 'success',
-    });
   }
 
   function togglePlay(): void {
@@ -261,10 +276,11 @@ export function RecordingPlayerView({
             type="button"
             className="btn-secondary"
             onClick={() => void handleExport()}
-            disabled={recording.frames.length === 0}
-            title="Download this recording as a JSON file"
+            disabled={exporting || recording.frames.length === 0}
+            aria-busy={exporting}
+            title={exporting ? 'Recording export in progress' : 'Download this recording as JSON'}
           >
-            Export
+            {exporting ? 'Exporting…' : 'Export'}
           </button>
           <button type="button" className="btn-primary" onClick={togglePlay}>
             {playing ? 'Pause' : cursorMs >= totalMs ? 'Replay' : 'Play'}

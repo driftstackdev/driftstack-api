@@ -123,6 +123,33 @@ describe('RecordingPlayerView — Space play/pause keyboard control', () => {
     await waitFor(() => expect(view.getByText('Exported')).toBeInTheDocument());
   });
 
+  it('single-flights export and exposes a busy button until the write settles', async () => {
+    let finishExport: ((saved: boolean) => void) | undefined;
+    mockDownloadJson.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishExport = resolve;
+        }),
+    );
+    const { container } = renderPlayer(
+      <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
+    );
+    const view = within(container);
+    const exportBtn = view.getByRole('button', { name: 'Export' });
+
+    fireEvent.click(exportBtn);
+    fireEvent.click(exportBtn);
+
+    const pending = await view.findByRole('button', { name: 'Exporting…' });
+    expect(pending).toBeDisabled();
+    expect(pending).toHaveAttribute('aria-busy', 'true');
+    expect(mockDownloadJson).toHaveBeenCalledTimes(1);
+
+    finishExport?.(true);
+    await waitFor(() => expect(view.getByRole('button', { name: 'Export' })).toBeEnabled());
+    expect(view.getByText('Exported')).toBeInTheDocument();
+  });
+
   it('shows an Export FAILED toast (not a lying success) when the write does NOT land', async () => {
     // The Tauri WKWebView anchor fallback writes nothing → downloadJson resolves false.
     mockDownloadJson.mockResolvedValueOnce(false);
@@ -134,5 +161,22 @@ describe('RecordingPlayerView — Space play/pause keyboard control', () => {
     await waitFor(() => expect(view.getByText('Export failed')).toBeInTheDocument());
     // The success toast must NOT appear.
     expect(view.queryByText('Exported')).not.toBeInTheDocument();
+  });
+
+  it('contains a thrown filesystem failure behind customer-safe copy', async () => {
+    mockDownloadJson.mockRejectedValueOnce(
+      new Error('write failed at /Users/founder/Library/Application Support/private.json'),
+    );
+    const { container } = renderPlayer(
+      <RecordingPlayerView recordingId="rec_1" onBack={vi.fn()} />,
+    );
+    const view = within(container);
+
+    fireEvent.click(view.getByRole('button', { name: 'Export' }));
+
+    await waitFor(() => expect(view.getByText('Export failed')).toBeInTheDocument());
+    expect(view.getByText('Could not save the file.')).toBeInTheDocument();
+    expect(view.queryByText(/Users\/founder/)).toBeNull();
+    expect(view.getByRole('button', { name: 'Export' })).toBeEnabled();
   });
 });
