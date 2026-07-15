@@ -268,15 +268,16 @@ class AgentSessionsResource:
         - ``pair-mode-takeover-fired`` (Slice 5 takeover-trigger) —
           ``pair_mode_state`` populated with the new state kind.
         - ``forwarded`` (Slice 4 forward-to-harness) — ``duration_ms``
-          populated; pre-harness this path returns 503 instead.
+          populated. Deployments without a compatible harness return
+          503 instead.
 
         Raises ``ConflictError`` (409) if the session is not active OR
         is in mode='ai' (input-event requires manual or pair mode), OR
         the pair_mode_state is mid-transition.
         Raises ``ValidationError`` (400) when pair-mode ai-driving
         path is taken without ``client_id``.
-        Raises ``FeatureUnavailableError`` (503) on the harness-forward
-        path pre-harness.
+        Raises ``FeatureUnavailableError`` (503) when input forwarding
+        is unavailable on the selected deployment.
         """
         body: dict[str, Any] = {"event": event}
         if client_id is not None:

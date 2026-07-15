@@ -46,9 +46,9 @@ export type InputEvent =
  *    `pair_mode_state` carries the new state machine kind (typically
  *    `takeover-pending` or `takeover-queued`).
  *  - `'forwarded'` — event dispatched directly to the harness
- *    (manual mode OR pair-mode after takeover-grant). Pre-harness,
- *    this path returns 503; once Agent 1's Swift work lands the
- *    handler will return this shape with `duration_ms`.
+ *    (manual mode OR pair-mode after takeover-grant), with the
+ *    measured dispatch `duration_ms`. Deployments without a
+ *    compatible harness return 503 instead.
  */
 export type SendInputEventResponse =
   | {

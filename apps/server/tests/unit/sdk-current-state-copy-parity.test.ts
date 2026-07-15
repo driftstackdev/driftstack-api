@@ -14,6 +14,7 @@ const CURRENT_STATE_PATHS = [
   'packages/sdk-python/examples/egress_flow.py',
   'packages/sdk-python/examples/egress_openvpn.py',
   'packages/sdk-python/openapi.json',
+  'packages/sdk-python/src/driftstack/resources/agent_sessions.py',
   'packages/sdk-python/src/driftstack/client.py',
   'packages/sdk-typescript/examples/agent-chat.ts',
   'packages/sdk-typescript/examples/egress-flow.ts',

@@ -21482,7 +21482,7 @@
             }
           },
           "503": {
-            "description": "Pre-harness: forward-to-harness path returns 503 until Mac fleet Swift work lands. Pair-mode takeover-trigger path returns 200.",
+            "description": "Input forwarding is unavailable when the selected deployment has no compatible fleet harness. Pair-mode takeover-trigger responses remain available.",
             "content": {
               "application/problem+json": {
                 "schema": {
