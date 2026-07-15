@@ -40,7 +40,7 @@ export interface ProfilePhoneCardProps {
   note?: string;
   /** Save the trimmed note (Enter / Save / blur in the inline editor); empty
    *  clears it. Omitted → the "Edit note" affordance isn't offered. */
-  onSaveNote?: (note: string) => void;
+  onSaveNote?: (note: string) => string | null | void | Promise<string | null | void>;
   // proxy / egress
   hasProxy: boolean;
   flag: string; // emoji or '🌍'
@@ -102,9 +102,27 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // here so the small <textarea> overlays the card body without leaving the grid.
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState(p.note ?? '');
-  const commitNote = (): void => {
-    p.onSaveNote?.(noteDraft.trim());
-    setEditingNote(false);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const noteSaveInFlightRef = useRef(false);
+  const commitNote = async (): Promise<void> => {
+    if (p.onSaveNote === undefined || noteSaveInFlightRef.current) return;
+    noteSaveInFlightRef.current = true;
+    setNoteSaving(true);
+    setNoteError(null);
+    try {
+      const error = await p.onSaveNote(noteDraft.trim());
+      if (typeof error === 'string' && error.length > 0) {
+        setNoteError(error.slice(0, 240));
+        return;
+      }
+      setEditingNote(false);
+    } catch {
+      setNoteError("Couldn't save the note. Check your connection and try again.");
+    } finally {
+      noteSaveInFlightRef.current = false;
+      setNoteSaving(false);
+    }
   };
   // Dismiss the tap-opened ⋯ menu on an outside pointer-down or Escape — a
   // toggle-opened dropdown that can only be re-toggled shut reads as stuck.
@@ -177,6 +195,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               autoFocus
               aria-label={`Note for ${p.name}`}
               value={noteDraft}
+              disabled={noteSaving}
               maxLength={280}
               rows={5}
               placeholder="Add a note…"
@@ -184,7 +203,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  commitNote();
+                  void commitNote();
                 } else if (e.key === 'Escape') {
                   setNoteDraft(p.note ?? '');
                   setEditingNote(false);
@@ -192,19 +211,32 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               }}
               className="min-h-0 flex-1 resize-none rounded-lg border border-surface-divider bg-surface-inset px-2 py-1.5 text-[11.5px] text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
             />
+            {noteError !== null ? (
+              <p role="alert" className="text-[10px] text-status-error">
+                {noteError}
+              </p>
+            ) : null}
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
+                disabled={noteSaving}
                 onClick={() => {
                   setNoteDraft(p.note ?? '');
+                  setNoteError(null);
                   setEditingNote(false);
                 }}
                 className="rounded-lg border border-surface-divider px-2.5 py-1 text-[11px] font-medium text-ink-secondary transition-colors hover:text-ink-primary"
               >
                 Cancel
               </button>
-              <button type="button" onClick={commitNote} className="btn-primary text-[11px]">
-                Save
+              <button
+                type="button"
+                disabled={noteSaving}
+                aria-busy={noteSaving}
+                onClick={() => void commitNote()}
+                className="btn-primary text-[11px]"
+              >
+                {noteSaving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
@@ -402,6 +434,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               onClick={(e) => {
                 e.stopPropagation();
                 setNoteDraft(p.note ?? '');
+                setNoteError(null);
                 setEditingNote(true);
               }}
               title="Click to edit note"
@@ -522,6 +555,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 onClick={() => {
                   setActionsOpen(false);
                   setNoteDraft(p.note ?? '');
+                  setNoteError(null);
                   setEditingNote(true);
                 }}
               />

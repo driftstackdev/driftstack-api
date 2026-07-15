@@ -4,7 +4,7 @@
 // act without bubbling to a select toggle.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
 import {
   ProfilesTable,
   type ProfileTableRow,
@@ -123,6 +123,32 @@ describe('ProfilesTable', () => {
     fireEvent.click(screen.getByTitle('Click to edit note'));
     expect(screen.getByLabelText('Select amsterdam shopper')).toBeTruthy();
     expect(screen.getByLabelText('Note for amsterdam shopper').value).toBe('vip buyer');
+    cleanup();
+  });
+
+  it('notes: waits for persistence, suppresses duplicate commits, and keeps failures editable', async () => {
+    let resolve!: (value: string | null) => void;
+    const pending = new Promise<string | null>((done) => {
+      resolve = done;
+    });
+    const onSaveNote = vi.fn(() => pending);
+    render(<ProfilesTable {...props({ rows: [row({ note: '' })], onSaveNote })} />);
+    fireEvent.click(screen.getByTitle('Add a note'));
+    const input = screen.getByLabelText('Note for amsterdam shopper');
+    fireEvent.change(input, { target: { value: '  account note  ' } });
+
+    act(() => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+      fireEvent.blur(input);
+    });
+    expect(onSaveNote).toHaveBeenCalledTimes(1);
+    expect(onSaveNote).toHaveBeenCalledWith('p1', 'account note');
+    expect(screen.getByText('Saving…')).toBeTruthy();
+    expect(input).toBeDisabled();
+
+    resolve('Saved locally, but account sync failed.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('account sync failed');
+    expect(screen.getByLabelText('Note for amsterdam shopper')).toBeTruthy();
     cleanup();
   });
 

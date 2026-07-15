@@ -3,7 +3,7 @@
 // pills, and that the dock actions + selection fire their handlers.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 import {
   ProfilePhoneCard,
   type ProfilePhoneCardProps,
@@ -51,6 +51,51 @@ function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps
 }
 
 describe('ProfilePhoneCard', () => {
+  it('keeps the note editor mounted and single-flight until persistence succeeds', async () => {
+    let resolve!: (value: string | null) => void;
+    const pending = new Promise<string | null>((done) => {
+      resolve = done;
+    });
+    const onSaveNote = vi.fn(() => pending);
+    render(<ProfilePhoneCard {...props({ note: '', onSaveNote })} />);
+    fireEvent.click(screen.getByLabelText('Edit note for amsterdam shopper'));
+    const input = screen.getByLabelText('Note for amsterdam shopper');
+    fireEvent.change(input, { target: { value: '  priority  ' } });
+    const save = screen.getByRole('button', { name: 'Save' });
+
+    act(() => {
+      save.click();
+      save.click();
+    });
+    expect(onSaveNote).toHaveBeenCalledTimes(1);
+    expect(onSaveNote).toHaveBeenCalledWith('priority');
+    expect(screen.getByRole('button', { name: 'Saving…' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByLabelText('Note for amsterdam shopper')).toBeDisabled();
+
+    resolve(null);
+    await waitFor(() => expect(screen.queryByLabelText('Note for amsterdam shopper')).toBeNull());
+    cleanup();
+  });
+
+  it('keeps a failed note draft open and allows a clean retry', async () => {
+    const onSaveNote = vi
+      .fn<() => Promise<string | null>>()
+      .mockResolvedValueOnce('Saved locally, but account sync failed.')
+      .mockResolvedValueOnce(null);
+    render(<ProfilePhoneCard {...props({ note: '', onSaveNote })} />);
+    fireEvent.click(screen.getByLabelText('Edit note for amsterdam shopper'));
+    fireEvent.change(screen.getByLabelText('Note for amsterdam shopper'), {
+      target: { value: 'retry me' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('account sync failed');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByLabelText('Note for amsterdam shopper')).toBeNull());
+    expect(onSaveNote).toHaveBeenCalledTimes(2);
+    cleanup();
+  });
+
   it('shows identity + device + country + real exit IP + UDP badge; Launch fires onPrimary', () => {
     const onPrimary = vi.fn();
     render(<ProfilePhoneCard {...props({ onPrimary })} />);

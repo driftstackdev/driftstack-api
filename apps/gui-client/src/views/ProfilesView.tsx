@@ -1120,19 +1120,25 @@ export function ProfilesView({
   // profile row so it follows the account (per-account sync, 2026-06-16). Empty
   // string clears the note (sent as null to the server).
   const handleSaveNote = useCallback(
-    (id: string, note: string): void => {
-      void saveProfileMeta(
-        id,
-        { note },
-        // Only pass the prune list in Personal — in a team workspace state.profiles
-        // is the OWNER's set, so pruning against it would WIPE the member's own
-        // personal org metadata (same guard as every other save path).
-        activeWorkspace === null ? state.profiles.map((pr) => pr.id) : undefined,
-      ).then(setProfilesMeta);
-      if (client) {
-        void client.profiles
-          .update(id, { note: note.length > 0 ? note : null })
-          .catch(() => undefined);
+    async (id: string, note: string): Promise<string | null> => {
+      let savedLocally = false;
+      try {
+        const nextMeta = await saveProfileMeta(
+          id,
+          { note },
+          // Only pass the prune list in Personal — in a team workspace state.profiles
+          // is the OWNER's set, so pruning against it would WIPE the member's own
+          // personal org metadata (same guard as every other save path).
+          activeWorkspace === null ? state.profiles.map((pr) => pr.id) : undefined,
+        );
+        savedLocally = true;
+        setProfilesMeta(nextMeta);
+        if (client) await client.profiles.update(id, { note: note.length > 0 ? note : null });
+        return null;
+      } catch {
+        return savedLocally
+          ? 'Saved on this Mac, but couldn’t sync the note to your account. Check your connection and retry.'
+          : 'Couldn’t save the note on this Mac. Check app storage and try again.';
       }
     },
     [client, state.profiles, activeWorkspace],

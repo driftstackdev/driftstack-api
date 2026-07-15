@@ -14,7 +14,7 @@
 //    spill outside the table; wide content scrolls within the bordered box.
 //  - More useful columns: Tags, Created, Last used, Notes.
 
-import { useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { RelativeTime } from './RelativeTime';
 
 export type ProfilesTableSortKey = 'name' | 'status' | 'country' | 'created' | 'lastUsed';
@@ -88,7 +88,7 @@ export interface ProfilesTableProps {
   onDelete: (id: string) => void;
   // Inline note editing (founder batch #2 "Add note"). Called with the trimmed
   // note on commit (Enter / blur); empty string clears the note.
-  onSaveNote: (id: string, note: string) => void;
+  onSaveNote: (id: string, note: string) => string | null | void | Promise<string | null | void>;
 }
 
 interface Col {
@@ -186,9 +186,27 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
   const otherBusy = (p.anyBusy ?? false) && !r.busy;
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState(r.note);
-  const commitNote = (): void => {
-    p.onSaveNote(r.id, noteDraft.trim());
-    setEditingNote(false);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const noteSaveInFlightRef = useRef(false);
+  const commitNote = async (): Promise<void> => {
+    if (noteSaveInFlightRef.current) return;
+    noteSaveInFlightRef.current = true;
+    setNoteSaving(true);
+    setNoteError(null);
+    try {
+      const error = await p.onSaveNote(r.id, noteDraft.trim());
+      if (typeof error === 'string' && error.length > 0) {
+        setNoteError(error.slice(0, 240));
+        return;
+      }
+      setEditingNote(false);
+    } catch {
+      setNoteError("Couldn't save the note. Check your connection and try again.");
+    } finally {
+      noteSaveInFlightRef.current = false;
+      setNoteSaving(false);
+    }
   };
   const exitHover = [r.proxyAddress, r.locationLabel].filter((x) => x !== null).join(' · ');
   return (
@@ -362,28 +380,39 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           stops click propagation so editing never toggles row selection. */}
       <td className={`px-3 py-2 ${HIDE_SMALL}`} onClick={(e) => e.stopPropagation()}>
         {editingNote ? (
-          <input
-            autoFocus
-            aria-label={`Note for ${r.name}`}
-            value={noteDraft}
-            maxLength={280}
-            placeholder="Add a note…"
-            onChange={(e) => setNoteDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitNote();
-              else if (e.key === 'Escape') {
-                setNoteDraft(r.note);
-                setEditingNote(false);
-              }
-            }}
-            onBlur={commitNote}
-            className="w-full max-w-[16rem] rounded border border-surface-divider bg-surface-inset px-1.5 py-0.5 text-xs text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
-          />
+          <div aria-busy={noteSaving} className="flex max-w-[16rem] flex-col gap-1">
+            <input
+              autoFocus
+              aria-label={`Note for ${r.name}`}
+              value={noteDraft}
+              disabled={noteSaving}
+              maxLength={280}
+              placeholder="Add a note…"
+              onChange={(e) => setNoteDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void commitNote();
+                else if (e.key === 'Escape' && !noteSaving) {
+                  setNoteDraft(r.note);
+                  setNoteError(null);
+                  setEditingNote(false);
+                }
+              }}
+              onBlur={() => void commitNote()}
+              className="w-full rounded border border-surface-divider bg-surface-inset px-1.5 py-0.5 text-xs text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none disabled:opacity-60"
+            />
+            {noteSaving ? <span className="text-[10px] text-ink-muted">Saving…</span> : null}
+            {noteError !== null ? (
+              <span role="alert" className="text-[10px] text-status-error">
+                {noteError}
+              </span>
+            ) : null}
+          </div>
         ) : r.note.trim() !== '' ? (
           <button
             type="button"
             onClick={() => {
               setNoteDraft(r.note);
+              setNoteError(null);
               setEditingNote(true);
             }}
             className="block max-w-[16rem] truncate text-left text-ink-secondary hover:text-ink-primary"
@@ -396,6 +425,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             type="button"
             onClick={() => {
               setNoteDraft('');
+              setNoteError(null);
               setEditingNote(true);
             }}
             className="text-ink-muted transition-colors hover:text-ink-primary"

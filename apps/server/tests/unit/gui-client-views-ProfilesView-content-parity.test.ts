@@ -58,6 +58,20 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toContain('Retry before judging its contents.');
   });
 
+  it('awaits local and account note persistence and reports partial sync honestly', () => {
+    const start = body.indexOf('const handleSaveNote = useCallback(');
+    const end = body.indexOf('// Switching account/workspace', start);
+    const handler = body.slice(start, end);
+    expect(handler).toMatch(/async \(id: string, note: string\): Promise<string \| null>/);
+    expect(handler).toMatch(/const nextMeta = await saveProfileMeta\(/);
+    expect(handler).toMatch(/if \(client\) await client\.profiles\.update\(id,/);
+    expect(handler).toContain('Saved on this Mac, but couldn’t sync the note to your account.');
+    expect(handler).toContain('Couldn’t save the note on this Mac.');
+    expect(handler).not.toMatch(
+      /client\.profiles\s*\n?\s*\.update\(id,[\s\S]{0,120}?catch\(\(\) => undefined\)/,
+    );
+  });
+
   it('states the shipped protected-local and encrypted owner-account proxy sync boundary honestly', () => {
     expect(body).toMatch(
       /Proxy credentials are\s*\n?\s*protected locally and synced encrypted to your account when used for a session\./,
