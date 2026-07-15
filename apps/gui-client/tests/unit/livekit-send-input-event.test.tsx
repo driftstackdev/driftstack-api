@@ -468,6 +468,31 @@ describe('sendTabListUpdate', () => {
 });
 
 describe('sendActivateTab', () => {
+  it('lets a caller reserve the exact requestId before publish begins', async () => {
+    const { room, publishData } = makeRoom();
+    let requestId: string | null = null;
+    const published = sendActivateTab(
+      room,
+      {
+        sessionId: 'agt_x',
+        tabId: 't2',
+        prevTabId: 't1',
+        url: 'https://b.example/',
+        scrollY: 300,
+      },
+      (reservedRequestId) => {
+        requestId = reservedRequestId;
+        expect(publishData).not.toHaveBeenCalled();
+      },
+    );
+    expect(requestId).not.toBeNull();
+    expect(decodeEvent(firstCall(publishData))).toMatchObject({
+      type: 'activateTab',
+      requestId,
+    });
+    await expect(published).resolves.toBe(requestId);
+  });
+
   it('publishes {type:"activateTab", requestId, sessionId, tabId, prevTabId, url, scrollY} reliably', async () => {
     const { room, publishData } = makeRoom();
     const requestId = await sendActivateTab(room, {

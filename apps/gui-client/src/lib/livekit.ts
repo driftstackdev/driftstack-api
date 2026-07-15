@@ -406,12 +406,17 @@ export function sendTabListUpdate(room: Room, payload: TabListUpdatePayload): Pr
 }
 
 /** Switch the PUBLISHED page to another tab (doc-150 item 4; locked A2↔A3 contract).
- *  Mints a `requestId` (`crypto.randomUUID()`) so the harness's `activateTabResult`
- *  reply ({ ok?, error? }) can be correlated for re-issue-on-miss. Returns the
- *  requestId so the caller can track the in-flight switch. reliable=true; teardown
- *  races are swallowed (shared codepath). */
-export async function sendActivateTab(room: Room, payload: ActivateTabPayload): Promise<string> {
+ *  Mints a request id exactly as before. Correlating callers may receive it through
+ *  `onRequestId` synchronously before publish begins, so their pending owner exists
+ *  before a fast reply can arrive. Returns the same id placed on the wire.
+ *  reliable=true; teardown races are swallowed by the shared send path. */
+export async function sendActivateTab(
+  room: Room,
+  payload: ActivateTabPayload,
+  onRequestId?: (requestId: string) => void,
+): Promise<string> {
   const requestId = crypto.randomUUID();
+  onRequestId?.(requestId);
   await sendInputEvent(room, { type: 'activateTab', requestId, ...payload }, { reliable: true });
   return requestId;
 }

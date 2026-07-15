@@ -15,7 +15,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, within, act, waitFor } from '@testing-library/react';
 
 const sendTabListUpdate = vi.fn(() => Promise.resolve());
-const sendActivateTab = vi.fn(() => Promise.resolve('req_1'));
+const sendActivateTab = vi.fn(
+  (_room: unknown, _payload: unknown, onRequestId?: (requestId: string) => void) => {
+    onRequestId?.('req_1');
+    return Promise.resolve('req_1');
+  },
+);
 const sendNavigate = vi.fn(() => Promise.resolve());
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
@@ -117,7 +122,11 @@ function lastTabListCall(): { sessionId: string; tabs: unknown[]; activeTabId: s
 describe('SimulatorWindow — page tab strip', () => {
   beforeEach(() => {
     sendTabListUpdate.mockClear();
-    sendActivateTab.mockClear();
+    sendActivateTab.mockReset();
+    sendActivateTab.mockImplementation((_room, _payload, onRequestId) => {
+      onRequestId?.('req_1');
+      return Promise.resolve('req_1');
+    });
     sendNavigate.mockClear();
     getAgentSessionPageState.mockClear();
     pageStateValue = null;
@@ -511,6 +520,119 @@ describe('SimulatorWindow — page tab strip', () => {
     // Reverted: the second tab is active again.
     expect(tabEls(container)[1].getAttribute('data-active')).toBe('true');
     expect(tabEls(container)[0].getAttribute('data-active')).toBe('false');
+  });
+
+  it('correlates a warm success before the held publish settles and does not retry', async () => {
+    vi.useFakeTimers();
+    let releasePublish!: () => void;
+    const heldPublish = new Promise<void>((resolve) => {
+      releasePublish = resolve;
+    });
+    try {
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+      sendActivateTab.mockClear();
+      sendActivateTab.mockImplementationOnce((_room, _payload, onRequestId) => {
+        onRequestId?.('req_fast_warm');
+        return heldPublish.then(() => 'req_fast_warm');
+      });
+
+      fireEvent.click(tabEls(container)[0]); // switch to tab1; publish remains held
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({
+              type: 'activateTabResult',
+              requestId: 'req_fast_warm',
+              ok: true,
+              wasWarm: true,
+            }),
+          ),
+        );
+      });
+
+      // The owner existed before publish, so the fast warm ack clears the cover now.
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        releasePublish();
+        await heldPublish;
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reverts a fast reject before publish settles and an old failure cannot delete the newer owner', async () => {
+    vi.useFakeTimers();
+    let rejectPublish!: (reason: Error) => void;
+    const heldPublish = new Promise<void>((_resolve, reject) => {
+      rejectPublish = reject;
+    });
+    try {
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+      const tab2Id = (lastTabListCall().tabs[1] as { id: string }).id;
+      sendActivateTab.mockClear();
+      // Deliberately collide ids to prove the old publish's rejection uses owner
+      // identity and cannot delete the reject-driven reactivation owner.
+      let publishCount = 0;
+      sendActivateTab.mockImplementation((_room, _payload, onRequestId) => {
+        onRequestId?.('req_owner_collision');
+        publishCount += 1;
+        return publishCount === 1
+          ? heldPublish.then(() => 'req_owner_collision')
+          : Promise.resolve('req_owner_collision');
+      });
+
+      fireEvent.click(tabEls(container)[0]); // optimistic tab1 switch; publish held
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({
+              type: 'activateTabResult',
+              requestId: 'req_owner_collision',
+              ok: false,
+            }),
+          ),
+        );
+      });
+
+      // Synchronous activeTabIdRef publication lets the immediate reject restore tab2
+      // and issue the exact box-side reactivation before React's passive phase.
+      expect(tabEls(container)[1].getAttribute('data-active')).toBe('true');
+      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+      expect((sendActivateTab.mock.calls[1]?.[1] as { tabId: string }).tabId).toBe(tab2Id);
+
+      await act(async () => {
+        rejectPublish(new Error('old publish failed after replacement'));
+        await Promise.resolve();
+      });
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({
+              type: 'activateTabResult',
+              requestId: 'req_owner_collision',
+              ok: true,
+              wasWarm: true,
+            }),
+          ),
+        );
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(2); // newer owner acked; no retry
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('on a rejected switch, re-activates the previous tab on the box (not just the GUI)', async () => {
@@ -1122,7 +1244,11 @@ describe('SimulatorWindow — page tab strip', () => {
     try {
       // Distinct requestIds per activateTab send so R1 and R2 are separately tracked.
       let n = 0;
-      sendActivateTab.mockImplementation(() => Promise.resolve(`req_${++n}`));
+      sendActivateTab.mockImplementation((_room, _payload, onRequestId) => {
+        const requestId = `req_${++n}`;
+        onRequestId?.(requestId);
+        return Promise.resolve(requestId);
+      });
       const { container } = renderSim();
       fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
       sendActivateTab.mockClear();
@@ -1164,7 +1290,6 @@ describe('SimulatorWindow — page tab strip', () => {
       );
       expect(alertSpy).not.toHaveBeenCalled();
     } finally {
-      sendActivateTab.mockImplementation(() => Promise.resolve('req_1'));
       vi.useRealTimers();
       alertSpy.mockRestore();
     }

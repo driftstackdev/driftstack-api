@@ -3824,6 +3824,14 @@ export function SimulatorWindow(): JSX.Element {
   const seedTabRef = useRef<SimTab>({ id: makeTabId(), url: '', scrollY: 0, title: '' });
   const [tabs, setTabs] = useState<SimTab[]>(() => [seedTabRef.current]);
   const [activeTabId, setActiveTabId] = useState<string>(() => seedTabRef.current.id);
+  // Data-channel replies can arrive before React commits the state update that
+  // initiated their publish. Every active-tab transition goes through this owner so
+  // reply handling observes the operator's latest choice synchronously.
+  const activeTabIdRef = useRef(activeTabId);
+  const setActiveTabIdSynchronized = useCallback((tabId: string): void => {
+    activeTabIdRef.current = tabId;
+    setActiveTabId(tabId);
+  }, []);
   // In-flight activateTab requests keyed by requestId so the harness's
   // activateTabResult reply (handled in onData) can revert an optimistic switch that
   // the box rejected. A missed reply just leaves the optimistic switch (v1 behaviour).
@@ -3886,13 +3894,8 @@ export function SimulatorWindow(): JSX.Element {
   // a short grace after a switch the poll won't overwrite the active tab's url
   // (the one-shot reconcile + a real data-channel frame refresh it instead).
   const lastSwitchAtRef = useRef(0);
-  // Live mirror of activeTabId for the data-channel + poll callbacks (which close
-  // over a stale activeTabId — their effects don't re-subscribe per switch). Used
-  // to resolve "the active tab" when a box frame carries no tabId.
-  const activeTabIdRef = useRef(activeTabId);
-  useEffect(() => {
-    activeTabIdRef.current = activeTabId;
-  }, [activeTabId]);
+  // activeTabIdRef is synchronously maintained by setActiveTabIdSynchronized above;
+  // data-channel and poll callbacks therefore never wait for a passive effect.
   // Live mirror of the tab list for the data-channel callbacks (onData closes over a
   // stale `tabs`). Used by the activateTabResult revert path to look up the
   // previously-active tab's url/scrollY so the box can be switched BACK to it.
@@ -4245,7 +4248,7 @@ export function SimulatorWindow(): JSX.Element {
             // SOFT failure (founder 2026-06-25): revert to the previously-active tab
             // (a sensible state — never leave it half-switched) and show a brief,
             // NON-BLOCKING notice. No alert(); the toast auto-dismisses.
-            setActiveTabId(pending.prevTabId);
+            setActiveTabIdSynchronized(pending.prevTabId);
             // audit wb1w3015f #6 — reset the (window-global) page chrome on the revert
             // exactly like the forward-switch paths do, so the REJECTED tab's overlay /
             // spinner / stalled badge / load-gate can't bleed onto the reverted-to tab
@@ -4326,7 +4329,7 @@ export function SimulatorWindow(): JSX.Element {
           lastSwitchAtRef.current = Date.now();
           resetPageChromeForSwitch();
           setTabs(restored);
-          setActiveTabId(active.id);
+          setActiveTabIdSynchronized(active.id);
           // Reflect the active tab's url in the address bar (the BrowserBar reads liveUrl).
           if (active.url !== '') setLiveUrl(active.url);
           if (active.title !== '') setLiveTitle(active.title);
@@ -5520,7 +5523,7 @@ export function SimulatorWindow(): JSX.Element {
     const seed: SimTab = { id: makeTabId(), url: '', scrollY: 0, title: '' };
     seedTabRef.current = seed;
     setTabs([seed]);
-    setActiveTabId(seed.id);
+    setActiveTabIdSynchronized(seed.id);
     setLiveTitle('');
     pendingActivationsRef.current.clear();
     // Drop any in-flight switch re-issue timers + the affordance — they reference the
@@ -6004,7 +6007,7 @@ export function SimulatorWindow(): JSX.Element {
       emitTabList(next, tab.id);
       return next;
     });
-    setActiveTabId(tab.id);
+    setActiveTabIdSynchronized(tab.id);
     // Clear the prior tab's error overlay / loading bar / stalled badge so they don't
     // cover the fresh new tab (the new-tab page re-asserts its own loading state).
     resetPageChromeForSwitch();
@@ -6096,7 +6099,7 @@ export function SimulatorWindow(): JSX.Element {
           if (neighbor !== undefined) nextActive = neighbor.id;
         }
         emitTabList(next, nextActive);
-        if (nextActive !== activeTabId) setActiveTabId(nextActive);
+        if (nextActive !== activeTabId) setActiveTabIdSynchronized(nextActive);
         return next;
       });
       // Tell the box to actually switch the published page to the focused neighbour
@@ -6133,20 +6136,35 @@ export function SimulatorWindow(): JSX.Element {
   const sendActivateAttempt = useCallback(
     (ctx: { tabId: string; prevTabId: string; url: string; scrollY: number }): void => {
       if (room === null) return;
-      void sendActivateTab(room, {
-        sessionId,
+      let requestId: string | null = null;
+      const pendingOwner = {
         tabId: ctx.tabId,
         prevTabId: ctx.prevTabId,
-        url: ctx.url,
-        scrollY: ctx.scrollY,
-      }).then(
-        (requestId) => {
-          pendingActivationsRef.current.set(requestId, {
-            tabId: ctx.tabId,
-            prevTabId: ctx.prevTabId,
-          });
+      };
+      void sendActivateTab(
+        room,
+        {
+          sessionId,
+          tabId: ctx.tabId,
+          prevTabId: ctx.prevTabId,
+          url: ctx.url,
+          scrollY: ctx.scrollY,
         },
+        (reservedRequestId) => {
+          requestId = reservedRequestId;
+          // Reserve before publish. A local/loopback-fast activateTabResult can now
+          // correlate even while LiveKit's publish promise is still pending.
+          pendingActivationsRef.current.set(reservedRequestId, pendingOwner);
+        },
+      ).then(
+        () => undefined,
         (err: unknown) => {
+          // A retry or reject-driven reactivation may have installed a newer owner
+          // under the same id in a deterministic test/mocked UUID environment. Never
+          // let this older publish failure delete that replacement.
+          if (requestId !== null && pendingActivationsRef.current.get(requestId) === pendingOwner) {
+            pendingActivationsRef.current.delete(requestId);
+          }
           if (!(err instanceof ReliableInputCongestedError)) return;
           // Congestion can begin in the narrow gap after the GUI's local guard but
           // before publish. If the previous tab still exists (normal switch/new-tab),
@@ -6168,7 +6186,7 @@ export function SimulatorWindow(): JSX.Element {
           }
           if (activeTabIdRef.current !== ctx.tabId) return;
           setSwitchingTabId((current) => (current === ctx.tabId ? null : current));
-          setActiveTabId(ctx.prevTabId);
+          setActiveTabIdSynchronized(ctx.prevTabId);
           resetPageChromeForSwitch();
           emitTabListRef.current(tabsRef.current, ctx.prevTabId);
           showNotice('Connection catching up — tab switch paused', 2500);
@@ -6257,7 +6275,7 @@ export function SimulatorWindow(): JSX.Element {
       // bleed onto the newly-active tab (and so "Try again" can't re-navigate the wrong
       // tab). The box's next page_state for the now-active tab re-asserts the real state.
       resetPageChromeForSwitch();
-      setActiveTabId(id);
+      setActiveTabIdSynchronized(id);
       // INSTANT feedback — show "switching…" on the target tab immediately (real
       // speed is A3's box-side no-reload). Cleared when the box reports the tab's
       // page (resolveSwitch via writeTabPageState / ack), or the hard timeout below.

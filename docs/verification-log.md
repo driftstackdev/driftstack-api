@@ -28825,3 +28825,39 @@ session insertion method and driver allocation, and independently requires zero
 stored active/status rows and zero events. API-types and strict server source/test
 TypeScript, docs and marketing Astro checks (zero diagnostics), targeted
 ESLint/Prettier and diff/whitespace checks are green.
+
+---
+
+## V-691 — Tab activation owns correlation before publish
+
+**Date:** 2026-07-15
+
+The GUI previously learned an `activateTab` request id only after the reliable
+LiveKit publish promise settled. A fast `activateTabResult` could therefore arrive
+while no pending owner existed and be discarded as unknown. The optimistic active
+tab was also copied into its callback ref only by a passive React effect, so an
+immediate hard rejection could observe the prior tab and skip the required UI and
+box-side reactivation.
+
+The helper still mints the request id by default but now exposes it to the caller
+synchronously before publish. The caller installs the exact pending owner in that
+pre-publish callback, and the unchanged reliable wire event then carries the same id.
+Publish failure removes only the owner created by that publish, so a retry or
+reject-driven replacement cannot be erased by an older promise settling late. Every
+active-tab transition updates the callback ref before scheduling React state, making
+fast success and rejection observe the same operator choice.
+
+Held-publish proof delivers an exact-id warm success and hard rejection before the
+publish promise settles. Warm success clears the switch cover immediately with no
+duplicate retry; rejection restores and reactivates the exact previous tab. A
+deliberate same-id replacement proves the older publish failure cannot delete the
+newer owner. Existing bounded retry/supersession, warm/cold cover distinction,
+page-state routing, default id generation and wire fields remain unchanged. This
+correlation correction does not redefine a genuinely cold box response as warm or
+claim that it removes a box-side navigation; cold responses remain covered until the
+target reports loaded.
+
+Focused proof passes 2 files and 81/81 tests; the expanded Simulator window matrix
+passes 17 files and 259/259 tests. GUI TypeScript, targeted ESLint, Prettier and
+diff/whitespace checks are green. No native/harness build, install, relaunch, deploy
+or customer-session action was performed.
