@@ -231,6 +231,7 @@ export function AgentChatView({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const saveDialogRef = useRef<HTMLDivElement>(null);
+  const savingRecipeRef = useRef(false);
   const saveDiscardConfirmOpenRef = useRef(false);
 
   // Multi-chat history (memory): each chat is persisted as its own transcript
@@ -374,7 +375,7 @@ export function AgentChatView({
   }, []);
 
   const requestCloseSaveDialog = useCallback((): void => {
-    if (saving || saveDiscardConfirmOpenRef.current) return;
+    if (savingRecipeRef.current || saveDiscardConfirmOpenRef.current) return;
     if (recipeLabel.trim().length === 0 && recipeDesc.trim().length === 0) {
       resetSaveDialog();
       return;
@@ -388,19 +389,23 @@ export function AgentChatView({
       saveDiscardConfirmOpenRef.current = false;
       if (discard) resetSaveDialog();
     });
-  }, [confirm, recipeDesc, recipeLabel, resetSaveDialog, saving]);
+  }, [confirm, recipeDesc, recipeLabel, resetSaveDialog]);
 
   // Keep focus inside the modal, restore it to the trigger, and route Escape
   // through the same dirty-draft guard as backdrop/Cancel.
   useFocusTrap(saveOpen, saveDialogRef, requestCloseSaveDialog);
 
   async function saveRecipe(): Promise<void> {
-    if (!client || chat.session === null) return;
+    if (!client || chat.session === null || savingRecipeRef.current) return;
     const label = recipeLabel.trim();
     if (label.length === 0) {
       setSaveError('Give the task a name.');
       return;
     }
+    // React's disabled state is not an admission lock: the Name input keeps an
+    // Enter handler while the request is pending, and two key events can reach
+    // this function before a render. Claim the save synchronously.
+    savingRecipeRef.current = true;
     setSaving(true);
     setSaveError(null);
     try {
@@ -418,6 +423,7 @@ export function AgentChatView({
     } catch (err) {
       setSaveError(humanizeError(err, "Couldn't save the task. Try again."));
     } finally {
+      savingRecipeRef.current = false;
       setSaving(false);
     }
   }

@@ -224,6 +224,32 @@ describe('AgentChatView Save-as-recipe', () => {
     );
   });
 
+  it('single-flights rapid Enter saves until the recipe request settles', async () => {
+    let finishCreate: ((recipe: { id: string; label: string }) => void) | undefined;
+    createRecipe.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishCreate = resolve;
+        }),
+    );
+    const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
+    chatState = baseChat({ session: SESSION, turns: [planTurn] });
+    render(<AgentChatView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
+    const name = await screen.findByPlaceholderText('e.g. Add 3 items to cart');
+    fireEvent.change(name, { target: { value: 'One durable task' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    fireEvent.keyDown(name, { key: 'Enter' });
+
+    expect(createRecipe).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+
+    finishCreate?.({ id: 'rec_single', label: 'One durable task' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(pushToast).toHaveBeenCalledTimes(1);
+  });
+
   it('surfaces an error and does not toast when the create fails', async () => {
     createRecipe.mockRejectedValueOnce(
       new DriftstackError({
@@ -249,6 +275,14 @@ describe('AgentChatView Save-as-recipe', () => {
     ).toBeTruthy();
     expect(screen.queryByText('quota exceeded')).toBeNull();
     expect(pushToast).not.toHaveBeenCalled();
+
+    // The synchronous latch releases in finally, so the retained draft can be
+    // retried without reopening or retyping it.
+    fireEvent.click(screen.getByRole('button', { name: 'Save task' }));
+    await waitFor(() => expect(createRecipe).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Task saved' })),
+    );
   });
 });
 
