@@ -17,11 +17,17 @@ import '@testing-library/jest-dom/vitest';
 
 const invokeStore = new Map<string, string>();
 const tauriStore = new Map<string, unknown>();
+let failSecretSave = false;
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(async (cmd: string, args: { key: string; value?: string }) => {
     if (cmd === 'secret_load') return invokeStore.get(args.key) ?? null;
     if (cmd === 'secret_save') {
+      if (failSecretSave) {
+        throw new Error(
+          'securityd denied /Users/customer/Library/Keychains token=first-run-secret',
+        );
+      }
       invokeStore.set(args.key, args.value ?? '');
       return undefined;
     }
@@ -64,6 +70,7 @@ vi.mock('@sentry/browser', () => ({
 beforeEach(() => {
   invokeStore.clear();
   tauriStore.clear();
+  failSecretSave = false;
   // Boot with NO key (cloud baseUrl present, but no api_key) → first-run wizard.
   tauriStore.set('driftstack', {
     baseUrl: 'https://api.driftstack.dev',
@@ -121,5 +128,35 @@ describe('First-run wizard — reaches the First-profile step after key validati
       },
       { timeout: 3000 },
     );
+  });
+
+  it('stays retryable when the credential store rejects the key, then advances after access returns', async () => {
+    const { App } = await import('../../src/App');
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText('Welcome to Driftstack')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /get started/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^next$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /have an api key\? paste it instead/i }),
+    );
+    await userEvent.type(screen.getByLabelText(/api key/i), 'ds_live_retryable_key');
+
+    failSecretSave = true;
+    await userEvent.click(screen.getByRole('button', { name: /validate \+ continue/i }));
+
+    expect(
+      await screen.findByText("Couldn't complete setup. Check the details and try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/create your first profile/i)).toBeNull();
+    expect(
+      screen.queryByText(/securityd|\/Users\/customer|Keychains|token=first-run-secret/i),
+    ).toBeNull();
+    expect(invokeStore.has('api_key:api.driftstack.dev')).toBe(false);
+
+    failSecretSave = false;
+    await userEvent.click(screen.getByRole('button', { name: /validate \+ continue/i }));
+    await waitFor(() => expect(screen.getByText(/create your first profile/i)).toBeInTheDocument());
+    expect(invokeStore.get('api_key:api.driftstack.dev')).toBe('ds_live_retryable_key');
   });
 });

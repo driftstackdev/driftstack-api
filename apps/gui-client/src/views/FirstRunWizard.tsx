@@ -95,7 +95,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
     try {
       const client = new Driftstack({ apiKey: trimmedKey, baseUrl: trimmedUrl });
       await client.account.me();
-      await update({ apiKey: trimmedKey, baseUrl: trimmedUrl });
+      await update({ apiKey: trimmedKey, baseUrl: trimmedUrl }, { reportPersistenceFailure: true });
       setStep('profile');
     } catch (err) {
       setValidationError(

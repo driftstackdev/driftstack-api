@@ -96,7 +96,9 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     // 2026-05-20 — inline comment was dropped when the validateAndSave
     // function was rearchitected ffe8bfa4; pin the await update call
     // shape directly so the persist-through-settings flow stays load-bearing.
-    expect(body).toMatch(/await update\(\{ apiKey: trimmedKey, baseUrl: trimmedUrl \}\);/);
+    expect(body).toMatch(
+      /await update\(\s*\{ apiKey: trimmedKey, baseUrl: trimmedUrl \},\s*\{ reportPersistenceFailure: true \},?\s*\);/,
+    );
   });
 
   it("baseUrl-mode sync useEffect: mode === 'cloud' → CLOUD_DEFAULT_URL else lastSelfHostedUrlRef.current — pinned so the URL field updates when the radio flips, and a cloud round-trip no longer clobbers the customer's custom self-hosted URL back to the default (audit): the last self-hosted URL the user typed is stashed in a ref (seeded from SELF_HOSTED_DEFAULT_URL) and restored when switching back to self-hosted", () => {
