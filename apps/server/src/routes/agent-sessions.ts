@@ -938,7 +938,18 @@ export async function dispatchSessionAssignOnCreate(args: {
       fleetControlRegistry,
       accountRegion,
     );
-    if (mac === null || mac.livekit === null) return;
+    if (mac === null || mac.livekit === null) {
+      // The fleet wiring is live, but no candidate has LiveKit publisher
+      // authority. This is the same terminal create-time condition as an
+      // offline LiveKit candidate below: no assign can ever be sent, so retain
+      // no phantom active slot while waiting for the 12-hour orphan reaper.
+      logger?.info(
+        { component: 'fleet-session-dispatch', sessionId },
+        'no LiveKit-capable fleet node at create; closing never-dispatched session (dispatch_no_live_node)',
+      );
+      await closeUnresolvedEgressSession(agentSessions, sessionId, logger, 'dispatch_no_live_node');
+      return;
+    }
     if (conn === undefined) {
       // Founder bug ("opened a session and nothing happened, browser not
       // started"): NO LiveKit box in the region has a live control-WSS at create
@@ -1152,7 +1163,13 @@ export async function dispatchSessionAssignOnCreate(args: {
             nodeId: dispatchedNodeId,
             err: err instanceof Error ? err.message : String(err),
           },
-          'persisting session node_id failed; skipping dispatch (avoids owned-but-NULL window; orphan_reap backstop holds)',
+          'persisting session node_id failed; skipping dispatch and closing never-dispatched session',
+        );
+        await closeUnresolvedEgressSession(
+          agentSessions,
+          sessionId,
+          logger,
+          'dispatch_owner_claim_failed',
         );
         return;
       }
@@ -1294,24 +1311,37 @@ async function closeFailedSessionAssign(args: {
 }
 
 /**
- * #16 — close a never-dispatched session so the phantom 'active' row stops
- * counting against the per-account active-session cap. Used for two terminal,
- * never-will-dispatch cases: `egress_unresolved` (unresolvable/undispatchable
- * proxy or an SSRF-rejected host) and `dispatch_no_live_node` (the owning box's
- * control-WSS was disconnected at create time, so no publisher was ever sent).
- * Best-effort + no-op when the repo isn't wired (the fail-closed path still
- * returns); the wall-clock orphan reaper remains the backstop. Idempotent —
- * closeWithReason keeps the first close's timestamp.
+ * #16 — close a failed create/dispatch row so the phantom 'active' slot stops
+ * counting against the per-account cap. The never-dispatched reasons include
+ * an unresolvable egress, no LiveKit authority and a failed node-owner claim;
+ * `create_failed` is the route's broader post-create fallback. The DB close is
+ * bounded to five seconds so a failing store cannot hang the create path; the
+ * orphan/worker reconciliation remains the backstop. No-op when the repo isn't
+ * wired. Idempotent — closeWithReason preserves the first terminal winner.
  */
 async function closeUnresolvedEgressSession(
   agentSessions: AgentSessionsRepo | undefined,
   sessionId: string,
   logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void },
-  reason: 'egress_unresolved' | 'dispatch_no_live_node' | 'create_failed' = 'egress_unresolved',
+  reason:
+    | 'egress_unresolved'
+    | 'dispatch_no_live_node'
+    | 'dispatch_owner_claim_failed'
+    | 'create_failed' = 'egress_unresolved',
 ): Promise<void> {
   if (agentSessions === undefined) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await agentSessions.closeWithReason(sessionId, reason);
+    await Promise.race([
+      agentSessions.closeWithReason(sessionId, reason),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('never-dispatched session close timed out')),
+          5_000,
+        );
+        timer.unref?.();
+      }),
+    ]);
   } catch (closeErr) {
     logger?.warn(
       {
@@ -1322,6 +1352,8 @@ async function closeUnresolvedEgressSession(
       },
       'failed to close never-dispatched session; orphan reaper will backstop',
     );
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 

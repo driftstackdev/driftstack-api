@@ -423,34 +423,102 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(after!.nodeId).toBeNull();
   });
 
-  it('a setNodeId failure SKIPS the assign (no owned-but-NULL window) — resolves + logs, never throws', async () => {
+  it('a setNodeId failure sends no frame and immediately closes the never-dispatched active slot', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     const log = logger();
-    const throwingSessions = {
-      setNodeId: () => Promise.reject(new Error('db down')),
-    } as unknown as InMemoryAgentSessionsRepo;
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    vi.spyOn(agentSessions, 'setNodeId').mockRejectedValueOnce(new Error('db down'));
     await expect(
       dispatchSessionAssignOnCreate({
-        sessionId: 'agt_persist_fail',
+        sessionId: created.id,
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),
         livekitSecretEncryptionKey: KEY,
         sessionDispatch: DISPATCH,
-        agentSessions: throwingSessions,
+        agentSessions,
         logger: log,
       }),
     ).resolves.toBeUndefined();
-    // review w7eu5sw7n: node_id is persisted BEFORE the assign. If the persist
-    // fails we must NOT send the assign — doing so would leave the session
-    // status='active' with node_id=NULL while a node owns it, and the
-    // terminal-close cross-node guard ALLOWS a close on a NULL owner (so another
-    // node could close it) + the disconnect reaper can't attribute it. So the
-    // dispatch is SKIPPED (no assign), the failure is logged, never thrown; the
-    // session stays unowned for the 12h orphan_reap backstop.
+    // The claim failed before sessionAssign, so no node can own a browser and no
+    // sessionEnd is needed. Release the active cap slot now instead of making the
+    // account wait for the 12-hour orphan reaper.
     expect(sent).toHaveLength(0);
+    expect(await agentSessions.countActive('acc_1')).toBe(0);
+    expect(await agentSessions.get(created.id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'dispatch_owner_claim_failed',
+      nodeId: null,
+    });
     expect(log.warn).toHaveBeenCalled();
+  });
+
+  it('a setNodeId throw after another close preserves that first terminal winner and sends no frame', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    vi.spyOn(agentSessions, 'setNodeId').mockImplementationOnce(async () => {
+      await agentSessions.closeWithReason(created.id, 'customer_closed');
+      throw new Error('ambiguous owner-claim response');
+    });
+
+    await dispatchSessionAssignOnCreate({
+      sessionId: created.id,
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      agentSessions,
+      logger: logger(),
+    });
+
+    expect(sent).toHaveLength(0);
+    expect(await agentSessions.countActive('acc_1')).toBe(0);
+    expect(await agentSessions.get(created.id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'customer_closed',
+      nodeId: null,
+    });
+  });
+
+  it('bounds a failed owner-claim close attempt and leaves the orphan reaper as the fallback', async () => {
+    vi.useFakeTimers();
+    try {
+      const sent: string[] = [];
+      const registry = new FleetControlRegistry();
+      registry.register(NODE_ID, (d) => sent.push(d));
+      const log = logger();
+      const sessions = {
+        setNodeId: () => Promise.reject(new Error('db down')),
+        closeWithReason: () => new Promise(() => {}),
+      } as unknown as InMemoryAgentSessionsRepo;
+      const pending = dispatchSessionAssignOnCreate({
+        sessionId: 'agt_owner_close_hangs',
+        fleetControlRegistry: registry,
+        fleetNodesRepo: repoReturning(macWithLivekit()),
+        livekitSecretEncryptionKey: KEY,
+        sessionDispatch: DISPATCH,
+        agentSessions: sessions,
+        logger: log,
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(pending).resolves.toBeUndefined();
+      expect(sent).toHaveLength(0);
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'agt_owner_close_hangs',
+          reason: 'dispatch_owner_claim_failed',
+        }),
+        'failed to close never-dispatched session; orphan reaper will backstop',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a setNodeId null return (row missing or terminal mid-dispatch) SKIPS the assign', async () => {
@@ -872,19 +940,28 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('no-ops when no fleet node has livekit creds', async () => {
+  it('no LiveKit-capable fleet node closes the never-dispatched row and frees its active slot', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
+    const agentSessions = new InMemoryAgentSessionsRepo();
+    const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
     await dispatchSessionAssignOnCreate({
-      sessionId: 'agt_demo4',
+      sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(null),
       livekitSecretEncryptionKey: KEY,
       sessionDispatch: DISPATCH,
+      agentSessions,
       logger: logger(),
     });
     expect(sent).toHaveLength(0);
+    expect(await agentSessions.countActive('acc_1')).toBe(0);
+    expect(await agentSessions.get(created.id)).toMatchObject({
+      status: 'closed',
+      closedReason: 'dispatch_no_live_node',
+      nodeId: null,
+    });
   });
 
   it('best-effort: a decrypt failure is caught + logged, never thrown', async () => {

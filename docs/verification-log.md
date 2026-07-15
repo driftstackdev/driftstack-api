@@ -28718,3 +28718,32 @@ request-correlator union passes 26 files and 454/454 tests. Strict server source
 server-test TypeScript, targeted ESLint/Prettier and diff/whitespace checks are green.
 This slice changes no public route, driver selection, persistence schema, native
 binary or activation state.
+
+---
+
+## V-688 — Never-dispatched agent sessions release their active slot immediately
+
+**Date:** 2026-07-15
+
+The fleet dispatch path already closed a session when a LiveKit-capable node was
+known but its control connection was offline. Two adjacent branches did not keep
+that invariant. An empty candidate set—or candidates with no LiveKit authority—
+returned before closing the newly active row. A failure while persisting the
+active-only node ownership claim also logged and returned. Neither branch had sent
+`sessionAssign`, yet both left an unowned active row consuming account concurrency
+until the 12-hour orphan sweep.
+
+Both branches now send zero fleet frames and close immediately. Missing LiveKit
+authority uses `dispatch_no_live_node`; a thrown owner claim uses
+`dispatch_owner_claim_failed`. The close attempt has a five-second loss bound so a
+failing store cannot hang the create path, while the orphan reaper remains the
+fallback if that bounded close cannot settle. The repository's atomic terminal
+transition stays authoritative: if another closer won first, the dispatch cleanup
+preserves that original reason and emits neither `sessionAssign` nor `sessionEnd`.
+
+The direct fleet-dispatch behavior proof passes 1 file and 58/58 tests. The expanded
+dispatch, active-count, terminal-close, disconnect/orphan reaper, prelaunch and fleet
+registry matrix passes 9 files and 192/192 tests. Strict server source and test
+TypeScript, targeted ESLint/Prettier and diff/whitespace checks are green. No
+FleetDriver, public route/type/SDK, persistence schema, native binary, customer
+session, deploy or foreign pnpm state is changed.
