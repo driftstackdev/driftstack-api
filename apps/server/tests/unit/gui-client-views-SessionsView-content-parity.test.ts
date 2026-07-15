@@ -90,6 +90,19 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     expect(body).toMatch(/await client\.sessions\.destroy\(id\);/);
   });
 
+  it('quick-create, driver stop, and agent stop share a synchronous pre-await mutation gate', () => {
+    expect(body).toContain('const mutationInFlightRef = useRef(false);');
+    expect(body.match(/if \(!client \|\| mutationInFlightRef\.current\) return;/g)).toHaveLength(3);
+    expect(body.match(/mutationInFlightRef\.current = true;/g)).toHaveLength(3);
+    expect(body.match(/mutationInFlightRef\.current = false;/g)).toHaveLength(3);
+    expect(body).toMatch(
+      /async function handleDestroy[\s\S]*?mutationInFlightRef\.current = true;[\s\S]*?await confirm\(/,
+    );
+    expect(body).toMatch(
+      /async function handleCloseAgent[\s\S]*?mutationInFlightRef\.current = true;[\s\S]*?await confirm\(/,
+    );
+  });
+
   it("New session button: disabled + aria-disabled both gated on busyId === '__create__' || atConcurrentCap; title tooltip for cap surface: 'Concurrent session cap reached ({cap} for {tier}). Destroy a session or upgrade to spawn more.' fallback when atConcurrentCap, undefined otherwise (so screen readers + hover both surface the explanation) — 2026-06-24 GUI restyle: the tooltip string was hoisted into a `capTitle` const (shared verbatim by the hero button + the empty-state's create button so the cap surface is identical wherever New session appears); pin BOTH the const's exact gating/copy AND that the button still wires disabled + aria-disabled + title={capTitle}", () => {
     // The cap tooltip + its cap/tier interpolation, hoisted into a shared const
     // so the hero + empty-state create buttons surface an identical explanation.

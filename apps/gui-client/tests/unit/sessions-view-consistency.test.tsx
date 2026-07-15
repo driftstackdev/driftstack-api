@@ -11,7 +11,7 @@
 // first, with copy that explains the trade-off + points at profile launch.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
 const sessionsList = vi.fn<() => Promise<{ data: unknown[] }>>(() => Promise.resolve({ data: [] }));
@@ -66,6 +66,17 @@ const ACTIVE_AGENT = {
   created_at: '2026-06-25T00:00:00Z',
   mode: 'manual',
 };
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 beforeEach(() => {
   sessionsList.mockReset();
@@ -150,6 +161,60 @@ describe('SessionsView consistency #11 — New session confirms the bare path', 
     fireEvent.click(await screen.findByRole('button', { name: /New session/ }));
     await waitFor(() => expect(confirmFn).toHaveBeenCalledTimes(1));
     expect(sessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it('single-flights rapid quick-create events before React commits disabled state', async () => {
+    const decision = deferred<boolean>();
+    confirmFn.mockImplementation(() => decision.promise);
+    render(<SessionsView onGoToSettings={vi.fn()} />);
+    const button = await screen.findByRole('button', { name: /New session/ });
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await waitFor(() => expect(confirmFn).toHaveBeenCalledTimes(1));
+    decision.resolve(true);
+    await waitFor(() => expect(sessionsCreate).toHaveBeenCalledTimes(1));
+  });
+
+  it('releases the synchronous mutation gate after a declined create', async () => {
+    confirmFn.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    render(<SessionsView onGoToSettings={vi.fn()} />);
+    const button = await screen.findByRole('button', { name: /New session/ });
+
+    fireEvent.click(button);
+    await waitFor(() => expect(confirmFn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(button).not.toBeDisabled());
+    fireEvent.click(button);
+
+    await waitFor(() => expect(confirmFn).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(sessionsCreate).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('SessionsView mutation single-flight', () => {
+  it('allows only one agent stop confirmation and write from rapid clicks', async () => {
+    const decision = deferred<boolean>();
+    confirmFn.mockImplementation(() => decision.promise);
+    agentSessionsList.mockResolvedValue({
+      data: [ACTIVE_AGENT],
+      has_more: false,
+      next_cursor: null,
+    });
+    render(<SessionsView onGoToSettings={vi.fn()} />);
+    const card = (await screen.findByText('Profile session')).closest('article');
+    const button = within(card as HTMLElement).getByRole('button', { name: 'Stop' });
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(confirmFn).toHaveBeenCalledTimes(1);
+    decision.resolve(true);
+    await waitFor(() => expect(agentClose).toHaveBeenCalledTimes(1));
   });
 });
 

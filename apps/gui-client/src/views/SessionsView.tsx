@@ -64,6 +64,13 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
     error: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
+  // One shared synchronous gate owns every billed/session mutation. React's
+  // disabled state is deliberately visible feedback, but it is not a mutex:
+  // two native click/Enter events can arrive before the state commit. Without
+  // this ref, quick-create can open two confirms and two Stop actions can race
+  // across rows. Acquire before the first async boundary (including confirm)
+  // and release on accept, cancel, or failure.
+  const mutationInFlightRef = useRef(false);
 
   // Toast on status transitions (demo-concepts arc): when the 15s poll sees a
   // session newly errored, surface it instead of waiting for the customer to
@@ -157,14 +164,12 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
             ? client.agentSessions
                 .list()
                 .then((p) =>
-                  p.data.map(
-                    (s): AgentSessionLite => ({
-                      id: s.id,
-                      status: s.status,
-                      created_at: s.created_at,
-                      mode: s.mode,
-                    }),
-                  ),
+                  p.data.map((s): AgentSessionLite => ({
+                    id: s.id,
+                    status: s.status,
+                    created_at: s.created_at,
+                    mode: s.mode,
+                  })),
                 )
                 .catch(() => null)
             : Promise.resolve(null),
@@ -209,7 +214,8 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
   }, [refresh]);
 
   async function handleCreate(): Promise<void> {
-    if (!client) return;
+    if (!client || mutationInFlightRef.current) return;
+    mutationInFlightRef.current = true;
     setBusyId('__create__');
     try {
       // 2026-05-20 — auto-attach the first saved proxy to the
@@ -261,6 +267,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
+      mutationInFlightRef.current = false;
       setBusyId(null);
     }
   }
@@ -298,18 +305,19 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
   }
 
   async function handleDestroy(id: string): Promise<void> {
-    if (!client) return;
-    // Stopping tears down a live (billed) browser immediately — confirm so a
-    // misclick in the dense session grid doesn't kill a running session.
-    if (
-      !(await confirm(
-        'Stop this session now? The live browser is torn down immediately and anything in progress is lost.',
-        { confirmLabel: 'Stop session' },
-      ))
-    )
-      return;
-    setBusyId(id);
+    if (!client || mutationInFlightRef.current) return;
+    mutationInFlightRef.current = true;
     try {
+      // Stopping tears down a live (billed) browser immediately — confirm so a
+      // misclick in the dense session grid doesn't kill a running session.
+      if (
+        !(await confirm(
+          'Stop this session now? The live browser is torn down immediately and anything in progress is lost.',
+          { confirmLabel: 'Stop session' },
+        ))
+      )
+        return;
+      setBusyId(id);
       await client.sessions.destroy(id);
       await refresh(false);
       // V-239 — refresh after destroy so the cap counter unlocks the
@@ -318,6 +326,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
+      mutationInFlightRef.current = false;
       setBusyId(null);
     }
   }
@@ -326,22 +335,24 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
   // (its row's Stop), so a running launched profile is actionable here, not
   // only from its Profiles row.
   async function handleCloseAgent(id: string): Promise<void> {
-    if (!client) return;
-    if (
-      !(await confirm(
-        'Stop this running session now? The live browser is torn down immediately and anything in progress is lost.',
-        { confirmLabel: 'Stop session' },
-      ))
-    )
-      return;
-    setBusyId(id);
+    if (!client || mutationInFlightRef.current) return;
+    mutationInFlightRef.current = true;
     try {
+      if (
+        !(await confirm(
+          'Stop this running session now? The live browser is torn down immediately and anything in progress is lost.',
+          { confirmLabel: 'Stop session' },
+        ))
+      )
+        return;
+      setBusyId(id);
       await client.agentSessions.close(id);
       await refresh(false);
       await refreshAccountMe();
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
+      mutationInFlightRef.current = false;
       setBusyId(null);
     }
   }
