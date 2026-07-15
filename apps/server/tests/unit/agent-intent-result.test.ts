@@ -279,6 +279,13 @@ describe('intentResultToCustomer — failure reasons', () => {
         true,
       ],
       [{ kind: 'navigate', url: 'https://x' }, 'intent_dispatch_error', 'session_error', true],
+      [{ kind: 'navigate', url: 'https://x' }, 'intent_deadline_exceeded', 'session_error', false],
+      [
+        { kind: 'navigate', url: 'https://x' },
+        'intent_deadline_cleanup_unconfirmed',
+        'session_error',
+        false,
+      ],
       [{ kind: 'navigate', url: 'https://x' }, 'session_paused', 'session_error', true],
       [{ kind: 'navigate', url: 'https://x' }, 'session_intent_in_flight', 'session_error', true],
       [
@@ -337,6 +344,28 @@ describe('intentResultToCustomer — failure reasons', () => {
     if (busy.kind !== 'failure') throw new Error('narrow');
     expect(busy.reason).toContain('wait, then retry');
     expect(busy.diagnosis).toEqual({ category: 'session_error', retryable: true });
+
+    const deadline = intentResultToCustomer(
+      { kind: 'scroll', direction: 'down' },
+      fail('intent_deadline_exceeded'),
+    );
+    if (deadline.kind !== 'failure') throw new Error('narrow');
+    expect(deadline.reason).toContain('start a new session');
+    expect(deadline.reason).toContain('do not retry against this session');
+    expect(deadline.diagnosis).toEqual({ category: 'session_error', retryable: false });
+
+    const cleanupUnconfirmed = intentResultToCustomer(
+      { kind: 'scroll', direction: 'down' },
+      fail('intent_deadline_cleanup_unconfirmed'),
+    );
+    if (cleanupUnconfirmed.kind !== 'failure') throw new Error('narrow');
+    expect(cleanupUnconfirmed.reason).toContain('permanently fenced');
+    expect(cleanupUnconfirmed.reason).toContain('start a new session');
+    expect(cleanupUnconfirmed.reason).toContain('do not retry against this session');
+    expect(cleanupUnconfirmed.diagnosis).toEqual({
+      category: 'session_error',
+      retryable: false,
+    });
   });
 
   it('handles a failure with no code + no message (defensive)', () => {

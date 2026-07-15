@@ -7,7 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   IntentDispatchCorrelator,
   dispatchTimeoutMs,
+  DISPATCH_DEADLINE_BROWSER_CLEANUP_MS,
+  DISPATCH_DEADLINE_RESULT_DRAIN_MS,
   DISPATCH_TIMEOUT_BASE_MS,
+  DISPATCH_TIMEOUT_SLACK_MS,
   DISPATCH_NAVIGATION_BUDGET_MS,
   type DispatchTransport,
 } from '../../src/services/harness-dispatch-correlator.js';
@@ -64,10 +67,15 @@ describe('dispatchTimeoutMs', () => {
     }
   });
 
-  it('keeps fill_form/scroll loss detection bounded at a documented provisional 315s', () => {
+  it('uses the exact 300s producer wall fence plus a positive bounded delivery margin for fill_form/scroll', () => {
     for (const n of ['fill_form', 'scroll'] as HarnessIntentName[]) {
       expect(dispatchTimeoutMs(n), n).toBe(315_000);
     }
+    expect(
+      DISPATCH_TIMEOUT_SLACK_MS -
+        DISPATCH_DEADLINE_BROWSER_CLEANUP_MS -
+        DISPATCH_DEADLINE_RESULT_DRAIN_MS,
+    ).toBe(1_000);
   });
 
   it('uses the 55s WebDriver navigation budget + 15s slack for navigate/history', () => {
@@ -334,6 +342,46 @@ describe('IntentDispatchCorrelator', () => {
       errorMessage: 'resume the session before retrying',
     });
     expect(await p).toMatchObject({ success: false, errorCode: 'session_paused' });
+  });
+
+  it('settles the exact correlated producer deadline code without rewriting it as a transport failure', async () => {
+    const { transport } = recorder();
+    const c = new IntentDispatchCorrelator(transport);
+    const p = c.dispatch(dispatch('int_deadline', 'scroll', { direction: 'down' }));
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'int_deadline',
+      success: false,
+      durationMs: 300_000,
+      errorCode: 'intent_deadline_exceeded',
+      errorMessage: 'exact session terminated',
+    });
+    expect(await p).toMatchObject({
+      success: false,
+      errorCode: 'intent_deadline_exceeded',
+      errorMessage: 'exact session terminated',
+    });
+  });
+
+  it('settles an unconfirmed producer cleanup distinctly before the retryable timeout fallback', async () => {
+    const { transport } = recorder();
+    const c = new IntentDispatchCorrelator(transport);
+    const p = c.dispatch(dispatch('int_deadline_unconfirmed', 'scroll', { direction: 'down' }));
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'int_deadline_unconfirmed',
+      success: false,
+      durationMs: 300_000,
+      errorCode: 'intent_deadline_cleanup_unconfirmed',
+      errorMessage: 'browser exit unconfirmed; exact session fenced',
+    });
+    expect(await p).toMatchObject({
+      success: false,
+      errorCode: 'intent_deadline_cleanup_unconfirmed',
+      errorMessage: 'browser exit unconfirmed; exact session fenced',
+    });
   });
 
   it('failAll fails every in-flight dispatch (connection drop)', async () => {

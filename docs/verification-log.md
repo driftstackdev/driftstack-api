@@ -28897,3 +28897,53 @@ This change does not hide genuine cache eviction. With the current fleet cache s
 of two, a three-tab return may still take an honest cold navigation after eviction.
 No cache-size, GUI, API, fork, environment, native build/sign/install/relaunch,
 deployment or customer-session action was performed.
+
+---
+
+## V-693 — Detached intents retain exact browser-lifetime authority
+
+**Date:** 2026-07-15
+
+The live harness receive loop previously detached only two short wait intents. The
+other sixteen names could hold the single control-frame reader for minutes, while
+the 64-owner overflow branch fell back to inline execution. In addition,
+`fill_form` reset a 300-second typing allowance for every field and `scroll` had no
+whole-intent wall fence, even though the control plane treated 315 seconds as its
+bounded lost-reply detector.
+
+The production control-loop entry now admits all eighteen canonical intents into a
+single exact token-and-browser owner per session before executor or page work. A
+second same-session intent is retryably refused, and the defensive 512-owner ceiling
+fails immediately without an inline fallback. The direct coordinator entry remains
+synchronous for deterministic probes unless its explicit test seam requests the
+production owner. Detached owners do not touch the legacy id-keyed inline counter.
+
+Every detached worker revalidates its admission-captured token and browser before
+and after each pre-execution actor await, immediately before page execution, and
+immediately after execution before cache, challenge pause, activity or result
+effects. Explicit end claims and cancels that owner before its first registry await.
+Deterministic same-id, distinct-browser tests hold an old worker on both sides of
+execution, tear down and reuse the id, and require zero old executor, page, cache,
+pause, activity, counter or result effects while the exact successor remains owned.
+
+Only `fill_form` and `scroll` now receive an admission-stamped 300-second
+`ContinuousClock` producer fence. A winning deadline removes the exact owner and
+browser mutation authority, cancels the worker, then waits at most 3,000ms for TERM
+and 1,000ms for KILL confirmation. Confirmed exit emits
+`intent_deadline_exceeded`. An unconfirmed bounded kill emits the distinct correlated
+`intent_deadline_cleanup_unconfirmed`, discards the unsafe local in-progress profile
+and retains a same-id process-lifetime tombstone. Both strict API outcomes map to a
+non-retryable `session_error` with new-session guidance; capacity, send, transport
+and lost-reply `intent_dispatch_error` remains retryable. The four-second stop budget
+plus the fixed ten-second result drain leaves one second of actor/network margin in
+the exact 315-second control-plane deadline. Field, flick and submit cancellation
+checkpoints prevent later browser mutations after ownership is revoked.
+
+The focused ownership, deadline and same-id ABA matrix passes 16/16 tests, including
+the confirmed and unconfirmed stop paths. The strict schema, codec, mapper and
+correlator proof passes 4 files and 136/136 tests. The plain full harness suite passes
+980 tests with one expected inert box integration skip and zero failures. Strict
+server source and test TypeScript, targeted ESLint, Prettier and scoped
+diff/whitespace checks are green. The harness source is deliberately not built,
+signed, installed or activated; Family-B, WebKit, API deployment/environment, fleet,
+customer-session and foreign pnpm state remain untouched.

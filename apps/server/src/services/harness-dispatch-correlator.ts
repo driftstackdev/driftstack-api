@@ -19,9 +19,10 @@
 //   - Per-intent timeout = producer execution budget + 15s transport slack.
 //     Explicit post-action waits and aggregate behavioral pacing can legally
 //     consume 300s; search/login compose TWO such phases; navigation/history
-//     has a 55s WebDriver budget. fill_form/scroll still lack a producer-wide
-//     wall fence (documented residual below). Only remaining short intents use
-//     the 30s base.
+//     has a 55s WebDriver budget. fill_form/scroll now have an exact producer
+//     300s monotonic whole-intent fence, with at most 4s browser cleanup and the
+//     fixed 10s heartbeat result drain leaving 1s inside the 15s slack. Only
+//     remaining short intents use 30s.
 //
 // dispatch() ALWAYS resolves with a ParsedIntentResult (success or a synthesized
 // failure) — it never rejects — so the executor gets a uniform result per intent.
@@ -47,6 +48,9 @@ export interface DispatchTransport {
 export const DISPATCH_TIMEOUT_BASE_MS = 30_000;
 export const DISPATCH_TIMEOUT_SLACK_MS = 15_000;
 export const DISPATCH_NAVIGATION_BUDGET_MS = 55_000;
+/** Harness-side terminal deadline budget mirrors: 3s TERM + 1s KILL confirmation, then ≤10s heartbeat drain. */
+export const DISPATCH_DEADLINE_BROWSER_CLEANUP_MS = 4_000;
+export const DISPATCH_DEADLINE_RESULT_DRAIN_MS = 10_000;
 
 const SINGLE_CAP_LONG_INTENTS = new Set<HarnessIntentName>([
   'click',
@@ -57,20 +61,15 @@ const SINGLE_CAP_LONG_INTENTS = new Set<HarnessIntentName>([
 
 const COMPOSITE_LONG_INTENTS = new Set<HarnessIntentName>(['search', 'login']);
 
-// Provisional bounded loss detectors, NOT claimed producer maxima. fill_form
-// applies the typing wall independently per field and scroll has no top-level
-// fence across slow successful flick calls before pause_after. Runtime
-// activation therefore remains blocked on a harness-wide per-intent wall-clock
-// fence + cancellation semantics; until then these prevent an unbounded lost
-// reply while acknowledging a legal extreme operation could outlive the timer.
-const UNFENCED_COMPOSITE_INTENTS = new Set<HarnessIntentName>(['fill_form', 'scroll']);
+const FENCED_COMPOSITE_INTENTS = new Set<HarnessIntentName>(['fill_form', 'scroll']);
 
 const NAVIGATION_INTENTS = new Set<HarnessIntentName>(['navigate', 'back', 'forward']);
 
-/** Per-intent loss-detection deadline. Proved bounded classes use the live
- *  producer budget plus transport slack; fill_form/scroll use the explicitly
- *  provisional bound above until the producer supplies a whole-intent fence.
- *  Short operations stay fail-fast instead of inheriting a blanket long timer. */
+/** Per-intent loss-detection deadline. Every long class uses its live producer
+ *  budget plus transport/teardown slack. For terminal fill/scroll deadlines,
+ *  4s cleanup + 10s heartbeat drain leaves 1s scheduling/network margin inside
+ *  that 15s. Short operations stay fail-fast instead of inheriting a blanket
+ *  long timer. */
 export function dispatchTimeoutMs(intentName: HarnessIntentName): number {
   if (COMPOSITE_LONG_INTENTS.has(intentName)) {
     return (
@@ -86,7 +85,7 @@ export function dispatchTimeoutMs(intentName: HarnessIntentName): number {
         : HARNESS_BEHAVIORAL_PAUSE_CAP_MS;
     return Math.max(DISPATCH_TIMEOUT_BASE_MS, capMs + DISPATCH_TIMEOUT_SLACK_MS);
   }
-  if (UNFENCED_COMPOSITE_INTENTS.has(intentName)) {
+  if (FENCED_COMPOSITE_INTENTS.has(intentName)) {
     return HARNESS_BEHAVIORAL_PAUSE_CAP_MS + DISPATCH_TIMEOUT_SLACK_MS;
   }
   if (NAVIGATION_INTENTS.has(intentName)) {

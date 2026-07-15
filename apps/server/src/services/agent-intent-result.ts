@@ -138,6 +138,10 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   intent_webdriver_failed: 'the browser failed to perform this action',
   intent_script_failed: 'the browser script for this action was invalid',
   intent_dispatch_error: 'the action could not be dispatched',
+  intent_deadline_exceeded:
+    'the action exceeded its whole-intent deadline and the browser session was terminated — start a new session; do not retry against this session',
+  intent_deadline_cleanup_unconfirmed:
+    'the action exceeded its whole-intent deadline but browser cleanup could not be confirmed — this session is permanently fenced; start a new session and do not retry against this session',
   // A3 W227 — the harness caps inline result output at 8 MiB; an over-cap
   // result is a terminal client error (narrow the selector / paginate).
   result_too_large: 'the result was too large to return — narrow the selector or paginate',
@@ -190,6 +194,9 @@ function diagnose(intent: AgentIntent, code: HarnessErrorCode | undefined): Fail
     case 'session_paused':
     case 'session_intent_in_flight':
       return { category: 'session_error', retryable: true };
+    case 'intent_deadline_exceeded':
+    case 'intent_deadline_cleanup_unconfirmed':
+      return { category: 'session_error', retryable: false };
     case 'intent_missing_parameter':
     case 'intent_invalid_parameter':
     case 'intent_not_implemented':

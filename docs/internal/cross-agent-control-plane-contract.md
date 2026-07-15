@@ -492,14 +492,21 @@ internal dispatch vocabulary: `navigate`, `back`, `forward`, `click`, `send_keys
 `fill_form`/`search`/`login` were reserved or unimplemented are historical and
 must not be used to build a sender.
 
-The live result failure vocabulary is exactly 10 codes:
+The live result failure vocabulary is exactly 12 codes:
 `intent_session_not_established`, `intent_not_implemented`,
 `intent_missing_parameter`, `intent_invalid_parameter`,
 `intent_webdriver_failed`, `intent_script_failed`, `intent_dispatch_error`,
+`intent_deadline_exceeded`, `intent_deadline_cleanup_unconfirmed`,
 `result_too_large`, `session_paused`, and `session_intent_in_flight`.
 `intent_script_failed` is a non-retryable invalid script request;
 `session_paused` is retryable after resume; `session_intent_in_flight` is a
 retryable session-state condition after the active operation settles.
+`intent_deadline_exceeded` is emitted only after the producer's fill/scroll
+whole-intent wall fence wins, destroys that exact browser session, and confirms
+browser exit; it is non-retryable for that session and requires a new session.
+`intent_deadline_cleanup_unconfirmed` is emitted when that same producer fence
+wins but bounded SIGKILL exit confirmation fails. It is likewise non-retryable
+and requires a new session; the old exact id remains fail-closed on that node.
 
 Every logical parameter object and every successful decoded result now has an
 intent-specific strict schema. A success envelope must carry only `outputData`;
@@ -522,10 +529,14 @@ and cross-intent result shapes settle deterministically as
   `intent_dispatch_no_session: <intentName>`; per-intent timeout follows the live producer budget plus
   15 seconds of transport slack where that budget is proved: 615s for search/login (300s typing plus a separate
   300s result wait), 315s for click/send_keys/behavioral_pause/wait_for, 70s for navigate/back/forward and 30s
-  for remaining short observation/key/script intents. fill_form and scroll retain a provisional 315s bounded
-  lost-reply detector, not a claimed producer maximum: per-field typing and slow successful flick calls lack a
-  whole-intent wall clock. Runtime activation requires a harness-wide per-intent fence and cancellation contract
-  for those two. A blanket long timeout is deliberately avoided so genuine connection loss remains fast for
+  for remaining short observation/key/script intents. fill_form and scroll now use an exact 315s correlation
+  deadline: a producer-enforced 300s monotonic whole-intent fence plus 15s for bounded exact-browser
+  SIGTERM→SIGKILL→exit confirmation and delivery. Producer cleanup is bounded to 3s SIGTERM + 1s SIGKILL
+  confirmation; the fixed default heartbeat result drain adds at most 10s, leaving 1s for actor scheduling/network.
+  Confirmed destruction yields `intent_deadline_exceeded`; unconfirmed bounded
+  cleanup yields `intent_deadline_cleanup_unconfirmed`. Both require a new session. Transport,
+  capacity and lost-reply failures remain retryable `intent_dispatch_error`. A blanket long timeout is deliberately
+  avoided so genuine connection loss remains fast for
   short operations. No result on connection-drop settles as `intent_dispatch_error` at the applicable deadline.
 
 ### DONE on the API side (all unwired → zero prod change until the bootstrap swap)

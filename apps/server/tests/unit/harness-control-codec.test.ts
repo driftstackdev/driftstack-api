@@ -140,6 +140,46 @@ describe('parseIntentResult', () => {
     expect(r.errorMessage).toBe('url is required');
   });
 
+  it('strictly decodes the producer deadline code without output payload', () => {
+    const r = parseIntentResult(
+      {
+        type: 'intentResult',
+        sessionId: 'ses_x',
+        intentId: 'int_deadline',
+        success: false,
+        durationMs: 300_000,
+        errorCode: 'intent_deadline_exceeded',
+        errorMessage: 'session terminated after whole-intent wall deadline',
+      },
+      'scroll',
+    );
+    expect(r).toMatchObject({
+      success: false,
+      errorCode: 'intent_deadline_exceeded',
+    });
+    expect(r.outputData).toBeUndefined();
+  });
+
+  it('strictly decodes an unconfirmed deadline cleanup as a distinct correlated failure', () => {
+    const r = parseIntentResult(
+      {
+        type: 'intentResult',
+        sessionId: 'ses_x',
+        intentId: 'int_deadline_unconfirmed',
+        success: false,
+        durationMs: 300_000,
+        errorCode: 'intent_deadline_cleanup_unconfirmed',
+        errorMessage: 'browser exit unconfirmed; session fenced',
+      },
+      'fill_form',
+    );
+    expect(r).toMatchObject({
+      success: false,
+      errorCode: 'intent_deadline_cleanup_unconfirmed',
+    });
+    expect(r.outputData).toBeUndefined();
+  });
+
   it('throws on a frame that is not a valid IntentResultEnvelope (unknown errorCode)', () => {
     expect(() =>
       parseIntentResult(

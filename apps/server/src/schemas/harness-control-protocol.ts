@@ -904,6 +904,14 @@ export const HARNESS_ERROR_CODES = [
   'intent_webdriver_failed',
   'intent_script_failed',
   'intent_dispatch_error',
+  // Producer-only whole-intent wall fence. Unlike capacity/transport dispatch
+  // failures, this destroys the exact browser session and must never be retried
+  // against that session.
+  'intent_deadline_exceeded',
+  // The same producer wall fence won, but bounded SIGKILL exit confirmation
+  // failed. The exact session stays fail-closed/tombstoned and callers must
+  // start a new session; this must not degrade to retryable dispatch_error.
+  'intent_deadline_cleanup_unconfirmed',
   // A3 W227 (harness f711840f) — inline outputData is capped at 8 MiB harness-side;
   // an over-cap result FAILS with this code (no outputData) rather than returning a
   // corrupt/truncated DOM/base64. Must be in the decode enum or the carrying

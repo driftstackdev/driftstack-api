@@ -16,7 +16,7 @@
 //   • Per-intent param shapes (navigate/click/send_keys/scroll/
 //     behavioral_pause/wait_for/execute_script + no-param intents).
 //   • intentName→schema map roster.
-//   • IntentDispatch + exclusive IntentResult envelopes + 10 live error codes.
+//   • IntentDispatch + exclusive IntentResult envelopes + 12 live error codes.
 //
 // Plus a behavioral block that exercises the schemas (accept/reject)
 // so the contract is enforced, not just pinned by regex.
@@ -899,7 +899,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(true);
   });
 
-  it('10 live error codes are pinned in canonical order', () => {
+  it('12 live error codes are pinned in canonical order', () => {
     // Exact .toEqual (not a source regex): order-sensitive + tolerant of the
     // inline rationale comments now interleaved in the source array.
     expect([...HARNESS_ERROR_CODES]).toEqual([
@@ -910,6 +910,8 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'intent_webdriver_failed',
       'intent_script_failed',
       'intent_dispatch_error',
+      'intent_deadline_exceeded',
+      'intent_deadline_cleanup_unconfirmed',
       'result_too_large',
       'session_paused',
       'session_intent_in_flight',
@@ -920,7 +922,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
 describe('harness-control-protocol behavioral contract', () => {
   it('intent vocab, strict schema maps, and error codes match canonical counts', () => {
     expect(HARNESS_INTENT_NAMES).toHaveLength(18);
-    expect(HARNESS_ERROR_CODES).toHaveLength(10);
+    expect(HARNESS_ERROR_CODES).toHaveLength(12);
     expect(Object.keys(HARNESS_INTENT_PARAM_SCHEMAS).sort()).toEqual(
       [...HARNESS_INTENT_NAMES].sort(),
     );
