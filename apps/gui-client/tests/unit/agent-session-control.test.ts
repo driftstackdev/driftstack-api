@@ -5,9 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/lib/settings', () => ({
   loadSettings: vi.fn().mockResolvedValue({ apiKey: 'ds_test', baseUrl: 'https://api.test' }),
+  loadBaseUrl: vi.fn().mockResolvedValue('https://api.test'),
 }));
 
-import { loadSettings } from '../../src/lib/settings';
+import { loadBaseUrl, loadSettings } from '../../src/lib/settings';
 import {
   getAgentSession,
   setSessionMode,
@@ -40,6 +41,9 @@ afterEach(() => {
     apiKey: 'ds_test',
     baseUrl: 'https://api.test',
   });
+  (loadSettings as ReturnType<typeof vi.fn>).mockClear();
+  (loadBaseUrl as ReturnType<typeof vi.fn>).mockResolvedValue('https://api.test');
+  (loadBaseUrl as ReturnType<typeof vi.fn>).mockClear();
 });
 
 describe('agent-session-control transport', () => {
@@ -308,6 +312,8 @@ describe('agent-session-control transport', () => {
     expect(headers['x-driftstack-gui-control-key']).toBe('gck_abc123');
     // The control key REPLACES the bearer — never both.
     expect(headers.Authorization).toBeUndefined();
+    expect(loadSettings).not.toHaveBeenCalled();
+    expect(loadBaseUrl).toHaveBeenCalledOnce();
   });
 
   it('endAgentSession + sendAgentMessage send the control-key header (NOT Authorization) when a control key is supplied', async () => {
@@ -334,11 +340,7 @@ describe('agent-session-control transport', () => {
     expect(msgHeaders.Authorization).toBeUndefined();
   });
 
-  it('the control key authorizes EVEN WHEN no apiKey is configured (the separate-app case)', async () => {
-    (loadSettings as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      apiKey: null,
-      baseUrl: 'https://api.test',
-    });
+  it('the control key authorizes without reading the account credential (the separate-app case)', async () => {
     mockFetch.mockResolvedValue(
       ok({ mode: 'pair', pair_mode_state: { kind: 'ai-driving' }, status: 'active' }),
     );
@@ -354,6 +356,8 @@ describe('agent-session-control transport', () => {
     expect((init.headers as Record<string, string>)['x-driftstack-gui-control-key']).toBe(
       'gck_xyz',
     );
+    expect(loadSettings).not.toHaveBeenCalled();
+    expect(loadBaseUrl).toHaveBeenCalledOnce();
   });
 
   it('falls back to the bearer when controlKey is null (in-app window)', async () => {
@@ -363,6 +367,8 @@ describe('agent-session-control transport', () => {
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBe('Bearer ds_test');
     expect(headers['x-driftstack-gui-control-key']).toBeUndefined();
+    expect(loadSettings).toHaveBeenCalledOnce();
+    expect(loadBaseUrl).not.toHaveBeenCalled();
   });
 
   it('mintGuiControlKey GETs /:id/gui-control-key with the bearer + returns the plaintext', async () => {
@@ -428,6 +434,8 @@ describe('agent-session-control transport', () => {
     await getAgentSessionCookies('agt_1', { controlKey: 'gck_x', baseUrl: 'https://real.host' });
     const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://real.host/v1/agent-sessions/agt_1/cookies');
+    expect(loadSettings).not.toHaveBeenCalled();
+    expect(loadBaseUrl).not.toHaveBeenCalled();
   });
 
   it('getAgentSessionCookies sends the control-key header (separate Simulator app)', async () => {

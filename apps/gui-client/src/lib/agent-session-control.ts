@@ -2,8 +2,9 @@
 //
 // The SimulatorWindow is mounted under RecordingsProvider only — it has NO SDK
 // client and NO SettingsProvider — so it can't use the SDK. This is a thin
-// raw-fetch client modeled on lib/gui-input.ts, reading {apiKey, baseUrl} from
-// the same Tauri store + Keychain via loadSettings(). It drives the
+// raw-fetch client modeled on lib/gui-input.ts. Bearer fallback reads
+// {apiKey, baseUrl} via loadSettings(); per-session control auth reads only the
+// non-secret base URL and never opens the account-key credential. It drives the
 // agent-session control endpoints (mode / takeover / handback / message), which
 // all require the `write` scope (account_owner satisfies it).
 //
@@ -22,7 +23,7 @@
 import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
-import { loadSettings } from './settings';
+import { loadBaseUrl, loadSettings } from './settings';
 
 export type SessionMode = 'ai' | 'manual' | 'pair';
 
@@ -47,7 +48,7 @@ export interface AgentSessionErrorEvent {
  *  The SEPARATE Simulator app's settings store may be empty (→ loadSettings
  *  defaults to localhost:3000), so carrying the host HERE makes every control
  *  call target the right server with NO store-timing race. Omitted (in-app
- *  window) → fall back to settings.baseUrl. */
+ *  window) → fall back to the non-secret stored baseUrl. */
 export type ControlAuth = { controlKey: string; baseUrl?: string } | null;
 
 /** The slice of agent-session state the simulator control panel reads. */
@@ -176,26 +177,36 @@ async function authedResponse(
   auth: ControlAuth,
   timeoutMs?: number,
 ): Promise<Response> {
-  const settings = await loadSettings();
   // Auth header selection: a per-session control key (separate app) is
   // preferred when present; otherwise the account API key (in-app
   // window). The control key needs NO keychain read, which is the
   // whole point — the separate app has no API key.
   let authHeaders: Record<string, string>;
+  let rawBase: string;
   if (auth !== null && auth.controlKey.length > 0) {
     authHeaders = { 'x-driftstack-gui-control-key': auth.controlKey };
-  } else if (settings.apiKey !== null && settings.apiKey.length > 0) {
-    authHeaders = { Authorization: `Bearer ${settings.apiKey}` };
+    // The launch payload normally supplies the origin. Restored payloads may
+    // omit it, in which case read only settings.json — never the account API
+    // key's OS credential entry.
+    rawBase =
+      typeof auth.baseUrl === 'string' && auth.baseUrl.length > 0
+        ? auth.baseUrl
+        : await loadBaseUrl();
   } else {
-    throw new AgentSessionControlError('API key not configured', 0, 'auth_missing');
+    // Bearer fallback is the only path that needs the account credential.
+    const settings = await loadSettings();
+    if (settings.apiKey === null || settings.apiKey.length === 0) {
+      throw new AgentSessionControlError('API key not configured', 0, 'auth_missing');
+    }
+    authHeaders = { Authorization: `Bearer ${settings.apiKey}` };
+    rawBase =
+      auth !== null && typeof auth.baseUrl === 'string' && auth.baseUrl.length > 0
+        ? auth.baseUrl
+        : settings.baseUrl;
   }
   // Prefer the base URL handed off WITH the control credential (separate app —
   // its own store may be empty/localhost); fall back to the configured store
   // baseUrl (in-app window). Race-free: no dependency on a just-persisted store.
-  const rawBase =
-    auth !== null && typeof auth.baseUrl === 'string' && auth.baseUrl.length > 0
-      ? auth.baseUrl
-      : settings.baseUrl;
   const baseUrl = rawBase.replace(/\/+$/, '');
   const res = await fetchWithDeadline(
     `${baseUrl}${path}`,

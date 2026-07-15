@@ -35,6 +35,17 @@ describe('GUI settings protected API-key storage invariant', () => {
     expect(body).toMatch(/return 'api_key:' \+ hostIdFor\(baseUrl\);/);
   });
 
+  it('exposes a non-secret-only base URL reader for control-key transports', () => {
+    expect(body).toMatch(/export async function loadBaseUrl\(\): Promise<string>/);
+    const loader = body.slice(
+      body.indexOf('export async function loadBaseUrl'),
+      body.indexOf('async function keychainLoad'),
+    );
+    expect(loader).toContain('getStore().get<PersistedSettings>(SETTINGS_KEY)');
+    expect(loader).not.toContain('keychainLoad');
+    expect(loader).not.toContain('invoke');
+  });
+
   it('keychain save failures are memory-only and never fall back to disk', () => {
     expect(body).toMatch(
       /async function keychainSave\(name: string, value: string\): Promise<boolean>/,

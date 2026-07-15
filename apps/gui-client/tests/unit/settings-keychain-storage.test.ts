@@ -37,7 +37,7 @@ vi.mock('@tauri-apps/plugin-store', () => ({
   },
 }));
 
-const { DEFAULT_SETTINGS, loadSettings, rememberedKeyFor, saveSettings } =
+const { DEFAULT_SETTINGS, loadBaseUrl, loadSettings, rememberedKeyFor, saveSettings } =
   await import('../../src/lib/settings');
 
 describe('settings API-key protected storage', () => {
@@ -79,6 +79,17 @@ describe('settings API-key protected storage', () => {
     expect(invoke).not.toHaveBeenCalled();
     expect(keychain.get('api_key:api.driftstack.dev')).toBe('ds_live_existing');
     expect(disk.get('driftstack')).toMatchObject({ telemetryOptIn: true });
+  });
+
+  it('loads only the non-secret base URL without invoking the credential store', async () => {
+    disk.set('driftstack', {
+      baseUrl: 'https://simulator-control.example.com',
+      apiKey: 'legacy-value-that-must-not-be-read-or-migrated',
+    });
+
+    await expect(loadBaseUrl()).resolves.toBe('https://simulator-control.example.com');
+    expect(invoke).not.toHaveBeenCalled();
+    expect(keychain.size).toBe(0);
   });
 
   it('migrates and purges legacy flat + multi-host plaintext keys on first load', async () => {

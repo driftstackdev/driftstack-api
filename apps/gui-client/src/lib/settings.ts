@@ -125,6 +125,21 @@ function getStore(): LazyStore {
   return store;
 }
 
+/**
+ * Read only the non-secret deployment origin. Simulator control requests that
+ * already carry a per-session control key must never open the account API-key
+ * credential entry merely to discover where to send the request.
+ *
+ * This deliberately does not run plaintext-key migration: that work belongs
+ * to loadSettings(), whose callers actually need the account credential.
+ */
+export async function loadBaseUrl(): Promise<string> {
+  const persisted = await getStore().get<PersistedSettings>(SETTINGS_KEY);
+  return persisted && typeof persisted.baseUrl === 'string' && persisted.baseUrl.length > 0
+    ? persisted.baseUrl
+    : DEFAULT_SETTINGS.baseUrl;
+}
+
 async function keychainLoad(name: string): Promise<string | null> {
   try {
     const value = await invoke<string | null>('secret_load', { key: name });
