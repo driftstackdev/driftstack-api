@@ -75,18 +75,29 @@ describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => 
     expect(body).toMatch(
       /const refresh = useCallback\(async \(\) => \{\s*\n?\s*setLoadError\(null\);\s*\n?\s*try \{\s*\n?\s*const all = await listFleetMembers\(\);\s*\n?\s*setMembers\(all\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*setLoadError\(\s*\n?\s*humanizeError\(\s*\n?\s*err,\s*\n?\s*"Couldn't read the saved fleet\. Check the app's file permissions and try again\.",\s*\n?\s*\),\s*\n?\s*\);\s*\n?\s*\} finally \{\s*\n?\s*setLoading\(false\);\s*\n?\s*\}\s*\n?\s*\}, \[\]\);/,
     );
-    expect(body).toMatch(
-      /const ping = useCallback\(async \(member: FleetMember\) => \{\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: 'pending' \}\)\);[\s\S]*?const result = await pingFleetMember\(member\);\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: result \}\)\);[\s\S]*?\}, \[\]\);/,
-    );
+    expect(body).toContain('const ping = useCallback((member: FleetMember): Promise<void> => {');
+    expect(body).toContain("setPings((prev) => ({ ...prev, [member.id]: 'pending' }));");
+    expect(body).toContain('const result = await pingFleetMember(member);');
+    expect(body).toContain('setPings((prev) => ({ ...prev, [member.id]: result }));');
   });
 
   it('Ping-all uses Promise.all (parallel pings, not sequential — fleet of 10 minis pings concurrently); sort = useMemo with label localeCompare ascending — pinned so the list stays alphabetically sortable and parallel-pinged', () => {
+    expect(body).toContain(
+      'const pingPromisesRef = useRef<Map<string, Promise<void>>>(new Map());',
+    );
+    expect(body).toContain('const existing = pingPromisesRef.current.get(member.id);');
+    expect(body).toContain('if (existing !== undefined) return existing;');
+    expect(body).toContain('pingPromisesRef.current.set(member.id, task);');
+    expect(body).toContain('if (pingingAllRef.current) return;');
     expect(body).toMatch(
       /const pingAll = useCallback\(async \(\) => \{[\s\S]*?await Promise\.all\(members\.map\(\(m\) => ping\(m\)\)\);[\s\S]*?\}, \[members, ping\]\);/,
     );
     expect(body).toMatch(
       /const sorted = useMemo\(\s*\n?\s*\(\) => \[\.\.\.members\]\.sort\(\(a, b\) => a\.label\.localeCompare\(b\.label\)\),\s*\n?\s*\[members\],\s*\n?\s*\);/,
     );
+    expect(body).toContain("disabled={p === 'pending'}");
+    expect(body).toContain("aria-busy={p === 'pending'}");
+    expect(body).toContain("{p === 'pending' ? 'Pinging…' : 'Ping'}");
   });
 
   it("Form lifecycle: startCreate / startEdit both setTimeout 0 focus to first input via formRef.current?.querySelector('input')?.focus(); submitForm: validateDraft + setForm errors if !ok + addFleetMember or updateFleetMember + reset via setForm({...EMPTY_DRAFT_FORM}) + refresh()", () => {

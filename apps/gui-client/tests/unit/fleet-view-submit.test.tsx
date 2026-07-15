@@ -65,6 +65,44 @@ describe('FleetView form submission', () => {
     expect(fleet.listFleetMembers).toHaveBeenCalledTimes(2);
   });
 
+  it('single-flights row and batch pings until the shared request settles', async () => {
+    const member: fleet.FleetMember = {
+      id: 'fleet_1',
+      label: 'mac-mini-test',
+      baseUrl: 'https://fleet.example.test',
+      notes: null,
+      createdAt: '2026-07-12T19:00:00.000Z',
+    };
+    vi.mocked(fleet.listFleetMembers).mockResolvedValue([member]);
+    let finishPing: ((result: fleet.FleetMemberPing) => void) | undefined;
+    vi.mocked(fleet.pingFleetMember).mockReturnValue(
+      new Promise<fleet.FleetMemberPing>((resolve) => {
+        finishPing = resolve;
+      }),
+    );
+    render(<FleetView />);
+
+    const rowPing = await screen.findByRole('button', { name: 'Ping' });
+    fireEvent.click(rowPing);
+    fireEvent.click(rowPing);
+
+    const pendingRow = await screen.findByRole('button', { name: 'Pinging…' });
+    expect(pendingRow).toBeDisabled();
+    expect(pendingRow).toHaveAttribute('aria-busy', 'true');
+    expect(fleet.pingFleetMember).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ping all' }));
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Pinging…' })).toHaveLength(2),
+    );
+    expect(fleet.pingFleetMember).toHaveBeenCalledTimes(1);
+
+    finishPing?.({ ok: true, durationMs: 12, version: 'abc123' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ping' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: 'Ping all' })).toBeEnabled();
+    expect(screen.getByText('ok · 12ms')).toBeInTheDocument();
+  });
+
   it('does not render local store paths when the fleet registry cannot be read', async () => {
     vi.mocked(fleet.listFleetMembers).mockRejectedValueOnce(
       new Error('permission denied: /Users/founder/Library/Application Support/settings.json'),

@@ -57,6 +57,7 @@ export function FleetView(): JSX.Element {
     visible: false,
   });
   const formRef = useRef<HTMLFormElement | null>(null);
+  const pingPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
   const savingRef = useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -81,38 +82,55 @@ export function FleetView(): JSX.Element {
     void refresh();
   }, [refresh]);
 
-  const ping = useCallback(async (member: FleetMember) => {
-    setPings((prev) => ({ ...prev, [member.id]: 'pending' }));
-    try {
-      const result = await pingFleetMember(member);
-      setPings((prev) => ({ ...prev, [member.id]: result }));
-    } catch (err) {
-      // A THROWN ping (vs a resolved {ok:false}) would strand the row on "pending"
-      // forever and reject pingAll's Promise.all (audit 2026-07-08). Synthesize an
-      // unreachable result so the row resolves and "Ping all" can't fail the batch.
-      setPings((prev) => ({
-        ...prev,
-        [member.id]: {
-          ok: false,
-          durationMs: 0,
-          error: humanizeError(
-            err,
-            "Couldn't reach this fleet member. Check its URL and try again.",
-          ),
-        },
-      }));
-    }
+  const ping = useCallback((member: FleetMember): Promise<void> => {
+    const existing = pingPromisesRef.current.get(member.id);
+    if (existing !== undefined) return existing;
+
+    const task = (async () => {
+      setPings((prev) => ({ ...prev, [member.id]: 'pending' }));
+      try {
+        const result = await pingFleetMember(member);
+        setPings((prev) => ({ ...prev, [member.id]: result }));
+      } catch (err) {
+        // A THROWN ping (vs a resolved {ok:false}) would strand the row on "pending"
+        // forever and reject pingAll's Promise.all (audit 2026-07-08). Synthesize an
+        // unreachable result so the row resolves and "Ping all" can't fail the batch.
+        setPings((prev) => ({
+          ...prev,
+          [member.id]: {
+            ok: false,
+            durationMs: 0,
+            error: humanizeError(
+              err,
+              "Couldn't reach this fleet member. Check its URL and try again.",
+            ),
+          },
+        }));
+      }
+    })();
+    pingPromisesRef.current.set(member.id, task);
+    const release = (): void => {
+      if (pingPromisesRef.current.get(member.id) === task) {
+        pingPromisesRef.current.delete(member.id);
+      }
+    };
+    void task.then(release, release);
+    return task;
   }, []);
 
   // "Ping all" fans out to every member. Track batch-in-flight so the button
   // reflects progress (it was a dead-looking click on a slow/large fleet — the
   // per-row 'pending' pills were the only signal, easy to miss up top).
   const [pingingAll, setPingingAll] = useState(false);
+  const pingingAllRef = useRef(false);
   const pingAll = useCallback(async () => {
+    if (pingingAllRef.current) return;
+    pingingAllRef.current = true;
     setPingingAll(true);
     try {
       await Promise.all(members.map((m) => ping(m)));
     } finally {
+      pingingAllRef.current = false;
       setPingingAll(false);
     }
   }, [members, ping]);
@@ -456,8 +474,10 @@ export function FleetView(): JSX.Element {
                     type="button"
                     className="rounded-md px-2 py-1 text-2xs text-ink-secondary transition-colors hover:bg-surface-inset hover:text-ink-primary"
                     onClick={() => void ping(m)}
+                    disabled={p === 'pending'}
+                    aria-busy={p === 'pending'}
                   >
-                    Ping
+                    {p === 'pending' ? 'Pinging…' : 'Ping'}
                   </button>
                   <button
                     type="button"
