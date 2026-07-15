@@ -104,7 +104,7 @@ beforeAll(async () => {
   `);
   client = postgres(DB_URL, {
     max: 5,
-    connection: { search_path: TEST_SCHEMA },
+    connection: { options: `-c search_path=${TEST_SCHEMA}` },
   });
   const [current] = await client<Array<{ value: string }>>`SELECT current_schema() AS value`;
   expect(current?.value).toBe(TEST_SCHEMA);
@@ -305,11 +305,11 @@ describe.skipIf(!RUN_DB_TESTS)('account proxy hardening (Drizzle path, real Post
     );
     const blocker = postgres(DB_URL, {
       max: 1,
-      connection: { search_path: TEST_SCHEMA },
+      connection: { options: `-c search_path=${TEST_SCHEMA}` },
     });
     const migratorClient = postgres(DB_URL, {
       max: 1,
-      connection: { search_path: TEST_SCHEMA },
+      connection: { options: `-c search_path=${TEST_SCHEMA}` },
     });
     const [backend] = await migratorClient<Array<{ pid: number }>>`
       SELECT pg_backend_pid()::int AS pid
