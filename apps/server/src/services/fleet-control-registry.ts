@@ -84,6 +84,10 @@ import {
   FleetInboundFrameBudget,
   readLargeDownloadResultHeader,
 } from './fleet-inbound-frame-gate.js';
+import {
+  SessionReadinessCorrelator,
+  type SessionReadinessOutcome,
+} from './session-readiness-correlator.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
  *  node's socket (the route adapts the real `ws.send`). */
@@ -99,6 +103,9 @@ export type FleetInboundAdmission =
  */
 export class FleetControlConnection {
   readonly correlator: IntentDispatchCorrelator;
+  /** Strict SessionAssign readiness owner. A waiter is registered before a
+   * future caller sends and can be settled only by this authenticated socket. */
+  readonly sessionReadinessCorrelator: SessionReadinessCorrelator;
   /** Founder #48 — correlates GET /:id/cookies pulls (cookiesRequest → cookiesResult)
    *  over this node's socket, keyed by requestId. Owned here like `correlator`. */
   readonly cookiesCorrelator: CookiesRequestCorrelator;
@@ -202,6 +209,7 @@ export class FleetControlConnection {
     this.logger = log;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
+    this.sessionReadinessCorrelator = new SessionReadinessCorrelator();
     const cookiesTransport: CookiesTransport = { send: (r) => send(JSON.stringify(r)) };
     this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport, log);
     const setCookiesTransport: SetCookiesTransport = { send: (r) => send(JSON.stringify(r)) };
@@ -375,6 +383,12 @@ export class FleetControlConnection {
     this.send(JSON.stringify(assign));
   }
 
+  /** Reserve readiness before a future strict provisioner sends SessionAssign.
+   * This method does not send or activate any current route. */
+  waitForSessionActive(sessionId: string, timeoutMs?: number): Promise<SessionReadinessOutcome> {
+    return this.sessionReadinessCorrelator.waitForActive(sessionId, timeoutMs);
+  }
+
   /**
    * Push a serialized `sessionEnd` frame to this node (fire-and-forget) so the
    * harness tears down the session + frees its concurrency slot on close. Same
@@ -486,6 +500,10 @@ export class FleetControlConnection {
           this.correlator.onResultFrame(frame);
           break;
         case 'sessionStatus':
+          // Feed EVERY valid status to the connection-local readiness owner.
+          // Unknown/intermediate statuses are cheap no-ops; active/terminal can
+          // settle only a waiter registered on this exact authenticated socket.
+          this.sessionReadinessCorrelator.onSessionStatus(frame);
           // Fast-fail the in-flight dispatch when the harness reports the session
           // isn't established (A3 W106). onSessionError itself filters on the
           // intent_dispatch_no_session detail prefix.
@@ -643,6 +661,7 @@ export class FleetControlConnection {
     // down on socket close/error), it must never process another inbound frame —
     // see handleInbound's stale-guard + the field's doc comment above.
     this.stale = true;
+    this.sessionReadinessCorrelator.failAll();
     this.correlator.failAll(reason);
     this.cookiesCorrelator.failAll(reason);
     this.setCookiesCorrelator.failAll(reason);

@@ -685,3 +685,34 @@ discriminator:
   record session→profile + reject mismatch). The crypto-free R2/presign half is already
   built + tested (`buildAssignProfileBlock`); (e) is unblocked the moment (c) is ack'd +
   the linkage is chosen.
+
+## SessionAssign readiness ownership (2026-07-15, A3 V-689 — inert until provisioner wiring)
+
+`socket.send(sessionAssign)` proves only that a frame was handed to one WebSocket; it
+does not prove that the harness created the browser. Each authenticated
+`FleetControlConnection` therefore owns one bounded `SessionReadinessCorrelator`.
+A future strict provisioner must reserve the session id synchronously on the exact
+connection **before** sending `sessionAssign`, then await one non-rejecting outcome:
+
+- `active` — that connection received the exact session's active status;
+- `terminal` — it received `ended` or `errored`, retaining only the bounded status
+  and optional bounded reason token (never free-text detail);
+- `timeout` — the control-plane readiness policy elapsed;
+- `connection_closed` — that physical connection closed or was superseded;
+- `duplicate` or `capacity` — the reservation was refused before any send.
+
+Unknown/intermediate statuses do not settle readiness. A connection admits at most
+256 pending ids; duplicates never replace their first owner. Close clears every
+timer and resolves every pending owner. Same-node reconnect is a hard authority
+boundary: replacement settles the predecessor's owners as `connection_closed`, and
+neither a late predecessor frame nor a successor frame can acknowledge work owned
+by the other connection. Terminal status still independently drives the existing
+intent fast-fail and terminal-session consumer exactly once.
+
+The default 105-second deadline is an overrideable control-plane policy, **not** a
+claim about the harness producer's maximum. The current harness launch watchdog
+defaults to 90 seconds but is operator-tunable. Runtime activation remains blocked
+until the watchdog is fixed/clamped fleet-wide or its effective deadline is carried
+through an authenticated capability and the control-plane policy is derived from
+that value. This slice adds the owner and proofs only; no route, driver, provisioner
+or bootstrap path calls it.

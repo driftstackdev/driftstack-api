@@ -28747,3 +28747,42 @@ registry matrix passes 9 files and 192/192 tests. Strict server source and test
 TypeScript, targeted ESLint/Prettier and diff/whitespace checks are green. No
 FleetDriver, public route/type/SDK, persistence schema, native binary, customer
 session, deploy or foreign pnpm state is changed.
+
+---
+
+## V-689 — Session readiness belongs to one authenticated Fleet connection
+
+**Date:** 2026-07-15
+
+The control plane could send a `sessionAssign` frame but had no strict owner for
+the later browser-readiness acknowledgement. Treating a successful WebSocket send
+as readiness would race the harness's synchronous or delayed status response, and
+correlating only by node id would let a same-node reconnect acknowledge work sent
+on the physical connection it replaced.
+
+Each `FleetControlConnection` now owns one bounded readiness correlator. A future
+strict provisioner can reserve the session id synchronously before send and await
+one non-rejecting outcome: active, bounded terminal status/reason, policy timeout,
+connection close, duplicate refusal or capacity refusal. Duplicate reservation
+never replaces the first owner; each connection admits at most 256 ids. Unknown
+and intermediate states remain pending, terminal detail is never retained, every
+timer is unreferenced, and close resolves and removes all waiters and timers.
+
+Every valid status frame reaches readiness through the authenticated connection
+that parsed it. Replacing a socket first fails the predecessor's waiters, and a
+lagging predecessor frame cannot settle a successor owner even when node and
+session ids match. An errored status still independently drives the readiness
+outcome, existing intent fast-fail and existing terminal consumer exactly once.
+No provisioner, route, driver, factory or bootstrap calls the new owner in this
+slice, so production behavior and DRIVER=mock are unchanged.
+
+The default 105-second deadline is a caller-overridable control-plane policy, not
+a producer maximum. The harness launch watchdog currently defaults to 90 seconds
+but is operator-tunable; Fleet-backed activation remains blocked until that value
+is fixed/clamped across the fleet or reported through an authenticated capability
+and used by the policy.
+
+The direct correlator/connection proof passes 2 files and 52/52 tests. The expanded
+Fleet registry, routing, dispatch, request-correlator, profile and bootstrap matrix
+passes 19 files and 335/335 tests. Strict server source and test TypeScript,
+targeted ESLint/Prettier and diff/whitespace checks are green.

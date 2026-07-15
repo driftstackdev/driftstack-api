@@ -88,6 +88,35 @@ describe('FleetControlConnection', () => {
     expect(typeof frame.inlineProxyConfig).toBe('string');
   });
 
+  it('reserves readiness before sessionAssign send and accepts an immediate active reply on this socket', async () => {
+    let acknowledge = () => {};
+    const conn = new FleetControlConnection('node-1', () => acknowledge());
+    acknowledge = () => {
+      // Model a transport/test double that produces the acknowledgement before
+      // sendSessionAssign returns. The waiter must already be installed.
+      expect(conn.sessionReadinessCorrelator.inFlight()).toBe(1);
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'sessionStatus',
+          sessionId: 'ses_assign',
+          status: 'active',
+          timestamp: 't',
+        }),
+      );
+    };
+    const readiness = conn.waitForSessionActive('ses_assign', 5_000);
+    conn.sendSessionAssign(
+      serializeSessionAssign({
+        sessionId: 'ses_assign',
+        archetype: 'iphone16pro_ios18_6_safari18_6',
+        behaviorProfile: 'default',
+        initialUrl: 'https://example.com',
+      }),
+    );
+    expect(await readiness).toEqual({ status: 'active' });
+    expect(conn.sessionReadinessCorrelator.inFlight()).toBe(0);
+  });
+
   it('sends a serialized sessionEnd frame to the node socket (fire-and-forget teardown)', () => {
     const sent: string[] = [];
     const conn = new FleetControlConnection('node-1', (d) => sent.push(d));
@@ -566,7 +595,7 @@ describe('FleetControlConnection', () => {
     expect(seen).toHaveLength(0);
   });
 
-  it('an errored sessionStatus drives BOTH the in-flight fast-fail AND onSessionStatus (independent concerns)', async () => {
+  it('an errored sessionStatus drives readiness, intent fast-fail, and the terminal consumer exactly once', async () => {
     const seen: SessionStatus[] = [];
     const conn = new FleetControlConnection(
       'node-1',
@@ -578,6 +607,7 @@ describe('FleetControlConnection', () => {
       undefined,
       (f) => seen.push(f),
     );
+    const readiness = conn.waitForSessionActive('agt_a', 5_000);
     const p = conn.correlator.dispatch(dispatch('int_1', 'agt_a'));
     conn.handleInbound(
       JSON.stringify({
@@ -593,7 +623,13 @@ describe('FleetControlConnection', () => {
     const r = await p;
     expect(r.success).toBe(false);
     expect(r.errorCode).toBe('intent_session_not_established');
-    // …AND the terminal-close consumer fired (the row close is independent).
+    // …the strict readiness owner receives the bounded terminal outcome…
+    expect(await readiness).toEqual({
+      status: 'terminal',
+      terminalStatus: 'errored',
+      reason: 'browser_crashed',
+    });
+    // …AND the terminal-close consumer fired exactly once (row close remains independent).
     expect(seen).toEqual([
       {
         type: 'sessionStatus',
@@ -621,13 +657,17 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
-  it('close() fails every in-flight dispatch', async () => {
+  it('close() fails every in-flight dispatch and readiness owner without leaving timers', async () => {
     const conn = new FleetControlConnection('node-1', () => {});
+    const readiness = conn.waitForSessionActive('agt_ready', 5_000);
     const p = conn.correlator.dispatch(dispatch('int_1'));
     conn.close('socket closed');
     const r = await p;
     expect(r.success).toBe(false);
     expect(r.errorMessage).toBe('socket closed');
+    expect(await readiness).toEqual({ status: 'connection_closed' });
+    expect(conn.sessionReadinessCorrelator.inFlight()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('close() marks the connection stale — handleInbound no-ops any frame delivered afterward (reconnect-race guard)', () => {
@@ -673,6 +713,41 @@ describe('FleetControlRegistry', () => {
     const r = await p; // the prior connection's dispatch was failed by the replace
     expect(r.success).toBe(false);
     expect(r.errorMessage).toMatch(/replaced by a new connection/);
+  });
+
+  it('same-node reconnect is a hard readiness boundary in both directions', async () => {
+    const reg = new FleetControlRegistry();
+    const first = reg.register('node-1', () => {});
+    const predecessor = first.waitForSessionActive('agt_same', 5_000);
+
+    const second = reg.register('node-1', () => {});
+    expect(await predecessor).toEqual({ status: 'connection_closed' });
+    expect(first.sessionReadinessCorrelator.inFlight()).toBe(0);
+
+    const successor = second.waitForSessionActive('agt_same', 5_000);
+    // A lagging frame on the superseded physical socket cannot settle the new
+    // connection's owner, even with the same node id and session id.
+    first.handleInbound(
+      JSON.stringify({
+        type: 'sessionStatus',
+        sessionId: 'agt_same',
+        status: 'active',
+        timestamp: 'old',
+      }),
+    );
+    expect(second.sessionReadinessCorrelator.inFlight()).toBe(1);
+
+    second.handleInbound(
+      JSON.stringify({
+        type: 'sessionStatus',
+        sessionId: 'agt_same',
+        status: 'active',
+        timestamp: 'new',
+      }),
+    );
+    expect(await successor).toEqual({ status: 'active' });
+    expect(second.sessionReadinessCorrelator.inFlight()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('reconnect SUPERSEDES the prior connection — actively CLOSES its old socket (P0 2026-07-11 zombie-conn fix)', () => {
