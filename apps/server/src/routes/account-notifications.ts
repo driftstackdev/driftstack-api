@@ -114,7 +114,30 @@ export function registerAccountNotificationsRoutes(
       });
       reply.raw.write(': stream open\n\n');
 
-      const unsubscribe = bus.subscribe(accountId, (event) => {
+      let closed = false;
+      let heartbeatAuthInFlight = false;
+      let unsubscribe = (): void => {};
+
+      const cleanup = (): void => {
+        // Idempotent — invoked from either backpressure path, heartbeat auth
+        // failure, and the close/error handlers below. Release every owned
+        // resource before ending the raw response so a synchronous or delayed
+        // socket signal cannot double-decrement the per-account capacity.
+        if (closed) return;
+        closed = true;
+        clearInterval(heartbeat);
+        unsubscribe();
+        const remaining = (activeByAccount.get(accountId) ?? 1) - 1;
+        if (remaining <= 0) activeByAccount.delete(accountId);
+        else activeByAccount.set(accountId, remaining);
+        reply.raw.end();
+      };
+      const closeIfBackpressured = (): void => {
+        if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) cleanup();
+      };
+
+      unsubscribe = bus.subscribe(accountId, (event) => {
+        if (closed) return;
         // Each event is one SSE frame. `event:` carries the
         // discriminator so the EventSource client can route via
         // addEventListener('cost.threshold_alert', …) etc.
@@ -123,7 +146,7 @@ export function registerAccountNotificationsRoutes(
         // L1 — past the high-water mark a stalled client is buffering unboundedly;
         // close the stream (EventSource auto-reconnects; the bus is live so no
         // durable event is lost). A healthy client drains and never trips this.
-        if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) cleanup();
+        closeIfBackpressured();
       });
 
       // Each heartbeat also RE-VALIDATES the connection's auth: a web session
@@ -137,32 +160,33 @@ export function registerAccountNotificationsRoutes(
       // lingering until the client's TCP drops; a transient auth blip just closes
       // and the client reconnects (self-healing).
       const heartbeat = setInterval(() => {
+        // Authentication can involve an external session store. Never stack
+        // detached checks when one takes longer than the heartbeat cadence.
+        if (closed || heartbeatAuthInFlight) return;
+        heartbeatAuthInFlight = true;
         void (async () => {
-          await app.requireAuthEventSource(req, reply);
-          // Re-check authorization after authenticate refreshes request.account.
-          // If a future key-management flow narrows scopes in place, an already-
-          // open mixed-resource stream closes within one heartbeat as well.
-          await requireNotificationRead(req, reply);
-          reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
-        })().catch(() => reply.raw.destroy());
+          try {
+            await app.requireAuthEventSource(req, reply);
+            if (closed) return;
+            // Re-check authorization after authenticate refreshes request.account.
+            // If a future key-management flow narrows scopes in place, an already-
+            // open mixed-resource stream closes within one heartbeat as well.
+            await requireNotificationRead(req, reply);
+            if (closed) return;
+            reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
+            closeIfBackpressured();
+          } catch {
+            if (closed) return;
+            // Release the timer, listener and account capacity before destroying
+            // the socket. Relying on a future close event can strand all three.
+            cleanup();
+            reply.raw.destroy();
+          } finally {
+            heartbeatAuthInFlight = false;
+          }
+        })();
       }, heartbeatMs);
       heartbeat.unref();
-
-      let closed = false;
-      const cleanup = (): void => {
-        // Idempotent — invoked from the backpressure guard above AND the
-        // close/error handlers below (incl. the heartbeat re-auth failure, which
-        // destroys the socket → 'close'); double-end / double-unsubscribe /
-        // double-decrement is avoided so the paths can't race.
-        if (closed) return;
-        closed = true;
-        clearInterval(heartbeat);
-        unsubscribe();
-        const remaining = (activeByAccount.get(accountId) ?? 1) - 1;
-        if (remaining <= 0) activeByAccount.delete(accountId);
-        else activeByAccount.set(accountId, remaining);
-        reply.raw.end();
-      };
       req.raw.on('close', cleanup);
       req.raw.on('error', cleanup);
       // Acquire the concurrency slot now that the stream is fully established and

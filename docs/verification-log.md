@@ -28266,3 +28266,37 @@ suite passes 13/13 tests; the expanded route, event-bus, auth, token-redaction
 and documentation matrix passes 8 files and 198/198 tests. Strict server
 source/test TypeScript, targeted ESLint/Prettier, diff/whitespace checks,
 full-workspace typechecking and the configured production build are green.
+
+---
+
+## V-675 — Notification heartbeats serialize authorization and teardown
+
+**Date:** 2026-07-15
+
+The authenticated account-notification SSE route started a detached
+authorization promise on every heartbeat without checking whether an earlier
+one was still pending. If authorization exceeded the heartbeat cadence, checks
+stacked indefinitely. A client close during those awaits did not stop their
+later scope checks or heartbeat writes, and heartbeat frames omitted the
+four-megabyte socket-buffer ceiling already applied to notification events.
+Authorization failure also destroyed the raw socket and relied on a later
+`close` event to release its timer, bus listener and per-account stream slot.
+
+Each stream now permits one heartbeat authorization check in flight and checks
+its closed state after authentication and scope awaits. Notification and
+heartbeat frames share one backpressure helper. Backlog, authorization failure
+and socket close/error all converge on the same idempotent cleanup;
+authorization failure releases the timer, listener and account capacity before
+destroying the socket. Initial EventSource authentication, broad read scope,
+per-account event routing, CORS/cache headers, ten-stream ceiling, 25-second
+cadence, revoke-on-heartbeat behavior and healthy frame shapes are unchanged.
+
+Captured-handler verification holds one authorization promise across repeated
+timer ticks, closes the client while it is pending and proves zero post-close
+writes. It separately proves notification and heartbeat backlog tear down once,
+auth failure releases all resources before destruction, every released slot is
+reusable, and healthy event/heartbeat framing stays live. The direct route
+lifecycle/content suite passes 16/16 tests; the expanded route, real-socket
+scope/capacity, event-bus, auth and token-redaction matrix passes 7 files and
+61/61 tests. Strict server source/test TypeScript, targeted ESLint/Prettier and
+diff/whitespace checks are green.
