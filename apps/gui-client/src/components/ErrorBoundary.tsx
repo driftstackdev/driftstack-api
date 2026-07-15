@@ -11,12 +11,26 @@ interface Props {
   /** Rendered on failure; `retry` re-mounts the children (e.g. re-attempt a
    *  lazy import or a transient render). */
   fallback: (retry: () => void) => ReactNode;
+  /** A destination identity change clears a prior failure without replacing the
+   *  boundary instance (which would also remount the surrounding panel). */
+  resetKey?: unknown;
 }
 
-export class ErrorBoundary extends Component<Props, { failed: boolean }> {
-  override state = { failed: false };
+interface State {
+  failed: boolean;
+  resetKey: unknown;
+}
 
-  static getDerivedStateFromError(): { failed: boolean } {
+export class ErrorBoundary extends Component<Props, State> {
+  override state: State = { failed: false, resetKey: this.props.resetKey };
+
+  static getDerivedStateFromProps(props: Props, state: State): Partial<State> | null {
+    return Object.is(props.resetKey, state.resetKey)
+      ? null
+      : { failed: false, resetKey: props.resetKey };
+  }
+
+  static getDerivedStateFromError(): Pick<State, 'failed'> {
     return { failed: true };
   }
 

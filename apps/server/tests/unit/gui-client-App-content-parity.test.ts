@@ -170,6 +170,26 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).toMatch(/id: 'nav-billing'/);
   });
 
+  it('founder tab-switch continuity: one transition-owned navigator + stable main/resettable boundary + bounded per-destination scroll; inactive views are not cached', () => {
+    expect(body).toContain('export function useViewNavigation(initial: View)');
+    expect(body).toContain('const [, startNavigation] = useTransition();');
+    expect(body).toContain('startNavigation(() => setView(next));');
+    expect(body).toContain('export function StableViewPanel({');
+    expect(body).toContain('const VIEW_SCROLL_CACHE_LIMIT = 32;');
+    expect(body).toContain('useLayoutEffect(() => {');
+    expect(body).toContain('main.scrollTop = saved;');
+    expect(body).toContain('<ErrorBoundary resetKey={destinationKey} fallback={errorFallback}>');
+    expect(body).toContain('<Suspense fallback={loadingFallback}>{children}</Suspense>');
+    expect(body).toContain("const [view, setView] = useViewNavigation({ kind: 'home' });");
+    expect(body).toContain('destinationKey={viewScrollKey(view)}');
+    expect(body).not.toContain('key={view.kind}');
+    expect(body).not.toContain('bg-surface-base animate-view-in');
+    // Deliberately no keep-alive/offscreen destination cache: CurrentView remains
+    // one child, so switching still runs the prior view's effect cleanup.
+    expect(body).toContain('<CurrentView view={view} onNavigate={setView} />');
+    expect(body).not.toMatch(/keepAlive|KeepAlive|Offscreen/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

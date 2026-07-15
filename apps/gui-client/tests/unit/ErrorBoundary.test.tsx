@@ -59,4 +59,45 @@ describe('ErrorBoundary — recoverable per-view fallback', () => {
     expect(screen.getByText('happy path')).toBeInTheDocument();
     expect(screen.queryByText('fallback')).not.toBeInTheDocument();
   });
+
+  it('clears a failed destination when resetKey changes without replacing the boundary', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const throwRef = { current: true };
+    const boundaryRef = { current: null as ErrorBoundary | null };
+
+    const { rerender } = render(
+      <ErrorBoundary
+        ref={(value) => {
+          boundaryRef.current = value;
+        }}
+        resetKey="profiles"
+        fallback={() => <div>failed profiles</div>}
+      >
+        <Boom throwRef={throwRef} />
+      </ErrorBoundary>,
+    );
+    const originalBoundary = boundaryRef.current;
+    expect(screen.getByText('failed profiles')).toBeInTheDocument();
+
+    throwRef.current = false;
+    rerender(
+      <ErrorBoundary
+        ref={(value) => {
+          boundaryRef.current = value;
+        }}
+        resetKey="settings"
+        fallback={() => <div>failed settings</div>}
+      >
+        <Boom throwRef={throwRef} />
+      </ErrorBoundary>,
+    );
+
+    expect(screen.getByText('recovered child')).toBeInTheDocument();
+    expect(screen.queryByText('failed profiles')).not.toBeInTheDocument();
+    expect(boundaryRef.current).toBe(originalBoundary);
+
+    errSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
 });

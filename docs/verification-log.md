@@ -28492,3 +28492,35 @@ direct route/parity proof passes 2 files and 18/18 tests; the expanded Fleet
 authentication, activation, admission, registry and correlator matrix passes 14
 files and 181/181 tests. Strict server source/test TypeScript, targeted
 ESLint/Prettier and diff/whitespace checks are green.
+
+---
+
+## V-682 — Sidebar navigation keeps one continuous content panel
+
+**Date:** 2026-07-15
+
+The desktop shell synchronously changed its view state, so a destination's first
+lazy chunk could replace the whole content area with a `Loading…` fallback. It also
+keyed the `<main>` scroll container and nested ErrorBoundary by view kind, replacing
+both DOM subtrees and replaying a page-wide entrance fade on every sidebar switch.
+Together, those behaviors looked like a full page reload and discarded the prior
+destination's scroll position.
+
+Every sidebar, palette, shortcut, deep-link and internal navigation now enters one
+React transition-owned state callback. The already-revealed destination therefore
+stays visible while a first lazy chunk resolves. One stable main element owns a
+32-entry process-memory scroll LRU and restores the destination before paint. One
+stable ErrorBoundary resets only its failed state when destination identity changes,
+while retaining local Retry behavior. The actual view child is still replaced and
+unmounted: Profiles/Sessions polling and AgentChat live resources continue to run
+their cleanup rather than remaining active behind a hidden keep-alive surface.
+
+The controlled lazy regression test holds the first Settings chunk, proves Home
+remains rendered with no full-panel fallback, then proves Home cleanup occurs only
+when Settings commits. The same main DOM node survives both switches, Settings
+cleanup runs on return, and Home's exact scroll offset restores across A→B→A.
+ErrorBoundary proof also pins failed-destination reset without boundary replacement.
+Direct navigation/boundary/content proof passes 3 files and 17/17 tests; the expanded
+shell, sidebar, palette, deep-link and sign-out matrix passes 14 files and 98/98
+tests. Strict GUI and server-test TypeScript, targeted ESLint/Prettier and
+diff/whitespace checks are green.

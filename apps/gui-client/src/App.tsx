@@ -6,7 +6,17 @@
 // single-window desktop app, and Tauri's window doesn't have a real
 // history stack to integrate with.
 
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from 'react';
 import { ConnectionPill } from './components/ConnectionPill';
 import { Sidebar, type SidebarViewKind } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
@@ -86,6 +96,79 @@ export type View =
   | { kind: 'team' }
   | { kind: 'billing' }
   | { kind: 'settings' };
+
+/** One transition-owned state boundary for every navigation entry point. A lazy
+ * destination may suspend, but React keeps the already-revealed view visible
+ * until its chunk is ready instead of committing the full-panel fallback. */
+export function useViewNavigation(initial: View): readonly [View, (next: View) => void] {
+  const [view, setView] = useState<View>(initial);
+  const [, startNavigation] = useTransition();
+  const navigate = useCallback((next: View): void => {
+    startNavigation(() => setView(next));
+  }, []);
+  return [view, navigate] as const;
+}
+
+/** Recording players need independent scroll positions; every other destination
+ * is one sidebar surface even when it was opened with an initial entity id. */
+export function viewScrollKey(view: View): string {
+  return view.kind === 'recording-player' ? `${view.kind}:${view.recordingId}` : view.kind;
+}
+
+const VIEW_SCROLL_CACHE_LIMIT = 32;
+
+function rememberViewScroll(positions: Map<string, number>, key: string, scrollTop: number): void {
+  // Refresh insertion order so the bounded map behaves as a tiny LRU. Recording
+  // deep links are the only source of more keys than the fixed view taxonomy.
+  positions.delete(key);
+  positions.set(key, scrollTop);
+  if (positions.size <= VIEW_SCROLL_CACHE_LIMIT) return;
+  const oldest = positions.keys().next().value;
+  if (oldest !== undefined) positions.delete(oldest);
+}
+
+export function StableViewPanel({
+  destinationKey,
+  children,
+  loadingFallback,
+  errorFallback,
+}: {
+  destinationKey: string;
+  children: ReactNode;
+  loadingFallback: ReactNode;
+  errorFallback: (retry: () => void) => ReactNode;
+}): JSX.Element {
+  const mainRef = useRef<HTMLElement>(null);
+  const scrollPositionsRef = useRef<Map<string, number>>(new Map());
+
+  // Restore before paint. The view component itself still unmounts normally,
+  // so inactive polls/live media clean up rather than running behind the rail.
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (main === null) return;
+    const saved = scrollPositionsRef.current.get(destinationKey) ?? 0;
+    main.scrollTop = saved;
+    rememberViewScroll(scrollPositionsRef.current, destinationKey, saved);
+  }, [destinationKey]);
+
+  return (
+    <main
+      ref={mainRef}
+      onScroll={(event) => {
+        rememberViewScroll(
+          scrollPositionsRef.current,
+          destinationKey,
+          event.currentTarget.scrollTop,
+        );
+      }}
+      className="min-w-0 flex-1 overflow-auto bg-surface-base"
+    >
+      <ErrorBoundary resetKey={destinationKey} fallback={errorFallback}>
+        <Suspense fallback={loadingFallback}>{children}</Suspense>
+      </ErrorBoundary>
+    </main>
+  );
+}
 
 /** P2 #7 — whether the Team destination is offered, matching the Sidebar gate:
  *  a team MEMBER (teamCount>0) OR a team-capable tier (so an owner can manage
@@ -264,7 +347,7 @@ function Shell(): JSX.Element {
   // 2026-06-14 — Command Center ('home') is the default landing (5→10 G4):
   // it leads with Automate (Ask AI / recipes) + an account/session overview,
   // making automation the primary surface; Profiles/Sessions are one click away.
-  const [view, setView] = useState<View>({ kind: 'home' });
+  const [view, setView] = useViewNavigation({ kind: 'home' });
   // ⌘K command palette (demo-concepts arc) — global hotkey, view navigation.
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Keyboard-shortcuts cheatsheet (5→10 polish) — `?` or ⌘/. `?` is suppressed
@@ -632,60 +715,50 @@ function Shell(): JSX.Element {
             onSignOut={() => void handleSignOut()}
             onOpenPalette={() => setPaletteOpen(true)}
           />
-          {/* key by view.kind so switching views replays the fade-in (5→10
-              G8 polish); same element + classes, so no layout-chain change. */}
           {/* min-w-0 is load-bearing: without it a flex item keeps min-width:auto
               and refuses to shrink below its content's intrinsic width, so a wide
               table (Profiles list view) blows the whole layout past the viewport
               instead of letting its own overflow-x-auto scroll. (founder 2026-06-16) */}
-          <main
-            key={view.kind}
-            className="min-w-0 flex-1 overflow-auto bg-surface-base animate-view-in"
+          <StableViewPanel
+            destinationKey={viewScrollKey(view)}
+            errorFallback={(retry) => (
+              <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+                <div className="max-w-md space-y-2">
+                  <h2 className="text-base font-semibold text-ink-primary">
+                    This view ran into a problem
+                  </h2>
+                  <p className="text-sm text-ink-muted">
+                    Something went wrong rendering this screen. The rest of the app is still running
+                    — you can retry, or switch to another view in the sidebar.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={retry}
+                  className="rounded border border-surface-divider px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-surface-raised"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            loadingFallback={
+              <div
+                role="status"
+                aria-label="Loading view"
+                className="flex h-full items-center justify-center gap-3 text-sm text-ink-muted"
+              >
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-surface-divider border-t-ink-primary" />
+                Loading…
+              </div>
+            }
           >
             {/* Scope a view render-crash to this panel — the sidebar/chrome
                 stay alive and the customer gets a Retry, instead of an
                 unexpected throw bubbling to RootErrorBoundary and blanking the
-                whole window (no recover path there). Keyed by view.kind so
-                navigating to another view always lands a fresh boundary. */}
-            <ErrorBoundary
-              key={view.kind}
-              fallback={(retry) => (
-                <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
-                  <div className="max-w-md space-y-2">
-                    <h2 className="text-base font-semibold text-ink-primary">
-                      This view ran into a problem
-                    </h2>
-                    <p className="text-sm text-ink-muted">
-                      Something went wrong rendering this screen. The rest of the app is still
-                      running — you can retry, or switch to another view in the sidebar.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={retry}
-                    className="rounded border border-surface-divider px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-surface-raised"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-            >
-              <Suspense
-                fallback={
-                  <div
-                    role="status"
-                    aria-label="Loading view"
-                    className="flex h-full items-center justify-center gap-3 text-sm text-ink-muted"
-                  >
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-surface-divider border-t-ink-primary" />
-                    Loading…
-                  </div>
-                }
-              >
-                <CurrentView view={view} onNavigate={setView} />
-              </Suspense>
-            </ErrorBoundary>
-          </main>
+                whole window (no recover path there). The boundary stays mounted
+                and resets by destination identity, avoiding a panel remount. */}
+            <CurrentView view={view} onNavigate={setView} />
+          </StableViewPanel>
         </div>
         <CommandPalette
           open={paletteOpen}
