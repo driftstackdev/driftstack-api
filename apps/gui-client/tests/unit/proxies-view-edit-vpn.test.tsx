@@ -14,6 +14,21 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ProxyConfig, ProxyDraft } from '../../src/lib/proxies';
 
 const updateProxy = vi.fn<(id: string, patch: ProxyDraft) => Promise<unknown>>();
+const addProxy = vi.fn<(draft: ProxyDraft) => Promise<unknown>>();
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 const WIREGUARD_PROXY: ProxyConfig = {
   id: 'wg1',
@@ -52,7 +67,7 @@ let stored: ProxyConfig[] = [];
 
 vi.mock('../../src/lib/proxies', () => ({
   listProxies: () => Promise.resolve(stored),
-  addProxy: vi.fn(() => Promise.resolve({})),
+  addProxy: (draft: ProxyDraft) => addProxy(draft),
   removeProxy: vi.fn(() => Promise.resolve()),
   updateProxy: (id: string, patch: ProxyDraft) => updateProxy(id, patch),
   validateDraft: () => ({ ok: true, errors: {} }),
@@ -89,8 +104,73 @@ async function openEditAndRename(label: string, newLabel: string): Promise<void>
 
 describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => {
   beforeEach(() => {
+    addProxy.mockReset();
+    addProxy.mockResolvedValue({});
     updateProxy.mockReset();
     updateProxy.mockResolvedValue({});
+  });
+
+  it('single-flights Add, locks the draft, and keeps the busy state through refresh', async () => {
+    stored = [];
+    const pending = deferred<unknown>();
+    addProxy.mockReturnValueOnce(pending.promise);
+    render(<ProxiesView />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New proxy' }));
+    const submit = screen.getByRole('button', { name: 'Add proxy' });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(addProxy).toHaveBeenCalledTimes(1));
+    const adding = screen.getByRole('button', { name: 'Adding…' });
+    expect(adding).toBeDisabled();
+    expect(adding).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled();
+    const form = adding.closest('form');
+    expect(form).toHaveAttribute('inert');
+    expect(form).toHaveAttribute('aria-disabled', 'true');
+
+    pending.resolve({});
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Adding…' })).toBeNull());
+    expect(addProxy).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the Add latch after failure so the same draft can retry once', async () => {
+    stored = [];
+    addProxy.mockRejectedValueOnce(new Error('vault unavailable')).mockResolvedValueOnce({});
+    render(<ProxiesView />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New proxy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add proxy' }));
+    await screen.findByText(/Couldn't save this proxy/);
+
+    const retry = screen.getByRole('button', { name: 'Add proxy' });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+    await waitFor(() => expect(addProxy).toHaveBeenCalledTimes(2));
+  });
+
+  it('single-flights two same-turn Save changes activations', async () => {
+    stored = [WIREGUARD_PROXY];
+    const pending = deferred<unknown>();
+    updateProxy.mockReturnValueOnce(pending.promise);
+    render(<ProxiesView />);
+    await screen.findByText('wg-london');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(await screen.findByDisplayValue('wg-london'), {
+      target: { value: 'wg-london-renamed' },
+    });
+
+    const submit = screen.getByRole('button', { name: 'Save changes' });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+    await waitFor(() => expect(updateProxy).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+
+    pending.resolve({});
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Saving…' })).toBeNull());
+    expect(updateProxy).toHaveBeenCalledTimes(1);
   });
 
   it('renaming a WireGuard proxy keeps scheme:wireguard + the wireguard block', async () => {

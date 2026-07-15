@@ -121,6 +121,12 @@ export function ProxiesView(): JSX.Element {
     { kind: 'idle' } | { kind: 'add' } | { kind: 'edit'; id: string }
   >({ kind: 'idle' });
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Saving a proxy can write the encrypted local vault and then refresh the
+  // registry. A state-only guard lands one render too late for two same-turn
+  // submit events, so the ref is the authoritative single-flight latch while
+  // `saving` drives the visible/accessible busy state.
+  const saveInFlightRef = useRef(false);
+  const [saving, setSaving] = useState(false);
   // Native SOCKS5 probe per saved proxy — reachability + UDP-associate
   // support. Keyed by proxy id so each row keeps its own last result.
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -211,6 +217,9 @@ export function ProxiesView(): JSX.Element {
   }, [refresh]);
 
   async function handleSave(draft: ProxyDraft): Promise<void> {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    setSaving(true);
     try {
       if (editor.kind === 'add') {
         await addProxy(draft);
@@ -236,13 +245,18 @@ export function ProxiesView(): JSX.Element {
           setExitResults((r) => dropKey(r, editId));
         }
       }
-      setEditor({ kind: 'idle' });
       await refresh();
+      // Keep the form mounted and locked through refresh so the customer never
+      // sees an editable draft while the just-saved registry is still settling.
+      setEditor({ kind: 'idle' });
     } catch (err) {
       setState((s) => ({
         ...s,
         error: friendlyError(err, "Couldn't save this proxy. Check the details and try again."),
       }));
+    } finally {
+      saveInFlightRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -500,7 +514,10 @@ export function ProxiesView(): JSX.Element {
           <button
             type="button"
             className="btn-primary flex items-center gap-1.5"
-            onClick={() => setEditor({ kind: 'add' })}
+            onClick={() => {
+              if (!saveInFlightRef.current) setEditor({ kind: 'add' });
+            }}
+            disabled={saving}
           >
             <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
               <path
@@ -527,8 +544,11 @@ export function ProxiesView(): JSX.Element {
           key={editor.kind === 'edit' ? editor.id : 'add'}
           initial={editing !== null ? toDraft(editing) : EMPTY_DRAFT}
           mode={editor.kind}
-          onCancel={() => setEditor({ kind: 'idle' })}
-          onSave={(d) => void handleSave(d)}
+          saving={saving}
+          onCancel={() => {
+            if (!saveInFlightRef.current) setEditor({ kind: 'idle' });
+          }}
+          onSave={handleSave}
         />
       )}
 
@@ -992,13 +1012,15 @@ function HealthPill({
 export function ProxyForm({
   initial,
   mode,
+  saving = false,
   onCancel,
   onSave,
 }: {
   initial: ProxyDraft;
   mode: 'add' | 'edit';
+  saving?: boolean;
   onCancel: () => void;
-  onSave: (d: ProxyDraft) => void;
+  onSave: (d: ProxyDraft) => void | Promise<void>;
 }): JSX.Element {
   const [draft, setDraft] = useState<ProxyDraft>(initial);
   const [validation, setValidation] = useState<DraftValidation>({ ok: true, errors: {} });
@@ -1009,6 +1031,21 @@ export function ProxyForm({
   // parse-feedback hint.
   const [wgText, setWgText] = useState(initial.wireguard ? '(saved WireGuard config)' : '');
   const [vpnHint, setVpnHint] = useState<string | null>(null);
+  const submitInFlightRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  const locked = saving || submitting;
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // React 18's DOM types do not expose the standard `inert` attribute yet.
+  // Apply its presence imperatively so every draft control (including file
+  // inputs and a field that retained keyboard focus) is genuinely non-interactive
+  // while the save settles, without re-indenting the whole form in a fieldset.
+  useEffect(() => {
+    const form = formRef.current;
+    if (form === null) return;
+    if (locked) form.setAttribute('inert', '');
+    else form.removeAttribute('inert');
+  }, [locked]);
 
   const scheme = draft.scheme ?? 'socks5';
   const isVpn = scheme === 'openvpn' || scheme === 'wireguard';
@@ -1141,12 +1178,20 @@ export function ProxyForm({
     );
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
+    if (submitInFlightRef.current) return;
     const v = validateDraft(draft);
     setValidation(v);
     if (!v.ok) return;
-    onSave(draft);
+    submitInFlightRef.current = true;
+    setSubmitting(true);
+    try {
+      await onSave(draft);
+    } finally {
+      submitInFlightRef.current = false;
+      setSubmitting(false);
+    }
   }
 
   // In-form connection test — validate before you save, so a bad host/port or
@@ -1209,7 +1254,10 @@ export function ProxyForm({
 
   return (
     <form
-      onSubmit={handleSubmit}
+      ref={formRef}
+      onSubmit={(e) => void handleSubmit(e)}
+      aria-busy={locked}
+      aria-disabled={locked}
       className="relative flex flex-col gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised p-4 shadow-lg"
     >
       {/* Soft accent glow (matches the Command Center hero) so the form reads as
@@ -1457,7 +1505,7 @@ export function ProxyForm({
             type="button"
             className="btn-secondary"
             onClick={() => void handleTestConnection()}
-            disabled={testing}
+            disabled={testing || locked}
             title="Probe this proxy — reachability, auth, latency, UDP — before saving"
           >
             {testing ? 'Testing…' : 'Test connection'}
@@ -1467,18 +1515,31 @@ export function ProxyForm({
             type="button"
             className="btn-secondary"
             onClick={() => void handleTestEndpoint()}
-            disabled={resolving}
+            disabled={resolving || locked}
             title="Check the VPN endpoint host resolves — full tunnel verifies at launch"
           >
             {resolving ? 'Checking…' : 'Test endpoint'}
           </button>
         )}
         <div className="flex gap-2">
-          <button type="button" className="btn-secondary" onClick={onCancel}>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={locked}
+            onClick={() => {
+              if (!submitInFlightRef.current) onCancel();
+            }}
+          >
             Cancel
           </button>
-          <button type="submit" className="btn-primary">
-            {mode === 'add' ? 'Add proxy' : 'Save changes'}
+          <button type="submit" className="btn-primary" disabled={locked} aria-busy={locked}>
+            {locked
+              ? mode === 'add'
+                ? 'Adding…'
+                : 'Saving…'
+              : mode === 'add'
+                ? 'Add proxy'
+                : 'Save changes'}
           </button>
         </div>
       </div>

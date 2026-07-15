@@ -84,10 +84,17 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).toMatch(/>\s*Add a proxy\s*<\/button>/);
   });
 
-  it("ProxyForm submit: handleSubmit preventDefault + validateDraft + setValidation + return early if !v.ok else onSave(draft); port input type='number' min=1 max=65535; username/password onChange normalizes empty → null (so EMPTY_DRAFT's nulls stay null instead of empty-string false-truthy)", () => {
+  it("ProxyForm submit: synchronous ref single-flight + awaited onSave + inert/busy form lock; port input type='number' min=1 max=65535; username/password empty → null", () => {
     expect(body).toMatch(
-      /function handleSubmit\(e: React\.FormEvent<HTMLFormElement>\): void \{\s*\n?\s*e\.preventDefault\(\);\s*\n?\s*const v = validateDraft\(draft\);\s*\n?\s*setValidation\(v\);\s*\n?\s*if \(!v\.ok\) return;\s*\n?\s*onSave\(draft\);\s*\n?\s*\}/,
+      /async function handleSubmit\(e: React\.FormEvent<HTMLFormElement>\): Promise<void> \{[\s\S]*?if \(submitInFlightRef\.current\) return;[\s\S]*?submitInFlightRef\.current = true;[\s\S]*?await onSave\(draft\);[\s\S]*?submitInFlightRef\.current = false;[\s\S]*?setSubmitting\(false\);/,
     );
+    expect(body).toMatch(/const locked = saving \|\| submitting;/);
+    expect(body).toMatch(/aria-busy=\{locked\}/);
+    expect(body).toMatch(/aria-disabled=\{locked\}/);
+    expect(body).toMatch(
+      /if \(locked\) form\.setAttribute\('inert', ''\);\s*\n?\s*else form\.removeAttribute\('inert'\);/,
+    );
+    expect(body).toMatch(/\? mode === 'add'\s*\n?\s*\? 'Adding…'\s*\n?\s*: 'Saving…'/);
     expect(body).toMatch(
       /<input\s*\n?\s*type="number"\s*\n?\s*className="form-input mono"\s*\n?\s*min=\{1\}\s*\n?\s*max=\{65535\}\s*\n?\s*value=\{draft\.port\}\s*\n?\s*onChange=\{\(e\) => setField\('port', Number\(e\.target\.value\)\)\}/,
     );
@@ -99,6 +106,20 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     );
   });
 
+  it('parent save is also ref-single-flight, keeps the editor locked through refresh, and releases in finally', () => {
+    expect(body).toMatch(/const saveInFlightRef = useRef\(false\);/);
+    expect(body).toMatch(
+      /async function handleSave\(draft: ProxyDraft\): Promise<void> \{\s*\n?\s*if \(saveInFlightRef\.current\) return;\s*\n?\s*saveInFlightRef\.current = true;\s*\n?\s*setSaving\(true\);/,
+    );
+    expect(body).toMatch(
+      /await refresh\(\);\s*\n?\s*\/\/ Keep the form mounted and locked through refresh[\s\S]*?setEditor\(\{ kind: 'idle' \}\);/,
+    );
+    expect(body).toMatch(
+      /finally \{\s*\n?\s*saveInFlightRef\.current = false;\s*\n?\s*setSaving\(false\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(/saving=\{saving\}[\s\S]*?onSave=\{handleSave\}/);
+  });
+
   it("Edit-mode initial draft via toDraft helper: ProxyConfig → ProxyDraft carries label/host/port/username/password + scheme + the openvpn/wireguard config block (each only when present), strips id+createdAt+other server-side fields; ProxyForm label conditional 'Add proxy' / 'Edit proxy' for mode header + 'Add proxy' / 'Save changes' submit button — pinned so the verb matches the noun (add vs edit) AND so editing a VPN proxy doesn't drop its scheme/config (the silent revert-to-SOCKS5 data-loss bug)", () => {
     expect(body).toMatch(
       /function toDraft\(p: ProxyConfig\): ProxyDraft \{[\s\S]*?return \{\s*\n?\s*label: p\.label,\s*\n?\s*host: p\.host,\s*\n?\s*port: p\.port,\s*\n?\s*username: p\.username,\s*\n?\s*password: p\.password,\s*\n?\s*\.\.\.\(p\.scheme !== undefined \? \{ scheme: p\.scheme \} : \{\}\),\s*\n?\s*\.\.\.\(p\.openvpn !== undefined \? \{ openvpn: p\.openvpn \} : \{\}\),\s*\n?\s*\.\.\.\(p\.wireguard !== undefined \? \{ wireguard: p\.wireguard \} : \{\}\),\s*\n?\s*\};\s*\n?\s*\}/,
@@ -106,7 +127,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).toMatch(
       /<span className="section-label text-accent">\s*\n?\s*\{mode === 'add' \? 'Add proxy' : 'Edit proxy'\}\s*\n?\s*<\/span>/,
     );
-    expect(body).toMatch(/\{mode === 'add' \? 'Add proxy' : 'Save changes'\}/);
+    expect(body).toMatch(/: mode === 'add'\s*\n?\s*\? 'Add proxy'\s*\n?\s*: 'Save changes'/);
   });
 
   it("ProxyCard (Console restyle of the old 5-col ProxyTable): per-card host:port endpoint + username shown only when set (no leak when blank) + createdAt via <RelativeTime iso=p.createdAt tooltipPrefix=\"Added\"> + Edit + Remove buttons (Remove disabled while that card is busy with a 'Removing…' label, gated through the card's `busy` prop = busyId===p.id at the call site); password never rendered anywhere — pinned so credentials don't leak into the UI", () => {
