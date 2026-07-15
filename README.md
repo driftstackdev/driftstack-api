@@ -117,10 +117,10 @@ Core groups (see env-vars.md for the full list):
 - **Cloudflare R2** (optional): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_RECORDINGS`.
 - **Postmark** (optional): `POSTMARK_API_TOKEN`, `POSTMARK_FROM`, `POSTMARK_REPLY_TO`.
 - **Sentry** (optional): `SENTRY_DSN` (EU region required), `SENTRY_ENVIRONMENT`.
-- **Stripe** (optional): `STRIPE_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, `DRIFTSTACK_TIER_PRICE_IDS`, `STRIPE_TRIAL_PACK_PRICE_ID`.
+- **Stripe** (optional): `STRIPE_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, `DRIFTSTACK_TIER_PRICE_IDS` (six paid tiers, monthly + annual).
 - **Auth-flow links**: `AUTH_VERIFY_EMAIL_URL`, `AUTH_MAGIC_LINK_URL`, `AUTH_PASSWORD_RESET_URL`.
 
-Routes register conditionally — when a vendor isn't configured, its routes don't register and the rest of the API stays up. `/v1/billing/*` needs Stripe configured; `/v1/webhooks/stripe` needs `STRIPE_WEBHOOK_SECRET`; `/v1/auth/*` needs the auth-flow URLs.
+Vendor integrations fail independently so the rest of the API stays up. `/v1/billing/*` returns a typed `503 FeatureUnavailable` until `STRIPE_SECRET_KEY` and `DRIFTSTACK_TIER_PRICE_IDS` are configured; `/v1/webhooks/stripe` is gated independently by `STRIPE_WEBHOOK_SECRET`; `/v1/auth/*` needs the auth-flow URLs.
 
 ## Authentication
 

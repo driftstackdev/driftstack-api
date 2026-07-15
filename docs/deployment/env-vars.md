@@ -1,12 +1,13 @@
 # Driftstack control plane — environment variables
 
-> **Founder fills the values + base64-encodes** the resulting `.env` file
-> into the GitHub repo secret `DEPLOY_DOTENV_BASE64`. The deploy
-> pipeline (`.github/workflows/deploy.yml`) decodes it onto the
-> Hetzner VM at `/opt/driftstack/.env`. No actual secrets land in this
-> repo — examples below are placeholder shapes only.
+> **Founder provisions each environment through an SSH-only, root-owned
+> mode-600 pending file.** After validation it is atomically installed as
+> `/opt/driftstack/api/.env` with owner `driftstack:driftstack`; immutable
+> `deploy-bridge.sh` promotions preserve that runtime file. No actual secrets
+> land in this repo, chat, commit text, or command-line arguments — examples
+> below are placeholder shapes only.
 
-**Effective:** 2026-05-03 · **Version:** 0.1.0-draft · **V-053**
+**Effective:** 2026-07-15 · **Version:** 1.0.0 · **V-053**
 
 This is the canonical schema for every env var the control plane
 reads. When code adds a new env var, it lands here in the same
@@ -23,10 +24,9 @@ months in.
   Stripe webhook secret pinned to one Stripe account), the column
   reads "shared" — but **never** share secrets across environments
   unless they're tied to a single external resource.
-- All values supplied via `.env` file at `/opt/driftstack/.env` on
-  the Hetzner VM. The deploy pipeline writes this from
-  `DEPLOY_DOTENV_BASE64`. Local dev uses `apps/server/.env`
-  (gitignored).
+- All runtime values are supplied via `/opt/driftstack/api/.env` on the
+  Hetzner VM. Staging and production have independent mode-600 files. Local
+  development uses `apps/server/.env` (gitignored).
 
 ## Variables
 
@@ -34,10 +34,10 @@ months in.
 
 | Name                     | Required | Per-env? | Example      | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------------ | -------- | -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `NODE_ENV`               | yes      | per-env  | `production` | One of `development \| test \| production`. Production deploys hardcode `production` in the Dockerfile env block; the .env override is unusual.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `NODE_ENV`               | yes      | per-env  | `production` | One of `development \| test \| production`. The production systemd service requires `production`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `DRIFTSTACK_DEPLOY_ENV`  | optional | per-env  | `staging`    | Exact deployment-role marker. Set to `staging` only on the staging control plane; production should leave it unset or use `production`. This marker is an authority boundary for explicitly staging-only behavior, including the agent-decomposer deployment-key fallback below.                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `PORT`                   | optional | shared   | `7780`       | Default 3000 in dev; production compose pins 7780 (nginx proxies the loopback `127.0.0.1:7780`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `HOST`                   | optional | shared   | `0.0.0.0`    | Default `0.0.0.0`. Inside the container; the host binds `127.0.0.1:7780` so the bind value is irrelevant externally.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `PORT`                   | optional | shared   | `7780`       | Default 3000 in development; the production systemd unit and reverse proxy use 7780.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `HOST`                   | optional | shared   | `0.0.0.0`    | Default `0.0.0.0`; production ingress remains restricted by the host firewall and reverse proxy.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `LOG_LEVEL`              | optional | per-env  | `info`       | `fatal \| error \| warn \| info \| debug \| trace`. Production: `info`. Staging: `debug`. Default `info`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `DRIVER`                 | optional | per-env  | `mock`       | `mock \| webkit \| playwright` (config.ts enum). Pre-V1 staging + production both run `mock` until Agent 1's WebKit fork integrates; `playwright` is the V-333b local real-browser path (with `PLAYWRIGHT_BROWSER`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `SESSION_PROXY_REQUIRED` | optional | per-env  | `false`      | Fail-closed tri-state for the direct `POST /v1/sessions` and `POST /v1/profiles/:id/launch` surfaces. **Unset** → inferred from egress-backend presence. `true` (or inferred true) disables both direct create verbs for every body because they have no typed, consumed proxy authority; a raw `proxy` key is always rejected and cannot bypass this boundary. `false` keeps proxy-free direct creation available (the **current prod + staging posture**, set 2026-06-11). Customer-controlled egress uses `POST /v1/agent-sessions` with an owner-validated saved `proxy_id`. Do not enable this flag as a proxy-presence check; keep the direct surface closed until a reviewed transport consumes typed egress authority. |
@@ -69,8 +69,7 @@ months in.
 
 ### Cloudflare R2 (object storage, EU jurisdiction)
 
-For session Recording uploads (V-040 in-memory ring → R2 mirror, lands
-in Workstream A iteration 2).
+For session recording uploads and retrieval.
 
 | Name                   | Required           | Per-env? | Example                                      | Notes                                                                                                                     |
 | ---------------------- | ------------------ | -------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -82,9 +81,8 @@ in Workstream A iteration 2).
 
 ### Postmark (transactional email, EU sending region)
 
-For signup verification, password reset, billing receipts, support
-correspondence (transactional email service, lands in Workstream A
-iteration 2 + Workstream F).
+For signup verification, password reset, billing receipts and support
+correspondence.
 
 | Name                 | Required           | Per-env? | Example                               | Notes                                                                                                               |
 | -------------------- | ------------------ | -------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -96,19 +94,19 @@ iteration 2 + Workstream F).
 
 For diagnostics (V-058 SDK wiring + V-062 source-map upload).
 
-**Runtime env vars** (live in `DEPLOY_DOTENV_BASE64`, read by the
-running container):
+**Runtime env vars** (live in `/opt/driftstack/api/.env`, read by the
+systemd service):
 
-| Name                        | Required           | Per-env? | Example                                                | Notes                                                                                                                                                                                          |
-| --------------------------- | ------------------ | -------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SENTRY_DSN`                | required at deploy | per-env  | `https://<key>@<org>.ingest.de.sentry.io/<project-id>` | EU region (`*.ingest.de.sentry.io`, not `.us.`). Staging + production map to **the same Sentry project** but different `SENTRY_ENVIRONMENT` tags.                                              |
-| `SENTRY_ENVIRONMENT`        | optional           | per-env  | `production` / `staging`                               | Tagged on every event for filtering. Defaults to `NODE_ENV`.                                                                                                                                   |
-| `SENTRY_RELEASE`            | optional           | per-env  | full git SHA                                           | **Baked into the Docker image** at build time via `--build-arg SENTRY_RELEASE=${{ github.sha }}` (per V-062); not in `DEPLOY_DOTENV_BASE64`. Matches the Sentry source-map release identifier. |
-| `SENTRY_TRACES_SAMPLE_RATE` | optional           | per-env  | `0.1`                                                  | Default 0 (no APM traces). 0.1 in staging for tuning; production typically 0.01 to keep quota down.                                                                                            |
+| Name                        | Required           | Per-env? | Example                                                | Notes                                                                                                                                             |
+| --------------------------- | ------------------ | -------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SENTRY_DSN`                | required at deploy | per-env  | `https://<key>@<org>.ingest.de.sentry.io/<project-id>` | EU region (`*.ingest.de.sentry.io`, not `.us.`). Staging + production map to **the same Sentry project** but different `SENTRY_ENVIRONMENT` tags. |
+| `SENTRY_ENVIRONMENT`        | optional           | per-env  | `production` / `staging`                               | Tagged on every event for filtering. Defaults to `NODE_ENV`.                                                                                      |
+| `SENTRY_RELEASE`            | optional           | per-env  | full git SHA                                           | Release identifier used to match events to uploaded source maps. Keep it aligned with the exact immutable SHA being promoted.                     |
+| `SENTRY_TRACES_SAMPLE_RATE` | optional           | per-env  | `0.1`                                                  | Default 0 (no APM traces). 0.1 in staging for tuning; production typically 0.01 to keep quota down.                                               |
 
 **Build-time / GH Actions secrets** (live in repository-level GitHub
-secrets, NOT in `DEPLOY_DOTENV_BASE64` — used only by the deploy
-workflow's source-map upload step):
+secrets and never in the runtime `.env`; used only by the source-map upload
+step):
 
 | Name                | Required for source-map upload | Example          | Notes                                                                                                                                                                                                                                               |
 | ------------------- | ------------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,57 +118,16 @@ workflow's source-map upload step):
 
 Per V-052: Stripe is the sole payment rail. Coinbase Commerce dropped.
 
-| Name                           | Required           | Per-env? | Example                                          | Notes                                                                                                                                                                                                                                        |
-| ------------------------------ | ------------------ | -------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `STRIPE_PUBLISHABLE_KEY`       | required at deploy | per-env  | `pk_test_<...>` / `pk_live_<...>`                | Test mode for staging + pre-KvK; live mode for production post-KvK. Stripe enforces the test-vs-live split server-side.                                                                                                                      |
-| `STRIPE_SECRET_KEY`            | required at deploy | per-env  | `sk_test_<...>` / `sk_live_<...>`                | Same split. Live keys never enter chat / PR — written directly into Hetzner `.env` via SSH at production cutover.                                                                                                                            |
-| `STRIPE_WEBHOOK_SECRET`        | required at deploy | per-env  | `whsec_<...>`                                    | Per-endpoint signing secret, populated after the webhook URL is registered with Stripe. Different per environment because webhook URLs differ (`/staging/webhooks/stripe` vs `/v1/webhooks/stripe`).                                         |
-| `STRIPE_API_VERSION`           | optional           | shared   | `2025-11-15.basil`                               | Pinned Stripe API version sent on every outbound request as the `Stripe-Version` header. Omit to track Stripe's account-level default; pin when validating against a specific schema during integration testing.                             |
-| `STRIPE_SUCCESS_URL`           | optional           | per-env  | `https://app.driftstack.dev/billing/success`     | Customer-portal redirect after a successful Checkout Session. Server falls back to a hardcoded staging URL when omitted.                                                                                                                     |
-| `STRIPE_CANCEL_URL`            | optional           | per-env  | `https://app.driftstack.dev/billing/cancel`      | Customer-portal redirect on Checkout cancellation. Same fallback behavior as `STRIPE_SUCCESS_URL`.                                                                                                                                           |
-| `STRIPE_PORTAL_RETURN_URL`     | optional           | per-env  | `https://app.driftstack.dev/billing`             | Stripe Billing Portal `return_url` — where the customer lands after closing the portal. Same fallback behavior.                                                                                                                              |
-| `STRIPE_TRIAL_PACK_PRICE_ID`   | required at deploy | per-env  | `price_xxx`                                      | One-time price ID for the $2.99 trial pack (ADR-003). Distinct from `DRIFTSTACK_TIER_PRICE_IDS` because trial pack is one-time, not subscription. Founder creates in Stripe test mode (staging) + later live mode (production).              |
-| `DRIFTSTACK_TIER_PRICE_IDS`    | required at deploy | per-env  | `{"starter":"price_xxx","solo":"price_xxx",...}` | JSON map of tier slug → Stripe price ID. SKU naming convention: `driftstack_<tier>_<period>` (e.g. `driftstack_starter_monthly`). Annual SKUs `_annual` later. Founder creates in Stripe test mode (staging) + later live mode (production). |
-| `DRIFTSTACK_BYOK_METER_NAME`   | optional           | shared   | `driftstack_llm_tokens`                          | Meter event name for BYOK LLM token billing. Defaults to `driftstack_llm_tokens`. Stripe meter aggregates monthly.                                                                                                                           |
-| `DRIFTSTACK_BYOK_MARKUP_RATIO` | optional           | shared   | `1.3`                                            | Multiplier on Anthropic published rates for bundled-LLM customers. Placeholder `1.3` until founder confirms. BYOK customers (own Anthropic key) skip metering entirely; detected via account flag.                                           |
-
-### Anthropic (bundled-LLM AI agent — opt-in only)
-
-Per V-046 / V-048: Anthropic is a conditional Sub-processor; engaged
-only for customers who opt into bundled-LLM billing. BYOK customers
-supply their own Anthropic key directly to the SDK and don't trigger
-this path.
-
-| Name                | Required           | Per-env? | Example        | Notes                                                                                                                                                                                                                                  |
-| ------------------- | ------------------ | -------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ANTHROPIC_API_KEY` | required at deploy | per-env  | `sk-ant-<...>` | Driftstack's Anthropic key for the bundled-LLM path. Production-only at launch (bundled LLM is disabled in staging). Server fails to boot the bundled-LLM service if this is required at runtime + missing — gate with a feature flag. |
-
-### Moneybird (accounting / invoicing)
-
-Workstream E scoping doc + Workstream D implementation. Founder
-holds the access token + administration ID.
-
-| Name                          | Required           | Per-env? | Example          | Notes                                                                                                                          |
-| ----------------------------- | ------------------ | -------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `MONEYBIRD_API_TOKEN`         | required at deploy | per-env  | `<bearer token>` | Moneybird personal access token (or OAuth2 token; OAuth2 recommended in scoping doc). Founder delivers at implementation time. |
-| `MONEYBIRD_ADMINISTRATION_ID` | required at deploy | per-env  | `<numeric id>`   | One administration per BV. Staging may use a separate test administration; production uses the BV's production administration. |
-
-### Legal / entity placeholders (post-KvK)
-
-These are read into the legal documents at startup (V-047
-LegalDocumentCatalog reads `docs/legal/*.md`) and the Privacy /
-ToS / DPA placeholder substitution (founder's task post-KvK).
-
-| Name                    | Required          | Per-env? | Example                         | Notes                                                                                                                    |
-| ----------------------- | ----------------- | -------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `BV_LEGAL_NAME`         | required post-KvK | shared   | `Driftstack B.V.`               | Find-replaces `[BV LEGAL NAME]` in the legal documents at server startup. Pre-KvK: leave unset; placeholder text serves. |
-| `BV_KVK_NUMBER`         | required post-KvK | shared   | `<8 digits>`                    | Find-replaces `[KvK NUMBER]`.                                                                                            |
-| `BV_BTW_NUMBER`         | required post-KvK | shared   | `NL<9 digits>B<2 digits>`       | Find-replaces `[BTW NUMBER]`. Format: `NL` + 9 digits + `B` + 2 digits per Dutch BTW format.                             |
-| `BV_REGISTERED_ADDRESS` | required post-KvK | shared   | `<street>, <postal> <city>, NL` | Find-replaces `[REGISTERED ADDRESS]`. Single-line format.                                                                |
-
-The find-replace lands in V-046 follow-up work; founder direction is
-to keep brackets in `docs/legal/*.md` and substitute at runtime, not
-to commit values.
+| Name                        | Required                         | Per-env? | Example                                                      | Notes                                                                                                                                                                                                                                                                                                                   |
+| --------------------------- | -------------------------------- | -------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STRIPE_PUBLISHABLE_KEY`    | required when billing is enabled | per-env  | `pk_test_<...>` / `pk_live_<...>`                            | Test mode for staging + pre-launch production; live mode at commercial cutover. Stripe enforces the test-vs-live split server-side.                                                                                                                                                                                     |
+| `STRIPE_SECRET_KEY`         | required when billing is enabled | per-env  | `sk_test_<...>` / `sk_live_<...>`                            | Wires the outbound Stripe billing provider together with `DRIFTSTACK_TIER_PRICE_IDS`. Live keys never enter chat / PR / shell arguments; install through the root-owned mode-600 pending-file procedure.                                                                                                                |
+| `STRIPE_WEBHOOK_SECRET`     | required for Stripe webhooks     | per-env  | `whsec_<...>`                                                | Per-endpoint signing secret for `/v1/webhooks/stripe`, populated after that environment's full webhook URL is registered. It gates inbound signature verification independently of outbound billing.                                                                                                                    |
+| `STRIPE_API_VERSION`        | optional                         | shared   | `2025-11-15.basil`                                           | Pinned Stripe API version sent on every outbound request as the `Stripe-Version` header. Omit to track Stripe's account-level default; pin when validating against a specific schema during integration testing.                                                                                                        |
+| `STRIPE_SUCCESS_URL`        | optional                         | per-env  | `https://app.driftstack.dev/billing/success`                 | Customer-portal redirect after a successful Checkout Session. Server falls back to a hardcoded staging URL when omitted.                                                                                                                                                                                                |
+| `STRIPE_CANCEL_URL`         | optional                         | per-env  | `https://app.driftstack.dev/billing/cancel`                  | Customer-portal redirect on Checkout cancellation. Same fallback behavior as `STRIPE_SUCCESS_URL`.                                                                                                                                                                                                                      |
+| `STRIPE_PORTAL_RETURN_URL`  | optional                         | per-env  | `https://app.driftstack.dev/billing`                         | Stripe Billing Portal `return_url` — where the customer lands after closing the portal. Same fallback behavior.                                                                                                                                                                                                         |
+| `DRIFTSTACK_TIER_PRICE_IDS` | required when billing is enabled | per-env  | `{"solo_manual":{"monthly":"price_…","annual":"price_…"},…}` | JSON map containing exactly the six self-serve paid tier ids (`solo_manual`, `team_manual`, `agency_manual`, `api_starter`, `api_builder`, `api_scale`), each with `monthly` and `annual` price IDs: six products / twelve recurring prices. The perpetual free tier has no Stripe price; Enterprise is sales-assisted. |
 
 ### Marketing site (Cloudflare Pages — build-time only)
 
@@ -209,7 +166,8 @@ The customer dashboard (`apps/customer-dashboard/`, V-099) is an Astro static-bu
 | `PUBLIC_API_BASE_URL`                     | variable | **required for prod** | `https://api.driftstack.dev`                   | Astro `import.meta.env.PUBLIC_API_BASE_URL` — the public origin of the Driftstack API. Resolved via the shared `resolveApiBaseUrl()` helper (W192/W193) in both the customer-dashboard and the admin-panel. Dev mode falls back to `http://localhost:3000`; **production builds throw at evaluation time when this env var is unset** — same fail-fast pattern as `DASHBOARD_ORIGIN` (V-079.B). Trailing slashes are stripped at the helper layer. Override for staging (`https://staging.driftstack.dev`). |
 | `PUBLIC_SENTRY_DSN_DASHBOARD`             | secret   | optional              | `https://<key>@<org>.ingest.de.sentry.io/<id>` | V-469 — `@sentry/astro` DSN baked into the dashboard bundle at build time. When unset, the integration is fully skipped (zero bundle inclusion). Distinct from the marketing + API DSNs so per-surface filtering stays clean.                                                                                                                                                                                                                                                                               |
 
-The deploy workflow at `.github/workflows/deploy-customer-dashboard.yml` lands when the founder confirms the dashboard-stack proposal. Until then, the dashboard builds via `npm run build --workspace apps/customer-dashboard` but does not auto-deploy.
+`.github/workflows/deploy-customer-dashboard.yml` builds and publishes the
+dashboard to its dedicated Cloudflare Pages project.
 
 Custom domains + DNS:
 
@@ -235,9 +193,9 @@ Custom domains + DNS:
 
 ### Customer-secret encryption (2026-05-20)
 
-| Name                 | Required            | Per-env? | Example                                                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------- | ------------------- | -------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MFA_ENCRYPTION_KEY` | optional (per-feat) | per-env  | base64 of 32 random bytes — `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` | AES-256-GCM master key for ALL customer-stored secrets. Single key for v1; rotation = re-encrypt every cipherblob (multi-key derivation lands post-launch). Decodes to exactly 32 bytes (AES-256); boot-time validation throws on wrong size. Activates these features when set: MFA TOTP secret storage (V-353), CLI/GUI device authorization (the minted API key is encrypted during its short Redis handoff), purpose/account/session-bound v2 agent-session transcript envelopes (boot authenticates existing v1/v2 ciphertext, synchronously CAS-converts every plaintext/v1 row in bounded batches, and refuses to serve until zero legacy rows remain), outbound-webhook signing-secret envelopes (legacy rows convert in bounded bootstrap batches), BYOK Anthropic key envelope (Q.1.d), gui*control_key auto-mint (24h-TTL), LiveKit per-Mac secret envelope (LK.2), saved-proxies storage (EG-API-1.6+). When unset, secret-bearing features fail closed through their existing omitted-route, 503 activation gate, or repository write refusal; none stores plaintext as a fallback. Naming kept `MFA*\*` for backwards compatibility — it predates BYOK. |
+| Name                 | Required            | Per-env? | Example                                                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------- | ------------------- | -------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MFA_ENCRYPTION_KEY` | optional (per-feat) | per-env  | base64 of 32 random bytes — `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` | AES-256-GCM master key for ALL customer-stored secrets. Decodes to exactly 32 bytes (AES-256); boot-time validation throws on wrong size. Activates these features when set: MFA TOTP secret storage (V-353), CLI/GUI device authorization (the minted API key is encrypted during its short Redis handoff), purpose/account/session-bound v2 agent-session transcript envelopes (boot authenticates existing v1/v2 ciphertext, synchronously CAS-converts every plaintext/v1 row in bounded batches, and refuses to serve until zero legacy rows remain), outbound-webhook signing-secret envelopes (legacy rows convert in bounded bootstrap batches), BYOK Anthropic key envelope (Q.1.d), gui*control_key auto-mint (24h-TTL), LiveKit per-Mac secret envelope (LK.2), saved-proxies storage (EG-API-1.6+). When unset, secret-bearing features fail closed through their existing omitted-route, 503 activation gate, or repository write refusal; none stores plaintext as a fallback. Naming kept `MFA*\*` for backwards compatibility — it predates BYOK. |
 
 ### Operational / optional (2026-05-27)
 
@@ -253,13 +211,6 @@ documented defaults — none cause a startup failure if unset.
 | `PUBLIC_STATUS_PAGE_URL`                    | optional | shared   | `https://status.driftstack.dev`                             | Base URL of the public status page, embedded in status-subscription + incident emails. Default `https://status.driftstack.dev`.                                                                                                                                                                                                                                     |
 | `DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS` | optional | per-env  | `1`                                                         | Set to `1` to suppress the periodic API-key / webhook-secret / BYOK-key rotation-reminder emails (e.g. during a migration window). Any other value / unset → reminders enabled (default).                                                                                                                                                                           |
 | `DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK`  | optional | staging  | `true`                                                      | Staging demo escape hatch: exact `true` lets an unconfigured customer use the deployment Anthropic key after the BYOK and consented bundled-LLM legs are absent. **Never enable in production.** When `NODE_ENV=production`, boot refuses this flag unless `DRIFTSTACK_DEPLOY_ENV=staging`. Unset or any value other than exact `true` keeps the fallback disabled. |
-
-### Future Workstream slots (placeholder — not yet wired)
-
-| Name                                      | Notes                                                                                                                            |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `JWT_SIGNING_KEY_KID`                     | Per V-052 §4: control-plane signing key id (current). Rotation event format documented in `docs/network-architecture.md` §4.     |
-| `FLEET_NODE_PUBLIC_KEY_CACHE_TTL_SECONDS` | Default 15. JWT validation cache TTL for `(node_id, public_key, revoked_at)` triples. See network-architecture.md §4 revocation. |
 
 ## Per-environment baseline
 
@@ -289,19 +240,13 @@ POSTMARK_REPLY_TO=support@driftstack.dev
 
 SENTRY_DSN=https://...ingest.de.sentry.io/...
 SENTRY_ENVIRONMENT=staging
-# SENTRY_RELEASE is baked into the image at build time; do not set
-# here.
+# SENTRY_RELEASE may be set to the exact immutable Git SHA when source maps
+# are uploaded for the deployment.
 
 STRIPE_PUBLISHABLE_KEY=pk_test_...
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-DRIFTSTACK_TIER_PRICE_IDS={"starter":"price_xxx","solo":"price_xxx","builder":"price_xxx","scale":"price_xxx"}
-
-# bundled LLM disabled in staging by default
-# ANTHROPIC_API_KEY=
-
-MONEYBIRD_API_TOKEN=...
-MONEYBIRD_ADMINISTRATION_ID=...
+DRIFTSTACK_TIER_PRICE_IDS={"solo_manual":{"monthly":"price_…","annual":"price_…"},"team_manual":{"monthly":"price_…","annual":"price_…"},"agency_manual":{"monthly":"price_…","annual":"price_…"},"api_starter":{"monthly":"price_…","annual":"price_…"},"api_builder":{"monthly":"price_…","annual":"price_…"},"api_scale":{"monthly":"price_…","annual":"price_…"}}
 
 DASHBOARD_ORIGIN=https://app.driftstack.dev
 # V-079.B/C: the three AUTH_*_URL vars below are derived from
@@ -317,33 +262,33 @@ DASHBOARD_ORIGIN=https://app.driftstack.dev
 
 Production `.env` is structurally identical with environment-tagged
 values (`SENTRY_ENVIRONMENT=production`, `R2_BUCKET_RECORDINGS=
-driftstack-recordings-production`, etc.) and live-mode Stripe keys
-post-KvK.
+driftstack-recordings-production`, etc.) and the explicitly selected Stripe
+mode.
 
-## How DEPLOY_DOTENV_BASE64 gets populated
+## How the production runtime file gets populated
 
-Per founder direction (V-052 decision 2): values reviewed via the
-GitHub UI (not `gh secret set`), one at a time. Founder workflow:
+Use the established no-output pending-file procedure independently for staging
+and production:
 
-1. Compose the `.env` file locally per the schema above.
-2. `base64 -i .env > .env.b64` (single-line base64 on macOS:
-   `base64 -i .env | tr -d '\n' > .env.b64`).
-3. Open repo settings → Environments → staging → Add secret →
-   `DEPLOY_DOTENV_BASE64` → paste contents of `.env.b64`.
-4. Repeat for production environment.
+1. Compose the complete file locally from this schema in a temporary file with
+   mode `600`; never include values in chat, commits, or command-line arguments.
+2. Transfer it over SSH/SFTP to a root-owned mode-600 pending path on the target
+   host and validate every required value before changing the live file.
+3. Preserve a root-only recovery copy, atomically install the reviewed file at
+   `/opt/driftstack/api/.env`, then set owner `driftstack:driftstack` and mode
+   `600`. Delete the pending file after the activation succeeds.
+4. Promote one reviewed full Git SHA with
+   `DEPLOY_VIA_BUNDLE=1 scripts/deploy-bridge.sh <staging|prod> <full-sha>`, run
+   `post-deploy-verify.mjs`, and confirm `deploy-status.sh --check`.
 
-The deploy pipeline (`deploy.yml`) decodes it onto the Hetzner VM
-at deploy time. Full round-trip stays on the founder's machine +
-GitHub + Hetzner; no third-party secret store at this stage. When
-secret count or rotation cadence justifies, migrate to HashiCorp
-Vault / 1Password Connect / equivalent.
+The immutable deploy bridge updates only generated deployment markers in the
+runtime file; it does not source secrets from GitHub or print them.
 
 ## Validation checklist
 
-Before flipping `DEPLOY_DOTENV_BASE64` for the first time:
+Before atomically installing or rotating a runtime file:
 
-- [ ] `NODE_ENV=production` set explicitly (Dockerfile already
-      hardcodes; .env override would be unusual).
+- [ ] `NODE_ENV=production` set explicitly for the systemd service.
 - [ ] `DATABASE_URL` ends with `?sslmode=require` (Neon enforces TLS).
 - [ ] `REDIS_URL` uses `rediss://` not `redis://` (Upstash TLS).
 - [ ] `SENTRY_DSN` contains `.de.` for EU region.
@@ -352,8 +297,6 @@ Before flipping `DEPLOY_DOTENV_BASE64` for the first time:
       `sk_live_` for production).
 - [ ] `DRIFTSTACK_TIER_PRICE_IDS` JSON parses (server fails fast if
       not).
-- [ ] `BV_*` placeholders left empty pre-KvK; the legal-doc
-      placeholder substitution skips when unset.
 - [ ] `SENTRY_AUTH_TOKEN` populated as a **repository-wide** GH
       secret (not an environment secret) so the deploy workflow's
       source-map upload step runs. If left unset, the upload step
@@ -367,5 +310,5 @@ read) lands here in the same commit. The CI build step verifies
 that the `ConfigSchema` Zod object's required keys are documented
 above — when it isn't (e.g. doc drift), CI fails.
 
-CI verification not yet wired; lands in Workstream A iteration 2
-when the Zod-config-vs-doc parity check is added as a unit test.
+CI content guards verify that the documented runtime contract stays aligned with
+the configuration and bootstrap wiring.

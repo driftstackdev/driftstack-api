@@ -66,15 +66,15 @@ describe('W615 gap close-out content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'docs/deployment/dr-runbook.md'))).toBe(true);
   });
 
-  it('docs/deployment/env-vars.md: V-053 canonical env schema + DEPLOY_DOTENV_BASE64-via-deploy.yml provisioning + 17 sections (process/runtime + Neon + Upstash + mock-driver + slow-query + R2 + Postmark + Sentry runtime/build-time + Stripe + Anthropic + Moneybird + legal-post-KvK + marketing-Pages + dashboard-Pages + V-079-auth + future-Workstream-slots) + per-env baseline + DEPLOY_DOTENV_BASE64 populate workflow + 7-item validation checklist pinned', () => {
+  it('docs/deployment/env-vars.md: canonical mode-600 runtime schema + recurring Stripe catalog + validation workflow pinned', () => {
     const body = read('docs/deployment/env-vars.md');
     expect(body).toMatch(/^# Driftstack control plane — environment variables$/m);
-    expect(body).toMatch(/\*\*Founder fills the values \+ base64-encodes\*\*/);
-    expect(body).toMatch(/DEPLOY_DOTENV_BASE64`\. The deploy/);
-    expect(body).toMatch(/pipeline \(`\.github\/workflows\/deploy\.yml`\) decodes it onto the/);
-    expect(body).toMatch(/Hetzner VM at `\/opt\/driftstack\/\.env`\./);
+    expect(body).toMatch(/SSH-only, root-owned/);
+    expect(body).toMatch(/`\/opt\/driftstack\/api\/\.env`/);
+    expect(body).toMatch(/owner `driftstack:driftstack`/);
+    expect(body).toMatch(/`deploy-bridge\.sh` promotions preserve/);
     expect(body).toMatch(
-      /\*\*Effective:\*\* 2026-05-03 · \*\*Version:\*\* 0\.1\.0-draft · \*\*V-053\*\*/,
+      /\*\*Effective:\*\* 2026-07-15 · \*\*Version:\*\* 1\.0\.0 · \*\*V-053\*\*/,
     );
     expect(body).toMatch(/^## Conventions$/m);
     expect(body).toMatch(/^## Variables$/m);
@@ -96,16 +96,12 @@ describe('W615 gap close-out content parity', () => {
       /Per V-052: Stripe is the sole payment rail\. Coinbase Commerce dropped\./,
     );
     expect(body).toMatch(/`STRIPE_PUBLISHABLE_KEY`/);
-    expect(body).toMatch(/`STRIPE_TRIAL_PACK_PRICE_ID`/);
     expect(body).toMatch(/`DRIFTSTACK_TIER_PRICE_IDS`/);
-    expect(body).toMatch(/^### Anthropic \(bundled-LLM AI agent — opt-in only\)$/m);
-    expect(body).toMatch(/^### Moneybird \(accounting \/ invoicing\)$/m);
-    expect(body).toMatch(/`MONEYBIRD_API_TOKEN`/);
-    expect(body).toMatch(/^### Legal \/ entity placeholders \(post-KvK\)$/m);
-    expect(body).toMatch(/`BV_LEGAL_NAME`/);
-    expect(body).toMatch(/`BV_KVK_NUMBER`/);
-    expect(body).toMatch(/`BV_BTW_NUMBER`/);
-    expect(body).toMatch(/`BV_REGISTERED_ADDRESS`/);
+    expect(body).toMatch(/six products \/ twelve recurring prices/);
+    expect(body).not.toMatch(/STRIPE_TRIAL_PACK_PRICE_ID|19 IDs per ADR-004/);
+    expect(body).not.toMatch(
+      /ANTHROPIC_API_KEY|MONEYBIRD_API_TOKEN|MONEYBIRD_ADMINISTRATION_ID|BV_LEGAL_NAME|BV_KVK_NUMBER|BV_BTW_NUMBER|BV_REGISTERED_ADDRESS/,
+    );
     expect(body).toMatch(/^### Marketing site \(Cloudflare Pages — build-time only\)$/m);
     expect(body).toMatch(/^### Customer dashboard \(Cloudflare Pages — build-time only\)$/m);
     expect(body).toMatch(/^### User-facing auth flow \(V-079\)$/m);
@@ -118,12 +114,12 @@ describe('W615 gap close-out content parity', () => {
     expect(body).toMatch(/`AUTH_MAGIC_LINK_URL`/);
     expect(body).toMatch(/`AUTH_PASSWORD_RESET_URL`/);
     expect(body).toMatch(/`AUTH_EXPOSE_DEBUG_TOKEN`/);
-    expect(body).toMatch(/^### Future Workstream slots \(placeholder — not yet wired\)$/m);
-    expect(body).toMatch(/`JWT_SIGNING_KEY_KID`/);
-    expect(body).toMatch(/`FLEET_NODE_PUBLIC_KEY_CACHE_TTL_SECONDS`/);
+    expect(body).not.toMatch(/Future Workstream slots|placeholder — not yet wired/);
+    expect(body).not.toMatch(/JWT_SIGNING_KEY_KID|FLEET_NODE_PUBLIC_KEY_CACHE_TTL_SECONDS/);
     expect(body).toMatch(/^## Per-environment baseline$/m);
-    expect(body).toMatch(/^## How DEPLOY_DOTENV_BASE64 gets populated$/m);
-    expect(body).toMatch(/Per founder direction \(V-052 decision 2\): values reviewed via the/);
+    expect(body).toMatch(/^## How the production runtime file gets populated$/m);
+    expect(body).toMatch(/root-owned mode-600 pending path/);
+    expect(body).toMatch(/DEPLOY_VIA_BUNDLE=1 scripts\/deploy-bridge\.sh/);
     expect(body).toMatch(/^## Validation checklist$/m);
     expect(body).toMatch(/`DATABASE_URL` ends with `\?sslmode=require` \(Neon enforces TLS\)/);
     expect(body).toMatch(/`REDIS_URL` uses `rediss:\/\/` not `redis:\/\/` \(Upstash TLS\)/);

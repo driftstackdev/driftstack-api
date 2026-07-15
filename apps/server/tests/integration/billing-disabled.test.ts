@@ -1,6 +1,6 @@
 // Wave 1119 / Slice 1119.2 — when billing env is unconfigured (no
-// STRIPE_SECRET_KEY / DRIFTSTACK_TIER_PRICE_IDS /
-// STRIPE_TRIAL_PACK_PRICE_ID), the four `/v1/billing/*` paths return
+// STRIPE_SECRET_KEY / DRIFTSTACK_TIER_PRICE_IDS), the four
+// `/v1/billing/*` paths return
 // 503 + `FeatureUnavailable` problem-type (not 404). The customer
 // dashboard's existing 503-detection leg
 // (apps/customer-dashboard/src/pages/select-tier.astro since 121cd266)

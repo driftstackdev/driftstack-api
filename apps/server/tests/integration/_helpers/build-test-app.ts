@@ -293,8 +293,8 @@ export interface TestAppOptions {
    * Wave 1119 / Slice 1119.2 — when `true`, omits `billingService` from
    * the AppDeps so `registerBillingDisabledRoutes` runs in place of
    * `registerBillingRoutes`. Matches the prod posture before
-   * STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS +
-   * STRIPE_TRIAL_PACK_PRICE_ID land in `/opt/driftstack/api/.env`.
+   * STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS land in
+   * `/opt/driftstack/api/.env`.
    * Default `false`.
    */
   disableBilling?: boolean;

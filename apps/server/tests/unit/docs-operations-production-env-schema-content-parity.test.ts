@@ -14,7 +14,7 @@
 //   • Live sk_live_* via SSH-write only — never gh secret set, never
 //     PR description.
 //   • BillingService wires only when STRIPE_SECRET_KEY +
-//     DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID all set.
+//     DRIFTSTACK_TIER_PRICE_IDS are set; webhook secret is independent.
 //   • Admin gated by Cloudflare Access at origin, NOT by env-var.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -44,13 +44,13 @@ describe('W553.B /docs/operations/production-env-schema.md content parity', () =
     expect(env).not.toMatch(/\*\*Re-engage\*\*/);
   });
 
-  it("Header + ops-cheat-sheet vs full-spec framing pinned: '# Production environment schema (operations summary)' + 'Provisioning-order summary of every env var the production / staging Hetzner VM needs in `/opt/driftstack/.env`. Sourced from `DEPLOY_DOTENV_BASE64` per `.github/workflows/deploy.yml` + `.github/workflows/server-deploy.yml`.' + 'The longer per-variable spec (defaults, allowed values, behaviour-on-absent) lives in `docs/deployment/env-vars.md`.' + 'This doc is the operations cheat sheet — what to set up first, what comes next, what's optional.' — pinned so the /opt/driftstack/.env + DEPLOY_DOTENV_BASE64 + deploy.yml + server-deploy.yml + env-vars.md-full-spec + cheat-sheet-role commitment survives", () => {
+  it('pins the current systemd runtime-file provisioning summary and canonical full-spec link', () => {
     expect(body).toMatch(/^# Production environment schema \(operations summary\)$/m);
     expect(body).toMatch(
-      /Provisioning-order summary of every env var the production \/ staging Hetzner VM needs in `\/opt\/driftstack\/\.env`\./,
+      /Provisioning-order summary of every env var the production \/ staging Hetzner VM needs in `\/opt\/driftstack\/api\/\.env`\./,
     );
     expect(body).toMatch(
-      /Sourced from `DEPLOY_DOTENV_BASE64` per `\.github\/workflows\/deploy\.yml` \+ `\.github\/workflows\/server-deploy\.yml`\./,
+      /SSH-only root-owned mode-600 pending file; immutable `deploy-bridge\.sh` promotions preserve it\./,
     );
     expect(body).toMatch(
       /The longer per-variable spec \(defaults, allowed values, behaviour-on-absent\) lives in `docs\/deployment\/env-vars\.md`\./,
@@ -93,26 +93,38 @@ describe('W553.B /docs/operations/production-env-schema.md content parity', () =
     expect(body).not.toMatch(/^DASHBOARD_ORIGIN=https:\/\/app-staging\.driftstack\.dev$/m);
   });
 
-  it("Stripe live-mode + BillingService wiring framing pinned: 'STRIPE_SECRET_KEY=sk_live_…' + 'STRIPE_WEBHOOK_SECRET=whsec_…' + 'DRIFTSTACK_TIER_PRICE_IDS=trial_pack:price_…|solo_manual:price_…' + '19 IDs per ADR-004' + 'STRIPE_TRIAL_PACK_PRICE_ID=price_…' + '**Live-mode keys**: per the `stripe_credential_handling` rule, live `sk_live_…` keys go via SSH-write to Hetzner only — never via `gh secret set` from a chat-readable terminal, never in a PR description.' + 'Test-mode keys (`sk_test_…`) for staging are fine in `DEPLOY_DOTENV_BASE64`.' + 'When `STRIPE_SECRET_KEY` + `DRIFTSTACK_TIER_PRICE_IDS` + `STRIPE_TRIAL_PACK_PRICE_ID` are all set, the BillingService wires' + 'When any is unset, the routes don't register (pre-launch state) and the bootstrap log emits a `BillingService NOT wired` warning.' — pinned so the sk_live_* + whsec_* + 19-ADR-004-price-IDs + SSH-write-only + sk_test_*-staging-OK + 3-var-BillingService-wire + BillingService-NOT-wired-warning commitment survives", () => {
+  it('Stripe recurring catalog, independent webhook gate and actual BillingService wiring contract pinned', () => {
     expect(body).toMatch(/STRIPE_SECRET_KEY=sk_live_…/);
     expect(body).toMatch(/STRIPE_WEBHOOK_SECRET=whsec_…/);
-    expect(body).toMatch(/DRIFTSTACK_TIER_PRICE_IDS=trial_pack:price_…\|solo_manual:price_…/);
-    expect(body).toMatch(/19 IDs per ADR-004/);
-    expect(body).toMatch(/STRIPE_TRIAL_PACK_PRICE_ID=price_…/);
     expect(body).toMatch(
-      /\*\*Live-mode keys\*\*: per the `stripe_credential_handling` rule, live `sk_live_…` keys go via SSH-write to Hetzner only/,
+      /DRIFTSTACK_TIER_PRICE_IDS=\{"solo_manual":\{"monthly":"price_…","annual":"price_…"\}/,
+    );
+    for (const tier of [
+      'solo_manual',
+      'team_manual',
+      'agency_manual',
+      'api_starter',
+      'api_builder',
+      'api_scale',
+    ]) {
+      expect(body).toContain(`"${tier}"`);
+    }
+    expect(body).not.toMatch(/STRIPE_TRIAL_PACK_PRICE_ID|19 IDs per ADR-004/);
+    expect(body).toMatch(
+      /\*\*Live-mode keys\*\*: per the `stripe_credential_handling` rule, live `sk_live_…` keys go through the SSH-only root-owned mode-600 pending-file procedure/,
     );
     expect(body).toMatch(
-      /— never via `gh secret set` from a chat-readable terminal, never in a PR description\./,
+      /never through chat, command-line arguments, a commit or a PR description\./,
+    );
+    expect(body).toMatch(/Test-mode and live-mode values use the same handling\./);
+    expect(body).toMatch(
+      /When `STRIPE_SECRET_KEY` \+ `DRIFTSTACK_TIER_PRICE_IDS` are set, the BillingService wires/,
     );
     expect(body).toMatch(
-      /Test-mode keys \(`sk_test_…`\) for staging are fine in `DEPLOY_DOTENV_BASE64`\./,
+      /typed disabled billing routes return `503 FeatureUnavailable` and bootstrap logs `BillingService NOT wired`/,
     );
     expect(body).toMatch(
-      /When `STRIPE_SECRET_KEY` \+ `DRIFTSTACK_TIER_PRICE_IDS` \+ `STRIPE_TRIAL_PACK_PRICE_ID` are all set, the BillingService wires;/,
-    );
-    expect(body).toMatch(
-      /When any is unset, the routes don't register \(pre-launch state\) and the bootstrap log emits a `BillingService NOT wired` warning\./,
+      /`STRIPE_WEBHOOK_SECRET` independently activates inbound Stripe signature verification/,
     );
   });
 

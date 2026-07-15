@@ -94,7 +94,7 @@ describe('W540.B /README.md content parity', () => {
     );
   });
 
-  it("Configuration env-groups + conditional-route-registration framing pinned: 'The Zod schema in `apps/server/src/lib/config.ts` validates at startup. The canonical reference is `docs/deployment/env-vars.md`' + 'Process: NODE_ENV, PORT, HOST, LOG_LEVEL, DRIVER' + 'Postgres / Redis: DATABASE_URL, REDIS_URL' + 'Cloudflare R2 (optional): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_RECORDINGS' + 'Postmark (optional): POSTMARK_API_TOKEN, POSTMARK_FROM, POSTMARK_REPLY_TO' + 'Sentry (optional): SENTRY_DSN (EU region required), SENTRY_ENVIRONMENT' + 'Stripe (optional): STRIPE_WEBHOOK_SECRET, STRIPE_SECRET_KEY, DRIFTSTACK_TIER_PRICE_IDS, STRIPE_TRIAL_PACK_PRICE_ID' + 'Auth-flow links: AUTH_VERIFY_EMAIL_URL, AUTH_MAGIC_LINK_URL, AUTH_PASSWORD_RESET_URL' + 'Routes register conditionally — when a vendor isn\\'t configured, its routes don\\'t register and the rest of the API stays up.' — pinned so the 7-env-group + Zod-config-validates-at-startup + conditional-route-registration (vendor-not-configured → routes-not-registered, rest-of-API-stays-up) commitment survives", () => {
+  it('Configuration env groups and independent vendor failure contracts stay production-accurate', () => {
     expect(body).toMatch(
       /The Zod schema in `apps\/server\/src\/lib\/config\.ts` validates at startup\. The canonical reference is `docs\/deployment\/env-vars\.md`/,
     );
@@ -112,13 +112,20 @@ describe('W540.B /README.md content parity', () => {
       /\*\*Sentry\*\* \(optional\): `SENTRY_DSN` \(EU region required\), `SENTRY_ENVIRONMENT`\./,
     );
     expect(body).toMatch(
-      /\*\*Stripe\*\* \(optional\): `STRIPE_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, `DRIFTSTACK_TIER_PRICE_IDS`, `STRIPE_TRIAL_PACK_PRICE_ID`\./,
+      /\*\*Stripe\*\* \(optional\): `STRIPE_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, `DRIFTSTACK_TIER_PRICE_IDS` \(six paid tiers, monthly \+ annual\)\./,
     );
+    expect(body).not.toMatch(/STRIPE_TRIAL_PACK_PRICE_ID/);
     expect(body).toMatch(
       /\*\*Auth-flow links\*\*: `AUTH_VERIFY_EMAIL_URL`, `AUTH_MAGIC_LINK_URL`, `AUTH_PASSWORD_RESET_URL`\./,
     );
     expect(body).toMatch(
-      /Routes register conditionally — when a vendor isn't configured, its routes don't register and the rest of the API stays up\./,
+      /Vendor integrations fail independently so the rest of the API stays up\./,
+    );
+    expect(body).toMatch(
+      /`\/v1\/billing\/\*` returns a typed `503 FeatureUnavailable` until `STRIPE_SECRET_KEY` and `DRIFTSTACK_TIER_PRICE_IDS` are configured/,
+    );
+    expect(body).toMatch(
+      /`\/v1\/webhooks\/stripe` is gated independently by `STRIPE_WEBHOOK_SECRET`/,
     );
   });
 

@@ -1,6 +1,6 @@
 # Production environment schema (operations summary)
 
-Provisioning-order summary of every env var the production / staging Hetzner VM needs in `/opt/driftstack/.env`. Sourced from `DEPLOY_DOTENV_BASE64` per `.github/workflows/deploy.yml` + `.github/workflows/server-deploy.yml`.
+Provisioning-order summary of every env var the production / staging Hetzner VM needs in `/opt/driftstack/api/.env`. Each environment is provisioned through an SSH-only root-owned mode-600 pending file; immutable `deploy-bridge.sh` promotions preserve it.
 
 The longer per-variable spec (defaults, allowed values, behaviour-on-absent) lives in `docs/deployment/env-vars.md`. This doc is the operations cheat sheet — what to set up first, what comes next, what's optional.
 
@@ -102,16 +102,15 @@ EU ingest region. `SENTRY_RELEASE` is set by the deploy workflow at build time; 
 ```
 STRIPE_SECRET_KEY=sk_live_…
 STRIPE_WEBHOOK_SECRET=whsec_…
-DRIFTSTACK_TIER_PRICE_IDS=trial_pack:price_…|solo_manual:price_… …  # 19 IDs per ADR-004
-STRIPE_TRIAL_PACK_PRICE_ID=price_…
+DRIFTSTACK_TIER_PRICE_IDS={"solo_manual":{"monthly":"price_…","annual":"price_…"},"team_manual":{"monthly":"price_…","annual":"price_…"},"agency_manual":{"monthly":"price_…","annual":"price_…"},"api_starter":{"monthly":"price_…","annual":"price_…"},"api_builder":{"monthly":"price_…","annual":"price_…"},"api_scale":{"monthly":"price_…","annual":"price_…"}}
 STRIPE_SUCCESS_URL=https://app.driftstack.dev/billing/success
 STRIPE_CANCEL_URL=https://app.driftstack.dev/billing/cancel
 STRIPE_PORTAL_RETURN_URL=https://app.driftstack.dev/billing
 ```
 
-**Live-mode keys**: per the `stripe_credential_handling` rule, live `sk_live_…` keys go via SSH-write to Hetzner only — never via `gh secret set` from a chat-readable terminal, never in a PR description. Test-mode keys (`sk_test_…`) for staging are fine in `DEPLOY_DOTENV_BASE64`.
+**Live-mode keys**: per the `stripe_credential_handling` rule, live `sk_live_…` keys go through the SSH-only root-owned mode-600 pending-file procedure — never through chat, command-line arguments, a commit or a PR description. Test-mode and live-mode values use the same handling.
 
-When `STRIPE_SECRET_KEY` + `DRIFTSTACK_TIER_PRICE_IDS` + `STRIPE_TRIAL_PACK_PRICE_ID` are all set, the BillingService wires; `/v1/billing/*` routes register; webhook endpoint validates signatures. When any is unset, the routes don't register (pre-launch state) and the bootstrap log emits a `BillingService NOT wired` warning.
+When `STRIPE_SECRET_KEY` + `DRIFTSTACK_TIER_PRICE_IDS` are set, the BillingService wires against the six paid products / twelve recurring prices. When either is unset, the typed disabled billing routes return `503 FeatureUnavailable` and bootstrap logs `BillingService NOT wired`. `STRIPE_WEBHOOK_SECRET` independently activates inbound Stripe signature verification at `/v1/webhooks/stripe`.
 
 ### 9. Driver (production WebKit fork integration)
 
