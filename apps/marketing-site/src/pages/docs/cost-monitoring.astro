@@ -78,13 +78,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-tk-ink">LLM tokens</dt>
+          <dt class="text-sm font-medium text-tk-ink">Bundled AI usage</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
-            When the bundled-LLM agent feature is enabled and you're
-            on the pass-through pricing model, this line is the
-            input + output tokens consumed × the sub-processor's rate
-            with our small operational markup. BYOK customers see 0
-            here.
+            When bundled LLM is enabled, standard API Builder and API
+            Scale usage posts $0.10 per agent turn; Enterprise can use
+            its contracted custom rate. The amount accumulates in the
+            response's <code class="font-mono">llmCents</code> field and
+            counts against your monthly cap. BYOK customers see 0 here.
           </dd>
         </div>
       </dl>
@@ -199,14 +199,15 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </div>
         <div>
           <p class="font-medium text-tk-ink">
-            Why are LLM tokens 0 even though I'm using the agent?
+            Why is bundled AI cost 0 even though I'm using the agent?
           </p>
           <p class="mt-1">
             BYOK accounts (Bring Your Own Anthropic Key) settle LLM
             cost directly with the LLM vendor; we don't meter what
-            we don't pay for. If you're on pass-through pricing, you
-            should see a non-zero line — open a support ticket if
-            not.
+            we don't pay for. If bundled billing is enabled, each
+            standard Builder or Scale agent turn adds $0.10; Enterprise
+            follows its contracted custom rate. Open a support ticket if
+            completed bundled turns still show 0.
           </p>
         </div>
         <div>

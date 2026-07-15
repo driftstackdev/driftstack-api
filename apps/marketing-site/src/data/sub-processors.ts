@@ -72,14 +72,14 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     name: 'Stripe',
     region: 'Stripe Payments Europe Ltd (Ireland)',
     purpose:
-      'Payment processing, subscription management, usage-based billing for the bring-your-own-key (BYOK) AI option, and VAT (Dutch BTW) reverse-charge handling via Stripe Tax.',
+      'Payment processing, subscription management, billing for Driftstack-bundled AI usage, and VAT (Dutch BTW) reverse-charge handling via Stripe Tax. BYOK AI usage is billed directly by the model provider, not Stripe through Driftstack.',
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
   {
     name: 'Anthropic',
     region: 'United States',
     purpose:
-      "Large language model (LLM) behind the optional AI agent feature. Engaged in two modes: (1) Bring your own key (BYOK) — the customer supplies their own Anthropic API key; the customer's contract is with Anthropic directly, and Driftstack only passes the request through without keeping it (a transient proxy). (2) Bundled — opt-in only; Driftstack uses its own key (deployment-managed) and bills the customer at a markup. Session data flows to Anthropic only when one of these two modes is actually used in a given AI step.",
+      "Large language model (LLM) behind the optional AI agent feature. Engaged in two modes: (1) Bring your own key (BYOK) — the customer supplies their own Anthropic API key; the customer's contract is with Anthropic directly, and Driftstack only passes the request through without keeping it (a transient proxy). (2) Bundled — opt-in only; Driftstack uses its own deployment-managed key and bills standard Builder and Scale usage at $0.10 per agent turn, while Enterprise can use a contracted custom rate. Session data flows to Anthropic only when one of these two modes is actually used in a given AI step.",
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
   {

@@ -5,7 +5,7 @@
 //
 //   • V-671 doc-comment framing + V-541.D GET /v1/account/cost companion.
 //   • 5 cost components: Compute (session-minutes) / Storage (R2 GB-months) /
-//     Egress (TURN GB) / Email (Postmark sends) / LLM tokens (BYOK 0).
+//     Egress (TURN GB) / Email (Postmark sends) / bundled AI usage (BYOK 0).
 //   • Retention defaults: 30d screenshots/DOM, 90d recordings.
 //   • thresholdState 3-state enum: under-soft / between-soft-and-hard / over-hard.
 //   • Soft + hard email alerts fire once per crossing.
@@ -37,7 +37,7 @@ describe('W514.B apps/marketing-site/src/pages/docs/cost-monitoring.astro conten
     );
   });
 
-  it("5-cost-component framing pinned: Compute (session-minutes) + Storage (R2 GB-months) + Egress (TURN GB) + Email (Postmark sends) + LLM tokens + 'The breakdown returned by /v1/account/cost mirrors the same five components.' — pinned so the 5-line component surface + the mirrors-the-route commitment survives (drift to dropping any component would create marketing↔cost-breakdown-response divergence)", () => {
+  it("5-cost-component framing pins bundled AI's flat turn rate while preserving the llmCents response field", () => {
     expect(body).toMatch(
       /<dt class="text-sm font-medium text-tk-ink">Compute \(session-minutes\)<\/dt>/,
     );
@@ -48,7 +48,11 @@ describe('W514.B apps/marketing-site/src/pages/docs/cost-monitoring.astro conten
     expect(body).toMatch(
       /<dt class="text-sm font-medium text-tk-ink">Email \(Postmark sends\)<\/dt>/,
     );
-    expect(body).toMatch(/<dt class="text-sm font-medium text-tk-ink">LLM tokens<\/dt>/);
+    expect(body).toMatch(/<dt class="text-sm font-medium text-tk-ink">Bundled AI usage<\/dt>/);
+    expect(body).toMatch(/API\s*\n?\s*Scale usage posts \$0\.10 per agent turn/);
+    expect(body).toMatch(/Enterprise can use\s*\n?\s*its contracted custom rate/);
+    expect(body).toMatch(/<code class="font-mono">llmCents<\/code> field/);
+    expect(body).not.toMatch(/pass-through pricing|operational markup|input \+ output tokens/i);
     expect(body).toMatch(
       /The breakdown returned by\s*\n?\s*<code class="font-mono">\/v1\/account\/cost<\/code> mirrors the\s*\n?\s*same five components\./,
     );
@@ -92,13 +96,15 @@ describe('W514.B apps/marketing-site/src/pages/docs/cost-monitoring.astro conten
     expect(body).toMatch(/All amounts are integer cents/);
   });
 
-  it("FAQ 3-question framing pinned: 'Is the response real-time?' + 'Within a few seconds of the underlying usage event. Snapshots aren't persisted yet, so the endpoint recomputes every request. This will move to nightly snapshots when traffic justifies caching' + 'Why are LLM tokens 0 even though I'm using the agent?' BYOK + 'What happens if I cross the hard cap?' 'Nothing is automatically blocked. The platform alerts our ops team and emails you. We reach out to discuss raising the cap or moving you to a higher tier; we never silently kill running sessions to enforce a soft cap.' — pinned so the 3-FAQ + never-silently-kill commitment survives (drift to silently-killing on hard-cap would break customer-trust commitment)", () => {
+  it('FAQ pins real-time recomputation, BYOK zero cost, flat standard bundled turns, and the never-silently-kill cap boundary', () => {
     expect(body).toMatch(/Is the response real-time\?/);
     expect(body).toMatch(
       /Within a few seconds of the underlying usage event\.\s*\n?\s*Snapshots aren't persisted yet, so the endpoint\s*\n?\s*recomputes every request\. This will move to nightly\s*\n?\s*snapshots when traffic justifies caching/,
     );
-    expect(body).toMatch(/Why are LLM tokens 0 even though I'm using the agent\?/);
+    expect(body).toMatch(/Why is bundled AI cost 0 even though I'm using the agent\?/);
     expect(body).toMatch(/BYOK accounts \(Bring Your Own Anthropic Key\)/);
+    expect(body).toMatch(/standard Builder or Scale agent turn adds \$0\.10/);
+    expect(body).toMatch(/Enterprise\s*\n?\s*follows its contracted custom rate/);
     expect(body).toMatch(/What happens if I cross the hard cap\?/);
     expect(body).toMatch(
       /Nothing is automatically blocked\. The platform alerts our\s*\n?\s*ops team and emails you\. We reach out to discuss raising\s*\n?\s*the cap or moving you to a higher tier; we never silently\s*\n?\s*kill running sessions to enforce a soft cap\./,
