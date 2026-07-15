@@ -349,7 +349,8 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         const [stored] = await client<
           Array<{ secret: string; updated_at: string }>
         >`SELECT secret, updated_at FROM webhook_endpoints WHERE id = ${endpointId}`;
-        expect(stored?.secret).toBe(successor);
+        if (stored === undefined) throw new Error('Migrated webhook endpoint row disappeared.');
+        expect(stored.secret).toBe(successor);
         expect(new Date(stored.updated_at).toISOString()).toBe(updatedAt.toISOString());
       } finally {
         if (transactionOpen) await blocker`ROLLBACK`.catch(() => {});
