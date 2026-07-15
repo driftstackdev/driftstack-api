@@ -139,4 +139,10 @@ describe('owner platform-secrets routes (secrets Phase A slice 2) parity', () =>
     expect(body).toContain("action: 'secret.deleted',");
     expect(body).toMatch(/reply\.code\(isUpdate \? 200 : 201\)/);
   });
+
+  it('validates secret values by exact UTF-8 storage bytes before the service call', () => {
+    expect(body).toContain('isValidPlatformSecretValue');
+    expect(body).toContain('PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES');
+    expect(body).toMatch(/value: z\.string\(\)\.refine\(isValidPlatformSecretValue,/);
+  });
 });

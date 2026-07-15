@@ -248,6 +248,28 @@ describe('owner secrets-management routes (secrets Phase A slice 2)', () => {
     expect(auditRepo.getAll()).toHaveLength(0);
     await app.close();
   });
+
+  it('accepts exactly 8192 UTF-8 bytes and rejects a shorter-code-unit oversized value', async () => {
+    const { app } = await buildApp();
+    const headers = { authorization: `Bearer ${OWNER_TOKEN}` };
+    const exact = await app.inject({
+      method: 'PUT',
+      url: '/v1/admin/owner/secrets/multibyte_key',
+      headers,
+      payload: { value: 'é'.repeat(4096) },
+    });
+    expect(exact.statusCode).toBe(201);
+
+    const oversized = await app.inject({
+      method: 'PUT',
+      url: '/v1/admin/owner/secrets/multibyte_key',
+      headers,
+      payload: { value: 'é'.repeat(4097) },
+    });
+    expect(oversized.statusCode).toBe(400);
+    expect(oversized.body).not.toContain('é'.repeat(100));
+    await app.close();
+  });
 });
 
 describe('disabled deployment (MFA_ENCRYPTION_KEY unset) — V-352b mapping', () => {

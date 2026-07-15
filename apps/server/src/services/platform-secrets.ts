@@ -1,24 +1,28 @@
 // Platform-secrets service (admin-cockpit secrets Phase A — founder-locked
-// decision 3, 2026-06-04: DB-backed key management, encrypted at rest with the
-// BYOK pattern, owner-gated + audited).
+// decision 3, 2026-06-04: DB-backed key management, name-bound encryption at
+// rest, owner-gated + audited).
 //
-// This is the STORAGE/SERVICE layer; the owner-gated routes + per-action audit
-// land in the next increment (so for now it has no production caller — the
-// same staging the pricing-as-data arc used). Design points:
+// This is the STORAGE/SERVICE layer behind the live owner-gated routes and
+// per-action admin audit. Design points:
 //
 //   - `name` is a stable slug (e.g. 'stripe_secret_key') — validated here so a
 //     typo'd or hostile name can't smuggle path-ish/format-ish junk into audit
 //     logs or future env-sync tooling.
-//   - Values are AES-256-GCM-encrypted (lib/platform-secret-encryption, the
-//     BYOK blob format) under the shared MFA_ENCRYPTION_KEY. No key configured
-//     → the service is OFF (set/reveal throw FeatureUnavailable-style errors at
-//     the route layer; here they throw plain Errors the route maps).
+//   - Values use a name-bound AES-256-GCM v2 byte envelope under the shared
+//     MFA_ENCRYPTION_KEY. No key configured → the service is OFF (set/reveal
+//     throw FeatureUnavailable-style errors at the route layer; here they
+//     throw plain Errors the route maps).
 //   - `list()` NEVER touches ciphertext — metadata only. `reveal()` is the only
 //     decrypt path and returns the brand-typed plaintext so call sites that log
 //     it are visibly unsafe in review.
 
 import type { PlatformSecretPlaintext } from '../lib/platform-secret-encryption.js';
-import { decryptPlatformSecret, encryptPlatformSecret } from '../lib/platform-secret-encryption.js';
+import {
+  decryptPlatformSecretValue,
+  encryptPlatformSecretValue,
+  isValidPlatformSecretValue,
+  PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES,
+} from '../lib/platform-secret-value-encryption.js';
 import { ValidationError } from '../lib/errors.js';
 
 export interface PlatformSecretMeta {
@@ -52,7 +56,6 @@ const NAME_RE = /^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$/;
 
 /** Values are operational secrets (API keys, tokens, DSNs) — bound the size so
  *  a paste-accident (a whole file) can't balloon the table. */
-const MAX_VALUE_CHARS = 8192;
 const MAX_DESCRIPTION_CHARS = 256;
 
 export class PlatformSecretsService {
@@ -97,10 +100,12 @@ export class PlatformSecretsService {
         },
       });
     }
-    if (args.value.length === 0 || args.value.length > MAX_VALUE_CHARS) {
+    if (!isValidPlatformSecretValue(args.value)) {
       throw new ValidationError({
         formErrors: [],
-        fieldErrors: { value: [`must be 1-${MAX_VALUE_CHARS} characters`] },
+        fieldErrors: {
+          value: [`must be 1-${PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES} exact UTF-8 bytes`],
+        },
       });
     }
     const description = args.description ?? null;
@@ -112,7 +117,7 @@ export class PlatformSecretsService {
     }
     await this.repo.upsert({
       name: args.name,
-      ciphertext: encryptPlatformSecret(args.value, key),
+      ciphertext: encryptPlatformSecretValue(args.value, key, args.name),
       description,
       updatedByKeyId: args.updatedByKeyId ?? null,
     });
@@ -124,7 +129,7 @@ export class PlatformSecretsService {
     const key = this.requireKey();
     const blob = await this.repo.getCiphertext(name);
     if (blob === null) return null;
-    return decryptPlatformSecret(blob, key);
+    return decryptPlatformSecretValue(blob, key, name);
   }
 
   /** Delete one secret. False when it didn't exist (route maps to 404). */

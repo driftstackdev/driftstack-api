@@ -3,15 +3,92 @@
 // metadata only; getCiphertext is the single blob read path (feeding the
 // service's reveal()).
 
-import { eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq, sql } from 'drizzle-orm';
+import {
+  convertPlatformSecretValueToV2,
+  decryptPlatformSecretValue,
+  PLATFORM_SECRET_VALUE_V2_PREFIX,
+} from '../lib/platform-secret-value-encryption.js';
 import type { PlatformSecretMeta, PlatformSecretsRepo } from '../services/platform-secrets.js';
 import type { Database } from './client.js';
 import { platformSecrets } from './schema.js';
+
+const MAX_PLATFORM_SECRET_VALUE_MIGRATION_BATCH = 500;
+const PLATFORM_SECRET_VALUE_V2_PREFIX_BYTES = Buffer.from(PLATFORM_SECRET_VALUE_V2_PREFIX, 'utf8');
+
+function platformSecretValueIsV2() {
+  return sql`substring(${platformSecrets.ciphertext} from 1 for ${PLATFORM_SECRET_VALUE_V2_PREFIX_BYTES.length}) = ${PLATFORM_SECRET_VALUE_V2_PREFIX_BYTES}`;
+}
+
+function platformSecretValueIsLegacy() {
+  return sql`NOT (${platformSecretValueIsV2()})`;
+}
 
 // W197 — only the `db` handle is read; narrow the dependency so e2e fixtures
 // stay composable without the full Database envelope.
 export class DrizzlePlatformSecretsRepo implements PlatformSecretsRepo {
   constructor(private readonly database: Pick<Database, 'db'>) {}
+
+  /**
+   * Bootstrap-only no-DDL conversion from context-free byte envelopes to
+   * name-bound v2. It authenticates a successor probe, prevalidates a complete
+   * bounded page, and exact-CASes name + old ciphertext without moving metadata.
+   */
+  async migrateValueEnvelopes(
+    encryptionKeyBase64: string,
+    limit = MAX_PLATFORM_SECRET_VALUE_MIGRATION_BATCH,
+  ): Promise<{ scanned: number; converted: number; remaining: number }> {
+    if (
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > MAX_PLATFORM_SECRET_VALUE_MIGRATION_BATCH
+    ) {
+      throw new Error(
+        `Platform-secret value migration limit must be an integer from 1 to ` +
+          `${MAX_PLATFORM_SECRET_VALUE_MIGRATION_BATCH.toString()}.`,
+      );
+    }
+
+    const [v2Probe] = await this.database.db
+      .select({ name: platformSecrets.name, ciphertext: platformSecrets.ciphertext })
+      .from(platformSecrets)
+      .where(platformSecretValueIsV2())
+      .orderBy(asc(platformSecrets.name))
+      .limit(1);
+    if (v2Probe !== undefined) {
+      decryptPlatformSecretValue(v2Probe.ciphertext, encryptionKeyBase64, v2Probe.name);
+    }
+
+    const rows = await this.database.db
+      .select({ name: platformSecrets.name, ciphertext: platformSecrets.ciphertext })
+      .from(platformSecrets)
+      .where(platformSecretValueIsLegacy())
+      .orderBy(asc(platformSecrets.name))
+      .limit(limit);
+
+    const prepared = rows.map((row) => ({
+      ...row,
+      next: convertPlatformSecretValueToV2(row.ciphertext, encryptionKeyBase64, row.name),
+    }));
+
+    let converted = 0;
+    for (const row of prepared) {
+      const updated = await this.database.db
+        .update(platformSecrets)
+        .set({ ciphertext: row.next })
+        .where(
+          and(eq(platformSecrets.name, row.name), eq(platformSecrets.ciphertext, row.ciphertext)),
+        )
+        .returning({ name: platformSecrets.name });
+      if (updated.length === 1) converted += 1;
+    }
+
+    const [remainingRow] = await this.database.db
+      .select({ value: count() })
+      .from(platformSecrets)
+      .where(platformSecretValueIsLegacy());
+    return { scanned: rows.length, converted, remaining: remainingRow?.value ?? 0 };
+  }
 
   async listMeta(): Promise<PlatformSecretMeta[]> {
     const rows = await this.database.db

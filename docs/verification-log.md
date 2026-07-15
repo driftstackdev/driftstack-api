@@ -27553,3 +27553,40 @@ The package plus directly affected duplicate source guards pass 18 files and
 267/267 tests. Targeted ESLint/Prettier, the package composite typecheck, strict
 server test TypeScript, the full workspace typecheck and the full configured
 workspace build are green.
+
+## V-657 — Platform-secret values authenticate their stable names
+
+**Date:** 2026-07-14
+
+The live owner-only platform-secret routes encrypted values at rest with a
+context-free AES-256-GCM byte blob. The authentication tag protected each blob's
+bytes, but not its owning `platform_secrets.name`; a complete valid ciphertext
+relocated under another secret name therefore remained readable. This was a
+database-boundary integrity risk requiring corruption or write access, not an
+unauthenticated network path. The route and service also counted JavaScript
+UTF-16 code units for the 8,192 limit instead of the encrypted UTF-8 bytes.
+
+New writes use an explicit `driftstack:platform-secret-value:v2:` byte envelope.
+AES-GCM additional authenticated data is a canonical JSON array containing a
+dedicated purpose, version 2, the validated lowercase secret name, and the
+semantic `value` role. Ordinary set and reveal paths accept v2 only; cross-name
+relocation, a wrong purpose, wrong key, ciphertext modification, unknown
+version, truncation, extension, invalid name, or malformed envelope fails
+closed. Plaintext must be 1–8,192 exact UTF-8 bytes, and the owner route and
+service share that byte-aware predicate.
+
+The no-DDL bootstrap bridge is the only path that accepts the prefixless legacy
+format. It authenticates one v2 successor probe, selects a deterministic bounded
+legacy page, validates every row before the first write, and compares both the
+stable name and exact old ciphertext on update. The maintenance write changes
+only ciphertext, preserving description, created/updated timestamps and editor
+metadata. Startup drains synchronously to zero with no-progress and 10,000-row
+caps before the owner routes are composed.
+
+The focused codec/service/route/bootstrap matrix passes 6 files and 77/77
+tests. The connected PostgreSQL proof passes 3/3 cases, covering wrong-key byte
+preservation, metadata-preserving conversion, name relocation refusal,
+whole-page prevalidation, and a deterministically blocked exact compare-and-swap
+that preserves a concurrent v2 successor. Strict server source-and-test
+TypeScript, targeted ESLint/Prettier, diff and whitespace checks, the full
+workspace typecheck, and the full configured workspace build are green.

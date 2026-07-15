@@ -26,6 +26,10 @@ import type { AdminAuditService } from '../services/admin-audit.js';
 import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { TIER_MONTHLY_PRICE_CENTS } from '../lib/cost-defaults.js';
+import {
+  isValidPlatformSecretValue,
+  PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES,
+} from '../lib/platform-secret-value-encryption.js';
 
 export interface OwnerPlatformStatus {
   billing: boolean;
@@ -77,7 +81,9 @@ const SecretNameParamsSchema = z.object({
     .regex(/^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$/, 'lowercase snake_case slug'),
 });
 const SetSecretBodySchema = z.object({
-  value: z.string().min(1).max(8192),
+  value: z.string().refine(isValidPlatformSecretValue, {
+    message: `must be 1-${PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES.toString()} exact UTF-8 bytes`,
+  }),
   description: z.string().max(256).nullable().optional(),
 });
 

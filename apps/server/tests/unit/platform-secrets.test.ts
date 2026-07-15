@@ -16,6 +16,10 @@ import {
   type PlatformSecretsRepo,
 } from '../../src/services/platform-secrets.js';
 import { ValidationError } from '../../src/lib/errors.js';
+import {
+  decryptPlatformSecretValue,
+  PLATFORM_SECRET_VALUE_V2_PREFIX,
+} from '../../src/lib/platform-secret-value-encryption.js';
 
 const KEY = randomBytes(32).toString('base64');
 const OTHER_KEY = randomBytes(32).toString('base64');
@@ -92,7 +96,21 @@ describe('PlatformSecretsService', () => {
     expect(list).toHaveLength(1);
     expect(JSON.stringify(list)).not.toContain('sk-live-AAA');
     // Stored at rest encrypted — the raw store never holds the plaintext.
-    expect(repo.store.get('stripe_secret_key')?.includes(Buffer.from('sk-live-AAA'))).toBe(false);
+    const stored = repo.store.get('stripe_secret_key');
+    expect(stored?.includes(Buffer.from('sk-live-AAA'))).toBe(false);
+    expect(stored?.subarray(0, Buffer.byteLength(PLATFORM_SECRET_VALUE_V2_PREFIX)).toString()).toBe(
+      PLATFORM_SECRET_VALUE_V2_PREFIX,
+    );
+    expect(decryptPlatformSecretValue(stored!, KEY, 'stripe_secret_key')).toBe('sk-live-AAA');
+  });
+
+  it('rejects a complete valid ciphertext relocated under another secret name', async () => {
+    const repo = makeRepo();
+    const svc = new PlatformSecretsService(repo, KEY);
+    await svc.set({ name: 'stripe_secret_key', value: 'stripe-value' });
+    await svc.set({ name: 'postmark_server_token', value: 'postmark-value' });
+    repo.store.set('postmark_server_token', Buffer.from(repo.store.get('stripe_secret_key')!));
+    await expect(svc.reveal('postmark_server_token')).rejects.toThrow();
   });
 
   it('reveal of an unknown name → null; remove → true then false', async () => {
@@ -114,10 +132,14 @@ describe('PlatformSecretsService', () => {
     await svc.set({ name: 'snake_case_name', value: 'v' });
   });
 
-  it('rejects an empty / oversized value + an oversized description', async () => {
+  it('enforces exact UTF-8 byte bounds + an oversized description', async () => {
     const svc = new PlatformSecretsService(makeRepo(), KEY);
     await expect(svc.set({ name: 'k', value: '' })).rejects.toThrow(ValidationError);
+    await expect(svc.set({ name: 'k', value: 'x'.repeat(8192) })).resolves.toBeUndefined();
+    await expect(svc.set({ name: 'k', value: 'é'.repeat(4096) })).resolves.toBeUndefined();
     await expect(svc.set({ name: 'k', value: 'x'.repeat(8193) })).rejects.toThrow(ValidationError);
+    await expect(svc.set({ name: 'k', value: 'é'.repeat(4097) })).rejects.toThrow(ValidationError);
+    await expect(svc.set({ name: 'k', value: '\ud800' })).rejects.toThrow(ValidationError);
     await expect(svc.set({ name: 'k', value: 'v', description: 'd'.repeat(257) })).rejects.toThrow(
       ValidationError,
     );

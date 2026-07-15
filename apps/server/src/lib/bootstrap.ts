@@ -678,9 +678,42 @@ export async function createProductionDeps(
   const pricingService = new PricingService(new DrizzlePricingRepo(dbHandle));
   // Secrets Phase A (migration 0074): owner platform-secret store, encrypted
   // under the shared MFA_ENCRYPTION_KEY (Q1-verdict reuse, same as BYOK/MFA).
-  // Key unset -> service constructs DISABLED (list works; set/reveal throw).
+  // Prefixless legacy values synchronously drain to name-bound v2 before the
+  // live owner routes are composed. Key unset -> service constructs DISABLED
+  // (list works; set/reveal throw).
+  const platformSecretsRepo = new DrizzlePlatformSecretsRepo(dbHandle);
+  if (config.mfaEncryptionKey !== undefined) {
+    const MAX_PLATFORM_SECRET_VALUE_BOOT_MIGRATION_ROWS = 10_000;
+    let scanned = 0;
+    let converted = 0;
+    let remaining = 0;
+    do {
+      const batch = await platformSecretsRepo.migrateValueEnvelopes(config.mfaEncryptionKey, 500);
+      scanned += batch.scanned;
+      converted += batch.converted;
+      remaining = batch.remaining;
+      if (remaining > 0 && (batch.scanned === 0 || batch.converted === 0)) {
+        throw new Error(
+          `Platform-secret value migration made no progress with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+      if (remaining > 0 && scanned >= MAX_PLATFORM_SECRET_VALUE_BOOT_MIGRATION_ROWS) {
+        throw new Error(
+          `Platform-secret value migration exceeded the ` +
+            `${MAX_PLATFORM_SECRET_VALUE_BOOT_MIGRATION_ROWS.toString()}-row boot bound with ` +
+            `${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+    } while (remaining > 0);
+    if (scanned > 0) {
+      logger.info(
+        { component: 'platform-secret-value-encryption', scanned, converted, remaining },
+        'legacy platform-secret values migrated to name-bound v2 before serving',
+      );
+    }
+  }
   const platformSecretsService = new PlatformSecretsService(
-    new DrizzlePlatformSecretsRepo(dbHandle),
+    platformSecretsRepo,
     config.mfaEncryptionKey ?? null,
   );
   const rateLimitOverridesService = new RateLimitOverridesService(

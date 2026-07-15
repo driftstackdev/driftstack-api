@@ -115,6 +115,20 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).not.toMatch(/webhookSecretUpgradeInFlight/);
   });
 
+  it('synchronously drains platform-secret values to name-bound v2 before service construction', () => {
+    expect(body).toContain('const platformSecretsRepo = new DrizzlePlatformSecretsRepo(dbHandle);');
+    expect(body).toContain('const MAX_PLATFORM_SECRET_VALUE_BOOT_MIGRATION_ROWS = 10_000;');
+    expect(body).toContain('await platformSecretsRepo.migrateValueEnvelopes(');
+    expect(body).toContain('Platform-secret value migration made no progress');
+    expect(body).toContain(
+      'legacy platform-secret values migrated to name-bound v2 before serving',
+    );
+    expect(body.indexOf('migrateValueEnvelopes')).toBeLessThan(
+      body.indexOf('new PlatformSecretsService('),
+    );
+    expect(body).not.toMatch(/platformSecretValueUpgradeTimer/);
+  });
+
   it('header framing pinned: pure-factory; pass-in deps NOT lazy; every external connection (Postgres pool, Redis, R2, Sentry, Postmark) opened HERE so SIGTERM handler closes them deterministically', () => {
     expect(body).toMatch(/\/\/ Production bootstrap\./);
     expect(body).toMatch(

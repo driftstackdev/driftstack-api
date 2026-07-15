@@ -572,11 +572,12 @@ export const pricing = pgTable('pricing', {
 });
 
 // platform_secrets — admin-cockpit secrets Phase A (founder-locked decision 3):
-// DB-backed platform secret store, encrypted at rest with the BYOK blob
-// pattern ([12 IV | 16 tag | N ct] AES-256-GCM under the shared
-// MFA_ENCRYPTION_KEY). `name` is the stable slug PK; ciphertext is NEVER
-// returned by list reads (repo list selects metadata only). Owner-gated
-// management + audit ride the routes slice. Migration 0074.
+// DB-backed platform secret store. Values use an explicit v2 byte prefix plus
+// [12 IV | 16 tag | N ct] AES-256-GCM under the shared MFA_ENCRYPTION_KEY, with
+// AAD binding each ciphertext to its stable `name` PK and semantic value role.
+// Ciphertext is NEVER returned by list reads (repo list selects metadata only).
+// Owner-gated management + audit ride the routes slice. Migration 0074 created
+// the table; the bounded bootstrap bridge upgrades its prefixless legacy rows.
 export const platformSecrets = pgTable('platform_secrets', {
   name: text('name').primaryKey(),
   description: text('description'),
