@@ -160,7 +160,7 @@ satisfy the 90-day gate.
 |    401 | unauthorized            | missing or invalid bearer token                                                                                                                       |
 |    403 | forbidden               | scope check failed (write op without account_owner)                                                                                                   |
 |    502 | byok-anthropic-required | session turn resolved no key (no BYOK + no bundled-llm + no fallback) — surfaced from the agent-session message route, not from this surface directly |
-|    503 | feature-unavailable     | deployment hasn't wired the BYOKAnthropicService (typical pre-`MFA_ENCRYPTION_KEY` posture)                                                           |
+|    503 | feature-unavailable     | encrypted BYOK key storage is unavailable for this deployment (for example, encryption configuration is missing)                                      |
 
 ## Privacy
 

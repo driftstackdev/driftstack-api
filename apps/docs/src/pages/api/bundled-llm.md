@@ -17,12 +17,11 @@ session route's resolution chain prefers [BYOK](/api/byok-anthropic/)
 (per-request header or stored) over bundled-LLM — bundled-LLM is
 the no-BYOK fallback.
 
-Activation: the settings + status routes are always registered (the
-bootstrap wires a `BundledLlmService` by default), so they don't
-return a `503` stub. Consent and budget enforcement surface as `402`
-at agent-session turn time (see below); any `503` you encounter is
-likewise returned on the agent-session turn route, not on these
-settings/status reads.
+The settings and status endpoints are always available. Consent and
+budget enforcement surface as typed `402` responses at agent-session
+turn time (see below). If an inference dependency is unavailable, the
+agent-session turn endpoint returns the corresponding typed `503`;
+settings and status reads remain available.
 
 ## Resource shape
 

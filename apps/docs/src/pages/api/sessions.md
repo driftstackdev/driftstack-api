@@ -434,12 +434,12 @@ write returns 403).
 
 ## Errors common to every endpoint
 
-| Status | Type                    | When                                                            |
-| ------ | ----------------------- | --------------------------------------------------------------- |
-| 401    | `unauthorized`          | Missing / invalid bearer                                        |
-| 403    | `forbidden`             | Scope missing (write on a read-only key)                        |
-| 404    | `not-found`             | Session not found / not owned                                   |
-| 410    | `session-destroyed`     | Session is `destroyed`; recreate                                |
-| 504    | `session-timeout`       | An operation exceeded its time budget mid-call                  |
-| 502    | `driver-error`          | Driver-level failure (network, crash)                           |
-| 503    | `driver-not-integrated` | Real WebKit driver unavailable; the server is configured for it |
+| Status | Type                    | When                                                          |
+| ------ | ----------------------- | ------------------------------------------------------------- |
+| 401    | `unauthorized`          | Missing / invalid bearer                                      |
+| 403    | `forbidden`             | Scope missing (write on a read-only key)                      |
+| 404    | `not-found`             | Session not found / not owned                                 |
+| 410    | `session-destroyed`     | Session is `destroyed`; recreate                              |
+| 504    | `session-timeout`       | An operation exceeded its time budget mid-call                |
+| 502    | `driver-error`          | Driver-level failure (network, crash)                         |
+| 503    | `driver-not-integrated` | The selected browser driver is unavailable in this deployment |

@@ -28,9 +28,9 @@ describe('AI-B4 sub-slice 8.20.m docs/api/recipes.md parity', () => {
     expect(body).toMatch(/description: .+intent_log.+/);
   });
 
-  it('explains the v1.0 create/list/read/delete surface (only execute stays v1.1)', () => {
-    expect(body).toMatch(/The v1\.0 surface covers create, list, read, and delete/);
-    expect(body).toMatch(/v1\.1/);
+  it('explains the current create/list/read/delete surface and does not promise an execution endpoint', () => {
+    expect(body).toMatch(/The current surface covers create, list, read, and delete/);
+    expect(body).toMatch(/There is no recipe-execution endpoint/);
     expect(body).toMatch(/POST \/v1\/recipes/);
     expect(body).toMatch(/GET \/v1\/recipes/);
     expect(body).toMatch(/DELETE \/v1\/recipes\/\{id\}/);

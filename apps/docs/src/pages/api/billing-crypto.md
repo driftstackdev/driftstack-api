@@ -89,11 +89,11 @@ dashboard if needed).
 | `api_builder`   | $499/mo     | yes           |
 | `api_scale`     | $1,499/mo   | yes           |
 
-The server short-circuits to the stub posture (`provider: 'stub'`
-
-- null payment fields) for any product priced below the
-  NowPayments-USD floor; no upstream call is made. No current tier
-  is below the floor, but the guard remains.
+For a product priced below the NowPayments USD floor, the API returns
+an unavailable checkout response (`provider: "stub"` with null payment
+fields) and makes no upstream call. Every current tier clears the floor;
+the guard prevents a future mispriced product from creating an invalid
+checkout.
 
 ## Order status lifecycle
 
