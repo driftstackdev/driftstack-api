@@ -9,6 +9,14 @@ import type {
   ScheduledJobsRepo,
 } from '../services/scheduled-jobs.js';
 
+function parseClaimedRunAt(value: unknown): Date {
+  const parsed = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null;
+  if (parsed === null || !Number.isFinite(parsed.getTime())) {
+    throw new TypeError('scheduled_jobs.run_at returned an invalid timestamp');
+  }
+  return parsed;
+}
+
 export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
   constructor(private readonly database: Database) {}
 
@@ -92,7 +100,7 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
       job_type: string;
       account_id: string | null;
       payload: Record<string, unknown>;
-      run_at: Date;
+      run_at: unknown;
       attempts: number;
       max_attempts: number;
     }>(sql`
@@ -125,7 +133,12 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
       jobType: r.job_type as string,
       accountId: (r.account_id as string | null) ?? null,
       payload: (r.payload as Record<string, unknown>) ?? {},
-      runAt: r.run_at as Date,
+      // Raw db.execute() rows bypass Drizzle's column-schema timestamp
+      // decoder and postgres-js returns timestamptz as an ISO string in the
+      // production driver configuration. Normalize at this repository
+      // boundary: self-arming handlers pass runAt back through Drizzle's
+      // timestamp mapper, which correctly requires a real Date.
+      runAt: parseClaimedRunAt(r.run_at),
       attempts: r.attempts as number,
       maxAttempts: r.max_attempts as number,
     }));

@@ -122,13 +122,15 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
     expect(p).toMatch(/sj\.attempts, sj\.max_attempts;/);
   });
 
-  it('CRITICAL claimDue returns 7-field row shape — id + jobType + accountId??null + payload??{} + runAt + attempts + maxAttempts.', () => {
+  it('CRITICAL claimDue returns 7-field row shape and fail-closed normalized runAt Date.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/scheduled-jobs-repo.ts'));
+    expect(p).toMatch(/function parseClaimedRunAt\(value: unknown\): Date \{/);
+    expect(p).toMatch(/!Number\.isFinite\(parsed\.getTime\(\)\)/);
     expect(p).toMatch(/id: r\.id as string,/);
     expect(p).toMatch(/jobType: r\.job_type as string,/);
     expect(p).toMatch(/accountId: \(r\.account_id as string \| null\) \?\? null,/);
     expect(p).toMatch(/payload: \(r\.payload as Record<string, unknown>\) \?\? \{\},/);
-    expect(p).toMatch(/runAt: r\.run_at as Date,/);
+    expect(p).toMatch(/runAt: parseClaimedRunAt\(r\.run_at\),/);
     expect(p).toMatch(/attempts: r\.attempts as number,/);
     expect(p).toMatch(/maxAttempts: r\.max_attempts as number,/);
   });

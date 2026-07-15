@@ -98,13 +98,24 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
     );
   });
 
-  it('claimDue dual-shape row iter (postgres-js typed array vs {rows} envelope); rows.map to ScheduledJobRow shape (snake_case → camel; payload defaulted {})', () => {
+  it('claimDue dual-shape row iter normalizes the raw timestamp and maps the ScheduledJobRow shape', () => {
     expect(body).toMatch(
       /\/\/ postgres-js returns rows as a typed array\.\s*\n?\s*const rows = \(result as unknown as \{ rows\?: unknown\[\] \}\)\.rows \?\? \(result as unknown\[\]\);/,
     );
+    expect(body).toMatch(/function parseClaimedRunAt\(value: unknown\): Date \{/);
+    expect(body).toMatch(/value instanceof Date \? value : typeof value === 'string'/);
+    expect(body).toMatch(/!Number\.isFinite\(parsed\.getTime\(\)\)/);
     expect(body).toMatch(
-      /return \(rows as Array<Record<string, unknown>>\)\.map\(\(r\) => \(\{\s*\n?\s*id: r\.id as string,\s*\n?\s*jobType: r\.job_type as string,\s*\n?\s*accountId: \(r\.account_id as string \| null\) \?\? null,\s*\n?\s*payload: \(r\.payload as Record<string, unknown>\) \?\? \{\},\s*\n?\s*runAt: r\.run_at as Date,\s*\n?\s*attempts: r\.attempts as number,\s*\n?\s*maxAttempts: r\.max_attempts as number,\s*\n?\s*\}\)\);/,
+      /throw new TypeError\('scheduled_jobs\.run_at returned an invalid timestamp'\)/,
     );
+    expect(body).toMatch(/return \(rows as Array<Record<string, unknown>>\)\.map\(\(r\) => \(\{/);
+    expect(body).toMatch(/id: r\.id as string,/);
+    expect(body).toMatch(/jobType: r\.job_type as string,/);
+    expect(body).toMatch(/accountId: \(r\.account_id as string \| null\) \?\? null,/);
+    expect(body).toMatch(/payload: \(r\.payload as Record<string, unknown>\) \?\? \{\},/);
+    expect(body).toMatch(/runAt: parseClaimedRunAt\(r\.run_at\),/);
+    expect(body).toMatch(/attempts: r\.attempts as number,/);
+    expect(body).toMatch(/maxAttempts: r\.max_attempts as number,/);
   });
 
   it('markComplete: completedAt + clear lockedBy/lockedAt + updatedAt where id; markRetry: bump runAt + lastError + clear locked + updatedAt; markFailed: failedAt + lastError + clear locked + updatedAt', () => {

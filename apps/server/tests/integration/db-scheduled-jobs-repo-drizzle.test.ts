@@ -73,12 +73,13 @@ beforeAll(async () => {
 afterAll(async () => {
   if (client) {
     // Clean up rows this suite inserted so they don't accumulate in
-    // the DB across test runs. Matches all `regression_guard_dummy`
-    // jobs by type — the suite is the only writer of that job_type.
+    // the DB across test runs. Matches both regression-guard job types —
+    // the suite is their only writer.
     // No-throw on the delete (DB may already be torn down).
-    await client`DELETE FROM scheduled_jobs WHERE job_type = 'regression_guard_dummy'`.catch(
-      () => {},
-    );
+    await client`
+      DELETE FROM scheduled_jobs
+       WHERE job_type IN ('regression_guard_dummy', 'regression_guard_self_arm')
+    `.catch(() => {});
     await client.end({ timeout: 5 });
   }
 });
@@ -132,11 +133,59 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(ours.length).toBeGreaterThanOrEqual(1);
       const job = ours.find((j) => j.payload.marker === workerId);
       expect(job).toBeDefined();
+      expect(job!.runAt).toBeInstanceOf(Date);
+      expect(Number.isFinite(job!.runAt.getTime())).toBe(true);
+      expect(job!.runAt.toISOString()).toBe(pastRunAt.toISOString());
       // Cleanup — mark every claimed regression-guard job complete so
       // future runs don't see them as still-pending.
       for (const j of ours) {
         await repo.markComplete(j.id, new Date());
       }
+    });
+
+    it('normalizes raw run_at before a self-arming handler feeds it to Drizzle dedup', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
+      const logger = pino({ level: 'silent' });
+      const workerId = `regression-guard-self-arm-${Date.now()}`;
+      const service = new ScheduledJobsService(repo, logger, {
+        workerId,
+        batchSize: 16,
+      });
+      service.register('regression_guard_self_arm', async (job) => {
+        expect(job.runAt).toBeInstanceOf(Date);
+        await service.enqueue({
+          jobType: job.jobType,
+          accountId: null,
+          payload: { successor: workerId },
+          runAt: new Date(Date.now() + 60_000),
+          dedupOnAccountAndType: true,
+          dedupAfterRunAt: job.runAt,
+        });
+      });
+
+      await repo.enqueue({
+        jobType: 'regression_guard_self_arm',
+        accountId: null,
+        payload: { current: workerId },
+        runAt: new Date(Date.now() - 5_000),
+      });
+      await expect(service.processTick(new Date())).resolves.toEqual(
+        expect.objectContaining({ processed: expect.any(Number) }),
+      );
+
+      const [successor] = await client<[{ pending: number }]>`
+        SELECT COUNT(*)::int AS pending
+          FROM scheduled_jobs
+         WHERE job_type = 'regression_guard_self_arm'
+           AND completed_at IS NULL
+           AND failed_at IS NULL
+           AND payload ->> 'successor' = ${workerId}
+      `;
+      expect(successor?.pending).toBe(1);
     });
 
     it('ScheduledJobsService.processTick runs claimDue end-to-end without crashing (the actual prod hot path)', async () => {
