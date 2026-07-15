@@ -3,7 +3,7 @@
 // error boundary remain mounted, while the old view itself still unmounts once
 // the destination commits so hidden polling/live media cannot continue.
 
-import { lazy, useEffect } from 'react';
+import { lazy, useEffect, useState } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
@@ -37,7 +37,13 @@ vi.mock('@sentry/browser', () => ({
   BrowserTracing: class {},
 }));
 
-const { StableViewPanel, useViewNavigation, viewScrollKey } = await import('../../src/App');
+const {
+  StableViewPanel,
+  useViewNavigation,
+  useWorkspaceScopedView,
+  viewAfterWorkspaceChange,
+  viewScrollKey,
+} = await import('../../src/App');
 
 describe('stable App view navigation', () => {
   it('keeps revealed content during first lazy load, preserves main + scroll, and unmounts inactive views', async () => {
@@ -74,6 +80,7 @@ describe('stable App view navigation', () => {
           </button>
           <StableViewPanel
             destinationKey={viewScrollKey(view)}
+            contentIdentity="workspace:personal"
             loadingFallback={<div>Full-panel loading fallback</div>}
             errorFallback={() => <div>View failed</div>}
           >
@@ -110,5 +117,142 @@ describe('stable App view navigation', () => {
     expect(settingsCleanup).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('main')).toBe(main);
     expect(main.scrollTop).toBe(137);
+  });
+
+  it('remounts only workspace-scoped content and isolates/restores each workspace scroll', async () => {
+    const cleanup = vi.fn();
+
+    function ScopedChild({ workspace }: { workspace: string }): JSX.Element {
+      const [draft, setDraft] = useState('');
+      useEffect(() => cleanup, []);
+      return (
+        <label>
+          {workspace} draft
+          <input
+            aria-label="Workspace draft"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </label>
+      );
+    }
+
+    function Harness(): JSX.Element {
+      const [workspace, setWorkspace] = useState<'personal' | 'team-b'>('personal');
+      const contentIdentity =
+        workspace === 'personal' ? 'workspace:personal' : 'workspace:team:acct_b';
+      return (
+        <>
+          <button type="button" onClick={() => setWorkspace('personal')}>
+            Personal
+          </button>
+          <button type="button" onClick={() => setWorkspace('team-b')}>
+            Team B
+          </button>
+          <StableViewPanel
+            destinationKey="profiles"
+            contentIdentity={contentIdentity}
+            loadingFallback={<div>Loading workspace</div>}
+            errorFallback={() => <div>Workspace failed</div>}
+          >
+            <ScopedChild workspace={workspace} />
+          </StableViewPanel>
+        </>
+      );
+    }
+
+    render(<Harness />);
+    const main = screen.getByRole('main');
+    const draft = screen.getByRole('textbox', { name: 'Workspace draft' });
+    fireEvent.change(draft, { target: { value: 'personal-only state' } });
+    main.scrollTop = 83;
+    fireEvent.scroll(main);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team B' }));
+    expect(screen.getByRole('main')).toBe(main);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('textbox', { name: 'Workspace draft' })).toHaveValue('');
+    expect(main.scrollTop).toBe(0);
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Workspace draft' }), {
+      target: { value: 'team-only state' },
+    });
+    main.scrollTop = 29;
+    fireEvent.scroll(main);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Personal' }));
+    await waitFor(() => expect(main.scrollTop).toBe(83));
+    expect(screen.getByRole('main')).toBe(main);
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('textbox', { name: 'Workspace draft' })).toHaveValue('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team B' }));
+    await waitFor(() => expect(main.scrollTop).toBe(29));
+    expect(screen.getByRole('main')).toBe(main);
+    expect(cleanup).toHaveBeenCalledTimes(3);
+  });
+
+  it('drops only stale profile entity payloads at a workspace boundary', () => {
+    expect(viewAfterWorkspaceChange({ kind: 'ai', profileId: 'prof_a' })).toEqual({ kind: 'ai' });
+    expect(viewAfterWorkspaceChange({ kind: 'profiles', profileId: 'prof_a' })).toEqual({
+      kind: 'profiles',
+    });
+    const recording = { kind: 'recording-player', recordingId: 'rec_local' } as const;
+    expect(viewAfterWorkspaceChange(recording)).toBe(recording);
+    const profiles = { kind: 'profiles' } as const;
+    expect(viewAfterWorkspaceChange(profiles)).toBe(profiles);
+  });
+
+  it('never renders or effects a stale profile id in the newly keyed workspace child', async () => {
+    const rendered: Array<string | undefined> = [];
+    const effected: Array<string | undefined> = [];
+
+    function ProfileChild({ profileId }: { profileId?: string }): JSX.Element {
+      rendered.push(profileId);
+      useEffect(() => {
+        effected.push(profileId);
+      }, [profileId]);
+      return <div>Profile: {profileId ?? 'none'}</div>;
+    }
+
+    function Harness(): JSX.Element {
+      const [workspace, setWorkspace] = useState<string | null>(null);
+      const [view, , replaceView] = useViewNavigation({
+        kind: 'profiles',
+        profileId: 'prof_a',
+      });
+      const scopedView = useWorkspaceScopedView(view, replaceView, workspace);
+      const contentIdentity =
+        workspace === null ? 'workspace:personal' : `workspace:team:${workspace}`;
+      return (
+        <>
+          <button type="button" onClick={() => setWorkspace('acct_b')}>
+            Team B
+          </button>
+          <StableViewPanel
+            destinationKey={viewScrollKey(scopedView)}
+            contentIdentity={contentIdentity}
+            loadingFallback={<div>Loading workspace</div>}
+            errorFallback={() => <div>Workspace failed</div>}
+          >
+            {scopedView.kind === 'profiles' ? (
+              <ProfileChild profileId={scopedView.profileId} />
+            ) : null}
+          </StableViewPanel>
+        </>
+      );
+    }
+
+    render(<Harness />);
+    expect(await screen.findByText('Profile: prof_a')).toBeInTheDocument();
+    await waitFor(() => expect(effected).toEqual(['prof_a']));
+    const renderBoundary = rendered.length;
+    const effectBoundary = effected.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team B' }));
+    expect(await screen.findByText('Profile: none')).toBeInTheDocument();
+    await waitFor(() => expect(effected.length).toBeGreaterThan(effectBoundary));
+    expect(rendered.slice(renderBoundary)).not.toContain('prof_a');
+    expect(effected.slice(effectBoundary)).not.toContain('prof_a');
   });
 });

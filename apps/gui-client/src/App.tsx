@@ -7,6 +7,7 @@
 // history stack to integrate with.
 
 import {
+  Fragment,
   lazy,
   Suspense,
   useCallback,
@@ -100,19 +101,56 @@ export type View =
 /** One transition-owned state boundary for every navigation entry point. A lazy
  * destination may suspend, but React keeps the already-revealed view visible
  * until its chunk is ready instead of committing the full-panel fallback. */
-export function useViewNavigation(initial: View): readonly [View, (next: View) => void] {
+export function useViewNavigation(
+  initial: View,
+): readonly [View, (next: View) => void, (next: View) => void] {
   const [view, setView] = useState<View>(initial);
   const [, startNavigation] = useTransition();
   const navigate = useCallback((next: View): void => {
     startNavigation(() => setView(next));
   }, []);
-  return [view, navigate] as const;
+  // Account/workspace replacement is not ordinary navigation: it must remove a
+  // stale entity payload before the new scoped child's passive effects run.
+  // Keep this immediate setter private to the workspace boundary's layout
+  // reconciliation; every user navigation entry point uses `navigate` above.
+  const replaceForScope = useCallback((next: View): void => setView(next), []);
+  return [view, navigate, replaceForScope] as const;
 }
 
 /** Recording players need independent scroll positions; every other destination
  * is one sidebar surface even when it was opened with an initial entity id. */
 export function viewScrollKey(view: View): string {
   return view.kind === 'recording-player' ? `${view.kind}:${view.recordingId}` : view.kind;
+}
+
+/** An entity deep link belongs to the workspace where it was opened. A workspace
+ * switch keeps the destination but drops that old profile id before the fresh
+ * view's effects can resolve or act on it. */
+export function viewAfterWorkspaceChange(view: View): View {
+  if (view.kind === 'ai' && view.profileId !== undefined) return { kind: 'ai' };
+  if (view.kind === 'profiles' && view.profileId !== undefined) return { kind: 'profiles' };
+  return view;
+}
+
+/** Derive the view rendered for the current workspace before React creates its
+ * child subtree. The stored navigation state is reconciled in layout, but the
+ * fresh workspace can never render or run effects with an old entity payload. */
+export function useWorkspaceScopedView(
+  view: View,
+  replaceView: (next: View) => void,
+  activeWorkspace: string | null,
+): View {
+  const previousWorkspaceRef = useRef(activeWorkspace);
+  const workspaceChanged = previousWorkspaceRef.current !== activeWorkspace;
+  const scopedView = workspaceChanged ? viewAfterWorkspaceChange(view) : view;
+
+  useLayoutEffect(() => {
+    if (!workspaceChanged) return;
+    previousWorkspaceRef.current = activeWorkspace;
+    if (scopedView !== view) replaceView(scopedView);
+  }, [activeWorkspace, replaceView, scopedView, view, workspaceChanged]);
+
+  return scopedView;
 }
 
 const VIEW_SCROLL_CACHE_LIMIT = 32;
@@ -129,27 +167,32 @@ function rememberViewScroll(positions: Map<string, number>, key: string, scrollT
 
 export function StableViewPanel({
   destinationKey,
+  contentIdentity,
   children,
   loadingFallback,
   errorFallback,
 }: {
   destinationKey: string;
+  /** Opaque account/workspace identity. Changing it remounts only the active
+   * view child and namespaces scroll/error state; shell/main/boundary persist. */
+  contentIdentity: string;
   children: ReactNode;
   loadingFallback: ReactNode;
   errorFallback: (retry: () => void) => ReactNode;
 }): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
+  const scopedDestinationKey = `${contentIdentity}\0${destinationKey}`;
 
   // Restore before paint. The view component itself still unmounts normally,
   // so inactive polls/live media clean up rather than running behind the rail.
   useLayoutEffect(() => {
     const main = mainRef.current;
     if (main === null) return;
-    const saved = scrollPositionsRef.current.get(destinationKey) ?? 0;
+    const saved = scrollPositionsRef.current.get(scopedDestinationKey) ?? 0;
     main.scrollTop = saved;
-    rememberViewScroll(scrollPositionsRef.current, destinationKey, saved);
-  }, [destinationKey]);
+    rememberViewScroll(scrollPositionsRef.current, scopedDestinationKey, saved);
+  }, [scopedDestinationKey]);
 
   return (
     <main
@@ -157,14 +200,16 @@ export function StableViewPanel({
       onScroll={(event) => {
         rememberViewScroll(
           scrollPositionsRef.current,
-          destinationKey,
+          scopedDestinationKey,
           event.currentTarget.scrollTop,
         );
       }}
       className="min-w-0 flex-1 overflow-auto bg-surface-base"
     >
-      <ErrorBoundary resetKey={destinationKey} fallback={errorFallback}>
-        <Suspense fallback={loadingFallback}>{children}</Suspense>
+      <ErrorBoundary resetKey={scopedDestinationKey} fallback={errorFallback}>
+        <Suspense fallback={loadingFallback}>
+          <Fragment key={contentIdentity}>{children}</Fragment>
+        </Suspense>
       </ErrorBoundary>
     </main>
   );
@@ -347,7 +392,14 @@ function Shell(): JSX.Element {
   // 2026-06-14 — Command Center ('home') is the default landing (5→10 G4):
   // it leads with Automate (Ask AI / recipes) + an account/session overview,
   // making automation the primary surface; Profiles/Sessions are one click away.
-  const [view, setView] = useViewNavigation({ kind: 'home' });
+  const [view, setView, replaceViewForScope] = useViewNavigation({ kind: 'home' });
+  // Workspace switches rebuild SettingsContext's SDK client. Derive the safe
+  // view during render, before React creates the newly keyed child, then
+  // reconcile stored navigation state in layout. No fresh-workspace render or
+  // passive effect can therefore observe an old entity-bearing profile link.
+  const scopedView = useWorkspaceScopedView(view, replaceViewForScope, activeWorkspace);
+  const workspaceContentIdentity =
+    activeWorkspace === null ? 'workspace:personal' : `workspace:team:${activeWorkspace}`;
   // ⌘K command palette (demo-concepts arc) — global hotkey, view navigation.
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Keyboard-shortcuts cheatsheet (5→10 polish) — `?` or ⌘/. `?` is suppressed
@@ -710,7 +762,7 @@ function Shell(): JSX.Element {
         ) : null}
         <div className="flex flex-1 overflow-hidden">
           <Sidebar
-            current={sidebarSectionFor(view)}
+            current={sidebarSectionFor(scopedView)}
             onNavigate={(kind) => setView({ kind })}
             onSignOut={() => void handleSignOut()}
             onOpenPalette={() => setPaletteOpen(true)}
@@ -720,7 +772,8 @@ function Shell(): JSX.Element {
               table (Profiles list view) blows the whole layout past the viewport
               instead of letting its own overflow-x-auto scroll. (founder 2026-06-16) */}
           <StableViewPanel
-            destinationKey={viewScrollKey(view)}
+            destinationKey={viewScrollKey(scopedView)}
+            contentIdentity={workspaceContentIdentity}
             errorFallback={(retry) => (
               <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
                 <div className="max-w-md space-y-2">
@@ -757,7 +810,7 @@ function Shell(): JSX.Element {
                 unexpected throw bubbling to RootErrorBoundary and blanking the
                 whole window (no recover path there). The boundary stays mounted
                 and resets by destination identity, avoiding a panel remount. */}
-            <CurrentView view={view} onNavigate={setView} />
+            <CurrentView view={scopedView} onNavigate={setView} />
           </StableViewPanel>
         </div>
         <CommandPalette

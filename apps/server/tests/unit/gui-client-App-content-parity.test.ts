@@ -119,11 +119,11 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).not.toMatch(/redactBaseUrl/);
   });
 
-  it("Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current={sidebarSectionFor(view)} /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the sidebarSectionFor() helper folds the DRILLED-IN sub-view ('recording-player'→'recordings') AND the item-less live-Sessions view ('sessions'→'sessions-history') onto their parent section so the nav stays lit (replacing the old `view.kind as SidebarViewKind` cast that matched nothing for those views); the 'live-session'→'sessions' fold was dropped with the in-app session viewer (2026-06-26)", () => {
+  it("Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current={sidebarSectionFor(scopedView)} /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the sidebarSectionFor() helper folds the DRILLED-IN sub-view ('recording-player'→'recordings') AND the item-less live-Sessions view ('sessions'→'sessions-history') onto their parent section so the nav stays lit (replacing the old `view.kind as SidebarViewKind` cast that matched nothing for those views); the 'live-session'→'sessions' fold was dropped with the in-app session viewer (2026-06-26)", () => {
     expect(body).toMatch(
       /import \{ Sidebar, type SidebarViewKind \} from '\.\/components\/Sidebar';/,
     );
-    expect(body).toMatch(/<Sidebar\s*\n?\s*current=\{sidebarSectionFor\(view\)\}/);
+    expect(body).toMatch(/<Sidebar\s*\n?\s*current=\{sidebarSectionFor\(scopedView\)\}/);
     expect(body).toMatch(
       /export function sidebarSectionFor\(view: View\): SidebarViewKind \{\s*\n?\s*switch \(view\.kind\) \{\s*\n?\s*case 'recording-player':\s*\n?\s*return 'recordings';/,
     );
@@ -171,23 +171,57 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
   });
 
   it('founder tab-switch continuity: one transition-owned navigator + stable main/resettable boundary + bounded per-destination scroll; inactive views are not cached', () => {
-    expect(body).toContain('export function useViewNavigation(initial: View)');
+    expect(body).toContain('export function useViewNavigation(');
     expect(body).toContain('const [, startNavigation] = useTransition();');
     expect(body).toContain('startNavigation(() => setView(next));');
     expect(body).toContain('export function StableViewPanel({');
     expect(body).toContain('const VIEW_SCROLL_CACHE_LIMIT = 32;');
     expect(body).toContain('useLayoutEffect(() => {');
     expect(body).toContain('main.scrollTop = saved;');
-    expect(body).toContain('<ErrorBoundary resetKey={destinationKey} fallback={errorFallback}>');
-    expect(body).toContain('<Suspense fallback={loadingFallback}>{children}</Suspense>');
-    expect(body).toContain("const [view, setView] = useViewNavigation({ kind: 'home' });");
-    expect(body).toContain('destinationKey={viewScrollKey(view)}');
+    expect(body).toContain(
+      '<ErrorBoundary resetKey={scopedDestinationKey} fallback={errorFallback}>',
+    );
+    expect(body).toContain('<Fragment key={contentIdentity}>{children}</Fragment>');
+    expect(body).toContain(
+      "const [view, setView, replaceViewForScope] = useViewNavigation({ kind: 'home' });",
+    );
+    expect(body).toContain('destinationKey={viewScrollKey(scopedView)}');
     expect(body).not.toContain('key={view.kind}');
     expect(body).not.toContain('bg-surface-base animate-view-in');
     // Deliberately no keep-alive/offscreen destination cache: CurrentView remains
     // one child, so switching still runs the prior view's effect cleanup.
-    expect(body).toContain('<CurrentView view={view} onNavigate={setView} />');
+    expect(body).toContain('<CurrentView view={scopedView} onNavigate={setView} />');
     expect(body).not.toMatch(/keepAlive|KeepAlive|Offscreen/);
+  });
+
+  it('workspace identity remounts only the active child and cannot carry entity or scroll state across accounts', () => {
+    expect(body).toContain('export function viewAfterWorkspaceChange(view: View): View');
+    expect(body).toContain(
+      "if (view.kind === 'ai' && view.profileId !== undefined) return { kind: 'ai' };",
+    );
+    expect(body).toContain(
+      "if (view.kind === 'profiles' && view.profileId !== undefined) return { kind: 'profiles' };",
+    );
+    expect(body).toContain('export function useWorkspaceScopedView(');
+    expect(body).toContain('const previousWorkspaceRef = useRef(activeWorkspace);');
+    expect(body).toContain(
+      'const scopedView = workspaceChanged ? viewAfterWorkspaceChange(view) : view;',
+    );
+    expect(body).toContain('if (scopedView !== view) replaceView(scopedView);');
+    expect(body).toContain(
+      'const scopedView = useWorkspaceScopedView(view, replaceViewForScope, activeWorkspace);',
+    );
+    expect(body).toContain(
+      "activeWorkspace === null ? 'workspace:personal' : `workspace:team:${activeWorkspace}`;",
+    );
+    expect(body).toContain('contentIdentity={workspaceContentIdentity}');
+    expect(body).toContain('<CurrentView view={scopedView} onNavigate={setView} />');
+    expect(body).not.toContain('<CurrentView view={view} onNavigate={setView} />');
+    expect(body).toContain(
+      'const scopedDestinationKey = `${contentIdentity}\\0${destinationKey}`;',
+    );
+    expect(body).toContain('<Fragment key={contentIdentity}>{children}</Fragment>');
+    expect(body).not.toMatch(/key=\{workspaceContentIdentity\}[\s\S]{0,80}?<main/);
   });
 
   it('file exists at canonical path', () => {

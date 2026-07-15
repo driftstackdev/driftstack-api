@@ -28524,3 +28524,39 @@ Direct navigation/boundary/content proof passes 3 files and 17/17 tests; the exp
 shell, sidebar, palette, deep-link and sign-out matrix passes 14 files and 98/98
 tests. Strict GUI and server-test TypeScript, targeted ESLint/Prettier and
 diff/whitespace checks are green.
+
+---
+
+## V-683 — Workspace switches replace only account-scoped view content
+
+**Date:** 2026-07-15
+
+SettingsContext correctly rebuilt its SDK client when the active workspace changed,
+but the continuous App content panel could retain the active view component's local
+state, effects and scroll position across that client replacement. Profiles and AI
+entity deep links could also carry a profile id selected in the prior workspace into
+the fresh client's first effects. This made old account data briefly visible or
+actionable in another workspace even though ordinary sidebar navigation no longer
+reloaded the page.
+
+The stable view panel now receives an opaque workspace content identity. A change
+keys only the active child fragment, forcing that account-scoped component and its
+polls or live resources through cleanup and a fresh mount while preserving the shell,
+main DOM node, Suspense boundary and ErrorBoundary instance. Error and bounded scroll
+state are namespaced by workspace plus destination, so offsets restore when returning
+to a workspace but never leak into another. A render-time workspace boundary removes
+stale AI/Profiles entity ids before React creates the newly keyed child, then
+reconciles stored navigation state in layout; ordinary user navigation remains
+transition-owned.
+
+The behavior regression proof types a workspace-only draft, records independent
+personal and team scroll offsets, switches personal→team→personal→team, and pins
+child cleanup/remount, cleared local state, exact per-workspace restoration and one
+stable main element. Pure and content-parity proofs pin selective entity-id removal,
+render-time replacement, scoped error/scroll identity and child-only remounting. A
+Shell-equivalent hook harness records every new-workspace render and passive effect
+and proves neither ever receives the old profile id. Direct behavior/content proof
+passes 2 files and 18/18 tests; the expanded shell, boundary, sidebar, palette,
+deep-link and sign-out matrix passes 14 files and 102/102
+tests. Strict GUI and server-test TypeScript, targeted ESLint/Prettier and
+diff/whitespace checks are green.
