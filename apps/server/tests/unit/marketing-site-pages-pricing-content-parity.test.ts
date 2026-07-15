@@ -171,12 +171,18 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     );
   });
 
-  it("BYOK / Bundled LLM section pinned: 'BYOK or bundled — your call.' + 'API Builder, API Scale, Enterprise' bundled-tier list + 'Self-hosted SKUs are BYOK-only because we don't proxy LLM calls into customer hardware.' — pinned so the bundled-tier scope + the self-hosted-BYOK-only architectural reason survive (drift to claiming self-hosted bundled would create marketing↔engineering divergence)", () => {
+  it('BYOK / Bundled LLM section pins the live $0.10 standard turn rate, Enterprise custom-rate boundary, desktop/API enablement, and self-hosted BYOK-only posture', () => {
     expect(body).toMatch(/BYOK or bundled — your call\./);
     expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
+    expect(body).toMatch(/\$0\.10 per agent turn/);
+    expect(body).toMatch(/counts against the monthly cap you control/);
+    expect(body).toMatch(/Enterprise can use a\s*\n?\s*contracted custom rate/);
+    expect(body).toMatch(/Settings → AI &amp; billing/);
+    expect(body).toMatch(/bundled-LLM settings API/);
+    expect(body).not.toMatch(/announced at launch|per-token rate/i);
     // S20b 2026-07-06: same architectural reason, plain words.
     expect(body).toMatch(
-      /Self-hosted\s*\n?\s*plans are BYOK-only because we don't route AI calls into hardware you\s*\n?\s*own\./,
+      /Self-hosted\s+plans are BYOK-only\s+because we don't route AI calls into hardware you\s+own\./,
     );
   });
 

@@ -152,6 +152,16 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
     );
   });
 
+  it('AI billing states the shipped flat-per-turn and self-serve consent paths without launch promises', () => {
+    expect(body).toContain("q: 'How is AI usage billed?'");
+    expect(body).toMatch(/BYOK has no Driftstack markup/);
+    expect(body).toMatch(/bundled LLM usage is \$0\.10 per agent turn/);
+    expect(body).toMatch(/Enterprise can use a contracted custom rate/);
+    expect(body).toMatch(/Settings → AI &amp; billing/);
+    expect(body).toMatch(/PATCH \/v1\/account\/me\/bundled-llm-settings/);
+    expect(body).not.toMatch(/announced at launch|arrives at v1\.1|until then/i);
+  });
+
   it("Cap-reached HTTP 429 + RFC 9457 framing: 'Session-creation requests fail with HTTP 429 + a structured RFC 9457 problem-detail pointing at the cap-reached state and (where applicable) the next-tier upgrade path. Existing in-flight sessions are not interrupted.' — pinned so the 429 status + RFC 9457 + non-interruption contract stay explicit (drift to dropping non-interruption would let customers think hitting cap mid-fleet would kill in-flight sessions)", () => {
     // S20b 2026-07-06: the answer now leads plain ("starting one session
     // too many simply fails with a clear error") and keeps the developer
