@@ -3,7 +3,8 @@
 // produce the same outputs (matches the mock-driver discipline used
 // elsewhere in the repo: "deterministic; same inputs → same outputs").
 //
-// Phase 3 ships a non-mock generator behind the same interface.
+// Pure deterministic mouse, touch and scroll-velocity generators already
+// exist, so this reference simulator delegates to them for mock/real parity.
 
 import type {
   BehaviouralSimulator,
@@ -17,7 +18,8 @@ import { generateScrollVelocityProfile, type ScrollVelocityProfile } from './scr
 import { generateTouchEvent } from './touch.js';
 import { splitGraphemes } from './graphemes.js';
 import { MAX_TEXT_LENGTH } from './keyboard.js';
-import { requireFinite, requireIntegerInRange, requirePositiveFinite } from './validation.js';
+import { generateMouseTrajectory } from './mouse.js';
+import { requireFinite, requirePositiveFinite } from './validation.js';
 import type {
   BehaviouralProfile,
   KeyboardCadence,
@@ -51,21 +53,6 @@ const DEFAULT_PROFILES: readonly BehaviouralProfile[] = immutableProfileSnapshot
   },
 ]);
 
-/**
- * Bounds on `generateMouseTrajectory`'s `samples` option. There is no non-mock
- * mouse-trajectory implementation in this package — this IS the shipped
- * generator — so it gets the same validation as the other generators here.
- * Lower bound: `samples: 0` divides-by-zero in the `t = i / samples`
- * interpolation below (NaN points), so at least 1 is required. Upper bound:
- * a mouse trajectory realistically never needs more than a few hundred to a
- * low few thousand points (the default is 32; even a very deliberate, slow
- * mouse move sampled at a generous 1 kHz over a couple of seconds is still
- * only ~1-2k points), so 1,000 is a generous-but-bounded ceiling — matching
- * MAX_SAMPLES_PER_FINGER in multi-touch.ts for consistency across the
- * package's `samples`-shaped options.
- */
-export const MIN_MOUSE_TRAJECTORY_SAMPLES = 1;
-export const MAX_MOUSE_TRAJECTORY_SAMPLES = 1000;
 /** Bound the constant-tick mock's only caller-controlled allocation. */
 export const MAX_SCROLL_PATTERN_TICKS = 10_000;
 
@@ -83,42 +70,9 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
   }
 
   generateMouseTrajectory(opts: GenerateMouseTrajectoryOpts): MouseTrajectory {
-    for (const [name, value] of [
-      ['from.x', opts.from.x],
-      ['from.y', opts.from.y],
-      ['to.x', opts.to.x],
-      ['to.y', opts.to.y],
-    ] as const) {
-      requireFinite(`generateMouseTrajectory: ${name}`, value);
-    }
-    if (opts.samples !== undefined) {
-      requireIntegerInRange(
-        'generateMouseTrajectory: samples',
-        opts.samples,
-        MIN_MOUSE_TRAJECTORY_SAMPLES,
-        MAX_MOUSE_TRAJECTORY_SAMPLES,
-      );
-    }
-    const samples = opts.samples ?? 32;
-    const seed = opts.seed ?? defaultSeed('mouse', opts);
-    const dx = opts.to.x - opts.from.x;
-    const dy = opts.to.y - opts.from.y;
-    requireFinite('generateMouseTrajectory: derived x span', dx);
-    requireFinite('generateMouseTrajectory: derived y span', dy);
-    // Deterministic linear interpolation — the real Phase 3 path is
-    // Bezier with humanlike noise; the mock keeps it linear so tests
-    // can assert exact midpoints.
-    const points: Array<{ x: number; y: number; tMs: number }> = [];
-    const durationMs = 250;
-    for (let i = 0; i <= samples; i += 1) {
-      const t = i / samples;
-      points.push({
-        x: opts.from.x + dx * t,
-        y: opts.from.y + dy * t,
-        tMs: t * durationMs,
-      });
-    }
-    return { from: opts.from, to: opts.to, points, durationMs, seed };
+    // The real mouse generator is deterministic + pure, so delegating keeps
+    // consumer behavior identical on the mock and direct function surfaces.
+    return generateMouseTrajectory(opts);
   }
 
   generateKeyboardCadence(opts: GenerateKeyboardCadenceOpts): KeyboardCadence {

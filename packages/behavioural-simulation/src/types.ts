@@ -1,20 +1,14 @@
-// Phase 3 domain types — V-127 stub.
-//
-// Defines the shapes the behavioural simulator produces so consumers
-// (drivers, GUI client, recipe runner) can depend on them now while
-// Phase 3 swaps in the real implementation later.
-//
-// NO domain logic in this package — just types + interfaces + mock.
-// The real generators ship as a separate Phase 3 package and slot in
-// behind the same interface (see `interfaces.ts:BehaviouralSimulator`).
+// Behavioural-simulation domain types. Consumers (drivers, GUI client and
+// recipe runner) depend on these stable shapes while the private package's
+// pure deterministic generators evolve behind BehaviouralSimulator.
 
-/** Cubic-bezier control points describing a mouse path between two screen points. */
+/** Sampled cubic-Bézier mouse path between two screen points. */
 export interface MouseTrajectory {
   /** Start screen coordinate. */
   from: { x: number; y: number };
   /** End screen coordinate. */
   to: { x: number; y: number };
-  /** Sampled intermediate points. Length = `samples`. */
+  /** Sampled path including both endpoints. Length = `samples + 1`. */
   points: Array<{ x: number; y: number; tMs: number }>;
   /** Total wall-clock duration of the trajectory in ms. */
   durationMs: number;

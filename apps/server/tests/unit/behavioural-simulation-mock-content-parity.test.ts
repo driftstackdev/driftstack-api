@@ -1,6 +1,6 @@
 // W596.C — drift guard for packages/behavioural-simulation/src/mock.ts.
-// V-127 deterministic mock simulator + Phase-3 mock/real parity for
-// touch + scroll-velocity (real generators already deterministic).
+// V-127 deterministic mock simulator + mock/real parity for the pure
+// mouse, touch and scroll-velocity generators.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -18,14 +18,19 @@ function read(p: string): string {
 describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-127 mock framing + same-inputs-ALWAYS-same-outputs + mock-driver-discipline reference + Phase-3-non-mock-generator-behind-same-interface pinned', () => {
+  it('V-127 deterministic framing + pure-generator delegation seam pinned', () => {
     expect(body).toMatch(/\/\/ V-127 mock implementation\. Deterministic outputs so tests can/);
     expect(body).toMatch(/\/\/ assert exact shape without RNG flakiness; same inputs ALWAYS/);
     expect(body).toMatch(/\/\/ produce the same outputs \(matches the mock-driver discipline used/);
     expect(body).toMatch(
       /\/\/ elsewhere in the repo: "deterministic; same inputs → same outputs"\)\./,
     );
-    expect(body).toMatch(/\/\/ Phase 3 ships a non-mock generator behind the same interface\./);
+    expect(body).toMatch(
+      /\/\/ Pure deterministic mouse, touch and scroll-velocity generators already/,
+    );
+    expect(body).toMatch(
+      /\/\/ exist, so this reference simulator delegates to them for mock\/real parity\./,
+    );
   });
 
   it('DEFAULT_PROFILES: 2 personas (casual_browser_us + fast_typer_dev) with full BehaviouralProfile shape pinned', () => {
@@ -40,7 +45,7 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
     );
   });
 
-  it('defaultSeed deterministic label+JSON.stringify(opts) helper + MockBehaviouralSimulator 6 methods (mouse linear-interp + keyboard constant-delay + scroll constant-tick + touch via touch.ts + scroll-velocity via scroll.ts + listProfiles)', () => {
+  it('defaultSeed helper + MockBehaviouralSimulator delegates mouse while retaining the other five surfaces', () => {
     expect(body).toMatch(/^function defaultSeed\(label: string, opts: unknown\): string \{$/m);
     expect(body).toMatch(
       /\/\/ Deterministic seed = label \+ JSON-stringified opts\. Stable across/,
@@ -60,11 +65,10 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(
       /generateMouseTrajectory\(opts: GenerateMouseTrajectoryOpts\): MouseTrajectory \{/,
     );
-    expect(body).toMatch(/const samples = opts\.samples \?\? 32;/);
-    expect(body).toMatch(/\/\/ Deterministic linear interpolation — the real Phase 3 path is/);
-    expect(body).toMatch(/\/\/ Bezier with humanlike noise; the mock keeps it linear so tests/);
-    expect(body).toMatch(/\/\/ can assert exact midpoints\./);
-    expect(body).toMatch(/const durationMs = 250;/);
+    expect(body).toMatch(
+      /\/\/ The real mouse generator is deterministic \+ pure, so delegating keeps/,
+    );
+    expect(body).toMatch(/return generateMouseTrajectory\(opts\);/);
     expect(body).toMatch(
       /generateKeyboardCadence\(opts: GenerateKeyboardCadenceOpts\): KeyboardCadence \{/,
     );
@@ -120,10 +124,9 @@ describe('W596.C packages/behavioural-simulation/src/mock.ts content parity', ()
     );
   });
 
-  it('derived spans and mock keyboard text/duration boundaries are pinned', () => {
+  it('mouse delegation and mock keyboard text/duration boundaries are pinned', () => {
     expect(body).toContain("import { MAX_TEXT_LENGTH } from './keyboard.js';");
-    expect(body).toContain("requireFinite('generateMouseTrajectory: derived x span', dx);");
-    expect(body).toContain("requireFinite('generateMouseTrajectory: derived y span', dy);");
+    expect(body).toContain("import { generateMouseTrajectory } from './mouse.js';");
     expect(body).toContain('if (opts.text.length > MAX_TEXT_LENGTH) {');
     expect(body).toContain(
       "requireFinite('MockBehaviouralSimulator.generateKeyboardCadence: durationMs', durationMs);",

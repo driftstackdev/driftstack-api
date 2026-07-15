@@ -27,12 +27,13 @@ export type {
   ScrollVelocityTick,
 } from './scroll.js';
 
+export { MAX_SCROLL_PATTERN_TICKS, MockBehaviouralSimulator } from './mock.js';
 export {
+  generateMouseTrajectory,
   MAX_MOUSE_TRAJECTORY_SAMPLES,
-  MAX_SCROLL_PATTERN_TICKS,
   MIN_MOUSE_TRAJECTORY_SAMPLES,
-  MockBehaviouralSimulator,
-} from './mock.js';
+  MOUSE_ARC_LENGTH_SEGMENTS,
+} from './mouse.js';
 export { generateTouchEvent, TOUCH_DISTRIBUTIONS } from './touch.js';
 export {
   generateScrollVelocityProfile,

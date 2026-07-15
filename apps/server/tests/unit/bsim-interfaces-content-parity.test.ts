@@ -1,16 +1,15 @@
 // W450.C — drift guard for packages/behavioural-simulation/src/interfaces.ts.
-// V-127 stub interfaces. Drift here either drops one of the 6
+// Stable interfaces. Drift here either drops one of the 6
 // BehaviouralSimulator methods (drivers + recipe-runner + GUI client
 // would compile-fail at the consumer site mid-refactor) or
 // silently widens an Opts shape with a required field (existing
 // callers stop compiling without a deliberate migration commit).
 //
-//   • V-127 framing pinned ('Phase 3 real implementation slots in
-//     here without changing call sites.').
+//   • Stable pure-generator seam framing pinned.
 //   • imports: ScrollVelocityProfile from ./scroll; 7 type-only
 //     from ./types.
-//   • GenerateMouseTrajectoryOpts: from/to {x,y} + optional
-//     seed + optional samples (default 32).
+//   • GenerateMouseTrajectoryOpts: from/to {x,y} + required profile
+//     + optional seed + optional samples (default 32).
 //   • GenerateKeyboardCadenceOpts: text + profile (BehaviouralProfile)
 //     + optional seed.
 //   • GenerateScrollPatternOpts: direction enum (up|down|left|right)
@@ -45,9 +44,9 @@ function read(p: string): string {
 describe('W450.C packages/behavioural-simulation/src/interfaces.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-127 framing pinned: 'V-127 stub interfaces. The Phase 3 real implementation slots in here without changing call sites.'", () => {
+  it('stable pure-generator seam framing pinned', () => {
     expect(body).toMatch(
-      /\/\/ V-127 stub interfaces\. The Phase 3 real implementation slots in\s*\n?\s*\/\/ here without changing call sites\./,
+      /\/\/ Stable behavioural-simulation interfaces\. Pure generators slot in behind\s*\n?\s*\/\/ this seam while callers keep one coherent contract\./,
     );
   });
 
@@ -58,9 +57,9 @@ describe('W450.C packages/behavioural-simulation/src/interfaces.ts content parit
     );
   });
 
-  it('GenerateMouseTrajectoryOpts: from/to {x,y} + optional seed (deterministic per-call default) + optional samples (default 32)', () => {
+  it('GenerateMouseTrajectoryOpts: from/to {x,y} + required profile + optional seed/samples', () => {
     expect(body).toMatch(
-      /export interface GenerateMouseTrajectoryOpts \{\s*\n?\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};/,
+      /export interface GenerateMouseTrajectoryOpts \{\s*\n?\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};\s*\n?\s*\/\*\* Profile whose mean mouse speed determines trajectory duration\. \*\/\s*\n?\s*profile: BehaviouralProfile;/,
     );
     expect(body).toMatch(
       /\/\*\* Optional seed override \(defaults to deterministic per-call seed\)\. \*\/\s*\n?\s*seed\?: string;/,

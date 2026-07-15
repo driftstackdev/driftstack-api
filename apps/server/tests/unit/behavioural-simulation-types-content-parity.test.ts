@@ -1,5 +1,5 @@
 // W595.A — drift guard for packages/behavioural-simulation/src/types.ts.
-// V-127 stub + V-530.A per-element-class distributions framing.
+// Stable shapes + V-530.A per-element-class distributions framing.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -17,29 +17,20 @@ function read(p: string): string {
 describe('W595.A packages/behavioural-simulation/src/types.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-127 Phase-3 stub framing + NO-domain-logic-types-only contract + types-interfaces-mock-only pinned', () => {
-    expect(body).toMatch(/\/\/ Phase 3 domain types — V-127 stub\./);
-    expect(body).toMatch(/\/\/ Defines the shapes the behavioural simulator produces so consumers/);
+  it('stable domain-shape + private pure-generator seam framing pinned', () => {
+    expect(body).toMatch(/\/\/ Behavioural-simulation domain types\. Consumers/);
     expect(body).toMatch(
-      /\/\/ \(drivers, GUI client, recipe runner\) can depend on them now while/,
+      /\/\/ recipe runner\) depend on these stable shapes while the private package's/,
     );
-    expect(body).toMatch(/\/\/ Phase 3 swaps in the real implementation later\./);
-    expect(body).toMatch(
-      /\/\/ NO domain logic in this package — just types \+ interfaces \+ mock\./,
-    );
-    expect(body).toMatch(/\/\/ The real generators ship as a separate Phase 3 package and slot in/);
-    expect(body).toMatch(
-      /\/\/ behind the same interface \(see `interfaces\.ts:BehaviouralSimulator`\)\./,
-    );
+    expect(body).toMatch(/\/\/ pure deterministic generators evolve behind BehaviouralSimulator\./);
   });
 
   it('MouseTrajectory + KeyboardCadence + ScrollPattern types: from/to+points+durationMs+seed; text+delaysMs+durationMs+seed; direction-enum+totalDistancePx+ticks+durationMs+seed pinned', () => {
-    expect(body).toMatch(
-      /\/\*\* Cubic-bezier control points describing a mouse path between two screen points\. \*\//,
-    );
+    expect(body).toMatch(/\/\*\* Sampled cubic-Bézier mouse path between two screen points\. \*\//);
     expect(body).toMatch(/^export interface MouseTrajectory \{$/m);
     expect(body).toMatch(/from: \{ x: number; y: number \};/);
     expect(body).toMatch(/to: \{ x: number; y: number \};/);
+    expect(body).toMatch(/Sampled path including both endpoints\. Length = `samples \+ 1`\./);
     expect(body).toMatch(/points: Array<\{ x: number; y: number; tMs: number \}>;/);
     expect(body).toMatch(/durationMs: number;/);
     expect(body).toMatch(/seed: string;/);

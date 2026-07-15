@@ -1,5 +1,5 @@
-// V-127 stub interfaces. The Phase 3 real implementation slots in
-// here without changing call sites.
+// Stable behavioural-simulation interfaces. Pure generators slot in behind
+// this seam while callers keep one coherent contract.
 
 import type { ScrollVelocityProfile } from './scroll.js';
 import type {
@@ -17,6 +17,8 @@ export interface GenerateMouseTrajectoryOpts {
   from: { x: number; y: number };
   /** Finite CSS-pixel end coordinate. */
   to: { x: number; y: number };
+  /** Profile whose mean mouse speed determines trajectory duration. */
+  profile: BehaviouralProfile;
   /** Optional seed override (defaults to deterministic per-call seed). */
   seed?: string;
   /** Integer sample count in the implementation's bounded range (default 32). */
@@ -69,7 +71,7 @@ export interface GenerateScrollVelocityProfileOpts {
  * recipe runner, GUI client — depend on this interface only.
  */
 export interface BehaviouralSimulator {
-  /** Produce a sampled mouse path from `from` to `to`. */
+  /** Produce a profile-paced sampled mouse path from `from` to `to`. */
   generateMouseTrajectory(opts: GenerateMouseTrajectoryOpts): MouseTrajectory;
 
   /** Produce per-keystroke timings for a string typed by `profile`. */

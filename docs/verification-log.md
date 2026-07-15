@@ -27518,3 +27518,38 @@ blocked four-field compare-and-swap that preserves a concurrent v2 successor.
 Strict server source-and-test TypeScript, targeted ESLint/Prettier, diff and
 whitespace checks are green. The full workspace build is green with its required
 `PUBLIC_API_BASE_URL` build-time configuration.
+
+## V-656 — Mouse trajectories consume their profile and use bounded physical pacing
+
+**Date:** 2026-07-14
+
+The private behavioral-simulation package exposed a mouse profile speed but its
+only trajectory implementation ignored that value, emitted a fixed 250 ms
+straight line for every distance and persona, and described the returned sampled
+points as Bézier control points. No production caller imports this surface; the
+production harness remains the documented owner of the richer canonical
+behavioral model. This repair improves the deterministic reference/package
+implementation without claiming production capture fidelity.
+
+Mouse generation now requires an explicit `BehaviouralProfile`. A seeded bounded
+cubic Bézier uses forward-only control positions with lateral curvature, a fixed
+256-segment arc-length lookup table, minimum-jerk temporal progress, and
+`meanMouseSpeedPxPerMs` to derive wall-clock duration from path length. The mock
+delegates to the same pure generator, so its output no longer diverges from the
+direct surface and the previously unused mouse-speed field is load-bearing.
+Pause probability and mean pause time deliberately remain between-action concerns
+instead of being inserted into a single motion.
+
+The output includes exactly both endpoints and `samples + 1` points. Nonstationary
+timestamps are finite and strictly increasing; an equal-endpoint request returns
+a stationary zero-duration path. Coordinates, derived spans/control points/arc
+length/duration, the 0.01–10 px/ms profile-speed envelope and integer sample
+bounds fail closed, with both
+the caller-controlled output and internal arc table capped. Explicit seeds replay
+byte-identically, while the deterministic fallback seed includes endpoints,
+profile identity/speed and sample count.
+
+The package plus directly affected duplicate source guards pass 18 files and
+267/267 tests. Targeted ESLint/Prettier, the package composite typecheck, strict
+server test TypeScript, the full workspace typecheck and the full configured
+workspace build are green.

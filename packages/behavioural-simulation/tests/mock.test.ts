@@ -19,8 +19,16 @@ const PROFILE: BehaviouralProfile = {
 describe('MockBehaviouralSimulator — determinism', () => {
   it('generateMouseTrajectory is deterministic for identical inputs', () => {
     const sim = new MockBehaviouralSimulator();
-    const a = sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 100, y: 50 } });
-    const b = sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 100, y: 50 } });
+    const a = sim.generateMouseTrajectory({
+      from: { x: 0, y: 0 },
+      to: { x: 100, y: 50 },
+      profile: PROFILE,
+    });
+    const b = sim.generateMouseTrajectory({
+      from: { x: 0, y: 0 },
+      to: { x: 100, y: 50 },
+      profile: PROFILE,
+    });
     expect(a).toEqual(b);
   });
 
@@ -29,13 +37,13 @@ describe('MockBehaviouralSimulator — determinism', () => {
     const traj = sim.generateMouseTrajectory({
       from: { x: 0, y: 0 },
       to: { x: 200, y: 100 },
+      profile: PROFILE,
       samples: 16,
     });
     expect(traj.points).toHaveLength(17); // 0..samples inclusive
     expect(traj.points[0]).toEqual({ x: 0, y: 0, tMs: 0 });
-    expect(traj.points[16]).toEqual({ x: 200, y: 100, tMs: 250 });
-    // Midpoint check (linear interpolation in mock).
-    expect(traj.points[8]).toEqual({ x: 100, y: 50, tMs: 125 });
+    expect(traj.points[16]).toEqual({ x: 200, y: 100, tMs: traj.durationMs });
+    expect(traj.durationMs).toBeGreaterThan(0);
   });
 
   it('BSIM-3: rejects an absurd samples value on generateMouseTrajectory', () => {
@@ -44,6 +52,7 @@ describe('MockBehaviouralSimulator — determinism', () => {
       sim.generateMouseTrajectory({
         from: { x: 0, y: 0 },
         to: { x: 100, y: 50 },
+        profile: PROFILE,
         samples: 50_000_000,
       }),
     ).toThrow(/samples must be between/);
@@ -52,10 +61,20 @@ describe('MockBehaviouralSimulator — determinism', () => {
   it('BSIM-3: rejects a zero/negative samples value on generateMouseTrajectory', () => {
     const sim = new MockBehaviouralSimulator();
     expect(() =>
-      sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 100, y: 50 }, samples: 0 }),
+      sim.generateMouseTrajectory({
+        from: { x: 0, y: 0 },
+        to: { x: 100, y: 50 },
+        profile: PROFILE,
+        samples: 0,
+      }),
     ).toThrow(/samples must be between/);
     expect(() =>
-      sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 100, y: 50 }, samples: -5 }),
+      sim.generateMouseTrajectory({
+        from: { x: 0, y: 0 },
+        to: { x: 100, y: 50 },
+        profile: PROFILE,
+        samples: -5,
+      }),
     ).toThrow(/samples must be between/);
   });
 
@@ -65,6 +84,7 @@ describe('MockBehaviouralSimulator — determinism', () => {
       sim.generateMouseTrajectory({
         from: { x: 0, y: 0 },
         to: { x: 100, y: 50 },
+        profile: PROFILE,
         samples: MAX_MOUSE_TRAJECTORY_SAMPLES,
       }),
     ).not.toThrow();
@@ -72,6 +92,7 @@ describe('MockBehaviouralSimulator — determinism', () => {
       sim.generateMouseTrajectory({
         from: { x: 0, y: 0 },
         to: { x: 100, y: 50 },
+        profile: PROFILE,
         samples: MAX_MOUSE_TRAJECTORY_SAMPLES + 1,
       }),
     ).toThrow(/samples must be between/);
@@ -82,12 +103,14 @@ describe('MockBehaviouralSimulator — determinism', () => {
     const defaultTraj = sim.generateMouseTrajectory({
       from: { x: 0, y: 0 },
       to: { x: 100, y: 50 },
+      profile: PROFILE,
     });
     expect(defaultTraj.points).toHaveLength(33); // 0..32 inclusive
 
     const explicitTraj = sim.generateMouseTrajectory({
       from: { x: 0, y: 0 },
       to: { x: 200, y: 100 },
+      profile: PROFILE,
       samples: 16,
     });
     expect(explicitTraj.points).toHaveLength(17);
@@ -100,6 +123,7 @@ describe('MockBehaviouralSimulator — determinism', () => {
         sim.generateMouseTrajectory({
           from: { x: 0, y: 0 },
           to: { x: 100, y: 50 },
+          profile: PROFILE,
           samples,
         }),
       ).toThrow(/samples must/);
@@ -109,10 +133,18 @@ describe('MockBehaviouralSimulator — determinism', () => {
   it('rejects non-finite mouse coordinates instead of emitting NaN points', () => {
     const sim = new MockBehaviouralSimulator();
     for (const opts of [
-      { from: { x: Number.NaN, y: 0 }, to: { x: 10, y: 10 } },
-      { from: { x: 0, y: Number.POSITIVE_INFINITY }, to: { x: 10, y: 10 } },
-      { from: { x: 0, y: 0 }, to: { x: Number.NEGATIVE_INFINITY, y: 10 } },
-      { from: { x: 0, y: 0 }, to: { x: 10, y: Number.NaN } },
+      { from: { x: Number.NaN, y: 0 }, to: { x: 10, y: 10 }, profile: PROFILE },
+      {
+        from: { x: 0, y: Number.POSITIVE_INFINITY },
+        to: { x: 10, y: 10 },
+        profile: PROFILE,
+      },
+      {
+        from: { x: 0, y: 0 },
+        to: { x: Number.NEGATIVE_INFINITY, y: 10 },
+        profile: PROFILE,
+      },
+      { from: { x: 0, y: 0 }, to: { x: 10, y: Number.NaN }, profile: PROFILE },
     ]) {
       expect(() => sim.generateMouseTrajectory(opts)).toThrow(/must be finite/);
     }
@@ -124,14 +156,23 @@ describe('MockBehaviouralSimulator — determinism', () => {
       sim.generateMouseTrajectory({
         from: { x: Number.MAX_VALUE, y: 0 },
         to: { x: -Number.MAX_VALUE, y: 0 },
+        profile: PROFILE,
       }),
     ).toThrow(/derived x span must be finite/);
   });
 
   it('different inputs produce different seeds', () => {
     const sim = new MockBehaviouralSimulator();
-    const a = sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 100, y: 0 } });
-    const b = sim.generateMouseTrajectory({ from: { x: 0, y: 0 }, to: { x: 200, y: 0 } });
+    const a = sim.generateMouseTrajectory({
+      from: { x: 0, y: 0 },
+      to: { x: 100, y: 0 },
+      profile: PROFILE,
+    });
+    const b = sim.generateMouseTrajectory({
+      from: { x: 0, y: 0 },
+      to: { x: 200, y: 0 },
+      profile: PROFILE,
+    });
     expect(a.seed).not.toEqual(b.seed);
   });
 

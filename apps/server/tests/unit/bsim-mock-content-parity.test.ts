@@ -13,16 +13,12 @@
 //     produce the same outputs (matches the mock-driver discipline
 //     used elsewhere in the repo: "deterministic; same inputs →
 //     same outputs").'
-//   • Phase-3 seam rationale: 'Phase 3 ships a non-mock generator
-//     behind the same interface.'
+//   • Pure-generator delegation seam pinned.
 //   • DEFAULT_PROFILES: 2-entry catalogue (casual_browser_us +
 //     fast_typer_dev) with 5 numeric fields each.
 //   • defaultSeed: deterministic seed = label + JSON-stringified
 //     opts framing pinned.
-//   • generateMouseTrajectory: linear interpolation rationale 'real
-//     Phase 3 path is Bezier with humanlike noise; the mock keeps it
-//     linear so tests can assert exact midpoints.' + samples default
-//     32 + duration 250ms.
+//   • generateMouseTrajectory delegates to the pure mouse generator.
 //   • generateKeyboardCadence: 'Deterministic constant delay — real
 //     path samples around mean with profile-tuned jitter.' + delaysMs
 //     = repeat profile.meanKeyDelayMs.
@@ -58,7 +54,9 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     expect(body).toMatch(
       /\/\/ V-127 mock implementation\. Deterministic outputs so tests can\s*\n?\s*\/\/ assert exact shape without RNG flakiness; same inputs ALWAYS\s*\n?\s*\/\/ produce the same outputs \(matches the mock-driver discipline used\s*\n?\s*\/\/ elsewhere in the repo: "deterministic; same inputs → same outputs"\)\./,
     );
-    expect(body).toMatch(/\/\/ Phase 3 ships a non-mock generator behind the same interface\./);
+    expect(body).toMatch(
+      /\/\/ Pure deterministic mouse, touch and scroll-velocity generators already\s*\n?\s*\/\/ exist, so this reference simulator delegates to them for mock\/real parity\./,
+    );
   });
 
   it('imports: interface/types, real touch/scroll delegates, and the shared grapheme splitter', () => {
@@ -70,8 +68,9 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     );
     expect(body).toMatch(/import \{ generateTouchEvent \} from '\.\/touch\.js';/);
     expect(body).toMatch(/import \{ splitGraphemes \} from '\.\/graphemes\.js';/);
+    expect(body).toMatch(/import \{ generateMouseTrajectory \} from '\.\/mouse\.js';/);
     expect(body).toMatch(
-      /import \{ requireFinite, requireIntegerInRange, requirePositiveFinite \} from '\.\/validation\.js';/,
+      /import \{ requireFinite, requirePositiveFinite \} from '\.\/validation\.js';/,
     );
     expect(body).toMatch(
       /import type \{\s*\n?\s*BehaviouralProfile,\s*\n?\s*KeyboardCadence,\s*\n?\s*MouseTrajectory,\s*\n?\s*ScrollPattern,\s*\n?\s*TouchEvent,\s*\n?\s*\} from '\.\/types\.js';/,
@@ -99,15 +98,10 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     );
   });
 
-  it("generateMouseTrajectory framing pinned: linear interpolation rationale 'Deterministic linear interpolation — the real Phase 3 path is Bezier with humanlike noise; the mock keeps it linear so tests can assert exact midpoints.' + samples default 32 + durationMs 250", () => {
+  it('generateMouseTrajectory delegates to the deterministic pure generator', () => {
     expect(body).toMatch(
-      /const samples = opts\.samples \?\? 32;\s*\n?\s*const seed = opts\.seed \?\? defaultSeed\('mouse', opts\);/,
+      /generateMouseTrajectory\(opts: GenerateMouseTrajectoryOpts\): MouseTrajectory \{[\s\S]*?\/\/ The real mouse generator is deterministic \+ pure, so delegating keeps[\s\S]*?return generateMouseTrajectory\(opts\);\s*\n?\s*\}/,
     );
-    expect(body).toMatch(
-      /\/\/ Deterministic linear interpolation — the real Phase 3 path is\s*\n?\s*\/\/ Bezier with humanlike noise; the mock keeps it linear so tests\s*\n?\s*\/\/ can assert exact midpoints\./,
-    );
-    expect(body).toMatch(/const durationMs = 250;/);
-    expect(body).toMatch(/return \{ from: opts\.from, to: opts\.to, points, durationMs, seed \};/);
   });
 
   it("generateKeyboardCadence uses deterministic constant delay over shared Unicode graphemes + seed = defaultSeed('kb', {text, profileId})", () => {
@@ -161,10 +155,9 @@ describe('W451.C packages/behavioural-simulation/src/mock.ts content parity', ()
     );
   });
 
-  it('derived arithmetic and mock keyboard allocation boundaries fail closed', () => {
+  it('mouse delegation and mock keyboard allocation boundaries are pinned', () => {
     expect(body).toContain("import { MAX_TEXT_LENGTH } from './keyboard.js';");
-    expect(body).toContain("requireFinite('generateMouseTrajectory: derived x span', dx);");
-    expect(body).toContain("requireFinite('generateMouseTrajectory: derived y span', dy);");
+    expect(body).toContain("import { generateMouseTrajectory } from './mouse.js';");
     expect(body).toContain('if (opts.text.length > MAX_TEXT_LENGTH) {');
     expect(body).toContain(
       "requireFinite('MockBehaviouralSimulator.generateKeyboardCadence: durationMs', durationMs);",

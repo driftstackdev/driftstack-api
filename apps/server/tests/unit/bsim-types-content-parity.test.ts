@@ -1,13 +1,12 @@
 // W452.A — drift guard for packages/behavioural-simulation/src/types.ts.
-// V-127 Phase 3 domain types. Drift here either drops the V-530.A
+// Stable domain types. Drift here either drops the V-530.A
 // ElementClass 7-value union (per-class distribution table loses
 // case coverage, generator returns undefined for the missing class
 // and crashes at the sampling site) or weakens TouchEvent's
 // bounded-positive ElementBounds invariant (width/height > 0
 // silently dropped → division-by-zero / NaN in downstream samplers).
 //
-//   • V-127 framing pinned + NO-domain-logic-in-this-package +
-//     real-generators-ship-separate rationale.
+//   • Stable-shape + private pure-generator seam framing pinned.
 //   • MouseTrajectory: 5-field (from/to {x,y} + points array + duration
 //     + seed).
 //   • KeyboardCadence: 4-field (text + delaysMs[] + duration + seed).
@@ -46,19 +45,15 @@ function read(p: string): string {
 describe('W452.A packages/behavioural-simulation/src/types.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-127 framing pinned: 'Phase 3 domain types — V-127 stub.' + NO-domain-logic-in-package rationale + Phase 3 ships-separate-behind-same-interface seam", () => {
-    expect(body).toMatch(/\/\/ Phase 3 domain types — V-127 stub\./);
+  it('stable domain shapes + private pure-generator seam framing pinned', () => {
     expect(body).toMatch(
-      /\/\/ Defines the shapes the behavioural simulator produces so consumers\s*\n?\s*\/\/ \(drivers, GUI client, recipe runner\) can depend on them now while\s*\n?\s*\/\/ Phase 3 swaps in the real implementation later\./,
-    );
-    expect(body).toMatch(
-      /\/\/ NO domain logic in this package — just types \+ interfaces \+ mock\.\s*\n?\s*\/\/ The real generators ship as a separate Phase 3 package and slot in\s*\n?\s*\/\/ behind the same interface \(see `interfaces\.ts:BehaviouralSimulator`\)\./,
+      /\/\/ Behavioural-simulation domain types\. Consumers \(drivers, GUI client and\s*\n?\s*\/\/ recipe runner\) depend on these stable shapes while the private package's\s*\n?\s*\/\/ pure deterministic generators evolve behind BehaviouralSimulator\./,
     );
   });
 
-  it("MouseTrajectory: 5-field (from/to {x,y} + points samples + durationMs + seed) + 'Cubic-bezier control points' framing", () => {
+  it("MouseTrajectory: 5-field (from/to {x,y} + points samples + durationMs + seed) + 'Sampled cubic-Bézier mouse path' framing", () => {
     expect(body).toMatch(
-      /\/\*\* Cubic-bezier control points describing a mouse path between two screen points\. \*\/\s*\n?\s*export interface MouseTrajectory \{\s*\n?\s*\/\*\* Start screen coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* End screen coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};\s*\n?\s*\/\*\* Sampled intermediate points\. Length = `samples`\. \*\/\s*\n?\s*points: Array<\{ x: number; y: number; tMs: number \}>;[\s\S]*?durationMs: number;[\s\S]*?seed: string;/,
+      /\/\*\* Sampled cubic-Bézier mouse path between two screen points\. \*\/\s*\n?\s*export interface MouseTrajectory \{\s*\n?\s*\/\*\* Start screen coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* End screen coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};\s*\n?\s*\/\*\* Sampled path including both endpoints\. Length = `samples \+ 1`\. \*\/\s*\n?\s*points: Array<\{ x: number; y: number; tMs: number \}>;[\s\S]*?durationMs: number;[\s\S]*?seed: string;/,
     );
   });
 

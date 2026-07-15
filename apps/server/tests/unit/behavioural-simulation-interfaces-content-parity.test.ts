@@ -16,12 +16,14 @@ function read(p: string): string {
 describe('W595.B packages/behavioural-simulation/src/interfaces.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-127 stub-interfaces framing + 5 GenerateOpts (Mouse/Keyboard/Scroll/Touch/ScrollVelocity) + BehaviouralSimulator interface (6-method surface) pinned', () => {
-    expect(body).toMatch(/\/\/ V-127 stub interfaces\. The Phase 3 real implementation slots in/);
-    expect(body).toMatch(/\/\/ here without changing call sites\./);
+  it('stable-generator seam + 5 GenerateOpts (Mouse/Keyboard/Scroll/Touch/ScrollVelocity) + BehaviouralSimulator interface (6-method surface) pinned', () => {
+    expect(body).toMatch(
+      /\/\/ Stable behavioural-simulation interfaces\. Pure generators slot in behind/,
+    );
+    expect(body).toMatch(/\/\/ this seam while callers keep one coherent contract\./);
     expect(body).toMatch(/^import type \{ ScrollVelocityProfile \} from '\.\/scroll\.js';/m);
     expect(body).toMatch(
-      /export interface GenerateMouseTrajectoryOpts \{\s*\n?\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};/,
+      /export interface GenerateMouseTrajectoryOpts \{\s*\n?\s*\/\*\* Finite CSS-pixel start coordinate\. \*\/\s*\n?\s*from: \{ x: number; y: number \};\s*\n?\s*\/\*\* Finite CSS-pixel end coordinate\. \*\/\s*\n?\s*to: \{ x: number; y: number \};\s*\n?\s*\/\*\* Profile whose mean mouse speed determines trajectory duration\. \*\/\s*\n?\s*profile: BehaviouralProfile;/,
     );
     expect(body).toMatch(
       /\/\*\* Optional seed override \(defaults to deterministic per-call seed\)\. \*\/\s*\n?\s*seed\?: string;/,

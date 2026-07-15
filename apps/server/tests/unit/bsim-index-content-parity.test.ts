@@ -65,14 +65,19 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
     );
   });
 
-  it('Mock + V-530.A touch + V-530.B scroll velocity value exports: MockBehaviouralSimulator + generateTouchEvent + TOUCH_DISTRIBUTIONS + generateScrollVelocityProfile + SCROLL_VELOCITY_DEFAULTS', () => {
+  it('mouse generator + Mock + V-530.A touch + V-530.B scroll velocity value exports', () => {
     // toContain fragments (not closed regexes) so the new samples/tick-rate
     // bound constants (audit fixes BSIM-1/BSIM-3, 2026-07-01) don't break these.
     expect(body).toContain('MAX_MOUSE_TRAJECTORY_SAMPLES,');
     expect(body).toContain('MAX_SCROLL_PATTERN_TICKS,');
     expect(body).toContain('MIN_MOUSE_TRAJECTORY_SAMPLES,');
-    expect(body).toContain('MockBehaviouralSimulator,');
+    expect(body).toMatch(
+      /export \{ MAX_SCROLL_PATTERN_TICKS, MockBehaviouralSimulator \} from '\.\/mock\.js';/,
+    );
     expect(body).toContain("} from './mock.js';");
+    expect(body).toContain('generateMouseTrajectory,');
+    expect(body).toContain('MOUSE_ARC_LENGTH_SEGMENTS,');
+    expect(body).toContain("} from './mouse.js';");
     expect(body).toMatch(
       /export \{ generateTouchEvent, TOUCH_DISTRIBUTIONS \} from '\.\/touch\.js';/,
     );

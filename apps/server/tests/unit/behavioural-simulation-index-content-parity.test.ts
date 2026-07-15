@@ -34,8 +34,13 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toContain('MAX_MOUSE_TRAJECTORY_SAMPLES,');
     expect(body).toContain('MAX_SCROLL_PATTERN_TICKS,');
     expect(body).toContain('MIN_MOUSE_TRAJECTORY_SAMPLES,');
-    expect(body).toContain('MockBehaviouralSimulator,');
+    expect(body).toMatch(
+      /export \{ MAX_SCROLL_PATTERN_TICKS, MockBehaviouralSimulator \} from '\.\/mock\.js';/,
+    );
     expect(body).toContain("} from './mock.js';");
+    expect(body).toContain('generateMouseTrajectory,');
+    expect(body).toContain('MOUSE_ARC_LENGTH_SEGMENTS,');
+    expect(body).toContain("} from './mouse.js';");
     expect(body).toMatch(
       /^export \{ generateTouchEvent, TOUCH_DISTRIBUTIONS \} from '\.\/touch\.js';$/m,
     );
