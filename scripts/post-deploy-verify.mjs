@@ -86,12 +86,15 @@ const checks = [
   //     (6f2cdcb8); Q.1 route activation 1fc40421
   //   - checkRecipesGateStub: AI-B4 recipesRepo wired (b165c8dd)
   //
-  // Remaining gate checks stay because their underlying features are
-  // still legitimately gated:
+  // Remaining posture checks stay because their underlying features
+  // may be intentionally disabled on one environment and active on
+  // another:
   //   - checkFleetEventsGateStub: WebSocket handler still not
   //     implemented (V-820 follow-up slice pending)
-  //   - checkBillingGateStub: Stripe LIVE awaits BV-KvK closure
-  //     2026-05-21 (project_stripe_live_post_bv_kvk memory rule)
+  //   - checkBillingPosture: accepts only the typed disabled stub or
+  //     the typed active authentication boundary. This keeps staging
+  //     and production independently deployable without allowing a
+  //     missing route or malformed problem response to pass.
   //   - checkByokAnthropicGateStub: MFA_ENCRYPTION_KEY unset on
   //     staging (verified via earlier post-deploy-verify run);
   //     activates when the operator SSH-writes the key.
@@ -100,11 +103,8 @@ const checks = [
   // test's FEATURES table (apps/server/tests/unit/activation-
   // gate-pattern-cross-source-invariant.test.ts). Compile-time
   // test pins source-level shape; these checks pin the deployed
-  // runtime shape. When a gate genuinely flips on (founder
-  // intentionally activates), the corresponding check fails —
-  // intentional signal to the operator that the activation
-  // commit must also remove this assertion.
-  checkBillingGateStub,
+  // runtime shape.
+  checkBillingPosture,
   checkByokAnthropicGateStub,
 ].filter(Boolean);
 
@@ -421,18 +421,70 @@ async function checkOpenapi() {
 // 4 activated-gate check fns removed 2026-05-19 — see the `const checks`
 // declaration site for the activation commits + remaining-gate roster.
 
-async function checkBillingGateStub() {
-  // POST /v1/billing/checkout-session is one of the four billing
-  // routes the activation gate covers. The disabled stub returns
-  // 503 + FeatureUnavailable until the deploy has all three Stripe
-  // env vars (STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS +
-  // STRIPE_TRIAL_PACK_PRICE_ID) and bootstrap wires BillingService.
-  return featureGateStub(
-    'POST',
-    '/v1/billing/checkout-session',
-    'billing checkout-session gate',
-    {},
-  );
+async function checkBillingPosture() {
+  // Billing is intentionally allowed to differ by environment. An
+  // anonymous checkout request must reach exactly one honest boundary:
+  // the typed 503 activation stub when Stripe is not configured, or the
+  // typed 401 auth preHandler when BillingService is live. A 404, success,
+  // or a mismatched problem type is deployment drift.
+  const name = 'billing checkout-session gate';
+  let got;
+  try {
+    got = await fetchJsonWithRetry(`${baseUrl}/v1/billing/checkout-session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      name,
+      detail: `request failed after ${VERIFY_MAX_ATTEMPTS.toString()} attempts: ${err.message}`,
+    };
+  }
+
+  if (got.status === 401) {
+    if (got.body?.type !== UNAUTHORIZED_TYPE) {
+      return {
+        ok: false,
+        name,
+        detail: `401 but expected type=${UNAUTHORIZED_TYPE}, got ${JSON.stringify(got.body?.type)}`,
+      };
+    }
+    return {
+      ok: true,
+      name,
+      detail: 'live posture: 401 Unauthorized confirms BillingService auth boundary',
+    };
+  }
+
+  if (got.status === 503) {
+    if (got.body?.type !== FEATURE_UNAVAILABLE_TYPE) {
+      return {
+        ok: false,
+        name,
+        detail: `503 but expected type=${FEATURE_UNAVAILABLE_TYPE}, got ${JSON.stringify(got.body?.type)}`,
+      };
+    }
+    if (typeof got.body?.detail !== 'string' || got.body.detail.length < 8) {
+      return {
+        ok: false,
+        name,
+        detail: `503 body has empty/short detail (got ${JSON.stringify(got.body?.detail)})`,
+      };
+    }
+    return {
+      ok: true,
+      name,
+      detail: 'disabled posture: 503 FeatureUnavailable activation stub',
+    };
+  }
+
+  return {
+    ok: false,
+    name,
+    detail: `expected typed 503 (disabled) or typed 401 (active); got ${got.status}`,
+  };
 }
 
 async function checkByokAnthropicGateStub() {

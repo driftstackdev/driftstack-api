@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // Wave 1119 / Slice 1119.1 — Stripe products + prices bootstrap script.
 //
-// Idempotently creates the 7 Stripe products + 13 prices the API server
-// expects in DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID. Run
-// once per Stripe account (test mode + live mode are separate accounts;
-// run twice for both).
+// Idempotently creates the 6 self-serve Stripe products + 12 recurring
+// prices the API server expects in DRIFTSTACK_TIER_PRICE_IDS. Run once per
+// Stripe mode (test and live catalogs are separate).
 //
 // Founder usage:
 //
@@ -19,9 +18,8 @@
 //   2. Looks up existing prices by metadata.driftstack_tier + .billing_period;
 //      reuses if found AND amount matches.
 //   3. Creates missing products + prices.
-//   4. Prints the final DRIFTSTACK_TIER_PRICE_IDS JSON + STRIPE_TRIAL_PACK_PRICE_ID
-//      block ready to paste into /opt/driftstack/api/.env (or .env.local for
-//      dev runs).
+//   4. Prints the final DRIFTSTACK_TIER_PRICE_IDS JSON block ready to paste
+//      into /opt/driftstack/api/.env (or .env.local for dev runs).
 //
 // Idempotent + safe to re-run. Each Stripe create call has an Idempotency-
 // Key derived from the tier slug + billing_period so a retry-after-partial-
@@ -37,19 +35,13 @@
 import process from 'node:process';
 
 const TIERS = [
-  { id: 'solo_manual', name: 'Solo (manual)', monthly_cents: 7900, annual_cents: 7900 * 10 },
-  { id: 'team_manual', name: 'Team (manual)', monthly_cents: 24900, annual_cents: 24900 * 10 },
-  { id: 'agency_manual', name: 'Agency (manual)', monthly_cents: 69900, annual_cents: 69900 * 10 },
-  { id: 'api_starter', name: 'API starter', monthly_cents: 14900, annual_cents: 14900 * 10 },
-  { id: 'api_builder', name: 'API builder', monthly_cents: 49900, annual_cents: 49900 * 10 },
-  { id: 'api_scale', name: 'API scale', monthly_cents: 149900, annual_cents: 149900 * 10 },
+  { id: 'solo_manual', name: 'Personal', monthly_cents: 7_900, annual_cents: 75_800 },
+  { id: 'team_manual', name: 'Team', monthly_cents: 24_900, annual_cents: 239_000 },
+  { id: 'agency_manual', name: 'Agency', monthly_cents: 69_900, annual_cents: 671_000 },
+  { id: 'api_starter', name: 'API Starter', monthly_cents: 14_900, annual_cents: 143_000 },
+  { id: 'api_builder', name: 'API Builder', monthly_cents: 49_900, annual_cents: 479_000 },
+  { id: 'api_scale', name: 'API Scale', monthly_cents: 149_900, annual_cents: 1_439_000 },
 ];
-
-const TRIAL_PACK = {
-  id: 'trial_pack',
-  name: 'Trial pack',
-  amount_cents: 299, // $2.99 one-time
-};
 
 const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 
@@ -200,20 +192,10 @@ async function main() {
     tierPrices[tier.id] = { monthly: monthlyId, annual: annualId };
   }
 
-  const trialProductId = await ensureProduct(TRIAL_PACK.id, TRIAL_PACK.name);
-  const trialPriceId = await ensurePrice(
-    TRIAL_PACK.id,
-    'one_time',
-    trialProductId,
-    TRIAL_PACK.amount_cents,
-    null,
-  );
-
   process.stdout.write('\n========================================\n');
   process.stdout.write('Paste into /opt/driftstack/api/.env:\n');
   process.stdout.write('========================================\n');
   process.stdout.write(`DRIFTSTACK_TIER_PRICE_IDS='${JSON.stringify(tierPrices)}'\n`);
-  process.stdout.write(`STRIPE_TRIAL_PACK_PRICE_ID='${trialPriceId}'\n`);
   process.stdout.write('========================================\n');
 }
 
