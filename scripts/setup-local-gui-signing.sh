@@ -11,6 +11,7 @@ set -euo pipefail
 
 IDENTITY_NAME="Driftstack Local Development Signing"
 LOGIN_KEYCHAIN="$(security default-keychain -d user | tr -d ' "')"
+SYSTEM_KEYCHAIN="/Library/Keychains/System.keychain"
 if [[ -z "$LOGIN_KEYCHAIN" ]]; then
   echo "error: no default user keychain found" >&2
   exit 1
@@ -24,10 +25,15 @@ fi
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/driftstack-gui-signing.XXXXXX")"
 chmod 700 "$TMP_DIR"
 IMPORTED_CERT=0
+SYSTEM_TRUSTED_CERT=0
 cleanup() {
   local status=$?
   rm -rf "$TMP_DIR"
   if [[ $status -ne 0 && $IMPORTED_CERT -eq 1 ]]; then
+    if [[ $SYSTEM_TRUSTED_CERT -eq 1 ]]; then
+      sudo -n security delete-certificate -c "$IDENTITY_NAME" "$SYSTEM_KEYCHAIN" \
+        >/dev/null 2>&1 || true
+    fi
     security delete-identity -c "$IDENTITY_NAME" "$LOGIN_KEYCHAIN" >/dev/null 2>&1 ||
       security delete-certificate -c "$IDENTITY_NAME" "$LOGIN_KEYCHAIN" >/dev/null 2>&1 || true
   fi
@@ -59,9 +65,24 @@ security import "$CERT" -k "$LOGIN_KEYCHAIN" -t cert -f pemseq >/dev/null
 IMPORTED_CERT=1
 security import "$KEY" -k "$LOGIN_KEYCHAIN" -t priv -f openssl -T /usr/bin/codesign >/dev/null
 
-# Trust only this certificate for code signing in the current user's trust domain.
-# This is local development trust, not a distributable/notarizable Apple identity.
-security add-trusted-cert -r trustRoot -p codeSign -k "$LOGIN_KEYCHAIN" "$CERT"
+# Prefer cached, noninteractive administrator authorization. A trust record in
+# the system domain validates the login-keychain identity without presenting a
+# second SecurityAgent password dialog. If no cached authorization exists, keep
+# the one-time user-domain trust flow instead of storing or requesting a password
+# in this script. This remains local development trust, not an Apple identity.
+if sudo -n security add-trusted-cert \
+  -d \
+  -r trustRoot \
+  -p codeSign \
+  -k "$SYSTEM_KEYCHAIN" \
+  "$CERT" \
+  >/dev/null 2>&1; then
+  SYSTEM_TRUSTED_CERT=1
+  echo "==> installed code-signing trust with cached administrator authorization"
+else
+  echo "==> cached administrator authorization unavailable; approving user trust may ask once"
+  security add-trusted-cert -r trustRoot -p codeSign -k "$LOGIN_KEYCHAIN" "$CERT"
+fi
 
 if ! security find-identity -v -p codesigning 2>/dev/null | grep -Fq "\"$IDENTITY_NAME\""; then
   echo "error: imported identity is not valid for code signing" >&2

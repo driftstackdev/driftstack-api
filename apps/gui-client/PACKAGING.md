@@ -119,8 +119,11 @@ scripts/setup-local-gui-signing.sh
 
 The script creates `Driftstack Local Development Signing` in the user's login
 keychain, grants its private key only to `/usr/bin/codesign`, and deletes its
-owner-only temporary key material on exit. macOS may ask once to unlock the login
-keychain or approve the trust record. The identity is local development trust only;
+owner-only temporary key material on exit. When noninteractive administrator
+authorization is already cached, it installs the code-signing trust record in the
+system trust domain without another password dialog. Otherwise macOS may ask once
+to unlock the login keychain or approve user-domain trust; the script never reads or
+stores that password. The identity is local development trust only;
 it cannot replace Developer ID signing/notarisation for a distributed build.
 
 Then use only the canonical installer:
