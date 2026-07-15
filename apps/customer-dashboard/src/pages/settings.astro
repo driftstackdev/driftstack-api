@@ -3,6 +3,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 
 // V-217 — progressive-enhancement live wiring against:
 //   - /v1/account/email-preferences (V-204) — list + PUT per-event toggles
+//   - /v1/account/me/bundled-llm-status — consent + month-to-date usage
+//   - /v1/account/me/bundled-llm-settings — PATCH consent + monthly cap
 //
 // SSG renders mocks; inline <script> reads ds_web_session_token from
 // localStorage and replaces the live sections. The security surfaces
@@ -68,7 +70,7 @@ const EMAIL_EVENTS = [
       <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
         Account profile, email notifications, and your Anthropic API key.
         Changes here affect all sessions, profiles, and webhooks under this
-        account.
+        account. AI billing controls are available below.
       </p>
       <p class="mt-2 text-sm text-tk-ink-3">
         Security, sign-ins &amp; danger zone moved to
@@ -255,6 +257,117 @@ const EMAIL_EVENTS = [
           >
             Save
           </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Bundled AI billing — live consent, cap, and month-to-date usage. -->
+    <section class="dashboard-card mt-6" data-region="bundled-llm">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          </svg>
+        </span>
+        Bundled AI billing
+      </h2>
+      <p class="mt-2 text-sm text-tk-ink-3">
+        Builder and Scale use a flat <strong class="font-medium text-tk-ink-2">$0.10 per agent turn</strong>;
+        Enterprise uses your contracted custom rate. A stored Anthropic BYOK key takes
+        priority, bills through Anthropic, and does not consume this bundled cap.
+      </p>
+
+      <div data-bundled-state="loading" class="mt-6 text-sm text-tk-ink-3">
+        Loading AI billing settings…
+      </div>
+
+      <div data-bundled-state="error" class="mt-6 hidden rounded-md border border-tk-err/30 bg-tk-err/10 px-3 py-3">
+        <p class="text-sm text-tk-err-text" data-bundled-load-error>
+          We couldn't load your AI billing settings. No setting was changed.
+        </p>
+        <button type="button" data-bundled-retry class="mt-2 text-sm font-medium text-tk-accent-text hover:underline">
+          Try again
+        </button>
+      </div>
+
+      <div data-bundled-state="ready" class="mt-6 hidden">
+        <dl class="grid gap-3 sm:grid-cols-3">
+          <div class="rounded-md border border-tk-border bg-tk-bg px-3 py-3">
+            <dt class="text-xs text-tk-ink-3">Used this month</dt>
+            <dd class="mt-1 text-lg font-semibold text-tk-ink" data-field="bundled-used">—</dd>
+          </div>
+          <div class="rounded-md border border-tk-border bg-tk-bg px-3 py-3">
+            <dt class="text-xs text-tk-ink-3">Remaining</dt>
+            <dd class="mt-1 text-lg font-semibold text-tk-ink" data-field="bundled-remaining">—</dd>
+          </div>
+          <div class="rounded-md border border-tk-border bg-tk-bg px-3 py-3">
+            <dt class="text-xs text-tk-ink-3">Monthly reset</dt>
+            <dd class="mt-1 text-sm font-medium text-tk-ink" data-field="bundled-reset">—</dd>
+          </div>
+        </dl>
+      </div>
+
+      <form data-bundled-form class="mt-6 space-y-5">
+        <label class="flex items-start gap-3">
+          <input
+            type="checkbox"
+            data-field="bundled-consent"
+            class="mt-0.5"
+            disabled
+            title="Sign in and wait for AI billing settings to load"
+          />
+          <span class="text-sm text-tk-ink-2">
+            <strong class="block font-medium text-tk-ink">Enable bundled AI</strong>
+            Allow agent turns to use Driftstack's bundled provider when no BYOK key is available.
+          </span>
+        </label>
+
+        <div>
+          <label for="bundled-cap-usd" class="block text-sm font-medium text-tk-ink-2">
+            Monthly bundled-AI cap (USD)
+          </label>
+          <div class="mt-1 flex max-w-xs items-center rounded-md border border-tk-border bg-tk-bg focus-within:border-tk-accent focus-within:ring-1 focus-within:ring-tk-accent/30">
+            <span class="pl-3 text-sm text-tk-ink-3" aria-hidden="true">$</span>
+            <input
+              id="bundled-cap-usd"
+              data-field="bundled-cap-usd"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              max="10000"
+              step="0.01"
+              disabled
+              title="Sign in and wait for AI billing settings to load"
+              class="w-full border-0 bg-transparent px-2 py-2 text-sm text-tk-ink focus:outline-none focus:ring-0"
+            />
+          </div>
+          <p class="mt-1 text-xs text-tk-ink-3">
+            Exact range $0–$10,000. A $0 cap blocks bundled usage even when enabled.
+          </p>
+        </div>
+
+        <p
+          data-bundled-error
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          class="hidden rounded border border-tk-err/30 bg-tk-err/10 px-3 py-2 text-sm text-tk-err-text"
+        ></p>
+        <div class="flex items-center justify-between border-t border-tk-border pt-4">
+          <span
+            data-bundled-status
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            class="text-xs text-tk-ink-3"
+          >Sign in to load AI billing settings.</span>
+          <button
+            type="submit"
+            data-bundled-save
+            class="btn-primary"
+            disabled
+            title="Sign in and wait for AI billing settings to load"
+          >Save AI settings</button>
         </div>
       </form>
     </section>
@@ -1010,6 +1123,266 @@ const EMAIL_EVENTS = [
         });
       }
 
+      // Bundled AI billing — authoritative status + explicit consent/cap save.
+      const bundledForm = root.querySelector('[data-bundled-form]');
+      const bundledConsent = root.querySelector('[data-field="bundled-consent"]');
+      const bundledCapUsd = root.querySelector('[data-field="bundled-cap-usd"]');
+      const bundledSave = root.querySelector('[data-bundled-save]');
+      const bundledLoading = root.querySelector('[data-bundled-state="loading"]');
+      const bundledReady = root.querySelector('[data-bundled-state="ready"]');
+      const bundledErrorState = root.querySelector('[data-bundled-state="error"]');
+      const bundledLoadError = root.querySelector('[data-bundled-load-error]');
+      const bundledRetry = root.querySelector('[data-bundled-retry]');
+      const bundledError = root.querySelector('[data-bundled-error]');
+      const bundledStatus = root.querySelector('[data-bundled-status]');
+      const bundledUsed = root.querySelector('[data-field="bundled-used"]');
+      const bundledRemaining = root.querySelector('[data-field="bundled-remaining"]');
+      const bundledReset = root.querySelector('[data-field="bundled-reset"]');
+      const bundledCurrency = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      let bundledKnown = false;
+      let bundledSaving = false;
+      let bundledLoadGeneration = 0;
+
+      function isBundledStatus(body) {
+        return (
+          body !== null &&
+          typeof body === 'object' &&
+          typeof body.consent === 'boolean' &&
+          Number.isInteger(body.cap_cents) &&
+          body.cap_cents >= 0 &&
+          body.cap_cents <= 1_000_000 &&
+          Number.isInteger(body.used_this_month_cents) &&
+          body.used_this_month_cents >= 0 &&
+          Number.isInteger(body.remaining_cents) &&
+          body.remaining_cents >= 0 &&
+          typeof body.month_started_at === 'string' &&
+          Number.isFinite(Date.parse(body.month_started_at))
+        );
+      }
+
+      function setBundledPanel(panel) {
+        if (bundledLoading) bundledLoading.classList.toggle('hidden', panel !== 'loading');
+        if (bundledReady) bundledReady.classList.toggle('hidden', panel !== 'ready');
+        if (bundledErrorState) bundledErrorState.classList.toggle('hidden', panel !== 'error');
+      }
+
+      function showBundledError(message) {
+        if (!bundledError) return;
+        bundledError.textContent = message;
+        bundledError.classList.remove('hidden');
+      }
+
+      function hideBundledError() {
+        if (!bundledError) return;
+        bundledError.textContent = '';
+        bundledError.classList.add('hidden');
+      }
+
+      function syncBundledControls() {
+        const authenticated = Boolean(token);
+        const disabled = !authenticated || !bundledKnown || bundledSaving;
+        const reason = bundledSaving
+          ? 'Wait for the current AI settings save to finish'
+          : !authenticated
+            ? 'Sign in to manage AI billing settings'
+            : !bundledKnown
+              ? 'Wait for AI billing settings to load'
+              : '';
+        if (bundledConsent) {
+          bundledConsent.disabled = disabled;
+          bundledConsent.title = reason;
+        }
+        if (bundledCapUsd) {
+          bundledCapUsd.disabled = disabled;
+          bundledCapUsd.title = reason;
+        }
+        if (bundledSave) {
+          bundledSave.disabled = disabled;
+          bundledSave.title = reason;
+          bundledSave.toggleAttribute('aria-busy', bundledSaving);
+          bundledSave.textContent = bundledSaving ? 'Saving…' : 'Save AI settings';
+        }
+      }
+
+      function renderBundledStatus(status) {
+        bundledKnown = true;
+        if (bundledConsent) bundledConsent.checked = status.consent;
+        if (bundledCapUsd) bundledCapUsd.value = (status.cap_cents / 100).toFixed(2);
+        if (bundledUsed) {
+          bundledUsed.textContent = bundledCurrency.format(status.used_this_month_cents / 100);
+        }
+        if (bundledRemaining) {
+          bundledRemaining.textContent = bundledCurrency.format(status.remaining_cents / 100);
+        }
+        if (bundledReset) {
+          const start = new Date(status.month_started_at);
+          const nextMonth = new Date(
+            Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1),
+          );
+          bundledReset.textContent = nextMonth.toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            timeZone: 'UTC',
+          });
+        }
+        if (bundledStatus) {
+          bundledStatus.textContent = status.consent
+            ? 'Bundled AI is enabled when no BYOK key is available.'
+            : 'Bundled AI is disabled; BYOK sessions are unaffected.';
+        }
+        hideBundledError();
+        setBundledPanel('ready');
+        syncBundledControls();
+      }
+
+      async function fetchBundledStatus() {
+        const response = await authedFetch('/v1/account/me/bundled-llm-status', {
+          method: 'GET',
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw window.driftstackResponseError(response, body);
+        if (!isBundledStatus(body)) throw new Error('Invalid AI billing status response.');
+        return body;
+      }
+
+      async function loadBundledLlm() {
+        if (!token || !bundledForm) return undefined;
+        const generation = ++bundledLoadGeneration;
+        bundledKnown = false;
+        syncBundledControls();
+        setBundledPanel('loading');
+        hideBundledError();
+        try {
+          const status = await fetchBundledStatus();
+          if (generation !== bundledLoadGeneration) return undefined;
+          renderBundledStatus(status);
+          return status;
+        } catch (err) {
+          if (generation !== bundledLoadGeneration) return undefined;
+          bundledKnown = false;
+          if (bundledLoadError) {
+            bundledLoadError.textContent = requestErrorMessage(
+              err,
+              "We couldn't load your AI billing settings. No setting was changed.",
+            );
+          }
+          if (bundledStatus) bundledStatus.textContent = 'AI billing settings are unavailable.';
+          setBundledPanel('error');
+          syncBundledControls();
+          return undefined;
+        }
+      }
+
+      function desiredBundledSettings() {
+        const raw = bundledCapUsd ? bundledCapUsd.value.trim() : '';
+        if (!/^(?:0|[1-9]\d{0,3}|10000)(?:\.\d{1,2})?$/.test(raw)) {
+          throw new Error('Enter a cap from $0 to $10,000 with at most two decimal places.');
+        }
+        const cents = Math.round(Number(raw) * 100);
+        if (!Number.isInteger(cents) || cents < 0 || cents > 1_000_000) {
+          throw new Error('Enter a cap from $0 to $10,000 with at most two decimal places.');
+        }
+        return {
+          consent: Boolean(bundledConsent && bundledConsent.checked),
+          monthly_cap_usd_cents: cents,
+        };
+      }
+
+      if (bundledRetry) bundledRetry.addEventListener('click', loadBundledLlm);
+
+      if (bundledForm) {
+        bundledForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!token || !bundledKnown || bundledSaving) return;
+          let desired;
+          try {
+            desired = desiredBundledSettings();
+          } catch (err) {
+            showBundledError(err instanceof Error ? err.message : 'Enter a valid monthly cap.');
+            return;
+          }
+
+          bundledSaving = true;
+          let mutationAccepted = false;
+          hideBundledError();
+          syncBundledControls();
+          try {
+            const response = await authedFetch('/v1/account/me/bundled-llm-settings', {
+              method: 'PATCH',
+              body: JSON.stringify(desired),
+            });
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) throw window.driftstackResponseError(response, body);
+            mutationAccepted = true;
+
+            const live = await fetchBundledStatus();
+            renderBundledStatus(live);
+            if (
+              live.consent === desired.consent &&
+              live.cap_cents === desired.monthly_cap_usd_cents
+            ) {
+              const noticeGeneration = showBanner('AI billing settings saved.');
+              setTimeout(() => hideBanner(noticeGeneration), 3000);
+            } else {
+              showBundledError(
+                'The live settings differ from what you submitted. Review the current values before trying again.',
+              );
+            }
+          } catch (err) {
+            if (err && err.name === 'AbortError') {
+              try {
+                const live = await fetchBundledStatus();
+                renderBundledStatus(live);
+                if (
+                  live.consent === desired.consent &&
+                  live.cap_cents === desired.monthly_cap_usd_cents
+                ) {
+                  const noticeGeneration = showBanner(
+                    'AI billing settings saved. The response was lost, but the live settings match.',
+                  );
+                  setTimeout(() => hideBanner(noticeGeneration), 5000);
+                } else {
+                  showBundledError(
+                    'The save did not complete; the form now shows the live settings. Review them before trying again.',
+                  );
+                }
+              } catch {
+                bundledKnown = false;
+                if (bundledLoadError) {
+                  bundledLoadError.textContent =
+                    'The save outcome is unknown and live settings could not be refreshed. Reload to verify before retrying.';
+                }
+                if (bundledStatus) bundledStatus.textContent = 'AI billing save outcome unknown.';
+                setBundledPanel('error');
+              }
+            } else if (mutationAccepted) {
+              bundledKnown = false;
+              if (bundledLoadError) {
+                bundledLoadError.textContent =
+                  'The save was accepted, but the live settings could not be refreshed. Reload to verify; do not submit the same change again yet.';
+              }
+              if (bundledStatus) bundledStatus.textContent = 'AI billing settings need a refresh.';
+              setBundledPanel('error');
+            } else {
+              showBundledError(
+                requestErrorMessage(err, 'Could not save AI billing settings. Try again.'),
+              );
+            }
+          } finally {
+            bundledSaving = false;
+            syncBundledControls();
+          }
+        });
+      }
+
+      syncBundledControls();
+
       // V-204 — email preferences live wire.
       const emailPrefsList = root.querySelector('[data-list="email-prefs"]');
       const emailPrefsStatus = root.querySelector('[data-field="email-prefs-status"]');
@@ -1494,8 +1867,9 @@ const EMAIL_EVENTS = [
       }
 
       loadEmailPrefs();
+      loadBundledLlm();
       loadByokAnthropic();
-      // 2026-05-21 — opacity-gate signal. Two loaders fire in parallel
+      // 2026-05-21 — opacity-gate signal. Three loaders fire in parallel
       // without returning promises (legacy shape). Fire the reveal in
       // a microtask so the first paint happens after the network
       // requests are scheduled; far better UX than waiting the 1200ms

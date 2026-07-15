@@ -1,5 +1,5 @@
 // W497.C — drift guard for apps/customer-dashboard/src/pages/settings.astro.
-// V-217 + V-204 + V-298a + V-298b + V-352 + V-352b settings page.
+// V-217 + V-204 + V-298a + V-298b + V-352 + V-352b + bundled-AI settings page.
 // The security surfaces (V-079 change-password, V-353h MFA, V-355
 // web-sessions, V-216 audit teaser, danger zone) moved to /security
 // with the 2026-07-03 design-system v2 split — their pins live in
@@ -14,6 +14,7 @@
 //   • V-352 + V-352b + V-298a + V-298b profile form (name +
 //     timezone + slug + region + avatar).
 //   • V-331b act-as header in authedFetch.
+//   • Bundled-AI consent/cap/status with authoritative timeout reconciliation.
 //   • The moved-to-/security header cross-link.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -127,5 +128,39 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     expect(body).toMatch(/body\.set_at/);
     expect(body).toMatch(/body\.last_used_at/);
     expect(body).not.toMatch(/body\.key_set|body\.key_prefix|data-byok-prefix/);
+  });
+
+  it('bundled-AI card exposes live consent, exact cap bounds, spend/reset status, honest pricing, and BYOK priority', () => {
+    expect(body).toMatch(/data-region="bundled-llm"/);
+    expect(body).toMatch(/Builder and Scale use a flat[\s\S]{0,100}\$0\.10 per agent turn/);
+    expect(body).toMatch(/Enterprise uses your contracted custom rate/);
+    expect(body).toMatch(/A stored Anthropic BYOK key takes[\s\S]{0,80}priority/);
+    expect(body).toMatch(
+      /data-field="bundled-cap-usd"[\s\S]{0,250}min="0"[\s\S]{0,100}max="10000"[\s\S]{0,100}step="0\.01"/,
+    );
+    expect(body).toMatch(/data-field="bundled-used"/);
+    expect(body).toMatch(/data-field="bundled-remaining"/);
+    expect(body).toMatch(/data-field="bundled-reset"/);
+    expect(body).toMatch(/Exact range \$0–\$10,000/);
+  });
+
+  it('bundled-AI wiring uses dedicated load failure/retry, busy reasons, and authoritative timeout reconciliation without optimistic mutation', () => {
+    expect(body).toMatch(/authedFetch\('\/v1\/account\/me\/bundled-llm-status'/);
+    expect(body).toMatch(/authedFetch\('\/v1\/account\/me\/bundled-llm-settings'/);
+    expect(body).toMatch(/data-bundled-state="error"/);
+    expect(body).toMatch(/data-bundled-retry/);
+    expect(body).toMatch(/let bundledLoadGeneration = 0/);
+    expect(body).toMatch(/let bundledSaving = false/);
+    expect(body).toMatch(/bundledSave\.toggleAttribute\('aria-busy', bundledSaving\)/);
+    expect(body).toMatch(/Wait for the current AI settings save to finish/);
+    expect(body).toMatch(
+      /if \(err && err\.name === 'AbortError'\)[\s\S]{0,500}fetchBundledStatus\(\)/,
+    );
+    expect(body).toMatch(
+      /live\.consent === desired\.consent &&[\s\S]{0,100}live\.cap_cents === desired\.monthly_cap_usd_cents/,
+    );
+    expect(body).toMatch(/The save outcome is unknown and live settings could not be refreshed/);
+    expect(body).not.toMatch(/bundledConsent\.checked = desired\.consent/);
+    expect(body).not.toMatch(/bundledCapUsd\.value = desired/);
   });
 });
