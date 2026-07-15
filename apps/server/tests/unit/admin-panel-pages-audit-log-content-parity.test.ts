@@ -99,8 +99,9 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
       /'Showing ' \+\s*\n?\s*entries\.length \+\s*\n?\s*' entr' \+\s*\n?\s*\(entries\.length === 1 \? 'y' : 'ies'\) \+\s*\n?\s*\(filteredPage \? ' \(of the 50 most-recent — filter is client-side\)' : ''\) \+\s*\n?\s*'\. Retention 90 days hot in Postgres \+ R2 archive thereafter \(ADR-006\)\.';/,
     );
     expect(body).toMatch(
-      /Retention 90 days hot in Postgres \+ R2 archive thereafter \(ADR-006\)\. The\s*\n?\s*read endpoint paginates by timestamp DESC; bulk export is not yet\s*\n?\s*exposed from <code class="font-mono">\/v1\/admin\/audit-log<\/code>/,
+      /Retention 90 days hot in Postgres \+ R2 archive thereafter \(ADR-006\)\. The\s*\n?\s*read endpoint returns newest first and paginates by cursor\. For a complete\s*\n?\s*admin-side extract, pull every page from\s*\n?\s*<code class="font-mono">\/v1\/admin\/audit-log<\/code>/,
     );
+    expect(body).not.toMatch(/not yet|coming soon|roadmap|planned feature/i);
   });
 
   it("Empty-filter-result branch: 'No audit entries match the current filter.' colspan=5 cell — pinned so the empty-after-filter state is visually distinct (centered + slate-500 muted) from the no-data-yet state and operators can tell their filter is the cause. The client-side result filter also qualifies its empty-state + count honestly (a filtered empty page over the 50-row window means 'none in the most-recent', NOT 'none exist').", () => {

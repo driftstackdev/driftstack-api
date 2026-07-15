@@ -127,9 +127,9 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <p class="mt-4 text-xs text-tk-ink-3" data-field="footnote">
       Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006). The
-      read endpoint paginates by timestamp DESC; bulk export is not yet
-      exposed from <code class="font-mono">/v1/admin/audit-log</code> — pull
-      pages via <code class="font-mono">cursor</code> for now.
+      read endpoint returns newest first and paginates by cursor. For a complete
+      admin-side extract, pull every page from
+      <code class="font-mono">/v1/admin/audit-log</code>.
     </p>
   </div>
 
