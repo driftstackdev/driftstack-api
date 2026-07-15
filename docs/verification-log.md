@@ -28464,3 +28464,31 @@ cleanup; it also proves failed-caller/successor recovery and independent effecti
 account concurrency. The expanded organization seed, deadline and response-body
 matrix passes 4 files and 24/24 tests. Strict GUI TypeScript, targeted
 ESLint/Prettier and diff/whitespace checks are green.
+
+---
+
+## V-681 — Fleet protocol pings receive exactly one payload-preserving pong
+
+**Date:** 2026-07-15
+
+The fleet WebSocket server left `ws` automatic pong handling enabled while also
+registering an explicit ping listener that sent a second pong. A bounded live
+reproduction sent one non-empty `fleet-pong-proof` protocol ping and received two
+byte-identical pongs on the still-open connection. The route comments incorrectly
+claimed `autoPong` was not a WebSocketServer option, then later described the
+listener as if that option were already disabled.
+
+The `@fastify/websocket` server options now set `autoPong: false` beside the
+unchanged 96 MiB inbound payload ceiling. The existing exception-bounded route
+listener is therefore the single pong owner and explicitly echoes the ping's bytes.
+Upgrade authentication, large-frame admission, outbound OPEN/capacity checks,
+supersession, the 30-second server ping, graceful no-terminate cleanup, registry
+identity and application frames are unchanged.
+
+The new genuine-WebSocket test red-failed before the route correction with
+`expected length 1, received 2`. It now observes exactly one byte-identical pong,
+then completes an intent dispatch over that same OPEN and registered socket. The
+direct route/parity proof passes 2 files and 18/18 tests; the expanded Fleet
+authentication, activation, admission, registry and correlator matrix passes 14
+files and 181/181 tests. Strict server source/test TypeScript, targeted
+ESLint/Prettier and diff/whitespace checks are green.

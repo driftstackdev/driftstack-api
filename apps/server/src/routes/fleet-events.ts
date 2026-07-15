@@ -55,11 +55,11 @@ interface FleetSocket {
   readonly bufferedAmount: number;
   send(data: string): void;
   ping(): void;
-  pong(): void;
+  pong(data: Buffer): void;
   on(event: 'message', listener: (data: WsMessageData) => void): void;
   on(event: 'close', listener: () => void): void;
   on(event: 'error', listener: (err: Error) => void): void;
-  on(event: 'ping', listener: () => void): void;
+  on(event: 'ping', listener: (data: Buffer) => void): void;
   close(code?: number, reason?: string): void;
 }
 
@@ -125,12 +125,11 @@ export async function registerFleetEventsRoutes(
   // the equivalent HTTP body the same way) while still cutting the ws default
   // (100 MiB).
   const FLEET_WS_MAX_PAYLOAD_BYTES = 96 * 1024 * 1024;
-  // Rely on ws's default auto-pong (autoPong defaults true) to answer the node's
-  // keepalive ping; the explicit socket.on('ping')->pong below is a logged backup.
-  // (autoPong is a ws *WebSocket* option, not a WebSocketServer option, so it
-  // can't be forced here via the plugin's server options regardless.)
+  // Disable ws's default auto-pong so the bounded listener below is the single
+  // protocol-pong owner. `@fastify/websocket` forwards these options to its
+  // WebSocketServer, whose autoPong default is otherwise true.
   await app.register(websocketPlugin, {
-    options: { maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES },
+    options: { maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES, autoPong: false },
   });
 
   app.get(
@@ -189,9 +188,9 @@ export async function registerFleetEventsRoutes(
       // its "no PONG within 10s -> half-open -> reconnect" flap cannot recur from
       // a missing server pong. (The app-level `heartbeat` JSON frame is
       // node->server only and is unrelated to WS protocol ping/pong.)
-      socket.on('ping', () => {
+      socket.on('ping', (data: Buffer) => {
         try {
-          socket.pong();
+          socket.pong(data);
         } catch {
           // socket already closing — ignore
         }

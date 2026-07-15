@@ -188,6 +188,63 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
     expect(result.sessionId).toBe('sess-1');
   });
 
+  it('answers one non-empty protocol ping with exactly one byte-identical pong and keeps dispatch live', async () => {
+    const ws = await connect({
+      authorization: `Bearer ${await freshJwt()}`,
+      [FLEET_NODE_ID_HEADER]: NODE_ID,
+    });
+    const conn = fx.fleetControlRegistry.get(NODE_ID);
+    expect(conn).toBeDefined();
+
+    const pingPayload = Buffer.from('fleet-pong-proof', 'utf8');
+    const pongs: Buffer[] = [];
+    ws.on('pong', (data) => pongs.push(Buffer.from(data)));
+    ws.ping(pingPayload);
+
+    await expect.poll(() => pongs.length, { timeout: 2_000 }).toBeGreaterThanOrEqual(1);
+    // A duplicate auto-pong and explicit pong are emitted in the same event turn,
+    // but leave a bounded window so this still catches delayed transports.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(pongs).toHaveLength(1);
+    expect(pongs[0]).toEqual(pingPayload);
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    expect(fx.fleetControlRegistry.get(NODE_ID)).toBe(conn);
+
+    ws.on('message', (data: WebSocket.RawData) => {
+      const frame = JSON.parse(rawToString(data)) as {
+        type: string;
+        sessionId: string;
+        intentId: string;
+      };
+      if (frame.type !== 'intentDispatch') return;
+      ws.send(
+        JSON.stringify({
+          type: 'intentResult',
+          sessionId: frame.sessionId,
+          intentId: frame.intentId,
+          success: true,
+          durationMs: 1,
+          outputData: base64Json({ pongPreservedDispatch: true }),
+        }),
+      );
+    });
+
+    const result = await conn!.correlator.dispatch({
+      type: 'intentDispatch',
+      sessionId: 'sess-after-pong',
+      intentId: 'intent-after-pong',
+      intentName: 'navigate',
+      inputParams: base64Json({ url: 'https://example.test/after-pong' }),
+    });
+    expect(result).toMatchObject({
+      success: true,
+      sessionId: 'sess-after-pong',
+      intentId: 'intent-after-pong',
+    });
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    expect(fx.fleetControlRegistry.get(NODE_ID)).toBe(conn);
+  });
+
   it('refuses aggregate outbound backlog without closing the socket, clears correlation, and recovers after drain', async () => {
     const ws = await connect({
       authorization: `Bearer ${await freshJwt()}`,

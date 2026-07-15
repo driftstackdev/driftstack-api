@@ -60,7 +60,7 @@ describe('routes/fleet-events content parity', () => {
     // cap → ~85.3 MiB base64 wire; 96 MiB headroom (mirrors UPLOAD_MAX_BODY_BYTES).
     expect(body).toMatch(/const FLEET_WS_MAX_PAYLOAD_BYTES = 96 \* 1024 \* 1024;/);
     expect(body).toMatch(
-      /await app\.register\(websocketPlugin, \{\s*options: \{ maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES \},\s*\}\);/,
+      /await app\.register\(websocketPlugin, \{\s*options: \{ maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES, autoPong: false \},\s*\}\);/,
     );
     expect(body).toMatch(/'\/v1\/fleet\/events',/);
     expect(body).toMatch(/websocket: true,/);
@@ -127,7 +127,7 @@ describe('routes/fleet-events content parity', () => {
     );
   });
 
-  it('handler wiring pinned: register node by nodeId; route inbound messages; explicit PONG of inbound pings (+ ws auto-pong) + 30s keepalive ping with NO terminate(); clearInterval + unregister on close + error', () => {
+  it('handler wiring pinned: register node by nodeId; route inbound messages; one explicit payload-preserving PONG + 30s keepalive ping with NO terminate(); clearInterval + unregister on close + error', () => {
     // register(nodeId, send, terminate) — the 3rd arg lets a later reconnect SUPERSEDE +
     // actively close THIS socket (P0 2026-07-11 zombie-conn fix). toContain fragments —
     // prettier wraps the multi-line call.
@@ -138,12 +138,14 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toContain('conn.handleInboundBytes(messageToBuffer(data))');
     expect(body).toContain('socket.close(1008, admission)');
     expect(body).toContain('if (inboundRejected) return;');
-    // ws default auto-pong answers the node's ping; the explicit ping->pong
-    // handler is a logged backup; a 30s server->node ping keeps the direction
-    // warm. Must NOT terminate() — that RST surfaces as the box's ENOTCONN/Code-57
-    // flap (a missed pong is not proof of death).
+    // autoPong is disabled at the WebSocketServer, so the explicit listener is
+    // the single byte-preserving response. A 30s server->node ping keeps the
+    // direction warm. Must NOT terminate() — that RST surfaces as the box's
+    // ENOTCONN/Code-57 flap (a missed pong is not proof of death).
+    expect(body).toContain('autoPong: false');
     expect(body).toContain("socket.on('ping'");
-    expect(body).toContain('socket.pong();');
+    expect(body).toContain("socket.on('ping', (data: Buffer) => {");
+    expect(body).toContain('socket.pong(data);');
     expect(body).toContain('socket.ping();');
     expect(body).toContain('clearInterval(keepalive)');
     expect(body).not.toContain('socket.terminate()');
