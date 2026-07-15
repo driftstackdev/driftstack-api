@@ -157,12 +157,15 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     expect(body).not.toMatch(/Disaster recovery rehearsed pre-launch/);
   });
 
-  it("11-scenario DR framing pinned: 'Eleven DR scenarios documented with concrete recovery commands — host loss, Postgres corruption, Redis loss, R2 object loss, signing-key rotation under attack, bad deploys, cert renewal failures, Cloudflare Pages regressions, multi-day Hetzner regional outage. Every scenario is rehearseable on staging before commercial activation.' — pinned so the 11-DR-scenario commitment stays explicit (drift to dropping the count would let the customer wonder how thorough the DR rehearsal is)", () => {
+  it('11-scenario DR framing pins the complete roster and ongoing staging-before-production rehearsal contract', () => {
     // S20c 2026-07-06 plain-language pass: every scenario keeps its
     // precise name with a plain gloss in parens; the count + coverage
     // commitment is unchanged.
     expect(body).toMatch(
       /Eleven disaster-recovery \(DR\) scenarios documented with\s+concrete recovery commands — host loss \(a dead server\),\s+Postgres corruption \(the database\), Redis loss \(the cache\),\s+R2 object loss \(stored files\),\s+signing-key rotation under attack \(replacing a compromised\s+key mid-incident\), bad deploys, cert renewal failures\s+\(expired security certificates\), Cloudflare Pages\s+regressions \(our website host breaking\), and a\s+multi-day Hetzner regional outage \(our hosting provider\s+losing a region for days\)\./,
+    );
+    expect(body).toMatch(
+      /Every\s+scenario is rehearseable on staging — our test copy of the\s+platform — before the same recovery procedure is ever used\s+against production\./,
     );
   });
 
