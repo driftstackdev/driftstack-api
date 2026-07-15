@@ -1,5 +1,5 @@
 // Drift guard for packages/sdk-typescript/src/resources/recipes.ts.
-// Pins the AI-B4 write-only recipe library v1.0 narrow surface +
+// Pins the public saved-recipe management and suggestion surface +
 // the intent_log assembly rationale + the cross-account 404
 // existence-leak-prevention contract.
 
@@ -23,26 +23,19 @@ describe('sdk-typescript resources/recipes content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("AI-B4 module-level framing pinned: 'recipe library. Snapshots a finished agent-session's intent_log + transcript so the customer can later replay the same flow without re-paying the LLM decomposition cost.' — pinned so the replay-without-re-paying-LLM-cost value-prop survives (drift to dropping the no-replay-cost framing would mislead customers about what recipes solve)", () => {
+  it('frames recipes around reusable saved workflows without roadmap language', () => {
     expect(body).toMatch(
-      /\/\/ AI-B4 — recipe library\. Snapshots a finished agent-session's\s*\n?\s*\/\/ intent_log \+ transcript so the customer can later replay the same\s*\n?\s*\/\/ flow without re-paying the LLM decomposition cost\./,
+      /\/\/ Recipe library\. Snapshots a finished agent session's intent log and\s*\n?\s*\/\/ transcript so the customer can reuse the saved workflow without paying\s*\n?\s*\/\/ for another AI decomposition\./,
+    );
+    expect(body).toMatch(
+      /\/\/ Surface: create \+ list \+ iterate \+ get \+ delete \+ suggest\. Deployments\s*\n?\s*\/\/ without recipe storage return FeatureUnavailableError\./,
     );
   });
 
-  it("surface framing pinned: 'SDK surface: create + list + get + delete' + 'The read/management path (list/get/delete) was pulled forward from the v1.1 D2/D3 defer (V-530.I/.J); recipe EXECUTION stays v1.1 (harness-executor-gated).' — pinned so the create+list+get+delete surface + the execution-stays-gated contract stay explicit (drift to adding an execute() would diverge from the server, which has no execution route)", () => {
-    expect(body).toMatch(/\/\/ SDK surface: create \+ list \+ get \+ delete\./);
-    expect(body).toMatch(
-      /\/\/ \(list\/get\/delete\) was pulled forward from the v1\.1 D2\/D3 defer\s*\n?\s*\/\/ \(V-530\.I\/\.J\); recipe EXECUTION stays v1\.1 \(harness-executor-gated\)\./,
+  it('keeps roadmap and internal dependency language out of the public SDK', () => {
+    expect(body).not.toMatch(
+      /AI-B4|Doc-132|v1\.1|D2\/D3|V-530|defer|compile ahead|wired in AppDeps|harness-executor-gated/i,
     );
-  });
-
-  it("503 activation-gate framing pinned: 'When the route is gated 503 (recipesRepo OR agentSessionsRepo not wired in the deploy's AppDeps), the SDK propagates the FeatureUnavailableError; callers branch on the typed error the same way they do for billing / egress / agent-sessions.' — pinned so the dual-repo gating contract + the cross-feature error-handling parallel stay explicit (drift would mislead consumers about which repos drive the 503; drift to dropping the cross-feature pattern reference would orphan the typed-error handling pattern from its peers)", () => {
-    // Match the distinctive phrases rather than the exact line-wrap
-    // (robust to prose re-wrapping).
-    expect(body).toMatch(/When the route is gated 503 \(recipesRepo OR agentSessionsRepo/);
-    expect(body).toMatch(/the SDK propagates the/);
-    expect(body).toMatch(/FeatureUnavailableError; callers branch on the typed error/);
-    expect(body).toMatch(/billing \/ egress \/ agent-sessions\./);
   });
 
   it("Recipe interface 8-field surface: id + account_id + agent_session_id (nullable) + label + description (nullable) + intent_count + created_at + updated_at. Drift to making agent_session_id NOT nullable would break the recipe-survives-agent-session-cleanup contract; drift to dropping intent_count would force the dashboard to fetch the full intent_log just to render 'N intents' summary", () => {
@@ -92,12 +85,13 @@ describe('sdk-typescript resources/recipes content parity', () => {
     );
   });
 
-  it('RecipesResource method surface pinned: create + list + iterate + get + delete (read/management). EXECUTION is NOT present (no execute() — recipe execution stays gated on the harness executor; an execute() here would diverge from the server, which has no execution route).', () => {
+  it('RecipesResource method surface pinned: create + list + iterate + get + delete + suggest. Execution is outside this resource.', () => {
     expect(body).toMatch(/export class RecipesResource \{/);
     expect(body).toMatch(/create\(body: CreateRecipeRequest\): Promise<Recipe>/);
     expect(body).toMatch(/list\(query: PaginationQueryInput = \{\}\): Promise<RecipesListPage>/);
     expect(body).toMatch(/get\(id: string\): Promise<RecipeDetail>/);
     expect(body).toMatch(/delete\(id: string\): Promise<void>/);
+    expect(body).toMatch(/suggest\(agentSessionId: string\): Promise<RecipeSuggestion>/);
     expect(body).not.toMatch(/execute\(/);
   });
 

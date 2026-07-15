@@ -7,16 +7,11 @@ import (
 	"strconv"
 )
 
-// RecipesResource handles /v1/recipes (AI-B4). Mirrors the TypeScript
-// + Python RecipesResource.
+// RecipesResource manages saved recipes and recipe suggestions.
 //
-// Server registers these endpoints as 503 FeatureUnavailable stubs
-// until both recipesRepo and agentSessionsRepo are wired in AppDeps.
-// SDK surface is stable so consumers compile ahead of time.
-//
-// Surface: Create + List + Get + Delete (the read/management path was
-// pulled forward from the v1.1 D2/D3 defer — V-530.I/.J). Recipe
-// EXECUTION stays v1.1 (gated on the harness executor).
+// Surface: Create + List + Iterate + Get + Delete + Suggest. Deployments
+// without recipe storage return the typed FeatureUnavailable error. Recipe
+// execution is intentionally outside this resource; it has no Execute method.
 type RecipesResource struct {
 	client *Client
 }

@@ -1,14 +1,10 @@
-// AI-B4 — recipe library. Snapshots a finished agent-session's
-// intent_log + transcript so the customer can later replay the same
-// flow without re-paying the LLM decomposition cost.
+// Recipe library. Snapshots a finished agent session's intent log and
+// transcript so the customer can reuse the saved workflow without paying
+// for another AI decomposition.
 //
-// SDK surface: create + list + get + delete. The read/management path
-// (list/get/delete) was pulled forward from the v1.1 D2/D3 defer
-// (V-530.I/.J); recipe EXECUTION stays v1.1 (harness-executor-gated).
-// When the route is gated 503 (recipesRepo OR agentSessionsRepo not
-// wired in the deploy's AppDeps), the SDK propagates the
-// FeatureUnavailableError; callers branch on the typed error the same
-// way they do for billing / egress / agent-sessions.
+// Surface: create + list + iterate + get + delete + suggest. Deployments
+// without recipe storage return FeatureUnavailableError. Recipe execution is
+// intentionally outside this resource and is not exposed here.
 
 import type { PaginationQueryInput } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
@@ -45,10 +41,9 @@ export interface RecipesListPage {
   next_cursor: string | null;
 }
 
-/** Doc-132 §5.2 (recipe auto-generation) v1.0 slice — a deterministic
- *  label/description suggestion derived from a session's own
- *  intent_log (same assembly `create()` uses), so callers can prefill
- *  a "Save as recipe" form before the customer decides to save. */
+/** A deterministic label/description suggestion derived from a session's own
+ *  intent_log (the same assembly `create()` uses), so callers can prefill a
+ *  "Save as recipe" form before the customer decides to save. */
 export interface RecipeSuggestion {
   suggested_label: string;
   suggested_description: string;
@@ -132,10 +127,9 @@ export class RecipesResource {
   }
 
   /**
-   * Doc-132 §5.2 (recipe auto-generation) v1.0 slice — fetch a
-   * deterministic label/description suggestion for an agent session,
-   * derived from its own intent_log. Safe to call speculatively before
-   * the customer decides to save (read-only, no side effects).
+   * Fetch a deterministic label/description suggestion for an agent session,
+   * derived from its own intent_log. Safe to call speculatively before the
+   * customer decides to save (read-only, no side effects).
    */
   suggest(agentSessionId: string): Promise<RecipeSuggestion> {
     return this.http.request<RecipeSuggestion>({

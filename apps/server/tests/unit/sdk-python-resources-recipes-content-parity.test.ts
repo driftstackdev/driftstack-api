@@ -1,6 +1,6 @@
 // Drift guard for packages/sdk-python/src/driftstack/resources/recipes.py.
-// Pins the AI-B4 write-only Python surface — sync + async create()
-// methods + the v1.0 narrow surface + the cross-account 404
+// Pins the public saved-recipe Python surface — sync + async management
+// and suggestions + the cross-account 404
 // existence-leak-prevention contract.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -23,19 +23,20 @@ describe('sdk-python resources/recipes content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("AI-B4 module-level docstring framing pinned: 'Recipes resource — /v1/recipes (AI-B4). Mirrors the TypeScript RecipesResource. Server registers the routes as 503 FeatureUnavailable stubs until both recipesRepo and agentSessionsRepo are wired in AppDeps; SDK surface is stable so consumers compile ahead of time.' — pinned so the AI-B4 anchor + cross-SDK TS-mirror reference + dual-repo activation-gate framing all stay documented", () => {
-    expect(body).toMatch(/"""Recipes resource — \/v1\/recipes \(AI-B4\)\./);
+  it('frames recipes as an available management and suggestion resource', () => {
+    expect(body).toMatch(/"""Saved recipes and recipe suggestions\./);
     expect(body).toMatch(
-      /Mirrors the TypeScript RecipesResource\. Server registers the routes as\s*\n?\s*503 ``FeatureUnavailable`` stubs until both ``recipesRepo`` and\s*\n?\s*``agentSessionsRepo`` are wired in AppDeps; SDK surface is stable so\s*\n?\s*consumers compile ahead of time\./,
+      /Surface: ``create`` \+ ``list`` \+ ``iterate`` \+ ``get`` \+ ``delete`` \+\s*\n?\s*``suggest``\. Deployments without recipe storage return the typed\s*\n?\s*``FeatureUnavailable`` error\./,
     );
   });
 
-  it("surface framing pinned: 'Surface: create + list + get + delete (the read/management path was pulled forward from the v1.1 D2/D3 defer — V-530.I/.J). Recipe EXECUTION stays v1.1 (gated on the harness executor).' — pinned so the create+list+get+delete surface + the execution-stays-gated contract stay explicit (drift to adding an execute() would diverge from the server, which has no execution route)", () => {
-    expect(body).toMatch(/Surface: ``create`` \+ ``list`` \+ ``get`` \+ ``delete``/);
-    expect(body).toMatch(/Recipe EXECUTION stays v1\.1 \(gated on the harness executor\)\./);
+  it('keeps roadmap and internal dependency language out of the public SDK', () => {
+    expect(body).not.toMatch(
+      /AI-B4|Doc-132|v1\.1|D2\/D3|V-530|defer|compile ahead|wired in AppDeps|harness executor/i,
+    );
   });
 
-  it('Sync RecipesResource surface pinned: create + list + iterate + get + delete (read/management). No execute() — recipe execution stays gated on the harness executor (an execute() would diverge from the server, which has no execution route)', () => {
+  it('Sync RecipesResource surface pinned: create + list + iterate + get + delete + suggest. No execute() because execution is outside this resource', () => {
     expect(body).toMatch(/class RecipesResource:/);
     expect(body).toMatch(
       /def create\(\s*\n?\s*self,\s*\n?\s*\*,\s*\n?\s*agent_session_id: str,\s*\n?\s*label: str,\s*\n?\s*description: str \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
@@ -45,6 +46,7 @@ describe('sdk-python resources/recipes content parity', () => {
     );
     expect(body).toMatch(/def get\(self, recipe_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(/def delete\(self, recipe_id: str\) -> None:/);
+    expect(body).toMatch(/def suggest\(self, agent_session_id: str\) -> dict\[str, Any\]:/);
     expect(body).not.toMatch(/def execute\(/);
   });
 
@@ -55,6 +57,7 @@ describe('sdk-python resources/recipes content parity', () => {
     );
     expect(body).toMatch(/async def get\(self, recipe_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(/async def delete\(self, recipe_id: str\) -> None:/);
+    expect(body).toMatch(/async def suggest\(self, agent_session_id: str\) -> dict\[str, Any\]:/);
   });
 
   it('get() documents public intent-log sensitive-value omission and encrypted server-side replay', () => {

@@ -1,6 +1,6 @@
 // Drift guard for packages/sdk-go/recipes.go.
-// Pins the AI-B4 write-only Go surface — mirrors TS + Python.
-// Load-bearing pieces: the v1.0 narrow surface (Create only), the
+// Pins the public saved-recipe Go surface — mirrors TS + Python.
+// Load-bearing pieces: the management and suggestion surface, the
 // cross-account 404 existence-leak-prevention contract, and the
 // Recipe Go struct nullable-field pointer pattern.
 
@@ -24,21 +24,15 @@ describe('sdk-go recipes content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Module-level RecipesResource framing pinned: 'RecipesResource handles /v1/recipes (AI-B4). Mirrors the TypeScript + Python RecipesResource.' — pinned so the AI-B4 anchor + cross-SDK TS + Python mirror references survive (drift would orphan the Go SDK from its peers)", () => {
+  it('frames recipes as an available management and suggestion resource', () => {
+    expect(body).toMatch(/\/\/ RecipesResource manages saved recipes and recipe suggestions\./);
     expect(body).toMatch(
-      /\/\/ RecipesResource handles \/v1\/recipes \(AI-B4\)\. Mirrors the TypeScript\s*\n?\s*\/\/ \+ Python RecipesResource\./,
+      /\/\/ Surface: Create \+ List \+ Iterate \+ Get \+ Delete \+ Suggest\. Deployments\s*\n?\s*\/\/ without recipe storage return the typed FeatureUnavailable error\./,
     );
   });
 
-  it("503 activation-gate dual-repo framing pinned: 'Server registers these endpoints as 503 FeatureUnavailable stubs until both recipesRepo and agentSessionsRepo are wired in AppDeps. SDK surface is stable so consumers compile ahead of time.' — pinned so the dual-repo (recipesRepo + agentSessionsRepo) AND-gate stays documented (drift to a single-repo gate would mismatch the server's actual activation logic)", () => {
-    expect(body).toMatch(
-      /\/\/ Server registers these endpoints as 503 FeatureUnavailable stubs\s*\n?\s*\/\/ until both recipesRepo and agentSessionsRepo are wired in AppDeps\.\s*\n?\s*\/\/ SDK surface is stable so consumers compile ahead of time\./,
-    );
-  });
-
-  it("surface framing pinned: 'Surface: Create + List + Get + Delete (the read/management path was pulled forward from the v1.1 D2/D3 defer — V-530.I/.J). Recipe EXECUTION stays v1.1 (gated on the harness executor).' — pinned so the Create+List+Get+Delete surface + the execution-stays-gated contract stay explicit (drift to adding an Execute would diverge from the server, which has no execution route)", () => {
-    expect(body).toMatch(/\/\/ Surface: Create \+ List \+ Get \+ Delete/);
-    expect(body).toMatch(/\/\/ EXECUTION stays v1\.1 \(gated on the harness executor\)\./);
+  it('keeps roadmap and internal dependency language out of the public SDK', () => {
+    expect(body).not.toMatch(/v1\.1|D2\/D3|V-530|defer|compile ahead|wired in AppDeps/i);
   });
 
   it('Recipe Go struct 8-field surface: ID + AccountID + AgentSessionID (*string nullable) + Label + Description (*string nullable) + IntentCount + CreatedAt + UpdatedAt. Drift to making AgentSessionID non-pointer would break the ON DELETE SET NULL cleanup contract; drift to dropping IntentCount would force Go customers to fetch the full intent_log just for a count', () => {
@@ -71,7 +65,7 @@ describe('sdk-go recipes content parity', () => {
     );
   });
 
-  it('RecipesResource method surface pinned: Create + List + Iterate + Get + Delete (read/management). No Execute — recipe execution stays gated on the harness executor (an Execute here would diverge from the server, which has no execution route)', () => {
+  it('RecipesResource method surface pinned: Create + List + Iterate + Get + Delete + Suggest. No Execute because execution is outside this resource', () => {
     expect(body).toMatch(/type RecipesResource struct \{/);
     expect(body).toMatch(
       /func \(r \*RecipesResource\) List\(ctx context\.Context, query \*ListRecipesQuery\) \(\*RecipesListPage, error\)/,
@@ -81,6 +75,9 @@ describe('sdk-go recipes content parity', () => {
     );
     expect(body).toMatch(
       /func \(r \*RecipesResource\) Delete\(ctx context\.Context, recipeID string\) error/,
+    );
+    expect(body).toMatch(
+      /func \(r \*RecipesResource\) Suggest\(ctx context\.Context, agentSessionID string\) \(\*RecipeSuggestion, error\)/,
     );
     expect(body).not.toMatch(/func \(r \*RecipesResource\) Execute\(/);
   });

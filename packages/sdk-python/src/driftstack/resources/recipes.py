@@ -1,13 +1,11 @@
-"""Recipes resource — /v1/recipes (AI-B4).
+"""Saved recipes and recipe suggestions.
 
-Mirrors the TypeScript RecipesResource. Server registers the routes as
-503 ``FeatureUnavailable`` stubs until both ``recipesRepo`` and
-``agentSessionsRepo`` are wired in AppDeps; SDK surface is stable so
-consumers compile ahead of time.
+Surface: ``create`` + ``list`` + ``iterate`` + ``get`` + ``delete`` +
+``suggest``. Deployments without recipe storage return the typed
+``FeatureUnavailable`` error.
 
-Surface: ``create`` + ``list`` + ``get`` + ``delete`` (the
-read/management path was pulled forward from the v1.1 D2/D3 defer —
-V-530.I/.J). Recipe EXECUTION stays v1.1 (gated on the harness executor).
+Recipe execution is intentionally outside this resource; it has no
+``execute`` method.
 """
 
 from __future__ import annotations
@@ -31,7 +29,7 @@ def _encode_query(query: dict[str, Any]) -> str:
 
 
 class RecipesResource:
-    """Synchronous AI-B4 recipe library."""
+    """Synchronous saved-recipe resource."""
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http
@@ -89,9 +87,7 @@ class RecipesResource:
         self._http.request("DELETE", f"/v1/recipes/{quote(recipe_id, safe='')}")
 
     def suggest(self, agent_session_id: str) -> dict[str, Any]:
-        """Doc-132 §5.2 (recipe auto-generation) v1.0 slice.
-
-        Fetch a deterministic label/description suggestion derived from
+        """Fetch a deterministic label/description suggestion derived from
         the session's own intent_log (same assembly ``create`` uses).
         Read-only; safe to call speculatively before deciding to save.
         Returns ``suggested_label`` / ``suggested_description`` /
@@ -103,7 +99,7 @@ class RecipesResource:
 
 
 class AsyncRecipesResource:
-    """Async AI-B4 recipe library."""
+    """Asynchronous saved-recipe resource."""
 
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
