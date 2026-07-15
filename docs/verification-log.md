@@ -27271,3 +27271,41 @@ node/key/URL relocation refusal, successor wrong-key probing, and a blocked
 concurrent registration whose five-field compare-and-swap safely beats the
 migration without being overwritten. Server build and strict source-and-test
 TypeScript are green.
+
+## V-650 — Wrapped profile DEKs authenticate their profile identity
+
+**Date:** 2026-07-14
+
+Profile DEKs were previously wrapped only under an account-derived tenant key.
+That rejected cross-account relocation, but two complete `wrapped_dek` values
+inside the same account could be exchanged and still authenticate, assigning
+each profile the other profile's sealed-state key. This required corruption or
+write access at the database boundary rather than an unauthenticated request,
+but the encrypted record could not prove which profile owned it.
+
+Every stateful profile create, clone, import and transfer now preallocates its
+UUID before minting the DEK. New wrappers carry an explicit v2 prefix and use a
+canonical JSON-array GCM context containing a dedicated purpose/version plus
+normalized account and profile UUIDs. Ordinary session assignment accepts v2
+only and must supply that exact tuple. Canonical base64, UUID shape, ciphertext
+length and exact 32-byte plaintext checks fail closed; wrong account, profile,
+purpose, master key or ciphertext cannot be substituted. Stateful repository
+writes also refuse a wrapped DEK without a preallocated identity. Public API,
+R2 sealed-blob bytes and database schema are unchanged.
+
+The no-DDL bootstrap converter authenticates an existing v2 probe and fully
+validates a bounded page of prefixless legacy wrappers before its first write.
+Each rewrite exact-compares profile ID, account and old wrapper, updates only
+`wrapped_dek`, and leaves `updated_at` untouched. Startup drains to zero with
+no-progress and 10,000-row guards; the prefixless reader is unavailable to the
+ordinary session path.
+
+The focused codec/service/repository/bootstrap matrix passes 5 files and
+149/149 tests; the expanded profile matrix passes 51 files and 729/729 tests,
+and profile route/import/export/snapshot/transfer integration passes 4 files and
+84/84 tests. The isolated real-PostgreSQL proof passes 3/3 cases: wrong-key
+byte/timestamp preservation, same-account row-relocation refusal, whole-page
+prevalidation, successor wrong-key probing, and a deterministically blocked
+record-CAS loser that preserves the concurrent v2 successor. Server source and
+test TypeScript, targeted lint/format, build, diff and whitespace checks are
+green.

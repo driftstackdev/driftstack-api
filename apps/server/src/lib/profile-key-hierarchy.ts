@@ -23,7 +23,10 @@
 // account's profile DEK.
 //
 // Wrapped-DEK storage form: base64([IV(12) | tag(16) | ciphertext(32)]) — the
-// identical envelope shape used across the codebase (livekit-secret-encryption).
+// legacy v1 form. New profile writes use an explicit v2 prefix and authenticate
+// the owning account + profile UUID as AES-GCM AAD, so a valid wrapped key cannot
+// be relocated to another profile in the same account. The prefixless reader is
+// bootstrap-only and exists solely for the bounded no-DDL migration.
 
 import {
   createCipheriv,
@@ -36,8 +39,57 @@ import {
 const AES_256_KEY_BYTES = 32;
 const GCM_IV_BYTES = 12;
 const GCM_TAG_BYTES = 16;
+const WRAPPED_DEK_PAYLOAD_BYTES = GCM_IV_BYTES + GCM_TAG_BYTES + AES_256_KEY_BYTES;
+const WRAPPED_DEK_BASE64_CHARS = 80;
 const TMK_SALT_PREFIX = 'tenant';
 const TMK_INFO = 'TMK-v1';
+const PROFILE_DEK_AAD_PURPOSE = 'driftstack.profile-dek';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const PROFILE_DEK_V2_PREFIX = 'driftstack:profile-dek:v2:';
+
+export interface ProfileDekContext {
+  accountId: string;
+  profileId: string;
+}
+
+function decodeCanonicalBase64(value: string): Buffer {
+  if (value.length !== WRAPPED_DEK_BASE64_CHARS) {
+    throw new Error(
+      `wrapped DEK base64 is ${value.length.toString()} characters; expected exactly ` +
+        `${WRAPPED_DEK_BASE64_CHARS.toString()} for ${WRAPPED_DEK_PAYLOAD_BYTES.toString()} bytes.`,
+    );
+  }
+  const decoded = Buffer.from(value, 'base64');
+  if (decoded.toString('base64') !== value) {
+    throw new Error('wrapped DEK is not canonical base64.');
+  }
+  return decoded;
+}
+
+function normalizeUuid(name: 'accountId' | 'profileId', value: string): string {
+  if (!UUID_RE.test(value)) throw new Error(`${name} must be a UUID.`);
+  return value.toLowerCase();
+}
+
+function normalizeProfileDekContext(context: ProfileDekContext): ProfileDekContext {
+  return {
+    accountId: normalizeUuid('accountId', context.accountId),
+    profileId: normalizeUuid('profileId', context.profileId),
+  };
+}
+
+function buildProfileDekAad(normalizedContext: ProfileDekContext): Buffer {
+  return Buffer.from(
+    JSON.stringify([
+      PROFILE_DEK_AAD_PURPOSE,
+      2,
+      normalizedContext.accountId,
+      normalizedContext.profileId,
+    ]),
+    'utf8',
+  );
+}
 
 /** Decode + validate a base64 AES-256 key (the master key). */
 export function decodeMasterKey(masterKeyBase64: string): Buffer {
@@ -72,8 +124,7 @@ export function mintDek(): Buffer {
   return randomBytes(AES_256_KEY_BYTES);
 }
 
-/** Envelope-encrypt a DEK under a TMK → base64([IV | tag | ciphertext]). */
-export function wrapDek(dek: Buffer, tmk: Buffer): string {
+function wrapDekPayload(dek: Buffer, tmk: Buffer, aad?: Buffer): string {
   if (dek.length !== AES_256_KEY_BYTES) {
     throw new Error(
       `DEK must be ${AES_256_KEY_BYTES.toString()} bytes; got ${dek.length.toString()}`,
@@ -81,9 +132,15 @@ export function wrapDek(dek: Buffer, tmk: Buffer): string {
   }
   const iv = randomBytes(GCM_IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', tmk, iv);
+  if (aad !== undefined) cipher.setAAD(aad);
   const ciphertext = Buffer.concat([cipher.update(dek), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, tag, ciphertext]).toString('base64');
+}
+
+/** Legacy context-free DEK wrapper. New profile writes use mintWrappedProfileDek(). */
+export function wrapDek(dek: Buffer, tmk: Buffer): string {
+  return wrapDekPayload(dek, tmk);
 }
 
 /**
@@ -91,18 +148,18 @@ export function wrapDek(dek: Buffer, tmk: Buffer): string {
  * blob is malformed or the GCM tag fails (wrong TMK / tamper) — a wrong-account
  * TMK therefore cannot unwrap another account's DEK.
  */
-export function unwrapDek(wrappedDekBase64: string, tmk: Buffer): Buffer {
-  const blob = Buffer.from(wrappedDekBase64, 'base64');
-  const min = GCM_IV_BYTES + GCM_TAG_BYTES + AES_256_KEY_BYTES;
-  if (blob.length !== min) {
+function unwrapDekPayload(wrappedDekBase64: string, tmk: Buffer, aad?: Buffer): Buffer {
+  const blob = decodeCanonicalBase64(wrappedDekBase64);
+  if (blob.length !== WRAPPED_DEK_PAYLOAD_BYTES) {
     throw new Error(
-      `wrapped DEK blob is ${blob.length.toString()} bytes; expected exactly ${min.toString()} (iv + tag + 32-byte DEK)`,
+      `wrapped DEK blob is ${blob.length.toString()} bytes; expected exactly ${WRAPPED_DEK_PAYLOAD_BYTES.toString()} (iv + tag + 32-byte DEK)`,
     );
   }
   const iv = blob.subarray(0, GCM_IV_BYTES);
   const tag = blob.subarray(GCM_IV_BYTES, GCM_IV_BYTES + GCM_TAG_BYTES);
   const ciphertext = blob.subarray(GCM_IV_BYTES + GCM_TAG_BYTES);
   const decipher = createDecipheriv('aes-256-gcm', tmk, iv);
+  if (aad !== undefined) decipher.setAAD(aad);
   decipher.setAuthTag(tag);
   const dek = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   if (dek.length !== AES_256_KEY_BYTES) {
@@ -113,6 +170,10 @@ export function unwrapDek(wrappedDekBase64: string, tmk: Buffer): Buffer {
   return dek;
 }
 
+export function unwrapDek(wrappedDekBase64: string, tmk: Buffer): Buffer {
+  return unwrapDekPayload(wrappedDekBase64, tmk);
+}
+
 /**
  * Mint a per-profile DEK for `accountId` and return BOTH the plaintext DEK (for
  * immediate use — ship to the harness / seal the first blob) and the wrapped DEK
@@ -121,20 +182,57 @@ export function unwrapDek(wrappedDekBase64: string, tmk: Buffer): Buffer {
 export function mintWrappedProfileDek(
   masterKey: Buffer,
   accountId: string,
+  profileId: string,
 ): { dek: Buffer; wrappedDek: string } {
-  const tmk = deriveTenantMasterKey(masterKey, accountId);
   const dek = mintDek();
-  return { dek, wrappedDek: wrapDek(dek, tmk) };
+  return { dek, wrappedDek: wrapProfileDek(masterKey, accountId, profileId, dek) };
+}
+
+/** Wrap an existing 32-byte DEK into its exact profile-bound v2 envelope. */
+export function wrapProfileDek(
+  masterKey: Buffer,
+  accountId: string,
+  profileId: string,
+  dek: Buffer,
+): string {
+  const context = normalizeProfileDekContext({ accountId, profileId });
+  const tmk = deriveTenantMasterKey(masterKey, context.accountId);
+  return `${PROFILE_DEK_V2_PREFIX}${wrapDekPayload(dek, tmk, buildProfileDekAad(context))}`;
 }
 
 /**
  * Recover a profile's plaintext DEK from its stored wrapped form. Used at
- * session-assign time to ship the DEK to the harness. Throws if `wrappedDek`
- * wasn't wrapped under THIS account's TMK (cross-account isolation).
+ * session-assign time to ship the DEK to the harness. Throws unless `wrappedDek`
+ * was wrapped for this exact account + profile context.
  */
-export function unwrapProfileDek(masterKey: Buffer, accountId: string, wrappedDek: string): Buffer {
-  const tmk = deriveTenantMasterKey(masterKey, accountId);
-  return unwrapDek(wrappedDek, tmk);
+export function unwrapProfileDek(
+  masterKey: Buffer,
+  accountId: string,
+  profileId: string,
+  wrappedDek: string,
+): Buffer {
+  if (!wrappedDek.startsWith(PROFILE_DEK_V2_PREFIX)) {
+    throw new Error('wrapped profile DEK is not a v2 envelope.');
+  }
+  const context = normalizeProfileDekContext({ accountId, profileId });
+  const tmk = deriveTenantMasterKey(masterKey, context.accountId);
+  return unwrapDekPayload(
+    wrappedDek.slice(PROFILE_DEK_V2_PREFIX.length),
+    tmk,
+    buildProfileDekAad(context),
+  );
+}
+
+/** Bootstrap-only reader for the prefixless, account-only legacy envelope. */
+export function unwrapLegacyProfileDek(
+  masterKey: Buffer,
+  accountId: string,
+  wrappedDek: string,
+): Buffer {
+  if (wrappedDek.startsWith(PROFILE_DEK_V2_PREFIX)) {
+    throw new Error('legacy wrapped profile DEK reader refuses a v2 envelope.');
+  }
+  return unwrapDekPayload(wrappedDek, deriveTenantMasterKey(masterKey, accountId));
 }
 
 /** Constant-time equality for two keys (test/verification helper). */

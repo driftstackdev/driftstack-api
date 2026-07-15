@@ -1,6 +1,6 @@
 // Drizzle-backed ProfilesRepo (V-081).
 
-import { and, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { StorageQuotaExceededError } from '../lib/errors.js';
 import type {
@@ -19,9 +19,16 @@ import { computeAccountStorageState } from '../services/profile-storage-quota.js
 import type { Database } from './client.js';
 import { accounts, profiles } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
+import {
+  PROFILE_DEK_V2_PREFIX,
+  unwrapLegacyProfileDek,
+  unwrapProfileDek,
+  wrapProfileDek,
+} from '../lib/profile-key-hierarchy.js';
 
 const DEFAULT_PAGE = 50;
 const MAX_PAGE = 100;
+const MAX_PROFILE_DEK_MIGRATION_BATCH = 500;
 
 // L4b recycle bin — every customer-facing read path excludes soft-deleted
 // (trashed) profiles: they don't count against the cap, can't be found,
@@ -29,6 +36,22 @@ const MAX_PAGE = 100;
 // recycle-bin / restore / purge paths look at trashed rows. `delete()` here
 // is a soft delete (sets deletedAt); a hard row removal happens at purge.
 const notDeleted = isNull(profiles.deletedAt);
+
+function profileDekIsLegacy() {
+  return sql`${profiles.wrappedDek} IS NOT NULL
+    AND ${profiles.wrappedDek} NOT LIKE ${`${PROFILE_DEK_V2_PREFIX}%`}`;
+}
+
+function profileDekIsV2() {
+  return sql`${profiles.wrappedDek} LIKE ${`${PROFILE_DEK_V2_PREFIX}%`}`;
+}
+
+function preallocatedProfileId(input: NewProfileInput): { id?: string } {
+  if (input.wrappedDek != null && input.id === undefined) {
+    throw new Error('a profile with a wrapped DEK requires a preallocated id');
+  }
+  return input.id === undefined ? {} : { id: input.id };
+}
 
 function toRecord(r: typeof profiles.$inferSelect): ProfileRecord {
   return {
@@ -53,10 +76,91 @@ function toRecord(r: typeof profiles.$inferSelect): ProfileRecord {
 export class DrizzleProfilesRepo implements ProfilesRepo {
   constructor(private readonly database: Database) {}
 
+  /**
+   * Bootstrap-only no-DDL conversion from account-only legacy DEK wrappers to
+   * purpose/account/profile-bound v2. The complete page authenticates before
+   * its first write; each update exact-CASes the old record tuple.
+   */
+  async migrateWrappedDekEnvelopes(
+    masterKey: Buffer,
+    limit = MAX_PROFILE_DEK_MIGRATION_BATCH,
+  ): Promise<{ scanned: number; converted: number; remaining: number }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PROFILE_DEK_MIGRATION_BATCH) {
+      throw new Error(
+        `Profile DEK migration limit must be an integer from 1 to ${MAX_PROFILE_DEK_MIGRATION_BATCH.toString()}.`,
+      );
+    }
+
+    // Authenticate one already-bound row before considering legacy data. A
+    // wrong operator master key therefore fails without rewriting anything,
+    // including on successor boots after the legacy set has drained to zero.
+    const [v2Probe] = await this.database.db
+      .select({ id: profiles.id, accountId: profiles.accountId, wrappedDek: profiles.wrappedDek })
+      .from(profiles)
+      .where(profileDekIsV2())
+      .orderBy(asc(profiles.id))
+      .limit(1);
+    if (v2Probe !== undefined) {
+      if (v2Probe.wrappedDek === null) {
+        throw new Error(`Profile ${v2Probe.id} has an incomplete wrapped DEK.`);
+      }
+      unwrapProfileDek(masterKey, v2Probe.accountId, v2Probe.id, v2Probe.wrappedDek);
+    }
+
+    const rows = await this.database.db
+      .select({ id: profiles.id, accountId: profiles.accountId, wrappedDek: profiles.wrappedDek })
+      .from(profiles)
+      .where(profileDekIsLegacy())
+      .orderBy(asc(profiles.id))
+      .limit(limit);
+
+    // Decode and authenticate every legacy wrapper before the first UPDATE.
+    // Wrong key, malformed base64 or wrong-length plaintext leaves the whole
+    // selected page byte-for-byte intact.
+    const prepared = rows.map((row) => {
+      if (row.wrappedDek === null) {
+        throw new Error(`Profile ${row.id} has an incomplete wrapped DEK.`);
+      }
+      const dek = unwrapLegacyProfileDek(masterKey, row.accountId, row.wrappedDek);
+      return {
+        ...row,
+        wrappedDek: row.wrappedDek,
+        next: wrapProfileDek(masterKey, row.accountId, row.id, dek),
+      };
+    });
+
+    let converted = 0;
+    for (const row of prepared) {
+      const updated = await this.database.db
+        .update(profiles)
+        .set({
+          wrappedDek: row.next,
+          // Deliberately preserve updatedAt: rewrapping does not mutate profile
+          // metadata, customer revision state or sealed R2 blob contents.
+        })
+        .where(
+          and(
+            eq(profiles.id, row.id),
+            eq(profiles.accountId, row.accountId),
+            eq(profiles.wrappedDek, row.wrappedDek),
+          ),
+        )
+        .returning({ id: profiles.id });
+      if (updated.length === 1) converted += 1;
+    }
+
+    const [remainingRow] = await this.database.db
+      .select({ value: count() })
+      .from(profiles)
+      .where(profileDekIsLegacy());
+    return { scanned: rows.length, converted, remaining: remainingRow?.value ?? 0 };
+  }
+
   async insert(input: NewProfileInput): Promise<ProfileRecord> {
     const [row] = await this.database.db
       .insert(profiles)
       .values({
+        ...preallocatedProfileId(input),
         accountId: input.accountId,
         name: input.name,
         archetype: input.archetype,
@@ -135,6 +239,7 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       const [row] = await tx
         .insert(profiles)
         .values({
+          ...preallocatedProfileId(input),
           accountId: input.accountId,
           name: input.name,
           archetype: input.archetype,

@@ -41,17 +41,21 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed ProfilesRepo \(V-081\)\./);
   });
 
-  it('imports: and/count/desc/eq/inArray/lt/or from drizzle-orm; 6 service types (ListProfilesArgs/Page + NewProfileInput + ProfileRecord + ProfileUpdates + ProfilesRepo); Database; profiles schema', () => {
+  it('imports: and/asc/count/desc/eq/inArray/lt/or from drizzle-orm; profile-DEK codec; 6 service types; Database; profiles schema', () => {
     // doc-150 item 6 — `sql` joined the drizzle import for the
     // COALESCE(sum(...))::bigint storage-total aggregate in sumSizeBytesByAccount.
     // #158 — `inArray` joined for findExistingProfileIds' WHERE id IN (...) batch.
     expect(body).toMatch(
-      /import \{ and, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql \} from 'drizzle-orm';/,
+      /import \{ and, asc, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(/import \{ isUniqueViolation \} from '\.\.\/lib\/pg-error\.js';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*ListProfilesArgs,\s*\n?\s*ListProfilesPage,\s*\n?\s*NewProfileInput,\s*\n?\s*ProfileRecord,\s*\n?\s*ProfileUpdates,\s*\n?\s*ProfilesRepo,\s*\n?\s*\} from '\.\.\/services\/profiles\.js';/,
     );
+    expect(body).toContain('PROFILE_DEK_V2_PREFIX,');
+    expect(body).toContain('unwrapLegacyProfileDek,');
+    expect(body).toContain('unwrapProfileDek,');
+    expect(body).toContain('wrapProfileDek,');
   });
 
   it('DEFAULT_PAGE = 50; MAX_PAGE = 100 constants', () => {
@@ -87,10 +91,11 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toContain('return row ? Number(row.total) : 0;');
   });
 
-  it("insert: 7-field values (accountId + name + archetype + description + folder + tags + wrappedDek); returning(); throws 'insert profile: no row returned'", () => {
+  it("insert: preallocated identity + metadata + wrappedDek; returning(); throws 'insert profile: no row returned'", () => {
     // Per-field toContain rather than one long \s*\n?\s*-chained regex (the
     // chain backtracks pathologically past ~5 groups; the wrapped_dek field
     // pushed it over — see feedback_no_long_chain_parity_regex).
+    expect(body).toContain('...preallocatedProfileId(input),');
     expect(body).toContain('accountId: input.accountId,');
     expect(body).toContain('name: input.name,');
     expect(body).toContain('archetype: input.archetype,');
@@ -100,6 +105,25 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toContain('wrappedDek: input.wrappedDek ?? null,');
     expect(body).toContain('.returning();');
     expect(body).toContain("if (!row) throw new Error('insert profile: no row returned');");
+  });
+
+  it('profile-DEK migration authenticates v2 probe, prevalidates a bounded legacy page, exact-CASes id+account+old wrapper, preserves updatedAt and counts remaining', () => {
+    expect(body).toContain('const MAX_PROFILE_DEK_MIGRATION_BATCH = 500;');
+    expect(body).toContain('async migrateWrappedDekEnvelopes(');
+    expect(body).toContain('.where(profileDekIsV2())');
+    expect(body).toContain(
+      'unwrapProfileDek(masterKey, v2Probe.accountId, v2Probe.id, v2Probe.wrappedDek);',
+    );
+    expect(body).toContain('.where(profileDekIsLegacy())');
+    expect(body).toContain(
+      'const dek = unwrapLegacyProfileDek(masterKey, row.accountId, row.wrappedDek);',
+    );
+    expect(body).toContain('next: wrapProfileDek(masterKey, row.accountId, row.id, dek),');
+    expect(body).toContain('eq(profiles.id, row.id),');
+    expect(body).toContain('eq(profiles.accountId, row.accountId),');
+    expect(body).toContain('eq(profiles.wrappedDek, row.wrappedDek),');
+    expect(body).not.toContain('updatedAt: row.next');
+    expect(body).toContain('remaining: remainingRow?.value ?? 0');
   });
 
   it('countByAccount: select count() helper aggregate where accountId; row?.n ?? 0', () => {

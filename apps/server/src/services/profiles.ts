@@ -10,6 +10,7 @@
 // IndexedDB) lives in the WebKit driver layer — none of that flows
 // through this service. We store only the metadata.
 
+import { randomUUID } from 'node:crypto';
 import { LOCKED_ARCHETYPE_ID, type AccountTier } from '@driftstack/api-types';
 import {
   ConflictError,
@@ -61,6 +62,12 @@ export interface ProfileRecord {
 }
 
 export interface NewProfileInput {
+  /**
+   * Preallocated profile identity. Every stateful service write supplies this
+   * before wrapping the DEK so the envelope can authenticate its final row ID.
+   * Optional only for stateless/internal repo callers that store no wrapped DEK.
+   */
+  id?: string;
   accountId: string;
   name: string;
   archetype: string;
@@ -72,10 +79,10 @@ export interface NewProfileInput {
   icon?: string | null;
   note?: string | null;
   /**
-   * Profile-backed sessions (file 57): the per-profile DEK wrapped under the
-   * account TMK (base64[iv|tag|ct]). Optional — absent/undefined → stored NULL
-   * (profiles created without PROFILE_MASTER_KEY set, or via paths that don't
-   * mint a DEK). Never exposed back to the customer.
+   * Profile-backed sessions (file 57): the per-profile DEK in an explicit v2
+   * envelope authenticated to its account + preallocated profile UUID. Optional
+   * — absent/undefined → stored NULL (PROFILE_MASTER_KEY unset). Never exposed
+   * back to the customer.
    */
   wrappedDek?: string | null;
 }
@@ -292,18 +299,20 @@ export class ProfilesService {
 
   /**
    * Profile-backed sessions (file 57) — mint a FRESH per-profile DEK wrapped
-   * under the account's TMK, or `undefined` when no master key is configured
-   * (feature inert → the row stores NULL). Shared by EVERY profile-insert path
+   * under the account's TMK and authenticated to the final profile UUID, or no
+   * wrapper when no master key is configured (feature inert → row stores NULL).
+   * Shared by EVERY profile-insert path
    * (create / clone / import / transfer): each path mints its OWN fresh DEK —
    * a clone/import/transfer starts with NO sealed blob, so it must never reuse
    * the source profile's DEK. Without a DEK the row is stateless at
    * session-assign (no restore URL, no save-back PUT URL) → sealed-state
    * persistence silently breaks for that profile.
    */
-  private mintWrappedDek(accountId: string): string | undefined {
+  private mintProfileIdentity(accountId: string): { id: string; wrappedDek?: string } {
+    const id = randomUUID();
     return this.profileMasterKey !== null
-      ? mintWrappedProfileDek(this.profileMasterKey, accountId).wrappedDek
-      : undefined;
+      ? { id, wrappedDek: mintWrappedProfileDek(this.profileMasterKey, accountId, id).wrappedDek }
+      : { id };
   }
 
   private async emitAuditBestEffort(
@@ -371,12 +380,13 @@ export class ProfilesService {
     // account's TMK when the master key is configured. The plaintext DEK is
     // discarded here (re-derived by unwrapping at session-assign time); only the
     // wrapped form is stored. Absent key → undefined → stored NULL (inert).
-    const wrappedDek = this.mintWrappedDek(args.accountId);
+    const identity = this.mintProfileIdentity(args.accountId);
 
     let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
     try {
       result = await this.repo.insertWithLimit(
         {
+          id: identity.id,
           accountId: args.accountId,
           name: args.name,
           archetype: args.archetype ?? DEFAULT_ARCHETYPE,
@@ -385,7 +395,7 @@ export class ProfilesService {
           tags: args.tags ?? [],
           icon: args.icon ?? null,
           note: args.note ?? null,
-          wrappedDek,
+          wrappedDek: identity.wrappedDek,
         },
         limit,
       );
@@ -419,7 +429,8 @@ export class ProfilesService {
 
   /**
    * Recover a profile's plaintext DEK (file 57) for session-assign — reads the
-   * account-scoped wrapped DEK and unwraps it under the account's TMK. Returns
+   * account-scoped wrapped DEK and unwraps it under the exact account/profile
+   * context. Returns
    * null when the master key isn't configured or the profile has no stored DEK.
    * The plaintext DEK never persists; the caller ships it to the harness over
    * the authed WSS and discards it. Throws only if a stored DEK is corrupt /
@@ -432,7 +443,7 @@ export class ProfilesService {
       accountId: args.accountId,
     });
     if (wrappedDek === null) return null;
-    return unwrapProfileDek(this.profileMasterKey, args.accountId, wrappedDek);
+    return unwrapProfileDek(this.profileMasterKey, args.accountId, args.profileId, wrappedDek);
   }
 
   /**
@@ -719,7 +730,7 @@ export class ProfilesService {
     // DEK (a clone is a new identity slot, not a copy of the sealed store).
     // Without a DEK the clone runs stateless at session-assign (no restore /
     // save-back) → sealed-state persistence silently breaks for it.
-    const cloneWrappedDek = this.mintWrappedDek(args.accountId);
+    const cloneIdentity = this.mintProfileIdentity(args.accountId);
 
     // V-714 — atomic limit-check + insert (count above is the fast-fail
     // pre-check; insertWithLimit re-checks under an account-row lock).
@@ -727,6 +738,7 @@ export class ProfilesService {
     try {
       result = await this.repo.insertWithLimit(
         {
+          id: cloneIdentity.id,
           accountId: args.accountId,
           name: cloneName,
           archetype: source.archetype,
@@ -739,7 +751,7 @@ export class ProfilesService {
           tags: source.tags,
           icon: source.icon,
           note: source.note,
-          wrappedDek: cloneWrappedDek,
+          wrappedDek: cloneIdentity.wrappedDek,
         },
         limit,
       );
@@ -864,7 +876,7 @@ export class ProfilesService {
     // no sealed blob, so it gets its own DEK (never the source's). Without one
     // the import runs stateless at session-assign (no restore / save-back) →
     // sealed-state persistence silently breaks for it.
-    const importWrappedDek = this.mintWrappedDek(args.accountId);
+    const importIdentity = this.mintProfileIdentity(args.accountId);
 
     // V-714 — atomic limit-check + insert (count above is the fast-fail
     // pre-check; insertWithLimit re-checks under an account-row lock).
@@ -872,11 +884,12 @@ export class ProfilesService {
     try {
       result = await this.repo.insertWithLimit(
         {
+          id: importIdentity.id,
           accountId: args.accountId,
           name: targetName,
           archetype: args.payload.archetype,
           description: args.payload.description,
-          wrappedDek: importWrappedDek,
+          wrappedDek: importIdentity.wrappedDek,
         },
         limit,
       );
@@ -1010,7 +1023,7 @@ export class ProfilesService {
     // DEK is keyed to the SOURCE account's TMK — so the recipient row must get
     // its own freshly-minted DEK, never a copy. Without it the transferred
     // profile runs stateless at session-assign (no restore / save-back).
-    const transferWrappedDek = this.mintWrappedDek(args.recipientAccountId);
+    const transferIdentity = this.mintProfileIdentity(args.recipientAccountId);
 
     // V-714 — atomic limit-check + insert on the RECIPIENT account (count
     // above is the fast-fail pre-check; insertWithLimit re-checks under the
@@ -1021,11 +1034,12 @@ export class ProfilesService {
     try {
       result = await this.repo.insertWithLimit(
         {
+          id: transferIdentity.id,
           accountId: args.recipientAccountId,
           name: targetName,
           archetype: source.archetype,
           description: source.description,
-          wrappedDek: transferWrappedDek,
+          wrappedDek: transferIdentity.wrappedDek,
         },
         limit,
       );

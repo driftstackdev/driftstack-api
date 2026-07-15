@@ -35,6 +35,10 @@ import {
 import { TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
 import { mintWrappedProfileDek, unwrapProfileDek } from '../../src/lib/profile-key-hierarchy.js';
 
+const CRYPTO_ACCOUNT_A = '11111111-1111-4111-8111-111111111111';
+const CRYPTO_ACCOUNT_B = '22222222-2222-4222-8222-222222222222';
+const CRYPTO_PROFILE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
 function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
   return {
     id: 'p1',
@@ -69,7 +73,7 @@ function makeRepo(
     insert: (input: NewProfileInput) => {
       counter += 1;
       const row: ProfileRecord = {
-        id: `p_new_${counter.toString()}`,
+        id: input.id ?? `p_new_${counter.toString()}`,
         accountId: input.accountId,
         name: input.name,
         archetype: input.archetype,
@@ -96,7 +100,7 @@ function makeRepo(
       }
       counter += 1;
       const row: ProfileRecord = {
-        id: `p_new_${counter.toString()}`,
+        id: input.id ?? `p_new_${counter.toString()}`,
         accountId: input.accountId,
         name: input.name,
         archetype: input.archetype,
@@ -254,11 +258,36 @@ describe('V-553.B-21 ProfilesService.create', () => {
     };
     const master = Buffer.alloc(32, 4);
     const svc = new ProfilesService(repo, null, master);
-    await svc.create({ accountId: 'acc_dek', tier: SOLO, name: 'p' });
+    const row = await svc.create({ accountId: CRYPTO_ACCOUNT_A, tier: SOLO, name: 'p' });
     expect(typeof captured?.wrappedDek).toBe('string');
+    expect(captured?.id).toBe(row.id);
     // round-trips: unwraps back to a 32-byte DEK under the SAME account's TMK.
-    const dek = unwrapProfileDek(master, 'acc_dek', captured?.wrappedDek ?? '');
+    const dek = unwrapProfileDek(master, CRYPTO_ACCOUNT_A, row.id, captured?.wrappedDek ?? '');
     expect(dek.length).toBe(32);
+  });
+
+  it('preallocates distinct UUIDs and binds each new wrapped DEK to its returned profile identity', async () => {
+    const { repo } = makeRepo();
+    const orig = repo.insertWithLimit.bind(repo);
+    const captured: NewProfileInput[] = [];
+    repo.insertWithLimit = (input, limit) => {
+      captured.push(input);
+      return orig(input, limit);
+    };
+    const master = Buffer.alloc(32, 6);
+    const svc = new ProfilesService(repo, null, master);
+    const first = await svc.create({ accountId: CRYPTO_ACCOUNT_A, tier: TEAM, name: 'first' });
+    const second = await svc.create({ accountId: CRYPTO_ACCOUNT_A, tier: TEAM, name: 'second' });
+    expect(first.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(second.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(first.id).not.toBe(second.id);
+    expect(captured.map((input) => input.id)).toEqual([first.id, second.id]);
+    expect(
+      unwrapProfileDek(master, CRYPTO_ACCOUNT_A, first.id, captured[0]!.wrappedDek ?? '').length,
+    ).toBe(32);
+    expect(() =>
+      unwrapProfileDek(master, CRYPTO_ACCOUNT_A, second.id, captured[0]!.wrappedDek ?? ''),
+    ).toThrow();
   });
 
   it('stores no DEK on create when the master key is absent (feature inert)', async () => {
@@ -276,11 +305,14 @@ describe('V-553.B-21 ProfilesService.create', () => {
 
   it('getProfileDek: unwraps the stored wrapped DEK under the account TMK when the key is set', async () => {
     const master = Buffer.alloc(32, 8);
-    const { wrappedDek, dek } = mintWrappedProfileDek(master, 'acc_g');
+    const { wrappedDek, dek } = mintWrappedProfileDek(master, CRYPTO_ACCOUNT_A, CRYPTO_PROFILE_A);
     const { repo } = makeRepo();
     repo.getWrappedDek = () => Promise.resolve(wrappedDek);
     const svc = new ProfilesService(repo, null, master);
-    const got = await svc.getProfileDek({ profileId: 'p1', accountId: 'acc_g' });
+    const got = await svc.getProfileDek({
+      profileId: CRYPTO_PROFILE_A,
+      accountId: CRYPTO_ACCOUNT_A,
+    });
     expect(got?.equals(dek)).toBe(true);
   });
 
@@ -631,13 +663,16 @@ describe('ProfilesService DEK mint on clone/import/transfer (file 57)', () => {
   }
 
   it('clone mints a fresh wrapped DEK (round-trips under the account TMK) when the master key is set', async () => {
-    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_c', name: 'src' })]);
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: CRYPTO_ACCOUNT_A, name: 'src' }),
+    ]);
     const cap = captureInsert(repo);
     const master = Buffer.alloc(32, 4);
     const svc = new ProfilesService(repo, null, master);
-    await svc.clone({ id: 'p1', accountId: 'acc_c', tier: TEAM });
+    const row = await svc.clone({ id: 'p1', accountId: CRYPTO_ACCOUNT_A, tier: TEAM });
     expect(typeof cap.get()?.wrappedDek).toBe('string');
-    const dek = unwrapProfileDek(master, 'acc_c', cap.get()?.wrappedDek ?? '');
+    expect(cap.get()?.id).toBe(row.id);
+    const dek = unwrapProfileDek(master, CRYPTO_ACCOUNT_A, row.id, cap.get()?.wrappedDek ?? '');
     expect(dek.length).toBe(32);
   });
 
@@ -647,31 +682,35 @@ describe('ProfilesService DEK mint on clone/import/transfer (file 57)', () => {
     const master = Buffer.alloc(32, 7);
     const svc = new ProfilesService(repo, null, master);
     await svc.importProfile({
-      accountId: 'acc_i',
+      accountId: CRYPTO_ACCOUNT_A,
       tier: TEAM,
       sourceProfileId: 'p_src',
       sourceAccountId: 'acc_src',
       payload: { name: 'imported', archetype: 'default', description: null },
     });
     expect(typeof cap.get()?.wrappedDek).toBe('string');
-    const dek = unwrapProfileDek(master, 'acc_i', cap.get()?.wrappedDek ?? '');
+    const profileId = cap.get()?.id ?? '';
+    const dek = unwrapProfileDek(master, CRYPTO_ACCOUNT_A, profileId, cap.get()?.wrappedDek ?? '');
     expect(dek.length).toBe(32);
   });
 
   it('transfer mints a fresh wrapped DEK bound to the RECIPIENT account when the master key is set', async () => {
-    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' })]);
+    const { repo } = makeRepo([
+      makeProfile({ id: 'p1', accountId: CRYPTO_ACCOUNT_A, name: 'movable' }),
+    ]);
     const cap = captureInsert(repo);
     const master = Buffer.alloc(32, 9);
     const svc = new ProfilesService(repo, null, master);
     await svc.transferProfile({
       sourceProfileId: 'p1',
-      sourceAccountId: 'acc_src',
-      recipientAccountId: 'acc_dst',
+      sourceAccountId: CRYPTO_ACCOUNT_A,
+      recipientAccountId: CRYPTO_ACCOUNT_B,
       recipientTier: TEAM,
     });
     expect(typeof cap.get()?.wrappedDek).toBe('string');
-    // Bound to the recipient's TMK context — unwraps under acc_dst, not acc_src.
-    const dek = unwrapProfileDek(master, 'acc_dst', cap.get()?.wrappedDek ?? '');
+    // Bound to the recipient's TMK + profile-id context, not the source tuple.
+    const profileId = cap.get()?.id ?? '';
+    const dek = unwrapProfileDek(master, CRYPTO_ACCOUNT_B, profileId, cap.get()?.wrappedDek ?? '');
     expect(dek.length).toBe(32);
   });
 

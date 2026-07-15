@@ -89,6 +89,30 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     expect(body).toMatch(/archetype: args\.archetype \?\? DEFAULT_ARCHETYPE,/);
   });
 
+  it('stateful create/clone/import/transfer preallocate the profile UUID before wrapping and ordinary reads unwrap under the exact account+profile tuple', () => {
+    expect(body).toContain("import { randomUUID } from 'node:crypto';");
+    expect(body).toContain(
+      'private mintProfileIdentity(accountId: string): { id: string; wrappedDek?: string } {',
+    );
+    expect(body).toContain('const id = randomUUID();');
+    expect(body).toContain(
+      'mintWrappedProfileDek(this.profileMasterKey, accountId, id).wrappedDek',
+    );
+    expect(body).toContain('const identity = this.mintProfileIdentity(args.accountId);');
+    expect(body).toContain('const cloneIdentity = this.mintProfileIdentity(args.accountId);');
+    expect(body).toContain('const importIdentity = this.mintProfileIdentity(args.accountId);');
+    expect(body).toContain(
+      'const transferIdentity = this.mintProfileIdentity(args.recipientAccountId);',
+    );
+    expect(body).toContain('id: identity.id,');
+    expect(body).toContain('id: cloneIdentity.id,');
+    expect(body).toContain('id: importIdentity.id,');
+    expect(body).toContain('id: transferIdentity.id,');
+    expect(body).toContain(
+      'unwrapProfileDek(this.profileMasterKey, args.accountId, args.profileId, wrappedDek)',
+    );
+  });
+
   it('concurrent same-name insert race: isProfileNameRaceViolation detector (23505 + profiles_account_name_unique) guards the insert paths → 409 not 500', () => {
     expect(body).toMatch(/export function isProfileNameRaceViolation\(err: unknown\): boolean \{/);
     // V-714 — delegates to the drizzle-version-agnostic helper (reads top level

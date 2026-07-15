@@ -1419,6 +1419,34 @@ export async function createProductionDeps(
   // when PROFILE_MASTER_KEY unset → profiles created without a DEK; feature inert).
   const profileMasterKeyBuf =
     config.profileMasterKey !== undefined ? decodeMasterKey(config.profileMasterKey) : null;
+  if (profileMasterKeyBuf !== null) {
+    const MAX_PROFILE_DEK_BOOT_MIGRATION_ROWS = 10_000;
+    let scanned = 0;
+    let converted = 0;
+    let remaining = 0;
+    do {
+      const batch = await profilesRepo.migrateWrappedDekEnvelopes(profileMasterKeyBuf, 500);
+      scanned += batch.scanned;
+      converted += batch.converted;
+      remaining = batch.remaining;
+      if (remaining > 0 && (batch.scanned === 0 || batch.converted === 0)) {
+        throw new Error(
+          `Profile DEK migration made no progress with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+      if (remaining > 0 && scanned >= MAX_PROFILE_DEK_BOOT_MIGRATION_ROWS) {
+        throw new Error(
+          `Profile DEK migration exceeded the ${MAX_PROFILE_DEK_BOOT_MIGRATION_ROWS.toString()}-row boot bound with ${remaining.toString()} legacy rows remaining.`,
+        );
+      }
+    } while (remaining > 0);
+    if (scanned > 0) {
+      logger.info(
+        { component: 'profile-dek-encryption', scanned, converted, remaining },
+        'legacy profile DEKs migrated to profile-bound v2 before serving',
+      );
+    }
+  }
   // ARC A — proxies service (owner-scoped resolve + unwrap + SSRF guard) shares
   // the same master key as the profile DEK.
   const accountProxiesService = new AccountProxiesService(accountProxiesRepo, profileMasterKeyBuf);

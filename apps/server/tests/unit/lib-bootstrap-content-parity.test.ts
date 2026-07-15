@@ -239,6 +239,23 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toContain('legacy LiveKit API secrets migrated to node-bound v2 before serving');
   });
 
+  it('drains legacy profile DEK wrappers to profile-bound v2 before constructing profile/proxy services', () => {
+    expect(body).toContain('const profilesRepo = new DrizzleProfilesRepo(dbHandle);');
+    expect(body).toContain('const MAX_PROFILE_DEK_BOOT_MIGRATION_ROWS = 10_000;');
+    expect(body).toContain(
+      'await profilesRepo.migrateWrappedDekEnvelopes(profileMasterKeyBuf, 500)',
+    );
+    expect(body).toContain('batch.scanned === 0 || batch.converted === 0');
+    expect(body).toContain('scanned >= MAX_PROFILE_DEK_BOOT_MIGRATION_ROWS');
+    expect(body).toContain('legacy profile DEKs migrated to profile-bound v2 before serving');
+    expect(body.indexOf('migrateWrappedDekEnvelopes')).toBeLessThan(
+      body.indexOf('const accountProxiesService = new AccountProxiesService'),
+    );
+    expect(body.indexOf('migrateWrappedDekEnvelopes')).toBeLessThan(
+      body.indexOf('const profilesService = new ProfilesService'),
+    );
+  });
+
   it('V-295c2 status-snapshot framing pinned: separate public-readable R2 bucket (recordings bucket intentionally NOT used — recordings contain Customer Data and must remain private); fall-back when live API fetch fails; active ONLY when R2_BUCKET_PUBLIC configured', () => {
     expect(body).toMatch(
       /\/\/ V-295c2 — public status snapshot writer\. Writes the same data the\s*\n?\s*\/\/ public \/v1\/status\/incidents endpoint surfaces to a SEPARATE\s*\n?\s*\/\/ public-readable R2 bucket so the status site can fall back to the\s*\n?\s*\/\/ snapshot when the live API fetch fails\. The recordings bucket is\s*\n?\s*\/\/ intentionally NOT used — recordings contain Customer Data and must\s*\n?\s*\/\/ remain private\. Active only when R2_BUCKET_PUBLIC is configured\./,

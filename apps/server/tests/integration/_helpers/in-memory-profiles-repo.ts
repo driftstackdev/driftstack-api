@@ -18,9 +18,12 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   private readonly rows = new Map<string, ProfileRecord>();
 
   insert(input: NewProfileInput): Promise<ProfileRecord> {
+    if (input.wrappedDek != null && input.id === undefined) {
+      throw new Error('a profile with a wrapped DEK requires a preallocated id');
+    }
     const now = new Date();
     const row: ProfileRecord = {
-      id: randomUUID(),
+      id: input.id ?? randomUUID(),
       accountId: input.accountId,
       name: input.name,
       archetype: input.archetype,
@@ -66,6 +69,9 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     input: NewProfileInput,
     limit: number | null,
   ): Promise<{ record: ProfileRecord } | { limitExceeded: true; current: number }> {
+    if (input.wrappedDek != null && input.id === undefined) {
+      throw new Error('a profile with a wrapped DEK requires a preallocated id');
+    }
     if (limit !== null) {
       let current = 0;
       // Anti-abuse: count LIVE + TRASHED against the cap (mirrors prod
@@ -77,7 +83,7 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     }
     const now = new Date();
     const row: ProfileRecord = {
-      id: randomUUID(),
+      id: input.id ?? randomUUID(),
       accountId: input.accountId,
       name: input.name,
       archetype: input.archetype,
