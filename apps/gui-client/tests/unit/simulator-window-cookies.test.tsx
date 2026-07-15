@@ -274,8 +274,7 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
 
   it('labels a long poll as refreshing while retaining the last good cookie jar', async () => {
     let resolveRefresh:
-      | ((value: { status: 'ok'; cookies: Array<Record<string, unknown>> }) => void)
-      | undefined;
+      ((value: { status: 'ok'; cookies: Array<Record<string, unknown>> }) => void) | undefined;
     cookiesMock
       .mockResolvedValueOnce({
         status: 'ok',
@@ -592,7 +591,8 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
       if (!p) throw new Error('not yet');
       return p;
     });
-    expect(pane.textContent).toContain('not available yet');
+    expect(pane.textContent).toContain('unavailable for this session');
+    expect(pane.textContent).not.toContain('not available yet');
     // No live dot + Export disabled when there is no jar.
     expect(pane.querySelector('[data-component="simulator-cookies-live"]')).toBeNull();
     expect(

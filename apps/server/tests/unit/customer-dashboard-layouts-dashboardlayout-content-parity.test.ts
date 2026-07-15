@@ -51,6 +51,13 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     expect(body).toMatch(/if \(e\.target === overlay\)/);
   });
 
+  it('notification SSE documents and uses the live EventSource query-token contract without launch-placeholder copy', () => {
+    expect(body).toContain("'/v1/account/me/notifications?ds_token=' + encodeURIComponent(token)");
+    expect(body).toContain('es = new EventSource(url);');
+    expect(body).toContain("route's dedicated");
+    expect(body).not.toMatch(/change deferred to v0\.2/i);
+  });
+
   it('a11y focus restore: both modals capture the trigger (document.activeElement) on open and return focus to it on close — pinned so keyboard users keep their place after a confirm/prompt (WCAG 2.4.3 dialog pattern)', () => {
     // Two modals (confirm + prompt), each captures + restores once.
     expect(body.match(/var prevFocus = document\.activeElement;/g)?.length).toBe(2);

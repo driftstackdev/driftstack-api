@@ -1525,12 +1525,10 @@ const navSections: NavSection[] = [
         // subscriber per tab; the SSE connection auto-reconnects
         // on transient drops via native EventSource behavior.
         //
-        // Auth: native EventSource lacks header support; the
-        // backend route uses requireAuth Bearer-header, so this
-        // path passes the token via the query param (route layer
-        // change deferred to v0.2 — until then the subscription
-        // either succeeds via a polyfill OR drops on the 401 and
-        // the dashboard stays silent, same as it does today).
+        // Auth: native EventSource lacks header support, so the
+        // dashboard passes its bearer through the route's dedicated
+        // ds_token query parameter. Native EventSource reconnects
+        // transient drops without a second application-level loop.
         (function () {
           const banner = document.querySelector('[data-notification-banner]');
           if (!banner) return;
