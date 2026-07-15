@@ -76,7 +76,7 @@ import { Driftstack, isRetryable } from '@driftstack/sdk';
 
 for (let attempt = 0; attempt < 5; attempt++) {
   try {
-    return await client.sessions.create({ archetype: '…' });
+    return await client.sessions.create();
   } catch (err) {
     if (!isRetryable(err)) throw err;
     await sleepWithBackoff(attempt, err);
@@ -89,7 +89,7 @@ from driftstack import Driftstack, is_retryable, RateLimitError
 
 for attempt in range(5):
     try:
-        return client.sessions.create(archetype="…")
+        return client.sessions.create()
     except Exception as err:
         if not is_retryable(err):
             raise
@@ -98,8 +98,9 @@ for attempt in range(5):
 ```
 
 ```go
+request := &driftstack.CreateSessionRequest{}
 for attempt := 0; attempt < 5; attempt++ {
-    sess, err := client.Sessions.Create(ctx, opts)
+    sess, err := client.Sessions.Create(ctx, request)
     if err == nil {
         return sess, nil
     }
@@ -168,6 +169,6 @@ classes are mirrored at:
 - `packages/sdk-python/src/driftstack/errors.py`
 - `packages/sdk-go/errors.go`
 
-Any new problem-type lands via V-NNN slice that updates
-`PROBLEM_TYPES`, all three SDK error tables, this docs page, and
-the integration test that covers the new server-side route.
+Any new problem-type must update `PROBLEM_TYPES`, all three SDK error
+tables, this reference, and the integration test covering its server-side
+route in the same change.
