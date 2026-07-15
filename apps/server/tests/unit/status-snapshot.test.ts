@@ -84,8 +84,7 @@ describe('V-553.B-6 StatusSnapshotService — processSnapshot', () => {
     await svc.processSnapshot(now);
     expect(listSpy).toHaveBeenCalledTimes(1);
     const call = listSpy.mock.calls[0]?.[0] as
-      | { scope: string; limit: number; since: Date }
-      | undefined;
+      { scope: string; limit: number; since: Date } | undefined;
     expect(call?.scope).toBe('public');
     expect(call?.limit).toBe(50);
     // Default window: 30 days back.
@@ -122,6 +121,69 @@ describe('V-553.B-6 StatusSnapshotService — processSnapshot', () => {
     const r = await svc.processSnapshot(new Date('2026-05-11T16:00:00Z'));
     expect(r.count).toBe(2);
     expect(r.bytes).toBeGreaterThan(0);
+  });
+
+  it('skips an overlapping writer, then publishes the newer snapshot on the next tick', async () => {
+    const listSpy = vi.fn<IncidentsService['list']>(() => Promise.resolve([makeRow()]));
+    const incidents = { list: listSpy } as unknown as IncidentsService;
+    let releaseFirstPut!: () => void;
+    const firstPutPending = new Promise<void>((resolvePut) => {
+      releaseFirstPut = resolvePut;
+    });
+    let putCount = 0;
+    let publishedAt: string | null = null;
+    const r2 = {
+      putObject: async (args: { body: Buffer | Uint8Array | string }) => {
+        putCount += 1;
+        const generatedAt = (
+          JSON.parse(Buffer.from(args.body).toString('utf-8')) as { generated_at: string }
+        ).generated_at;
+        if (putCount === 1) await firstPutPending;
+        publishedAt = generatedAt;
+      },
+    } as unknown as R2;
+    const warn = vi.fn();
+    const logger = { debug: vi.fn(), warn } as unknown as Logger;
+    const svc = new StatusSnapshotService(incidents, r2, logger);
+    const older = new Date('2026-05-11T16:00:00Z');
+    const newer = new Date('2026-05-11T16:01:00Z');
+
+    const first = svc.processSnapshot(older);
+    await vi.waitFor(() => expect(putCount).toBe(1));
+    const overlap = await svc.processSnapshot(newer);
+    expect(overlap).toEqual({ count: 0, bytes: 0 });
+    expect(listSpy).toHaveBeenCalledTimes(1);
+    expect(putCount).toBe(1);
+    expect(publishedAt).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    releaseFirstPut();
+    await first;
+    expect(publishedAt).toBe(older.toISOString());
+
+    const retry = await svc.processSnapshot(newer);
+    expect(retry.count).toBe(1);
+    expect(listSpy).toHaveBeenCalledTimes(2);
+    expect(putCount).toBe(2);
+    expect(publishedAt).toBe(newer.toISOString());
+  });
+
+  it('releases the single-flight guard after a failed R2 write', async () => {
+    const listSpy = vi.fn<IncidentsService['list']>(() => Promise.resolve([makeRow()]));
+    const incidents = { list: listSpy } as unknown as IncidentsService;
+    const putObject = vi.fn<R2['putObject']>();
+    putObject.mockRejectedValueOnce(new Error('synthetic R2 failure')).mockResolvedValueOnce();
+    const r2 = { putObject } as unknown as R2;
+    const logger = { debug: vi.fn(), warn: vi.fn() } as unknown as Logger;
+    const svc = new StatusSnapshotService(incidents, r2, logger);
+
+    await expect(svc.processSnapshot(new Date('2026-05-11T16:00:00Z'))).rejects.toThrow(
+      'synthetic R2 failure',
+    );
+    const retry = await svc.processSnapshot(new Date('2026-05-11T16:01:00Z'));
+    expect(retry.count).toBe(1);
+    expect(listSpy).toHaveBeenCalledTimes(2);
+    expect(putObject).toHaveBeenCalledTimes(2);
   });
 
   it('renders inc_ prefix on row.id (matches public API wire shape)', async () => {

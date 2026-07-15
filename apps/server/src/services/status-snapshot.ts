@@ -50,6 +50,7 @@ export class StatusSnapshotService {
   private readonly windowMs: number;
   private readonly limit: number;
   private readonly key: string;
+  private running = false;
 
   constructor(
     private readonly incidents: IncidentsService,
@@ -64,26 +65,43 @@ export class StatusSnapshotService {
 
   /** Write one snapshot to R2. Idempotent — same key, full overwrite. */
   async processSnapshot(now: Date): Promise<{ count: number; bytes: number }> {
-    const since = new Date(now.getTime() - this.windowMs);
-    const rows = await this.incidents.list({
-      scope: 'public',
-      since,
-      limit: this.limit,
-    });
-    const body = JSON.stringify({
-      generated_at: now.toISOString(),
-      data: rows.map(publicIncident),
-    });
-    const buffer = Buffer.from(body, 'utf-8');
-    await this.r2.putObject({
-      key: this.key,
-      body: buffer,
-      contentType: 'application/json; charset=utf-8',
-    });
-    this.logger.debug?.(
-      { component: 'status-snapshot', count: rows.length, bytes: buffer.byteLength },
-      'wrote status snapshot to R2',
-    );
-    return { count: rows.length, bytes: buffer.byteLength };
+    // A slow R2 call can outlive the fixed 60s bootstrap interval. Admit only
+    // one writer per service instance so an older tick cannot finish after and
+    // overwrite a newer canonical snapshot. The warning makes the skipped fire
+    // explicit while zero counters preserve the established result contract;
+    // the next interval retries.
+    if (this.running) {
+      this.logger.warn(
+        { component: 'status-snapshot' },
+        'processSnapshot skipped — previous snapshot is still in progress',
+      );
+      return { count: 0, bytes: 0 };
+    }
+    this.running = true;
+    try {
+      const since = new Date(now.getTime() - this.windowMs);
+      const rows = await this.incidents.list({
+        scope: 'public',
+        since,
+        limit: this.limit,
+      });
+      const body = JSON.stringify({
+        generated_at: now.toISOString(),
+        data: rows.map(publicIncident),
+      });
+      const buffer = Buffer.from(body, 'utf-8');
+      await this.r2.putObject({
+        key: this.key,
+        body: buffer,
+        contentType: 'application/json; charset=utf-8',
+      });
+      this.logger.debug?.(
+        { component: 'status-snapshot', count: rows.length, bytes: buffer.byteLength },
+        'wrote status snapshot to R2',
+      );
+      return { count: rows.length, bytes: buffer.byteLength };
+    } finally {
+      this.running = false;
+    }
   }
 }

@@ -28300,3 +28300,34 @@ lifecycle/content suite passes 16/16 tests; the expanded route, real-socket
 scope/capacity, event-bus, auth and token-redaction matrix passes 7 files and
 61/61 tests. Strict server source/test TypeScript, targeted ESLint/Prettier and
 diff/whitespace checks are green.
+
+---
+
+## V-676 — Public status snapshots prevent out-of-order overwrite
+
+**Date:** 2026-07-15
+
+Bootstrap invokes the public status snapshot writer from a fire-and-forget
+60-second interval, but the service previously admitted every invocation. If
+an older R2 write stalled past the next interval and finished last, it could
+overwrite the canonical key after a newer snapshot had already published. A
+bounded service reproduction held the older write, completed a snapshot with
+`generated_at=04:01`, then released the first call and observed the final
+object regress to `generated_at=04:00`.
+
+Each service instance now admits one snapshot writer. An overlapping fire
+performs no incident query or R2 write, logs an explicit skip and returns the
+established zero-work `{ count, bytes }` counters. The active writer releases
+the guard in `finally`, so the next interval retries after either success or
+failure. The canonical key, 30-day/50-row query, public incident projection,
+JSON/content type, ordinary result shape, debug logging and bootstrap cadence
+are unchanged.
+
+Behavioral verification holds the first R2 write while a newer tick fires and
+proves one query/write, no out-of-order publication, an explicit skip, and a
+newer successful retry after release. A rejected R2 write also releases the
+guard and the next invocation succeeds. The direct service suite passes 9/9
+tests; the expanded unit/integration, source contract, R2 fallback, bootstrap
+and status-site matrix passes 9 files and 132/132 tests. Strict server
+source/test TypeScript, targeted ESLint/Prettier and diff/whitespace checks are
+green.
