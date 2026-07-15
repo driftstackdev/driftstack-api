@@ -13,6 +13,8 @@ set -euo pipefail
 IDENTITY_NAME="Driftstack Local Development Signing"
 LOGIN_KEYCHAIN="$(security default-keychain -d user | tr -d ' "')"
 SYSTEM_KEYCHAIN="/Library/Keychains/System.keychain"
+STATE_DIR="${HOME}/Library/Application Support/Driftstack"
+READY_MARKER="$STATE_DIR/local-signing-partition-v1.sha256"
 if [[ -z "$LOGIN_KEYCHAIN" ]]; then
   echo "error: no default user keychain found" >&2
   exit 1
@@ -69,10 +71,46 @@ configure_codesign_partition() {
     >/dev/null
 }
 
+certificate_fingerprint() {
+  local certificate_file="$1"
+  local fingerprint
+  fingerprint="$(openssl x509 -in "$certificate_file" -noout -fingerprint -sha256 \
+    | cut -d= -f2 | tr -d '[:space:]:' | tr '[:lower:]' '[:upper:]')"
+  if [[ ! "$fingerprint" =~ ^[0-9A-F]{64}$ ]]; then
+    echo "error: could not derive the signing certificate fingerprint" >&2
+    return 1
+  fi
+  printf '%s' "$fingerprint"
+}
+
+authorization_marker_matches() {
+  local expected="$1"
+  [[ -f "$READY_MARKER" ]] || return 1
+  [[ "$(tr -d '[:space:]' <"$READY_MARKER")" == "$expected" ]]
+}
+
+write_authorization_marker() {
+  local fingerprint="$1"
+  local marker_tmp
+  mkdir -p "$STATE_DIR"
+  chmod 700 "$STATE_DIR"
+  marker_tmp="$(mktemp "$STATE_DIR/.local-signing-partition-v1.XXXXXX")"
+  chmod 600 "$marker_tmp"
+  printf '%s\n' "$fingerprint" >"$marker_tmp"
+  mv -f "$marker_tmp" "$READY_MARKER"
+}
+
 if security find-identity -v -p codesigning 2>/dev/null | grep -Fq "\"$IDENTITY_NAME\""; then
   echo "==> stable identity already installed: $IDENTITY_NAME"
   security find-certificate -c "$IDENTITY_NAME" -p "$LOGIN_KEYCHAIN" >"$CERT"
+  FINGERPRINT="$(certificate_fingerprint "$CERT")"
+  if authorization_marker_matches "$FINGERPRINT"; then
+    echo "==> signing-key authorization already completed for this exact identity"
+    echo "==> stable identity is ready for prompt-free GUI rebuilds"
+    exit 0
+  fi
   configure_codesign_partition "$CERT"
+  write_authorization_marker "$FINGERPRINT"
   echo "==> stable identity is ready for prompt-free GUI rebuilds"
   exit 0
 fi
@@ -122,6 +160,8 @@ if ! security find-identity -v -p codesigning 2>/dev/null | grep -Fq "\"$IDENTIT
   echo "error: imported identity is not valid for code signing" >&2
   exit 1
 fi
+
+write_authorization_marker "$(certificate_fingerprint "$CERT")"
 
 echo "==> installed stable local identity: $IDENTITY_NAME"
 echo "    GUI rebuilds can now retain one signer-anchored designated requirement."
