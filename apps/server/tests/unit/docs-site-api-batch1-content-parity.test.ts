@@ -45,8 +45,8 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     const body = read(P('versioning.md'));
     expect(body).toMatch(/^title: API versioning policy$/m);
     expect(body).toMatch(/^# API versioning strategy$/m);
-    expect(body).toMatch(/Versioning policy for the HTTP API surface \(`\/v1\/\*`, eventually/);
-    expect(body).toMatch(/`\/v2\/\*`\)\./);
+    expect(body).toMatch(/Versioning policy for the HTTP API surface \(`\/v1\/\*` and any later/);
+    expect(body).toMatch(/major prefix\)\./);
     expect(body).toMatch(/Distinct from the SDK versioning policy at/);
     expect(existsSync(P('versioning.md'))).toBe(true);
   });

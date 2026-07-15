@@ -23556,30 +23556,9 @@
                     },
                     "price_currency": {
                       "type": "string"
-                    },
-                    "provider": {
-                      "type": "string",
-                      "enum": ["stub", "nowpayments"]
-                    },
-                    "pay_currency": {
-                      "type": ["string", "null"]
-                    },
-                    "pay_min_amount": {
-                      "type": ["number", "null"]
-                    },
-                    "pay_max_amount": {
-                      "type": ["number", "null"]
                     }
                   },
-                  "required": [
-                    "product",
-                    "price_cents",
-                    "price_currency",
-                    "provider",
-                    "pay_currency",
-                    "pay_min_amount",
-                    "pay_max_amount"
-                  ]
+                  "required": ["product", "price_cents", "price_currency"]
                 }
               }
             }

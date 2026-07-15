@@ -6,7 +6,7 @@
 //   Session (12 fields): id + account_id + api_key_id + status +
 //     archetype + purpose + label + metadata + created_at +
 //     updated_at + last_state_at + destroyed_at.
-//   CreateSessionRequest (4 optional fields).
+//   CreateSessionRequest (6 optional fields).
 //   CreateSessionResponse = SessionSchema (immediate-state).
 //   NavigateRequest: url + timeout_ms (1s-2min) + wait_until.
 //   NavigateResponse: url + HTTP status 100-599 + final_url +
@@ -70,17 +70,19 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
     expect(p).toMatch(/destroyed_at: Iso8601Schema\.nullable\(\)/);
   });
 
-  // ─── CreateSessionRequest 4 optional fields ──────────────────
+  // ─── CreateSessionRequest 6 optional fields ──────────────────
 
-  it("CRITICAL CreateSessionRequestSchema has 4 fields, ALL optional — archetype + purpose + label (max 120) + metadata. Server applies defaults: archetype → LOCKED_ARCHETYPE_ID; purpose → 'production_customer'.", () => {
+  it('CRITICAL CreateSessionRequestSchema has 6 fields, ALL optional — selectable archetype + purpose + label + metadata + profile_id + behavioral_profile.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     expect(p).toMatch(
-      /CreateSessionRequestSchema = z\.object\(\{\s*\n\s*archetype: ArchetypeSchema\.optional\(\)/,
+      /CreateSessionRequestSchema = z\.object\(\{\s*\n\s*archetype: SelectableArchetypeIdSchema\.optional\(\)/,
     );
     expect(p).toMatch(/purpose: SessionPurposeSchema\.optional\(\)/);
     expect(p).toMatch(/label: z\.string\(\)\.max\(120\)\.optional\(\)/);
     // Bounded-blob fix — metadata is the size-capped SessionMetadataSchema.
     expect(p).toMatch(/metadata: SessionMetadataSchema\.optional\(\)/);
+    expect(p).toMatch(/profile_id: z\.string\(\)\.optional\(\)/);
+    expect(p).toMatch(/behavioral_profile: BehavioralProfileSchema\.optional\(\)/);
   });
 
   // ─── CreateSessionResponse = SessionSchema ───────────────────

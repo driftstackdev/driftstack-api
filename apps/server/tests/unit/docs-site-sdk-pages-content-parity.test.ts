@@ -138,7 +138,7 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(existsSync(GO)).toBe(true);
   });
 
-  it('versioning.md: active status + 2026-05-05 effective date + SemVer 2.0.0 (MAJOR breaking / MINOR additive / PATCH bugfix) + control-plane-NOT-versioned (URL /v1→/v2 path) + pre-1.0 same-bar-as-post-1.0 + 1.0 ships at first-paying-customer + 30d-production + founder-explicit-approval gate pinned. Re-enabled by slice 321 post the R4 V-NNN scrub (V-177 parenthetical removed; the Effective date now sits bare without the anchor)', () => {
+  it('versioning.md: active status + effective date + SemVer + HTTP/SDK split + explicit pre-1.0 compatibility guidance, without speculative launch promises', () => {
     const body = read(VER);
     expect(body).toMatch(/^title: SDK versioning policy$/m);
     expect(body).toMatch(/^# SDK versioning \+ deprecation policy$/m);
@@ -160,10 +160,14 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(body).toMatch(/`\/v2\/`\./);
     expect(body).toMatch(/^## Pre-1\.0 stability$/m);
     expect(body).toMatch(/All three SDKs are currently pre-1\.0 \(`0\.x\.y`\)\./);
-    expect(body).toMatch(/`1\.0\.0` ships when:/);
-    expect(body).toMatch(/1\. Driftstack has its first paying customer\./);
-    expect(body).toMatch(/2\. The SDK has been in production use at that customer for ≥ 30 days/);
-    expect(body).toMatch(/3\. Driftstack explicitly approves the 1\.0 cut\./);
+    expect(body).toMatch(
+      /pre-1\.0\s*\n?breaks bump the MINOR version AND get explicit deprecation notice/,
+    );
+    expect(body).toMatch(/The bar is the same as post-1\.0/);
+    expect(body).toMatch(/Customers integrating a pre-1\.0 SDK should pin a compatible version/);
+    expect(body).not.toMatch(/first paying customer|first-paying-customer/i);
+    expect(body).not.toMatch(/`1\.0\.0` ships when/);
+    expect(body).not.toMatch(/founder.*approv/i);
     expect(body).toMatch(/^## Deprecation policy$/m);
     expect(existsSync(VER)).toBe(true);
   });

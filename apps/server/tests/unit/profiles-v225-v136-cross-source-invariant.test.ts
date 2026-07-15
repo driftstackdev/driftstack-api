@@ -148,7 +148,7 @@ describe('W948 V-225 + V-136 profiles cross-source invariant', () => {
   it('CRITICAL DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID — api-types canonical. The single-source-of-truth import prevents profile-default-archetype drift between server + api-types.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'));
     expect(p).toMatch(
-      /import \{ LOCKED_ARCHETYPE_ID, type AccountTier \} from '@driftstack\/api-types';/,
+      /import \{\s*LOCKED_ARCHETYPE_ID,\s*isSelectableArchetypeId,\s*type AccountTier,?\s*\} from '@driftstack\/api-types';/,
     );
     expect(p).toMatch(/const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;/);
   });
@@ -249,10 +249,10 @@ describe('W948 V-225 + V-136 profiles cross-source invariant', () => {
 
   // ─── 3-error class import ────────────────────────────────────
 
-  it('CRITICAL imports 4 error classes — ConflictError + NotFoundError + StorageQuotaExceededError + TierLimitError. Covers name-collision / row-missing / storage-quota (doc-150 item 6) / tier-cap states.', () => {
+  it('CRITICAL imports 5 error classes — BadRequestError + ConflictError + NotFoundError + StorageQuotaExceededError + TierLimitError. Covers retired-archetype, name-collision, row-missing, storage-quota and tier-cap states.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'));
     expect(p).toMatch(
-      /import \{\s*\n?\s*ConflictError,\s*\n?\s*NotFoundError,\s*\n?\s*StorageQuotaExceededError,\s*\n?\s*TierLimitError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*\n?\s*BadRequestError,\s*\n?\s*ConflictError,\s*\n?\s*NotFoundError,\s*\n?\s*StorageQuotaExceededError,\s*\n?\s*TierLimitError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

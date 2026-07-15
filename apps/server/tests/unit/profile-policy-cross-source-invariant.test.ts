@@ -65,11 +65,11 @@ describe('W876 Profile policy cross-source invariant', () => {
 
   // ─── CreateProfileRequest + description bounds ───────────────
 
-  it('CRITICAL CreateProfileRequest fields — name (ProfileNameSchema) + archetype (optional 1-120) + description (optional max 2048). The 2048-char description cap is bounded for storage + readability.', () => {
+  it('CRITICAL CreateProfileRequest fields — name (ProfileNameSchema) + selectable archetype + description (optional max 2048). The selectable catalogue prevents creation against retired archetypes.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/profiles.ts'));
     expect(p).toMatch(/CreateProfileRequestSchema = z\.object\(\{[\s\S]+?name: ProfileNameSchema/);
     expect(p).toMatch(
-      /CreateProfileRequestSchema[\s\S]+?archetype: z\.string\(\)\.min\(1\)\.max\(120\)\.optional\(\)/,
+      /CreateProfileRequestSchema[\s\S]+?archetype: SelectableArchetypeIdSchema\.optional\(\)/,
     );
     expect(p).toMatch(
       /CreateProfileRequestSchema[\s\S]+?description: z\.string\(\)\.max\(2048\)\.optional\(\)/,

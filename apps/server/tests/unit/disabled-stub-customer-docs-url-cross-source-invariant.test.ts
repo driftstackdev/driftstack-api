@@ -26,9 +26,9 @@ describe('Activation-gate disabled-stub customer-facing docs URL cross-source in
   const agentSessions = read(AGENT_SESSIONS);
   const accountByok = read(ACCOUNT_BYOK);
 
-  it('routes/recipes disabled-stub references https://docs.driftstack.dev/api/recipes/ — pinned so the customer-facing recovery URL stays documented', () => {
+  it('routes/recipes disabled-stub references the supported API flow at https://docs.driftstack.dev/api/recipes/', () => {
     expect(recipes).toMatch(
-      /'https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the full flow\.'/,
+      /'https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the supported API flow\.'/,
     );
   });
 
@@ -39,9 +39,9 @@ describe('Activation-gate disabled-stub customer-facing docs URL cross-source in
     expect(agentSessions).toMatch(/'\(https:\/\/docs\.driftstack\.dev\/api\/bundled-llm\/\)\.';/);
   });
 
-  it('routes/account-byok-anthropic disabled-stub references docs.driftstack.dev/api/byok-anthropic/ — pinned so the customer-facing PUT-the-key-here recovery URL stays documented (identical to the agent-sessions byok branch)', () => {
+  it('routes/account-byok-anthropic disabled-stub references the supported key-management flow at docs.driftstack.dev/api/byok-anthropic/', () => {
     expect(accountByok).toMatch(
-      /'https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\/ for the full flow\.'/,
+      /'https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\/ for the supported key-management flow\.'/,
     );
   });
 

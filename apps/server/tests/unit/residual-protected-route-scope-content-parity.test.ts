@@ -57,9 +57,9 @@ describe('residual protected-route API-key scope contract', () => {
     const goTeam = read('packages/sdk-go/team.go');
     expect(goTeam.match(/Requires broad read or account_owner\./g)).toHaveLength(3);
     expect(goTeam).toContain('// Requires account_owner.');
-    expect(read('packages/sdk-go/crypto_orders.go')).toContain(
-      '// minting an order (V-666.H). Requires read:billing; broad read or',
-    );
+    const goCrypto = read('packages/sdk-go/crypto_orders.go');
+    expect(goCrypto).toContain('// Quote previews the authoritative fiat price without minting an');
+    expect(goCrypto).toContain('// order (V-666.H). Requires read:billing; broad read or');
   });
 
   it('keeps the generated OpenAPI snapshot scope summaries in sync', () => {

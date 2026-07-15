@@ -89,7 +89,8 @@ describe('EG-API-1.2 — /v1/sessions/{id}/proxy (no backend wired)', () => {
     // customer disclosure shape — capability name, posture, and
     // what currently happens — instead.
     expect(body.detail).toMatch(/SOCKS5 \/ OpenVPN \/ WireGuard/);
-    expect(body.detail).toMatch(/not yet shipped/);
+    expect(body.detail).toMatch(/unavailable on this deployment/);
+    expect(body.detail).toMatch(/default egress/);
     expect(body.detail).not.toMatch(/planning file/i);
     expect(body.detail).not.toMatch(/V-\d{3,}/);
   });

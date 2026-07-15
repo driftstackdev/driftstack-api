@@ -93,14 +93,14 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     }
   });
 
-  it('CRITICAL V-666.H quote semantic — "preview the fiat-cents price + crypto pay-range without minting an order". Drift to minting-on-quote would let customers accidentally pay just by previewing.', () => {
+  it('CRITICAL V-666.H quote semantic — preview the authoritative fiat price without minting an order. Payment address, currency and amount remain checkout-only.', () => {
     const ts = read(TS_CRYPTO);
     const go = read(GO_CRYPTO);
     const py = read(PY_CRYPTO);
 
-    expect(ts).toMatch(/preview the fiat-cents price \+ crypto pay-range without minting an order/);
-    expect(go).toMatch(/minting an order \(V-666\.H\)|preview.*without minting/);
-    expect(py).toMatch(/preview the fiat-cents price \+ crypto pay-range without minting an order/);
+    expect(ts).toMatch(/preview the authoritative fiat price without minting an order/);
+    expect(go).toMatch(/previews the authoritative fiat price without minting an/);
+    expect(py).toMatch(/preview the authoritative fiat price without minting an order/);
   });
 
   it('CRITICAL V-666.J cancel-self-service semantic — "abandon a pending order (self-service)". This is the ONLY out for non-refundable crypto payments. Drift to admin-only-cancel would force customers through support for refund-equivalent flow.', () => {

@@ -99,14 +99,14 @@ describe('POST /v1/profiles', () => {
       headers: { authorization: `Bearer ${fx.plaintext}` },
       payload: {
         name: 'older-ios',
-        archetype: 'iphone15_ios17_5_1',
-        description: 'pinned to iOS 17 for stability',
+        archetype: 'iphone13_ios18_6_safari18_6',
+        description: 'pinned to an older selectable release for stability',
       },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<ProfileResponse>();
-    expect(body.archetype).toBe('iphone15_ios17_5_1');
-    expect(body.description).toBe('pinned to iOS 17 for stability');
+    expect(body.archetype).toBe('iphone13_ios18_6_safari18_6');
+    expect(body.description).toBe('pinned to an older selectable release for stability');
   });
 
   it('200 honors folder + tags at create (organization metadata)', async () => {

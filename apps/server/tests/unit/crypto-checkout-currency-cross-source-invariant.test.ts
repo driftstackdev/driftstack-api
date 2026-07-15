@@ -61,11 +61,11 @@ describe('W902 CryptoCheckout currency + price-cents cross-source invariant', ()
 
   // ─── CreateCryptoCheckoutResponse provider 2-value ───────────
 
-  it("CRITICAL CreateCryptoCheckoutResponse.provider = z.enum(['stub', 'nowpayments']) — 2-value provider enum. 'stub' is dev/local; 'nowpayments' is production. The 2-value model maps to the gating-flag pattern.", () => {
+  it("CRITICAL CreateCryptoCheckoutResponse.provider = z.enum(['stub', 'nowpayments']) — checkout alone reports the payment rail; 'stub' is the support-assisted fallback.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
     expect(p).toMatch(/provider: z\.enum\(\['stub', 'nowpayments'\]\)/);
     expect(p).toMatch(
-      /'stub' until the NowPayments merchant account lands; 'nowpayments' thereafter/,
+      /Payment rail used for this checkout; `stub` is the support-assisted fallback/,
     );
   });
 
