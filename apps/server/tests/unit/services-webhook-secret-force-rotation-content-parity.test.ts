@@ -1,6 +1,8 @@
-// Drift guard for apps/server/src/services/webhook-secret-force-rotation.ts.
-// Pins the Arc 3 sub-slice 28.2 server-initiated force-rotation sweep.
-// 91-day age (Q1=B) + 7-day grace (Q2=B) + dedicated email template (28.4).
+// Drift guard for the dormant webhook force-rotation implementation and its
+// production-wiring safety boundary. The plaintext-once API cannot reveal a
+// server-generated secret after the sweep discards it, so bootstrap must not
+// import, construct or schedule this service. Direct unit coverage remains to
+// preserve the implementation until a secure one-time handoff is designed.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/server/src/services/webhook-secret-force-rotation.ts');
+const BOOTSTRAP = resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -17,6 +20,17 @@ function read(p: string): string {
 
 describe('services/webhook-secret-force-rotation content parity', () => {
   const body = read(LIB);
+  const bootstrap = read(BOOTSTRAP);
+
+  it('is not wired into production bootstrap while its generated plaintext has no customer recovery channel', () => {
+    expect(bootstrap).not.toContain('WebhookSecretForceRotationService');
+    expect(bootstrap).not.toContain('webhookSecretForceRotationService');
+    expect(bootstrap).not.toContain('webhookSecretForceRotationTimer');
+    expect(bootstrap).not.toContain('webhook-force-rotation-poller');
+    expect(bootstrap).toContain('new WebhookRotationReminderService(');
+    expect(bootstrap).toContain('new WebhookGraceExpiringNoticeService(');
+    expect(bootstrap).toContain('webhooksRepo.clearStaleSecretPrev({ now: new Date() })');
+  });
 
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);

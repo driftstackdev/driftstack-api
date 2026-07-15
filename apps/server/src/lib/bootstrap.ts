@@ -55,7 +55,6 @@ import { DrizzleWebhookRotationReminderRepo } from '../db/webhook-rotation-remin
 import { DrizzleByokAnthropicRotationReminderRepo } from '../db/byok-anthropic-rotation-reminder-repo.js';
 import { WebhookRotationReminderService } from '../services/webhook-rotation-reminder.js';
 import { ByokAnthropicRotationReminderService } from '../services/byok-anthropic-rotation-reminder.js';
-import { WebhookSecretForceRotationService } from '../services/webhook-secret-force-rotation.js';
 import { WebhookGraceExpiringNoticeService } from '../services/webhook-grace-expiring-notice.js';
 import { DrizzleAdminAuditLogRepo } from '../db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
@@ -2582,27 +2581,14 @@ export async function createProductionDeps(
     logger,
     { dashboardUrl: config.dashboardOrigin },
   );
-  // Arc 3 sub-slice 28.2 (v2-#28) — 91-day server-initiated force-
-  // rotation sweep. Shares the DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS
-  // opt-out env var (Q4=A — no per-endpoint opt-out, but ops can
-  // silence the entire mutation surface for a customer-quiet deploy).
-  const webhookSecretForceRotationService = new WebhookSecretForceRotationService(
-    webhooksRepo,
-    email,
-    logger,
-    { dashboardUrl: config.dashboardOrigin },
-  );
   // Arc 3 sub-slice 28.5 follow-up (v2-#28) — 24h-before-grace-expiry
-  // last-chance email. The template + interface
-  // (EmailService.sendWebhookSecretGraceExpiring) were fully built in
-  // sub-slice 28.4/28.5 but no scheduler ever called it; this wires
-  // the sweep. Reuses webhooksRepo directly (DrizzleWebhooksRepo
-  // structurally satisfies WebhookGraceExpiringNoticeRepo — the two
-  // methods live alongside findEndpointsNeedingForceRotation in
-  // db/webhooks-repo.ts) — no separate repo wrapper needed, same as
-  // webhookSecretForceRotationService above. Shares the same
-  // DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS opt-out + daily cadence
-  // as the other rotation-related timers.
+  // last-chance email for any already-persisted force-rotation window.
+  // Keep this recovery path and secret-prev cleanup active even though the
+  // unrecoverable 91-day force-rotation producer is deliberately not wired:
+  // the plaintext-once API has no authenticated channel that can reveal the
+  // producer's generated secret to its customer. Reuses webhooksRepo directly
+  // (DrizzleWebhooksRepo structurally satisfies
+  // WebhookGraceExpiringNoticeRepo) and shares the reminder opt-out/cadence.
   const webhookGraceExpiringNoticeService = new WebhookGraceExpiringNoticeService(
     webhooksRepo,
     email,
@@ -2750,29 +2736,6 @@ export async function createProductionDeps(
   }, POLLER_INTERVAL_MS);
   webhookDeliveryTimer.unref();
 
-  // Arc 3 sub-slice 28.2 (v2-#28) — daily 91-day force-rotation sweep.
-  const webhookSecretForceRotationTimer = rotationRemindersDisabled
-    ? null
-    : setInterval(() => {
-        void (async () => {
-          try {
-            await webhookSecretForceRotationService.tickOnce(new Date());
-          } catch (err) {
-            logger.warn(
-              {
-                component: 'webhook-force-rotation-poller',
-                err:
-                  err instanceof Error
-                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
-                    : { value: err },
-              },
-              'webhook-force-rotation tickOnce threw unexpectedly (interval continues)',
-            );
-          }
-        })();
-      }, ROTATION_REMINDER_INTERVAL_MS);
-  webhookSecretForceRotationTimer?.unref();
-
   // Arc 3 sub-slice 28.5 follow-up (v2-#28) — daily grace-expiring
   // notice sweep. See webhookGraceExpiringNoticeService construction
   // above for why this was previously unwired.
@@ -2853,7 +2816,6 @@ export async function createProductionDeps(
     clearInterval(statusPurgeTimer);
     if (webhookRotationReminderTimer) clearInterval(webhookRotationReminderTimer);
     if (byokAnthropicRotationReminderTimer) clearInterval(byokAnthropicRotationReminderTimer);
-    if (webhookSecretForceRotationTimer) clearInterval(webhookSecretForceRotationTimer);
     if (webhookGraceExpiringNoticeTimer) clearInterval(webhookGraceExpiringNoticeTimer);
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
     if (webhookSecretUpgradeTimer) clearInterval(webhookSecretUpgradeTimer);

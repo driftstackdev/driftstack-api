@@ -27440,3 +27440,41 @@ guards that still open the deleted customer-dashboard mock module. One durable
 webhook reclaim timing assertion also failed under the full parallel load and
 immediately passed 7/7 in isolation. None intersects this proxy change; the
 baseline drift was reported to its owning lane rather than altered here.
+
+## V-654 — Unrecoverable background webhook-secret rotation is suspended
+
+**Date:** 2026-07-14
+
+The production 91-day webhook force-rotation path violated the API's
+plaintext-once contract. Its background service generated a new HMAC secret,
+persisted it, and discarded the only plaintext. The force-rotation and
+grace-expiry messages exposed only a display prefix and linked to the webhook
+dashboard, while endpoint reads intentionally never return the stored secret.
+The dashboard can reveal a full value only from a separate customer-initiated
+rotation response. The original design had assumed the generated value could be
+fetched from GET, but that recovery channel does not exist. Rotation also
+persisted when notification delivery failed or no account email existed. Once
+the grace window elapsed, a customer still configured with the prior secret
+would stop receiving a matching signature.
+
+Production was checked before source mutation using aggregate-only counts that
+selected no endpoint, account, URL, prefix, or secret. It contained zero active
+endpoints, zero force-rotation candidates aged at least 91 days, zero live force
+windows, zero force windows expiring within 24 hours, zero expired force
+windows, and zero live customer-initiated windows. No operational credential
+recovery was therefore required.
+
+The smallest reversible safety stop removes only the force-rotation service's
+production bootstrap import, construction, timer, poller, and teardown handle.
+The dormant implementation and its direct tests remain available for a future
+design with an authenticated one-time handoff. Customer-initiated rotation,
+24-hour dual-signing, the 60-day reminder, forced-window expiry notices,
+stale-previous-secret cleanup, delivery signing, API schemas, SDKs, and customer
+copy are unchanged. A structural guard proves bootstrap cannot silently re-arm
+the mutator and also proves the reminder, notice, and cleanup consumers remain
+wired.
+
+The focused reminder/force-rotation/grace-notice/cleanup/bootstrap matrix passes
+6 files and 72/72 tests. Strict server source-and-test TypeScript (including the
+server build), targeted ESLint, targeted Prettier, diff, and whitespace checks
+are green.
