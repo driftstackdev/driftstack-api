@@ -205,10 +205,12 @@ describe('V-277 ProxiesView empty state', () => {
     const heading = await screen.findByRole('heading', { name: /no proxies configured/i });
     expect(heading).toBeInTheDocument();
 
-    // Body explains SOCKS5 + local-only-storage commitment. SOCKS5
+    // Body explains SOCKS5 + protected local/encrypted account sync. SOCKS5
     // appears in header + empty-state body.
     expect(screen.getAllByText(/SOCKS5/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/never uploaded to the Driftstack control plane/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/protected locally and synced in encrypted form to your account/i),
+    ).toBeInTheDocument();
 
     // 5→10 consistency pass: migrated to the shared EmptyState with an
     // actionable CTA in place of the old "Click New proxy above" footnote.

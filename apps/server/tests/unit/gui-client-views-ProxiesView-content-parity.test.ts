@@ -1,28 +1,18 @@
 // W484.C — drift guard for apps/gui-client/src/views/ProxiesView.tsx.
-// SOCKS5 proxy CRUD view. Drift here either drops the 'local-
-// only until CreateSessionRequest grows a proxy field' framing
-// (architectural intent silently shifts and proxies start
-// roundtripping to the server before the contract is ready) or
-// breaks the port default of 1080 (SOCKS5 default port — without
-// it the form initializes empty and customers don't know what
-// port to type).
+// Proxy CRUD view. Drift here can misstate the shipped encrypted account-sync
+// boundary or break the port default of 1080 (SOCKS5 default port — without it
+// the form initializes empty and customers don't know what port to type).
 //
-//   • Framing pinned: 'SOCKS5 proxy management — local-only CRUD
-//     UI.' + 'Lives entirely client-side until
-//     `CreateSessionRequest` grows a `proxy` field on the server
-//     (queued, requires WebKit-fork SOCKS5 integration
-//     coordination). Until then this view lets the founder
-//     curate the proxy list so it's ready when the contract
-//     lands.'
+//   • Framing pinned: protected local registry plus encrypted owner-account
+//     sync when a proxy is selected for a session.
 //   • EMPTY_DRAFT 5-field with port 1080 SOCKS5 default.
 //   • editor state-machine 3-variant union (idle / add /
 //     edit{id}).
 //   • CRUD delegation: addProxy / listProxies / removeProxy /
 //     updateProxy / validateDraft / DraftValidation /
 //     ProxyConfig / ProxyDraft imports from ../lib/proxies.
-//   • Local-only-no-upload framing in Empty: 'Proxies are
-//     stored locally on this device only — never uploaded to
-//     the Driftstack control plane.'
+//   • Honest empty-state framing: credentials are protected locally and synced
+//     in encrypted form to the account when used for a session.
 //   • ProxyForm: validateDraft on submit + 1-65535 port range +
 //     username/password optional with empty→null normalization.
 //   • friendlyError delegates to shared humanizeError with an
@@ -44,11 +34,14 @@ function read(p: string): string {
 describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () => {
   const body = read(LIB);
 
-  it("Framing pinned: 'SOCKS5 proxy management — local-only CRUD UI.' + 'Lives entirely client-side until `CreateSessionRequest` grows a `proxy` field on the server (queued, requires WebKit-fork SOCKS5 integration coordination). Until then this view lets the founder curate the proxy list so it's ready when the contract lands.'", () => {
-    expect(body).toMatch(/\/\/ SOCKS5 proxy management — local-only CRUD UI\./);
+  it('pins the protected-local plus encrypted owner-account sync boundary', () => {
     expect(body).toMatch(
-      /\/\/ Lives entirely client-side until `CreateSessionRequest` grows a\s*\n?\s*\/\/ `proxy` field on the server \(queued, requires WebKit-fork SOCKS5\s*\n?\s*\/\/ integration coordination\)\. Until then this view lets the founder\s*\n?\s*\/\/ curate the proxy list so it's ready when the contract lands\./,
+      /\/\/ Proxy management — protected local registry plus encrypted account sync\./,
     );
+    expect(body).toMatch(
+      /owner-scoped account_proxies record whose secret fields are encrypted under\s*\n?\s*\/\/ the account key hierarchy\./,
+    );
+    expect(body).not.toMatch(/never uploaded|never go to the Driftstack control plane/i);
   });
 
   it("ListState 4-field (proxies + loading + error nullable + notice nullable — the transient unbind confirmation, e.g. 'N profiles were unbound from the deleted proxy'); EMPTY_DRAFT 6-field with label:'' + scheme:'socks5' + host:'' + port:1080 (SOCKS5 default) + username:null + password:null — pinned so the SOCKS5 default port doesn't drift, customer can submit without typing a port", () => {
@@ -84,9 +77,9 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     );
   });
 
-  it("Empty no-proxies framing pinned: 'Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxies are stored locally on this device only — never uploaded to the Driftstack control plane.' + an 'Add a proxy' CTA (the empty state migrated to the shared EmptyState component, 5→10 consistency pass) — pinned so customer knows the proxy list never roundtrips to the server", () => {
+  it('pins honest protected-local and encrypted account-sync empty-state copy plus the Add CTA', () => {
     expect(body).toMatch(
-      /Add a SOCKS5 endpoint to route session traffic through your own egress IP\. Proxies are\s*\n?\s*stored locally on this device only — never uploaded to the Driftstack control plane\./,
+      /Add a SOCKS5 endpoint to route session traffic through your own egress IP\. Proxy\s*\n?\s*credentials are protected locally and synced in encrypted form to your account when used\s*\n?\s*for a session\./,
     );
     expect(body).toMatch(/>\s*Add a proxy\s*<\/button>/);
   });

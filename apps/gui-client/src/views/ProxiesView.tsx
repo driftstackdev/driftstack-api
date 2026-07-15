@@ -1,9 +1,9 @@
-// SOCKS5 proxy management — local-only CRUD UI.
+// Proxy management — protected local registry plus encrypted account sync.
 //
-// Lives entirely client-side until `CreateSessionRequest` grows a
-// `proxy` field on the server (queued, requires WebKit-fork SOCKS5
-// integration coordination). Until then this view lets the founder
-// curate the proxy list so it's ready when the contract lands.
+// Credentials stay in protected local storage while the GUI is idle. When a
+// proxy is selected for a session, the launch path creates or refreshes an
+// owner-scoped account_proxies record whose secret fields are encrypted under
+// the account key hierarchy.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -469,11 +469,13 @@ export function ProxiesView(): JSX.Element {
                   <b className="font-semibold text-ink-primary">{udpCapable.length}</b> WebRTC +
                   QUIC
                   <span className="text-surface-divider">·</span>
-                  <span className="text-ink-muted">stored locally — never uploaded</span>
+                  <span className="text-ink-muted">
+                    protected locally · encrypted sync at launch
+                  </span>
                 </>
               ) : (
                 <span className="text-ink-muted">
-                  Stored locally on this device — never uploaded to the control plane.
+                  Protected locally on this device · synced encrypted when used for a session.
                 </span>
               )}
             </p>
@@ -634,7 +636,7 @@ function Empty({ loading, onAdd }: { loading: boolean; onAdd: () => void }): JSX
         </svg>
       }
       title="No proxies configured"
-      description="Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxies are stored locally on this device only — never uploaded to the Driftstack control plane."
+      description="Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxy credentials are protected locally and synced in encrypted form to your account when used for a session."
       action={
         <button type="button" className="btn-primary px-4 py-2 text-sm" onClick={onAdd}>
           Add a proxy

@@ -2609,8 +2609,8 @@ export function ProfilesView({
           </svg>
           <p className="flex-1 text-xs text-ink-secondary">
             <b className="text-ink-primary">Sealed &amp; private.</b> Profile state is sealed with
-            per-profile encryption under your account's own key hierarchy; proxies and credentials
-            stay on this device — never uploaded to the control plane.
+            per-profile encryption under your account's own key hierarchy. Proxy credentials are
+            protected locally and synced encrypted to your account when used for a session.
           </p>
           <button
             type="button"
@@ -4501,8 +4501,8 @@ function CreateProfileModal({
                       </div>
                     )}
                     <span className="text-2xs text-ink-muted">
-                      Stored locally in this app — credentials never go to the Driftstack control
-                      plane.
+                      Protected locally in this app · synced encrypted to your account when used for
+                      a session.
                     </span>
                   </div>
                 )}

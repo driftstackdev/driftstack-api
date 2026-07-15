@@ -37,6 +37,16 @@ function read(p: string): string {
 describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () => {
   const body = read(LIB);
 
+  it('states the shipped protected-local and encrypted owner-account proxy sync boundary honestly', () => {
+    expect(body).toMatch(
+      /Proxy credentials are\s*\n?\s*protected locally and synced encrypted to your account when used for a session\./,
+    );
+    expect(body).toMatch(
+      /Protected locally in this app · synced encrypted to your account when used for\s*\n?\s*a session\./,
+    );
+    expect(body).not.toMatch(/never uploaded to the control plane|credentials never go/i);
+  });
+
   it("Framing pinned: 'Profiles view — list profiles, create new, delete.' + V-136 Tier 3 draft framing ('Persistent identity slots that survive across sessions. Each profile carries its own cookies + localStorage; the driver attaches them to a session when the session is created against a profile.')", () => {
     expect(body).toMatch(/\/\/ Profiles view — list profiles, create new, delete\./);
     expect(body).toMatch(
