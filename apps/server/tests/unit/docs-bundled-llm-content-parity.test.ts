@@ -45,6 +45,14 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
     expect(body).toMatch(/monthly_cap_usd_cents.*2000/);
   });
 
+  it('documents live desktop controls and exact flat standard bundled billing', () => {
+    expect(body).toMatch(/Settings → AI[\s\S]*?& billing/);
+    expect(body).toMatch(/\$0\.10 per agent turn/);
+    expect(body).toMatch(/Enterprise can use a contracted custom rate/);
+    expect(body).toMatch(/bundled_flat_per_turn/);
+    expect(body).not.toMatch(/Cost-per-turn varies with the underlying model/);
+  });
+
   it('soft-cap 402 response shape pinned with spent_cents + cap_cents fields', () => {
     expect(body).toMatch(/HTTP\/1\.1 402 Payment Required/);
     expect(body).toMatch(/"spent_cents"/);

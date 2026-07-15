@@ -42,6 +42,23 @@ describe('docs/api/bundled-llm content parity', () => {
     expect(body).toMatch(/`PATCH \/v1\/account\/me\/bundled-llm-settings`/);
   });
 
+  it('pins the shipped desktop settings path and the flat standard turn rate without leaking upstream provider cost', () => {
+    expect(body).toMatch(/desktop app under \*\*Settings → AI\s*\n?\s*& billing\*\*/);
+    expect(body).toMatch(/flat \*\*\$0\.10 per agent turn\*\*/);
+    expect(body).toMatch(/independent of model choice and\s*\n?\s*token count/);
+    expect(body).toMatch(/Enterprise can use a contracted custom rate/);
+    expect(body).toMatch(/`cost_basis = 'bundled_flat_per_turn'`/);
+    expect(body).toMatch(/does\s*\n?\s*not expose Driftstack's upstream provider cost/);
+    expect(body).not.toMatch(/Cost-per-turn varies with the underlying model/);
+  });
+
+  it('status-panel prose keeps consent, cap, used spend, and remaining budget in one coherent sentence', () => {
+    expect(body).toMatch(
+      /`BundledLlmStatusPanel` reads this on page-load to render consent,\s*\n?\s*cap, used spend, and remaining budget\./,
+    );
+    expect(body).not.toMatch(/render consent\s*\n\s*\n- cap \+ used/);
+  });
+
   it("Status record shape pinned to the SHIPPED route fields: consent + cap_cents + used_this_month_cents + remaining_cents + refused_count_this_month + month_started_at. + 'used_this_month_cents sums usage_records.cost_usd_cents over the rows where record_type = \"agent_decomposer_bundled\" and recorded_at >= start_of_calendar_month (UTC)' — pinned so the status field names match account-bundled-llm.ts (the status route returns cap_cents/remaining_cents/month_started_at, NOT the settings record's monthly_cap_usd_cents) + record_type filter + UTC-calendar-month aggregation contract all stay documented (drift on aggregation would mis-bill across month boundaries)", () => {
     expect(body).toMatch(
       /"consent": true,\s*\n?\s*"cap_cents": 2000,\s*\n?\s*"used_this_month_cents": 450,\s*\n?\s*"remaining_cents": 1550,\s*\n?\s*"refused_count_this_month": 0,\s*\n?\s*"month_started_at":/,

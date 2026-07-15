@@ -80,9 +80,8 @@ write-only, and zero-scope keys cannot inspect billing consent or cap.
 `GET /v1/account/me/bundled-llm-status`
 
 Returns the status record above. The dashboard's
-`BundledLlmStatusPanel` reads this on page-load to render consent
-
-- cap + used.
+`BundledLlmStatusPanel` reads this on page-load to render consent,
+cap, used spend, and remaining budget.
 
 Requires the same broad `read` scope because the response includes
 account-wide month-to-date spend and remaining budget.
@@ -90,6 +89,10 @@ account-wide month-to-date spend and remaining budget.
 ## Update settings (PATCH)
 
 `PATCH /v1/account/me/bundled-llm-settings`
+
+The same controls are live in the desktop app under **Settings → AI
+& billing**. The desktop form and this endpoint update the same
+consent and monthly-cap record.
 
 Partial update — either field may be omitted, but at least one of
 `consent` / `monthly_cap_usd_cents` must be present. An empty body
@@ -197,8 +200,12 @@ turn** route, not on these reads.
 ## Privacy + billing
 
 - Bundled-LLM costs are billed alongside the customer's tier
-  subscription. Cost-per-turn varies with the underlying model;
-  the recorder tracks per-call usage in cents for auditability.
+  subscription. Standard API Builder and API Scale usage posts a
+  flat **$0.10 per agent turn**, independent of model choice and
+  token count; Enterprise can use a contracted custom rate. The
+  recorder stores the posted per-call amount in cents with
+  `cost_basis = 'bundled_flat_per_turn'` for auditability. It does
+  not expose Driftstack's upstream provider cost.
 - No prompt content is logged on Driftstack's side beyond what
   customers can read in their own session transcripts.
 - Bundled-LLM consent does NOT grant Driftstack any rights to
