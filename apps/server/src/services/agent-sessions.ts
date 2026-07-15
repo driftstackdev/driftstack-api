@@ -253,7 +253,13 @@ export interface AgentSessionsRepo {
     opts: { limit: number; cursor?: string },
   ): Promise<AgentSessionListPage>;
   appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord>;
+  /** Append only while the row is still active. Missing/terminal rows return
+   * null so a close winner remains immutable and callers can suppress SSE. */
+  appendTranscriptIfActive(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord | null>;
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord>;
+  /** Debit only while the row is still active. Missing/terminal rows return
+   * null instead of mutating accounting after close. */
+  debitTokensIfActive(id: string, tokens: number): Promise<AgentSessionRecord | null>;
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord>;
   closeWithReasonOutcome(id: string, reason: string): Promise<CloseAgentSessionResult>;
 
@@ -576,9 +582,33 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     return Promise.resolve(updated);
   }
 
+  appendTranscriptIfActive(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    if (rec === undefined || rec.status !== 'active') return Promise.resolve(null);
+    const updated: AgentSessionRecord = {
+      ...rec,
+      transcript: [...rec.transcript, entry],
+      updatedAt: this.clock(),
+    };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord> {
     const rec = this.records.get(id);
     if (!rec) return Promise.reject(new Error(`AgentSession ${id} not found`));
+    const updated: AgentSessionRecord = {
+      ...rec,
+      tokenBudgetRemaining: Math.max(0, rec.tokenBudgetRemaining - tokens),
+      updatedAt: this.clock(),
+    };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  debitTokensIfActive(id: string, tokens: number): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    if (rec === undefined || rec.status !== 'active') return Promise.resolve(null);
     const updated: AgentSessionRecord = {
       ...rec,
       tokenBudgetRemaining: Math.max(0, rec.tokenBudgetRemaining - tokens),

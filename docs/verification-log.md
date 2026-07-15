@@ -27848,3 +27848,64 @@ targeted ESLint/Prettier and diff checks, full workspace typecheck, and the
 configured full workspace build are green. The unconfigured public-app build
 continues to fail closed until `PUBLIC_API_BASE_URL` is supplied; the canonical
 configured run passed all packages and apps.
+
+---
+
+## V-664 — Agent turns stop mutating and dispatching after a terminal close
+
+**Date:** 2026-07-15
+
+The agent runtime checked session status only once before appending the user
+turn. A customer close could therefore commit while a slow decomposition was
+in flight, yet the completed turn would later debit the terminal row, dispatch
+browser intents (including an approved consequential action), append plan or
+read-back output, and publish SSE. The in-process per-session turn gate did not
+coordinate with DELETE, and ordinary row locks serialized these writes without
+requiring the row to remain active.
+
+Both repositories now expose active-only transcript and token mutations. The
+Drizzle variants lock and select the exact row only while `status='active'`,
+repeat that predicate on update, and return null when a missing or terminal row
+won; the in-memory repository mirrors the outcome. Existing unconditional
+methods remain available for fixtures and non-runtime compatibility. Typed
+production repositories always use the atomic variants; a checked fallback is
+retained solely for older hand-built test/dev adapters that predate the new
+interface and is not represented as a distributed-race guarantee.
+
+After a real decomposition completes, usage recording and the decompose metric
+still account for the upstream call that was actually incurred. The runtime
+then re-reads durable lifecycle state before debit, result branching or browser
+work. Every later transcript/debit and its corresponding SSE is conditional on
+a successful active-only mutation. Budget exhaustion returns a terminal result
+on the current turn before execution. Read-back observes, answers, persists and
+debits only while active, followed by a final authoritative lifecycle read.
+
+All executor variants accept an internal asynchronous `shouldContinue` fence.
+Stub, legacy real and control-plane executors check it before each intent; the
+control-plane executor also checks before every retry attempt, including after
+backoff. A false or throwing fence stops the undispatched suffix before a new
+intent ID, consequential-approval consumption or external dispatch. The
+runtime returns the authoritative terminal row without a post-close plan or
+answer append.
+
+Deterministic coverage holds decomposition pending, commits customer close,
+then releases a consequential plan: one upstream usage row and metric remain,
+while executor dispatch, token debit, post-close transcript and SSE are all
+zero. Executor tests prove close after intent one prevents intent two and a
+close during retry backoff prevents the next attempt. Active/terminal in-memory
+tests preserve the complete close snapshot; connected PostgreSQL runs all 9/9
+cases, including a close transaction holding the row lock while active-only
+append/debit wait and then return null without changing transcript or budget.
+
+The connected post-change matrix passes 11 files and 238/238 tests, with all
+PostgreSQL cases actually executed. The exact-tree exhaustive server run passes
+1,814 files and 19,993 tests with 130 configured skips. Strict server
+source-and-test TypeScript, targeted ESLint/Prettier and diff/whitespace checks,
+full workspace typechecking, and the configured full workspace build are
+green.
+
+This closes terminal-row mutation and narrows dispatch after a durable close;
+it does not claim impossible cross-system atomicity. Another API replica can
+still commit close in the final interval between the last database read and an
+already-starting external socket send. Linearizing that edge requires a future
+database outbox or intent lease together with a harness-side terminal fence.

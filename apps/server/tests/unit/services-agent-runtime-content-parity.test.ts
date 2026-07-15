@@ -152,4 +152,16 @@ describe('services/agent-runtime content parity', () => {
       /decomposed = \{\s*\n?\s*kind: 'refuse',\s*\n?\s*refuseReason: 'agent layer temporarily unavailable; please retry',\s*\n?\s*tokensConsumed: 0,\s*\n?\s*\};/,
     );
   });
+
+  it('completed upstream usage is recorded before the durable active fence; every later mutation and executor suffix is lifecycle-gated', () => {
+    const usageRecorder = body.indexOf('if (this.deps.usageRecorder !== undefined');
+    const activeFence = body.indexOf('const activeAfterDecompose = await this.deps.sessions.get');
+    const activeDebit = body.indexOf('const debited = await this.debitTokensIfActive', activeFence);
+    expect(usageRecorder).toBeGreaterThan(-1);
+    expect(activeFence).toBeGreaterThan(usageRecorder);
+    expect(activeDebit).toBeGreaterThan(activeFence);
+    expect(body).toMatch(/appendTranscriptIfActive\(/);
+    expect(body).toMatch(/shouldContinue: \(\) => this\.sessionIsActive\(session\.id\)/);
+    expect(body).toMatch(/const authoritative = await this\.deps\.sessions\.get\(session\.id\)/);
+  });
 });

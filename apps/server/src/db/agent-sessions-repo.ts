@@ -542,6 +542,38 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     });
   }
 
+  async appendTranscriptIfActive(
+    id: string,
+    entry: TranscriptEntry,
+  ): Promise<AgentSessionRecord | null> {
+    const key = this.requireTranscriptEncryptionKey();
+    const now = this.clock();
+    return this.database.db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(agentSessions)
+        .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
+        .for('update')
+        .limit(1);
+      const existing = rows[0];
+      if (!existing) return null;
+      const context = { accountId: existing.accountId, sessionId: existing.id };
+      const currentTranscript = readAgentSessionTranscript(existing.transcript, key, context);
+      const encryptedTranscript = encryptAgentSessionTranscript(
+        [...currentTranscript, entry],
+        key,
+        context,
+      );
+      const updated = await tx
+        .update(agentSessions)
+        .set({ transcript: encryptedTranscript, updatedAt: now })
+        .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
+        .returning();
+      const row = updated[0];
+      return row ? rowToRecord(row, key) : null;
+    });
+  }
+
   async debitTokens(id: string, tokens: number): Promise<AgentSessionRecord> {
     // Atomic debit under a row lock (see the file header concurrency note):
     // SELECT … FOR UPDATE inside a transaction serialises concurrent
@@ -573,6 +605,28 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         throw new Error(`AgentSession ${id} disappeared mid-transaction`);
       }
       return rowToRecord(row, this.transcriptEncryptionKeyBase64);
+    });
+  }
+
+  async debitTokensIfActive(id: string, tokens: number): Promise<AgentSessionRecord | null> {
+    const now = this.clock();
+    return this.database.db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(agentSessions)
+        .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
+        .for('update')
+        .limit(1);
+      const existing = rows[0];
+      if (!existing) return null;
+      const nextRemaining = Math.max(0, existing.tokenBudgetRemaining - tokens);
+      const updated = await tx
+        .update(agentSessions)
+        .set({ tokenBudgetRemaining: nextRemaining, updatedAt: now })
+        .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
+        .returning();
+      const row = updated[0];
+      return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
     });
   }
 

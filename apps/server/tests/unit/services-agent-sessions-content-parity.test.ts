@@ -102,7 +102,12 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(
       /appendTranscript\(id: string, entry: TranscriptEntry\): Promise<AgentSessionRecord>;/,
     );
+    expect(body).toMatch(/appendTranscriptIfActive\(/);
+    expect(body).toMatch(/Promise<AgentSessionRecord \| null>;/);
     expect(body).toMatch(/debitTokens\(id: string, tokens: number\): Promise<AgentSessionRecord>;/);
+    expect(body).toMatch(
+      /debitTokensIfActive\(id: string, tokens: number\): Promise<AgentSessionRecord \| null>;/,
+    );
     expect(body).toMatch(
       /closeWithReason\(id: string, reason: string\): Promise<AgentSessionRecord>;/,
     );
@@ -148,6 +153,14 @@ describe('services/agent-sessions content parity', () => {
     expect(body).toMatch(
       /\* Thread-safety: the repo is intended for single-threaded use \(Node's\s*\n?\s*\* single event loop suffices for the API server\)\. Concurrent calls\s*\n?\s*\* to debitTokens on the same id are serialized by the JS event loop\./,
     );
+  });
+
+  it('active-only runtime mutations return null on missing/terminal rows and preserve unconditional fixture compatibility', () => {
+    expect(body).toMatch(/appendTranscriptIfActive\(/);
+    expect(body).toMatch(/debitTokensIfActive\(/);
+    expect((body.match(/rec === undefined \|\| rec\.status !== 'active'/g) ?? []).length).toBe(2);
+    expect(body).toMatch(/appendTranscript\(id: string, entry: TranscriptEntry\)/);
+    expect(body).toMatch(/debitTokens\(id: string, tokens: number\)/);
   });
 
   it("agt_inmem_<padded-counter> id prefix pinned. Drift would break test fixtures that grep for 'agt_inmem_' to identify in-memory rows; drift to dropping padStart(8, '0') would let sort-by-id break on 11th+ in-memory row (lexical sort: '10' < '2')", () => {

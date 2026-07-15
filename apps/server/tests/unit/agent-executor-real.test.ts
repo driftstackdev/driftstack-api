@@ -124,6 +124,30 @@ describe('AI-B2.b RealAgentExecutor — clean dispatch', () => {
     expect(capture).toHaveBeenCalledWith(account, 'ses_1', { kind: 'screenshot' });
     expect(r.results[0]?.kind === 'success' && r.results[0].summary).toContain('4096 bytes');
   });
+
+  it('re-checks shouldContinue before each intent and never dispatches a closed suffix', async () => {
+    const { port, navigate, capture } = makePort();
+    const exec = new RealAgentExecutor({ sessions: port });
+    let checks = 0;
+    const r = await exec.execute({
+      account,
+      sessionId: 'ses_closing',
+      plan: plan([
+        { kind: 'navigate', url: 'https://ex.com' },
+        { kind: 'capture', capture: 'screenshot' },
+      ]),
+      shouldContinue: () => {
+        checks += 1;
+        return checks === 1;
+      },
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.results).toHaveLength(1);
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(capture).not.toHaveBeenCalled();
+    expect(checks).toBe(2);
+  });
 });
 
 describe('AI-B2.b RealAgentExecutor — vocab gaps + guards', () => {

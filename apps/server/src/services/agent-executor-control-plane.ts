@@ -32,7 +32,7 @@ import type {
   ExecutorRunResult,
   IntentResult,
 } from './agent-executor.js';
-import { consequentialHalt } from './agent-executor.js';
+import { consequentialHalt, executionMayContinue } from './agent-executor.js';
 import { agentIntentToDispatch } from './agent-intent-to-dispatch.js';
 import { intentResultToCustomer } from './agent-intent-result.js';
 import { serializeIntentDispatch, type ParsedIntentResult } from './harness-control-codec.js';
@@ -119,6 +119,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     // (legacy callers) — never dispatch on the `unattached` sentinel.
     const dispatchSessionId = args.agentSessionId ?? args.sessionId;
     for (const intent of args.plan.intents) {
+      if (!(await executionMayContinue(args.shouldContinue))) return { results, ok: false };
       // 0. W443/W445 consequential-action gate — halt (WITHOUT dispatching) on a
       //    purchase / payment / account-deletion the customer hasn't approved this
       //    run. Identical gate to Stub/RealAgentExecutor: the go-live swap must NOT
@@ -149,7 +150,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         intent,
         mapped.intentName,
         mapped.params,
+        args.shouldContinue,
       );
+      if (result === null) return { results, ok: false };
       results.push(result);
       // #139 — halt-on-first-failure, EXCEPT a `wait`: a wait is a best-effort
       // synchronization hint (the decomposer inserts idle-settles that a navigate
@@ -231,13 +234,18 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     intent: ExecuteArgs['plan']['intents'][number],
     intentName: HarnessIntentName,
     params: Record<string, unknown>,
-  ): Promise<IntentResult> {
+    shouldContinue: ExecuteArgs['shouldContinue'],
+  ): Promise<IntentResult | null> {
     let result: IntentResult = { kind: 'failure', intent, reason: 'no dispatch attempt made' };
     // Two independent budgets: the short general retryable-failure budget, and a
     // longer PATIENT budget reserved for a cold-starting session (see below).
     let retryAttempt = 0;
     let establishAttempt = 0;
     for (;;) {
+      // Re-check on EVERY attempt, including after either retry sleep. A close
+      // that wins while the box is cold or a retry backs off stops the suffix
+      // before a fresh intentId is minted or another external dispatch starts.
+      if (!(await executionMayContinue(shouldContinue))) return null;
       // Serialize to the base64 wire envelope (fresh intentId per attempt).
       // Re-validates params; should not fail (agentIntentToDispatch already
       // validated), but the executor must never throw — a guard converts any

@@ -82,6 +82,18 @@ describe('db/agent-sessions-repo content parity', () => {
     expect(body).not.toMatch(/each UPDATE is a single statement, so concurrent/);
   });
 
+  it('active-only transcript and debit variants lock and re-check status=active so a committed close winner is immutable', () => {
+    expect(body).toMatch(/async appendTranscriptIfActive\(/);
+    expect(body).toMatch(/async debitTokensIfActive\(/);
+    expect(
+      (
+        body.match(/and\(eq\(agentSessions\.id, id\), eq\(agentSessions\.status, 'active'\)\)/g) ??
+        []
+      ).length,
+    ).toBeGreaterThanOrEqual(4);
+    expect((body.match(/\.for\('update'\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  });
+
   it('createIfUnderActiveCap uses the canonical cross-surface profile lock, checks both agent + legacy live tables, and returns the competing public session id', () => {
     expect(body).toMatch(/import \{ agentSessions, sessions \} from '\.\/schema\.js';/);
     expect(body).toMatch(

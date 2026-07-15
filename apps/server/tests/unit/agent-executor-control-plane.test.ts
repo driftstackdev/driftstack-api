@@ -79,6 +79,29 @@ describe('ControlPlaneAgentExecutor', () => {
     expect(decodeWireData(got[1]!.inputParams)).toEqual({ strategy: 'css selector', value: '#go' });
   });
 
+  it('stops the undispatched suffix when the lifecycle fence closes after intent 1', async () => {
+    const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId, d.sessionId));
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    let checks = 0;
+    const res = await exec.execute({
+      ...planArgs([
+        { kind: 'navigate', url: 'https://x' },
+        { kind: 'capture', capture: 'screenshot' },
+      ]),
+      // First intent: outer check + per-attempt check. The second intent's
+      // outer check observes the close and prevents a new intentId/dispatch.
+      shouldContinue: () => {
+        checks += 1;
+        return checks <= 2;
+      },
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.results).toHaveLength(1);
+    expect(got.map((dispatch) => dispatch.intentName)).toEqual(['navigate']);
+    expect(checks).toBe(3);
+  });
+
   it('#139 dispatches on the AGENT session id (agentSessionId), NOT the driftstack sessionId', async () => {
     // The fleet routing dispatcher resolves agent_sessions.node_id by the AGENT
     // session id. A pure /v1/agent-sessions run has driftstackSessionId=null →
@@ -279,6 +302,28 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     // Each retry got a fresh intentId (a distinct dispatch to correlate).
     expect(new Set(got.map((d) => d.intentId)).size).toBe(3);
     expect(calls).toEqual([400, 400]); // backoff before each of the 2 retries
+  });
+
+  it('re-checks the lifecycle after retry backoff and does not mint or dispatch another attempt', async () => {
+    const { got, dispatcher } = mockDispatcher((d) =>
+      failResult(d.intentId, 'intent_webdriver_failed'),
+    );
+    let active = true;
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      maxRetries: 3,
+      retryDelayMs: 1,
+      sleep: () => {
+        active = false;
+        return Promise.resolve();
+      },
+    });
+    const res = await exec.execute({
+      ...planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
+      shouldContinue: () => active,
+    });
+
+    expect(res).toEqual({ results: [], ok: false });
+    expect(got).toHaveLength(1);
   });
 
   it('a RETRYABLE failure exhausting all attempts → failure after 1 + maxRetries dispatches', async () => {

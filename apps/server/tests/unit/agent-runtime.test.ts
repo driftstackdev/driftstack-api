@@ -19,6 +19,10 @@ import {
   type AgentExecutor,
 } from '../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
+import {
+  AgentSessionEventBus,
+  type AgentSessionTranscriptEvent,
+} from '../../src/services/agent-session-event-bus.js';
 import type { AgentIntent, DecomposeArgs } from '../../src/services/agent-decomposer.js';
 
 function fixedNow(iso: string): Date {
@@ -400,7 +404,7 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(seenModels[1]).toBe('claude-opus-4-8');
   });
 
-  it('Q.3 token budget exhausted before turn: returns refuse + ATOMICALLY CLOSES the session with closedReason=budget-exhausted (so the next turn short-circuits on session-closed instead of letting the customer retry into another budget refusal)', async () => {
+  it('Q.3 token budget exhausted before turn: atomically closes and returns the terminal signal without a post-close refusal append', async () => {
     const sessions = new InMemoryAgentSessionsRepo();
     const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
     const runtime = new AgentRuntime({
@@ -413,10 +417,9 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       agentSessionId: seed.id,
       userMessage: 'open https://example.com',
     });
-    expect(result.kind).toBe('refuse');
-    if (result.kind !== 'refuse') throw new Error('type narrow');
-    expect(result.decomposer.refuseReason).toMatch(/budget exhausted/);
-    expect(result.decomposer.tokensConsumed).toBe(0);
+    expect(result.kind).toBe('session-closed');
+    if (result.kind !== 'session-closed') throw new Error('type narrow');
+    expect(result.reason).toBe('budget-exhausted');
 
     // Q.3 invariant: session is now CLOSED with budget-exhausted reason.
     // Budget left unchanged (the 0-token refuse doesn't debit).
@@ -424,6 +427,7 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(final?.tokenBudgetRemaining).toBe(1);
     expect(final?.status).toBe('closed');
     expect(final?.closedReason).toBe('budget-exhausted');
+    expect(final?.transcript.map((entry) => entry.role)).toEqual(['user']);
   });
 
   it('Q.3 budget-exhausted session: subsequent runTurn returns kind: session-closed with reason budget-exhausted (the close from the prior refusal short-circuits without burning another decomposer call)', async () => {
@@ -450,7 +454,33 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(second.reason).toBe('budget-exhausted');
   });
 
-  it("Q.3 debit-to-zero closes the session: a turn that successfully runs but exhausts the budget atomically closes so the customer sees the session-end signal on the NEXT request (rather than letting them attempt another turn that would refuse). Uses a custom decomposer that reports tokensConsumed=budget so the close fires deterministically without coupling to the deterministic decomposer's 600-token overhead estimate.", async () => {
+  it("returns a concurrent first closer's authoritative reason instead of overwriting it with budget-exhausted", async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
+    const close = sessions.closeWithReason.bind(sessions);
+    sessions.closeWithReason = async (id, reason) => {
+      if (reason === 'budget-exhausted') await close(id, 'customer-closed');
+      return close(id, reason);
+    };
+    const runtime = new AgentRuntime({
+      decomposer: new DeterministicAgentDecomposer(),
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'open https://example.com',
+    });
+
+    expect(result.kind).toBe('session-closed');
+    if (result.kind !== 'session-closed') throw new Error('type narrow');
+    expect(result.reason).toBe('customer-closed');
+    expect(result.session.closedReason).toBe('customer-closed');
+  });
+
+  it("Q.3 debit-to-zero closes before browser execution and returns the terminal signal on the current turn. Uses a custom decomposer that reports tokensConsumed=budget so the close fires deterministically without coupling to the deterministic decomposer's 600-token overhead estimate.", async () => {
     const sessions = new InMemoryAgentSessionsRepo();
     const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 500 });
     // Custom decomposer: returns a valid plan with tokensConsumed
@@ -467,9 +497,15 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
           tokensConsumed: args.budgetTokensRemaining,
         }),
     };
+    let executeCalls = 0;
     const runtime = new AgentRuntime({
       decomposer,
-      executor: new StubAgentExecutor(),
+      executor: {
+        execute: () => {
+          executeCalls += 1;
+          return Promise.resolve({ results: [], ok: true });
+        },
+      },
       sessions,
       archetype: 'iphone16pro_ios18_7_safari26_4',
     });
@@ -477,12 +513,16 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       agentSessionId: seed.id,
       userMessage: 'open https://example.com',
     });
-    expect(first.kind).toBe('plan-executed');
+    expect(first.kind).toBe('session-closed');
+    if (first.kind !== 'session-closed') throw new Error('type narrow');
+    expect(first.reason).toBe('budget-exhausted');
+    expect(executeCalls).toBe(0);
     // Session is now closed because the debit zeroed the budget.
     const afterFirst = await sessions.get(seed.id);
     expect(afterFirst?.tokenBudgetRemaining).toBe(0);
     expect(afterFirst?.status).toBe('closed');
     expect(afterFirst?.closedReason).toBe('budget-exhausted');
+    expect(afterFirst?.transcript.map((entry) => entry.role)).toEqual(['user']);
   });
 
   // Arc 2 sub-slice 8.6 (v2-#8) — manual mode pass-through.
@@ -1110,6 +1150,96 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
 });
 
 describe('AgentRuntime.runTurn — per-session in-flight gate', () => {
+  it('retains completed decompose usage but a close winner prevents debit, result append/SSE, and consequential dispatch', async () => {
+    let releaseDecompose!: () => void;
+    const decomposeBlocker = new Promise<void>((resolve) => {
+      releaseDecompose = resolve;
+    });
+    let markDecomposeStarted!: () => void;
+    const decomposeStarted = new Promise<void>((resolve) => {
+      markDecomposeStarted = resolve;
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 10_000 });
+    const eventBus = new AgentSessionEventBus();
+    const events: AgentSessionTranscriptEvent[] = [];
+    eventBus.subscribe(seed.id, (event) => events.push(event));
+    const usageRows: unknown[] = [];
+    const metricRows: unknown[] = [];
+    let executeCalls = 0;
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: async () => {
+          markDecomposeStarted();
+          await decomposeBlocker;
+          return {
+            kind: 'plan' as const,
+            intents: [
+              { kind: 'navigate' as const, url: 'https://shop.example.com' },
+              { kind: 'interact' as const, action: 'tap' as const, selector: 'Buy Now' },
+            ],
+            tokensConsumed: 321,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 250,
+              anthropicOutputTokens: 71,
+              costUsdCents: 2,
+              model: 'claude-opus-4-8',
+            },
+          };
+        },
+      },
+      executor: {
+        execute: () => {
+          executeCalls += 1;
+          return Promise.resolve({ results: [], ok: true });
+        },
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+      metrics: {
+        inc: (name, labels) => {
+          metricRows.push({ name, labels });
+        },
+      },
+      eventBus,
+    });
+
+    const turn = runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'Open the store and buy now',
+      keySource: 'bundled',
+    });
+    await decomposeStarted;
+    const closeWinner = await sessions.closeWithReason(seed.id, 'customer-closed');
+    releaseDecompose();
+    const result = await turn;
+
+    expect(result.kind).toBe('session-closed');
+    if (result.kind !== 'session-closed') throw new Error('narrow');
+    expect(result.reason).toBe('customer-closed');
+    expect(result.session).toEqual(closeWinner);
+    expect(usageRows).toHaveLength(1);
+    expect(usageRows[0]).toMatchObject({
+      accountId: 'acc_1',
+      agentSessionId: seed.id,
+      decomposeResultKind: 'plan',
+      tokensConsumed: 321,
+      keySource: 'bundled',
+    });
+    expect(metricRows).toHaveLength(1);
+    expect(executeCalls).toBe(0);
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(10_000);
+    expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual(['user']);
+    expect(events.map((event) => event.entry.role)).toEqual(['user']);
+  });
+
   it('rejects a concurrent same-session turn before a second append/decompose/dispatch, then accepts after release', async () => {
     let release!: () => void;
     const blocker = new Promise<void>((resolve) => {

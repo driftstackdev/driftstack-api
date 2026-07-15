@@ -116,6 +116,38 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     ).rejects.toThrow(/AgentSession .* not found/);
   });
 
+  it('active-only transcript/debit mutations succeed while active, then return null without changing the close winner', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+
+    const appended = await repo.appendTranscriptIfActive(created.id, {
+      at: 'active',
+      role: 'user',
+      body: 'accepted before close',
+    });
+    expect(appended?.transcript.map((entry) => entry.body)).toEqual(['accepted before close']);
+    expect((await repo.debitTokensIfActive(created.id, 25))?.tokenBudgetRemaining).toBe(75);
+
+    const closed = await repo.closeWithReason(created.id, 'customer-closed');
+    await expect(
+      repo.appendTranscriptIfActive(created.id, {
+        at: 'late',
+        role: 'agent',
+        body: 'must not land',
+      }),
+    ).resolves.toBeNull();
+    await expect(repo.debitTokensIfActive(created.id, 50)).resolves.toBeNull();
+    await expect(
+      repo.appendTranscriptIfActive('agt_inmem_99999999', {
+        at: 'missing',
+        role: 'user',
+        body: 'missing',
+      }),
+    ).resolves.toBeNull();
+    await expect(repo.debitTokensIfActive('agt_inmem_99999999', 1)).resolves.toBeNull();
+    expect(await repo.get(created.id)).toEqual(closed);
+  });
+
   it('debitTokens: subtracts from remaining + floors at 0 (no negative budget)', async () => {
     const repo = new InMemoryAgentSessionsRepo();
     const r0 = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 1000 });

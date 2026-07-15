@@ -39,6 +39,33 @@ describe('AI-B2 StubAgentExecutor', () => {
     expect(result.results.every((r) => r.kind === 'success')).toBe(true);
   });
 
+  it('stops an undispatched suffix before its consequential gate when shouldContinue turns false', async () => {
+    const exec = new StubAgentExecutor();
+    let checks = 0;
+    const result = await exec.execute({
+      sessionId: 'ses_closing',
+      plan: {
+        kind: 'plan',
+        intents: [
+          { kind: 'navigate', url: 'https://shop.example.com' },
+          { kind: 'interact', action: 'tap', selector: 'Buy Now' },
+        ],
+        tokensConsumed: 0,
+      },
+      approvedConsequentialActions: new Set([consequentialSignature('purchase', 'Buy Now')]),
+      shouldContinue: () => {
+        checks += 1;
+        return checks === 1;
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.awaitingConfirmation).toBeUndefined();
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]?.kind).toBe('success');
+    expect(checks).toBe(2);
+  });
+
   it('capture intent results carry a captureId in the form cap_stub_{sessionId}_{n}', async () => {
     const exec = new StubAgentExecutor();
     const result = await exec.execute({

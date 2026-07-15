@@ -308,6 +308,61 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(await repo.get(session.id)).toEqual(winner!.session);
     });
 
+    it('a close transaction that wins the row lock makes waiting active-only append/debit mutations return null', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-active-fence-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+
+      let releaseClose!: () => void;
+      const closeBlocker = new Promise<void>((resolve) => {
+        releaseClose = resolve;
+      });
+      let markCloseLocked!: () => void;
+      const closeLocked = new Promise<void>((resolve) => {
+        markCloseLocked = resolve;
+      });
+      const closeTransaction = client.begin(async (tx) => {
+        await tx`
+          UPDATE agent_sessions
+             SET status = 'closed',
+                 closed_reason = 'customer-closed',
+                 closed_at = now(),
+                 updated_at = now()
+           WHERE id = ${session.id}
+             AND status = 'active'
+        `;
+        markCloseLocked();
+        await closeBlocker;
+      });
+
+      await closeLocked;
+      const lateAppend = repo.appendTranscriptIfActive(session.id, {
+        at: 'late',
+        role: 'agent',
+        body: 'must not land',
+      });
+      const lateDebit = repo.debitTokensIfActive(session.id, 400);
+      releaseClose();
+      await closeTransaction;
+
+      await expect(lateAppend).resolves.toBeNull();
+      await expect(lateDebit).resolves.toBeNull();
+      expect(await repo.get(session.id)).toMatchObject({
+        status: 'closed',
+        closedReason: 'customer-closed',
+        tokenBudgetRemaining: 1000,
+        transcript: [],
+      });
+    });
+
     it('close-before-claim refuses fleet ownership and preserves the complete terminal row', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;

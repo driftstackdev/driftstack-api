@@ -304,6 +304,51 @@ export class AgentRuntime {
     this.maxConcurrentTurnsPerAccount = limit;
   }
 
+  private async sessionIsActive(sessionId: string): Promise<boolean> {
+    return (await this.deps.sessions.get(sessionId))?.status === 'active';
+  }
+
+  private async appendTranscriptIfActive(
+    sessionId: string,
+    entry: TranscriptEntry,
+  ): Promise<AgentSessionRecord | null> {
+    // The typed production repos implement the atomic active-only primitive.
+    // Keep a checked compatibility path for older hand-built test/dev adapters
+    // that predate it: the second get prevents an already-terminal append, but
+    // is not represented as a distributed-race guarantee. Production Drizzle
+    // never reaches this fallback.
+    const activeOnly = (
+      this.deps.sessions as Partial<Pick<AgentSessionsRepo, 'appendTranscriptIfActive'>>
+    ).appendTranscriptIfActive;
+    if (activeOnly !== undefined) return activeOnly.call(this.deps.sessions, sessionId, entry);
+    if (!(await this.sessionIsActive(sessionId))) return null;
+    return this.deps.sessions.appendTranscript(sessionId, entry);
+  }
+
+  private async debitTokensIfActive(
+    sessionId: string,
+    tokens: number,
+  ): Promise<AgentSessionRecord | null> {
+    const activeOnly = (
+      this.deps.sessions as Partial<Pick<AgentSessionsRepo, 'debitTokensIfActive'>>
+    ).debitTokensIfActive;
+    if (activeOnly !== undefined) return activeOnly.call(this.deps.sessions, sessionId, tokens);
+    if (!(await this.sessionIsActive(sessionId))) return null;
+    return this.deps.sessions.debitTokens(sessionId, tokens);
+  }
+
+  private async closedTurnResult(
+    sessionId: string,
+    fallback: AgentSessionRecord,
+  ): Promise<Extract<RunTurnResult, { kind: 'session-closed' }>> {
+    const current = (await this.deps.sessions.get(sessionId)) ?? fallback;
+    return {
+      kind: 'session-closed',
+      reason: current.closedReason ?? `session ${current.status}`,
+      session: current,
+    };
+  }
+
   /**
    * Persist ONE bundled-LLM cost row with the billing-integrity discipline the
    * monthly soft-cap depends on: a bounded retry (SPEND_RECORD_MAX_ATTEMPTS,
@@ -474,7 +519,8 @@ export class AgentRuntime {
         role: 'operator' as const,
         body: args.userMessage,
       };
-      const updated = await this.deps.sessions.appendTranscript(session.id, operatorEntry);
+      const updated = await this.appendTranscriptIfActive(session.id, operatorEntry);
+      if (updated === null) return this.closedTurnResult(session.id, session);
       this.deps.eventBus?.publish({
         agentSessionId: session.id,
         index: updated.transcript.length - 1,
@@ -493,7 +539,8 @@ export class AgentRuntime {
     // Use the append's row-locked return as the exact history snapshot for this
     // turn. A separate get can observe a later concurrent append, mis-attribute
     // the SSE index, and bind an approval to the wrong user turn.
-    const sessionWithUser = await this.deps.sessions.appendTranscript(session.id, userEntry);
+    const sessionWithUser = await this.appendTranscriptIfActive(session.id, userEntry);
+    if (sessionWithUser === null) return this.closedTurnResult(session.id, session);
     // Arc 2 sub-slice 8.3 (v2-#8) — publish the user-turn entry to
     // the SSE event bus. Index = length-1 of the post-append
     // transcript so subscribers can resume via Last-Event-ID.
@@ -580,17 +627,6 @@ export class AgentRuntime {
       }
     }
 
-    // Always debit the decomposer's tokens (even on refuse —
-    // the input was processed). Budget-exhausted refusals charge
-    // 0 per the AgentDecomposer contract.
-    let postDebitSession = sessionWithUser;
-    if (decomposed.tokensConsumed > 0) {
-      postDebitSession = await this.deps.sessions.debitTokens(
-        session.id,
-        decomposed.tokensConsumed,
-      );
-    }
-
     // v2-#4 Q.1.e — cost-tracking. Persist a usage_records row per
     // decompose() call that returns a `usage` block.
     //
@@ -634,6 +670,25 @@ export class AgentRuntime {
       }
     }
 
+    // Decomposition can be slow. A customer close may commit while it is in
+    // flight, so account for the upstream call above, then re-read the durable
+    // lifecycle before ANY debit, result append, SSE or browser execution.
+    // Every later mutation is independently active-only as a second fence.
+    const activeAfterDecompose = await this.deps.sessions.get(session.id);
+    if (activeAfterDecompose === null || activeAfterDecompose.status !== 'active') {
+      return this.closedTurnResult(session.id, activeAfterDecompose ?? sessionWithUser);
+    }
+
+    // Always debit the decomposer's tokens (even on refuse — the input was
+    // processed), but never mutate accounting after a terminal winner.
+    // Budget-exhausted refusals charge 0 per the AgentDecomposer contract.
+    let postDebitSession = activeAfterDecompose;
+    if (decomposed.tokensConsumed > 0) {
+      const debited = await this.debitTokensIfActive(session.id, decomposed.tokensConsumed);
+      if (debited === null) return this.closedTurnResult(session.id, activeAfterDecompose);
+      postDebitSession = debited;
+    }
+
     // Q.3 — atomic session close on budget exhaustion. Two paths trip:
     //   1. The decomposer returned a budget-exhausted refusal
     //      (decompose() pre-call check refused before any LLM call).
@@ -649,7 +704,12 @@ export class AgentRuntime {
       decomposed.refuseReason === 'token budget exhausted; start a new session';
     const debitZeroedBudget = postDebitSession.tokenBudgetRemaining === 0;
     if (isBudgetExhaustedRefusal || debitZeroedBudget) {
-      await this.deps.sessions.closeWithReason(session.id, 'budget-exhausted');
+      const closed = await this.deps.sessions.closeWithReason(session.id, 'budget-exhausted');
+      return {
+        kind: 'session-closed',
+        reason: closed.closedReason ?? 'budget-exhausted',
+        session: closed,
+      };
     }
 
     if (decomposed.kind === 'refuse') {
@@ -658,7 +718,8 @@ export class AgentRuntime {
         role: 'agent' as const,
         body: `refused: ${decomposed.refuseReason}`,
       };
-      const updated = await this.deps.sessions.appendTranscript(session.id, refuseEntry);
+      const updated = await this.appendTranscriptIfActive(session.id, refuseEntry);
+      if (updated === null) return this.closedTurnResult(session.id, postDebitSession);
       this.deps.eventBus?.publish({
         agentSessionId: session.id,
         index: updated.transcript.length - 1,
@@ -673,7 +734,8 @@ export class AgentRuntime {
         role: 'agent' as const,
         body: `clarify: ${decomposed.clarifyingQuestion}`,
       };
-      const updated = await this.deps.sessions.appendTranscript(session.id, clarifyEntry);
+      const updated = await this.appendTranscriptIfActive(session.id, clarifyEntry);
+      if (updated === null) return this.closedTurnResult(session.id, postDebitSession);
       this.deps.eventBus?.publish({
         agentSessionId: session.id,
         index: updated.transcript.length - 1,
@@ -700,6 +762,7 @@ export class AgentRuntime {
       // owning node; the legacy driver-path executor keeps using `sessionId`.
       agentSessionId: session.id,
       plan: decomposed,
+      shouldContinue: () => this.sessionIsActive(session.id),
       ...(verifiedConsequentialApprovals !== undefined
         ? { approvedConsequentialActions: verifiedConsequentialApprovals }
         : {}),
@@ -726,7 +789,8 @@ export class AgentRuntime {
       intents: decomposed.intents,
       ...(resumeFromIntentIndex !== undefined ? { resumeFromIntentIndex } : {}),
     };
-    const updated = await this.deps.sessions.appendTranscript(session.id, planEntry);
+    const updated = await this.appendTranscriptIfActive(session.id, planEntry);
+    if (updated === null) return this.closedTurnResult(session.id, postDebitSession);
     this.deps.eventBus?.publish({
       agentSessionId: session.id,
       index: updated.transcript.length - 1,
@@ -747,8 +811,10 @@ export class AgentRuntime {
     const answerFromObservation = this.deps.decomposer.answerFromObservation?.bind(
       this.deps.decomposer,
     );
+    const mayReadBack = await this.sessionIsActive(session.id);
     if (
       executorResult.ok &&
+      mayReadBack &&
       observe !== undefined &&
       answerFromObservation !== undefined &&
       args.byokApiKey !== undefined &&
@@ -759,6 +825,9 @@ export class AgentRuntime {
       try {
         const observation = await observe(session.id);
         if (observation !== null && observation.trim().length > 0) {
+          if (!(await this.sessionIsActive(session.id))) {
+            return this.closedTurnResult(session.id, sessionAfter);
+          }
           const answer = await answerFromObservation({
             task: args.userMessage,
             observation,
@@ -779,7 +848,11 @@ export class AgentRuntime {
             // answer. Only after it's durably stored do we RECORD the spend (soft-cap
             // input) + DEBIT the budget, EACH best-effort so neither skips the other.
             const answerEntry = { at, role: 'agent' as const, body: answerBody };
-            sessionAfter = await this.deps.sessions.appendTranscript(session.id, answerEntry);
+            const appendedAnswer = await this.appendTranscriptIfActive(session.id, answerEntry);
+            if (appendedAnswer === null) {
+              return this.closedTurnResult(session.id, sessionAfter);
+            }
+            sessionAfter = appendedAnswer;
             this.deps.eventBus?.publish({
               agentSessionId: session.id,
               index: sessionAfter.transcript.length - 1,
@@ -807,10 +880,9 @@ export class AgentRuntime {
             }
             if (answer.tokensConsumed > 0) {
               try {
-                sessionAfter = await this.deps.sessions.debitTokens(
-                  session.id,
-                  answer.tokensConsumed,
-                );
+                const debited = await this.debitTokensIfActive(session.id, answer.tokensConsumed);
+                if (debited === null) return this.closedTurnResult(session.id, sessionAfter);
+                sessionAfter = debited;
               } catch {
                 /* debit best-effort — the spend is already recorded above */
               }
@@ -821,6 +893,12 @@ export class AgentRuntime {
         // Read-back is additive — never fail the turn on it.
       }
     }
+
+    const authoritative = await this.deps.sessions.get(session.id);
+    if (authoritative === null || authoritative.status !== 'active') {
+      return this.closedTurnResult(session.id, authoritative ?? sessionAfter);
+    }
+    sessionAfter = authoritative;
 
     return {
       kind: 'plan-executed',
