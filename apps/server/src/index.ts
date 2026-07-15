@@ -9,7 +9,11 @@
 
 import { loadConfig } from './lib/config.js';
 import { createLogger } from './lib/logger.js';
-import { createProductionDeps } from './lib/bootstrap.js';
+import {
+  buildAppWithFatalTeardown,
+  createProductionDeps,
+  shareFirstAsyncCall,
+} from './lib/bootstrap.js';
 import { buildApp } from './lib/app.js';
 import { installUnhandledRejectionBackstop } from './lib/unhandled-rejection-backstop.js';
 
@@ -42,7 +46,24 @@ async function main(): Promise<void> {
   // installed inside buildApp from `deps.sentry`. teardown holds the
   // SentryClient reference for flush/close on shutdown via the
   // bootstrap closure.
-  const app = await buildApp(deps);
+  const app = await buildAppWithFatalTeardown({
+    build: () => buildApp(deps),
+    teardown,
+    onFailure: (err) => {
+      logger.fatal(
+        {
+          component: 'bootstrap',
+          err:
+            err instanceof Error
+              ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+              : { value: err },
+        },
+        'app build failed — exiting',
+      );
+    },
+    exit: (code) => process.exit(code),
+  });
+  if (app === null) return;
 
   // Bound the graceful drain. app.close() waits for in-flight requests to
   // finish — but a long-lived SSE stream (status / notification / transcript)
@@ -55,7 +76,7 @@ async function main(): Promise<void> {
   // ALWAYS runs and the process exits cleanly within the stop window. The
   // normal (no-active-SSE) path is unchanged — app.close() resolves in ms.
   const CLOSE_DEADLINE_MS = 10_000;
-  const shutdown = async (signal: string): Promise<void> => {
+  const shutdown = shareFirstAsyncCall(async (signal: string): Promise<void> => {
     logger.info({ component: 'lifecycle', signal }, 'shutdown signal received');
     try {
       await Promise.race([
@@ -81,7 +102,7 @@ async function main(): Promise<void> {
     }
     await teardown();
     process.exit(0);
-  };
+  });
 
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));

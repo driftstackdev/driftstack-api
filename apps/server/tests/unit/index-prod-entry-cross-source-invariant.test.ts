@@ -98,12 +98,19 @@ describe('W990 production entry V-117 + V-167 cross-source invariant', () => {
     expect(p).toMatch(/installed inside buildApp from `deps\.sentry`\. teardown holds the/);
     expect(p).toMatch(/SentryClient reference for flush\/close on shutdown via the/);
     expect(p).toMatch(/bootstrap closure\./);
+    expect(p).toMatch(/const app = await buildAppWithFatalTeardown\(\{/);
+    expect(p).toMatch(/build: \(\) => buildApp\(deps\),/);
+    expect(p).toMatch(/'app build failed — exiting',/);
+    expect(p).toMatch(/if \(app === null\) return;/);
+    expect(p.indexOf('if (app === null) return;')).toBeLessThan(p.indexOf("process.on('SIGTERM'"));
+    expect(p.indexOf('if (app === null) return;')).toBeLessThan(p.indexOf('await app.listen'));
   });
 
   // ─── shutdown 3-step ─────────────────────────────────────────
 
   it('CRITICAL shutdown 3-step — app.close() (RACED against a CLOSE_DEADLINE_MS timeout) → teardown() → process.exit(0). The 3-step graceful-drain matches the V-167 lifecycle order; the timeout race keeps an active SSE stream from hanging the close past the systemd stop window while still guaranteeing teardown runs.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/index.ts'));
+    expect(p).toMatch(/const shutdown = shareFirstAsyncCall\(async \(signal: string\)/);
     expect(p).toMatch(/await Promise\.race\(\[\s*\n?\s*app\.close\(\),/);
     expect(p).toMatch(/const CLOSE_DEADLINE_MS = 10_000;/);
     expect(p).toMatch(/await teardown\(\);/);
@@ -148,13 +155,15 @@ describe('W990 production entry V-117 + V-167 cross-source invariant', () => {
     expect(p).toMatch(/process\.exit\(1\);/);
   });
 
-  // ─── 4 imports ───────────────────────────────────────────────
+  // ─── lifecycle imports ──────────────────────────────────────
 
-  it('CRITICAL 4 imports — loadConfig + createLogger + createProductionDeps + buildApp. The 4-import set is the production-entry dependency graph.', () => {
+  it('CRITICAL imports include production deps, build, and shared lifecycle owners.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/index.ts'));
     expect(p).toMatch(/import \{ loadConfig \} from '\.\/lib\/config\.js';/);
     expect(p).toMatch(/import \{ createLogger \} from '\.\/lib\/logger\.js';/);
-    expect(p).toMatch(/import \{ createProductionDeps \} from '\.\/lib\/bootstrap\.js';/);
+    expect(p).toMatch(/buildAppWithFatalTeardown,/);
+    expect(p).toMatch(/createProductionDeps,/);
+    expect(p).toMatch(/shareFirstAsyncCall,/);
     expect(p).toMatch(/import \{ buildApp \} from '\.\/lib\/app\.js';/);
   });
 

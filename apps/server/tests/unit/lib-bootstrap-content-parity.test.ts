@@ -38,7 +38,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { shareFirstAsyncCall } from '../../src/lib/bootstrap.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -50,6 +51,24 @@ function read(p: string): string {
 
 describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
   const body = read(LIB);
+
+  it('gives concurrent lifecycle callers the exact first in-flight promise', async () => {
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const operation = vi.fn(async (_signal: string) => held);
+    const shared = shareFirstAsyncCall(operation);
+
+    const first = shared('SIGTERM');
+    const second = shared('SIGINT');
+
+    expect(second).toBe(first);
+    await vi.waitFor(() => expect(operation).toHaveBeenCalledTimes(1));
+    expect(operation).toHaveBeenCalledWith('SIGTERM');
+    release?.();
+    await Promise.all([first, second]);
+  });
 
   it('builds the OAuth merge bearer link at the canonical static-page path', () => {
     expect(body).toMatch(/const confirmLink = canonicalOneTimeTokenUrl\(/);
@@ -334,13 +353,14 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
-  it("Teardown framing pinned: V-232 stop pollers BEFORE other teardown so in-flight tick doesn't try to acquire a closing redis/db handle; idempotent (torn flag); sentry flush+close 2s; swallow errors on redis.quit + dbHandle.close", () => {
+  it('Teardown framing pinned: one shared first-call promise; no new poller ticks after cleanup starts; sentry flush+close 2s; swallow errors on redis.quit + dbHandle.close', () => {
     expect(body).toMatch(
-      /\/\/ V-232 — stop pollers BEFORE other teardown so an in-flight tick\s*\n?\s*\/\/ doesn't try to acquire a closing redis\/db handle\./,
+      /\/\/ V-232 — stop pollers BEFORE other teardown so no new tick is admitted\s*\n?\s*\/\/ while Redis\/Postgres close\. clearInterval cannot cancel a tick that\s*\n?\s*\/\/ already started;/,
     );
     expect(body).toMatch(
-      /let torn = false;\s*\n?\s*async function teardown\(\): Promise<void> \{\s*\n?\s*if \(torn\) return;\s*\n?\s*torn = true;/,
+      /const teardown = shareFirstAsyncCall\(async \(\) => \{\s*\n?\s*logger\.info\(\{ component: 'bootstrap' \}, 'tearing down'\);/,
     );
+    expect(body).toContain('owner ??= Promise.resolve().then(() => operation(...args));');
     expect(body).toMatch(
       /try \{\s*\n?\s*await sentry\.flush\(2000\);\s*\n?\s*await sentry\.close\(2000\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* swallow \*\/\s*\n?\s*\}/,
     );

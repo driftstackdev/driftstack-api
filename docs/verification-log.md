@@ -3450,7 +3450,7 @@ V-051 landed the deploy pipeline; V-051 V-log explicitly noted "Production wires
 
 4. \*\*`buildLegalCatalog({repoRoot: process.cwd()})` works in both dev (`npm run dev` from repo root) and production (Docker `WORKDIR /app` with `docs/legal` copied in via Dockerfile). The path resolution does not depend on `import.meta.url` or any module-relative trick — `process.cwd()` is the runtime working directory in both cases.
 
-5. **Teardown swallows errors per-step.** A failure to `flush(Sentry)` should not prevent `redis.quit()` or `dbHandle.close()`. Each step has its own `try/catch`; the `torn` flag prevents double-execution if SIGTERM fires twice. Cost: silent teardown failures in logs only (warn-level if the close fn happened to log itself; otherwise silent). Acceptable for a graceful-shutdown path that's about ending cleanly, not about debugging.
+5. **Teardown swallows errors per-step.** A failure to `flush(Sentry)` should not prevent `redis.quit()` or `dbHandle.close()`. Each step has its own `try/catch`. At V-059, the `torn` flag prevented duplicate body entry if SIGTERM fired twice; V-686 supersedes the former stronger lifecycle claim because concurrent callers did not await the same cleanup owner. Cost: silent teardown failures in logs only (warn-level if the close fn happened to log itself; otherwise silent). Acceptable for a graceful-shutdown path that's about ending cleanly, not about debugging.
 
 6. **`apps/server/dist/index.js` ESM build at 20 KB.** The runtime entrypoint is small because tsup bundles only what `index.ts` directly imports + transitive ESM. Drizzle + postgres-js + ioredis + Sentry + AWS SDK are pulled at runtime from `node_modules` (not bundled), keeping the image build deterministic and the dist output reviewable. Confirmed via `npm run build` post-V-059: build succeeds, dist outputs ESM + CJS + DTS cleanly.
 
@@ -28633,3 +28633,42 @@ transport, partial profile retry, A-held→B-held→late-A owner identity and he
 failure→clean B→restored A retry. The complete Profiles matrix passes 17 files with
 144 tests passing and 6 intentional skips. Strict GUI and server-test TypeScript,
 targeted ESLint/Prettier and diff/whitespace checks are green.
+
+---
+
+## V-686 — Graceful shutdown has one awaitable lifecycle owner
+
+**Date:** 2026-07-15
+
+Bootstrap teardown previously used a boolean `torn` guard. It prevented a second
+caller from entering the cleanup body, but that caller received an already-resolved
+promise while the first caller could still be flushing Sentry or closing Redis and
+Postgres. Production shutdown had a separate guard with the same early-resolution
+shape, and a `buildApp` rejection after live dependencies were constructed escaped
+without awaiting teardown or taking an explicit fatal exit. This entry explicitly
+supersedes V-059's stronger historical statement that the torn flag prevented
+double-execution: duplicate body entry was prevented, shared lifecycle completion
+was not.
+
+One `shareFirstAsyncCall` primitive now publishes the first operation's exact promise
+synchronously. Bootstrap teardown and production shutdown both use it, so mixed and
+concurrent callers receive the same promise object, the first signal owns the log
+context, and no caller can report completion before the owner settles. The existing
+ten-second Fastify close deadline and best-effort close handling remain unchanged;
+Sentry, Redis and Postgres teardown remains ordered. The poller cleanup comment now
+states the actual guarantee: clearing its interval admits no new ticks but cannot
+cancel work that was already running.
+
+Fatal app construction now reports the build failure, awaits that same teardown
+owner, exits with status 1 and returns before signal-handler installation or listen.
+The behavior proof holds close and teardown independently, mixes SIGTERM and SIGINT,
+asserts exact promise identity and proves one close, one teardown and one exit with no
+early exit. A second held-promise proof rejects app construction and proves teardown
+finishes before the single fatal exit, with zero listen. Signal arrival during app
+construction remains an explicit residual because handlers are installed only after
+construction succeeds; this change does not claim otherwise.
+
+The direct bootstrap/index/cross-source proof passes 3 files and 65/65 tests. The
+expanded lifecycle/bootstrap matrix passes 10 files and 145/145 tests. Strict server
+source and server-test TypeScript, targeted ESLint/Prettier, diff/whitespace checks,
+the full workspace typecheck and the configured production build are green.

@@ -237,6 +237,43 @@ export interface BootstrapResult {
 }
 
 /**
+ * Give an async lifecycle operation one synchronous first-call owner. Every
+ * caller receives the exact same promise, including callers that arrive while
+ * the operation is still settling. The microtask boundary also converts a
+ * synchronous throw from `operation` into that shared rejection.
+ */
+export function shareFirstAsyncCall<TArgs extends unknown[]>(
+  operation: (...args: TArgs) => Promise<void>,
+): (...args: TArgs) => Promise<void> {
+  let owner: Promise<void> | null = null;
+  return (...args) => {
+    owner ??= Promise.resolve().then(() => operation(...args));
+    return owner;
+  };
+}
+
+/**
+ * Build the request-serving app after production dependencies are live. A
+ * construction failure owns fatal cleanup: teardown must settle before exit,
+ * and `null` tells the entrypoint to return before handlers or listen wiring.
+ */
+export async function buildAppWithFatalTeardown<T>(args: {
+  build: () => Promise<T>;
+  teardown: () => Promise<void>;
+  onFailure: (error: unknown) => void;
+  exit: (code: number) => void;
+}): Promise<T | null> {
+  try {
+    return await args.build();
+  } catch (error) {
+    args.onFailure(error);
+    await args.teardown();
+    args.exit(1);
+    return null;
+  }
+}
+
+/**
  * Resolve the repo root that holds `docs/legal/*.md`. Prod (the V-051
  * Docker image) runs with cwd at the dir containing docs/legal, so
  * cwd-first preserves that exact behavior. Local dev (`npm run dev -w
@@ -2820,13 +2857,12 @@ export async function createProductionDeps(
     );
   }
 
-  let torn = false;
-  async function teardown(): Promise<void> {
-    if (torn) return;
-    torn = true;
+  const teardown = shareFirstAsyncCall(async () => {
     logger.info({ component: 'bootstrap' }, 'tearing down');
-    // V-232 — stop pollers BEFORE other teardown so an in-flight tick
-    // doesn't try to acquire a closing redis/db handle.
+    // V-232 — stop pollers BEFORE other teardown so no new tick is admitted
+    // while Redis/Postgres close. clearInterval cannot cancel a tick that
+    // already started; individual services retain their bounded best-effort
+    // failure handling for that honest race.
     clearInterval(scheduledJobsTimer);
     clearInterval(validationHarnessTimer);
     if (healthProbeTimer) clearInterval(healthProbeTimer);
@@ -2855,7 +2891,7 @@ export async function createProductionDeps(
       /* swallow */
     }
     logger.info({ component: 'bootstrap' }, 'teardown complete');
-  }
+  });
 
   // Log a one-line summary of the SDK init state at boot — easy
   // sanity check in production logs.
