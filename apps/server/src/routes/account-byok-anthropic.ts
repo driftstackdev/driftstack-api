@@ -234,10 +234,9 @@ export function registerAccountByokAnthropicDisabledRoutes(app: FastifyInstance)
   // design doc. Same fix shape as agent-sessions disabled-stub
   // (slice 87 / 6efc0a34).
   const detail =
-    'BYOK Anthropic key management is not yet enabled on this deployment. ' +
-    'Once the operator configures the deployment, customers can store their ' +
-    'own Anthropic key via PUT /v1/account/me/byok-anthropic-key. See ' +
-    'https://docs.driftstack.dev/api/byok-anthropic/ for the full flow.';
+    'BYOK Anthropic key management is unavailable on this deployment. ' +
+    "Use the deployment's configured AI provider, or contact its operator if customer-managed keys are required. See " +
+    'https://docs.driftstack.dev/api/byok-anthropic/ for the supported key-management flow.';
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

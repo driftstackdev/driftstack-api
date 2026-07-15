@@ -92,10 +92,12 @@ describe('routes/fleet-events content parity', () => {
     expect(body).toContain("deps.registry.unregister(nodeId, conn, 'fleet node socket error')");
   });
 
-  it('disabled variant pinned: 503 stub with the fleet_nodes-pending detail + design-doc pointer', () => {
+  it('disabled variant pinned: stable 503 detail without internal infrastructure or design-doc leakage', () => {
     expect(body).toMatch(
-      /export function registerFleetEventsDisabledRoutes\(app: FastifyInstance\): void \{\s*\n?\s*const detail =\s*\n?\s*'Fleet events stream is not yet enabled on this deployment\. The ' \+\s*\n?\s*'fleet_nodes SQL table \+ WebSocket route \+ mTLS layer are pending\. ' \+\s*\n?\s*'See docs\/internal\/fleet-nodes-sql-migration-design\.md\.';/,
+      /export function registerFleetEventsDisabledRoutes\(app: FastifyInstance\): void \{\s*\n?\s*const detail = 'Fleet events stream is unavailable on this deployment\.';/,
     );
+    const disabled = body.slice(body.indexOf('registerFleetEventsDisabledRoutes'));
+    expect(disabled).not.toMatch(/fleet_nodes|mTLS|pending|docs\/internal/i);
     expect(body).toMatch(/throw new FeatureUnavailableError\(detail\);/);
   });
 });

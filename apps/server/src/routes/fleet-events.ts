@@ -197,14 +197,10 @@ export async function registerFleetEventsRoutes(
   );
 }
 
-// Registered when the fleet deps are omitted from AppDeps (e.g. before the
-// bootstrap wiring takes the route live). Returns 503 + a pointer so clients get
-// a machine-readable "not yet enabled" signal instead of a bare 404.
+// Registered when fleet dependencies are omitted from AppDeps. Return a stable,
+// machine-readable deployment-state signal instead of a bare 404 or internal plan.
 export function registerFleetEventsDisabledRoutes(app: FastifyInstance): void {
-  const detail =
-    'Fleet events stream is not yet enabled on this deployment. The ' +
-    'fleet_nodes SQL table + WebSocket route + mTLS layer are pending. ' +
-    'See docs/internal/fleet-nodes-sql-migration-design.md.';
+  const detail = 'Fleet events stream is unavailable on this deployment.';
   app.get('/v1/fleet/events', (): never => {
     throw new FeatureUnavailableError(detail);
   });

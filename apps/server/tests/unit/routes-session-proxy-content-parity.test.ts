@@ -81,13 +81,16 @@ describe('routes/session-proxy content parity', () => {
     );
   });
 
-  it("POST 503-on-pre-EG-API-1.6 framing pinned: 'Session-egress backends (SOCKS5 / OpenVPN / WireGuard) are not yet wired on this server. EG-API-1.2 route surface is registered; EG-API-1.6 wires the per-session harness propagation. Tracking via planning 133.' + applyToSession EgressHandle harness-consumes framing + 202-Accepted-with-type+safeguard-summary contract — pinned so the route-vs-propagation separation + Phase-1-SOCKS5-target contract stays documented", () => {
+  it('POST FeatureUnavailable detail states current availability and default-egress impact without internal identifiers', () => {
     expect(body).toMatch(
-      /\/\/ For Phase 1 SOCKS5 wiring, EG-API-1\.6 will await this call\s*\n?\s*\/\/ and propagate the EgressHandle to the per-session harness\s*\n?\s*\/\/ launcher\. Until then the service is the only place that\s*\n?\s*\/\/ touches secrets; the route returns 202 Accepted with the\s*\n?\s*\/\/ type \+ safeguard summary\./,
+      /'Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is unavailable on this deployment\. ' \+\s*\n?\s*"Sessions continue through Driftstack's default egress\."/,
     );
-    expect(body).toMatch(
-      /throw new FeatureUnavailableError\(\s*\n?\s*'Session-egress backends \(SOCKS5 \/ OpenVPN \/ WireGuard\) are not yet wired on this server\. ' \+\s*\n?\s*'EG-API-1\.2 route surface is registered; EG-API-1\.6 wires the per-session harness propagation\. ' \+\s*\n?\s*'Tracking via planning 133\.',\s*\n?\s*\);/,
-    );
+    const detailStart = body.indexOf('throw new FeatureUnavailableError');
+    expect(detailStart).toBeGreaterThan(-1);
+    const detailEnd = body.indexOf(');', detailStart);
+    expect(detailEnd).toBeGreaterThan(detailStart);
+    const handlerDetail = body.slice(detailStart, detailEnd + 2);
+    expect(handlerDetail).not.toMatch(/EG-API-1\.2|EG-API-1\.6|planning 133|not yet|roadmap/);
   });
 
   it("GET 404-no-proxy-config framing pinned: 'EG-API-1.6 backs this with a real read from session-egress state (config_hash + type + safeguard flags only — never raw config). For now the route surfaces 404 because no session has a proxy applied (no backend wired); same activation-gate logic as POST.' + NotFoundError('No proxy config for this session.') — pinned so the config_hash-only + never-raw-config + same-as-POST activation-gate contract stays documented", () => {
@@ -97,9 +100,9 @@ describe('routes/session-proxy content parity', () => {
     expect(body).toMatch(/throw new NotFoundError\('No proxy config for this session\.'\);/);
   });
 
-  it("Disabled-stub customer-facing detail framing pinned: 'Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard) is not yet shipped. Phase 1 SOCKS5 support is on the roadmap; until then sessions route through Driftstack's default egress.' + symmetric-with-saved-proxies framing — pinned so the customer-readable-roadmap (not internal planning-133 jargon) + symmetric-disabled-stub-detail contract stays documented", () => {
+  it('Disabled-stub customer-facing detail stays current-state-only', () => {
     expect(body).toMatch(
-      /\/\/ Customer-facing detail\. "planning file 133" is internal\s*\n?\s*\/\/ nomenclature; customers don't have access\. Drop the internal\s*\n?\s*\/\/ reference and surface the Phase 1 SOCKS5 roadmap framing in\s*\n?\s*\/\/ customer-readable terms\. Matches the symmetric saved-proxies\s*\n?\s*\/\/ disabled-stub detail\./,
+      /const detail =\s*\n?\s*'Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\) is unavailable on this deployment\. ' \+\s*\n?\s*"Sessions continue through Driftstack's default egress\.";/,
     );
   });
 

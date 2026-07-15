@@ -71,21 +71,12 @@ export function registerSessionProxyRoutes(
           'Body session_id must match the URL :id (cross-cutting body/URL mismatch).',
         );
       }
-      // EG-API-1.2 service-layer wiring is the EG-API-1.6 propagation
-      // slice's responsibility — `applyToSession` returns an
-      // EgressHandle which the harness consumes. The route surface
-      // returns the public-safe shape only (proxy type + safeguard
-      // flags echoed back; NEVER raw config fields like SOCKS5
-      // password or WireGuard private_key).
-      // For Phase 1 SOCKS5 wiring, EG-API-1.6 will await this call
-      // and propagate the EgressHandle to the per-session harness
-      // launcher. Until then the service is the only place that
-      // touches secrets; the route returns 202 Accepted with the
-      // type + safeguard summary.
+      // This deployment does not expose a session-egress backend. Keep the
+      // public error limited to current availability and impact; never surface
+      // internal implementation or planning identifiers.
       throw new FeatureUnavailableError(
-        'Session-egress backends (SOCKS5 / OpenVPN / WireGuard) are not yet wired on this server. ' +
-          'EG-API-1.2 route surface is registered; EG-API-1.6 wires the per-session harness propagation. ' +
-          'Tracking via planning 133.',
+        'Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard) is unavailable on this deployment. ' +
+          "Sessions continue through Driftstack's default egress.",
       );
     },
   );
@@ -108,19 +99,13 @@ export function registerSessionProxyRoutes(
 // Registered when `sessionEgressService` is omitted from AppDeps. Same
 // pattern as `registerBillingDisabledRoutes` (Wave 1119 / Slice 1119.2):
 // returning 503 + FeatureUnavailable on the route surface gives clients
-// a machine-readable "feature not yet shipped" signal vs a misleading
-// 404. The detail explains the activation gate so customers know it's
-// a deployment state, not a typo.
+// a machine-readable deployment-state signal instead of a misleading 404.
 export function registerSessionProxyDisabledRoutes(app: FastifyInstance): void {
-  // Customer-facing detail. "planning file 133" is internal
-  // nomenclature; customers don't have access. Drop the internal
-  // reference and surface the Phase 1 SOCKS5 roadmap framing in
-  // customer-readable terms. Matches the symmetric saved-proxies
-  // disabled-stub detail.
+  // Customer-facing detail: state current availability and impact without
+  // leaking internal implementation plans.
   const detail =
-    'Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard) is not yet ' +
-    'shipped. Phase 1 SOCKS5 support is on the roadmap; until then sessions ' +
-    "route through Driftstack's default egress.";
+    'Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard) is unavailable on this deployment. ' +
+    "Sessions continue through Driftstack's default egress.";
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

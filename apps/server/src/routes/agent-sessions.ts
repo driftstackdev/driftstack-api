@@ -4567,15 +4567,14 @@ export function registerAgentSessionsRoutes(
 // SDK + dashboard get a machine-readable signal vs 404.
 //
 // The `detail` text is customer-facing — it lands in the problem+json
-// body the SDK surfaces verbatim. Two self-serve options are surfaced
+// body the SDK surfaces verbatim. Current activation options are surfaced
 // here so a customer hitting this 503 from the SDK has the same
 // recovery path the dashboard's feature-unavailable banner shows
 // (apps/customer-dashboard/src/pages/agent-sessions.astro lines 35-53):
 // BYOK Anthropic key OR opt-in to the deployment's bundled-LLM budget.
 export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void {
   const detail =
-    'AI chat agent is not yet enabled on this deployment. Two self-serve ' +
-    'options activate this surface: bring your own Anthropic key ' +
+    'AI chat is unavailable on this deployment. To activate it, bring your own Anthropic key ' +
     '(https://docs.driftstack.dev/api/byok-anthropic/), or opt into the ' +
     "deployment's bundled-LLM budget " +
     '(https://docs.driftstack.dev/api/bundled-llm/).';

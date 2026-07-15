@@ -115,12 +115,12 @@ describe('routes/account-byok-anthropic content parity', () => {
     );
   });
 
-  it("Disabled-stub 4-verb registration + customer-facing-docs-URL framing pinned: 'BYOK Anthropic key management is not yet enabled on this deployment. Once the operator configures the deployment, customers can store their own Anthropic key via PUT /v1/account/me/byok-anthropic-key. See https://docs.driftstack.dev/api/byok-anthropic/ for the full flow.' + app.get + app.put + app.delete + app.post all bound to the same stub — pinned so the agent-sessions-symmetric slice 87 / 6efc0a34 fix-shape + 4-verb-disabled contract stays documented", () => {
+  it('Disabled-stub 4-verb registration + stable current-state detail and customer-facing docs URL are pinned', () => {
     expect(body).toMatch(
       /\/\/ Customer-facing detail\. Lands verbatim in the SDK's 503 problem\s*\n?\s*\/\/ body — point at the customer-facing docs URL, NOT the internal\s*\n?\s*\/\/ design doc\. Same fix shape as agent-sessions disabled-stub\s*\n?\s*\/\/ \(slice 87 \/ 6efc0a34\)\./,
     );
     expect(body).toMatch(
-      /'BYOK Anthropic key management is not yet enabled on this deployment\. ' \+\s*\n?\s*'Once the operator configures the deployment, customers can store their ' \+\s*\n?\s*'own Anthropic key via PUT \/v1\/account\/me\/byok-anthropic-key\. See ' \+\s*\n?\s*'https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\/ for the full flow\.';/,
+      /'BYOK Anthropic key management is unavailable on this deployment\. ' \+\s*\n?\s*"Use the deployment's configured AI provider, or contact its operator if customer-managed keys are required\. See " \+\s*\n?\s*'https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\/ for the supported key-management flow\.';/,
     );
     expect(body).toMatch(/app\.get\('\/v1\/account\/me\/byok-anthropic-key', stub\);/);
     expect(body).toMatch(/app\.put\('\/v1\/account\/me\/byok-anthropic-key', stub\);/);

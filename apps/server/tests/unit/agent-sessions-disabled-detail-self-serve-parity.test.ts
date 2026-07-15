@@ -16,7 +16,7 @@
 // This drift-guard pins:
 //   - the customer-facing docs URLs for both self-serve options
 //     (BYOK Anthropic + bundled-LLM)
-//   - the "self-serve" framing matching the dashboard's
+//   - the current activation options matching the dashboard's
 //     feature-unavailable banner (agent-sessions.astro lines 35-53)
 //   - explicit `not.toMatch` on "AI-CHAT design doc" so the legacy
 //     internal-reference text can't drift back into customer-facing
@@ -51,7 +51,7 @@ describe('agent-sessions disabled-stub 503 detail — customer-facing self-serve
     // The previous detail string sent customers to an internal doc
     // they have no access to. Drift-guard pin so this regression
     // can't slip back.
-    const fnIdx = body.indexOf('registerAgentSessionsDisabledRoutes');
+    const fnIdx = body.indexOf('export function registerAgentSessionsDisabledRoutes');
     expect(fnIdx).toBeGreaterThan(-1);
     const tail = body.slice(fnIdx);
     // Bound the search to the disabled-stub fn body so other
@@ -61,12 +61,15 @@ describe('agent-sessions disabled-stub 503 detail — customer-facing self-serve
     expect(fnBody).not.toMatch(/AI-CHAT design doc/);
   });
 
-  it('uses the "Two self-serve options" framing matching the dashboard banner', () => {
-    // The dashboard's feature-unavailable banner at
-    // agent-sessions.astro:37 says "Two self-serve options:" — the
-    // 503 detail should use parallel language so customers seeing
-    // both surfaces get a coherent message.
-    expect(body).toMatch(/Two self-serve options/);
+  it('states current unavailability and gives both activation options without roadmap language', () => {
+    const fnIdx = body.indexOf('export function registerAgentSessionsDisabledRoutes');
+    expect(fnIdx).toBeGreaterThan(-1);
+    const tail = body.slice(fnIdx);
+    const fnEnd = tail.indexOf('export function', 10);
+    const fnBody = fnEnd > 0 ? tail.slice(0, fnEnd) : tail;
+    expect(fnBody).toMatch(/AI chat is unavailable on this deployment/);
+    expect(fnBody).toMatch(/To activate it, bring your own Anthropic key/);
+    expect(fnBody).not.toMatch(/not yet|coming soon|roadmap|pending/i);
   });
 });
 
@@ -120,10 +123,10 @@ describe('session-proxy disabled-stub 503 detail — no internal "planning file 
     expect(fnBody).not.toMatch(/planning file 133/);
   });
 
-  it('the session-proxy disabled-stub surfaces the customer-readable Phase-1-SOCKS5-on-the-roadmap framing + the default-egress impact', () => {
+  it('the session-proxy disabled-stub states current availability and default-egress impact', () => {
     // Customers reading the 503 need to know the impact: their sessions
     // still work, just not via their custom proxy yet.
-    expect(SESSION).toMatch(/Phase 1 SOCKS5 support is on the roadmap/);
-    expect(SESSION).toMatch(/route through Driftstack's default egress/);
+    expect(SESSION).toMatch(/Customer-configurable egress .* is unavailable on this deployment/);
+    expect(SESSION).toMatch(/Sessions continue through Driftstack's default egress/);
   });
 });

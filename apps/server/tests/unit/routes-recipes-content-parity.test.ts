@@ -84,12 +84,12 @@ describe('routes/recipes content parity', () => {
     expect(body).toMatch(/rec\.intentLog\.map\(publicAgentIntent\)/);
   });
 
-  it("Disabled-stub customer-facing detail framing pinned: 'Recipes are not yet enabled on this deployment. Once the operator configures the recipe library + agent layer, customers can snapshot a finished agent-session via POST /v1/recipes. See https://docs.driftstack.dev/api/recipes/ for the full flow.' — pinned so the customer-facing-docs-URL contract stays documented (drift to internal handoff/design-doc pointers would leak internal nomenclature to customers; slices 87+88 fix-shape comment is the explicit lock)", () => {
+  it('Disabled-stub customer-facing current-state detail and docs URL are pinned', () => {
     expect(body).toMatch(
       /\/\/ Customer-facing detail\. Lands verbatim in the SDK's 503 problem\s*\n?\s*\/\/ body\. Same fix shape as agent-sessions \/ byok-anthropic \/\s*\n?\s*\/\/ proxy disabled-stubs \(slices 87 \+ 88\): point at customer-facing\s*\n?\s*\/\/ docs URL, NOT the internal handoff\/design doc\./,
     );
     expect(body).toMatch(
-      /'Recipes are not yet enabled on this deployment\. Once the operator ' \+\s*\n?\s*'configures the recipe library \+ agent layer, customers can snapshot ' \+\s*\n?\s*'a finished agent-session via POST \/v1\/recipes\. See ' \+\s*\n?\s*'https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the full flow\.';/,
+      /'Recipes are unavailable on this deployment\. ' \+\s*\n?\s*'Contact the deployment operator if recipe access is expected\. See ' \+\s*\n?\s*'https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the supported API flow\.';/,
     );
   });
 });

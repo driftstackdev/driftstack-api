@@ -29,7 +29,7 @@ describe('AI-B4 POST /v1/recipes activation gate (disabled-stub variant)', () =>
     expect(res.statusCode).toBe(503);
     expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
     const body = res.json<{ detail?: string }>();
-    expect(body.detail ?? '').toMatch(/Recipes are not yet enabled on this deployment/);
+    expect(body.detail ?? '').toMatch(/Recipes are unavailable on this deployment/);
   });
 
   it('disabled-stub detail points at customer-facing docs URL (slice 87+88 fix-shape regression-prevention)', async () => {
@@ -42,7 +42,7 @@ describe('AI-B4 POST /v1/recipes activation gate (disabled-stub variant)', () =>
     });
     const body = res.json<{ detail?: string }>();
     expect(body.detail ?? '').toMatch(
-      /See https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the full flow\./,
+      /See https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the supported API flow\./,
     );
     // No internal jargon
     expect(body.detail ?? '').not.toMatch(/V-\d{3}|planning file|handoff/);

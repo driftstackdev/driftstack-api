@@ -31,8 +31,8 @@ describe('V-820 — /v1/fleet/events (disabled stub posture; no AppDeps wired)',
     expect(res.statusCode).toBe(503);
     const body = res.json<{ type: string; detail: string }>();
     expect(body.type).toBe(PROBLEM_TYPES.FeatureUnavailable);
-    expect(body.detail).toMatch(/Fleet events stream is not yet enabled/);
-    expect(body.detail).toMatch(/fleet-nodes-sql-migration-design\.md/);
+    expect(body.detail).toBe('Fleet events stream is unavailable on this deployment.');
+    expect(body.detail).not.toMatch(/fleet_nodes|WebSocket|mTLS|pending|docs\/internal/i);
   });
 
   it('returns application/problem+json (RFC 7807)', async () => {
