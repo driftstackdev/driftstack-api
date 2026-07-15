@@ -91,9 +91,24 @@ describe('W763 docs /api/profiles content parity', () => {
   it("CRITICAL archetype-is-sticky-for-lifetime framing pinned. The 'Once set, the archetype is sticky for that profile\\'s lifetime' wording + the 'repin via POST /v1/profiles/:id/clone with a new archetype' fallback explains the no-archetype-edit contract.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Once set, the\s*\n?\s+archetype is sticky for that profile's lifetime\./);
+    expect(p).toMatch(/Once set,\s*\n?\s+the archetype is sticky for that profile's lifetime\./);
     expect(p).toMatch(
       /The\s*\n?archetype is intentionally not editable — repin via\s*\n?`POST \/v1\/profiles\/:id\/clone` with a new archetype, then delete the\s*\n?old profile after migration\./,
+    );
+  });
+
+  it('new create/import archetypes come from the live catalog while stored legacy profile operations remain available', () => {
+    const p = read(PAGE);
+
+    expect(p).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
+    expect(p).toMatch(
+      /A well-formed unknown, reference-only, or planned id is rejected before\s*\n?the profile repository is read or written\./,
+    );
+    expect(p).toMatch(
+      /Import is a new-profile write, so `envelope\.profile\.archetype` must be present\s*\n?in the current selectable catalog\./,
+    );
+    expect(p).toMatch(
+      /Existing profiles preserve their stored archetype even after it leaves\s*\n?the selectable catalog\. They remain listable, readable, clonable, transferable,\s*\n?snapshot-restorable, and launchable/,
     );
   });
 
@@ -101,7 +116,7 @@ describe('W763 docs /api/profiles content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`description` — free-form, max 2048 chars; nullable\./);
-    expect(p).toMatch(/or `description` over 2048 chars\./);
+    expect(p).toMatch(/field, `description` over 2048 chars,/);
   });
 
   it("CRITICAL create returns 200 (not 201) framing pinned. The 'the API surface uses 200 for both idempotent and one-shot resource creation' clause is the load-bearing API-versioning convention.", () => {

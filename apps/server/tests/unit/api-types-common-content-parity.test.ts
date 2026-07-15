@@ -277,6 +277,16 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
   });
 
+  it('direct create/import archetypes derive from the launch+available registry subset', () => {
+    expect(body).toMatch(/const SELECTABLE_ARCHETYPE_IDS = new Set\(/);
+    expect(body).toMatch(/archetype\.status === 'launch' \|\| archetype\.status === 'available'/);
+    expect(body).toMatch(/export function isSelectableArchetypeId\(id: string\): boolean/);
+    expect(body).toMatch(/export const SelectableArchetypeIdSchema = z/);
+    expect(body).toContain(
+      "message: 'archetype must be a selectable id returned by GET /v1/archetypes'",
+    );
+  });
+
   it('ARCHETYPE_REGISTRY is the multi-archetype catalogue (NOT a single hardcoded device): ArchetypeConfig shape + status enum + the locked id (iphone17, post-2026-06-11 cutover) is the sole status:launch entry + the full 81-slug Agent-1 catalog folds in as `available` + a legacy reference baseline retained', () => {
     // The platform models a device MATRIX; the registry is the source of
     // truth. A drift back to a single hardcoded archetype would re-break

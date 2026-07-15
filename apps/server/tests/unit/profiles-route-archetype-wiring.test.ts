@@ -107,4 +107,25 @@ describe('profiles route — create archetype wiring (app.inject)', () => {
     expect(res.statusCode).toBe(400);
     await app.close();
   });
+
+  it('POST /v1/profiles rejects a well-formed unknown archetype before calling the service', async () => {
+    const { app, createArgs } = await harness();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      payload: { name: 'Unknown device', archetype: 'iphone99_ios99_safari99' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      type: 'https://errors.driftstack.dev/validation-failed',
+      status: 400,
+      issues: {
+        fieldErrors: {
+          archetype: ['archetype must be a selectable id returned by GET /v1/archetypes'],
+        },
+      },
+    });
+    expect(createArgs).toHaveLength(0);
+    await app.close();
+  });
 });

@@ -52,6 +52,62 @@ Internal fingerprint-reference baselines and other non-selectable entries are
 never included. `default_archetype_id` is the value the platform currently
 chooses when `POST /v1/sessions` or `POST /v1/profiles` omits an archetype.
 
+Direct session creation, profile creation, and profile import accept only an
+`id` present in the current response. A well-formed but unknown, reference-only,
+or planned id returns `400 ValidationFailed` on the `archetype` field before a
+browser, profile row, or driver allocation is attempted.
+
+## Generate a create payload from the live catalog
+
+Resolve capabilities to an id at runtime instead of constructing or guessing a
+slug. This helper can generate the body for either `POST /v1/sessions` or
+`POST /v1/profiles`:
+
+```ts
+type ArchetypeFilter = {
+  device?: string;
+  ios_version?: string;
+  safari_version?: string;
+};
+
+async function archetypeCreatePayload(filter: ArchetypeFilter = {}) {
+  const response = await fetch('https://api.driftstack.dev/v1/archetypes');
+  if (!response.ok) throw new Error(`Catalog request failed: ${response.status}`);
+
+  const catalog = (await response.json()) as {
+    default_archetype_id: string;
+    data: Array<{
+      id: string;
+      device: string;
+      ios_version: string;
+      safari_version: string;
+    }>;
+  };
+  const match = catalog.data.find(
+    (entry) =>
+      (filter.device === undefined || entry.device === filter.device) &&
+      (filter.ios_version === undefined || entry.ios_version === filter.ios_version) &&
+      (filter.safari_version === undefined || entry.safari_version === filter.safari_version),
+  );
+
+  if (match === undefined) {
+    throw new Error('No currently selectable archetype matches those capabilities.');
+  }
+  return { archetype: match.id };
+}
+
+const sessionBody = await archetypeCreatePayload({
+  device: 'iPhone 17',
+  ios_version: '18.7',
+});
+```
+
+If no capability filter is needed, omit `archetype` and let the server use
+`default_archetype_id`. Existing stored profiles keep their pinned archetype
+even if it later leaves the selectable catalog; compatibility operations on
+those profiles remain available, but new direct creates and imports must choose
+from the live response.
+
 The same response schema is published in
 [`/openapi.json`](https://api.driftstack.dev/openapi.json), so generated clients
 can expose it without maintaining a separate hand-written model.

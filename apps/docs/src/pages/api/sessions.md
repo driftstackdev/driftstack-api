@@ -108,6 +108,13 @@ iOS 18.7 / Safari 26.4 archetype when omitted (`LOCKED_ARCHETYPE_ID`
 = `iphone17_ios18_7_safari26_4`). `purpose` defaults to
 `production_customer`.
 
+When supplied directly, `archetype` must be an `id` returned by the current
+[`GET /v1/archetypes`](/api/archetypes/) catalog. Unknown, reference-only, and
+planned ids return `400 ValidationFailed` on the `archetype` field before the
+server creates a session row or asks the driver to allocate a browser. Fetch
+the catalog at runtime or use its `default_archetype_id`; do not synthesize an
+id from device/version strings.
+
 When `profile_id` is supplied (2026-05-20, commit `fa8cb83a`) the
 server inherits the profile's `archetype` as the default, stamps
 `{profile_id, profile_name}` into the session's `metadata`, and
@@ -115,6 +122,11 @@ bumps the profile's `last_used_at` fire-and-forget. Cross-account
 `profile_id` returns `404` (anti-enumeration — indistinguishable
 from a missing one). See also `POST /v1/profiles/:id/launch` for
 the one-round-trip launch helper.
+
+Profile-backed launches inherit the already-stored profile archetype. This is a
+compatibility path: an existing profile remains launchable if its pinned id is
+no longer offered for new direct creates. The exception cannot be requested by
+putting a retired id directly in a create-session body.
 
 A profile can have only **one live session at a time**. If the
 `profile_id` already has a non-terminal session, the create is
@@ -133,6 +145,8 @@ Returns the created session (201).
 
 Errors:
 
+- `400 ValidationFailed` — a directly supplied `archetype` is not present in
+  the current selectable catalog.
 - `429 ConcurrencyLimit` — concurrent-session cap hit.
 - `404 NotFound` — `profile_id` refers to a profile that doesn't
   exist OR belongs to a different account.

@@ -11,8 +11,13 @@
 // through this service. We store only the metadata.
 
 import { randomUUID } from 'node:crypto';
-import { LOCKED_ARCHETYPE_ID, type AccountTier } from '@driftstack/api-types';
 import {
+  LOCKED_ARCHETYPE_ID,
+  isSelectableArchetypeId,
+  type AccountTier,
+} from '@driftstack/api-types';
+import {
+  BadRequestError,
   ConflictError,
   NotFoundError,
   StorageQuotaExceededError,
@@ -213,6 +218,16 @@ export interface ProfilesRepo {
 
 const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;
 
+function requireSelectableArchetype(archetype: string): string {
+  if (!isSelectableArchetypeId(archetype)) {
+    throw new BadRequestError(
+      `Archetype "${archetype}" is not selectable. Use GET /v1/archetypes for accepted ids.`,
+      { field: 'archetype' },
+    );
+  }
+  return archetype;
+}
+
 /**
  * Detect the Postgres unique-violation (23505) raised on the
  * `profiles_account_name_unique` index. Every profile-insert path
@@ -344,6 +359,7 @@ export class ProfilesService {
   }
 
   async create(args: CreateProfileArgs): Promise<ProfileRecord> {
+    const archetype = requireSelectableArchetype(args.archetype ?? DEFAULT_ARCHETYPE);
     const limit = profileLimitFor(args.tier);
     if (limit !== null) {
       const current = await this.repo.countByAccount(args.accountId);
@@ -389,7 +405,7 @@ export class ProfilesService {
           id: identity.id,
           accountId: args.accountId,
           name: args.name,
-          archetype: args.archetype ?? DEFAULT_ARCHETYPE,
+          archetype,
           description: args.description ?? null,
           folder: args.folder ?? null,
           tags: args.tags ?? [],
@@ -819,6 +835,7 @@ export class ProfilesService {
     payload: { name: string; archetype: string; description: string | null };
     nameOverride?: string;
   }): Promise<ProfileRecord> {
+    const archetype = requireSelectableArchetype(args.payload.archetype);
     const limit = profileLimitFor(args.tier);
     if (limit !== null) {
       const current = await this.repo.countByAccount(args.accountId);
@@ -887,7 +904,7 @@ export class ProfilesService {
           id: importIdentity.id,
           accountId: args.accountId,
           name: targetName,
-          archetype: args.payload.archetype,
+          archetype,
           description: args.payload.description,
           wrappedDek: importIdentity.wrappedDek,
         },

@@ -1329,6 +1329,31 @@ export function archetypeDisplayLabel(id: string): string {
   return ARCHETYPE_DISPLAY_LABEL[id] ?? id;
 }
 
+const SELECTABLE_ARCHETYPE_IDS = new Set(
+  ARCHETYPE_REGISTRY.filter(
+    (archetype) => archetype.status === 'launch' || archetype.status === 'available',
+  ).map((archetype) => archetype.id),
+);
+
+/** True only for customer-selectable registry entries returned by GET /v1/archetypes. */
+export function isSelectableArchetypeId(id: string): boolean {
+  return SELECTABLE_ARCHETYPE_IDS.has(id);
+}
+
+/**
+ * Direct create/import input contract. Stored resource schemas intentionally
+ * remain looser so legacy reference rows can still be read, cloned, moved and
+ * launched without rewriting their identity.
+ */
+export const SelectableArchetypeIdSchema = z
+  .string()
+  .regex(/^[a-z0-9_]+$/, { message: 'archetype slug is lowercase alphanumeric + underscores' })
+  .min(3)
+  .max(60)
+  .refine(isSelectableArchetypeId, {
+    message: 'archetype must be a selectable id returned by GET /v1/archetypes',
+  });
+
 // `gui_control` is the scope that gates the manual-control plane
 // (tap_at, type_focused, etc.) — bypasses the behavioral simulation
 // layer, only granted to keys for the self-hosted GUI workflow per

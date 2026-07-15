@@ -40,10 +40,10 @@ function read(p: string): string {
 describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
   const body = read(LIB);
 
-  it("imports: z + ApiKeyIdSchema + AccountIdSchema + Iso8601Schema + SessionEventIdSchema + SessionIdSchema from './common.js'", () => {
+  it("imports shared ids plus the registry-derived selectable archetype schema from './common.js'", () => {
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(
-      /import \{\s*\n?\s*ApiKeyIdSchema,\s*\n?\s*AccountIdSchema,\s*\n?\s*Iso8601Schema,\s*\n?\s*SessionEventIdSchema,\s*\n?\s*SessionIdSchema,\s*\n?\s*\} from '\.\/common\.js';/,
+      /import \{\s*\n?\s*ApiKeyIdSchema,\s*\n?\s*AccountIdSchema,\s*\n?\s*Iso8601Schema,\s*\n?\s*SelectableArchetypeIdSchema,\s*\n?\s*SessionEventIdSchema,\s*\n?\s*SessionIdSchema,\s*\n?\s*\} from '\.\/common\.js';/,
     );
   });
 
@@ -102,9 +102,9 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
-  it('CreateSessionRequest: archetype optional + V-169 purpose optional + label max 120 optional + metadata optional + 2026-05-20 profile_id optional (antidetect-browser profile binding; accepts prof_<uuid> or bare uuid, server normalizes; cross-account 404 anti-enumeration) + 2026-06-05 behavioral_profile optional (per-session persona)', () => {
+  it('CreateSessionRequest: selectable archetype optional + purpose/label/metadata/profile/persona fields', () => {
     expect(body).toMatch(
-      /export const CreateSessionRequestSchema = z\.object\(\{\s*\n?\s*archetype: ArchetypeSchema\.optional\(\),\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema\.optional\(\),\s*\n?\s*label: z\.string\(\)\.max\(120\)\.optional\(\),\s*\n?\s*metadata: SessionMetadataSchema\.optional\(\),\s*\n?\s*[\s\S]*?profile_id: z\.string\(\)\.optional\(\),\s*\n?\s*[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\n?\s*\}\);/,
+      /export const CreateSessionRequestSchema = z\.object\(\{\s*\n?\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema\.optional\(\),\s*\n?\s*label: z\.string\(\)\.max\(120\)\.optional\(\),\s*\n?\s*metadata: SessionMetadataSchema\.optional\(\),\s*\n?\s*[\s\S]*?profile_id: z\.string\(\)\.optional\(\),\s*\n?\s*[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\n?\s*\}\);/,
     );
     // 2026-05-20 anti-enumeration framing pinned
     expect(body).toMatch(/cross-account profile_id returns/);

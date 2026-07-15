@@ -6,7 +6,7 @@
 // browser state lives in the WebKit driver layer.
 
 import { z } from 'zod';
-import { Iso8601Schema, PrefixedId } from './common.js';
+import { Iso8601Schema, PrefixedId, SelectableArchetypeIdSchema } from './common.js';
 import { OpenVpnProxyConfigSchema, WireGuardProxyConfigSchema } from './egress.js';
 
 export const ProfileIdSchema = PrefixedId('prof');
@@ -244,10 +244,10 @@ export const CreateProfileRequestSchema = z.object({
   /**
    * Archetype slug — defaults to `LOCKED_ARCHETYPE_ID`
    * (`iphone17_ios18_7_safari26_4`) server-side if omitted.
-   * Customers may pin a profile to an older archetype for
-   * behavioural-stability reasons.
+   * Customers may select any older archetype the live catalog still marks
+   * available for behavioural-stability reasons.
    */
-  archetype: z.string().min(1).max(120).optional(),
+  archetype: SelectableArchetypeIdSchema.optional(),
   description: z.string().max(2048).optional(),
   folder: ProfileFolderSchema.optional(),
   tags: ProfileTagsSchema.optional(),
@@ -330,13 +330,13 @@ export type ListProfilesResponse = z.infer<typeof ListProfilesResponseSchema>;
 export const PROFILE_EXPORT_ENVELOPE_VERSION = 1 as const;
 
 // Import re-validates these with the SAME bounds the create path enforces
-// (ProfileNameSchema, archetype <=120, description <=2048) — a hand-crafted
+// (ProfileNameSchema, selectable archetype, description <=2048) — a hand-crafted
 // import envelope must not store name/archetype/description that POST /v1/profiles
-// would reject. Round-trip-safe: an exported payload came from the bounded create
-// path, so it always re-validates on import.
+// would reject. Exports of retained legacy profiles remain readable, but import
+// deliberately refuses them after their pinned id leaves the selectable catalog.
 const ProfileExportPayloadSchema = z.object({
   name: ProfileNameSchema,
-  archetype: z.string().min(1).max(120),
+  archetype: SelectableArchetypeIdSchema,
   description: z.string().max(2048).nullable(),
 });
 export type ProfileExportPayload = z.infer<typeof ProfileExportPayloadSchema>;

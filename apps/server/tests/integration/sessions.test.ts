@@ -99,6 +99,39 @@ describe('POST /v1/sessions', () => {
     expect(body.type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
 
+  it('400 rejects a well-formed but unknown archetype before creating a session row', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { archetype: 'unknown_ios18_7_safari26_4' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<Record<string, unknown>>().type).toBe(PROBLEM_TYPES.ValidationFailed);
+    expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
+  });
+
+  it('201 preserves a reference archetype inherited from an existing legacy profile', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = '11111111-1111-4111-8111-111111111111';
+    await fx.profilesRepo.insert({
+      id: profileId,
+      accountId: fx.accountId,
+      name: 'legacy-reference',
+      archetype: 'iphone15pro_ios17_5_safari17_5',
+      description: null,
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { profile_id: `prof_${profileId}` },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json<Record<string, unknown>>().archetype).toBe('iphone15pro_ios17_5_safari17_5');
+  });
+
   it('201 accepts metadata at the exact 8 KiB serialized ASCII boundary', async () => {
     fx = await buildTestApp();
     const overheadBytes = new TextEncoder().encode(JSON.stringify({ note: '' })).byteLength;

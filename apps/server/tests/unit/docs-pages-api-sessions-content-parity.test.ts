@@ -96,6 +96,18 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
+  it('direct archetype creates use the live selectable catalog while stored profile launches preserve compatibility', () => {
+    const p = read(PAGE);
+
+    expect(p).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
+    expect(p).toMatch(
+      /Unknown, reference-only, and\s*\n?planned ids return `400 ValidationFailed` on the `archetype` field before the\s*\n?server creates a session row or asks the driver to allocate a browser\./,
+    );
+    expect(p).toMatch(
+      /Profile-backed launches inherit the already-stored profile archetype\.[\s\S]*?existing profile remains launchable if its pinned id is\s*\n?no longer offered for new direct creates\./,
+    );
+  });
+
   it('CRITICAL label-max-120-char + metadata-arbitrary-JSON framing pinned. Drift to different field bounds would diverge from server validation.', () => {
     const p = read(PAGE);
 

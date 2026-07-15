@@ -13,6 +13,7 @@ import {
   MAX_SESSION_MINUTES_PER_TIER,
   PROFILES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
+  isSelectableArchetypeId,
   type AccountTier,
   type CaptureKind,
   type CaptureRequest,
@@ -357,7 +358,12 @@ export class SessionsService {
   async create(
     ctx: AccountContext,
     body: CreateSessionRequest,
-    opts: { effectiveAccountId?: string; effectiveTier?: AccountTier } = {},
+    opts: {
+      effectiveAccountId?: string;
+      effectiveTier?: AccountTier;
+      /** Internal: the route resolved this value from an existing owned profile row. */
+      inheritedProfileArchetype?: boolean;
+    } = {},
   ): Promise<SessionRecord> {
     // V-326e1 — when effectiveAccountId is set (route layer resolved
     // X-Driftstack-Account + verified the caller has 'admin' role on
@@ -370,6 +376,12 @@ export class SessionsService {
     const limit = concurrentSessionLimitFor(tier);
 
     const archetype = body.archetype ?? LOCKED_ARCHETYPE_ID;
+    if (!opts.inheritedProfileArchetype && !isSelectableArchetypeId(archetype)) {
+      throw new BadRequestError(
+        `Archetype "${archetype}" is not selectable. Use GET /v1/archetypes for accepted ids.`,
+        { field: 'archetype' },
+      );
+    }
     const purpose: SessionPurpose = body.purpose ?? DEFAULT_SESSION_PURPOSE;
     // 2026-06-05 — behavioural persona, defaulted at the service like purpose
     // (the harness always gets a persona). Passed to the driver create-input;

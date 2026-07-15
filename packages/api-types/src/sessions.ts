@@ -3,6 +3,7 @@ import {
   ApiKeyIdSchema,
   AccountIdSchema,
   Iso8601Schema,
+  SelectableArchetypeIdSchema,
   SessionEventIdSchema,
   SessionIdSchema,
 } from './common.js';
@@ -126,7 +127,7 @@ export type Session = z.infer<typeof SessionSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 export const CreateSessionRequestSchema = z.object({
-  archetype: ArchetypeSchema.optional(),
+  archetype: SelectableArchetypeIdSchema.optional(),
   /** V-169 — harness purpose; defaults to `production_customer`. */
   purpose: SessionPurposeSchema.optional(),
   label: z.string().max(120).optional(),

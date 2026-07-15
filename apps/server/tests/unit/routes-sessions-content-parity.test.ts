@@ -126,9 +126,22 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     // references ownerAccountId + ownerTier (the owner lookup moved ahead of
     // the binding).
     expect(body).toMatch(
-      /created = await service\.create\(ctx, bodyWithProfile, \{\s*\n?\s*effectiveAccountId: ownerAccountId,\s*\n?\s*effectiveTier: ownerTier,\s*\n?\s*\}\);/,
+      /created = await service\.create\(ctx, bodyWithProfile, \{\s*\n?\s*effectiveAccountId: ownerAccountId,\s*\n?\s*effectiveTier: ownerTier,\s*\n?\s*\.\.\.\(profileBinding !== null \? \{ inheritedProfileArchetype: true \} : \{\}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/return reply\.code\(201\)\.send\(publicSession\(created\)\);/);
+  });
+
+  it('profile-backed creates explicitly preserve stored legacy archetypes while direct creates stay registry-gated', () => {
+    expect(body).toContain(
+      '...(profileBinding !== null ? { inheritedProfileArchetype: true } : {}),',
+    );
+    expect(body).toContain('profileBinding !== null ? { inheritedProfileArchetype: true } : {},');
+    expect(body).toMatch(
+      /created = await service\.create\(ctx, body, \{\s*effectiveAccountId: ownerAccountId,\s*effectiveTier: ownerTier,\s*inheritedProfileArchetype: true,\s*\}\);/,
+    );
+    expect(body).toContain(
+      'created = await service.create(ctx, body, { inheritedProfileArchetype: true });',
+    );
   });
 
   it('V-326d GET /v1/sessions framing pinned: honors X-Driftstack-Account — team member with valid membership sees owner sessions; without header behaves identically to pre-V-326d; response data + has_more (nextCursor !== null) + next_cursor', () => {

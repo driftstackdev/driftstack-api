@@ -46,9 +46,11 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
     );
   });
 
-  it("imports: z + Iso8601Schema + PrefixedId from './common.js'; ProfileId = PrefixedId('prof')", () => {
+  it("imports common schemas including SelectableArchetypeIdSchema; ProfileId = PrefixedId('prof')", () => {
     expect(body).toMatch(/import \{ z \} from 'zod';/);
-    expect(body).toMatch(/import \{ Iso8601Schema, PrefixedId \} from '\.\/common\.js';/);
+    expect(body).toMatch(
+      /import \{ Iso8601Schema, PrefixedId, SelectableArchetypeIdSchema \} from '\.\/common\.js';/,
+    );
     expect(body).toMatch(/export const ProfileIdSchema = PrefixedId\('prof'\);/);
     expect(body).toMatch(/export type ProfileId = z\.infer<typeof ProfileIdSchema>;/);
   });
@@ -85,14 +87,14 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
     expect(body).toContain('tags must be unique');
   });
 
-  it('CreateProfileRequest: name + optional archetype 1..120 (defaults to LOCKED_ARCHETYPE_ID iphone17_ios18_7_safari26_4 server-side; behavioural-stability pin rationale) + optional description max 2048', () => {
+  it('CreateProfileRequest: name + optional selectable archetype (default server-side) + optional description', () => {
     expect(body).toMatch(
-      /\*\s*Archetype slug — defaults to `LOCKED_ARCHETYPE_ID`\s*\n?\s*\*\s*\(`iphone17_ios18_7_safari26_4`\) server-side if omitted\.\s*\n?\s*\*\s*Customers may pin a profile to an older archetype for\s*\n?\s*\*\s*behavioural-stability reasons\./,
+      /\*\s*Archetype slug — defaults to `LOCKED_ARCHETYPE_ID`\s*\n?\s*\*\s*\(`iphone17_ios18_7_safari26_4`\) server-side if omitted\.\s*\n?\s*\*\s*Customers may select any older archetype the live catalog still marks\s*\n?\s*\*\s*available for behavioural-stability reasons\./,
     );
     expect(body).toMatch(
       /export const CreateProfileRequestSchema = z\.object\(\{\s*\n?\s*name: ProfileNameSchema,/,
     );
-    expect(body).toMatch(/archetype: z\.string\(\)\.min\(1\)\.max\(120\)\.optional\(\),/);
+    expect(body).toMatch(/archetype: SelectableArchetypeIdSchema\.optional\(\),/);
     expect(body).toMatch(/description: z\.string\(\)\.max\(2048\)\.optional\(\),/);
   });
 
@@ -145,9 +147,9 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
     expect(body).toMatch(/export const PROFILE_EXPORT_ENVELOPE_VERSION = 1 as const;/);
   });
 
-  it('ProfileExportEnvelope: version literal(1) + exported_at + source_profile_id + source_account_id (transfer between accounts permitted) + profile payload bounded same as create (ProfileNameSchema / archetype ≤120 / description ≤2048 — import must not bypass create bounds)', () => {
+  it('ProfileExportEnvelope: version/source lineage + payload uses the create-time selectable archetype contract', () => {
     expect(body).toMatch(
-      /const ProfileExportPayloadSchema = z\.object\(\{\s*\n?\s*name: ProfileNameSchema,\s*\n?\s*archetype: z\.string\(\)\.min\(1\)\.max\(120\),\s*\n?\s*description: z\.string\(\)\.max\(2048\)\.nullable\(\),\s*\n?\s*\}\);/,
+      /const ProfileExportPayloadSchema = z\.object\(\{\s*\n?\s*name: ProfileNameSchema,\s*\n?\s*archetype: SelectableArchetypeIdSchema,\s*\n?\s*description: z\.string\(\)\.max\(2048\)\.nullable\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export const ProfileExportEnvelopeSchema = z\.object\(\{\s*\n?\s*version: z\.literal\(PROFILE_EXPORT_ENVELOPE_VERSION\),\s*\n?\s*exported_at: Iso8601Schema,/,

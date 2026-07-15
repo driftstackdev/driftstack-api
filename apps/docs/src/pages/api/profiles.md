@@ -62,10 +62,11 @@ The cap on enterprise tier is negotiated; the API returns
   allowed inner characters are letters, digits, spaces, underscore,
   hyphen, and dot. Leading/trailing whitespace is trimmed.
 - `archetype` — the pinned device + OS + Safari version triple. New
-  profiles default to `iphone17_ios18_7_safari26_4`. You can
-  pin to an older archetype for behavioural-stability reasons (e.g.
-  hold a profile on iOS 17 while you migrate). Once set, the
-  archetype is sticky for that profile's lifetime.
+  profiles default to `iphone17_ios18_7_safari26_4`. When supplied,
+  the id must be present in the current
+  [`GET /v1/archetypes`](/api/archetypes/) response; this includes any
+  older combination the platform still marks `available`. Once set,
+  the archetype is sticky for that profile's lifetime.
 - `description` — free-form, max 2048 chars; nullable.
 - `folder` — optional organising folder name; `null` when the profile
   isn't filed under a folder.
@@ -94,10 +95,16 @@ The cap on enterprise tier is negotiated; the API returns
 profile (200, not 201 — the API surface uses 200 for both
 idempotent and one-shot resource creation).
 
+Use `GET /v1/archetypes` to generate the request from the live selectable
+catalog. A well-formed unknown, reference-only, or planned id is rejected before
+the profile repository is read or written. Omitting the field selects the
+catalog's `default_archetype_id`.
+
 Errors:
 
 - `400 ValidationFailed` — invalid name shape, missing required
-  field, or `description` over 2048 chars.
+  field, `description` over 2048 chars, or an `archetype` absent from the live
+  selectable catalog.
 - `409 Conflict` — `name` already exists in this account.
 - `429 TierLimit` — account at the profile cap. Body extension:
   `{limit, current, resource: "profile", tier}`.
@@ -275,6 +282,11 @@ the source profile is left intact, and you move the JSON yourself
 travels — `name`, `archetype`, `description`. Underlying browser
 state is not in the envelope.
 
+Import is a new-profile write, so `envelope.profile.archetype` must be present
+in the current selectable catalog. An export of an older retained profile still
+succeeds, but importing that envelope returns `400 ValidationFailed` if its
+pinned id is no longer selectable.
+
 ## Export
 
 `GET /v1/profiles/:id/export`
@@ -320,7 +332,8 @@ teammates).
 
 Errors:
 
-- `400 ValidationFailed` — the envelope is malformed or not a v1 shape.
+- `400 ValidationFailed` — the envelope is malformed, is not a v1 shape, or
+  carries an archetype absent from the live selectable catalog.
 - `409 Conflict` — `name` (or `name_override`) already exists.
 - `429 TierLimit` — importing would exceed your tier's profile cap.
 
@@ -394,6 +407,14 @@ they sit until you delete them. Deleting the parent profile sets
 the snapshot's `parent_profile_id` to `null` but does NOT delete
 the snapshot — the captured `parent_archetype` + `parent_name` +
 description remain restorable.
+
+## Stored-archetype compatibility
+
+Catalog restrictions apply to new direct session/profile creates and profile
+imports. Existing profiles preserve their stored archetype even after it leaves
+the selectable catalog. They remain listable, readable, clonable, transferable,
+snapshot-restorable, and launchable; these compatibility operations do not
+silently rewrite the pinned browser identity.
 
 ## Delete (recycle bin)
 

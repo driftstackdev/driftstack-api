@@ -75,8 +75,11 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     expect(body).toContain("| 'profile.imported'");
   });
 
-  it("create: profileLimitFor tier-cap; TierLimitError with limit+current+resource:'profile'+tier; ConflictError on duplicate name; DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID", () => {
+  it("create: registry-selectable archetype validation precedes repo access; profileLimitFor tier-cap; TierLimitError with limit+current+resource:'profile'+tier; ConflictError on duplicate name; DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID", () => {
     expect(body).toMatch(/const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;/);
+    expect(body).toMatch(
+      /async create\(args: CreateProfileArgs\): Promise<ProfileRecord> \{\s*\n?\s*const archetype = requireSelectableArchetype\(args\.archetype \?\? DEFAULT_ARCHETYPE\);\s*\n?\s*const limit = profileLimitFor\(args\.tier\);/,
+    );
     expect(body).toMatch(
       /const limit = profileLimitFor\(args\.tier\);\s*\n?\s*if \(limit !== null\) \{\s*\n?\s*const current = await this\.repo\.countByAccount\(args\.accountId\);\s*\n?\s*if \(current >= limit\) \{\s*\n?\s*throw new TierLimitError\(/,
     );
@@ -86,7 +89,7 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     expect(body).toMatch(
       /if \(existing !== null\) \{\s*\n?\s*throw new ConflictError\(`Profile name "\$\{args\.name\}" already exists in this account\.`, \{\s*\n?\s*resource: 'profile',\s*\n?\s*field: 'name',\s*\n?\s*\}\);/,
     );
-    expect(body).toMatch(/archetype: args\.archetype \?\? DEFAULT_ARCHETYPE,/);
+    expect(body).toMatch(/archetype,/);
   });
 
   it('stateful create/clone/import/transfer preallocate the profile UUID before wrapping and ordinary reads unwrap under the exact account+profile tuple', () => {
@@ -218,14 +221,14 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     expect(body).toMatch(/\/\*\* Page size, 1-100\. Default 50\. \*\/\s*\n?\s*limit\?: number;/);
   });
 
-  it('imports: LOCKED_ARCHETYPE_ID + AccountTier + ConflictError + NotFoundError + StorageQuotaExceededError + TierLimitError + profileLimitFor + computeAccountStorageState + AccountAuditService', () => {
+  it('imports: selectable-archetype predicate + LOCKED_ARCHETYPE_ID + AccountTier + BadRequest/Conflict/NotFound/StorageQuota/TierLimit errors + profileLimitFor + computeAccountStorageState + AccountAuditService', () => {
     expect(body).toMatch(
-      /import \{ LOCKED_ARCHETYPE_ID, type AccountTier \} from '@driftstack\/api-types';/,
+      /import \{\s*\n?\s*LOCKED_ARCHETYPE_ID,\s*\n?\s*isSelectableArchetypeId,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     // doc-150 item 6 — StorageQuotaExceededError joined the errors import (now
     // multi-line) + the pure quota helper is imported for the launch gate.
     expect(body).toMatch(
-      /import \{\s*\n?\s*ConflictError,\s*\n?\s*NotFoundError,\s*\n?\s*StorageQuotaExceededError,\s*\n?\s*TierLimitError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*\n?\s*BadRequestError,\s*\n?\s*ConflictError,\s*\n?\s*NotFoundError,\s*\n?\s*StorageQuotaExceededError,\s*\n?\s*TierLimitError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(/import \{ profileLimitFor \} from '\.\/sessions\.js';/);
     expect(body).toMatch(/computeAccountStorageState/);

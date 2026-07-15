@@ -27,6 +27,7 @@ import {
 import type { AccountAuditService } from '../../src/services/account-audit.js';
 import type { R2 } from '../../src/lib/r2.js';
 import {
+  BadRequestError,
   ConflictError,
   NotFoundError,
   StorageQuotaExceededError,
@@ -38,6 +39,7 @@ import { mintWrappedProfileDek, unwrapProfileDek } from '../../src/lib/profile-k
 const CRYPTO_ACCOUNT_A = '11111111-1111-4111-8111-111111111111';
 const CRYPTO_ACCOUNT_B = '22222222-2222-4222-8222-222222222222';
 const CRYPTO_PROFILE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const SELECTABLE_ARCHETYPE = 'iphone17_ios18_7_safari26_4';
 
 function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
   return {
@@ -232,6 +234,20 @@ function nameRace23505(): Error {
 }
 
 describe('V-553.B-21 ProfilesService.create', () => {
+  it('rejects a non-selectable archetype before any repository read or write', async () => {
+    const { repo } = makeRepo();
+    repo.countByAccount = () => Promise.reject(new Error('repository must not be called'));
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.create({
+        accountId: 'acc_1',
+        tier: SOLO,
+        name: 'invalid',
+        archetype: 'unknown_ios18_7_safari26_4',
+      }),
+    ).rejects.toThrow(BadRequestError);
+  });
+
   it('throws TierLimitError when at the tier cap', async () => {
     const { repo } = makeRepo([], { countOverride: 1_000_000 });
     const svc = new ProfilesService(repo);
@@ -358,11 +374,11 @@ describe('V-553.B-21 ProfilesService.create', () => {
       accountId: 'acc_1',
       tier: TEAM,
       name: 'fresh',
-      archetype: 'mobile_ios',
+      archetype: SELECTABLE_ARCHETYPE,
       description: 'first one',
     });
     expect(row.name).toBe('fresh');
-    expect(row.archetype).toBe('mobile_ios');
+    expect(row.archetype).toBe(SELECTABLE_ARCHETYPE);
     expect(state.rows).toHaveLength(1);
     expect(calls[0]?.action).toBe('profile.created');
   });
@@ -560,6 +576,25 @@ describe('V-553.B-21 ProfilesService.exportProfile', () => {
 });
 
 describe('V-553.B-21 ProfilesService.importProfile', () => {
+  it('rejects a reference/non-selectable archetype before quota or repository work', async () => {
+    const { repo } = makeRepo();
+    repo.countByAccount = () => Promise.reject(new Error('repository must not be called'));
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.importProfile({
+        accountId: 'acc_1',
+        tier: SOLO,
+        sourceProfileId: 'prof_source',
+        sourceAccountId: 'acc_source',
+        payload: {
+          name: 'legacy',
+          archetype: 'iphone15pro_ios17_5_safari17_5',
+          description: null,
+        },
+      }),
+    ).rejects.toThrow(BadRequestError);
+  });
+
   it('throws TierLimitError when at cap', async () => {
     const { repo } = makeRepo([], { countOverride: 1_000_000 });
     const svc = new ProfilesService(repo);
@@ -569,7 +604,7 @@ describe('V-553.B-21 ProfilesService.importProfile', () => {
         tier: SOLO,
         sourceProfileId: 'p_src',
         sourceAccountId: 'acc_src',
-        payload: { name: 'imported', archetype: 'default', description: null },
+        payload: { name: 'imported', archetype: SELECTABLE_ARCHETYPE, description: null },
       }),
     ).rejects.toThrow(TierLimitError);
   });
@@ -583,7 +618,7 @@ describe('V-553.B-21 ProfilesService.importProfile', () => {
         tier: TEAM,
         sourceProfileId: 'p_src',
         sourceAccountId: 'acc_src',
-        payload: { name: 'imported', archetype: 'default', description: null },
+        payload: { name: 'imported', archetype: SELECTABLE_ARCHETYPE, description: null },
       }),
     ).rejects.toThrow(ConflictError);
   });
@@ -597,7 +632,7 @@ describe('V-553.B-21 ProfilesService.importProfile', () => {
       tier: TEAM,
       sourceProfileId: 'p_src',
       sourceAccountId: 'acc_src',
-      payload: { name: 'imported', archetype: 'mobile_ios', description: 'note' },
+      payload: { name: 'imported', archetype: SELECTABLE_ARCHETYPE, description: 'note' },
       nameOverride: 'imported-renamed',
     });
     expect(row.name).toBe('imported-renamed');
@@ -618,7 +653,7 @@ describe('V-553.B-21 ProfilesService.importProfile', () => {
         tier: TEAM,
         sourceProfileId: 'p_src',
         sourceAccountId: 'acc_src',
-        payload: { name: 'fresh', archetype: 'default', description: null },
+        payload: { name: 'fresh', archetype: SELECTABLE_ARCHETYPE, description: null },
       }),
     ).rejects.toThrow(ConflictError);
   });
@@ -686,7 +721,7 @@ describe('ProfilesService DEK mint on clone/import/transfer (file 57)', () => {
       tier: TEAM,
       sourceProfileId: 'p_src',
       sourceAccountId: 'acc_src',
-      payload: { name: 'imported', archetype: 'default', description: null },
+      payload: { name: 'imported', archetype: SELECTABLE_ARCHETYPE, description: null },
     });
     expect(typeof cap.get()?.wrappedDek).toBe('string');
     const profileId = cap.get()?.id ?? '';
@@ -733,7 +768,7 @@ describe('ProfilesService DEK mint on clone/import/transfer (file 57)', () => {
         tier: TEAM,
         sourceProfileId: 'p_src',
         sourceAccountId: 'acc_src',
-        payload: { name: 'imported', archetype: 'default', description: null },
+        payload: { name: 'imported', archetype: SELECTABLE_ARCHETYPE, description: null },
       });
       expect(cap.get()?.wrappedDek).toBeUndefined();
     }

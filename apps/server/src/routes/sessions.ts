@@ -270,9 +270,14 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         created = await service.create(ctx, bodyWithProfile, {
           effectiveAccountId: ownerAccountId,
           effectiveTier: ownerTier,
+          ...(profileBinding !== null ? { inheritedProfileArchetype: true } : {}),
         });
       } else {
-        created = await service.create(ctx, bodyWithProfile);
+        created = await service.create(
+          ctx,
+          bodyWithProfile,
+          profileBinding !== null ? { inheritedProfileArchetype: true } : {},
+        );
       }
       // Fire-and-forget touch on the profile — if it fails the customer
       // still gets their session (the binding is recorded in metadata).
@@ -363,9 +368,10 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         created = await service.create(ctx, body, {
           effectiveAccountId: ownerAccountId,
           effectiveTier: ownerTier,
+          inheritedProfileArchetype: true,
         });
       } else {
-        created = await service.create(ctx, body);
+        created = await service.create(ctx, body, { inheritedProfileArchetype: true });
       }
       if (profilesService) {
         void profilesService
