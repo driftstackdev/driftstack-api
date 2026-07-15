@@ -24,21 +24,36 @@ const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftsta
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 
 let dbReachable = false;
+let admin: ReturnType<typeof postgres> | null = null;
 let client: ReturnType<typeof postgres> | null = null;
-const seeded: Array<{ accountId: string; webhookId: string }> = [];
+const TEST_SCHEMA = `webhook_claim_reclaim_${randomUUID().replaceAll('-', '')}`;
 
 beforeAll(async () => {
-  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  admin = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
-    await probe`SELECT 1`;
+    await admin`SELECT 1`;
     dbReachable = true;
-    await probe.end({ timeout: 1 });
   } catch {
-    await probe.end({ timeout: 1 }).catch(() => {});
+    await admin.end({ timeout: 1 }).catch(() => {});
+    admin = null;
     return;
+  }
+  await admin.unsafe(`CREATE SCHEMA "${TEST_SCHEMA}"`);
+  for (const table of [
+    'accounts',
+    'webhook_endpoints',
+    'webhook_deliveries',
+    'webhook_delivery_attempts',
+  ]) {
+    await admin.unsafe(
+      `CREATE TABLE "${TEST_SCHEMA}"."${table}" (LIKE public."${table}" INCLUDING ALL)`,
+    );
   }
   client = postgres(DB_URL, { max: 1 });
   try {
+    await client.unsafe(`SET search_path TO "${TEST_SCHEMA}", public`);
+    const [current] = await client<Array<{ value: string }>>`SELECT current_schema() AS value`;
+    expect(current?.value).toBe(TEST_SCHEMA);
     await client`SELECT 1 FROM webhook_deliveries LIMIT 0`;
   } catch {
     dbReachable = false;
@@ -48,13 +63,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (client) {
-    for (const { accountId, webhookId } of seeded) {
-      await client`DELETE FROM webhook_deliveries WHERE webhook_id = ${webhookId}`.catch(() => {});
-      await client`DELETE FROM webhook_endpoints WHERE id = ${webhookId}`.catch(() => {});
-      await client`DELETE FROM accounts WHERE id = ${accountId}`.catch(() => {});
-    }
-    await client.end({ timeout: 5 });
+  if (client) await client.end({ timeout: 5 });
+  if (admin) {
+    await admin.unsafe(`DROP SCHEMA IF EXISTS "${TEST_SCHEMA}" CASCADE`).catch(() => {});
+    await admin.end({ timeout: 5 });
   }
 });
 
@@ -73,7 +85,6 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
       const accountId = randomUUID();
       const webhookId = randomUUID();
-      seeded.push({ accountId, webhookId });
       await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`reclaim-${accountId}@test.local`})`;
       await client`INSERT INTO webhook_endpoints (id, account_id, url, secret, secret_prefix, events)
         VALUES (${webhookId}, ${accountId}, 'https://example.test/hook', 'whsec_test_secret', 'whsec_test',
