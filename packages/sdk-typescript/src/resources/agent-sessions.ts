@@ -511,15 +511,14 @@ export class AgentSessionsResource {
    * DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
    * through the schema unchanged but the harness decoder drops them.
    *
-   * Pre-harness (today): server returns 503 FeatureUnavailable
-   * — the Mac fleet harness Swift work is on the Agent 1 roadmap
-   * post §10/§11+EG-WK close (6-9 weeks dedicated per the Tier-3
-   * Option A verdict 2026-05-19). The SDK surface ships so dashboard
-   * + e2e tests compile against the stable contract.
+   * Live deployments forward accepted events to the active fleet
+   * harness. A deployment without a compatible harness returns
+   * `FeatureUnavailableError` (503).
    *
    * Throws `ConflictError` (409) if the session is not 'active' OR
    * is in mode='ai' (input-event requires manual or pair mode).
-   * Throws `FeatureUnavailableError` (503) pre-harness.
+   * Throws `FeatureUnavailableError` (503) when input forwarding is
+   * unavailable on the selected deployment.
    */
   sendInputEvent(
     id: string,

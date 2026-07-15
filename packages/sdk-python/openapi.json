@@ -10065,7 +10065,7 @@
             }
           },
           "503": {
-            "description": "BYOK Anthropic key storage not yet enabled on this deployment.",
+            "description": "BYOK Anthropic key storage is unavailable on deployments without the required encryption-key configuration.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18401,7 +18401,7 @@
             }
           },
           "503": {
-            "description": "Egress backend not yet wired on this deployment.",
+            "description": "No compatible egress backend is available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18520,7 +18520,7 @@
             }
           },
           "503": {
-            "description": "Egress backend not yet wired on this deployment.",
+            "description": "No compatible egress backend is available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29750,8 +29750,9 @@
                   },
                   "archetype": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 120
+                    "minLength": 3,
+                    "maxLength": 60,
+                    "pattern": "^[a-z0-9_]+$"
                   },
                   "description": {
                     "type": "string",
@@ -31262,8 +31263,9 @@
                         },
                         "archetype": {
                           "type": "string",
-                          "minLength": 1,
-                          "maxLength": 120
+                          "minLength": 3,
+                          "maxLength": 60,
+                          "pattern": "^[a-z0-9_]+$"
                         },
                         "description": {
                           "type": ["string", "null"],
@@ -31383,8 +31385,9 @@
                           },
                           "archetype": {
                             "type": "string",
-                            "minLength": 1,
-                            "maxLength": 120
+                            "minLength": 3,
+                            "maxLength": 60,
+                            "pattern": "^[a-z0-9_]+$"
                           },
                           "description": {
                             "type": ["string", "null"],

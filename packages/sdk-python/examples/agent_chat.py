@@ -81,8 +81,8 @@ def main() -> int:
         print("Closed.")
     except FeatureUnavailableError as e:
         print(
-            f"Agent chat not yet enabled on this deployment: {e}\n"
-            "Pre-launch posture; comes online when the LLM key path wires up.",
+            f"Agent chat is unavailable on this deployment: {e}\n"
+            "Use a deployment with bundled Anthropic access or provide a valid BYOK Anthropic key.",
             file=sys.stderr,
         )
         return 2

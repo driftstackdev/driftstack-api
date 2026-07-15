@@ -1581,7 +1581,8 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description: 'BYOK Anthropic key storage not yet enabled on this deployment.',
+        description:
+          'BYOK Anthropic key storage is unavailable on deployments without the required encryption-key configuration.',
         content: problemContent,
       },
     },
@@ -3628,10 +3629,9 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // ── EG-API-1.2 + 1.3 — customer-configurable egress (planning 133) ──────
-  // All four routes register as 503 FeatureUnavailable stubs until the
-  // EG-API-1.6 propagation slice lands a concrete SOCKS5 backend; the
-  // OpenAPI spec describes the wired-backend behavior so SDK consumers
-  // can generate the right client surface ahead of time.
+  // These routes use the configured SOCKS5/OpenVPN/WireGuard backend.
+  // Deployments without a compatible backend return FeatureUnavailable;
+  // the public request and response contract is otherwise identical.
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions/{id}/proxy',
@@ -3659,7 +3659,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description: 'Egress backend not yet wired on this deployment.',
+        description: 'No compatible egress backend is available on this deployment.',
         content: problemContent,
       },
     },
@@ -3692,7 +3692,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description: 'Egress backend not yet wired on this deployment.',
+        description: 'No compatible egress backend is available on this deployment.',
         content: problemContent,
       },
     },
@@ -3703,10 +3703,9 @@ function buildRegistry(): OpenAPIRegistry {
   // routes stay mounted but undocumented until a follow-up retires them.
 
   // ── AI-D — agent chat sessions ──────────────────────────────────
-  // All four routes register as 503 FeatureUnavailable stubs until the
-  // LLM key path is enabled on the deployment; the OpenAPI spec
-  // describes the wired-runtime behavior so SDK consumers compile
-  // ahead of time.
+  // Agent-chat routes use bundled Anthropic credentials or an explicit
+  // customer BYOK key. Deployments with neither path configured return
+  // FeatureUnavailable while preserving this public contract.
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions',

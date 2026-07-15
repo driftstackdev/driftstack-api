@@ -93,8 +93,8 @@ def main() -> int:
         print(f"Session proxy summary: {read}")
     except FeatureUnavailableError as e:
         print(
-            f"Egress not yet enabled on this deployment: {e}\n"
-            "Pre-launch posture; comes online when the SOCKS5 backend wires up.",
+            f"SOCKS5 egress is unavailable on this deployment: {e}\n"
+            "Use a deployment with SOCKS5 egress support or choose another supported proxy scheme.",
             file=sys.stderr,
         )
         return 2

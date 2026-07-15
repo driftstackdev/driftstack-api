@@ -4,9 +4,9 @@ Two parallel classes — :class:`Driftstack` (sync, ``httpx.Client``)
 and :class:`AsyncDriftstack` (async, ``httpx.AsyncClient``). Mirrors
 the pattern used by Stripe-Python, OpenAI-Python, Anthropic-Python.
 
-Resource accessors are placeholders in this commit — full
-implementations land in PY2. The constructor + auth + transport
-plumbing is covered by the smoke tests in this commit.
+Every accessor below is backed by its synchronous and asynchronous
+resource implementation. Constructor, authentication, transport and
+resource behavior are covered by the SDK test suite.
 """
 
 from __future__ import annotations

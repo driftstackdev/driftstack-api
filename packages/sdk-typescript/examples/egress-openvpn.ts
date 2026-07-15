@@ -97,8 +97,8 @@ async function main(): Promise<void> {
     }
     if (err instanceof FeatureUnavailableError) {
       console.error(
-        `Egress not yet enabled on this deployment: ${err.message}\n` +
-          'Pre-launch posture; comes online when the OpenVPN VM harness ships.',
+        `OpenVPN egress is unavailable on this deployment: ${err.message}\n` +
+          'Use a deployment with OpenVPN support or choose another supported proxy scheme.',
       );
       process.exit(2);
     }

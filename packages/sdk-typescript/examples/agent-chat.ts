@@ -83,7 +83,7 @@ async function main(): Promise<void> {
   } catch (err) {
     if (err instanceof FeatureUnavailableError) {
       console.error(
-        `Agent chat not yet enabled on this deployment: ${err.message}\nPre-launch posture; comes online when the LLM key path wires up.`,
+        `Agent chat is unavailable on this deployment: ${err.message}\nUse a deployment with bundled Anthropic access or provide a valid BYOK Anthropic key.`,
       );
       process.exit(2);
     }

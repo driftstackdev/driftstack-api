@@ -56,7 +56,7 @@ func main() {
 	}, nil)
 	if err != nil {
 		if errors.Is(err, driftstack.ErrFeatureUnavailable) {
-			fmt.Fprintf(os.Stderr, "Agent chat not yet enabled on this deployment: %v\nPre-launch posture; comes online when the LLM key path wires up.\n", err)
+			fmt.Fprintf(os.Stderr, "Agent chat is unavailable on this deployment: %v\nUse a deployment with bundled Anthropic access or provide a valid BYOK Anthropic key.\n", err)
 			os.Exit(2)
 		}
 		log.Fatalf("Create: %v", err)

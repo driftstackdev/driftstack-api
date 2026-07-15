@@ -425,15 +425,14 @@ type SendInputEventResponse struct {
 // names (Shift / Control / Alt / Meta) round-trip through the
 // schema unchanged but the harness decoder drops them.
 //
-// Pre-harness (today): server returns 503 FeatureUnavailable —
-// the Mac fleet harness Swift work is on the Agent 1 roadmap
-// post §10/§11+EG-WK close (6-9 weeks dedicated per the Tier-3
-// Option A verdict 2026-05-19). SDK surface ships so consumers
-// compile against the stable contract.
+// Live deployments forward accepted events to the active fleet
+// harness. A deployment without a compatible harness returns
+// FeatureUnavailable.
 //
 // Returns 409 ConflictError if the session is not active OR is
 // in mode="ai" (input-event requires manual or pair mode).
-// Returns 503 FeatureUnavailableError pre-harness.
+// Returns 503 FeatureUnavailableError when input forwarding is
+// unavailable on the selected deployment.
 // SendInputEventOptions carries the optional client_id required
 // when the first input-event in a pair-mode ai-driving session
 // fires the takeover-request transition (Slice 5).

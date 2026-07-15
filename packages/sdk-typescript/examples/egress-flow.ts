@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   } catch (err) {
     if (err instanceof FeatureUnavailableError) {
       console.error(
-        `Egress not yet enabled on this deployment: ${err.message}\nPre-launch posture; comes online when the SOCKS5 backend wires up.`,
+        `SOCKS5 egress is unavailable on this deployment: ${err.message}\nUse a deployment with SOCKS5 egress support or choose another supported proxy scheme.`,
       );
       process.exit(2);
     }

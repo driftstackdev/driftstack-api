@@ -114,8 +114,8 @@ def main() -> int:
         return 3
     except FeatureUnavailableError as e:
         print(
-            f"Egress not yet enabled on this deployment: {e}\n"
-            "Pre-launch posture; comes online when the OpenVPN VM harness ships.",
+            f"OpenVPN egress is unavailable on this deployment: {e}\n"
+            "Use a deployment with OpenVPN support or choose another supported proxy scheme.",
             file=sys.stderr,
         )
         return 2

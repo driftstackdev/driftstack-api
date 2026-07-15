@@ -38,9 +38,10 @@ describe('W585.A packages/sdk-python/src/driftstack/client.py content parity', (
       /and :class:`AsyncDriftstack` \(async, ``httpx\.AsyncClient``\)\. Mirrors/,
     );
     expect(body).toMatch(/the pattern used by Stripe-Python, OpenAI-Python, Anthropic-Python\./);
-    expect(body).toMatch(/Resource accessors are placeholders in this commit — full/);
-    expect(body).toMatch(/implementations land in PY2\. The constructor \+ auth \+ transport/);
-    expect(body).toMatch(/plumbing is covered by the smoke tests in this commit\./);
+    expect(body).toMatch(/Every accessor below is backed by its synchronous and asynchronous/);
+    expect(body).not.toMatch(/placeholders in this commit|implementations land in PY2/);
+    expect(body).toMatch(/Constructor, authentication, transport and/);
+    expect(body).toMatch(/resource behavior are covered by the SDK test suite\./);
   });
 
   it('14 resource imports paired + RetryConfig + DEFAULT_BASE_URL = https://api.driftstack.dev + _validate_api_key TypeError on falsy/non-string pinned', () => {
