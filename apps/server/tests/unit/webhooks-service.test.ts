@@ -239,6 +239,59 @@ describe('V-553.B-14 WebhooksService.create', () => {
   });
 });
 
+describe('WebhooksService.enqueueEvent closed session-failure metadata', () => {
+  it('projects session.failed before persistence and leaves unrelated event data unchanged', async () => {
+    const endpoint = baseRow({
+      events: ['session.failed', 'session.completed'],
+    });
+    const { repo } = makeRepo([endpoint]);
+    const enqueued: Parameters<WebhooksRepo['enqueueDelivery']>[0][] = [];
+    repo.listEndpointsSubscribedTo = () => Promise.resolve([endpoint]);
+    repo.enqueueDelivery = (input) => {
+      enqueued.push(input);
+      return Promise.resolve(randomUUID());
+    };
+    const service = new WebhooksService(repo);
+    const sentinel = 'PRIVATE_WEBHOOK_FAILURE_2dd8a1';
+
+    await expect(
+      service.enqueueEvent('acc_1', 'session.failed', {
+        session_id: 'ses_00000000-0000-4000-8000-000000000001',
+        duration_ms: 88,
+        operation: 'navigate',
+        error_name: 'DriverError',
+        error_message: sentinel,
+        nested: { secret: sentinel },
+      }),
+    ).resolves.toBe(1);
+    expect(enqueued[0]).toMatchObject({
+      webhookId: endpoint.id,
+      eventType: 'session.failed',
+      payload: {
+        type: 'session.failed',
+        data: {
+          session_id: 'ses_00000000-0000-4000-8000-000000000001',
+          duration_ms: 88,
+          operation: 'navigate',
+          error_name: 'DriverError',
+          error_message: 'The browser operation failed.',
+        },
+      },
+    });
+    expect(JSON.stringify(enqueued[0])).not.toContain(sentinel);
+
+    const completedData = { output: sentinel };
+    await expect(service.enqueueEvent('acc_1', 'session.completed', completedData)).resolves.toBe(
+      1,
+    );
+    expect(enqueued[1]).toMatchObject({
+      webhookId: endpoint.id,
+      eventType: 'session.completed',
+      payload: { type: 'session.completed', data: completedData },
+    });
+  });
+});
+
 describe('V-553.B-14 WebhooksService.get', () => {
   it('returns the row when account-scope matches', async () => {
     const row = baseRow();

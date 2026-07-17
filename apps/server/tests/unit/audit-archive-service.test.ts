@@ -12,10 +12,12 @@
 //   - archiveAll: iterates the 4 audit-shaped tables in order
 
 import { describe, expect, it } from 'vitest';
+import { gunzipSync } from 'node:zlib';
 import {
   archiveObjectKey,
   AUDIT_TABLES,
   AuditArchiveService,
+  MAX_ARCHIVED_WEBHOOK_BODY_BYTES,
   type ArchiveLedgerRepo,
   type ArchiveTableName,
   type ArchiveTableRepo,
@@ -98,6 +100,18 @@ function makeRows(
     },
   };
   return { rows, deletes };
+}
+
+function uploadedJsonl(
+  puts: Array<{ body: Buffer | Uint8Array | string }>,
+): Array<Record<string, unknown>> {
+  const body = puts[0]?.body;
+  if (body === undefined) throw new Error('expected one archive upload');
+  const compressed = typeof body === 'string' ? Buffer.from(body, 'utf8') : Buffer.from(body);
+  const jsonl = gunzipSync(compressed).toString('utf8');
+  return jsonl.length === 0
+    ? []
+    : jsonl.split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 describe('V-553.B-26 archiveObjectKey', () => {
@@ -204,6 +218,238 @@ describe('V-553.B-26 AuditArchiveService.archiveTable', () => {
     expect(result.deletedFromPostgres).toBe(false);
     expect(inserts).toHaveLength(1);
     expect(markedDeleted).toEqual([]); // NOT marked — re-run next month
+  });
+
+  it('uploads projected session-event rows while using the original rows for deletion', async () => {
+    const sentinel = 'PRIVATE_ARCHIVE_EVENT_8a13be';
+    const original = {
+      id: 'evt_1',
+      sessionId: 'session_1',
+      type: 'navigated',
+      payload: {
+        url: `https://user:${sentinel}@customer.example/private/${sentinel}`,
+        final_url: `https://customer.example/final?token=${sentinel}`,
+        status: 204,
+        nested: { secret: sentinel },
+      },
+      duration_ms: 23,
+      created_at: new Date('2026-01-10T00:00:00.000Z'),
+    };
+    const { r2, puts } = makeR2();
+    const { ledger } = makeLedger();
+    const { rows, deletes } = makeRows({ rowsByTable: { session_events: [original] } });
+    const service = new AuditArchiveService({
+      r2,
+      ledger,
+      rows,
+      now: () => new Date('2026-05-11T02:00:00.000Z'),
+    });
+
+    await service.archiveTable('session_events');
+
+    const archived = uploadedJsonl(puts);
+    expect(archived).toHaveLength(1);
+    expect(archived[0]).toMatchObject({
+      id: 'evt_1',
+      sessionId: 'session_1',
+      type: 'navigated',
+      payload: {
+        requested_origin: 'https://customer.example',
+        final_origin: 'https://customer.example',
+        status: 204,
+      },
+      durationMs: 23,
+      duration_ms: 23,
+    });
+    expect(JSON.stringify(archived)).not.toContain(sentinel);
+    expect(original.payload.url).toContain(sentinel);
+    expect(deletes).toEqual([{ tableName: 'session_events', ids: ['evt_1'] }]);
+  });
+
+  it('closes structured, durable, malformed, and oversized session.failed archives only', async () => {
+    const failureSentinel = 'PRIVATE_ARCHIVE_FAILURE_d30aa9';
+    const unrelatedSentinel = 'UNRELATED_EVENT_DATA_159e7c';
+    const createdAt = new Date('2026-01-10T00:00:00.000Z');
+    const rowsByTable: Record<string, unknown>[] = [
+      {
+        id: 'delivery_1',
+        eventId: '00000000-0000-4000-8000-000000000101',
+        eventType: 'session.failed',
+        payload: {
+          id: failureSentinel,
+          type: 'session.failed',
+          created_at: '2025-01-01T00:00:00.000Z',
+          data: {
+            session_id: 'ses_00000000-0000-4000-8000-000000000001',
+            duration_ms: 90,
+            operation: 'navigate',
+            error_name: 'DriverError',
+            error_message: failureSentinel,
+            nested: { secret: failureSentinel },
+          },
+        },
+        lastResponseExcerpt: failureSentinel,
+        lastError: failureSentinel,
+        createdAt,
+      },
+      {
+        id: 'delivery_2',
+        eventId: '00000000-0000-4000-8000-000000000102',
+        eventType: 'session.failed',
+        payload: {
+          body: JSON.stringify({
+            id: '00000000-0000-4000-8000-000000000999',
+            type: 'session.failed',
+            created_at: createdAt.toISOString(),
+            data: {
+              session_id: 'ses_00000000-0000-4000-8000-000000000002',
+              operation: 'login',
+              error_name: 'SessionTimeoutError',
+              error_message: failureSentinel,
+            },
+          }),
+          emittedAtSec: 1_768_000_000,
+        },
+        lastResponseExcerpt: failureSentinel,
+        lastError: failureSentinel,
+        createdAt,
+      },
+      {
+        id: 'delivery_3',
+        event_id: '00000000-0000-4000-8000-000000000103',
+        event_type: 'session.failed',
+        payload: { body: `{${failureSentinel}`, emittedAtSec: -1 },
+        last_response_excerpt: failureSentinel,
+        last_error: failureSentinel,
+        created_at: createdAt,
+      },
+      {
+        id: 'delivery_4',
+        eventId: '00000000-0000-4000-8000-000000000104',
+        eventType: 'session.failed',
+        payload: {
+          body: failureSentinel.repeat(
+            Math.ceil(MAX_ARCHIVED_WEBHOOK_BODY_BYTES / failureSentinel.length) + 1,
+          ),
+          emittedAtSec: 12,
+        },
+        lastResponseExcerpt: failureSentinel,
+        lastError: failureSentinel,
+        createdAt,
+      },
+      {
+        id: 'delivery_5',
+        eventId: '00000000-0000-4000-8000-000000000105',
+        eventType: 'session.completed',
+        payload: { data: unrelatedSentinel },
+        lastResponseExcerpt: unrelatedSentinel,
+        lastError: unrelatedSentinel,
+        createdAt,
+      },
+    ];
+    const { r2, puts } = makeR2();
+    const { ledger } = makeLedger();
+    const { rows } = makeRows({ rowsByTable: { webhook_deliveries: rowsByTable } });
+    const service = new AuditArchiveService({
+      r2,
+      ledger,
+      rows,
+      now: () => new Date('2026-05-11T02:00:00.000Z'),
+    });
+
+    await service.archiveTable('webhook_deliveries');
+
+    const archived = uploadedJsonl(puts);
+    expect(archived).toHaveLength(5);
+    for (const row of archived.slice(0, 4)) {
+      expect(row.lastResponseExcerpt).toBeNull();
+      expect(row.lastError).toBeNull();
+    }
+    expect(archived[0]?.payload).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000101',
+      type: 'session.failed',
+      created_at: createdAt.toISOString(),
+      data: {
+        session_id: 'ses_00000000-0000-4000-8000-000000000001',
+        duration_ms: 90,
+        operation: 'navigate',
+        error_name: 'DriverError',
+        error_message: 'The browser operation failed.',
+      },
+    });
+    const durableBody = JSON.parse((archived[1]?.payload as { body: string }).body) as Record<
+      string,
+      unknown
+    >;
+    expect(durableBody).toMatchObject({
+      id: '00000000-0000-4000-8000-000000000102',
+      type: 'session.failed',
+      created_at: createdAt.toISOString(),
+      data: {
+        session_id: 'ses_00000000-0000-4000-8000-000000000002',
+        operation: 'login',
+        error_name: 'SessionTimeoutError',
+        error_message: 'The session operation timed out.',
+      },
+    });
+    expect(archived[1]?.payload).toMatchObject({
+      emittedAtSec: Math.floor(createdAt.getTime() / 1000),
+    });
+    for (const row of archived.slice(2, 4)) {
+      const body = JSON.parse((row.payload as { body: string }).body) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        type: 'session.failed',
+        data: {
+          operation: 'unknown',
+          error_name: 'UnknownError',
+          error_message: 'The session operation failed.',
+        },
+      });
+    }
+    expect(JSON.stringify(archived.slice(0, 4))).not.toContain(failureSentinel);
+    expect(archived[2]).toMatchObject({
+      event_id: '00000000-0000-4000-8000-000000000103',
+      event_type: 'session.failed',
+      last_response_excerpt: null,
+      last_error: null,
+    });
+    expect(archived[4]).toMatchObject({
+      eventType: 'session.completed',
+      payload: { data: unrelatedSentinel },
+      lastResponseExcerpt: unrelatedSentinel,
+      lastError: unrelatedSentinel,
+    });
+  });
+
+  it('aborts an unknown session-event archive before upload, ledger, or deletion', async () => {
+    const { r2, puts } = makeR2();
+    const { ledger, inserts, markedDeleted } = makeLedger();
+    const { rows, deletes } = makeRows({
+      rowsByTable: {
+        session_events: [
+          {
+            id: 'evt_unknown',
+            type: 'future_secret_event',
+            payload: { secret: 'must-not-upload' },
+            createdAt: new Date('2026-01-10T00:00:00.000Z'),
+          },
+        ],
+      },
+    });
+    const service = new AuditArchiveService({
+      r2,
+      ledger,
+      rows,
+      now: () => new Date('2026-05-11T02:00:00.000Z'),
+    });
+
+    await expect(service.archiveTable('session_events')).rejects.toThrow(
+      'Unknown session event type.',
+    );
+    expect(puts).toEqual([]);
+    expect(inserts).toEqual([]);
+    expect(deletes).toEqual([]);
+    expect(markedDeleted).toEqual([]);
   });
 });
 

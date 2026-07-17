@@ -66,15 +66,29 @@ test('POST /v1/sessions: 201 with full shape', async ({ request }) => {
 test('POST /v1/sessions: records "created" event in DB', async ({ request }) => {
   const seed = await seedAccount(server.client);
   const session = await createSession(request, server.baseUrl, seed.plaintext);
-  const events = (await server.client`
-    SELECT type FROM session_events
-    WHERE session_id = ${session.id.replace('ses_', '')}
-  `) as Array<{ type: string }>;
-  expect(events.map((e) => e.type)).toContain('created');
+  let events: Array<{ type: string; payload: Record<string, unknown> }> = [];
+  await expect
+    .poll(async () => {
+      events = (await server.client`
+        SELECT type, payload FROM session_events
+        WHERE session_id = ${session.id.replace('ses_', '')}
+      `) as Array<{ type: string; payload: Record<string, unknown> }>;
+      return events.length;
+    })
+    .toBe(1);
+  expect(events[0]).toEqual({
+    type: 'created',
+    payload: {
+      archetype: 'iphone17_ios18_7_safari26_4',
+      purpose: 'production_customer',
+    },
+  });
 });
 
-test('POST /v1/sessions: 429 ConcurrencyLimit when free-tier already at 1', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'free' });
+test('POST /v1/sessions: 429 ConcurrencyLimit when API-enabled single-session tier is at 1', async ({
+  request,
+}) => {
+  const seed = await seedAccount(server.client, { tier: 'solo_manual' });
   await createSession(request, server.baseUrl, seed.plaintext);
 
   const res = await request.post(`${server.baseUrl}/v1/sessions`, {

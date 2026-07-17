@@ -64,9 +64,16 @@ describe('POST /v1/sessions', () => {
   it('records a "created" session event', async () => {
     fx = await buildTestApp();
     await createSession(fx);
-    const events = fx.sessionsRepo.getEvents();
-    expect(events).toHaveLength(1);
-    expect(events[0]?.type).toBe('created');
+    await vi.waitFor(() => expect(fx.sessionsRepo.getEvents()).toHaveLength(1));
+    expect(fx.sessionsRepo.getEvents()[0]).toMatchObject({
+      type: 'created',
+      payload: {
+        archetype: 'iphone17_ios18_7_safari26_4',
+        purpose: 'production_customer',
+      },
+      durationMs: null,
+    });
+    expect(fx.sessionsRepo.getEvents()[0]?.payload).not.toHaveProperty('driver_session_id');
   });
 
   it('429 ConcurrencyLimit when an API-enabled single-session tier is already at limit', async () => {

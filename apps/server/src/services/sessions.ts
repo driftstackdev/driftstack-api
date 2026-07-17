@@ -38,15 +38,18 @@ import {
   SessionDestroyedError,
 } from '../lib/errors.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
-import { redactText } from '../lib/redact-url.js';
+import {
+  classifySessionFailure,
+  projectSessionEventMetadata,
+  projectSessionFailedData,
+  sessionFailureCopy,
+} from '../lib/session-event-metadata.js';
 
-const SESSION_FAILURE_MESSAGE_MAX_CHARS = 500;
-const SESSION_FAILURE_NAME_MAX_CHARS = 100;
 export const SESSION_DESTROY_DRIVER_TIMEOUT_MS = 30_000;
 export const SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS = 5_000;
 
 type PostSuccessPersistenceOutcome =
-  { kind: 'succeeded' } | { kind: 'failed'; error: unknown } | { kind: 'timed_out' };
+  { kind: 'succeeded' } | { kind: 'failed' } | { kind: 'timed_out' };
 
 export async function destroyDriverSessionWithTimeout(
   destroy: () => Promise<void>,
@@ -61,23 +64,6 @@ export async function destroyDriverSessionWithTimeout(
     await Promise.race([destroy(), timeout]);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
-  }
-}
-
-function safeSessionFailureDiagnostic(value: string, maxChars: number, fallback: string): string {
-  // Driver errors cross durable + customer-visible boundaries below. Bound
-  // before redaction to avoid processing attacker-sized diagnostics, then
-  // bound again because replacement markers can expand short credentials.
-  const bounded = value.slice(0, maxChars);
-  return (redactText(bounded) || fallback).slice(0, maxChars);
-}
-
-function unknownFailureMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  try {
-    return String(err);
-  } catch {
-    return 'unknown driver failure';
   }
 }
 
@@ -580,12 +566,15 @@ export class SessionsService {
     // are detached observability: a rejection OR a non-settling pool/query
     // must not withhold the authoritative create response and invite a second
     // live session on caller retry.
-    this.persistPostSuccessObservability(record, 'create', 'event', () =>
+    const createdEvent = projectSessionEventMetadata({
+      type: 'created',
+      payload: { archetype, purpose, driver_session_id: driverResult.driverSessionId },
+      durationMs: null,
+    });
+    this.persistPostSuccessObservability(record.accountId, record.id, 'create', 'event', () =>
       this.deps.repo.recordEvent({
         sessionId: record.id,
-        type: 'created',
-        payload: { archetype, purpose, driver_session_id: driverResult.driverSessionId },
-        durationMs: null,
+        ...createdEvent,
       }),
     );
 
@@ -595,16 +584,21 @@ export class SessionsService {
     // "Member X created session Y on team owner Z").
     if (this.deps.accountAudit) {
       const accountAudit = this.deps.accountAudit;
-      this.persistPostSuccessObservability(record, 'create', 'account_audit', () =>
-        accountAudit.record({
-          accountId,
-          actorType: 'customer',
-          actorAccountId: ctx.account.id,
-          actorKeyId: ctx.apiKey.id,
-          action: 'session.created',
-          targetResourceId: `ses_${record.id}`,
-          payload: { archetype, purpose },
-        }),
+      const accountAuditInput = {
+        accountId,
+        actorType: 'customer' as const,
+        actorAccountId: ctx.account.id,
+        actorKeyId: ctx.apiKey.id,
+        action: 'session.created' as const,
+        targetResourceId: `ses_${record.id}`,
+        payload: { archetype, purpose },
+      };
+      this.persistPostSuccessObservability(
+        record.accountId,
+        record.id,
+        'create',
+        'account_audit',
+        () => accountAudit.record(accountAuditInput),
       );
     }
 
@@ -638,12 +632,15 @@ export class SessionsService {
         waitUntil: body.wait_until,
       }),
     );
-    this.persistPostSuccessObservability(session, 'navigate', 'event', () =>
+    const event = projectSessionEventMetadata({
+      type: 'navigated',
+      payload: { url: body.url, final_url: result.finalUrl, status: result.status },
+      durationMs: result.durationMs,
+    });
+    this.persistPostSuccessObservability(session.accountId, session.id, 'navigate', 'event', () =>
       this.deps.repo.recordEvent({
         sessionId: session.id,
-        type: 'navigated',
-        payload: { url: body.url, final_url: result.finalUrl, status: result.status },
-        durationMs: result.durationMs,
+        ...event,
       }),
     );
     return result;
@@ -662,13 +659,13 @@ export class SessionsService {
         timeoutMs: body.timeout_ms ?? 10_000,
       }),
     );
-    this.persistPostSuccessObservability(session, 'interact', 'event', () =>
-      this.deps.repo.recordEvent({
-        sessionId: session.id,
-        type: 'interacted',
-        payload: { action: body.action },
-        durationMs: result.durationMs,
-      }),
+    const event = projectSessionEventMetadata({
+      type: 'interacted',
+      payload: { action: body.action },
+      durationMs: result.durationMs,
+    });
+    this.persistPostSuccessObservability(session.accountId, session.id, 'interact', 'event', () =>
+      this.deps.repo.recordEvent({ sessionId: session.id, ...event }),
     );
     return result;
   }
@@ -686,13 +683,13 @@ export class SessionsService {
         timeoutMs: body.timeout_ms ?? 10_000,
       }),
     );
-    this.persistPostSuccessObservability(session, 'gui_input', 'event', () =>
-      this.deps.repo.recordEvent({
-        sessionId: session.id,
-        type: 'gui_input',
-        payload: { action: body.action },
-        durationMs: result.durationMs,
-      }),
+    const event = projectSessionEventMetadata({
+      type: 'gui_input',
+      payload: { action: body.action },
+      durationMs: result.durationMs,
+    });
+    this.persistPostSuccessObservability(session.accountId, session.id, 'gui_input', 'event', () =>
+      this.deps.repo.recordEvent({ sessionId: session.id, ...event }),
     );
     return result;
   }
@@ -710,13 +707,13 @@ export class SessionsService {
         timeoutMs: body.timeout_ms ?? 30_000,
       }),
     );
-    this.persistPostSuccessObservability(session, 'wait', 'event', () =>
-      this.deps.repo.recordEvent({
-        sessionId: session.id,
-        type: 'waited',
-        payload: { condition: body.condition, satisfied: result.satisfied },
-        durationMs: result.durationMs,
-      }),
+    const event = projectSessionEventMetadata({
+      type: 'waited',
+      payload: { condition: body.condition, satisfied: result.satisfied },
+      durationMs: result.durationMs,
+    });
+    this.persistPostSuccessObservability(session.accountId, session.id, 'wait', 'event', () =>
+      this.deps.repo.recordEvent({ sessionId: session.id, ...event }),
     );
     return result;
   }
@@ -738,18 +735,28 @@ export class SessionsService {
     const state = await this.runWithFailureCapture(ctx, session, 'state_capture', () =>
       this.deps.driver.getState(session.driverSessionId),
     );
-    this.persistPostSuccessObservability(session, 'state_capture', 'status', () =>
-      this.deps.repo.updateSessionStatus(session.id, session.status, {
-        lastStateAt: state.capturedAt,
-      }),
+    const capturedAt = state.capturedAt;
+    this.persistPostSuccessObservability(
+      session.accountId,
+      session.id,
+      'state_capture',
+      'status',
+      () =>
+        this.deps.repo.updateSessionStatus(session.id, session.status, {
+          lastStateAt: capturedAt,
+        }),
     );
-    this.persistPostSuccessObservability(session, 'state_capture', 'event', () =>
-      this.deps.repo.recordEvent({
-        sessionId: session.id,
-        type: 'state_captured',
-        payload: { url: state.url, title: state.title },
-        durationMs: null,
-      }),
+    const event = projectSessionEventMetadata({
+      type: 'state_captured',
+      payload: { url: state.url, title: state.title },
+      durationMs: null,
+    });
+    this.persistPostSuccessObservability(
+      session.accountId,
+      session.id,
+      'state_capture',
+      'event',
+      () => this.deps.repo.recordEvent({ sessionId: session.id, ...event }),
     );
     return state;
   }
@@ -773,16 +780,16 @@ export class SessionsService {
         fullPage: body.full_page,
       }),
     );
-    this.persistPostSuccessObservability(session, 'capture', 'event', () =>
-      this.deps.repo.recordEvent({
-        sessionId: session.id,
-        type:
-          body.kind === 'screenshot' || body.kind === 'pdf'
-            ? 'screenshot_captured'
-            : 'state_captured',
-        payload: { kind: body.kind, byte_size: result.byteSize },
-        durationMs: result.durationMs,
-      }),
+    const event = projectSessionEventMetadata({
+      type:
+        body.kind === 'screenshot' || body.kind === 'pdf'
+          ? 'screenshot_captured'
+          : 'state_captured',
+      payload: { kind: body.kind, byte_size: result.byteSize },
+      durationMs: result.durationMs,
+    });
+    this.persistPostSuccessObservability(session.accountId, session.id, 'capture', 'event', () =>
+      this.deps.repo.recordEvent({ sessionId: session.id, ...event }),
     );
     return result;
   }
@@ -869,12 +876,17 @@ export class SessionsService {
     // 'admin' role per Q1 before reaching here.
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const destroyedAt = new Date();
+    const destroyEvent = projectSessionEventMetadata({
+      type: 'destroyed',
+      payload: { reason_code: 'customer_request' },
+      durationMs: null,
+    });
     const outcome = await this.deps.repo.destroySessionSerialized(
       {
         id: sessionId,
         accountId,
         destroyedAt,
-        event: { type: 'destroyed', payload: null, durationMs: null },
+        event: destroyEvent,
       },
       (current) =>
         destroyDriverSessionWithTimeout(() => this.deps.driver.destroy(current.driverSessionId)),
@@ -952,8 +964,8 @@ export class SessionsService {
    *
    * Idempotent on terminal status (a row that raced to destroyed/errored
    * between the sweep query and this call is a no-op). The `destroyed`
-   * event payload carries `reason: 'auto-destroyed: free-tier session
-   * duration cap'` + the cap so the audit trail explains the closure.
+   * event payload carries a closed duration-limit reason code + the cap
+   * so the audit trail explains the closure without retaining free text.
    * Webhook + audit are best-effort — a failure there never blocks the
    * slot-freeing destroy.
    */
@@ -963,16 +975,21 @@ export class SessionsService {
   ): Promise<{ destroyed: boolean }> {
     const reason = 'auto-destroyed: free-tier session duration cap';
     const destroyedAt = new Date();
+    const destroyEvent = projectSessionEventMetadata({
+      type: 'destroyed',
+      payload: {
+        reason_code: 'duration_limit',
+        auto_destroyed: true,
+        max_session_minutes: opts.maxMinutes,
+      },
+      durationMs: null,
+    });
     const outcome = await this.deps.repo.destroySessionSerialized(
       {
         id: session.id,
         accountId: session.accountId,
         destroyedAt,
-        event: {
-          type: 'destroyed',
-          payload: { auto_destroyed: true, reason, max_session_minutes: opts.maxMinutes },
-          durationMs: null,
-        },
+        event: destroyEvent,
       },
       (current) =>
         destroyDriverSessionWithTimeout(() => this.deps.driver.destroy(current.driverSessionId)),
@@ -1030,6 +1047,11 @@ export class SessionsService {
   async destroyAllForAccount(accountId: string): Promise<number> {
     const active = await this.deps.repo.listActiveByAccount(accountId);
     const reason = 'account suspended';
+    const destroyEvent = projectSessionEventMetadata({
+      type: 'destroyed',
+      payload: { reason_code: 'account_suspended', auto_destroyed: true },
+      durationMs: null,
+    });
     let destroyed = 0;
     for (const session of active) {
       try {
@@ -1039,11 +1061,7 @@ export class SessionsService {
             id: session.id,
             accountId,
             destroyedAt,
-            event: {
-              type: 'destroyed',
-              payload: { auto_destroyed: true, reason },
-              durationMs: null,
-            },
+            event: destroyEvent,
           },
           (current) =>
             destroyDriverSessionWithTimeout(() =>
@@ -1223,7 +1241,8 @@ export class SessionsService {
    * terminal row and event share one atomic transaction.
    */
   private persistPostSuccessObservability(
-    session: SessionRecord,
+    accountId: string,
+    sessionId: string,
     operation: string,
     persistence: 'event' | 'status' | 'account_audit',
     persist: () => Promise<unknown>,
@@ -1242,10 +1261,10 @@ export class SessionsService {
       // response becomes observable. Settlement remains deliberately detached.
       writeOutcome = Promise.resolve(persist()).then(
         () => ({ kind: 'succeeded' }),
-        (error: unknown) => ({ kind: 'failed', error }),
+        () => ({ kind: 'failed' }),
       );
-    } catch (error) {
-      writeOutcome = Promise.resolve({ kind: 'failed', error });
+    } catch {
+      writeOutcome = Promise.resolve({ kind: 'failed' });
     }
 
     void Promise.race([writeOutcome, timeoutOutcome])
@@ -1256,22 +1275,6 @@ export class SessionsService {
         // promise is not cancellable and may still commit later. Resolve both
         // promise branches so a late rejection is consumed and cannot create
         // a second diagnostic or an unhandled rejection.
-        let rawErrorName = 'UnknownError';
-        if (outcome.kind === 'timed_out') {
-          rawErrorName = 'PostSuccessPersistenceTimeout';
-        } else {
-          try {
-            if (outcome.error instanceof Error) {
-              const candidate = outcome.error.name as unknown;
-              if (typeof candidate === 'string') rawErrorName = candidate;
-            }
-          } catch {
-            rawErrorName = 'UnknownError';
-          }
-        }
-        const errorName = /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(rawErrorName)
-          ? rawErrorName
-          : 'Error';
         const timedOut = outcome.kind === 'timed_out';
         try {
           this.deps.logger?.error?.(
@@ -1280,11 +1283,13 @@ export class SessionsService {
               event: timedOut
                 ? 'post_success_persistence_timed_out'
                 : 'post_success_persistence_failed',
-              account_id: session.accountId,
-              session_id: session.id,
+              account_id: accountId,
+              session_id: sessionId,
               operation,
               persistence,
-              error_name: errorName,
+              error_name: timedOut
+                ? 'PostSuccessPersistenceTimeout'
+                : 'PostSuccessPersistenceError',
             },
             timedOut
               ? 'session post-success observability write timed out with unknown outcome; preserving authoritative driver success'
@@ -1325,16 +1330,13 @@ export class SessionsService {
       return await fn();
     } catch (err) {
       const erroredAt = new Date();
-      const errorMessage = safeSessionFailureDiagnostic(
-        unknownFailureMessage(err),
-        SESSION_FAILURE_MESSAGE_MAX_CHARS,
-        'unknown driver failure',
-      );
-      const errorName = safeSessionFailureDiagnostic(
-        err instanceof Error ? err.name : 'UnknownError',
-        SESSION_FAILURE_NAME_MAX_CHARS,
-        'UnknownError',
-      );
+      const failureClass = classifySessionFailure(err);
+      const failureCopy = sessionFailureCopy(failureClass);
+      const errorEvent = projectSessionEventMetadata({
+        type: 'errored',
+        payload: { operation, failure_class: failureClass },
+        durationMs: null,
+      });
 
       // Persist the failure state. Errors here are swallowed so the
       // original driver error still propagates to the caller — the DB
@@ -1356,9 +1358,7 @@ export class SessionsService {
       try {
         await this.deps.repo.recordEvent({
           sessionId: session.id,
-          type: 'errored',
-          payload: { operation, error_name: errorName, error_message: errorMessage },
-          durationMs: null,
+          ...errorEvent,
         });
       } catch {
         /* swallow */
@@ -1375,7 +1375,7 @@ export class SessionsService {
             kind: 'session.errored',
             accountId: session.accountId,
             sessionId: session.id,
-            errorClass: errorName,
+            errorClass: failureCopy.error_name,
             at: erroredAt.toISOString(),
           });
         } catch {
@@ -1392,14 +1392,14 @@ export class SessionsService {
       // owner is the audience.
       if (this.deps.webhooks) {
         const durationMs = erroredAt.getTime() - session.createdAt.getTime();
+        const failedData = projectSessionFailedData({
+          session_id: `ses_${session.id}`,
+          duration_ms: durationMs,
+          operation,
+          failure_class: failureClass,
+        });
         try {
-          await this.deps.webhooks.enqueueEvent(session.accountId, 'session.failed', {
-            session_id: `ses_${session.id}`,
-            duration_ms: durationMs,
-            operation,
-            error_name: errorName,
-            error_message: errorMessage,
-          });
+          await this.deps.webhooks.enqueueEvent(session.accountId, 'session.failed', failedData);
         } catch {
           /* webhook enqueue is best-effort */
         }
@@ -1415,7 +1415,7 @@ export class SessionsService {
           await this.deps.accountLifecycle.emit(session.accountId, {
             kind: 'session.failed.first',
             sessionId: `ses_${session.id}`,
-            errorMessage,
+            errorMessage: failureCopy.error_message,
           });
         } catch {
           /* swallow — original error wins */

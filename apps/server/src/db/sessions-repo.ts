@@ -17,6 +17,7 @@ import {
 } from 'drizzle-orm';
 import { SessionStatusSchema, type AccountTier } from '@driftstack/api-types';
 import { ProfileInUseError } from '../lib/errors.js';
+import { projectSessionEventMetadata } from '../lib/session-event-metadata.js';
 import type {
   NewSessionInput,
   SessionEventInput,
@@ -195,6 +196,10 @@ export class DrizzleSessionRepo implements SessionRepo {
     input: SerializedSessionDestroyInput,
     destroyDriverSession: (session: SessionRecord) => Promise<void>,
   ): Promise<SerializedSessionDestroyResult> {
+    // Project before the transaction and external driver side effect. A future
+    // unknown event type must fail before browser teardown; malformed known
+    // payloads collapse to closed metadata without rolling back the terminal row.
+    const event = projectSessionEventMetadata(input.event);
     return this.database.db.transaction(async (tx) => {
       const scope = and(
         eq(sessions.id, input.id),
@@ -231,9 +236,9 @@ export class DrizzleSessionRepo implements SessionRepo {
       if (driverFailed) return { kind: 'driver_error', session, error: driverError };
       await tx.insert(sessionEvents).values({
         sessionId: session.id,
-        type: input.event.type,
-        payload: input.event.payload,
-        durationMs: input.event.durationMs,
+        type: event.type,
+        payload: event.payload,
+        durationMs: event.durationMs,
       });
       return { kind: 'destroyed', session };
     });
@@ -366,11 +371,12 @@ export class DrizzleSessionRepo implements SessionRepo {
   }
 
   async recordEvent(input: SessionEventInput): Promise<void> {
+    const event = projectSessionEventMetadata(input);
     await this.database.db.insert(sessionEvents).values({
       sessionId: input.sessionId,
-      type: input.type,
-      payload: input.payload,
-      durationMs: input.durationMs,
+      type: event.type,
+      payload: event.payload,
+      durationMs: event.durationMs,
     });
   }
 

@@ -24,6 +24,10 @@ import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { gzip as gzipCb, gzipSync } from 'node:zlib';
 import type { R2 } from '../lib/r2.js';
+import {
+  projectSessionEventMetadata,
+  projectSessionFailedData,
+} from '../lib/session-event-metadata.js';
 
 const gzipAsync = promisify(gzipCb);
 
@@ -32,6 +36,9 @@ export const HOT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
 /** Default upload-batch size — keeps memory bounded on large windows. */
 export const DEFAULT_BATCH_SIZE = 10_000;
+
+/** Maximum legacy durable webhook body inspected during archive projection. */
+export const MAX_ARCHIVED_WEBHOOK_BODY_BYTES = 64 * 1024;
 
 /**
  * The five tables this service archives (four audit-shaped + session_events). Each entry
@@ -157,6 +164,19 @@ export function rowsToJsonl(rows: readonly Record<string, unknown>[]): string {
   return rows.map((r) => JSON.stringify(r)).join('\n');
 }
 
+/**
+ * Project sensitive legacy rows before JSONL generation. Original rows remain
+ * authoritative for window selection and deletion ids; this copy is upload-only.
+ */
+export function projectRowsForArchive(
+  tableName: ArchiveTableName,
+  rows: readonly Record<string, unknown>[],
+): readonly Record<string, unknown>[] {
+  if (tableName === 'session_events') return rows.map(projectSessionEventArchiveRow);
+  if (tableName === 'webhook_deliveries') return rows.map(projectWebhookDeliveryArchiveRow);
+  return rows;
+}
+
 export class AuditArchiveService {
   private readonly r2: R2;
   private readonly ledger: ArchiveLedgerRepo;
@@ -186,7 +206,8 @@ export class AuditArchiveService {
 
     const archivable = await this.rows.selectArchivableRows(tableName, olderThan);
 
-    const jsonl = rowsToJsonl(archivable);
+    const uploadRows = projectRowsForArchive(tableName, archivable);
+    const jsonl = rowsToJsonl(uploadRows);
     const compressed = await gzipAsync(Buffer.from(jsonl, 'utf-8'));
     const sha256Checksum = createHash('sha256').update(compressed).digest('hex');
 
@@ -269,12 +290,122 @@ export class AuditArchiveService {
  */
 function extractTimestamp(row: Record<string, unknown>, tableName: ArchiveTableName): Date {
   const col = AUDIT_TABLES.find((t) => t.tableName === tableName)!.timestampColumn;
-  const v = row[col];
+  const v = row[col] ?? row[camelTimestampColumn(tableName)];
   if (v instanceof Date) return v;
   if (typeof v === 'string') return new Date(v);
   throw new Error(
     `audit-archive: row from ${tableName} missing timestamp column ${col} or has unexpected type`,
   );
+}
+
+function projectSessionEventArchiveRow(row: Record<string, unknown>): Record<string, unknown> {
+  const event = projectSessionEventMetadata({
+    type: row.type as string,
+    payload: row.payload,
+    durationMs: row.durationMs ?? row.duration_ms,
+  });
+  return {
+    ...row,
+    type: event.type,
+    payload: event.payload,
+    durationMs: event.durationMs,
+    ...(Object.hasOwn(row, 'duration_ms') ? { duration_ms: event.durationMs } : {}),
+  };
+}
+
+function projectWebhookDeliveryArchiveRow(row: Record<string, unknown>): Record<string, unknown> {
+  const payload = asRecord(row.payload);
+  const eventType = row.eventType ?? row.event_type ?? payload.type;
+  if (eventType !== 'session.failed') return row;
+
+  const eventId = row.eventId ?? row.event_id;
+  const createdAt = row.createdAt ?? row.created_at;
+  let projectedPayload: Record<string, unknown>;
+  if (typeof payload.body === 'string' || Object.hasOwn(payload, 'emittedAtSec')) {
+    const parsed = boundedJsonObject(payload.body);
+    projectedPayload = {
+      body: JSON.stringify(canonicalSessionFailedEnvelope(parsed, eventId, createdAt)),
+      emittedAtSec: safeUnixSeconds(createdAt),
+    };
+  } else {
+    projectedPayload = canonicalSessionFailedEnvelope(payload, eventId, createdAt);
+  }
+
+  return {
+    ...row,
+    payload: projectedPayload,
+    lastResponseExcerpt: null,
+    lastError: null,
+    ...(Object.hasOwn(row, 'last_response_excerpt') ? { last_response_excerpt: null } : {}),
+    ...(Object.hasOwn(row, 'last_error') ? { last_error: null } : {}),
+  };
+}
+
+function canonicalSessionFailedEnvelope(
+  input: Record<string, unknown>,
+  fallbackId: unknown,
+  fallbackCreatedAt: unknown,
+): Record<string, unknown> {
+  return {
+    id: safeEnvelopeId(fallbackId) ?? 'unknown',
+    type: 'session.failed',
+    created_at: safeIsoTimestamp(fallbackCreatedAt ?? input.created_at),
+    data: projectSessionFailedData(input.data),
+  };
+}
+
+function boundedJsonObject(value: unknown): Record<string, unknown> {
+  if (
+    typeof value !== 'string' ||
+    Buffer.byteLength(value, 'utf8') > MAX_ARCHIVED_WEBHOOK_BODY_BYTES
+  ) {
+    return {};
+  }
+  try {
+    return asRecord(JSON.parse(value) as unknown);
+  } catch {
+    return {};
+  }
+}
+
+function safeEnvelopeId(value: unknown): string | null {
+  return typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(value)
+    ? value
+    : null;
+}
+
+function safeIsoTimestamp(value: unknown): string {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return '1970-01-01T00:00:00.000Z';
+}
+
+function safeUnixSeconds(value: unknown): number {
+  const iso = safeIsoTimestamp(value);
+  return iso === '1970-01-01T00:00:00.000Z' ? 0 : Math.floor(new Date(iso).getTime() / 1000);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function camelTimestampColumn(tableName: ArchiveTableName): string {
+  switch (tableName) {
+    case 'admin_audit_log':
+      return 'timestamp';
+    case 'processed_stripe_events':
+      return 'receivedAt';
+    case 'legal_acceptances':
+      return 'acceptedAt';
+    case 'webhook_deliveries':
+    case 'session_events':
+      return 'createdAt';
+  }
 }
 
 /** Extract the row's primary key. All audit tables use a uuid 'id' column. */

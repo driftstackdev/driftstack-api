@@ -4612,6 +4612,11 @@ Continuing overnight queue:
 
 2026-05-03
 
+> **Superseded by V-696 (2026-07-17):** the raw `error_name` / `error_message`
+> retention described below is historical. Current `session_events` retain only
+> an allowlisted failure class and operation; current `session.failed` webhooks
+> and lifecycle copy use fixed class-derived text with no driver diagnostic.
+
 ### Goal
 
 Land the founder-approved "Built for two audiences" two-card section on `/index` between Why-Driftstack and the Pricing teaser, plus add `id="manual"` and `id="api"` anchor IDs to the corresponding sections on `/pricing` so the new index cards can deep-link.
@@ -29010,3 +29015,62 @@ a hostile non-string `Error.name`, explicit timer unref, zero residual timers an
 complete authoritative-result equality. The focused failure matrix passes 28/28;
 strict server source/test TypeScript, targeted ESLint, Prettier and diff/whitespace
 checks are green.
+
+---
+
+## V-696 — Session observability retains metadata, never customer payloads
+
+**Date:** 2026-07-17
+
+The session action log previously retained complete operation inputs and driver
+diagnostics: typed values, selectors and keys; GUI text and coordinates; URL
+userinfo, paths, queries and fragments; wait patterns; page titles and full state
+URLs; opaque driver ids; arbitrary direct-caller JSON; and arbitrary failure
+messages. The same plaintext could later be copied into `session.failed` delivery rows and
+gzip JSONL archives. Marking a field `sensitive` changed browser behavior but did
+not change this retention boundary.
+
+A single closed, idempotent projector now owns all nine session-event types.
+Navigation and page-state events retain HTTP(S) origins only; interactions,
+GUI input and waits retain only allowlisted kind plus explicitly safe bounded
+boolean/numeric metadata; captures retain kind and byte count; destroys retain
+closed reason codes and flags; failures retain only operation and an allowlisted
+class. Unknown event types abort before any database transaction, browser teardown,
+archive upload or source-row deletion. Malformed known payloads and hostile getters
+collapse to fixed null/unknown metadata rather than publishing or throwing their
+values.
+
+`SessionsService` projects synchronously before each detached write so its closure
+never captures raw action/result/state/failure payloads. `DrizzleSessionRepo`
+projects again at both direct-record and serialized-destroy entry, making the
+durable boundary authoritative for every present and future caller. Driver inputs,
+successful responses and the original thrown error remain exact at the caller
+boundary. Failure webhooks and first-failure lifecycle copy now use fixed
+class-derived messages; arbitrary error names/messages are not retained.
+
+The dormant archive service projects legacy `session_events` before JSONL and
+canonicalizes both structured and durable-body `session.failed` deliveries from
+trusted row ids/timestamps. Durable bodies are parsed only below 64 KiB; malformed
+or oversized bodies become one fixed unknown-failure envelope. Response excerpts
+and last-error fields are cleared for failures because an endpoint can echo the
+request. Unrelated event types and audit tables remain byte-shape compatible.
+Archive projection is upload-only: original ids still select deletion, and an
+unknown event aborts before R2, ledger or deletion effects.
+
+Deterministic sentinel proof covers all nine event types, ordinary and sensitive
+typing, GUI typing, selectors, URL credentials/path/query/fragment, wait patterns,
+page title/cookies/storage, driver/capture data, arbitrary errors, direct Drizzle
+callers, structured/durable/malformed/oversized archive rows, response echoes,
+camelCase and snake_case rows, idempotence, frozen input and hostile Proxy traps.
+The focused source/service/archive matrix passes 237 tests with seven honest
+environment-dependent skips; the 37-file affected union passes 450 tests with 28
+environment-dependent skips. A real local-Postgres Drizzle replay passes 7/7,
+including direct insertion, serialized destroy and fail-before-driver rejection.
+Strict server source/test TypeScript, targeted ESLint, Prettier and diff/whitespace
+checks are green.
+
+This source correction does not activate the archive service, inspect or mutate
+customer rows, rewrite existing R2 objects, run a shared build, or deploy. Existing
+hot rows, archives and backups require the separately guarded aggregate-only
+inventory plus manifest/checksum remediation and an explicit PITR-expiry residual;
+V-696 does not claim that historical-data operation complete.

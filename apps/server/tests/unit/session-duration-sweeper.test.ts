@@ -250,9 +250,10 @@ describe('SessionDurationSweeperService — free-tier auto-destroy safety', () =
 
     const destroyEvent = repo.getEvents().find((e) => e.type === 'destroyed');
     expect(destroyEvent).toBeDefined();
-    expect(destroyEvent?.payload).toMatchObject({
+    expect(destroyEvent?.payload).toEqual({
+      reason_code: 'duration_limit',
       auto_destroyed: true,
-      reason: 'auto-destroyed: free-tier session duration cap',
+      by_admin: false,
       max_session_minutes: 20,
     });
   });

@@ -40,6 +40,8 @@ interface RecordedLifecycleEvent {
     | { kind: 'session.success.first'; sessionId: string };
 }
 
+const PRIVATE_SENTINEL = 'PRIVATE_SESSION_PAYLOAD_91c7f0';
+
 interface Deferred<T> {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -596,15 +598,26 @@ describe('SessionsService — V-090 driver-failure capture', () => {
 
     const erroredEvent = repo.events.find((e) => e.type === 'errored');
     expect(erroredEvent).toBeDefined();
-    expect((erroredEvent?.payload as { operation: string } | null)?.operation).toBe('navigate');
+    expect(erroredEvent?.payload).toEqual({
+      operation: 'navigate',
+      failure_class: 'driver_error',
+    });
 
     expect(webhookEvents).toHaveLength(1);
     expect(webhookEvents[0]?.eventType).toBe('session.failed');
-    expect((webhookEvents[0]?.data as { operation: string }).operation).toBe('navigate');
-    expect(webhookEvents[0]?.data.session_id).toBe(`ses_${session.id}`);
+    expect(webhookEvents[0]?.data).toEqual({
+      duration_ms: expect.any(Number),
+      operation: 'navigate',
+      error_name: 'DriverError',
+      error_message: 'The browser operation failed.',
+    });
+    expect(webhookEvents[0]?.data).not.toHaveProperty('session_id');
+    expect(JSON.stringify({ events: repo.events, webhookEvents })).not.toContain(
+      'WebKit handle gone',
+    );
   });
 
-  it('redacts and bounds every durable/customer failure diagnostic while rethrowing unchanged', async () => {
+  it('retains only closed failure metadata while rethrowing the original diagnostic unchanged', async () => {
     const { service, repo, driver, webhookEvents, lifecycleEvents } = buildService();
     const ctx = buildCtx();
     const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
@@ -627,14 +640,8 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     expect((caught as Error).message).toBe(rawMessage);
     expect((caught as Error).name).toBe(rawName);
 
-    const stored = repo.events.find((event) => event.type === 'errored')?.payload as {
-      error_name: string;
-      error_message: string;
-    };
-    expect(stored.error_message.length).toBeLessThanOrEqual(500);
-    expect(stored.error_name.length).toBeLessThanOrEqual(100);
-    expect(stored.error_message).toContain('[redacted]');
-    expect(stored.error_name).toContain('[redacted]');
+    const stored = repo.events.find((event) => event.type === 'errored')?.payload;
+    expect(stored).toEqual({ operation: 'navigate', failure_class: 'unknown' });
     for (const secret of [
       'user:pass',
       'tok_live_secret',
@@ -643,18 +650,129 @@ describe('SessionsService — V-090 driver-failure capture', () => {
       'dXNlcjpwYXNz',
       'bmFtZS1zZWNyZXQ',
     ]) {
-      expect(stored.error_message).not.toContain(secret);
-      expect(stored.error_name).not.toContain(secret);
+      expect(JSON.stringify(repo.events)).not.toContain(secret);
+      expect(JSON.stringify(webhookEvents)).not.toContain(secret);
+      expect(JSON.stringify(lifecycleEvents)).not.toContain(secret);
     }
 
     expect(webhookEvents[0]?.data).toMatchObject({
-      error_name: stored.error_name,
-      error_message: stored.error_message,
+      operation: 'navigate',
+      error_name: 'UnknownError',
+      error_message: 'The session operation failed.',
     });
     expect(lifecycleEvents[0]?.event).toMatchObject({
       kind: 'session.failed.first',
-      errorMessage: stored.error_message,
+      errorMessage: 'The session operation failed.',
     });
+  });
+
+  it('returns exact driver results while every successful event write keeps only closed metadata', async () => {
+    const { service, repo, driver } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const navigationResult = {
+      url: `https://customer.example/private/${PRIVATE_SENTINEL}`,
+      finalUrl: `https://customer.example/final?token=${PRIVATE_SENTINEL}`,
+      status: 201,
+      durationMs: 7,
+    };
+    vi.spyOn(driver, 'navigate').mockResolvedValueOnce(navigationResult);
+    await expect(
+      service.navigate(ctx, session.id, {
+        url: `https://user:${PRIVATE_SENTINEL}@customer.example/start/${PRIVATE_SENTINEL}`,
+        wait_until: 'load',
+      }),
+    ).resolves.toEqual(navigationResult);
+
+    await service.interact(ctx, session.id, {
+      action: {
+        kind: 'type',
+        selector: `#${PRIVATE_SENTINEL}`,
+        text: PRIVATE_SENTINEL,
+        delay_ms: 25,
+        sensitive: true,
+      },
+    });
+    await service.guiInput(ctx, session.id, {
+      action: { kind: 'type_focused', text: PRIVATE_SENTINEL, delay_ms: 15 },
+    });
+    await service.wait(ctx, session.id, {
+      condition: { kind: 'url_matches', pattern: PRIVATE_SENTINEL },
+    });
+
+    const stateResult = {
+      url: `https://state.example/private/${PRIVATE_SENTINEL}`,
+      title: PRIVATE_SENTINEL,
+      cookies: [{ name: 'auth', value: PRIVATE_SENTINEL }],
+      localStorage: { token: PRIVATE_SENTINEL },
+      pageState: null,
+      capturedAt: driver.capturedAt,
+    };
+    vi.spyOn(driver, 'getState').mockResolvedValueOnce(stateResult);
+    await expect(service.getState(ctx, session.id)).resolves.toEqual(stateResult);
+
+    const captureResult = {
+      kind: 'screenshot' as const,
+      data: PRIVATE_SENTINEL,
+      encoding: 'base64' as const,
+      byteSize: 128,
+      durationMs: 9,
+    };
+    vi.spyOn(driver, 'capture').mockResolvedValueOnce(captureResult);
+    await expect(
+      service.capture(ctx, session.id, { kind: 'screenshot', full_page: false }),
+    ).resolves.toEqual(captureResult);
+
+    expect(
+      repo.events.map(({ type, payload, durationMs }) => ({ type, payload, durationMs })),
+    ).toEqual([
+      {
+        type: 'created',
+        payload: {
+          archetype: 'iphone16pro_ios18_7_safari26_4',
+          purpose: 'production_customer',
+        },
+        durationMs: null,
+      },
+      {
+        type: 'navigated',
+        payload: {
+          requested_origin: 'https://customer.example',
+          final_origin: 'https://customer.example',
+          status: 201,
+        },
+        durationMs: 7,
+      },
+      {
+        type: 'interacted',
+        payload: { action_kind: 'type', sensitive: true, delay_ms: 25 },
+        durationMs: 1,
+      },
+      {
+        type: 'gui_input',
+        payload: { action_kind: 'type_focused', delay_ms: 15 },
+        durationMs: 1,
+      },
+      {
+        type: 'waited',
+        payload: { condition_kind: 'url_matches', satisfied: true },
+        durationMs: 1,
+      },
+      {
+        type: 'state_captured',
+        payload: { source: 'page_state', origin: 'https://state.example' },
+        durationMs: null,
+      },
+      {
+        type: 'screenshot_captured',
+        payload: { kind: 'screenshot', byte_size: 128 },
+        durationMs: 9,
+      },
+    ]);
+    expect(JSON.stringify(repo.events)).not.toContain(PRIVATE_SENTINEL);
   });
 
   it('subsequent op on errored session 410s without re-firing webhook', async () => {
@@ -839,7 +957,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
         operation: testCase.operation,
         persistence: 'event',
       });
-      expect(loggedErrors[0]?.obj.error_name).toBe('Error');
+      expect(loggedErrors[0]?.obj.error_name).toBe('PostSuccessPersistenceError');
       expect(loggedErrors[0]?.obj).not.toHaveProperty('error_message');
       const diagnostic = JSON.stringify(loggedErrors[0]?.obj);
       for (const secret of ['user:pass', 'event_secret', 'bmFtZS1zZWNyZXQ=']) {
@@ -934,7 +1052,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
       event: 'post_success_persistence_failed',
       operation: 'interact',
       persistence: 'event',
-      error_name: 'UnknownError',
+      error_name: 'PostSuccessPersistenceError',
     });
     expect(driver.operationCalls).toEqual(['interact']);
     expect(driver.destroyedIds).toEqual([]);
@@ -1063,7 +1181,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
         event: 'post_success_persistence_failed',
         operation: 'wait',
         persistence: 'event',
-        error_name: 'PromptPersistenceError',
+        error_name: 'PostSuccessPersistenceError',
       });
       expect(vi.getTimerCount()).toBe(0);
 
@@ -1083,7 +1201,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
         event: 'post_success_persistence_failed',
         operation: 'capture',
         persistence: 'event',
-        error_name: 'SynchronousPersistenceError',
+        error_name: 'PostSuccessPersistenceError',
       });
       expect(vi.getTimerCount()).toBe(0);
 

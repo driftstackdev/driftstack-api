@@ -192,12 +192,15 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     );
   });
 
-  it('enqueueEvent: defence-in-depth skip on disabled endpoints; payload shape {id, type, created_at, data}', () => {
+  it('enqueueEvent: session.failed is closed before lookup/persistence; unrelated event data passes through; disabled endpoints are skipped', () => {
+    expect(body).toMatch(
+      /const closedData = eventType === 'session\.failed' \? projectSessionFailedData\(data\) : data;/,
+    );
     expect(body).toMatch(
       /\/\/ Skip endpoints that are disabled even if listEndpointsSubscribedTo\s*\n?\s*\/\/ returned them \(defence in depth\)\.\s*\n?\s*if \(!ep\.active \|\| ep\.disabledAt !== null\) continue;/,
     );
     expect(body).toMatch(
-      /const payload = \{ id: eventId, type: eventType, created_at: createdAt, data \};/,
+      /const payload = \{ id: eventId, type: eventType, created_at: createdAt, data: closedData \};/,
     );
   });
 
@@ -244,7 +247,7 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     );
   });
 
-  it('imports: randomUUID + BadRequest/Conflict/NotFound errors + requireScope alias + webhook-signing helpers + AccountContext + AccountAuditService', () => {
+  it('imports: randomUUID + errors/scope/signing + closed session.failed projector + service types', () => {
     expect(body).toMatch(/import \{ randomUUID \} from 'node:crypto';/);
     expect(body).toMatch(
       /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
@@ -254,6 +257,9 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     );
     expect(body).toMatch(
       /import \{ generateWebhookSecret, webhookSecretPrefix \} from '\.\.\/lib\/webhook-signing\.js';/,
+    );
+    expect(body).toMatch(
+      /import \{ projectSessionFailedData \} from '\.\.\/lib\/session-event-metadata\.js';/,
     );
     expect(body).toMatch(/import type \{ AccountContext \} from '\.\/auth\.js';/);
     expect(body).toMatch(/import type \{ AccountAuditService \} from '\.\/account-audit\.js';/);

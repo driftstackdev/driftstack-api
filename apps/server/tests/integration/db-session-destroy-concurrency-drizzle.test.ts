@@ -328,5 +328,110 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(destroyed.kind).toBe('destroyed');
       expect(destroyedDriverSessionId).toBe(realDriverSessionId);
     });
+
+    it('projects direct event and serialized-destroy callers before durable write or browser teardown', async () => {
+      if (!dbReachable || !client) throw new Error('real PostgreSQL setup failed');
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+      const { accountId, apiKeyId } = await seedAccountWithKey();
+      const sentinel = 'PRIVATE_DB_EVENT_4b7d31';
+      const session = await repo.insertSession(sessionInput(accountId, apiKeyId));
+      await repo.updateSessionStatus(session.id, 'ready');
+
+      await repo.recordEvent({
+        sessionId: session.id,
+        type: 'navigated',
+        payload: {
+          url: `https://user:${sentinel}@customer.example/private/${sentinel}`,
+          final_url: `https://customer.example/final?token=${sentinel}`,
+          status: 200,
+          extension: sentinel,
+        },
+        durationMs: 12,
+      });
+
+      let destroyCalls = 0;
+      await expect(
+        repo.destroySessionSerialized(
+          {
+            id: session.id,
+            accountId,
+            destroyedAt: new Date('2026-07-17T12:00:00.000Z'),
+            event: {
+              type: 'destroyed',
+              payload: { reason: sentinel, detail: sentinel },
+              durationMs: null,
+            },
+          },
+          () => {
+            destroyCalls += 1;
+            return Promise.resolve();
+          },
+        ),
+      ).resolves.toMatchObject({ kind: 'destroyed' });
+      expect(destroyCalls).toBe(1);
+
+      const stored = (await client`
+        SELECT type, payload, duration_ms
+          FROM session_events
+         WHERE session_id = ${session.id}
+         ORDER BY type
+      `) as Array<{ type: string; payload: Record<string, unknown>; duration_ms: number | null }>;
+      expect(stored).toHaveLength(2);
+      expect(stored.find((event) => event.type === 'navigated')).toEqual({
+        type: 'navigated',
+        payload: {
+          requested_origin: 'https://customer.example',
+          final_origin: 'https://customer.example',
+          status: 200,
+        },
+        duration_ms: 12,
+      });
+      expect(stored.find((event) => event.type === 'destroyed')).toEqual({
+        type: 'destroyed',
+        payload: {
+          reason_code: 'unspecified',
+          auto_destroyed: false,
+          by_admin: false,
+          max_session_minutes: null,
+        },
+        duration_ms: null,
+      });
+      expect(JSON.stringify(stored)).not.toContain(sentinel);
+    });
+
+    it('rejects an unknown direct destroy event before external teardown and row mutation', async () => {
+      if (!dbReachable || !client) throw new Error('real PostgreSQL setup failed');
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+      const { accountId, apiKeyId } = await seedAccountWithKey();
+      const session = await repo.insertSession(sessionInput(accountId, apiKeyId));
+      await repo.updateSessionStatus(session.id, 'ready');
+      let destroyCalls = 0;
+
+      await expect(
+        repo.destroySessionSerialized(
+          {
+            id: session.id,
+            accountId,
+            destroyedAt: new Date('2026-07-17T12:01:00.000Z'),
+            event: {
+              type: 'future_secret_event',
+              payload: { secret: 'must-not-persist' },
+              durationMs: null,
+            } as never,
+          },
+          () => {
+            destroyCalls += 1;
+            return Promise.resolve();
+          },
+        ),
+      ).rejects.toThrow('Unknown session event type.');
+      expect(destroyCalls).toBe(0);
+      expect(await repo.findSession(session.id, accountId)).toMatchObject({
+        status: 'ready',
+        destroyedAt: null,
+      });
+    });
   },
 );

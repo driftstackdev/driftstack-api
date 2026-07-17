@@ -45,7 +45,7 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('imports: Drizzle primitives; SessionStatusSchema + AccountTier; ProfileInUseError; service/Database types; both session schemas; canonical profile lock helper', () => {
+  it('imports: Drizzle primitives; SessionStatusSchema + AccountTier; ProfileInUseError; closed event projector; service/Database types; both session schemas; canonical profile lock helper', () => {
     // Reflow-robust: prettier wraps this multi-member import across lines, so
     // match the members with \s* separators rather than a single-line literal.
     expect(body).toMatch(
@@ -59,6 +59,9 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     // A3 finding #7 (W2979/W2980) — ProfileInUseError thrown by the single-active-
     // session-per-profile guard inside insertSessionIfUnderLimit.
     expect(body).toMatch(/import \{ ProfileInUseError \} from '\.\.\/lib\/errors\.js';/);
+    expect(body).toMatch(
+      /import \{ projectSessionEventMetadata \} from '\.\.\/lib\/session-event-metadata\.js';/,
+    );
     expect(body).toMatch(
       /import type \{\s*\n?\s*NewSessionInput,\s*\n?\s*SessionEventInput,\s*\n?\s*SessionListPage,\s*\n?\s*SessionRecord,\s*\n?\s*SessionRepo,\s*\n?\s*SerializedSessionDestroyInput,\s*\n?\s*SerializedSessionDestroyResult,\s*\n?\s*\} from '\.\.\/services\/sessions\.js';/,
     );
@@ -115,10 +118,17 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('destroySessionSerialized: scoped SELECT FOR UPDATE; one terminal callback winner; driver failure commits no success event; success update + event share the transaction', () => {
+  it('destroySessionSerialized: projects before transaction/driver; scoped SELECT FOR UPDATE elects one terminal callback winner; success update + projected event share the transaction', () => {
     expect(body).toMatch(
       /async destroySessionSerialized\(\s*\n?\s*input: SerializedSessionDestroyInput,\s*\n?\s*destroyDriverSession: \(session: SessionRecord\) => Promise<void>,\s*\n?\s*\): Promise<SerializedSessionDestroyResult> \{/,
     );
+    const projectionIdx = body.indexOf('const event = projectSessionEventMetadata(input.event);');
+    const transactionIdx = body.indexOf(
+      'return this.database.db.transaction(async (tx) => {',
+      projectionIdx,
+    );
+    expect(projectionIdx).toBeGreaterThan(0);
+    expect(transactionIdx).toBeGreaterThan(projectionIdx);
     expect(body).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
     expect(body).toMatch(
       /input\.accountId === null \? undefined : eq\(sessions\.accountId, input\.accountId\)/,
@@ -137,6 +147,9 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     const eventInsertIdx = body.indexOf('await tx.insert(sessionEvents).values({');
     expect(driverFailureIdx).toBeGreaterThan(0);
     expect(eventInsertIdx).toBeGreaterThan(driverFailureIdx);
+    expect(body.slice(eventInsertIdx, eventInsertIdx + 260)).toMatch(
+      /type: event\.type,\s*payload: event\.payload,\s*durationMs: event\.durationMs/,
+    );
   });
 
   it('updateSessionStatus: always-bump updatedAt:new Date(); selective spread of lastStateAt + destroyedAt when present', () => {
@@ -176,9 +189,9 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     expect(body).toMatch(/nextCursor: hasMore && last \? last\.id : null,/);
   });
 
-  it('recordEvent: append-only insert into sessionEvents with 4-field values (sessionId + type + payload + durationMs)', () => {
+  it('recordEvent: projects before append-only insert into sessionEvents', () => {
     expect(body).toMatch(
-      /async recordEvent\(input: SessionEventInput\): Promise<void> \{\s*\n?\s*await this\.database\.db\.insert\(sessionEvents\)\.values\(\{\s*\n?\s*sessionId: input\.sessionId,\s*\n?\s*type: input\.type,\s*\n?\s*payload: input\.payload,\s*\n?\s*durationMs: input\.durationMs,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /async recordEvent\(input: SessionEventInput\): Promise<void> \{\s*const event = projectSessionEventMetadata\(input\);\s*await this\.database\.db\.insert\(sessionEvents\)\.values\(\{\s*sessionId: input\.sessionId,\s*type: event\.type,\s*payload: event\.payload,\s*durationMs: event\.durationMs,\s*\}\);\s*\}/,
     );
   });
 

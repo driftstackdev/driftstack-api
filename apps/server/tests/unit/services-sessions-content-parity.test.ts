@@ -225,7 +225,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
       /const purpose: SessionPurpose = body\.purpose \?\? DEFAULT_SESSION_PURPOSE;/,
     );
     expect(body).toMatch(
-      /action: 'session\.created',\s*\n?\s*targetResourceId: `ses_\$\{record\.id\}`,\s*\n?\s*payload: \{ archetype, purpose \},/,
+      /const accountAuditInput = \{[\s\S]+?action: 'session\.created' as const,\s*targetResourceId: `ses_\$\{record\.id\}`,\s*payload: \{ archetype, purpose \},\s*\};[\s\S]+?\(\) => accountAudit\.record\(accountAuditInput\)/,
     );
   });
 
@@ -303,25 +303,24 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
       /\/\/ V-326e3 — fan-out goes to the SESSION OWNER \(session\.accountId\),\s*\n?\s*\/\/ not the caller\. When a member fails on an owner's session,\s*\n?\s*\/\/ the owner's webhook subscription fires \+ the owner gets the\s*\n?\s*\/\/ first-failure email\. The caller is the actor; the resource's\s*\n?\s*\/\/ owner is the audience\./,
     );
     expect(body).toMatch(
-      /await this\.deps\.webhooks\.enqueueEvent\(session\.accountId, 'session\.failed', \{\s*\n?\s*session_id: `ses_\$\{session\.id\}`,\s*\n?\s*duration_ms: durationMs,\s*\n?\s*operation,\s*\n?\s*error_name: errorName,\s*\n?\s*error_message: errorMessage,/,
+      /const failedData = projectSessionFailedData\(\{\s*session_id: `ses_\$\{session\.id\}`,\s*duration_ms: durationMs,\s*operation,\s*failure_class: failureClass,\s*\}\);/,
     );
     expect(body).toMatch(
-      /await this\.deps\.accountLifecycle\.emit\(session\.accountId, \{\s*\n?\s*kind: 'session\.failed\.first',\s*\n?\s*sessionId: `ses_\$\{session\.id\}`,\s*\n?\s*errorMessage,\s*\n?\s*\}\);/,
+      /await this\.deps\.webhooks\.enqueueEvent\(session\.accountId, 'session\.failed', failedData\);/,
+    );
+    expect(body).toMatch(
+      /await this\.deps\.accountLifecycle\.emit\(session\.accountId, \{\s*\n?\s*kind: 'session\.failed\.first',\s*\n?\s*sessionId: `ses_\$\{session\.id\}`,\s*\n?\s*errorMessage: failureCopy\.error_message,\s*\n?\s*\}\);/,
     );
   });
 
-  it('runWithFailureCapture: durable/customer diagnostics are centrally redacted and pre/post bounded while the original error is rethrown', () => {
-    expect(body).toMatch(/import \{ redactText \} from '\.\.\/lib\/redact-url\.js';/);
-    expect(body).toMatch(/const SESSION_FAILURE_MESSAGE_MAX_CHARS = 500;/);
-    expect(body).toMatch(/const SESSION_FAILURE_NAME_MAX_CHARS = 100;/);
-    expect(body).toMatch(/const bounded = value\.slice\(0, maxChars\);/);
-    expect(body).toMatch(/\(redactText\(bounded\) \|\| fallback\)\.slice\(0, maxChars\)/);
+  it('runWithFailureCapture: durable/customer diagnostics use only closed classes and fixed copy while the original error is rethrown', () => {
     expect(body).toMatch(
-      /const errorMessage = safeSessionFailureDiagnostic\([\s\S]+?SESSION_FAILURE_MESSAGE_MAX_CHARS,[\s\S]+?'unknown driver failure',[\s\S]+?\);/,
+      /const failureClass = classifySessionFailure\(err\);\s*\n?\s*const failureCopy = sessionFailureCopy\(failureClass\);/,
     );
     expect(body).toMatch(
-      /const errorName = safeSessionFailureDiagnostic\([\s\S]+?SESSION_FAILURE_NAME_MAX_CHARS,[\s\S]+?'UnknownError',[\s\S]+?\);/,
+      /const errorEvent = projectSessionEventMetadata\(\{\s*type: 'errored',\s*payload: \{ operation, failure_class: failureClass \},\s*durationMs: null,\s*\}\);/,
     );
+    expect(body).not.toMatch(/redactText|safeSessionFailureDiagnostic|error_message: errorMessage/);
     expect(body).toMatch(/throw err;/);
   });
 
@@ -333,9 +332,21 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
       /await this\.deps\.repo\.updateSessionStatus\(session\.id, 'errored', \{\s*\n?\s*destroyedAt: erroredAt,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /type: 'errored',\s*\n?\s*payload: \{ operation, error_name: errorName, error_message: errorMessage \},/,
+      /await this\.deps\.repo\.recordEvent\(\{\s*sessionId: session\.id,\s*\.\.\.errorEvent,\s*\}\);/,
     );
     expect(body).toMatch(/throw err;/);
+  });
+
+  it('successful event payloads are projected synchronously before detached persistence', () => {
+    expect(body).toMatch(
+      /const createdEvent = projectSessionEventMetadata\(\{[\s\S]+?this\.persistPostSuccessObservability\(record\.accountId, record\.id, 'create', 'event', \(\) =>[\s\S]+?\.\.\.createdEvent,/,
+    );
+    expect(body).toMatch(
+      /const event = projectSessionEventMetadata\(\{\s*type: 'navigated',[\s\S]+?this\.persistPostSuccessObservability\(session\.accountId, session\.id, 'navigate', 'event'/,
+    );
+    expect(body).toMatch(
+      /error_name: timedOut\s*\? 'PostSuccessPersistenceTimeout'\s*:\s*'PostSuccessPersistenceError'/,
+    );
   });
 
   it('listAll: exact driftstack_internal_admin scope; legacy customer admin is insufficient', () => {

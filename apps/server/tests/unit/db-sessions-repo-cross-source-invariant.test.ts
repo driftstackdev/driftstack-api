@@ -30,8 +30,8 @@
 //
 //   listAllSessions admin filters — cursor + status + accountId.
 //
-//   recordEvent values 4 fields — sessionId + type + payload +
-//     durationMs.
+//   recordEvent closed projection boundary — project before the
+//     four-field sessionId + type + payload + durationMs insert.
 //
 //   toSessionRecord 13-field mapper — id + accountId + apiKeyId +
 //     driverSessionId + status + archetype + purpose + label +
@@ -182,14 +182,21 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
     expect(p).toMatch(/nextCursor: hasMore && last \? last\.id : null,/);
   });
 
-  // ─── recordEvent 4-field values ──────────────────────────────
+  // ─── recordEvent closed projection boundary ─────────────────
 
-  it('CRITICAL recordEvent 4-field values — sessionId + type + payload + durationMs. The 4-field shape is the per-event session-history record.', () => {
+  it('CRITICAL recordEvent projects through the closed metadata boundary before its 4-field insert', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(
+      /import \{ projectSessionEventMetadata \} from '\.\.\/lib\/session-event-metadata\.js';/,
+    );
+    const projectionIdx = p.indexOf('const event = projectSessionEventMetadata(input);');
+    const insertIdx = p.indexOf('await this.database.db.insert(sessionEvents).values({');
+    expect(projectionIdx).toBeGreaterThan(0);
+    expect(insertIdx).toBeGreaterThan(projectionIdx);
     expect(p).toMatch(/sessionId: input\.sessionId,/);
-    expect(p).toMatch(/type: input\.type,/);
-    expect(p).toMatch(/payload: input\.payload,/);
-    expect(p).toMatch(/durationMs: input\.durationMs,/);
+    expect(p).toMatch(/type: event\.type,/);
+    expect(p).toMatch(/payload: event\.payload,/);
+    expect(p).toMatch(/durationMs: event\.durationMs,/);
   });
 
   // ─── listAllSessions admin filters ───────────────────────────

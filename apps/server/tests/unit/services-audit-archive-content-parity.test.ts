@@ -4,16 +4,17 @@
 // mode invariants (R2 upload fails → DELETE skipped; DELETE fails →
 // R2 overwrite next run) or scrambles the YYYY/MM/ partition path.
 //
-//   • V-163 + ADR-006 framing + 4 audit-shaped tables + R2 gzip JSONL
+//   • V-163 + ADR-006 framing + 5 tables (4 audit-shaped + session_events) + R2 gzip JSONL
 //     + monthly cadence (1st of each month 02:00 UTC, scheduler
 //     external).
 //   • Failure modes: R2 upload fails → DELETE skipped + ledger row
 //     deletedFromPostgres=false → next-run retry; DELETE fails → R2
 //     remains, ledger records upload, next run overwrites idempotently.
 //   • HOT_RETENTION_MS = 90 days; DEFAULT_BATCH_SIZE = 10_000.
-//   • AUDIT_TABLES: 4 entries with per-table timestampColumn binding
+//   • AUDIT_TABLES: 5 entries with per-table timestampColumn binding
 //     (admin_audit_log/timestamp, processed_stripe_events/received_at,
-//     legal_acceptances/accepted_at, webhook_deliveries/created_at).
+//     legal_acceptances/accepted_at, webhook_deliveries/created_at,
+//     session_events/created_at).
 //   • archiveObjectKey: <prefix>/<table>/YYYY/MM/<table>_YYYY-MM.jsonl.gz
 //     (ADR-006 §2).
 //   • rowsToJsonl: empty input → empty string (no trailing newline).
@@ -40,7 +41,7 @@ function read(p: string): string {
 describe('W402.A apps/server/src/services/audit-archive.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-163 + ADR-006 framing pinned + 4 audit-shaped tables + R2 gzip JSONL + monthly cadence', () => {
+  it('V-163 + ADR-006 framing pinned + 5 tables + R2 gzip JSONL + monthly cadence', () => {
     expect(body).toMatch(/V-163 — AuditArchiveService per ADR-006\./);
     expect(body).toMatch(/Sweeps rows older than 90 days from five Postgres tables — the four/);
     expect(body).toMatch(/audit-shaped \(admin_audit_log \/ processed_stripe_events \//);
@@ -61,16 +62,17 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     );
   });
 
-  it('HOT_RETENTION_MS = 90 days + DEFAULT_BATCH_SIZE = 10_000 exports', () => {
+  it('HOT_RETENTION_MS = 90 days + DEFAULT_BATCH_SIZE = 10_000 + 64 KiB legacy body cap exports', () => {
     expect(body).toMatch(
       /\/\*\* 90 days in milliseconds — the hot-retention threshold\. \*\/\s*\n?\s*export const HOT_RETENTION_MS = 90 \* 24 \* 60 \* 60 \* 1000;/,
     );
     expect(body).toMatch(
       /\/\*\* Default upload-batch size — keeps memory bounded on large windows\. \*\/\s*\n?\s*export const DEFAULT_BATCH_SIZE = 10_000;/,
     );
+    expect(body).toMatch(/export const MAX_ARCHIVED_WEBHOOK_BODY_BYTES = 64 \* 1024;/);
   });
 
-  it('AUDIT_TABLES: 4 entries (admin_audit_log/timestamp, processed_stripe_events/received_at, legal_acceptances/accepted_at, webhook_deliveries/created_at)', () => {
+  it('AUDIT_TABLES: 5 entries including session_events/created_at', () => {
     expect(body).toMatch(/export const AUDIT_TABLES = \[/);
     expect(body).toMatch(/\{ tableName: 'admin_audit_log', timestampColumn: 'timestamp' \},/);
     expect(body).toMatch(
@@ -78,6 +80,7 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     );
     expect(body).toMatch(/\{ tableName: 'legal_acceptances', timestampColumn: 'accepted_at' \},/);
     expect(body).toMatch(/\{ tableName: 'webhook_deliveries', timestampColumn: 'created_at' \},/);
+    expect(body).toMatch(/\{ tableName: 'session_events', timestampColumn: 'created_at' \},/);
     expect(body).toMatch(/\] as const;/);
   });
 
@@ -129,13 +132,15 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     );
   });
 
-  it('archiveTable: select → gzip → sha256-hex → R2.putObject (content-type application/x-ndjson+gzip) → ledger.insertRun', () => {
+  it('archiveTable: select → closed projection → gzip → sha256-hex → R2.putObject → ledger.insertRun', () => {
     expect(body).toMatch(
       /const olderThan = new Date\(startedAt\.getTime\(\) - HOT_RETENTION_MS\);/,
     );
     expect(body).toMatch(
       /const archivable = await this\.rows\.selectArchivableRows\(tableName, olderThan\);/,
     );
+    expect(body).toMatch(/const uploadRows = projectRowsForArchive\(tableName, archivable\);/);
+    expect(body).toMatch(/const jsonl = rowsToJsonl\(uploadRows\);/);
     expect(body).toMatch(/const compressed = await gzipAsync\(Buffer\.from\(jsonl, 'utf-8'\)\);/);
     expect(body).toMatch(
       /const sha256Checksum = createHash\('sha256'\)\.update\(compressed\)\.digest\('hex'\);/,
@@ -143,6 +148,19 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     expect(body).toMatch(
       /await this\.r2\.putObject\(\{\s*\n?\s*key: r2ObjectKey,\s*\n?\s*body: compressed,\s*\n?\s*contentType: 'application\/x-ndjson\+gzip',\s*\n?\s*\}\);/,
     );
+  });
+
+  it('archive projection closes session events and session.failed rows while leaving unrelated tables/events unchanged', () => {
+    expect(body).toMatch(
+      /if \(tableName === 'session_events'\) return rows\.map\(projectSessionEventArchiveRow\);/,
+    );
+    expect(body).toMatch(
+      /if \(tableName === 'webhook_deliveries'\) return rows\.map\(projectWebhookDeliveryArchiveRow\);/,
+    );
+    expect(body).toMatch(/if \(eventType !== 'session\.failed'\) return row;/);
+    expect(body).toMatch(/Buffer\.byteLength\(value, 'utf8'\) > MAX_ARCHIVED_WEBHOOK_BODY_BYTES/);
+    expect(body).toMatch(/data: projectSessionFailedData\(input\.data\)/);
+    expect(body).toMatch(/lastResponseExcerpt: null,\s*lastError: null,/);
   });
 
   it('archiveTable: conditional DELETE — markDeletedFromPostgres only when deleted-count matches archived count; empty window marks deleted=true', () => {
@@ -200,6 +218,7 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     expect(body).toMatch(
       /const col = AUDIT_TABLES\.find\(\(t\) => t\.tableName === tableName\)!\.timestampColumn;/,
     );
+    expect(body).toMatch(/const v = row\[col\] \?\? row\[camelTimestampColumn\(tableName\)\];/);
     expect(body).toMatch(/if \(v instanceof Date\) return v;/);
     expect(body).toMatch(/if \(typeof v === 'string'\) return new Date\(v\);/);
     expect(body).toMatch(
@@ -208,11 +227,14 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     expect(body).toMatch(/throw new Error\('audit-archive: row missing string id'\);/);
   });
 
-  it('imports: createHash + promisify + gzip|gzipSync from node:zlib + R2 type', () => {
+  it('imports: crypto/zlib/R2 plus the closed session-event and failure projectors', () => {
     expect(body).toMatch(/import \{ createHash \} from 'node:crypto';/);
     expect(body).toMatch(/import \{ promisify \} from 'node:util';/);
     expect(body).toMatch(/import \{ gzip as gzipCb, gzipSync \} from 'node:zlib';/);
     expect(body).toMatch(/import type \{ R2 \} from '\.\.\/lib\/r2\.js';/);
+    expect(body).toMatch(
+      /import \{\s*projectSessionEventMetadata,\s*projectSessionFailedData,\s*\} from '\.\.\/lib\/session-event-metadata\.js';/,
+    );
     expect(body).toMatch(/const gzipAsync = promisify\(gzipCb\);/);
     expect(body).toMatch(/export \{ gzipSync \};/);
   });

@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 import { generateWebhookSecret, webhookSecretPrefix } from '../lib/webhook-signing.js';
+import { projectSessionFailedData } from '../lib/session-event-metadata.js';
 import type { AccountContext } from './auth.js';
 import type { AccountAuditService } from './account-audit.js';
 
@@ -823,12 +824,13 @@ export class WebhooksService {
     eventType: WebhookEventType,
     data: Record<string, unknown>,
   ): Promise<number> {
+    const closedData = eventType === 'session.failed' ? projectSessionFailedData(data) : data;
     const endpoints = await this.repo.listEndpointsSubscribedTo(accountId, eventType);
     if (endpoints.length === 0) return 0;
 
     const eventId = randomUUID();
     const createdAt = new Date().toISOString();
-    const payload = { id: eventId, type: eventType, created_at: createdAt, data };
+    const payload = { id: eventId, type: eventType, created_at: createdAt, data: closedData };
 
     for (const ep of endpoints) {
       // Skip endpoints that are disabled even if listEndpointsSubscribedTo
