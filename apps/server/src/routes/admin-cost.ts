@@ -8,7 +8,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { NotFoundError, BadRequestError } from '../lib/errors.js';
-import { type CostMonitoringService, billingCycleFromDate } from '../services/cost-monitoring.js';
+import {
+  BILLING_CYCLE_PATTERN,
+  type CostMonitoringService,
+  billingCycleFromDate,
+} from '../services/cost-monitoring.js';
 
 const AccountSummaryParams = z.object({
   // account id is `acc_<36-char-uuid>` (40 chars); 100 cap matches
@@ -16,20 +20,14 @@ const AccountSummaryParams = z.object({
   id: z.string().min(1).max(100),
 });
 const AccountSummaryQuery = z.object({
-  billing_cycle: z
-    .string()
-    .regex(/^\d{4}-\d{2}$/)
-    .optional(),
+  billing_cycle: z.string().regex(BILLING_CYCLE_PATTERN).optional(),
 });
 const OverviewQuery = z.object({
   // Comma-separated list of account ids. Cap at 4096 chars — fits
   // ~100 ids at 40 chars + separators; abuse beyond that crosses
   // into HTTP-header / URL-length territory anyway.
   account_ids: z.string().min(1).max(4096),
-  billing_cycle: z
-    .string()
-    .regex(/^\d{4}-\d{2}$/)
-    .optional(),
+  billing_cycle: z.string().regex(BILLING_CYCLE_PATTERN).optional(),
 });
 
 // Normalize to the bare uuid the cost lookups need: accept either the public

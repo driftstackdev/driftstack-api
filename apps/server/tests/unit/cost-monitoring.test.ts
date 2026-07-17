@@ -2,6 +2,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
+  BILLING_CYCLE_PATTERN,
+  CostThresholdConfigurationError,
   billingCycleFromDate,
   CostMonitoringService,
   type UsageAggregator,
@@ -36,6 +38,13 @@ describe('V-541.B billingCycleFromDate', () => {
   it('formats UTC year-month with leading zero', () => {
     expect(billingCycleFromDate(new Date('2026-01-15T00:00:00Z'))).toBe('2026-01');
     expect(billingCycleFromDate(new Date('2026-12-31T23:59:59Z'))).toBe('2026-12');
+  });
+
+  it('accepts only real two-digit calendar months', () => {
+    expect(BILLING_CYCLE_PATTERN.test('2026-01')).toBe(true);
+    expect(BILLING_CYCLE_PATTERN.test('2026-12')).toBe(true);
+    expect(BILLING_CYCLE_PATTERN.test('2026-00')).toBe(false);
+    expect(BILLING_CYCLE_PATTERN.test('2026-13')).toBe(false);
   });
 });
 
@@ -73,6 +82,41 @@ describe('V-541.B getAccountSummary', () => {
       resolveTier: () => Promise.resolve(null),
     });
     expect(await svc.getAccountSummary({ accountId: 'acc_a', billingCycle: '2026-05' })).toBeNull();
+  });
+
+  it('fails closed when the resolved tier has no exact threshold configuration', async () => {
+    const aggregateForAccount = vi.fn(() =>
+      Promise.resolve<UsageInputs | null>({ ...EMPTY, sessionMinutes: 1 }),
+    );
+    const svc = new CostMonitoringService({
+      aggregator: { aggregateForAccount },
+      rates: RATES,
+      tierThresholds: { api_starter: { softCents: 3000, hardCents: 6000 } },
+      resolveTier: () => Promise.resolve('free'),
+    });
+
+    await expect(
+      svc.getAccountSummary({ accountId: 'acc_free', billingCycle: '2026-05' }),
+    ).rejects.toEqual(expect.any(CostThresholdConfigurationError));
+    await expect(
+      svc.getAccountSummary({ accountId: 'acc_free', billingCycle: '2026-05' }),
+    ).rejects.toMatchObject({ tier: 'free' });
+    expect(aggregateForAccount).not.toHaveBeenCalled();
+  });
+
+  it('does not synthesize an empty-cycle result when its tier threshold is unconfigured', async () => {
+    const aggregateForAccount = vi.fn(() => Promise.resolve<UsageInputs | null>(null));
+    const svc = new CostMonitoringService({
+      aggregator: { aggregateForAccount },
+      rates: RATES,
+      tierThresholds: { api_starter: { softCents: 3000, hardCents: 6000 } },
+      resolveTier: () => Promise.resolve('enterprise'),
+    });
+
+    await expect(
+      svc.getAccountSummary({ accountId: 'acc_enterprise', billingCycle: '2026-05' }),
+    ).rejects.toThrow('No cost alert thresholds are configured for tier "enterprise".');
+    expect(aggregateForAccount).not.toHaveBeenCalled();
   });
 
   it('threshold_state reflects the configured per-tier thresholds', async () => {
@@ -143,5 +187,28 @@ describe('V-541.B getOverview', () => {
       billingCycle: '2026-05',
     });
     expect(aggregate).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects the whole batch rather than returning partial summaries under a borrowed threshold', async () => {
+    const aggregator = makeAggregator(
+      new Map([
+        ['acc_configured', { ...EMPTY, sessionMinutes: 100 }],
+        ['acc_unconfigured', { ...EMPTY, sessionMinutes: 200 }],
+      ]),
+    );
+    const svc = new CostMonitoringService({
+      aggregator,
+      rates: RATES,
+      tierThresholds: { api_builder: { softCents: 1000, hardCents: 2000 } },
+      resolveTier: (accountId) =>
+        Promise.resolve(accountId === 'acc_configured' ? 'api_builder' : 'free'),
+    });
+
+    await expect(
+      svc.getOverview({
+        accountIds: ['acc_configured', 'acc_unconfigured'],
+        billingCycle: '2026-05',
+      }),
+    ).rejects.toMatchObject({ name: 'CostThresholdConfigurationError', tier: 'free' });
   });
 });

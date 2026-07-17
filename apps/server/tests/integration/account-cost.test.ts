@@ -87,14 +87,36 @@ describe('V-541.D GET /v1/account/cost', () => {
     expect(body.billing_cycle).toMatch(/^\d{4}-\d{2}$/);
   });
 
-  it('400 on malformed billing_cycle (not YYYY-MM)', async () => {
+  it.each(['2026-5', '2026-00', '2026-13'])('400 on invalid billing_cycle %s', async (cycle) => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'GET',
-      url: '/v1/account/cost?billing_cycle=2026-5',
+      url: `/v1/account/cost?billing_cycle=${cycle}`,
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it.each(['2026-01', '2026-12'])('accepts valid boundary billing_cycle %s', async (cycle) => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/account/cost?billing_cycle=${cycle}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<CostResponse>().billing_cycle).toBe(cycle);
+  });
+
+  it('fails closed without a zero summary when the authenticated tier has no thresholds', async () => {
+    fx = await buildTestApp({ tier: 'enterprise' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/cost?billing_cycle=2026-05',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(500);
+    expect(res.json<{ breakdown?: unknown }>().breakdown).toBeUndefined();
   });
 
   it('does NOT include operator-tuned threshold values in the customer response', async () => {

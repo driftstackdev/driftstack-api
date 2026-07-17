@@ -18,6 +18,29 @@ import {
   type UsageInputs,
 } from '../lib/cost-estimator.js';
 
+/**
+ * Canonical public billing-cycle grammar. Both customer and admin routes use
+ * this exact authority so an impossible calendar month can never reach the
+ * usage aggregator as a plausible cycle.
+ */
+export const BILLING_CYCLE_PATTERN = /^\d{4}-(?:0[1-9]|1[0-2])$/;
+
+/**
+ * Configuration fault, not an absent account or an empty usage cycle.
+ *
+ * Callers deliberately let this fail closed: borrowing another tier's
+ * threshold would misclassify spend and could emit a false operator alert.
+ */
+export class CostThresholdConfigurationError extends Error {
+  readonly tier: string;
+
+  constructor(tier: string) {
+    super(`No cost alert thresholds are configured for tier "${tier}".`);
+    this.name = 'CostThresholdConfigurationError';
+    this.tier = tier;
+  }
+}
+
 export interface UsageAggregator {
   /**
    * Aggregate usage for a single account over the requested billing
@@ -57,12 +80,14 @@ export class CostMonitoringService {
     accountId: string;
     billingCycle: string;
   }): Promise<CostMonitoringAccountSummary | null> {
-    const usage = await this.opts.aggregator.aggregateForAccount(args);
-    if (usage === null) return null;
     const tier = await this.opts.resolveTier(args.accountId);
     if (tier === null) return null;
-    const thresholds = (this.opts.tierThresholds ?? DEFAULT_TIER_THRESHOLDS)[tier] ??
-      DEFAULT_TIER_THRESHOLDS.api_starter ?? { softCents: 0, hardCents: 0 };
+    const thresholds = (this.opts.tierThresholds ?? DEFAULT_TIER_THRESHOLDS)[tier];
+    if (thresholds === undefined) {
+      throw new CostThresholdConfigurationError(tier);
+    }
+    const usage = await this.opts.aggregator.aggregateForAccount(args);
+    if (usage === null) return null;
     return {
       account_id: args.accountId,
       billing_cycle: args.billingCycle,

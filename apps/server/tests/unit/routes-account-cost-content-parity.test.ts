@@ -7,7 +7,7 @@
 //
 //   • V-541.D framing pinned: customer-facing surface; service reused
 //     from admin V-541.B; account id pinned to ctx.account.id not URL.
-//   • billing_cycle YYYY-MM zod regex query param (optional; defaults
+//   • billing_cycle uses the shared strict calendar-cycle authority (optional; defaults
 //     to billingCycleFromDate(now)).
 //   • Null-summary policy pinned: fresh-account zero-breakdown reply
 //     (NOT 404) — "spent €0 this cycle" customer-facing copy
@@ -45,9 +45,9 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
     );
   });
 
-  it('Query zod schema: billing_cycle YYYY-MM regex + optional', () => {
+  it('Query zod schema: shared strict billing-cycle authority + optional', () => {
     expect(body).toMatch(
-      /const Query = z\.object\(\{\s*\n?\s*billing_cycle: z\s*\n?\s*\.string\(\)\s*\n?\s*\.regex\(\/\^\\d\{4\}-\\d\{2\}\$\/\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
+      /const Query = z\.object\(\{\s*\n?\s*billing_cycle: z\.string\(\)\.regex\(BILLING_CYCLE_PATTERN\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -112,11 +112,11 @@ describe('W414.B apps/server/src/routes/account-cost.ts content parity', () => {
     expect(body).not.toMatch(/BadRequestError\(result\.error\.message\)/);
   });
 
-  it('imports: FastifyInstance + zod + CostMonitoringService/billingCycleFromDate + BadRequestError/NotFoundError', () => {
+  it('imports: Fastify + zod + shared cycle authority/service + errors', () => {
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(
-      /import \{ type CostMonitoringService, billingCycleFromDate \} from '\.\.\/services\/cost-monitoring\.js';/,
+      /import \{\s*\n?\s*BILLING_CYCLE_PATTERN,\s*\n?\s*type CostMonitoringService,\s*\n?\s*billingCycleFromDate,\s*\n?\s*\} from '\.\.\/services\/cost-monitoring\.js';/,
     );
     expect(body).toMatch(
       /import \{ BadRequestError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,

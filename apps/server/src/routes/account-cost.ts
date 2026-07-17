@@ -11,14 +11,15 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { type CostMonitoringService, billingCycleFromDate } from '../services/cost-monitoring.js';
+import {
+  BILLING_CYCLE_PATTERN,
+  type CostMonitoringService,
+  billingCycleFromDate,
+} from '../services/cost-monitoring.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 
 const Query = z.object({
-  billing_cycle: z
-    .string()
-    .regex(/^\d{4}-\d{2}$/)
-    .optional(),
+  billing_cycle: z.string().regex(BILLING_CYCLE_PATTERN).optional(),
 });
 
 export interface RegisterAccountCostRoutesDeps {

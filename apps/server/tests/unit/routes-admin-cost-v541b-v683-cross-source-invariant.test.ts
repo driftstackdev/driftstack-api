@@ -14,7 +14,7 @@
 //     pattern)'.
 //
 //   AccountSummaryParams + AccountSummaryQuery + OverviewQuery Zod
-//     schemas with billing_cycle regex /^\d{4}-\d{2}$/.
+//     schemas sharing the strict BILLING_CYCLE_PATTERN authority.
 //
 //   accounts/:id summary returns 404 'Account has no usage in the
 //     requested billing cycle.' on null summary.
@@ -55,14 +55,14 @@ describe('W1030 routes/admin-cost V-541.B + V-683 cross-source invariant', () =>
     expect(p).toMatch(/\/\/ Auth: driftstack_internal_admin scope \(V-326e6 pattern\)\./);
   });
 
-  it('CRITICAL Zod schemas — AccountSummaryParams (id min 1) + AccountSummaryQuery + OverviewQuery (account_ids min 1 + billing_cycle /^\\d{4}-\\d{2}$/).', () => {
+  it('CRITICAL Zod schemas — AccountSummaryParams (id min 1) + both cost queries use the shared strict calendar-cycle authority.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-cost.ts'));
     expect(p).toMatch(/const AccountSummaryParams = z\.object\(\{/);
     expect(p).toMatch(/id: z\.string\(\)\.min\(1\)\.max\(100\),/);
     expect(p).toMatch(/const OverviewQuery = z\.object\(\{/);
     expect(p).toMatch(/account_ids: z\.string\(\)\.min\(1\)\.max\(4096\),/);
     expect(p).toMatch(/billing_cycle: z/);
-    expect(p).toMatch(/\.regex\(\/\^\\d\{4\}-\\d\{2\}\$\/\)/);
+    expect(p.match(/\.regex\(BILLING_CYCLE_PATTERN\)/g)).toHaveLength(2);
   });
 
   it("CRITICAL accounts/:id returns 404 NotFoundError 'Account has no usage in the requested billing cycle.' on null summary.", () => {

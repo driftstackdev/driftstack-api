@@ -36,10 +36,11 @@
 //     "who's expensive" eye hits the top of the list first'.
 //
 //   getAccountSummary returns null when usage OR tier resolves to
-//     null (accounts with no usage / unknown tier silently omitted).
+//     null (accounts with no usage / unknown account silently omitted),
+//     but an identified tier without exact thresholds fails closed.
 //
 //   billingCycleFromDate(d) — UTC 'YYYY-MM' label (2-digit padded
-//     month).
+//     month); BILLING_CYCLE_PATTERN admits only months 01..12.
 //
 // stays in lockstep across apps/server/src/services/cost-monitoring.ts.
 
@@ -47,7 +48,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { billingCycleFromDate } from '../../src/services/cost-monitoring.js';
+import { BILLING_CYCLE_PATTERN, billingCycleFromDate } from '../../src/services/cost-monitoring.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -153,14 +154,15 @@ describe('W942 V-541.B + V-683 cost-monitoring cross-source invariant', () => {
     expect(p).toMatch(/if \(tier === null\) return null;/);
   });
 
-  it("CRITICAL getAccountSummary threshold lookup — '(this.opts.tierThresholds ?? DEFAULT_TIER_THRESHOLDS)[tier] ?? DEFAULT_TIER_THRESHOLDS.api_starter ?? { softCents: 0, hardCents: 0 }'. The 3-tier fallback chain (per-tier → starter → zero) ensures even unknown tiers compute a breakdown.", () => {
+  it('CRITICAL getAccountSummary threshold lookup is exact and fail-closed. A missing tier entry throws CostThresholdConfigurationError before aggregation instead of borrowing api_starter or zero thresholds.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cost-monitoring.ts'));
     expect(p).toMatch(
-      /const thresholds = \(this\.opts\.tierThresholds \?\? DEFAULT_TIER_THRESHOLDS\)\[tier\] \?\?/,
+      /const thresholds = \(this\.opts\.tierThresholds \?\? DEFAULT_TIER_THRESHOLDS\)\[tier\];/,
     );
-    expect(p).toMatch(
-      /DEFAULT_TIER_THRESHOLDS\.api_starter \?\? \{ softCents: 0, hardCents: 0 \};/,
-    );
+    expect(p).toMatch(/if \(thresholds === undefined\) \{/);
+    expect(p).toMatch(/throw new CostThresholdConfigurationError\(tier\);/);
+    expect(p).not.toMatch(/DEFAULT_TIER_THRESHOLDS\.api_starter/);
+    expect(p).not.toMatch(/softCents: 0, hardCents: 0/);
   });
 
   // ─── getAccountSummary returns full 5-field shape ────────────
@@ -181,6 +183,13 @@ describe('W942 V-541.B + V-683 cost-monitoring cross-source invariant', () => {
     expect(billingCycleFromDate(new Date('2026-05-15T12:30:00Z'))).toBe('2026-05');
     expect(billingCycleFromDate(new Date('2026-01-01T00:00:00Z'))).toBe('2026-01');
     expect(billingCycleFromDate(new Date('2026-12-31T23:59:59Z'))).toBe('2026-12');
+  });
+
+  it('CRITICAL shared billing-cycle authority accepts 01/12 and rejects impossible 00/13 months', () => {
+    expect(BILLING_CYCLE_PATTERN.test('2026-01')).toBe(true);
+    expect(BILLING_CYCLE_PATTERN.test('2026-12')).toBe(true);
+    expect(BILLING_CYCLE_PATTERN.test('2026-00')).toBe(false);
+    expect(BILLING_CYCLE_PATTERN.test('2026-13')).toBe(false);
   });
 
   it("CRITICAL billingCycleFromDate uses getUTCFullYear + (getUTCMonth + 1).padStart(2, '0'). The UTC-only computation matches cost-aggregator billingCycleWindow + status-snapshot pattern.", () => {

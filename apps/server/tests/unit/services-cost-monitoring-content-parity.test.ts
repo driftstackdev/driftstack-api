@@ -12,8 +12,9 @@
 //   • CostMonitoringServiceOpts: aggregator + rates + tierThresholds?
 //     (defaults to V-658 DEFAULT_TIER_THRESHOLDS) + resolveTier.
 //   • getAccountSummary: returns null when usage OR tier missing.
-//   • Thresholds fallback chain: tierThresholds[tier] ?? api_starter
-//     ?? {soft:0, hard:0}.
+//   • Canonical billing-cycle grammar rejects impossible calendar months.
+//   • Threshold lookup is exact and fail-closed before aggregation; no
+//     cross-tier or zero-threshold borrowing.
 //   • V-683 getConfig: read-only rates + tierThresholds inspection
 //     for admin tooling.
 //   • getOverview: sort by total cost descending ("who's expensive"
@@ -89,10 +90,21 @@ describe('W396.A apps/server/src/services/cost-monitoring.ts content parity', ()
     expect(body).toMatch(/if \(tier === null\) return null;/);
   });
 
-  it('Thresholds fallback chain: tierThresholds[tier] ?? DEFAULT_TIER_THRESHOLDS.api_starter ?? {0,0}', () => {
+  it('exports one strict calendar-cycle authority with real month boundaries', () => {
     expect(body).toMatch(
-      /const thresholds = \(this\.opts\.tierThresholds \?\? DEFAULT_TIER_THRESHOLDS\)\[tier\] \?\?\s*\n?\s*DEFAULT_TIER_THRESHOLDS\.api_starter \?\? \{ softCents: 0, hardCents: 0 \};/,
+      /export const BILLING_CYCLE_PATTERN = \/\^\\d\{4\}-\(\?:0\[1-9\]\|1\[0-2\]\)\$\//,
     );
+  });
+
+  it('resolves tier + exact thresholds before aggregation and fails closed when absent', () => {
+    expect(body).toMatch(
+      /const tier = await this\.opts\.resolveTier\(args\.accountId\);\s*\n?\s*if \(tier === null\) return null;\s*\n?\s*const thresholds = \(this\.opts\.tierThresholds \?\? DEFAULT_TIER_THRESHOLDS\)\[tier\];\s*\n?\s*if \(thresholds === undefined\) \{\s*\n?\s*throw new CostThresholdConfigurationError\(tier\);/,
+    );
+    expect(body).toMatch(
+      /const usage = await this\.opts\.aggregator\.aggregateForAccount\(args\);\s*\n?\s*if \(usage === null\) return null;/,
+    );
+    expect(body).not.toMatch(/DEFAULT_TIER_THRESHOLDS\.api_starter/);
+    expect(body).not.toMatch(/softCents: 0, hardCents: 0/);
   });
 
   it('getAccountSummary: returns summary with breakdown=estimateCost(usage, rates, thresholds)', () => {

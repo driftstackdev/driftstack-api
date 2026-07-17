@@ -10,7 +10,7 @@
 //   • V-683 framing pinned: GET /v1/admin/cost/config returns wired
 //     rate-card + tier thresholds without touching usage; ops deploy-
 //     verification + "what did we ship?" admin dashboard.
-//   • billing_cycle YYYY-MM zod regex param; default via
+//   • billing_cycle uses the shared strict calendar-cycle authority; default via
 //     billingCycleFromDate(new Date(now())).
 //   • account_ids overview: CSV string split + trim + filter(Boolean);
 //     empty list → 400 BadRequestError.
@@ -55,15 +55,15 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
     );
   });
 
-  it('Schemas: AccountSummaryParams id min(1) + AccountSummaryQuery/OverviewQuery billing_cycle YYYY-MM optional', () => {
+  it('Schemas: AccountSummaryParams id min(1) + both queries share strict billing-cycle authority', () => {
     expect(body).toMatch(
       /const AccountSummaryParams = z\.object\(\{[\s\S]*?id: z\.string\(\)\.min\(1\)\.max\(100\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /const AccountSummaryQuery = z\.object\(\{\s*\n?\s*billing_cycle: z\s*\n?\s*\.string\(\)\s*\n?\s*\.regex\(\/\^\\d\{4\}-\\d\{2\}\$\/\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
+      /const AccountSummaryQuery = z\.object\(\{\s*\n?\s*billing_cycle: z\.string\(\)\.regex\(BILLING_CYCLE_PATTERN\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /const OverviewQuery = z\.object\(\{[\s\S]*?account_ids: z\.string\(\)\.min\(1\)\.max\(4096\),\s*\n?\s*billing_cycle: z\s*\n?\s*\.string\(\)\s*\n?\s*\.regex\(\/\^\\d\{4\}-\\d\{2\}\$\/\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
+      /const OverviewQuery = z\.object\(\{[\s\S]*?account_ids: z\.string\(\)\.min\(1\)\.max\(4096\),\s*\n?\s*billing_cycle: z\.string\(\)\.regex\(BILLING_CYCLE_PATTERN\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -109,14 +109,14 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
     );
   });
 
-  it('imports: FastifyInstance/FastifyRequest + zod + NotFoundError/BadRequestError + CostMonitoringService/billingCycleFromDate', () => {
+  it('imports: Fastify + zod + errors + shared cycle authority/service', () => {
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(
       /import \{ NotFoundError, BadRequestError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
-      /import \{ type CostMonitoringService, billingCycleFromDate \} from '\.\.\/services\/cost-monitoring\.js';/,
+      /import \{\s*\n?\s*BILLING_CYCLE_PATTERN,\s*\n?\s*type CostMonitoringService,\s*\n?\s*billingCycleFromDate,\s*\n?\s*\} from '\.\.\/services\/cost-monitoring\.js';/,
     );
   });
 

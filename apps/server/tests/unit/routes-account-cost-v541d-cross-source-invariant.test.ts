@@ -11,7 +11,7 @@
 //   account id is pinned to ctx.account.id, not pulled from a URL
 //   param'.
 //
-//   Query schema — billing_cycle optional /^\\d{4}-\\d{2}$/.
+//   Query schema — optional shared strict BILLING_CYCLE_PATTERN.
 //
 //   Synth-zero-on-null framing — 'Not 404 — for a fresh account with
 //   no usage in the cycle the customer should see you've spent €0
@@ -65,10 +65,10 @@ describe('W1025 routes/account-cost V-541.D cross-source invariant', () => {
     expect(p).toMatch(/to ctx\.account\.id, not pulled from a URL param\./);
   });
 
-  it('CRITICAL query schema — billing_cycle optional /^\\d{4}-\\d{2}$/.', () => {
+  it('CRITICAL query schema — billing_cycle uses the optional shared strict calendar-cycle authority.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-cost.ts'));
     expect(p).toMatch(/billing_cycle: z/);
-    expect(p).toMatch(/\.regex\(\/\^\\d\{4\}-\\d\{2\}\$\/\)/);
+    expect(p).toMatch(/\.regex\(BILLING_CYCLE_PATTERN\)/);
     expect(p).toMatch(/\.optional\(\)/);
   });
 
