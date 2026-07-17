@@ -126,16 +126,29 @@ Otherwise macOS may also ask once to approve user-domain trust. Owner-only tempo
 key material is deleted on exit. The identity is local development trust only;
 it cannot replace Developer ID signing/notarisation for a distributed build.
 
-Then use only the canonical installer:
+Then use only the canonical installer for normal updates:
 
 ```bash
-scripts/build-install-gui.sh --preflight
 scripts/build-install-gui.sh
 ```
 
-`--preflight` resolves a valid stable identity without compiling. For the local-only
-identity, it also reads the selected certificate fingerprint and requires the exact
-owner-only v2 authorization marker written by `setup-local-gui-signing.sh`. It then
+`--preflight` is an optional first-setup or diagnostic check; the full installer
+already performs the same check before it compiles anything:
+
+```bash
+scripts/build-install-gui.sh --preflight
+```
+
+The one-time setup and installer share one descriptor-owned kernel lock, acquired before
+setup discovers the default Keychain or the installer discovers an identity. The installer
+therefore admits only one local build/sign/install attempt at a time, and setup cannot
+replace or repartition its selected key mid-build; two terminals cannot multiply Keychain
+authorization requests. `--preflight` resolves a valid stable identity without compiling.
+Identity discovery binds the certificate's exact public hash to its name, collapses
+duplicate listings of that same hash, and fails before private-key access if one name
+resolves to different keys. For the local-only identity, it also reads the selected
+certificate fingerprint and requires the exact owner-only v2 authorization marker written
+by `setup-local-gui-signing.sh`. It then
 performs one bounded signature on a disposable copy of `/usr/bin/true`; the marker is
 accepted only when that real private-key operation and signature verification finish
 without an authorization wait. A missing, rotated, stale, or ineffective marker is
@@ -143,12 +156,15 @@ invalidated and stops with the setup instruction before either Tauri build, bund
 signature, or installation can start. This turns a broken ACL into one bounded
 preflight failure instead of several nested main/Simulator Keychain prompts.
 
-The full command builds and signs both bundles with the same certificate anchor,
-rejects CDHash-only requirements, checks each bundle identifier, and signs and verifies
-both source bundles before replacing either installed application. It then proves each
+The full command removes Apple certificate/signing/notarisation variables only from its
+two local Tauri build subprocesses, preventing Tauri from independently asking for the
+private key. The installer then performs exactly the two final source-bundle signatures
+it owns, using the selected exact identity hash and the same certificate anchor for both.
+It rejects CDHash-only requirements, checks each bundle identifier, signs and verifies
+both source bundles before replacing either installed application, and proves each
 installed copy retained the exact designated requirement. This local path requests only
 the macOS `.app` target that it installs, so unrelated distribution packaging (DMG,
-NSIS, AppImage, and deb) cannot block a developer update.
-`APPLE_SIGNING_IDENTITY` overrides local discovery for a valid Developer ID identity;
-that Apple-issued identity is validated against the keychain but does not use the
-local setup marker.
+NSIS, AppImage, and deb) cannot block a developer update. Distribution builds continue
+to use the Apple variables documented above. `APPLE_SIGNING_IDENTITY` overrides local
+discovery for a valid Developer ID identity; that Apple-issued identity is validated
+against the keychain but does not use the local setup marker.

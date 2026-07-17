@@ -18,10 +18,13 @@ ENTITLEMENTS="${DRIFTSTACK_GUI_ENTITLEMENTS:-$GUI_DIR/src-tauri/Entitlements.pli
 APPLICATIONS_DIR="${DRIFTSTACK_APPLICATIONS_DIR:-/Applications}"
 PLIST_BUDDY_BIN="${DRIFTSTACK_PLIST_BUDDY_BIN:-/usr/libexec/PlistBuddy}"
 CODESIGN_BIN="${DRIFTSTACK_CODESIGN_BIN:-/usr/bin/codesign}"
+LOCKF_BIN="${DRIFTSTACK_LOCKF_BIN:-/usr/bin/lockf}"
 LOCAL_SIGNING_IDENTITY="Driftstack Local Development Signing"
 SIGNING_STATE_DIR="${HOME}/Library/Application Support/Driftstack"
 SIGNING_READY_MARKER="$SIGNING_STATE_DIR/local-signing-partition-v2.sha256"
+INSTALL_LOCK_FILE="$SIGNING_STATE_DIR/gui-build-install.lock"
 SIGNING_CANARY_DIR=""
+INSTALL_LOCK_HELD=0
 
 cleanup_signing_canary() {
   if [[ -n "$SIGNING_CANARY_DIR" ]]; then
@@ -29,37 +32,75 @@ cleanup_signing_canary() {
     SIGNING_CANARY_DIR=""
   fi
 }
-trap cleanup_signing_canary EXIT
+
+cleanup() {
+  cleanup_signing_canary
+  if (( INSTALL_LOCK_HELD == 1 )); then
+    exec 9>&-
+    INSTALL_LOCK_HELD=0
+  fi
+}
+trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 
 list_signing_identities() {
   security find-identity -v -p codesigning 2>/dev/null \
-    | sed -nE 's/^[[:space:]]*[0-9]+\) [[:xdigit:]]+ "(.*)"$/\1/p'
+    | sed -nE 's/^[[:space:]]*[0-9]+\) ([[:xdigit:]]{40}) "(.*)"$/\1\	\2/p' \
+    | awk -F '\t' '{ hash = toupper($1); if (!seen[hash]++) print hash "\t" $2 }'
 }
 
 resolve_signing_identity() {
   local requested="${APPLE_SIGNING_IDENTITY:-}"
   local identities
+  local conflict
+  local record=""
   identities="$(list_signing_identities)"
 
+  conflict="$(awk -F '\t' '
+    {
+      hash = toupper($1)
+      name = $2
+      if (hash_for_name[name] != "" && hash_for_name[name] != hash) {
+        print name
+        exit
+      }
+      hash_for_name[name] = hash
+    }
+  ' <<<"$identities")"
+  if [[ -n "$conflict" ]]; then
+    echo "error: multiple code-signing keys use the same identity name: $conflict" >&2
+    echo "Remove or rename the conflicting identity before any private-key operation." >&2
+    return 1
+  fi
+
   if [[ -n "$requested" ]]; then
-    if ! grep -Fqx -- "$requested" <<<"$identities"; then
+    if [[ "$requested" =~ ^[[:xdigit:]]{40}$ ]]; then
+      requested="$(printf '%s' "$requested" | tr '[:lower:]' '[:upper:]')"
+      record="$(awk -F '\t' -v requested="$requested" \
+        'toupper($1) == requested { print; exit }' <<<"$identities")"
+    else
+      record="$(awk -F '\t' -v requested="$requested" \
+        '$2 == requested { print; exit }' <<<"$identities")"
+    fi
+    if [[ -z "$record" ]]; then
       echo "error: APPLE_SIGNING_IDENTITY is not a valid code-signing identity: $requested" >&2
       return 1
     fi
-    printf '%s\n' "$requested"
+    printf '%s\n' "$record"
     return
   fi
 
-  if grep -Fqx -- "$LOCAL_SIGNING_IDENTITY" <<<"$identities"; then
-    printf '%s\n' "$LOCAL_SIGNING_IDENTITY"
+  record="$(awk -F '\t' -v requested="$LOCAL_SIGNING_IDENTITY" \
+    '$2 == requested { print; exit }' <<<"$identities")"
+  if [[ -n "$record" ]]; then
+    printf '%s\n' "$record"
     return
   fi
 
-  local developer_id
-  developer_id="$(grep -m1 '^Developer ID Application:' <<<"$identities" || true)"
-  if [[ -n "$developer_id" ]]; then
-    printf '%s\n' "$developer_id"
+  record="$(awk -F '\t' '$2 ~ /^Developer ID Application:/ { print; exit }' \
+    <<<"$identities")"
+  if [[ -n "$record" ]]; then
+    printf '%s\n' "$record"
     return
   fi
 
@@ -72,11 +113,22 @@ resolve_signing_identity() {
 
 local_signing_certificate_fingerprint() {
   local identity="$1"
+  local expected_identity_hash="$2"
   local certificate
+  local certificate_identity_hash
   local fingerprint
 
   if ! certificate="$(security find-certificate -c "$identity" -p 2>/dev/null)" || [[ -z "$certificate" ]]; then
     echo "error: could not read the selected local signing certificate: $identity" >&2
+    return 1
+  fi
+  certificate_identity_hash="$(printf '%s\n' "$certificate" \
+    | openssl x509 -noout -fingerprint -sha1 2>/dev/null \
+    | cut -d= -f2 \
+    | tr -d '[:space:]:' \
+    | tr '[:lower:]' '[:upper:]')"
+  if [[ "$certificate_identity_hash" != "$expected_identity_hash" ]]; then
+    echo "error: selected certificate does not match the resolved signing identity hash" >&2
     return 1
   fi
   fingerprint="$(printf '%s\n' "$certificate" \
@@ -92,15 +144,16 @@ local_signing_certificate_fingerprint() {
 }
 
 verify_local_signing_authorization() {
-  local identity="$1"
+  local identity_hash="$1"
+  local identity_name="$2"
   local fingerprint
   local marker=""
 
   # Developer ID identities have their own Apple-issued keychain policy. The
   # local marker belongs only to setup-local-gui-signing.sh's exact identity.
-  [[ "$identity" == "$LOCAL_SIGNING_IDENTITY" ]] || return 0
+  [[ "$identity_name" == "$LOCAL_SIGNING_IDENTITY" ]] || return 0
 
-  fingerprint="$(local_signing_certificate_fingerprint "$identity")"
+  fingerprint="$(local_signing_certificate_fingerprint "$identity_name" "$identity_hash")"
   if [[ -f "$SIGNING_READY_MARKER" ]]; then
     marker="$(tr -d '[:space:]' <"$SIGNING_READY_MARKER")"
   fi
@@ -110,6 +163,35 @@ verify_local_signing_authorization() {
     echo "No GUI build, codesign, or install work was started." >&2
     return 1
   fi
+}
+
+acquire_install_lock() {
+  local lock_status=0
+
+  mkdir -p "$SIGNING_STATE_DIR"
+  chmod 700 "$SIGNING_STATE_DIR"
+  # Keep one open file description for the script lifetime. BSD lockf ties the
+  # lock to that descriptor, so normal exit, signals, SIGKILL and power loss
+  # all release kernel ownership without stale-PID deletion or reclaim races.
+  # The inert owner-only file deliberately remains for stable lock ordering.
+  if [[ ! -x "$LOCKF_BIN" ]]; then
+    echo "error: required lock helper is unavailable: $LOCKF_BIN" >&2
+    return 1
+  fi
+  exec 9>"$INSTALL_LOCK_FILE"
+  "$LOCKF_BIN" -s -t 0 9 || lock_status=$?
+  if (( lock_status != 0 )); then
+    exec 9>&-
+    if (( lock_status == 75 )); then
+      echo "error: another Driftstack GUI build/install attempt is already active." >&2
+      echo "Wait for it to finish; do not start a second signer or authorization flow." >&2
+    else
+      echo "error: could not acquire the Driftstack GUI build/install lock (lockf exit $lock_status)." >&2
+      echo "No signer, build, or installation work was started." >&2
+    fi
+    return 1
+  fi
+  INSTALL_LOCK_HELD=1
 }
 
 verify_prompt_free_codesign() {
@@ -172,10 +254,23 @@ verify_stable_signature() {
   printf '%s\n' "$requirement"
 }
 
-SIGNING_IDENTITY="$(resolve_signing_identity)"
-verify_local_signing_authorization "$SIGNING_IDENTITY"
-if ! verify_prompt_free_codesign "$SIGNING_IDENTITY"; then
-  if [[ "$SIGNING_IDENTITY" == "$LOCAL_SIGNING_IDENTITY" ]]; then
+if [[ "${1:-}" == "--preflight" ]]; then
+  [[ $# -eq 1 ]] || { echo "usage: scripts/build-install-gui.sh [--preflight]" >&2; exit 2; }
+elif [[ $# -ne 0 ]]; then
+  echo "usage: scripts/build-install-gui.sh [--preflight]" >&2
+  exit 2
+fi
+
+acquire_install_lock
+SIGNING_RECORD="$(resolve_signing_identity)"
+IFS=$'\t' read -r SIGNING_IDENTITY_HASH SIGNING_IDENTITY_NAME <<<"$SIGNING_RECORD"
+if [[ ! "$SIGNING_IDENTITY_HASH" =~ ^[0-9A-F]{40}$ || -z "$SIGNING_IDENTITY_NAME" ]]; then
+  echo "error: selected code-signing identity record is malformed" >&2
+  exit 1
+fi
+verify_local_signing_authorization "$SIGNING_IDENTITY_HASH" "$SIGNING_IDENTITY_NAME"
+if ! verify_prompt_free_codesign "$SIGNING_IDENTITY_HASH"; then
+  if [[ "$SIGNING_IDENTITY_NAME" == "$LOCAL_SIGNING_IDENTITY" ]]; then
     rm -f "$SIGNING_READY_MARKER"
     echo "Run scripts/setup-local-gui-signing.sh once, then rerun this command." >&2
   else
@@ -184,8 +279,8 @@ if ! verify_prompt_free_codesign "$SIGNING_IDENTITY"; then
   echo "No GUI build, bundle codesign, or install work was started." >&2
   exit 1
 fi
-echo "==> stable signing identity: $SIGNING_IDENTITY"
-if [[ "$SIGNING_IDENTITY" == "$LOCAL_SIGNING_IDENTITY" ]]; then
+echo "==> stable signing identity: $SIGNING_IDENTITY_NAME ($SIGNING_IDENTITY_HASH)"
+if [[ "$SIGNING_IDENTITY_NAME" == "$LOCAL_SIGNING_IDENTITY" ]]; then
   echo "==> prompt-free signing authorization: exact certificate marker + canary verified"
 else
   echo "==> prompt-free signing canary: verified"
@@ -193,10 +288,6 @@ fi
 
 if [[ "${1:-}" == "--preflight" ]]; then
   exit 0
-fi
-if [[ $# -ne 0 ]]; then
-  echo "usage: scripts/build-install-gui.sh [--preflight]" >&2
-  exit 2
 fi
 
 cd "$GUI_DIR"
@@ -206,7 +297,12 @@ for target in "tauri:build" "tauri:build:simulator"; do
   # This local installer consumes only the macOS .app bundle below. Keep
   # distribution targets (DMG/NSIS/AppImage/deb) out of this prompt-free path:
   # they add unrelated platform tooling and Finder automation failure modes.
-  npm run "$target" -- --bundles app
+  (
+    unset APPLE_SIGNING_IDENTITY APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
+    unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+    unset APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_PATH
+    npm run "$target" -- --bundles app
+  )
 done
 
 BUNDLE_DIR="src-tauri/target/release/bundle/macos"
@@ -223,7 +319,7 @@ for name in "${BUNDLE_NAMES[@]}"; do
     --deep \
     --options runtime \
     --entitlements "$ENTITLEMENTS" \
-    --sign "$SIGNING_IDENTITY" \
+    --sign "$SIGNING_IDENTITY_HASH" \
     --identifier "$IDENTIFIER" \
     "$SRC"
   SRC_REQUIREMENT="$(verify_stable_signature "$SRC" "$IDENTIFIER")"
