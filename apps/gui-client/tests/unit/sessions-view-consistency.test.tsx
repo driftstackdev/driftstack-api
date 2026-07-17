@@ -15,10 +15,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import '@testing-library/jest-dom/vitest';
 
 const sessionsList = vi.fn<() => Promise<{ data: unknown[] }>>(() => Promise.resolve({ data: [] }));
-const agentSessionsList = vi.fn<() => Promise<{ data: unknown[] }>>(() =>
-  Promise.resolve({ data: [], has_more: false, next_cursor: null }),
-);
+const agentSessionsList = vi.fn<
+  () => Promise<{ data: unknown[]; has_more: boolean; next_cursor: string | null }>
+>(() => Promise.resolve({ data: [], has_more: false, next_cursor: null }));
 const sessionsCreate = vi.fn<(b: unknown) => Promise<unknown>>(() => Promise.resolve({}));
+const sessionsDestroy = vi.fn<(id: string) => Promise<void>>(() => Promise.resolve());
 const agentClose = vi.fn<(id: string) => Promise<void>>(() => Promise.resolve());
 const refreshAccountMe = vi.fn(() => Promise.resolve());
 
@@ -43,7 +44,11 @@ vi.mock('../../src/lib/proxies', () => ({
 
 const ctx = {
   client: {
-    sessions: { list: () => sessionsList(), create: (b: unknown) => sessionsCreate(b) },
+    sessions: {
+      list: () => sessionsList(),
+      create: (b: unknown) => sessionsCreate(b),
+      destroy: (id: string) => sessionsDestroy(id),
+    },
     agentSessions: { list: () => agentSessionsList(), close: (id: string) => agentClose(id) },
   },
   settings: { apiKey: 'ds_test', baseUrl: 'http://localhost:3000' },
@@ -67,6 +72,15 @@ const ACTIVE_AGENT = {
   mode: 'manual',
 };
 
+const ACTIVE_DRIVER = {
+  id: 'ses_driver',
+  status: 'ready',
+  label: 'Driver session',
+  archetype: 'iphone_15_pro',
+  created_at: '2026-06-25T00:00:00Z',
+  egress_capabilities: null,
+};
+
 function deferred<T>(): {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -85,6 +99,8 @@ beforeEach(() => {
   agentSessionsList.mockResolvedValue({ data: [], has_more: false, next_cursor: null });
   sessionsCreate.mockReset();
   sessionsCreate.mockResolvedValue({});
+  sessionsDestroy.mockReset();
+  sessionsDestroy.mockResolvedValue();
   agentClose.mockReset();
   agentClose.mockResolvedValue();
   refreshAccountMe.mockClear();
@@ -102,7 +118,7 @@ describe('SessionsView consistency #5 — profile-launched agent sessions are vi
       has_more: false,
       next_cursor: null,
     });
-    render(<SessionsView onGoToSettings={vi.fn()} />);
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
     // The launched profile's session shows up (not the "No active sessions yet"
     // empty state) with its id + a Stop action.
     expect(await screen.findByText('Profile session')).toBeTruthy();
@@ -116,7 +132,7 @@ describe('SessionsView consistency #5 — profile-launched agent sessions are vi
       has_more: false,
       next_cursor: null,
     });
-    render(<SessionsView onGoToSettings={vi.fn()} />);
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
     const card = (await screen.findByText('Profile session')).closest('article');
     expect(card).not.toBeNull();
     fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'Stop' }));
@@ -135,7 +151,7 @@ describe('SessionsView consistency #5 — profile-launched agent sessions are vi
       has_more: false,
       next_cursor: null,
     });
-    render(<SessionsView onGoToSettings={vi.fn()} />);
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
     // Header shows 2 / 2 (driver 0 + 2 agent), and New session is cap-disabled.
     await waitFor(() => expect(screen.getByText('2 / 2')).toBeTruthy());
     const newBtn = screen.getByRole('button', { name: /New session/ });
@@ -145,7 +161,7 @@ describe('SessionsView consistency #5 — profile-launched agent sessions are vi
 
 describe('SessionsView consistency #11 — New session confirms the bare path', () => {
   it('confirms before creating a profile-less session and only creates when accepted', async () => {
-    render(<SessionsView onGoToSettings={vi.fn()} />);
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: /New session/ }));
     await waitFor(() => expect(confirmFn).toHaveBeenCalledTimes(1));
     // The confirm copy names the trade-off + the proxy it would use.
@@ -157,7 +173,7 @@ describe('SessionsView consistency #11 — New session confirms the bare path', 
 
   it('does NOT create when the confirm is declined', async () => {
     confirmFn.mockResolvedValue(false);
-    render(<SessionsView onGoToSettings={vi.fn()} />);
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: /New session/ }));
     await waitFor(() => expect(confirmFn).toHaveBeenCalledTimes(1));
     expect(sessionsCreate).not.toHaveBeenCalled();
@@ -166,7 +182,7 @@ describe('SessionsView consistency #11 — New session confirms the bare path', 
   it('single-flights rapid quick-create events before React commits disabled state', async () => {
     const decision = deferred<boolean>();
     confirmFn.mockImplementation(() => decision.promise);
-    render(<SessionsView onGoToSettings={vi.fn()} />);
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
     const button = await screen.findByRole('button', { name: /New session/ });
 
     act(() => {
@@ -181,7 +197,7 @@ describe('SessionsView consistency #11 — New session confirms the bare path', 
 
   it('releases the synchronous mutation gate after a declined create', async () => {
     confirmFn.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    render(<SessionsView onGoToSettings={vi.fn()} />);
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
     const button = await screen.findByRole('button', { name: /New session/ });
 
     fireEvent.click(button);
@@ -203,7 +219,7 @@ describe('SessionsView mutation single-flight', () => {
       has_more: false,
       next_cursor: null,
     });
-    render(<SessionsView onGoToSettings={vi.fn()} />);
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
     const card = (await screen.findByText('Profile session')).closest('article');
     const button = within(card as HTMLElement).getByRole('button', { name: 'Stop' });
 
@@ -216,6 +232,36 @@ describe('SessionsView mutation single-flight', () => {
     decision.resolve(true);
     await waitFor(() => expect(agentClose).toHaveBeenCalledTimes(1));
   });
+
+  it('shares one owner across driver stop, agent stop, and quick create', async () => {
+    const decision = deferred<boolean>();
+    confirmFn.mockImplementation(() => decision.promise);
+    sessionsList.mockResolvedValue({ data: [ACTIVE_DRIVER] });
+    agentSessionsList.mockResolvedValue({
+      data: [ACTIVE_AGENT],
+      has_more: false,
+      next_cursor: null,
+    });
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
+
+    const driverCard = (await screen.findByText('Driver session')).closest('article');
+    const agentCard = screen.getByText('Profile session').closest('article');
+    const driverStop = within(driverCard as HTMLElement).getByRole('button', { name: 'Stop' });
+    const agentStop = within(agentCard as HTMLElement).getByRole('button', { name: 'Stop' });
+    const create = screen.getByRole('button', { name: /New session/ });
+
+    act(() => {
+      driverStop.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      agentStop.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      create.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(confirmFn).toHaveBeenCalledTimes(1);
+    decision.resolve(true);
+    await waitFor(() => expect(sessionsDestroy).toHaveBeenCalledWith('ses_driver'));
+    expect(agentClose).not.toHaveBeenCalled();
+    expect(sessionsCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe('SessionsView customer-safe error copy', () => {
@@ -224,10 +270,31 @@ describe('SessionsView customer-safe error copy', () => {
       new Error('SQLite failed /Users/customer token=secret private-control.internal'),
     );
 
-    render(<SessionsView onGoToSettings={vi.fn()} />);
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent("Couldn't complete the session request. Try again.");
     expect(alert).not.toHaveTextContent(/SQLite|\/Users|token=secret|private-control/i);
+  });
+
+  it('maps a rejected mutation through the existing customer-safe renderer', async () => {
+    agentClose.mockRejectedValueOnce(
+      new Error('SQLite failed /Users/customer token=secret private-control.internal'),
+    );
+    agentSessionsList.mockResolvedValue({
+      data: [ACTIVE_AGENT],
+      has_more: false,
+      next_cursor: null,
+    });
+    render(<SessionsView onGoToSettings={vi.fn()} onGoToProxies={vi.fn()} />);
+
+    const card = (await screen.findByText('Profile session')).closest('article');
+    const button = within(card as HTMLElement).getByRole('button', { name: 'Stop' });
+    fireEvent.click(button);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent("Couldn't complete the session request. Try again.");
+    expect(alert).not.toHaveTextContent(/SQLite|\/Users|token=secret|private-control/i);
+    await waitFor(() => expect(button).toBeEnabled());
   });
 });

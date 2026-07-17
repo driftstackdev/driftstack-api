@@ -17,6 +17,7 @@ import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { humanizeError } from '../lib/humanize-error';
 import { listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
 import { countActiveAgentSessions } from '../lib/active-agent-sessions';
+import { useExclusiveAsyncAction } from '../lib/use-exclusive-async-action';
 
 // Consistency #5 — the minimal agent-session shape SessionsView renders. A
 // profile launch creates an `agt_` AGENT session (no driver row), which the
@@ -64,13 +65,17 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
     error: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
-  // One shared synchronous gate owns every billed/session mutation. React's
-  // disabled state is deliberately visible feedback, but it is not a mutex:
-  // two native click/Enter events can arrive before the state commit. Without
-  // this ref, quick-create can open two confirms and two Stop actions can race
-  // across rows. Acquire before the first async boundary (including confirm)
-  // and release on accept, cancel, or failure.
-  const mutationInFlightRef = useRef(false);
+  // One shared synchronous owner covers every billed/session mutation. React's
+  // disabled state is visible feedback, not a mutex: two native click/Enter
+  // events can arrive before the state commit. The hook acquires before the
+  // first async boundary (including confirm) and releases on every outcome.
+  const {
+    error: mutationError,
+    reset: resetMutationError,
+    run: runMutation,
+  } = useExclusiveAsyncAction({
+    mapError: (err: unknown) => friendlyError(err, settings.baseUrl),
+  });
 
   // Toast on status transitions (demo-concepts arc): when the 15s poll sees a
   // session newly errored, surface it instead of waiting for the customer to
@@ -143,6 +148,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
       if (!client) {
+        resetMutationError();
         setState({
           sessions: [],
           agentSessions: [],
@@ -174,6 +180,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
                 .catch(() => null)
             : Promise.resolve(null),
         ]);
+        resetMutationError();
         setState((s) => ({
           ...s,
           sessions: page.data,
@@ -189,6 +196,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
           error: null,
         }));
       } catch (err) {
+        resetMutationError();
         setState((s) => ({
           ...s,
           loading: false,
@@ -196,7 +204,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
         }));
       }
     },
-    [client, settings.baseUrl],
+    [client, resetMutationError, settings.baseUrl],
   );
 
   // First fetch shows the loading hint so the empty list doesn't flash;
@@ -214,62 +222,60 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
   }, [refresh]);
 
   async function handleCreate(): Promise<void> {
-    if (!client || mutationInFlightRef.current) return;
-    mutationInFlightRef.current = true;
-    setBusyId('__create__');
-    try {
-      // 2026-05-20 — auto-attach the first saved proxy to the
-      // create-session body. Server's egress-required deployments
-      // reject sessions without a `proxy` envelope (per planning 133),
-      // and the local proxy store has been disconnected from the
-      // create flow — customer reported '2 proxies set, still get the
-      // proxy-required error'. Pick the first saved proxy as the
-      // default; future iterations can surface a picker.
-      const saved = await listProxies();
-      const first = saved[0];
-      if (first === undefined) {
-        // Setup step, not an error: this deployment routes every session through a
-        // proxy and none is saved yet. Offer a direct jump to Proxies instead of a
-        // red banner the user then has to act on manually (journey audit M9).
-        if (
-          await confirm(
-            "This deployment routes every session through a proxy, and you don't have one saved yet. Add a SOCKS5 server in Proxies, then come back to start a session.",
-            { confirmLabel: 'Open Proxies' },
-          )
-        ) {
-          onGoToProxies();
+    if (!client) return;
+    await runMutation(async () => {
+      setBusyId('__create__');
+      try {
+        // 2026-05-20 — auto-attach the first saved proxy to the
+        // create-session body. Server's egress-required deployments
+        // reject sessions without a `proxy` envelope (per planning 133),
+        // and the local proxy store has been disconnected from the
+        // create flow — customer reported '2 proxies set, still get the
+        // proxy-required error'. Pick the first saved proxy as the
+        // default; future iterations can surface a picker.
+        const saved = await listProxies();
+        const first = saved[0];
+        if (first === undefined) {
+          // Setup step, not an error: this deployment routes every session through a
+          // proxy and none is saved yet. Offer a direct jump to Proxies instead of a
+          // red banner the user then has to act on manually (journey audit M9).
+          if (
+            await confirm(
+              "This deployment routes every session through a proxy, and you don't have one saved yet. Add a SOCKS5 server in Proxies, then come back to start a session.",
+              { confirmLabel: 'Open Proxies' },
+            )
+          ) {
+            onGoToProxies();
+          }
+          return;
         }
-        return;
+        const proxy = toServerProxyEnvelope(first);
+        // Consistency #11 — this New-session path creates a bare driver session:
+        // no saved profile (so no persistent identity — cookies/logins don't
+        // survive), the operator-default device, through the FIRST saved proxy
+        // (not one the user picked here). Confirm so the founder isn't surprised
+        // by a no-identity session on a slot/bill they didn't intend, and is
+        // pointed at the profile-based launch when they want a saved identity.
+        const proceed = await confirm(
+          `Start a quick session with NO saved profile?\n\n` +
+            `• No persistent identity — cookies/logins won't be saved or restored.\n` +
+            `• Uses the default device and your first saved proxy (${first.label}).\n\n` +
+            `For a saved identity + a device/proxy you choose, launch a profile from Profiles instead.`,
+          { confirmLabel: 'Start quick session' },
+        );
+        if (!proceed) return;
+        // SDK type doesn't yet declare the proxy field — server accepts
+        // it via the EG-API-1.6 raw-body pass-through. Cast through
+        // unknown to keep the call typesafe at the type-narrow boundary.
+        await client.sessions.create({ proxy } as unknown as Parameters<
+          typeof client.sessions.create
+        >[0]);
+        await refresh(false);
+        await refreshAccountMe();
+      } finally {
+        setBusyId(null);
       }
-      const proxy = toServerProxyEnvelope(first);
-      // Consistency #11 — this New-session path creates a bare driver session:
-      // no saved profile (so no persistent identity — cookies/logins don't
-      // survive), the operator-default device, through the FIRST saved proxy
-      // (not one the user picked here). Confirm so the founder isn't surprised
-      // by a no-identity session on a slot/bill they didn't intend, and is
-      // pointed at the profile-based launch when they want a saved identity.
-      const proceed = await confirm(
-        `Start a quick session with NO saved profile?\n\n` +
-          `• No persistent identity — cookies/logins won't be saved or restored.\n` +
-          `• Uses the default device and your first saved proxy (${first.label}).\n\n` +
-          `For a saved identity + a device/proxy you choose, launch a profile from Profiles instead.`,
-        { confirmLabel: 'Start quick session' },
-      );
-      if (!proceed) return; // finally resets busyId
-      // SDK type doesn't yet declare the proxy field — server accepts
-      // it via the EG-API-1.6 raw-body pass-through. Cast through
-      // unknown to keep the call typesafe at the type-narrow boundary.
-      await client.sessions.create({ proxy } as unknown as Parameters<
-        typeof client.sessions.create
-      >[0]);
-      await refresh(false);
-      await refreshAccountMe();
-    } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
-    } finally {
-      mutationInFlightRef.current = false;
-      setBusyId(null);
-    }
+    });
   }
 
   /** Map the GUI-local proxy shape to the server's discriminated-union
@@ -305,9 +311,8 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
   }
 
   async function handleDestroy(id: string): Promise<void> {
-    if (!client || mutationInFlightRef.current) return;
-    mutationInFlightRef.current = true;
-    try {
+    if (!client) return;
+    await runMutation(async () => {
       // Stopping tears down a live (billed) browser immediately — confirm so a
       // misclick in the dense session grid doesn't kill a running session.
       if (
@@ -318,26 +323,24 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
       )
         return;
       setBusyId(id);
-      await client.sessions.destroy(id);
-      await refresh(false);
-      // V-239 — refresh after destroy so the cap counter unlocks the
-      // Spawn button when we drop below cap.
-      await refreshAccountMe();
-    } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
-    } finally {
-      mutationInFlightRef.current = false;
-      setBusyId(null);
-    }
+      try {
+        await client.sessions.destroy(id);
+        await refresh(false);
+        // V-239 — refresh after destroy so the cap counter unlocks the
+        // Spawn button when we drop below cap.
+        await refreshAccountMe();
+      } finally {
+        setBusyId(null);
+      }
+    });
   }
 
   // Consistency #5 — stop a profile-launched AGENT session from this surface
   // (its row's Stop), so a running launched profile is actionable here, not
   // only from its Profiles row.
   async function handleCloseAgent(id: string): Promise<void> {
-    if (!client || mutationInFlightRef.current) return;
-    mutationInFlightRef.current = true;
-    try {
+    if (!client) return;
+    await runMutation(async () => {
       if (
         !(await confirm(
           'Stop this running session now? The live browser is torn down immediately and anything in progress is lost.',
@@ -346,15 +349,14 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
       )
         return;
       setBusyId(id);
-      await client.agentSessions.close(id);
-      await refresh(false);
-      await refreshAccountMe();
-    } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
-    } finally {
-      mutationInFlightRef.current = false;
-      setBusyId(null);
-    }
+      try {
+        await client.agentSessions.close(id);
+        await refresh(false);
+        await refreshAccountMe();
+      } finally {
+        setBusyId(null);
+      }
+    });
   }
 
   if (!client) {
@@ -376,6 +378,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
         accountMe?.tier ?? 'this tier'
       }). Destroy a session or upgrade to spawn more.`
     : undefined;
+  const visibleError = mutationError ?? state.error;
 
   return (
     <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-6 overflow-y-auto p-6">
@@ -509,7 +512,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
         </div>
       )}
 
-      {state.error !== null && (
+      {visibleError !== null && (
         // Sticky so a failed action (Stop/Destroy on a card the user has
         // scrolled down to) stays visible instead of dropping into a banner
         // that's scrolled off the top (journey audit M6). Kept inline rather
@@ -518,10 +521,13 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
         // content-area colour) keeps scrolled cards from bleeding through.
         <div className="sticky top-0 z-20 bg-surface-base py-1">
           <ErrorBanner
-            message={state.error}
+            message={visibleError}
             onRetry={() => void refresh(true)}
             retrying={state.loading}
-            onDismiss={() => setState((s) => ({ ...s, error: null }))}
+            onDismiss={() => {
+              resetMutationError();
+              setState((s) => ({ ...s, error: null }));
+            }}
           />
         </div>
       )}

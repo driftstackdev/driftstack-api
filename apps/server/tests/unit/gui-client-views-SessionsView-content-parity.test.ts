@@ -38,6 +38,10 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/gui-client/src/views/SessionsView.tsx');
+const EXCLUSIVE_ACTION_LIB = resolve(
+  REPO_ROOT,
+  'apps/gui-client/src/lib/use-exclusive-async-action.ts',
+);
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -45,6 +49,7 @@ function read(p: string): string {
 
 describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () => {
   const body = read(LIB);
+  const exclusiveActionBody = read(EXCLUSIVE_ACTION_LIB);
 
   it("Framing pinned: 'Sessions view — list active sessions, create new, destroy individual.' + 'Auto-refreshes every 5 seconds so the list reflects fleet state without requiring the user to click. Stops polling when the view unmounts. Failures surface inline rather than via toasts so the founder can debug API issues without losing context.'", () => {
     expect(body).toMatch(
@@ -90,17 +95,37 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     expect(body).toMatch(/await client\.sessions\.destroy\(id\);/);
   });
 
-  it('quick-create, driver stop, and agent stop share a synchronous pre-await mutation gate', () => {
-    expect(body).toContain('const mutationInFlightRef = useRef(false);');
-    expect(body.match(/if \(!client \|\| mutationInFlightRef\.current\) return;/g)).toHaveLength(3);
-    expect(body.match(/mutationInFlightRef\.current = true;/g)).toHaveLength(3);
-    expect(body.match(/mutationInFlightRef\.current = false;/g)).toHaveLength(3);
-    expect(body).toMatch(
-      /async function handleDestroy[\s\S]*?mutationInFlightRef\.current = true;[\s\S]*?await confirm\(/,
+  it('quick-create, driver stop, and agent stop share one durable synchronous action owner', () => {
+    expect(body).toContain(
+      "import { useExclusiveAsyncAction } from '../lib/use-exclusive-async-action';",
     );
     expect(body).toMatch(
-      /async function handleCloseAgent[\s\S]*?mutationInFlightRef\.current = true;[\s\S]*?await confirm\(/,
+      /useExclusiveAsyncAction\(\{\s*mapError: \(err: unknown\) => friendlyError\(err, settings\.baseUrl\),\s*\}\)/,
     );
+    expect(body.match(/await runMutation\(async \(\) => \{/g)).toHaveLength(3);
+    expect(body).not.toContain('mutationInFlightRef');
+    expect(body).toMatch(
+      /async function handleDestroy[\s\S]*?await runMutation\(async \(\) => \{[\s\S]*?await confirm\(/,
+    );
+    expect(body).toMatch(
+      /async function handleCloseAgent[\s\S]*?await runMutation\(async \(\) => \{[\s\S]*?await confirm\(/,
+    );
+  });
+
+  it('the shared owner acquires before work, returns duplicate calls without invoking them, releases in finally, and suppresses post-unmount state publication', () => {
+    expect(exclusiveActionBody).toMatch(
+      /pending: boolean;\s*error: string \| null;\s*reset: \(\) => void;\s*run:/,
+    );
+    expect(exclusiveActionBody).toContain("if (ownerRef.current) return { status: 'busy' };");
+    const acquire = exclusiveActionBody.indexOf('ownerRef.current = true;');
+    const invoke = exclusiveActionBody.indexOf('const value = await work();');
+    expect(acquire).toBeGreaterThan(-1);
+    expect(invoke).toBeGreaterThan(acquire);
+    expect(exclusiveActionBody).toMatch(
+      /finally \{\s*ownerRef\.current = false;\s*if \(mountedRef\.current\) setPending\(false\);\s*\}/,
+    );
+    expect(exclusiveActionBody).toContain("return { status: 'error', error: safeError };");
+    expect(exclusiveActionBody).toMatch(/return \(\) => \{\s*mountedRef\.current = false;\s*\};/);
   });
 
   it("New session button: disabled + aria-disabled both gated on busyId === '__create__' || atConcurrentCap; title tooltip for cap surface: 'Concurrent session cap reached ({cap} for {tier}). Destroy a session or upgrade to spawn more.' fallback when atConcurrentCap, undefined otherwise (so screen readers + hover both surface the explanation) — 2026-06-24 GUI restyle: the tooltip string was hoisted into a `capTitle` const (shared verbatim by the hero button + the empty-state's create button so the cap surface is identical wherever New session appears); pin BOTH the const's exact gating/copy AND that the button still wires disabled + aria-disabled + title={capTitle}", () => {
