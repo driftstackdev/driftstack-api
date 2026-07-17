@@ -12,9 +12,13 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/api-reference.astro');
 const ROUTES = resolve(REPO_ROOT, 'apps/server/src/routes');
+const ARCHETYPES_DOC = resolve(REPO_ROOT, 'apps/docs/src/pages/api/archetypes.md');
 
 const REQUIRED_GROUPS = [
   'Sessions',
+  'Archetypes',
+  'Agent sessions',
+  'Recipes',
   'Profiles',
   'API keys',
   'Webhooks',
@@ -22,6 +26,7 @@ const REQUIRED_GROUPS = [
   'Team',
   'Auth flows',
   'Status',
+  'Billing',
 ];
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -82,5 +87,28 @@ describe('W310.B /api-reference ↔ live route parity', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('covers the shipped discovery and saved-recipe management surface without inventing execution routes', () => {
+    for (const endpoint of [
+      'GET /v1/archetypes',
+      'GET /v1/agent-sessions',
+      'GET /v1/agent-sessions/:id/recipe-suggestion',
+      'POST /v1/recipes',
+      'GET /v1/recipes',
+      'GET /v1/recipes/:id',
+      'DELETE /v1/recipes/:id',
+    ]) {
+      expect(body).toContain(`<li>${endpoint}</li>`);
+    }
+    expect(body).not.toMatch(/\/v1\/recipes\/:id\/(?:execute|replay)/);
+  });
+
+  it('links the canonical archetype catalog and create-payload generator reference', () => {
+    expect(existsSync(ARCHETYPES_DOC)).toBe(true);
+    expect(body).toContain('https://docs.driftstack.dev/api/archetypes/');
+    const reference = read(ARCHETYPES_DOC);
+    expect(reference).toContain('## Generate a create payload from the live catalog');
+    expect(reference).toContain('async function archetypeCreatePayload');
   });
 });

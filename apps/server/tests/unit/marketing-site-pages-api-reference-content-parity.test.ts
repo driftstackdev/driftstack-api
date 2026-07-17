@@ -1,6 +1,6 @@
 // W501.C — drift guard for apps/marketing-site/src/pages/api-reference.astro.
 // V-127a API reference landing page. Drift here either drops a
-// route group from the 11-group surface map (would orphan SDK
+// route group from the curated surface map (would orphan SDK
 // consumers from the canonical API surface enumeration) or breaks
 // the V-662 error taxonomy table (which SDK retry-logic implementers
 // compare against the typed error class names).
@@ -8,9 +8,8 @@
 //   • Live Scalar reference framing.
 //   • API_DOCS_URL = api.driftstack.dev/docs + OPENAPI_JSON_URL =
 //     api.driftstack.dev/openapi.json.
-//   • 11-group surface map: Sessions / Profiles / API keys / Webhooks /
-//     Account / Team / Billing-crypto-orders / Status / Auth flows /
-//     Billing.
+//   • Curated surface map including archetype discovery, agent-session
+//     collection reads, and the shipped saved-recipe management surface.
 //   • V-662 Common patterns: 3 flows × 4 languages (cURL / TypeScript /
 //     Python / Go).
 //   • V-662 Error reference 10-row table with RFC 7807 type URIs +
@@ -49,22 +48,26 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     );
   });
 
-  it("Hero framing: 'Every endpoint, every shape.' + 'The Driftstack API is documented as an OpenAPI 3.1 spec generated from the same Zod schemas the server uses at runtime. There is no second source of truth — if a route exists, it's in the spec; if it's in the spec, the SDK has typed bindings for it.' — pinned so the OpenAPI 3.1 + Zod single-source-of-truth + SDK typed-bindings narrative survives (drift to dropping the 'no second source of truth' would weaken the spec-as-contract claim)", () => {
-    expect(body).toMatch(/Every endpoint, every shape\./);
+  it('frames the page as a curated map backed by the complete generated reference', () => {
+    expect(body).toMatch(/Core routes, exact shapes\./);
     expect(body).toMatch(
-      // S20c 2026-07-06 plain-language pass: OpenAPI 3.1 + Zod +
-      // no-second-source + typed-bindings all survive, plain words
-      // lead with the precise terms in parens.
-      /The Driftstack API is documented in a standard machine-readable\s+format \(an OpenAPI 3\.1 spec\), generated from the exact same\s+validation rules \(Zod schemas\) the server itself enforces at\s+runtime\. There is no\s+second source of truth — if a route exists, it's in the spec; if\s+it's in the spec, the SDKs already know its exact shapes \(typed\s+bindings\)\./,
+      /complete Driftstack API is documented in a standard\s+machine-readable format \(an OpenAPI 3\.1 spec\), generated from the\s+same validation rules \(Zod schemas\) the server enforces at runtime/,
     );
+    expect(body).toMatch(
+      /This page is a curated map of common resources and runnable\s+request patterns/,
+    );
+    expect(body).not.toMatch(/Every endpoint/i);
   });
 
   // Fleet v2 (2026-07-03) — group headings re-pinned from text-tk-accent
   // to the AA-safe text-tk-accent-text tone (accent-colored TEXT fails
   // AA on the dark bg; heading text + grouping are unchanged).
-  it('13-group surface map taxonomy: Sessions + Agent sessions + Recipes + Profiles + API keys + Webhooks + Account + Team + Billing — crypto orders + Status + Auth flows + Billing — pinned so the 13-group enumeration of canonical route prefixes stays complete (drift to dropping any group would orphan SDK readers from that route surface; drift to merging Billing + crypto-orders would lose the separate billing-paths distinction)', () => {
+  it('curated surface map includes archetypes, agent sessions, recipes, and the primary account resources', () => {
     expect(body).toMatch(
       /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Sessions\s*\n?\s*<\/h3>/,
+    );
+    expect(body).toMatch(
+      /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Archetypes\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
       /uppercase tracking-widest text-tk-accent-text">\s*\n?\s*Agent sessions\s*\n?\s*<\/h3>/,
@@ -113,12 +116,13 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
   });
 
   // Arc 4 Wave 2.B sub-slice 8.20.f (v2-#8) — marketing api-reference
-  // surfaces agent-sessions as a distinct route group; pins all 8
-  // endpoints of the v2-#8 surface (extended 2026-05-20 with Slice 3
+  // surfaces agent-sessions as a distinct route group; pins the collection
+  // read plus the customer-facing control subset (extended 2026-05-20 with Slice 3
   // /:id/mode + Slice 4-6 /:id/input-event landed for Wave 29-NNN
   // ARC 3) so any rename / drop breaks CI.
-  it('Agent sessions route enumeration 8-endpoint: POST + GET /:id + POST /:id/message + POST /:id/mode + POST /:id/input-event + POST /:id/takeover + POST /:id/handback + DELETE /:id — pinned so the agent-sessions surface stays visible alongside regular sessions on the marketing page (drift to dropping would hide v2-#8 from prospects)', () => {
+  it('Agent sessions route enumeration includes the live paginated collection read', () => {
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions<\/li>/);
+    expect(body).toMatch(/<li>GET \/v1\/agent-sessions<\/li>/);
     expect(body).toMatch(/<li>GET \/v1\/agent-sessions\/:id<\/li>/);
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/message<\/li>/);
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/mode<\/li>/);
@@ -128,10 +132,34 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toMatch(/<li>DELETE \/v1\/agent-sessions\/:id<\/li>/);
   });
 
-  // AI-B4 sub-slice 8.20.m.2 — recipes is a 1-endpoint surface
-  // (POST only at v1.0; read/list/execute/delete are v1.1).
-  it("Recipes route enumeration 1-endpoint: POST /v1/recipes — pinned so the recipes surface stays visible on the marketing page (drift to dropping would hide AI-B4 from prospects; drift to listing more endpoints would surface v1.1 scope that hasn't shipped)", () => {
-    expect(body).toMatch(/<li>POST \/v1\/recipes<\/li>/);
+  it('Recipes route enumeration matches shipped suggestion/create/list/detail/delete management', () => {
+    for (const endpoint of [
+      'GET /v1/agent-sessions/:id/recipe-suggestion',
+      'POST /v1/recipes',
+      'GET /v1/recipes',
+      'GET /v1/recipes/:id',
+      'DELETE /v1/recipes/:id',
+    ]) {
+      expect(body).toContain(`<li>${endpoint}</li>`);
+    }
+    expect(body).not.toMatch(/\/v1\/recipes\/:id\/(?:execute|replay)/);
+  });
+
+  it('Archetypes card links the live catalog and generator reference', () => {
+    expect(body).toContain('<li>GET /v1/archetypes</li>');
+    expect(body).toMatch(
+      /const ARCHETYPES_REFERENCE_URL = 'https:\/\/docs\.driftstack\.dev\/api\/archetypes\/';/,
+    );
+    expect(body).toMatch(/catalog and create-payload generator reference/);
+  });
+
+  it('keeps the customer-key samples on the paid API surface and describes Free desktop access honestly', () => {
+    expect(body).toMatch(
+      /Customer API keys, OAuth applications, and SDK automation require a\s+paid tier/,
+    );
+    expect(body).toMatch(/browser-authorized restricted device credential/);
+    expect(body).toMatch(/These API-key and SDK examples require a paid tier/);
+    expect(body).not.toMatch(/Free (?:API|SDK) access/);
   });
 
   it("Webhooks route enumeration 9-endpoint: POST + GET + GET /:id + PATCH + DELETE + POST /:id/rotate-secret + POST /:id/test + GET /:id/deliveries + POST /v1/webhook-deliveries/:id/replay — pinned so the webhook lifecycle endpoint enumeration matches the customer-dashboard webhooks page's wired actions (drift would create marketing↔dashboard contract mismatch)", () => {
@@ -161,7 +189,7 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toMatch(/errors\.driftstack\.dev\/feature-unavailable/);
   });
 
-  it('V-662 typed SDK error class mapping: ValidationError + AuthError + NotFoundError + ConflictError + SessionDestroyedError + TierLimitError + RateLimitError + ConcurrencyLimitError + DriftstackError + FeatureUnavailableError — pinned so the SDK-class-name mapping stays consistent (drift to renaming a class would break customer try/catch blocks; drift to dropping retryable markers on RateLimitError/internal would change retry-logic guidance)', () => {
+  it('V-662 typed SDK error class mapping includes the concrete InternalError class', () => {
     expect(body).toMatch(/ValidationError/);
     expect(body).toMatch(/AuthError/);
     expect(body).toMatch(/NotFoundError/);
@@ -173,7 +201,7 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     );
     expect(body).toMatch(/ConcurrencyLimitError/);
     expect(body).toMatch(
-      /DriftstackError \(kind: <code>internal<\/code>\) <em class="font-sans not-italic text-tk-ink-3">\(retryable\)<\/em>/,
+      /InternalError <em class="font-sans not-italic text-tk-ink-3">\(retryable\)<\/em>/,
     );
     expect(body).toMatch(
       /FeatureUnavailableError <em class="font-sans not-italic text-tk-ink-3">\(NOT retryable\)<\/em>/,
@@ -186,9 +214,9 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     );
   });
 
-  it("Spec-posture 3-rule framing pinned: 'Every endpoint has Zod schemas for request + response. The OpenAPI 3.1 spec is generated from the schemas — there is no second source of truth.' + 'Every error case maps to an RFC 9457 application/problem+json response with a stable type URI.' + 'Breaking changes ship under a new path version. /v1 stays stable; /v2 would be a new prefix, not a silent shape change.' — pinned so the 3-rule API contract (Zod single-source + RFC 7807 + new-version-not-silent-change) all survives (drift to dropping any rule would weaken the API-stability contract)", () => {
+  it('Spec posture pins generated public shapes without claiming this curated page lists every endpoint', () => {
     expect(body).toMatch(
-      /Every endpoint has Zod schemas for request \+ response\. The OpenAPI 3\.1 spec is generated from the schemas — there is no second source of truth\./,
+      /Public request and response shapes are defined with Zod schemas\. The OpenAPI 3\.1 spec is generated from those schemas — there is no second source of truth\./,
     );
     expect(body).toMatch(
       // S20c 2026-07-06 plain-language pass: rule 2 said plainly.
@@ -197,6 +225,16 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toMatch(
       /Breaking changes ship under a new path version\. <code class="font-mono">\/v1<\/code> stays stable; <code class="font-mono">\/v2<\/code> would be a new prefix, not a silent shape change\./,
     );
+  });
+
+  it('common-pattern samples declare credentials, ids, imports, and contain no placeholder shell commands', () => {
+    expect(body).not.toContain('$URL');
+    expect(body).not.toContain('...');
+    expect(body.match(/--fail-with-body/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(body.match(/package main/g)?.length).toBe(3);
+    expect(body).toContain('import { writeFileSync } from "node:fs";');
+    expect(body).toContain('from pathlib import Path');
+    expect(body).toContain('client.sessions.capture(sessionId');
   });
 
   it("Hero CTA 2-button: 'Open interactive reference →' → API_DOCS_URL (primary) + 'Download openapi.json' → OPENAPI_JSON_URL (secondary) + 'Interactive reference uses Scalar — try requests against your API key directly in the browser.' subline — pinned so the dual-CTA path (interactive + raw json) + the Scalar reference stay visible (drift to dropping the openapi.json link would orphan tool integrators who want the raw spec)", () => {

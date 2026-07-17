@@ -1,8 +1,8 @@
 // W207 — drift guard between the customer-facing /api-reference page
 // and the actual Fastify route registrations.
 //
-// Background: api-reference.astro lists every endpoint as a quick
-// nav cue (`GET /v1/sessions`, `POST /v1/billing/checkout-session`).
+// Background: api-reference.astro lists a curated set of common endpoints as
+// quick nav cues (`GET /v1/sessions`, `POST /v1/billing/checkout-session`).
 // Two earlier bugs found in this audit: the doc listed
 // `/v1/billing/checkout` (real route: `/v1/billing/checkout-session`)
 // and `/v1/auth/magic-link` (real routes are `magic-link/request` and
@@ -73,7 +73,7 @@ const KNOWN_PARTIAL_PATHS = new Set<string>([
 ]);
 
 describe('W207 api-reference doc → server routes parity', () => {
-  it('every endpoint listed in /api-reference is registered by a route file', () => {
+  it('every curated endpoint listed in /api-reference is registered by a route file', () => {
     const docs: { method: string; path: string }[] = [];
     let m: RegExpExecArray | null;
     while ((m = LI_RE.exec(API_REF)) !== null) {
@@ -105,6 +105,21 @@ describe('W207 api-reference doc → server routes parity', () => {
         `Either the doc is stale or the route hasn't shipped yet. ` +
         `Missing:\n${missing.map((e) => `  ${e.method} ${e.path}`).join('\n')}`,
     ).toEqual([]);
+  });
+
+  it('pins the shipped archetype, agent collection, and saved-recipe route set', () => {
+    for (const endpoint of [
+      'GET /v1/archetypes',
+      'GET /v1/agent-sessions',
+      'GET /v1/agent-sessions/:id/recipe-suggestion',
+      'POST /v1/recipes',
+      'GET /v1/recipes',
+      'GET /v1/recipes/:id',
+      'DELETE /v1/recipes/:id',
+    ]) {
+      expect(API_REF).toContain(`<li>${endpoint}</li>`);
+    }
+    expect(API_REF).not.toMatch(/\/v1\/recipes\/:id\/(?:execute|replay)/);
   });
 
   it('W209 — every /v1/... URL mentioned in any /docs/*.astro is a registered route', () => {

@@ -37,8 +37,7 @@ describe('W338.B /api-reference SDK class column parity', () => {
     'RateLimitError',
     'ConcurrencyLimitError',
     'FeatureUnavailableError',
-    // DriftstackError is the base class — also exported.
-    'DriftstackError',
+    'InternalError',
   ];
 
   for (const cls of cited) {
@@ -67,6 +66,14 @@ describe('W338.B /api-reference SDK class column parity', () => {
     // consumers when to use `isRetryable(err)`. Pin it so a
     // future style rewrite doesn't silently drop the cue.
     expect(body).toMatch(/RateLimitError\s*<em[^>]*>\(retryable\)/);
+    expect(body).toMatch(/InternalError\s*<em[^>]*>\(retryable\)/);
     expect(body).toMatch(/FeatureUnavailableError\s*<em[^>]*>\(NOT retryable\)/);
+  });
+
+  it('maps the internal problem type to InternalError rather than the base transport class', () => {
+    expect(body).toMatch(
+      /errors\.driftstack\.dev\/internal[\s\S]*?<td class="py-2">InternalError <em/,
+    );
+    expect(body).not.toMatch(/DriftstackError \(kind: <code>internal<\/code>\)/);
   });
 });

@@ -6,8 +6,7 @@
 //
 //   • API_DOCS_URL + OPENAPI_JSON_URL constants point at the
 //     live Scalar surface (api.driftstack.dev/docs +
-//     openapi.json). The marketing page is a deliberate
-//     placeholder until the build embeds Scalar standalone.
+//     openapi.json), while the page clearly labels its route map as curated.
 //   • V-662 "Three flows, four languages" patterns: each of
 //     {create / drive / capture} session has cURL + TypeScript
 //     + Python + Go sample.
@@ -38,10 +37,13 @@ function read(p: string): string {
 describe('W373.A marketing-site /api-reference page content parity', () => {
   const body = read(PAGE);
 
-  it('API_DOCS_URL + OPENAPI_JSON_URL constants pinned (live Scalar surface)', () => {
+  it('pins the live Scalar and archetype-generator references', () => {
     expect(body).toMatch(/const API_DOCS_URL = 'https:\/\/api\.driftstack\.dev\/docs'/);
     expect(body).toMatch(
       /const OPENAPI_JSON_URL = 'https:\/\/api\.driftstack\.dev\/openapi\.json'/,
+    );
+    expect(body).toMatch(
+      /const ARCHETYPES_REFERENCE_URL = 'https:\/\/docs\.driftstack\.dev\/api\/archetypes\/'/,
     );
     expect(body).toMatch(/Interactive reference uses Scalar/);
   });
@@ -49,6 +51,17 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
   it('documents the live Scalar reference without deferred implementation copy', () => {
     expect(body).toContain('The live API server serves Scalar against the running OpenAPI spec');
     expect(body).not.toMatch(/placeholder|future iteration/i);
+  });
+
+  it('labels this page as curated and leaves the exhaustive contract to the live reference', () => {
+    expect(body).toMatch(/title="Core routes, exact shapes\."/);
+    expect(body).toMatch(
+      /This page is a curated map of common resources and runnable\s+request patterns/,
+    );
+    expect(body).toMatch(
+      /interactive reference carries the complete\s+operation and schema catalog/,
+    );
+    expect(body).not.toMatch(/Every endpoint/i);
   });
 
   it("V-662 'Three flows, four languages' pattern: each of {create / drive / capture} × {cURL, TS, Python, Go}", () => {
@@ -86,7 +99,7 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
       ['429', 'errors.driftstack.dev/tier-limit', 'TierLimitError'],
       ['429', 'errors.driftstack.dev/rate-limited', 'RateLimitError'],
       ['429', 'errors.driftstack.dev/concurrency-limit', 'ConcurrencyLimitError'],
-      ['500', 'errors.driftstack.dev/internal', 'DriftstackError'],
+      ['500', 'errors.driftstack.dev/internal', 'InternalError'],
       ['503', 'errors.driftstack.dev/feature-unavailable', 'FeatureUnavailableError'],
     ] as const) {
       const [, typeUri, sdkClass] = row;
@@ -95,9 +108,10 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
     }
   });
 
-  it('retryable markers pinned: RateLimitError + DriftstackError(internal) retryable / FeatureUnavailableError NOT retryable', () => {
+  it('retryable markers pinned: RateLimitError + InternalError retryable / FeatureUnavailableError NOT retryable', () => {
     expect(body).toMatch(/RateLimitError <em[^>]*>\(retryable\)<\/em>/);
-    expect(body).toMatch(/DriftstackError \(kind:[\s\S]*?<\/code>\) <em[^>]*>\(retryable\)<\/em>/);
+    expect(body).toMatch(/InternalError <em[^>]*>\(retryable\)<\/em>/);
+    expect(body).not.toMatch(/DriftstackError \(kind:[\s\S]*?<\/code>\)/);
     expect(body).toMatch(/FeatureUnavailableError <em[^>]*>\(NOT retryable\)<\/em>/);
   });
 
@@ -133,6 +147,9 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
   it('surface map includes the primary API groups and the public archetype catalog', () => {
     for (const section of [
       'Sessions',
+      'Archetypes',
+      'Agent sessions',
+      'Recipes',
       'Profiles',
       'API keys',
       'Webhooks',
@@ -152,6 +169,42 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
       );
     }
     expect(body).toContain('GET /v1/archetypes');
+  });
+
+  it('surfaces the live agent collection, recipe management, suggestion, and archetype generator', () => {
+    for (const endpoint of [
+      'GET /v1/agent-sessions',
+      'GET /v1/agent-sessions/:id/recipe-suggestion',
+      'POST /v1/recipes',
+      'GET /v1/recipes',
+      'GET /v1/recipes/:id',
+      'DELETE /v1/recipes/:id',
+    ]) {
+      expect(body).toContain(`<li>${endpoint}</li>`);
+    }
+    expect(body).toMatch(/catalog and create-payload generator reference/);
+    expect(body).not.toMatch(/\/v1\/recipes\/:id\/(?:execute|replay)/);
+  });
+
+  it('states the paid customer-key boundary without misrepresenting the Free desktop credential', () => {
+    expect(body).toMatch(
+      /Customer API keys, OAuth applications, and SDK automation require a\s+paid tier/,
+    );
+    expect(body).toMatch(/browser-authorized restricted device credential/);
+    expect(body).toMatch(/These API-key and SDK examples require a paid tier/);
+    expect(body).not.toMatch(/Free (?:API|SDK) access/);
+  });
+
+  it('keeps all common-pattern samples free of placeholders and declares their prerequisites', () => {
+    expect(body).not.toContain('$URL');
+    expect(body).not.toContain('...');
+    expect(body.match(/--fail-with-body/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(body.match(/package main/g)?.length).toBe(3);
+    expect(body).toContain('import { writeFileSync } from "node:fs";');
+    expect(body).toContain('from pathlib import Path');
+    expect(body).toContain('import base64');
+    expect(body).toContain('DRIFTSTACK_SESSION_ID');
+    expect(body).toContain('client.sessions.capture(sessionId');
   });
 
   it('"Capture kind" pins the three live inline capture variants only', () => {

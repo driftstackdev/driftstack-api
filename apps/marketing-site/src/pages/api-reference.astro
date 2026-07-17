@@ -1,9 +1,8 @@
 ---
 // Fleet v2 (2026-07-03) — re-skin only: PageHero/Section shells, the
 // .card/.panel/IconTile recipes, AA-safe accent text, plus the
-// living-reference banner. Every endpoint listed, every error-table
-// row, every code sample and every substantive claim is byte-identical
-// to the pre-redesign page (the api-reference satellite suite pins them).
+// living-reference banner. The curated route map, error table, and runnable
+// samples are pinned by the api-reference satellite suite.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
 import Section from '../components/Section.astro';
@@ -13,22 +12,23 @@ import IconTile from '../components/IconTile.astro';
 
 const API_DOCS_URL = 'https://api.driftstack.dev/docs';
 const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
+const ARCHETYPES_REFERENCE_URL = 'https://docs.driftstack.dev/api/archetypes/';
 ---
 
 <BaseLayout
   title="API reference"
-  description="Driftstack API reference. Every endpoint, every shape, generated from the same OpenAPI 3.1 spec the SDK codegen reads."
+  description="Driftstack API reference: a curated route map and runnable examples backed by the same OpenAPI 3.1 spec the SDK codegen reads."
 >
   <!-- Hero -->
-  <PageHero label="API reference" title="Every endpoint, every shape.">
+  <PageHero label="API reference" title="Core routes, exact shapes.">
     <p class="mt-5 max-w-prose text-lg leading-8 text-tk-ink-2">
-      The Driftstack API is documented in a standard machine-readable
-      format (an OpenAPI 3.1 spec), generated from the exact same
-      validation rules (Zod schemas) the server itself enforces at
-      runtime. There is no
-      second source of truth — if a route exists, it's in the spec; if
-      it's in the spec, the SDKs already know its exact shapes (typed
-      bindings).
+      The complete Driftstack API is documented in a standard
+      machine-readable format (an OpenAPI 3.1 spec), generated from the
+      same validation rules (Zod schemas) the server enforces at runtime.
+      There is no second source of truth for public request and response
+      shapes. This page is a curated map of common resources and runnable
+      request patterns; the interactive reference carries the complete
+      operation and schema catalog.
     </p>
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href={API_DOCS_URL} class="btn-primary">Open interactive reference →</a>
@@ -44,12 +44,12 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
        site; this page is a curated snapshot of the surface. -->
   <div class="mx-auto max-w-6xl px-6 py-8">
     <p class="panel text-sm text-tk-ink-2">
-      The living reference is <a href="https://docs.driftstack.dev" class="text-tk-accent-text underline" rel="noopener noreferrer">docs.driftstack.dev</a> — this page is a snapshot.
+      The complete living reference is <a href="https://docs.driftstack.dev" class="text-tk-accent-text underline" rel="noopener noreferrer">docs.driftstack.dev</a> — this page is a curated snapshot.
     </p>
   </div>
 
   <!-- Surface map -->
-  <Section label="Surface map" title="Routes, grouped." class="bg-tk-surface">
+  <Section label="Surface map" title="Common routes, grouped." class="bg-tk-surface">
     <div class="mt-10 grid gap-6 md:grid-cols-2">
       <div class="card p-6">
         <IconTile class="mb-3">
@@ -62,7 +62,6 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
         </h3>
         <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
           <li>POST /v1/sessions</li>
-          <li>GET /v1/archetypes</li>
           <li>GET /v1/sessions</li>
           <li>GET /v1/sessions/:id</li>
           <li>POST /v1/sessions/:id/navigate</li>
@@ -77,6 +76,25 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
       <div class="card p-6">
         <IconTile class="mb-3">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="3" width="16" height="18" rx="3" /><path d="M8 7h8M8 11h8M8 15h5" />
+          </svg>
+        </IconTile>
+        <h3 class="font-mono text-sm uppercase tracking-widest text-tk-accent-text">
+          Archetypes
+        </h3>
+        <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>GET /v1/archetypes</li>
+        </ul>
+        <p class="mt-4 text-sm leading-6 text-tk-ink-2">
+          Read the public device, iOS, and Safari catalog without an API key.
+          The <a href={ARCHETYPES_REFERENCE_URL} class="text-tk-accent-text underline">catalog and create-payload generator reference</a>
+          shows how to resolve capabilities to a current archetype id.
+        </p>
+      </div>
+
+      <div class="card p-6">
+        <IconTile class="mb-3">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
         </IconTile>
@@ -85,6 +103,7 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
         </h3>
         <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
           <li>POST /v1/agent-sessions</li>
+          <li>GET /v1/agent-sessions</li>
           <li>GET /v1/agent-sessions/:id</li>
           <li>POST /v1/agent-sessions/:id/message</li>
           <li>POST /v1/agent-sessions/:id/mode</li>
@@ -108,8 +127,16 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           Recipes
         </h3>
         <ul class="mt-3 space-y-2 font-mono text-xs text-tk-ink-2">
+          <li>GET /v1/agent-sessions/:id/recipe-suggestion</li>
           <li>POST /v1/recipes</li>
+          <li>GET /v1/recipes</li>
+          <li>GET /v1/recipes/:id</li>
+          <li>DELETE /v1/recipes/:id</li>
         </ul>
+        <p class="mt-4 text-sm leading-6 text-tk-ink-2">
+          Prefill recipe metadata from an agent session, then create, browse,
+          inspect, or delete saved recipes.
+        </p>
       </div>
 
       <div class="card p-6">
@@ -145,6 +172,12 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           <li>POST /v1/api-keys/:id/rotate</li>
           <li>DELETE /v1/api-keys/:id</li>
         </ul>
+        <p class="mt-4 text-sm leading-6 text-tk-ink-2">
+          Customer API keys, OAuth applications, and SDK automation require a
+          paid tier. Free is supported through the desktop app's
+          browser-authorized restricted device credential; it is not a customer
+          key to paste into API samples.
+        </p>
       </div>
 
       <div class="card p-6">
@@ -285,8 +318,13 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
     <p class="mt-4 max-w-prose text-tk-ink-2">
       Most integrations are built on the same three operations:
       spin up a session, drive it, capture artifacts. Below: each
-      one in cURL, TypeScript, Python, and Go. Copy-paste straight
-      into a quickstart.
+      one in cURL, TypeScript, Python, and Go. Each block declares the
+      environment values and imports it uses.
+    </p>
+    <p class="mt-3 max-w-prose text-sm text-tk-ink-2">
+      These API-key and SDK examples require a paid tier. On Free, sign in from
+      the desktop app instead; browser authorization stores its restricted
+      device credential automatically.
     </p>
 
     <!-- Create a session -->
@@ -299,7 +337,8 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
-curl -X POST https://api.driftstack.dev/v1/sessions \\
+: "\${DRIFTSTACK_API_KEY:?Set DRIFTSTACK_API_KEY}"
+curl --fail-with-body -X POST https://api.driftstack.dev/v1/sessions \\
   -H "authorization: Bearer $DRIFTSTACK_API_KEY" \\
   -H "content-type: application/json" \\
   -d '{"archetype":"iphone17_ios18_7_safari26_4"}'
@@ -307,7 +346,9 @@ curl -X POST https://api.driftstack.dev/v1/sessions \\
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 import { Driftstack } from "@driftstack/sdk";
-const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
+const apiKey = process.env.DRIFTSTACK_API_KEY;
+if (!apiKey) throw new Error("DRIFTSTACK_API_KEY is required");
+const client = new Driftstack({ apiKey });
 const session = await client.sessions.create({
   archetype: "iphone17_ios18_7_safari26_4",
 });
@@ -315,19 +356,38 @@ console.log(session.id);
 `}</code></pre>
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
+import os
+
 from driftstack import Driftstack
+
 client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
 session = client.sessions.create({"archetype": "iphone17_ios18_7_safari26_4"})
 print(session.id)
 `}</code></pre>
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
-client := driftstack.New(os.Getenv("DRIFTSTACK_API_KEY"))
-session, err := client.Sessions.Create(ctx, &driftstack.CreateSessionRequest{
-    Archetype: "iphone17_ios18_7_safari26_4",
-})
-if err != nil { return err }
-fmt.Println(session.ID)
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "os"
+
+    driftstack "github.com/driftstackdev/driftstack-api/packages/sdk-go"
+)
+
+func main() {
+    apiKey := os.Getenv("DRIFTSTACK_API_KEY")
+    if apiKey == "" { log.Fatal("DRIFTSTACK_API_KEY is required") }
+    client := driftstack.New(apiKey)
+    defer client.Close()
+    session, err := client.Sessions.Create(context.Background(), &driftstack.CreateSessionRequest{
+        Archetype: "iphone17_ios18_7_safari26_4",
+    })
+    if err != nil { log.Fatal(err) }
+    fmt.Println(session.ID)
+}
 `}</code></pre>
       </div>
     </div>
@@ -347,43 +407,78 @@ fmt.Println(session.ID)
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
-curl -X POST $URL/navigate \\
-  -d '{"url":"https://example.com"}' ...
-curl -X POST $URL/interact \\
-  -d '{"action":{"kind":"tap","selector":"button.cta"}}' ...
-curl -X POST $URL/wait \\
-  -d '{"condition":{"kind":"selector","selector":"main"}}' ...
+: "\${DRIFTSTACK_API_KEY:?Set DRIFTSTACK_API_KEY}"
+: "\${DRIFTSTACK_SESSION_ID:?Set DRIFTSTACK_SESSION_ID}"
+SESSION_URL="https://api.driftstack.dev/v1/sessions/$DRIFTSTACK_SESSION_ID"
+AUTH="authorization: Bearer $DRIFTSTACK_API_KEY"
+
+curl --fail-with-body -X POST "$SESSION_URL/navigate" \\
+  -H "$AUTH" -H "content-type: application/json" \\
+  -d '{"url":"https://example.com"}'
+curl --fail-with-body -X POST "$SESSION_URL/interact" \\
+  -H "$AUTH" -H "content-type: application/json" \\
+  -d '{"action":{"kind":"tap","selector":"button.cta"}}'
+curl --fail-with-body -X POST "$SESSION_URL/wait" \\
+  -H "$AUTH" -H "content-type: application/json" \\
+  -d '{"condition":{"kind":"selector","selector":"main"},"timeout_ms":5000}'
 `}</code></pre>
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
-await client.sessions.navigate(session.id, { url: "https://example.com" });
-await client.sessions.interact(session.id, {
+import { Driftstack } from "@driftstack/sdk";
+
+const apiKey = process.env.DRIFTSTACK_API_KEY;
+const sessionId = process.env.DRIFTSTACK_SESSION_ID;
+if (!apiKey || !sessionId) throw new Error("Set DRIFTSTACK_API_KEY and DRIFTSTACK_SESSION_ID");
+const client = new Driftstack({ apiKey });
+
+await client.sessions.navigate(sessionId, { url: "https://example.com" });
+await client.sessions.interact(sessionId, {
   action: { kind: "tap", selector: "button.cta" },
 });
-await client.sessions.wait(session.id, {
+await client.sessions.wait(sessionId, {
   condition: { kind: "selector", selector: "main" },
   timeout_ms: 5000,
 });
 `}</code></pre>
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
-client.sessions.navigate(session.id, {"url": "https://example.com"})
-client.sessions.interact(session.id, {
+import os
+
+from driftstack import Driftstack
+
+client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
+session_id = os.environ["DRIFTSTACK_SESSION_ID"]
+client.sessions.navigate(session_id, {"url": "https://example.com"})
+client.sessions.interact(session_id, {
     "action": {"kind": "tap", "selector": "button.cta"},
 })
-client.sessions.wait(session.id, {
+client.sessions.wait(session_id, {
     "condition": {"kind": "selector", "selector": "main"},
     "timeout_ms": 5000,
 })
 `}</code></pre>
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
-_, err = client.Sessions.Navigate(ctx, session.ID, &driftstack.NavigateRequest{
-    URL: "https://example.com",
-})
-_, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractRequest{
-    Action: driftstack.NewTapAction("button.cta"),
-})
+package main
+
+import (
+    "context"
+    "log"
+    "os"
+
+    driftstack "github.com/driftstackdev/driftstack-api/packages/sdk-go"
+)
+
+func main() {
+    apiKey, sessionID := os.Getenv("DRIFTSTACK_API_KEY"), os.Getenv("DRIFTSTACK_SESSION_ID")
+    if apiKey == "" || sessionID == "" { log.Fatal("set DRIFTSTACK_API_KEY and DRIFTSTACK_SESSION_ID") }
+    client := driftstack.New(apiKey)
+    defer client.Close()
+    ctx := context.Background()
+    if _, err := client.Sessions.Navigate(ctx, sessionID, &driftstack.NavigateRequest{URL: "https://example.com"}); err != nil { log.Fatal(err) }
+    if _, err := client.Sessions.Interact(ctx, sessionID, &driftstack.InteractRequest{Action: driftstack.NewTapAction("button.cta")}); err != nil { log.Fatal(err) }
+    if _, err := client.Sessions.Wait(ctx, sessionID, &driftstack.WaitRequest{Condition: driftstack.NewSelectorCondition("main"), TimeoutMS: 5000}); err != nil { log.Fatal(err) }
+}
 `}</code></pre>
       </div>
     </div>
@@ -404,29 +499,64 @@ _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractRequest{
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
-curl -X POST $URL/capture \\
-  -d '{"kind":"screenshot"}' ...
-# response.data is base64 PNG
+: "\${DRIFTSTACK_API_KEY:?Set DRIFTSTACK_API_KEY}"
+: "\${DRIFTSTACK_SESSION_ID:?Set DRIFTSTACK_SESSION_ID}"
+curl --fail-with-body -X POST "https://api.driftstack.dev/v1/sessions/$DRIFTSTACK_SESSION_ID/capture" \\
+  -H "authorization: Bearer $DRIFTSTACK_API_KEY" \\
+  -H "content-type: application/json" \\
+  -d '{"kind":"screenshot"}' \\
+  | jq -r .data | openssl base64 -d -A > out.png
 `}</code></pre>
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
-const shot = await client.sessions.capture(session.id, {
+import { writeFileSync } from "node:fs";
+import { Driftstack } from "@driftstack/sdk";
+
+const apiKey = process.env.DRIFTSTACK_API_KEY;
+const sessionId = process.env.DRIFTSTACK_SESSION_ID;
+if (!apiKey || !sessionId) throw new Error("Set DRIFTSTACK_API_KEY and DRIFTSTACK_SESSION_ID");
+const client = new Driftstack({ apiKey });
+const shot = await client.sessions.capture(sessionId, {
   kind: "screenshot",
 });
-fs.writeFileSync("out.png", Buffer.from(shot.data, "base64"));
+writeFileSync("out.png", Buffer.from(shot.data, "base64"));
 `}</code></pre>
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
-shot = client.sessions.capture(session.id, {"kind": "screenshot"})
+import base64
+import os
+from pathlib import Path
+
+from driftstack import Driftstack
+
+client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
+shot = client.sessions.capture(os.environ["DRIFTSTACK_SESSION_ID"], {"kind": "screenshot"})
 Path("out.png").write_bytes(base64.b64decode(shot.data))
 `}</code></pre>
         <pre
           class="overflow-x-auto rounded-md bg-[#0b0b0e] p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
-shot, _ := client.Sessions.Capture(ctx, session.ID, &driftstack.CaptureRequest{
-    Kind: driftstack.CaptureScreenshot,
-})
-data, _ := base64.StdEncoding.DecodeString(shot.Data)
-os.WriteFile("out.png", data, 0644)
+package main
+
+import (
+    "context"
+    "encoding/base64"
+    "log"
+    "os"
+
+    driftstack "github.com/driftstackdev/driftstack-api/packages/sdk-go"
+)
+
+func main() {
+    apiKey, sessionID := os.Getenv("DRIFTSTACK_API_KEY"), os.Getenv("DRIFTSTACK_SESSION_ID")
+    if apiKey == "" || sessionID == "" { log.Fatal("set DRIFTSTACK_API_KEY and DRIFTSTACK_SESSION_ID") }
+    client := driftstack.New(apiKey)
+    defer client.Close()
+    shot, err := client.Sessions.Capture(context.Background(), sessionID, &driftstack.CaptureRequest{Kind: driftstack.CaptureScreenshot})
+    if err != nil { log.Fatal(err) }
+    data, err := base64.StdEncoding.DecodeString(shot.Data)
+    if err != nil { log.Fatal(err) }
+    if err := os.WriteFile("out.png", data, 0o644); err != nil { log.Fatal(err) }
+}
 `}</code></pre>
       </div>
     </div>
@@ -509,7 +639,7 @@ os.WriteFile("out.png", data, 0644)
             <td class="py-2 pr-4">500</td>
             <td class="py-2 pr-4">errors.driftstack.dev/internal</td>
             <td class="py-2 pr-4 font-sans">Server-side fault. Logged + alerted.</td>
-            <td class="py-2">DriftstackError (kind: <code>internal</code>) <em class="font-sans not-italic text-tk-ink-3">(retryable)</em></td>
+            <td class="py-2">InternalError <em class="font-sans not-italic text-tk-ink-3">(retryable)</em></td>
           </tr>
           <tr>
             <td class="py-2 pr-4">503</td>
@@ -532,7 +662,7 @@ os.WriteFile("out.png", data, 0644)
     <ul class="mt-6 space-y-3 max-w-prose text-tk-ink-2">
       <li class="flex gap-3">
         <span class="arrow-bullet">→</span>
-        <span>Every endpoint has Zod schemas for request + response. The OpenAPI 3.1 spec is generated from the schemas — there is no second source of truth.</span>
+        <span>Public request and response shapes are defined with Zod schemas. The OpenAPI 3.1 spec is generated from those schemas — there is no second source of truth.</span>
       </li>
       <li class="flex gap-3">
         <span class="arrow-bullet">→</span>
