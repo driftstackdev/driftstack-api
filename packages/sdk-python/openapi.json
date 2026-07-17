@@ -3319,6 +3319,12 @@
         },
         "required": ["generated_at", "account_id", "row_count", "truncated", "data"]
       },
+      "BillingCycle": {
+        "type": "string",
+        "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])$",
+        "description": "UTC calendar month in YYYY-MM form (month 01 through 12).",
+        "example": "2026-07"
+      },
       "CostThresholdState": {
         "type": "string",
         "enum": ["under-soft", "between-soft-and-hard", "over-hard"]
@@ -3371,8 +3377,7 @@
             "type": "string"
           },
           "billing_cycle": {
-            "type": "string",
-            "pattern": "^\\d{4}-\\d{2}$"
+            "$ref": "#/components/schemas/BillingCycle"
           },
           "tier": {
             "type": "string",
@@ -3401,9 +3406,1900 @@
         "type": "string",
         "description": "Server-sent event stream of transcript.entry frames; each frame carries an `id:` (the entry index) and a JSON `data:` payload of { index, entry }."
       },
+      "AgentMessageUsage": {
+        "type": "object",
+        "properties": {
+          "decomposer_kind": {
+            "type": "string",
+            "enum": ["claude", "deterministic"]
+          },
+          "anthropic_input_tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "anthropic_output_tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cost_usd_cents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": ["decomposer_kind"],
+        "description": "Usage evidence for model-backed turns. Optional fields are present only when the selected decomposer/provider reports them; bundled turns expose the posted flat operational cost."
+      },
+      "AgentMessageResponse": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["plan-executed"]
+              },
+              "session": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "account_id": {
+                    "type": "string"
+                  },
+                  "driftstack_session_id": {
+                    "type": ["string", "null"]
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "closed_reason": {
+                    "type": ["string", "null"]
+                  },
+                  "token_budget_total": {
+                    "type": "integer"
+                  },
+                  "token_budget_remaining": {
+                    "type": "integer"
+                  },
+                  "transcript_length": {
+                    "type": "integer"
+                  },
+                  "closed_at": {
+                    "type": ["string", "null"]
+                  },
+                  "created_by_user_id": {
+                    "type": ["string", "null"]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["manual", "ai", "pair"]
+                  },
+                  "model": {
+                    "type": "string",
+                    "enum": [
+                      "claude-opus-4-8",
+                      "claude-opus-4-7",
+                      "claude-sonnet-4-6",
+                      "claude-haiku-4-5"
+                    ]
+                  },
+                  "pair_mode_state": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind"]
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  },
+                  "livekit": {
+                    "type": "object",
+                    "properties": {
+                      "ws_url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "room": {
+                        "type": "string"
+                      },
+                      "token": {
+                        "type": "string"
+                      },
+                      "participant_identity": {
+                        "type": "string"
+                      },
+                      "expires_at": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                  },
+                  "liveness": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": ["string", "null"],
+                        "enum": ["active", "provisioning", "idle", "terminating"]
+                      },
+                      "fresh": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["state", "fresh"]
+                  },
+                  "capability_report": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "string"
+                      },
+                      "manual_input_available": {
+                        "type": ["boolean", "null"]
+                      },
+                      "streaming_state": {
+                        "type": ["string", "null"],
+                        "enum": ["provisioning", "live", "blank", "failed"]
+                      },
+                      "egress_state": {
+                        "type": ["string", "null"],
+                        "enum": ["live", "dead_proxy"]
+                      },
+                      "proxy_kind": {
+                        "type": "string",
+                        "enum": ["socks5", "openvpn", "wireguard"]
+                      },
+                      "proxy_udp_supported": {
+                        "type": "boolean"
+                      },
+                      "transport_mode_requested": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "transport_mode_active": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "safeguards_passed": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "manual_input_available",
+                      "streaming_state",
+                      "egress_state",
+                      "proxy_kind",
+                      "proxy_udp_supported",
+                      "transport_mode_requested",
+                      "transport_mode_active",
+                      "safeguards_passed"
+                    ]
+                  },
+                  "error_event": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "timestamp": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "code": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": ["info", "warn", "error", "fatal"]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "detail": {
+                        "type": ["string", "null"],
+                        "maxLength": 16384
+                      },
+                      "customer_actionable": {
+                        "type": "boolean"
+                      },
+                      "retryable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "code",
+                      "severity",
+                      "summary",
+                      "detail",
+                      "customer_actionable",
+                      "retryable"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "account_id",
+                  "driftstack_session_id",
+                  "status",
+                  "closed_reason",
+                  "token_budget_total",
+                  "token_budget_remaining",
+                  "transcript_length",
+                  "closed_at",
+                  "created_by_user_id",
+                  "mode",
+                  "model",
+                  "pair_mode_state",
+                  "created_at",
+                  "updated_at"
+                ]
+              },
+              "intents": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["navigate"]
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind", "url"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["interact"]
+                        },
+                        "action": {
+                          "type": "string",
+                          "enum": ["tap", "type", "scroll", "swipe", "press"]
+                        },
+                        "selector": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "sensitive": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["kind", "action"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["wait"]
+                        },
+                        "condition": {
+                          "type": "string",
+                          "enum": ["idle", "selector_visible"]
+                        },
+                        "selector": {
+                          "type": "string"
+                        },
+                        "timeoutMs": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["kind", "condition"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["capture"]
+                        },
+                        "capture": {
+                          "type": "string",
+                          "enum": ["screenshot", "dom_snapshot", "pdf"]
+                        }
+                      },
+                      "required": ["kind", "capture"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["scroll"]
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": ["up", "down"]
+                        },
+                        "amount_px": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": ["kind", "direction"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["behavioral_pause"]
+                        },
+                        "duration_ms": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "reading_word_count": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["kind"]
+                    }
+                  ]
+                }
+              },
+              "results": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["success"]
+                        },
+                        "intent": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["navigate"]
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "url"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["interact"]
+                                },
+                                "action": {
+                                  "type": "string",
+                                  "enum": ["tap", "type", "scroll", "swipe", "press"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                },
+                                "sensitive": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["kind", "action"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["wait"]
+                                },
+                                "condition": {
+                                  "type": "string",
+                                  "enum": ["idle", "selector_visible"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "timeoutMs": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind", "condition"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["capture"]
+                                },
+                                "capture": {
+                                  "type": "string",
+                                  "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                }
+                              },
+                              "required": ["kind", "capture"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["scroll"]
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": ["up", "down"]
+                                },
+                                "amount_px": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": ["kind", "direction"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["behavioral_pause"]
+                                },
+                                "duration_ms": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "reading_word_count": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind"]
+                            }
+                          ]
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "captureId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind", "intent", "summary"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["failure"]
+                        },
+                        "intent": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["navigate"]
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "url"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["interact"]
+                                },
+                                "action": {
+                                  "type": "string",
+                                  "enum": ["tap", "type", "scroll", "swipe", "press"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                },
+                                "sensitive": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["kind", "action"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["wait"]
+                                },
+                                "condition": {
+                                  "type": "string",
+                                  "enum": ["idle", "selector_visible"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "timeoutMs": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind", "condition"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["capture"]
+                                },
+                                "capture": {
+                                  "type": "string",
+                                  "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                }
+                              },
+                              "required": ["kind", "capture"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["scroll"]
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": ["up", "down"]
+                                },
+                                "amount_px": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": ["kind", "direction"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["behavioral_pause"]
+                                },
+                                "duration_ms": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "reading_word_count": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind"]
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "diagnosis": {
+                          "type": "object",
+                          "properties": {
+                            "category": {
+                              "type": "string",
+                              "enum": [
+                                "element_not_found",
+                                "page_load_failed",
+                                "condition_not_met",
+                                "capture_failed",
+                                "scroll_failed",
+                                "session_error",
+                                "invalid_request",
+                                "result_too_large",
+                                "unknown"
+                              ]
+                            },
+                            "retryable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["category", "retryable"]
+                        }
+                      },
+                      "required": ["kind", "intent", "reason"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["confirmation_required"]
+                        },
+                        "intent": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["navigate"]
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "url"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["interact"]
+                                },
+                                "action": {
+                                  "type": "string",
+                                  "enum": ["tap", "type", "scroll", "swipe", "press"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                },
+                                "sensitive": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["kind", "action"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["wait"]
+                                },
+                                "condition": {
+                                  "type": "string",
+                                  "enum": ["idle", "selector_visible"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "timeoutMs": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind", "condition"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["capture"]
+                                },
+                                "capture": {
+                                  "type": "string",
+                                  "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                }
+                              },
+                              "required": ["kind", "capture"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["scroll"]
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": ["up", "down"]
+                                },
+                                "amount_px": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": ["kind", "direction"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["behavioral_pause"]
+                                },
+                                "duration_ms": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "reading_word_count": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind"]
+                            }
+                          ]
+                        },
+                        "category": {
+                          "type": "string",
+                          "enum": ["purchase", "payment", "account_deletion"]
+                        },
+                        "matchedText": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind", "intent", "category", "matchedText"]
+                    }
+                  ]
+                }
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "usage": {
+                "$ref": "#/components/schemas/AgentMessageUsage"
+              }
+            },
+            "required": ["kind", "session", "intents", "results", "ok"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["clarify"]
+              },
+              "session": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "account_id": {
+                    "type": "string"
+                  },
+                  "driftstack_session_id": {
+                    "type": ["string", "null"]
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "closed_reason": {
+                    "type": ["string", "null"]
+                  },
+                  "token_budget_total": {
+                    "type": "integer"
+                  },
+                  "token_budget_remaining": {
+                    "type": "integer"
+                  },
+                  "transcript_length": {
+                    "type": "integer"
+                  },
+                  "closed_at": {
+                    "type": ["string", "null"]
+                  },
+                  "created_by_user_id": {
+                    "type": ["string", "null"]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["manual", "ai", "pair"]
+                  },
+                  "model": {
+                    "type": "string",
+                    "enum": [
+                      "claude-opus-4-8",
+                      "claude-opus-4-7",
+                      "claude-sonnet-4-6",
+                      "claude-haiku-4-5"
+                    ]
+                  },
+                  "pair_mode_state": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind"]
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  },
+                  "livekit": {
+                    "type": "object",
+                    "properties": {
+                      "ws_url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "room": {
+                        "type": "string"
+                      },
+                      "token": {
+                        "type": "string"
+                      },
+                      "participant_identity": {
+                        "type": "string"
+                      },
+                      "expires_at": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                  },
+                  "liveness": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": ["string", "null"],
+                        "enum": ["active", "provisioning", "idle", "terminating"]
+                      },
+                      "fresh": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["state", "fresh"]
+                  },
+                  "capability_report": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "string"
+                      },
+                      "manual_input_available": {
+                        "type": ["boolean", "null"]
+                      },
+                      "streaming_state": {
+                        "type": ["string", "null"],
+                        "enum": ["provisioning", "live", "blank", "failed"]
+                      },
+                      "egress_state": {
+                        "type": ["string", "null"],
+                        "enum": ["live", "dead_proxy"]
+                      },
+                      "proxy_kind": {
+                        "type": "string",
+                        "enum": ["socks5", "openvpn", "wireguard"]
+                      },
+                      "proxy_udp_supported": {
+                        "type": "boolean"
+                      },
+                      "transport_mode_requested": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "transport_mode_active": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "safeguards_passed": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "manual_input_available",
+                      "streaming_state",
+                      "egress_state",
+                      "proxy_kind",
+                      "proxy_udp_supported",
+                      "transport_mode_requested",
+                      "transport_mode_active",
+                      "safeguards_passed"
+                    ]
+                  },
+                  "error_event": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "timestamp": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "code": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": ["info", "warn", "error", "fatal"]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "detail": {
+                        "type": ["string", "null"],
+                        "maxLength": 16384
+                      },
+                      "customer_actionable": {
+                        "type": "boolean"
+                      },
+                      "retryable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "code",
+                      "severity",
+                      "summary",
+                      "detail",
+                      "customer_actionable",
+                      "retryable"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "account_id",
+                  "driftstack_session_id",
+                  "status",
+                  "closed_reason",
+                  "token_budget_total",
+                  "token_budget_remaining",
+                  "transcript_length",
+                  "closed_at",
+                  "created_by_user_id",
+                  "mode",
+                  "model",
+                  "pair_mode_state",
+                  "created_at",
+                  "updated_at"
+                ]
+              },
+              "clarifying_question": {
+                "type": "string"
+              },
+              "usage": {
+                "$ref": "#/components/schemas/AgentMessageUsage"
+              }
+            },
+            "required": ["kind", "session", "clarifying_question"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["refuse"]
+              },
+              "session": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "account_id": {
+                    "type": "string"
+                  },
+                  "driftstack_session_id": {
+                    "type": ["string", "null"]
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "closed_reason": {
+                    "type": ["string", "null"]
+                  },
+                  "token_budget_total": {
+                    "type": "integer"
+                  },
+                  "token_budget_remaining": {
+                    "type": "integer"
+                  },
+                  "transcript_length": {
+                    "type": "integer"
+                  },
+                  "closed_at": {
+                    "type": ["string", "null"]
+                  },
+                  "created_by_user_id": {
+                    "type": ["string", "null"]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["manual", "ai", "pair"]
+                  },
+                  "model": {
+                    "type": "string",
+                    "enum": [
+                      "claude-opus-4-8",
+                      "claude-opus-4-7",
+                      "claude-sonnet-4-6",
+                      "claude-haiku-4-5"
+                    ]
+                  },
+                  "pair_mode_state": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind"]
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  },
+                  "livekit": {
+                    "type": "object",
+                    "properties": {
+                      "ws_url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "room": {
+                        "type": "string"
+                      },
+                      "token": {
+                        "type": "string"
+                      },
+                      "participant_identity": {
+                        "type": "string"
+                      },
+                      "expires_at": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                  },
+                  "liveness": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": ["string", "null"],
+                        "enum": ["active", "provisioning", "idle", "terminating"]
+                      },
+                      "fresh": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["state", "fresh"]
+                  },
+                  "capability_report": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "string"
+                      },
+                      "manual_input_available": {
+                        "type": ["boolean", "null"]
+                      },
+                      "streaming_state": {
+                        "type": ["string", "null"],
+                        "enum": ["provisioning", "live", "blank", "failed"]
+                      },
+                      "egress_state": {
+                        "type": ["string", "null"],
+                        "enum": ["live", "dead_proxy"]
+                      },
+                      "proxy_kind": {
+                        "type": "string",
+                        "enum": ["socks5", "openvpn", "wireguard"]
+                      },
+                      "proxy_udp_supported": {
+                        "type": "boolean"
+                      },
+                      "transport_mode_requested": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "transport_mode_active": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "safeguards_passed": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "manual_input_available",
+                      "streaming_state",
+                      "egress_state",
+                      "proxy_kind",
+                      "proxy_udp_supported",
+                      "transport_mode_requested",
+                      "transport_mode_active",
+                      "safeguards_passed"
+                    ]
+                  },
+                  "error_event": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "timestamp": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "code": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": ["info", "warn", "error", "fatal"]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "detail": {
+                        "type": ["string", "null"],
+                        "maxLength": 16384
+                      },
+                      "customer_actionable": {
+                        "type": "boolean"
+                      },
+                      "retryable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "code",
+                      "severity",
+                      "summary",
+                      "detail",
+                      "customer_actionable",
+                      "retryable"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "account_id",
+                  "driftstack_session_id",
+                  "status",
+                  "closed_reason",
+                  "token_budget_total",
+                  "token_budget_remaining",
+                  "transcript_length",
+                  "closed_at",
+                  "created_by_user_id",
+                  "mode",
+                  "model",
+                  "pair_mode_state",
+                  "created_at",
+                  "updated_at"
+                ]
+              },
+              "refuse_reason": {
+                "type": "string"
+              },
+              "usage": {
+                "$ref": "#/components/schemas/AgentMessageUsage"
+              }
+            },
+            "required": ["kind", "session", "refuse_reason"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["logged-manual"]
+              },
+              "session": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "account_id": {
+                    "type": "string"
+                  },
+                  "driftstack_session_id": {
+                    "type": ["string", "null"]
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "closed_reason": {
+                    "type": ["string", "null"]
+                  },
+                  "token_budget_total": {
+                    "type": "integer"
+                  },
+                  "token_budget_remaining": {
+                    "type": "integer"
+                  },
+                  "transcript_length": {
+                    "type": "integer"
+                  },
+                  "closed_at": {
+                    "type": ["string", "null"]
+                  },
+                  "created_by_user_id": {
+                    "type": ["string", "null"]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["manual", "ai", "pair"]
+                  },
+                  "model": {
+                    "type": "string",
+                    "enum": [
+                      "claude-opus-4-8",
+                      "claude-opus-4-7",
+                      "claude-sonnet-4-6",
+                      "claude-haiku-4-5"
+                    ]
+                  },
+                  "pair_mode_state": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind"]
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  },
+                  "livekit": {
+                    "type": "object",
+                    "properties": {
+                      "ws_url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "room": {
+                        "type": "string"
+                      },
+                      "token": {
+                        "type": "string"
+                      },
+                      "participant_identity": {
+                        "type": "string"
+                      },
+                      "expires_at": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                  },
+                  "liveness": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": ["string", "null"],
+                        "enum": ["active", "provisioning", "idle", "terminating"]
+                      },
+                      "fresh": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["state", "fresh"]
+                  },
+                  "capability_report": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "string"
+                      },
+                      "manual_input_available": {
+                        "type": ["boolean", "null"]
+                      },
+                      "streaming_state": {
+                        "type": ["string", "null"],
+                        "enum": ["provisioning", "live", "blank", "failed"]
+                      },
+                      "egress_state": {
+                        "type": ["string", "null"],
+                        "enum": ["live", "dead_proxy"]
+                      },
+                      "proxy_kind": {
+                        "type": "string",
+                        "enum": ["socks5", "openvpn", "wireguard"]
+                      },
+                      "proxy_udp_supported": {
+                        "type": "boolean"
+                      },
+                      "transport_mode_requested": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "transport_mode_active": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "safeguards_passed": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "manual_input_available",
+                      "streaming_state",
+                      "egress_state",
+                      "proxy_kind",
+                      "proxy_udp_supported",
+                      "transport_mode_requested",
+                      "transport_mode_active",
+                      "safeguards_passed"
+                    ]
+                  },
+                  "error_event": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "timestamp": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "code": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": ["info", "warn", "error", "fatal"]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "detail": {
+                        "type": ["string", "null"],
+                        "maxLength": 16384
+                      },
+                      "customer_actionable": {
+                        "type": "boolean"
+                      },
+                      "retryable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "code",
+                      "severity",
+                      "summary",
+                      "detail",
+                      "customer_actionable",
+                      "retryable"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "account_id",
+                  "driftstack_session_id",
+                  "status",
+                  "closed_reason",
+                  "token_budget_total",
+                  "token_budget_remaining",
+                  "transcript_length",
+                  "closed_at",
+                  "created_by_user_id",
+                  "mode",
+                  "model",
+                  "pair_mode_state",
+                  "created_at",
+                  "updated_at"
+                ]
+              }
+            },
+            "required": ["kind", "session"]
+          }
+        ]
+      },
       "AgentMessageResponseStream": {
         "type": "string",
         "description": "Heartbeat-backed SSE representation selected by Accept: text/event-stream. Comments keep the connection active; exactly one terminal event named response carries JSON { status, body }, where body is the ordinary AgentMessageResponse or RFC 7807 Problem."
+      },
+      "AgentMessageConflictProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "Stable URI identifying the problem class. Clients switch on this."
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "idempotency_status": {
+            "type": "string",
+            "enum": ["mismatch", "in_progress"]
+          },
+          "ai_control_unavailable": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "admission",
+              "message-publication",
+              "decompose",
+              "execution",
+              "plan-publication",
+              "observation",
+              "readback",
+              "finalize"
+            ]
+          },
+          "tokens_consumed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AgentMessageUsage"
+          },
+          "partial_results": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["success"]
+                    },
+                    "intent": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["navigate"]
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "url"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["interact"]
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": ["tap", "type", "scroll", "swipe", "press"]
+                            },
+                            "selector": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "sensitive": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["kind", "action"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["wait"]
+                            },
+                            "condition": {
+                              "type": "string",
+                              "enum": ["idle", "selector_visible"]
+                            },
+                            "selector": {
+                              "type": "string"
+                            },
+                            "timeoutMs": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["kind", "condition"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["capture"]
+                            },
+                            "capture": {
+                              "type": "string",
+                              "enum": ["screenshot", "dom_snapshot", "pdf"]
+                            }
+                          },
+                          "required": ["kind", "capture"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["scroll"]
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": ["up", "down"]
+                            },
+                            "amount_px": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": ["kind", "direction"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["behavioral_pause"]
+                            },
+                            "duration_ms": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "reading_word_count": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["kind"]
+                        }
+                      ]
+                    },
+                    "summary": {
+                      "type": "string"
+                    },
+                    "captureId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind", "intent", "summary"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["failure"]
+                    },
+                    "intent": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["navigate"]
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "url"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["interact"]
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": ["tap", "type", "scroll", "swipe", "press"]
+                            },
+                            "selector": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "sensitive": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["kind", "action"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["wait"]
+                            },
+                            "condition": {
+                              "type": "string",
+                              "enum": ["idle", "selector_visible"]
+                            },
+                            "selector": {
+                              "type": "string"
+                            },
+                            "timeoutMs": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["kind", "condition"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["capture"]
+                            },
+                            "capture": {
+                              "type": "string",
+                              "enum": ["screenshot", "dom_snapshot", "pdf"]
+                            }
+                          },
+                          "required": ["kind", "capture"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["scroll"]
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": ["up", "down"]
+                            },
+                            "amount_px": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": ["kind", "direction"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["behavioral_pause"]
+                            },
+                            "duration_ms": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "reading_word_count": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["kind"]
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "diagnosis": {
+                      "type": "object",
+                      "properties": {
+                        "category": {
+                          "type": "string",
+                          "enum": [
+                            "element_not_found",
+                            "page_load_failed",
+                            "condition_not_met",
+                            "capture_failed",
+                            "scroll_failed",
+                            "session_error",
+                            "invalid_request",
+                            "result_too_large",
+                            "unknown"
+                          ]
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["category", "retryable"]
+                    }
+                  },
+                  "required": ["kind", "intent", "reason"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["confirmation_required"]
+                    },
+                    "intent": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["navigate"]
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["kind", "url"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["interact"]
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": ["tap", "type", "scroll", "swipe", "press"]
+                            },
+                            "selector": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "sensitive": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["kind", "action"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["wait"]
+                            },
+                            "condition": {
+                              "type": "string",
+                              "enum": ["idle", "selector_visible"]
+                            },
+                            "selector": {
+                              "type": "string"
+                            },
+                            "timeoutMs": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["kind", "condition"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["capture"]
+                            },
+                            "capture": {
+                              "type": "string",
+                              "enum": ["screenshot", "dom_snapshot", "pdf"]
+                            }
+                          },
+                          "required": ["kind", "capture"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["scroll"]
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": ["up", "down"]
+                            },
+                            "amount_px": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": ["kind", "direction"]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["behavioral_pause"]
+                            },
+                            "duration_ms": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "reading_word_count": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["kind"]
+                        }
+                      ]
+                    },
+                    "category": {
+                      "type": "string",
+                      "enum": ["purchase", "payment", "account_deletion"]
+                    },
+                    "matchedText": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind", "intent", "category", "matchedText"]
+                }
+              ]
+            }
+          }
+        },
+        "required": ["type", "title", "status"],
+        "additionalProperties": {},
+        "description": "RFC 7807 conflict with bounded agent-turn evidence. Idempotency conflicts identify mismatch versus unresolved work; authority/lifecycle conflicts may include consumed usage and redacted settled results that must be inspected before another action."
       },
       "LiveKitInfo": {
         "type": "object",
@@ -11925,7 +13821,7 @@
     },
     "/v1/account/cost": {
       "get": {
-        "summary": "Read the calling account cost breakdown for a billing cycle",
+        "summary": "Read the calling account operational cost estimate for a UTC month",
         "tags": ["account"],
         "security": [
           {
@@ -11935,8 +13831,7 @@
         "parameters": [
           {
             "schema": {
-              "type": "string",
-              "pattern": "^\\d{4}-\\d{2}$"
+              "$ref": "#/components/schemas/BillingCycle"
             },
             "required": false,
             "name": "billing_cycle",
@@ -11945,7 +13840,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Per-cycle cost breakdown. A fresh account with no usage gets a zero breakdown (not 404).",
+            "description": "Per-month operational cost-to-serve estimate; not an invoice. A fresh account with no usage gets a zero breakdown (not 404).",
             "content": {
               "application/json": {
                 "schema": {
@@ -12008,7 +13903,7 @@
         ],
         "responses": {
           "200": {
-            "description": "SSE stream of mixed billing, audit, incident, and session events for the calling account (text/event-stream). Requires broad `read` or `account_owner`; resource-granular read scopes do not authorize this cross-resource stream. Each frame carries an `event:` discriminator (e.g. cost.threshold_alert) and a JSON `data:` payload; heartbeat comments keep the connection alive.",
+            "description": "SSE stream of mixed cost telemetry, audit, incident, and session events for the calling account (text/event-stream). Requires broad `read` or `account_owner`; resource-granular read scopes do not authorize this cross-resource stream. Each frame carries an `event:` discriminator (e.g. cost.threshold_alert) and a JSON `data:` payload; heartbeat comments keep the connection alive.",
             "content": {
               "text/event-stream": {
                 "schema": {
@@ -13538,22 +15433,40 @@
           {
             "schema": {
               "type": "string",
-              "enum": ["public", "all"],
-              "description": "'public' returns only public incidents; 'all' (default) returns everything."
+              "enum": ["public", "all"]
             },
             "required": false,
-            "description": "'public' returns only public incidents; 'all' (default) returns everything.",
             "name": "scope",
             "in": "query"
           },
           {
             "schema": {
               "type": "string",
-              "description": "ISO-8601 timestamp; filter to incidents started since this time."
+              "format": "date-time",
+              "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
             },
             "required": false,
-            "description": "ISO-8601 timestamp; filter to incidents started since this time.",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z",
             "name": "since",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["open", "resolved", "all"]
+            },
+            "required": false,
+            "name": "state",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "required": false,
+            "name": "cursor",
             "in": "query"
           },
           {
@@ -13569,7 +15482,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Incidents (newest first), filtered by scope/since/limit.",
+            "description": "Keyset-paginated incidents with exact filtered total and all-time open count for the selected scope.",
             "content": {
               "application/json": {
                 "schema": {
@@ -13586,7 +15499,7 @@
                           "title": {
                             "type": "string"
                           },
-                          "body": {
+                          "description": {
                             "type": "string"
                           },
                           "severity": {
@@ -13597,13 +15510,7 @@
                             "type": "string",
                             "enum": ["investigating", "identified", "monitoring", "resolved"]
                           },
-                          "started_at": {
-                            "type": "string"
-                          },
-                          "resolved_at": {
-                            "type": ["string", "null"]
-                          },
-                          "components_affected": {
+                          "affected_components": {
                             "type": "array",
                             "items": {
                               "type": "string"
@@ -13611,23 +15518,59 @@
                           },
                           "public": {
                             "type": "boolean"
+                          },
+                          "started_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "resolved_at": {
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                           }
                         },
                         "required": [
                           "id",
                           "title",
-                          "body",
+                          "description",
                           "severity",
                           "status",
+                          "affected_components",
+                          "public",
                           "started_at",
                           "resolved_at",
-                          "components_affected",
-                          "public"
+                          "created_at",
+                          "updated_at"
                         ]
                       }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "open_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
                     }
                   },
-                  "required": ["data"]
+                  "required": ["data", "total", "open_count", "has_more", "next_cursor"]
                 }
               }
             }
@@ -13693,10 +15636,10 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
-                  "body": {
+                  "description": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 10000
+                    "maxLength": 5000
                   },
                   "severity": {
                     "type": "string",
@@ -13704,78 +15647,132 @@
                   },
                   "status": {
                     "type": "string",
-                    "enum": ["investigating", "identified", "monitoring", "resolved"]
+                    "enum": ["investigating", "identified", "monitoring"]
                   },
-                  "started_at": {
-                    "type": "string"
-                  },
-                  "components_affected": {
+                  "affected_components": {
                     "type": "array",
                     "items": {
-                      "type": "string"
-                    }
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 50
+                    },
+                    "maxItems": 20
                   },
                   "public": {
                     "type": "boolean"
+                  },
+                  "started_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                   }
                 },
-                "required": ["title", "body", "severity"]
+                "required": ["title", "description", "severity"]
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Incident created.",
+            "description": "Incident and its atomic initial timeline update created.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string"
+                    "incident": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["minor", "major", "outage"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["investigating", "identified", "monitoring", "resolved"]
+                        },
+                        "affected_components": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "public": {
+                          "type": "boolean"
+                        },
+                        "started_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "resolved_at": {
+                          "type": ["string", "null"],
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "description",
+                        "severity",
+                        "status",
+                        "affected_components",
+                        "public",
+                        "started_at",
+                        "resolved_at",
+                        "created_at",
+                        "updated_at"
+                      ]
                     },
-                    "title": {
-                      "type": "string"
-                    },
-                    "body": {
-                      "type": "string"
-                    },
-                    "severity": {
-                      "type": "string",
-                      "enum": ["minor", "major", "outage"]
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": ["investigating", "identified", "monitoring", "resolved"]
-                    },
-                    "started_at": {
-                      "type": "string"
-                    },
-                    "resolved_at": {
-                      "type": ["string", "null"]
-                    },
-                    "components_affected": {
+                    "updates": {
                       "type": "array",
                       "items": {
-                        "type": "string"
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "incident_id": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["investigating", "identified", "monitoring", "resolved"]
+                          },
+                          "posted_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": ["id", "incident_id", "message", "status", "posted_at"]
                       }
-                    },
-                    "public": {
-                      "type": "boolean"
                     }
                   },
-                  "required": [
-                    "id",
-                    "title",
-                    "body",
-                    "severity",
-                    "status",
-                    "started_at",
-                    "resolved_at",
-                    "components_affected",
-                    "public"
-                  ]
+                  "required": ["incident", "updates"]
                 }
               }
             }
@@ -13824,6 +15821,342 @@
       }
     },
     "/v1/admin/incidents/{id}": {
+      "put": {
+        "summary": "Idempotently create or replay an incident with a caller-owned id (admin; V-295)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Prefixed incident id: inc_<uuid>."
+            },
+            "required": true,
+            "description": "Prefixed incident id: inc_<uuid>.",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": ["minor", "major", "outage"]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["investigating", "identified", "monitoring"]
+                  },
+                  "affected_components": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 50
+                    },
+                    "maxItems": 20
+                  },
+                  "public": {
+                    "type": "boolean"
+                  },
+                  "started_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                  }
+                },
+                "required": ["title", "description", "severity", "started_at"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exact same-id request replayed without duplicate timeline or audit effects.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": ["created", "replayed"]
+                    },
+                    "incident": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["minor", "major", "outage"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["investigating", "identified", "monitoring", "resolved"]
+                        },
+                        "affected_components": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "public": {
+                          "type": "boolean"
+                        },
+                        "started_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "resolved_at": {
+                          "type": ["string", "null"],
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "description",
+                        "severity",
+                        "status",
+                        "affected_components",
+                        "public",
+                        "started_at",
+                        "resolved_at",
+                        "created_at",
+                        "updated_at"
+                      ]
+                    },
+                    "updates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "incident_id": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["investigating", "identified", "monitoring", "resolved"]
+                          },
+                          "posted_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": ["id", "incident_id", "message", "status", "posted_at"]
+                      }
+                    }
+                  },
+                  "required": ["outcome", "incident", "updates"]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Incident and its atomic initial timeline update created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": ["created", "replayed"]
+                    },
+                    "incident": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["minor", "major", "outage"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["investigating", "identified", "monitoring", "resolved"]
+                        },
+                        "affected_components": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "public": {
+                          "type": "boolean"
+                        },
+                        "started_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "resolved_at": {
+                          "type": ["string", "null"],
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "description",
+                        "severity",
+                        "status",
+                        "affected_components",
+                        "public",
+                        "started_at",
+                        "resolved_at",
+                        "created_at",
+                        "updated_at"
+                      ]
+                    },
+                    "updates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "incident_id": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["investigating", "identified", "monitoring", "resolved"]
+                          },
+                          "posted_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": ["id", "incident_id", "message", "status", "posted_at"]
+                      }
+                    }
+                  },
+                  "required": ["outcome", "incident", "updates"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The incident id already belongs to a different create request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "summary": "Get a single incident with its update timeline (admin; V-295)",
         "tags": ["admin"],
@@ -13836,10 +16169,10 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "description": "Prefixed incident id: inc_<uuid>."
             },
             "required": true,
+            "description": "Prefixed incident id: inc_<uuid>.",
             "name": "id",
             "in": "path"
           }
@@ -13852,50 +16185,99 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string"
+                    "incident": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["minor", "major", "outage"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["investigating", "identified", "monitoring", "resolved"]
+                        },
+                        "affected_components": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "public": {
+                          "type": "boolean"
+                        },
+                        "started_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "resolved_at": {
+                          "type": ["string", "null"],
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "description",
+                        "severity",
+                        "status",
+                        "affected_components",
+                        "public",
+                        "started_at",
+                        "resolved_at",
+                        "created_at",
+                        "updated_at"
+                      ]
                     },
-                    "title": {
-                      "type": "string"
-                    },
-                    "body": {
-                      "type": "string"
-                    },
-                    "severity": {
-                      "type": "string",
-                      "enum": ["minor", "major", "outage"]
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": ["investigating", "identified", "monitoring", "resolved"]
-                    },
-                    "started_at": {
-                      "type": "string"
-                    },
-                    "resolved_at": {
-                      "type": ["string", "null"]
-                    },
-                    "components_affected": {
+                    "updates": {
                       "type": "array",
                       "items": {
-                        "type": "string"
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "incident_id": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["investigating", "identified", "monitoring", "resolved"]
+                          },
+                          "posted_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": ["id", "incident_id", "message", "status", "posted_at"]
                       }
-                    },
-                    "public": {
-                      "type": "boolean"
                     }
                   },
-                  "required": [
-                    "id",
-                    "title",
-                    "body",
-                    "severity",
-                    "status",
-                    "started_at",
-                    "resolved_at",
-                    "components_affected",
-                    "public"
-                  ]
+                  "required": ["incident", "updates"]
                 }
               }
             }
@@ -13966,10 +16348,10 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "description": "Prefixed incident id: inc_<uuid>."
             },
             "required": true,
+            "description": "Prefixed incident id: inc_<uuid>.",
             "name": "id",
             "in": "path"
           }
@@ -13980,24 +16362,24 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "body": {
+                  "message": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 10000
+                    "maxLength": 2000
                   },
                   "status": {
                     "type": "string",
                     "enum": ["investigating", "identified", "monitoring", "resolved"]
                   }
                 },
-                "required": ["body"]
+                "required": ["message", "status"]
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Update appended; incident timeline reflects the new entry.",
+            "description": "Timeline update appended and the incident lifecycle state advanced.",
             "content": {
               "application/json": {
                 "schema": {
@@ -14006,47 +16388,23 @@
                     "id": {
                       "type": "string"
                     },
-                    "title": {
+                    "incident_id": {
                       "type": "string"
                     },
-                    "body": {
+                    "message": {
                       "type": "string"
-                    },
-                    "severity": {
-                      "type": "string",
-                      "enum": ["minor", "major", "outage"]
                     },
                     "status": {
                       "type": "string",
                       "enum": ["investigating", "identified", "monitoring", "resolved"]
                     },
-                    "started_at": {
-                      "type": "string"
-                    },
-                    "resolved_at": {
-                      "type": ["string", "null"]
-                    },
-                    "components_affected": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "public": {
-                      "type": "boolean"
+                    "posted_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                     }
                   },
-                  "required": [
-                    "id",
-                    "title",
-                    "body",
-                    "severity",
-                    "status",
-                    "started_at",
-                    "resolved_at",
-                    "components_affected",
-                    "public"
-                  ]
+                  "required": ["id", "incident_id", "message", "status", "posted_at"]
                 }
               }
             }
@@ -14117,14 +16475,31 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "description": "Prefixed incident id: inc_<uuid>."
             },
             "required": true,
+            "description": "Prefixed incident id: inc_<uuid>.",
             "name": "id",
             "in": "path"
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": ["message"]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Incident transitioned to status=resolved + resolved_at set.",
@@ -14133,50 +16508,96 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "id": {
-                      "type": "string"
+                    "incident": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["minor", "major", "outage"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["investigating", "identified", "monitoring", "resolved"]
+                        },
+                        "affected_components": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "public": {
+                          "type": "boolean"
+                        },
+                        "started_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "resolved_at": {
+                          "type": ["string", "null"],
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "description",
+                        "severity",
+                        "status",
+                        "affected_components",
+                        "public",
+                        "started_at",
+                        "resolved_at",
+                        "created_at",
+                        "updated_at"
+                      ]
                     },
-                    "title": {
-                      "type": "string"
-                    },
-                    "body": {
-                      "type": "string"
-                    },
-                    "severity": {
-                      "type": "string",
-                      "enum": ["minor", "major", "outage"]
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": ["investigating", "identified", "monitoring", "resolved"]
-                    },
-                    "started_at": {
-                      "type": "string"
-                    },
-                    "resolved_at": {
-                      "type": ["string", "null"]
-                    },
-                    "components_affected": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "public": {
-                      "type": "boolean"
+                    "update": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "incident_id": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["investigating", "identified", "monitoring", "resolved"]
+                        },
+                        "posted_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        }
+                      },
+                      "required": ["id", "incident_id", "message", "status", "posted_at"]
                     }
                   },
-                  "required": [
-                    "id",
-                    "title",
-                    "body",
-                    "severity",
-                    "status",
-                    "started_at",
-                    "resolved_at",
-                    "components_affected",
-                    "public"
-                  ]
+                  "required": ["incident", "update"]
                 }
               }
             }
@@ -15363,8 +17784,7 @@
           },
           {
             "schema": {
-              "type": "string",
-              "pattern": "^\\d{4}-\\d{2}$"
+              "$ref": "#/components/schemas/BillingCycle"
             },
             "required": false,
             "name": "billing_cycle",
@@ -15383,8 +17803,7 @@
                       "type": "string"
                     },
                     "billing_cycle": {
-                      "type": "string",
-                      "pattern": "^\\d{4}-\\d{2}$"
+                      "$ref": "#/components/schemas/BillingCycle"
                     },
                     "breakdown": {
                       "type": "object",
@@ -15582,8 +18001,7 @@
           },
           {
             "schema": {
-              "type": "string",
-              "pattern": "^\\d{4}-\\d{2}$"
+              "$ref": "#/components/schemas/BillingCycle"
             },
             "required": false,
             "name": "billing_cycle",
@@ -15607,8 +18025,7 @@
                             "type": "string"
                           },
                           "billing_cycle": {
-                            "type": "string",
-                            "pattern": "^\\d{4}-\\d{2}$"
+                            "$ref": "#/components/schemas/BillingCycle"
                           },
                           "breakdown": {
                             "type": "object",
@@ -16087,10 +18504,10 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 2048
+              "description": "Prefixed incident id: inc_<uuid>."
             },
             "required": true,
+            "description": "Prefixed incident id: inc_<uuid>.",
             "name": "id",
             "in": "path"
           }
@@ -16151,16 +18568,24 @@
                           "type": "boolean"
                         },
                         "started_at": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                         },
                         "resolved_at": {
-                          "type": ["string", "null"]
+                          "type": ["string", "null"],
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                         },
                         "created_at": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                         },
                         "updated_at": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                         }
                       },
                       "required": [
@@ -16194,7 +18619,9 @@
                           "enum": ["investigating", "identified", "monitoring", "resolved"]
                         },
                         "posted_at": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                         }
                       },
                       "required": ["id", "incident_id", "message", "status", "posted_at"]
@@ -19661,7 +22088,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 255,
-              "description": "Strongly recommended durable identity for this logical turn. Reuse the same key only when retrying the exact same session, message, approvals, and explicit BYOK key after an ambiguous/lost response. A completed turn replays its exact terminal status and body without re-executing browser actions; a different request or still-in-progress outcome returns 409."
+              "description": "Strongly recommended durable identity for this logical turn. Reuse the same key only when retrying the exact same session, message, and approvals after an ambiguous/lost response. A completed turn replays its exact terminal status and body without re-executing browser actions, even if the explicit BYOK credential has since changed; use a new key for an intentionally new AI turn. Manual turns never read or hash an irrelevant BYOK header. A different request or still-in-progress outcome returns 409."
             },
             "required": false,
             "name": "idempotency-key",
@@ -19718,1204 +22145,11 @@
         },
         "responses": {
           "200": {
-            "description": "Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters.",
+            "description": "Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "enum": ["plan-executed"]
-                        },
-                        "session": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "account_id": {
-                              "type": "string"
-                            },
-                            "driftstack_session_id": {
-                              "type": ["string", "null"]
-                            },
-                            "status": {
-                              "type": "string"
-                            },
-                            "closed_reason": {
-                              "type": ["string", "null"]
-                            },
-                            "token_budget_total": {
-                              "type": "integer"
-                            },
-                            "token_budget_remaining": {
-                              "type": "integer"
-                            },
-                            "transcript_length": {
-                              "type": "integer"
-                            },
-                            "closed_at": {
-                              "type": ["string", "null"]
-                            },
-                            "created_by_user_id": {
-                              "type": ["string", "null"]
-                            },
-                            "mode": {
-                              "type": "string",
-                              "enum": ["manual", "ai", "pair"]
-                            },
-                            "model": {
-                              "type": "string",
-                              "enum": [
-                                "claude-opus-4-8",
-                                "claude-opus-4-7",
-                                "claude-sonnet-4-6",
-                                "claude-haiku-4-5"
-                              ]
-                            },
-                            "pair_mode_state": {
-                              "type": ["object", "null"],
-                              "properties": {
-                                "kind": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["kind"]
-                            },
-                            "created_at": {
-                              "type": "string"
-                            },
-                            "updated_at": {
-                              "type": "string"
-                            },
-                            "livekit": {
-                              "type": "object",
-                              "properties": {
-                                "ws_url": {
-                                  "type": "string",
-                                  "format": "uri"
-                                },
-                                "room": {
-                                  "type": "string"
-                                },
-                                "token": {
-                                  "type": "string"
-                                },
-                                "participant_identity": {
-                                  "type": "string"
-                                },
-                                "expires_at": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "ws_url",
-                                "room",
-                                "token",
-                                "participant_identity",
-                                "expires_at"
-                              ]
-                            },
-                            "liveness": {
-                              "type": "object",
-                              "properties": {
-                                "state": {
-                                  "type": ["string", "null"],
-                                  "enum": ["active", "provisioning", "idle", "terminating"]
-                                },
-                                "fresh": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": ["state", "fresh"]
-                            },
-                            "capability_report": {
-                              "type": "object",
-                              "properties": {
-                                "timestamp": {
-                                  "type": "string"
-                                },
-                                "manual_input_available": {
-                                  "type": ["boolean", "null"]
-                                },
-                                "streaming_state": {
-                                  "type": ["string", "null"],
-                                  "enum": ["provisioning", "live", "blank", "failed"]
-                                },
-                                "egress_state": {
-                                  "type": ["string", "null"],
-                                  "enum": ["live", "dead_proxy"]
-                                },
-                                "proxy_kind": {
-                                  "type": "string",
-                                  "enum": ["socks5", "openvpn", "wireguard"]
-                                },
-                                "proxy_udp_supported": {
-                                  "type": "boolean"
-                                },
-                                "transport_mode_requested": {
-                                  "type": "string",
-                                  "enum": ["h2-only", "h2-and-h3"]
-                                },
-                                "transport_mode_active": {
-                                  "type": "string",
-                                  "enum": ["h2-only", "h2-and-h3"]
-                                },
-                                "safeguards_passed": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "timestamp",
-                                "manual_input_available",
-                                "streaming_state",
-                                "egress_state",
-                                "proxy_kind",
-                                "proxy_udp_supported",
-                                "transport_mode_requested",
-                                "transport_mode_active",
-                                "safeguards_passed"
-                              ]
-                            },
-                            "error_event": {
-                              "type": ["object", "null"],
-                              "properties": {
-                                "timestamp": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 64
-                                },
-                                "code": {
-                                  "type": "string",
-                                  "pattern": "^[a-z][a-z0-9_]{0,127}$"
-                                },
-                                "severity": {
-                                  "type": "string",
-                                  "enum": ["info", "warn", "error", "fatal"]
-                                },
-                                "summary": {
-                                  "type": "string",
-                                  "maxLength": 4096
-                                },
-                                "detail": {
-                                  "type": ["string", "null"],
-                                  "maxLength": 16384
-                                },
-                                "customer_actionable": {
-                                  "type": "boolean"
-                                },
-                                "retryable": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "timestamp",
-                                "code",
-                                "severity",
-                                "summary",
-                                "detail",
-                                "customer_actionable",
-                                "retryable"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "account_id",
-                            "driftstack_session_id",
-                            "status",
-                            "closed_reason",
-                            "token_budget_total",
-                            "token_budget_remaining",
-                            "transcript_length",
-                            "closed_at",
-                            "created_by_user_id",
-                            "mode",
-                            "model",
-                            "pair_mode_state",
-                            "created_at",
-                            "updated_at"
-                          ]
-                        },
-                        "intents": {
-                          "type": "array",
-                          "items": {
-                            "oneOf": [
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string",
-                                    "enum": ["navigate"]
-                                  },
-                                  "url": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": ["kind", "url"]
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string",
-                                    "enum": ["interact"]
-                                  },
-                                  "action": {
-                                    "type": "string",
-                                    "enum": ["tap", "type", "scroll", "swipe", "press"]
-                                  },
-                                  "selector": {
-                                    "type": "string"
-                                  },
-                                  "value": {
-                                    "type": "string"
-                                  },
-                                  "sensitive": {
-                                    "type": "boolean"
-                                  }
-                                },
-                                "required": ["kind", "action"]
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string",
-                                    "enum": ["wait"]
-                                  },
-                                  "condition": {
-                                    "type": "string",
-                                    "enum": ["idle", "selector_visible"]
-                                  },
-                                  "selector": {
-                                    "type": "string"
-                                  },
-                                  "timeoutMs": {
-                                    "type": "integer",
-                                    "minimum": 0
-                                  }
-                                },
-                                "required": ["kind", "condition"]
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string",
-                                    "enum": ["capture"]
-                                  },
-                                  "capture": {
-                                    "type": "string",
-                                    "enum": ["screenshot", "dom_snapshot", "pdf"]
-                                  }
-                                },
-                                "required": ["kind", "capture"]
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string",
-                                    "enum": ["scroll"]
-                                  },
-                                  "direction": {
-                                    "type": "string",
-                                    "enum": ["up", "down"]
-                                  },
-                                  "amount_px": {
-                                    "type": "integer",
-                                    "exclusiveMinimum": 0
-                                  }
-                                },
-                                "required": ["kind", "direction"]
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string",
-                                    "enum": ["behavioral_pause"]
-                                  },
-                                  "duration_ms": {
-                                    "type": "integer",
-                                    "minimum": 0
-                                  },
-                                  "reading_word_count": {
-                                    "type": "integer",
-                                    "minimum": 0
-                                  }
-                                },
-                                "required": ["kind"]
-                              }
-                            ]
-                          }
-                        },
-                        "results": {
-                          "type": "array",
-                          "items": {
-                            "oneOf": [
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string",
-                                    "enum": ["success"]
-                                  },
-                                  "intent": {
-                                    "oneOf": [
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["navigate"]
-                                          },
-                                          "url": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": ["kind", "url"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["interact"]
-                                          },
-                                          "action": {
-                                            "type": "string",
-                                            "enum": ["tap", "type", "scroll", "swipe", "press"]
-                                          },
-                                          "selector": {
-                                            "type": "string"
-                                          },
-                                          "value": {
-                                            "type": "string"
-                                          },
-                                          "sensitive": {
-                                            "type": "boolean"
-                                          }
-                                        },
-                                        "required": ["kind", "action"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["wait"]
-                                          },
-                                          "condition": {
-                                            "type": "string",
-                                            "enum": ["idle", "selector_visible"]
-                                          },
-                                          "selector": {
-                                            "type": "string"
-                                          },
-                                          "timeoutMs": {
-                                            "type": "integer",
-                                            "minimum": 0
-                                          }
-                                        },
-                                        "required": ["kind", "condition"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["capture"]
-                                          },
-                                          "capture": {
-                                            "type": "string",
-                                            "enum": ["screenshot", "dom_snapshot", "pdf"]
-                                          }
-                                        },
-                                        "required": ["kind", "capture"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["scroll"]
-                                          },
-                                          "direction": {
-                                            "type": "string",
-                                            "enum": ["up", "down"]
-                                          },
-                                          "amount_px": {
-                                            "type": "integer",
-                                            "exclusiveMinimum": 0
-                                          }
-                                        },
-                                        "required": ["kind", "direction"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["behavioral_pause"]
-                                          },
-                                          "duration_ms": {
-                                            "type": "integer",
-                                            "minimum": 0
-                                          },
-                                          "reading_word_count": {
-                                            "type": "integer",
-                                            "minimum": 0
-                                          }
-                                        },
-                                        "required": ["kind"]
-                                      }
-                                    ]
-                                  },
-                                  "summary": {
-                                    "type": "string"
-                                  },
-                                  "captureId": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": ["kind", "intent", "summary"]
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string",
-                                    "enum": ["failure"]
-                                  },
-                                  "intent": {
-                                    "oneOf": [
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["navigate"]
-                                          },
-                                          "url": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": ["kind", "url"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["interact"]
-                                          },
-                                          "action": {
-                                            "type": "string",
-                                            "enum": ["tap", "type", "scroll", "swipe", "press"]
-                                          },
-                                          "selector": {
-                                            "type": "string"
-                                          },
-                                          "value": {
-                                            "type": "string"
-                                          },
-                                          "sensitive": {
-                                            "type": "boolean"
-                                          }
-                                        },
-                                        "required": ["kind", "action"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["wait"]
-                                          },
-                                          "condition": {
-                                            "type": "string",
-                                            "enum": ["idle", "selector_visible"]
-                                          },
-                                          "selector": {
-                                            "type": "string"
-                                          },
-                                          "timeoutMs": {
-                                            "type": "integer",
-                                            "minimum": 0
-                                          }
-                                        },
-                                        "required": ["kind", "condition"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["capture"]
-                                          },
-                                          "capture": {
-                                            "type": "string",
-                                            "enum": ["screenshot", "dom_snapshot", "pdf"]
-                                          }
-                                        },
-                                        "required": ["kind", "capture"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["scroll"]
-                                          },
-                                          "direction": {
-                                            "type": "string",
-                                            "enum": ["up", "down"]
-                                          },
-                                          "amount_px": {
-                                            "type": "integer",
-                                            "exclusiveMinimum": 0
-                                          }
-                                        },
-                                        "required": ["kind", "direction"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["behavioral_pause"]
-                                          },
-                                          "duration_ms": {
-                                            "type": "integer",
-                                            "minimum": 0
-                                          },
-                                          "reading_word_count": {
-                                            "type": "integer",
-                                            "minimum": 0
-                                          }
-                                        },
-                                        "required": ["kind"]
-                                      }
-                                    ]
-                                  },
-                                  "reason": {
-                                    "type": "string"
-                                  },
-                                  "diagnosis": {
-                                    "type": "object",
-                                    "properties": {
-                                      "category": {
-                                        "type": "string",
-                                        "enum": [
-                                          "element_not_found",
-                                          "page_load_failed",
-                                          "condition_not_met",
-                                          "capture_failed",
-                                          "scroll_failed",
-                                          "session_error",
-                                          "invalid_request",
-                                          "result_too_large",
-                                          "unknown"
-                                        ]
-                                      },
-                                      "retryable": {
-                                        "type": "boolean"
-                                      }
-                                    },
-                                    "required": ["category", "retryable"]
-                                  }
-                                },
-                                "required": ["kind", "intent", "reason"]
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "kind": {
-                                    "type": "string",
-                                    "enum": ["confirmation_required"]
-                                  },
-                                  "intent": {
-                                    "oneOf": [
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["navigate"]
-                                          },
-                                          "url": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": ["kind", "url"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["interact"]
-                                          },
-                                          "action": {
-                                            "type": "string",
-                                            "enum": ["tap", "type", "scroll", "swipe", "press"]
-                                          },
-                                          "selector": {
-                                            "type": "string"
-                                          },
-                                          "value": {
-                                            "type": "string"
-                                          },
-                                          "sensitive": {
-                                            "type": "boolean"
-                                          }
-                                        },
-                                        "required": ["kind", "action"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["wait"]
-                                          },
-                                          "condition": {
-                                            "type": "string",
-                                            "enum": ["idle", "selector_visible"]
-                                          },
-                                          "selector": {
-                                            "type": "string"
-                                          },
-                                          "timeoutMs": {
-                                            "type": "integer",
-                                            "minimum": 0
-                                          }
-                                        },
-                                        "required": ["kind", "condition"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["capture"]
-                                          },
-                                          "capture": {
-                                            "type": "string",
-                                            "enum": ["screenshot", "dom_snapshot", "pdf"]
-                                          }
-                                        },
-                                        "required": ["kind", "capture"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["scroll"]
-                                          },
-                                          "direction": {
-                                            "type": "string",
-                                            "enum": ["up", "down"]
-                                          },
-                                          "amount_px": {
-                                            "type": "integer",
-                                            "exclusiveMinimum": 0
-                                          }
-                                        },
-                                        "required": ["kind", "direction"]
-                                      },
-                                      {
-                                        "type": "object",
-                                        "properties": {
-                                          "kind": {
-                                            "type": "string",
-                                            "enum": ["behavioral_pause"]
-                                          },
-                                          "duration_ms": {
-                                            "type": "integer",
-                                            "minimum": 0
-                                          },
-                                          "reading_word_count": {
-                                            "type": "integer",
-                                            "minimum": 0
-                                          }
-                                        },
-                                        "required": ["kind"]
-                                      }
-                                    ]
-                                  },
-                                  "category": {
-                                    "type": "string",
-                                    "enum": ["purchase", "payment", "account_deletion"]
-                                  },
-                                  "matchedText": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": ["kind", "intent", "category", "matchedText"]
-                              }
-                            ]
-                          }
-                        },
-                        "ok": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": ["kind", "session", "intents", "results", "ok"]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "enum": ["clarify"]
-                        },
-                        "session": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "account_id": {
-                              "type": "string"
-                            },
-                            "driftstack_session_id": {
-                              "type": ["string", "null"]
-                            },
-                            "status": {
-                              "type": "string"
-                            },
-                            "closed_reason": {
-                              "type": ["string", "null"]
-                            },
-                            "token_budget_total": {
-                              "type": "integer"
-                            },
-                            "token_budget_remaining": {
-                              "type": "integer"
-                            },
-                            "transcript_length": {
-                              "type": "integer"
-                            },
-                            "closed_at": {
-                              "type": ["string", "null"]
-                            },
-                            "created_by_user_id": {
-                              "type": ["string", "null"]
-                            },
-                            "mode": {
-                              "type": "string",
-                              "enum": ["manual", "ai", "pair"]
-                            },
-                            "model": {
-                              "type": "string",
-                              "enum": [
-                                "claude-opus-4-8",
-                                "claude-opus-4-7",
-                                "claude-sonnet-4-6",
-                                "claude-haiku-4-5"
-                              ]
-                            },
-                            "pair_mode_state": {
-                              "type": ["object", "null"],
-                              "properties": {
-                                "kind": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["kind"]
-                            },
-                            "created_at": {
-                              "type": "string"
-                            },
-                            "updated_at": {
-                              "type": "string"
-                            },
-                            "livekit": {
-                              "type": "object",
-                              "properties": {
-                                "ws_url": {
-                                  "type": "string",
-                                  "format": "uri"
-                                },
-                                "room": {
-                                  "type": "string"
-                                },
-                                "token": {
-                                  "type": "string"
-                                },
-                                "participant_identity": {
-                                  "type": "string"
-                                },
-                                "expires_at": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "ws_url",
-                                "room",
-                                "token",
-                                "participant_identity",
-                                "expires_at"
-                              ]
-                            },
-                            "liveness": {
-                              "type": "object",
-                              "properties": {
-                                "state": {
-                                  "type": ["string", "null"],
-                                  "enum": ["active", "provisioning", "idle", "terminating"]
-                                },
-                                "fresh": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": ["state", "fresh"]
-                            },
-                            "capability_report": {
-                              "type": "object",
-                              "properties": {
-                                "timestamp": {
-                                  "type": "string"
-                                },
-                                "manual_input_available": {
-                                  "type": ["boolean", "null"]
-                                },
-                                "streaming_state": {
-                                  "type": ["string", "null"],
-                                  "enum": ["provisioning", "live", "blank", "failed"]
-                                },
-                                "egress_state": {
-                                  "type": ["string", "null"],
-                                  "enum": ["live", "dead_proxy"]
-                                },
-                                "proxy_kind": {
-                                  "type": "string",
-                                  "enum": ["socks5", "openvpn", "wireguard"]
-                                },
-                                "proxy_udp_supported": {
-                                  "type": "boolean"
-                                },
-                                "transport_mode_requested": {
-                                  "type": "string",
-                                  "enum": ["h2-only", "h2-and-h3"]
-                                },
-                                "transport_mode_active": {
-                                  "type": "string",
-                                  "enum": ["h2-only", "h2-and-h3"]
-                                },
-                                "safeguards_passed": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "timestamp",
-                                "manual_input_available",
-                                "streaming_state",
-                                "egress_state",
-                                "proxy_kind",
-                                "proxy_udp_supported",
-                                "transport_mode_requested",
-                                "transport_mode_active",
-                                "safeguards_passed"
-                              ]
-                            },
-                            "error_event": {
-                              "type": ["object", "null"],
-                              "properties": {
-                                "timestamp": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 64
-                                },
-                                "code": {
-                                  "type": "string",
-                                  "pattern": "^[a-z][a-z0-9_]{0,127}$"
-                                },
-                                "severity": {
-                                  "type": "string",
-                                  "enum": ["info", "warn", "error", "fatal"]
-                                },
-                                "summary": {
-                                  "type": "string",
-                                  "maxLength": 4096
-                                },
-                                "detail": {
-                                  "type": ["string", "null"],
-                                  "maxLength": 16384
-                                },
-                                "customer_actionable": {
-                                  "type": "boolean"
-                                },
-                                "retryable": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "timestamp",
-                                "code",
-                                "severity",
-                                "summary",
-                                "detail",
-                                "customer_actionable",
-                                "retryable"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "account_id",
-                            "driftstack_session_id",
-                            "status",
-                            "closed_reason",
-                            "token_budget_total",
-                            "token_budget_remaining",
-                            "transcript_length",
-                            "closed_at",
-                            "created_by_user_id",
-                            "mode",
-                            "model",
-                            "pair_mode_state",
-                            "created_at",
-                            "updated_at"
-                          ]
-                        },
-                        "clarifying_question": {
-                          "type": "string"
-                        }
-                      },
-                      "required": ["kind", "session", "clarifying_question"]
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "kind": {
-                          "type": "string",
-                          "enum": ["refuse"]
-                        },
-                        "session": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "account_id": {
-                              "type": "string"
-                            },
-                            "driftstack_session_id": {
-                              "type": ["string", "null"]
-                            },
-                            "status": {
-                              "type": "string"
-                            },
-                            "closed_reason": {
-                              "type": ["string", "null"]
-                            },
-                            "token_budget_total": {
-                              "type": "integer"
-                            },
-                            "token_budget_remaining": {
-                              "type": "integer"
-                            },
-                            "transcript_length": {
-                              "type": "integer"
-                            },
-                            "closed_at": {
-                              "type": ["string", "null"]
-                            },
-                            "created_by_user_id": {
-                              "type": ["string", "null"]
-                            },
-                            "mode": {
-                              "type": "string",
-                              "enum": ["manual", "ai", "pair"]
-                            },
-                            "model": {
-                              "type": "string",
-                              "enum": [
-                                "claude-opus-4-8",
-                                "claude-opus-4-7",
-                                "claude-sonnet-4-6",
-                                "claude-haiku-4-5"
-                              ]
-                            },
-                            "pair_mode_state": {
-                              "type": ["object", "null"],
-                              "properties": {
-                                "kind": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": ["kind"]
-                            },
-                            "created_at": {
-                              "type": "string"
-                            },
-                            "updated_at": {
-                              "type": "string"
-                            },
-                            "livekit": {
-                              "type": "object",
-                              "properties": {
-                                "ws_url": {
-                                  "type": "string",
-                                  "format": "uri"
-                                },
-                                "room": {
-                                  "type": "string"
-                                },
-                                "token": {
-                                  "type": "string"
-                                },
-                                "participant_identity": {
-                                  "type": "string"
-                                },
-                                "expires_at": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "ws_url",
-                                "room",
-                                "token",
-                                "participant_identity",
-                                "expires_at"
-                              ]
-                            },
-                            "liveness": {
-                              "type": "object",
-                              "properties": {
-                                "state": {
-                                  "type": ["string", "null"],
-                                  "enum": ["active", "provisioning", "idle", "terminating"]
-                                },
-                                "fresh": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": ["state", "fresh"]
-                            },
-                            "capability_report": {
-                              "type": "object",
-                              "properties": {
-                                "timestamp": {
-                                  "type": "string"
-                                },
-                                "manual_input_available": {
-                                  "type": ["boolean", "null"]
-                                },
-                                "streaming_state": {
-                                  "type": ["string", "null"],
-                                  "enum": ["provisioning", "live", "blank", "failed"]
-                                },
-                                "egress_state": {
-                                  "type": ["string", "null"],
-                                  "enum": ["live", "dead_proxy"]
-                                },
-                                "proxy_kind": {
-                                  "type": "string",
-                                  "enum": ["socks5", "openvpn", "wireguard"]
-                                },
-                                "proxy_udp_supported": {
-                                  "type": "boolean"
-                                },
-                                "transport_mode_requested": {
-                                  "type": "string",
-                                  "enum": ["h2-only", "h2-and-h3"]
-                                },
-                                "transport_mode_active": {
-                                  "type": "string",
-                                  "enum": ["h2-only", "h2-and-h3"]
-                                },
-                                "safeguards_passed": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "timestamp",
-                                "manual_input_available",
-                                "streaming_state",
-                                "egress_state",
-                                "proxy_kind",
-                                "proxy_udp_supported",
-                                "transport_mode_requested",
-                                "transport_mode_active",
-                                "safeguards_passed"
-                              ]
-                            },
-                            "error_event": {
-                              "type": ["object", "null"],
-                              "properties": {
-                                "timestamp": {
-                                  "type": "string",
-                                  "minLength": 1,
-                                  "maxLength": 64
-                                },
-                                "code": {
-                                  "type": "string",
-                                  "pattern": "^[a-z][a-z0-9_]{0,127}$"
-                                },
-                                "severity": {
-                                  "type": "string",
-                                  "enum": ["info", "warn", "error", "fatal"]
-                                },
-                                "summary": {
-                                  "type": "string",
-                                  "maxLength": 4096
-                                },
-                                "detail": {
-                                  "type": ["string", "null"],
-                                  "maxLength": 16384
-                                },
-                                "customer_actionable": {
-                                  "type": "boolean"
-                                },
-                                "retryable": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "timestamp",
-                                "code",
-                                "severity",
-                                "summary",
-                                "detail",
-                                "customer_actionable",
-                                "retryable"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "account_id",
-                            "driftstack_session_id",
-                            "status",
-                            "closed_reason",
-                            "token_budget_total",
-                            "token_budget_remaining",
-                            "transcript_length",
-                            "closed_at",
-                            "created_by_user_id",
-                            "mode",
-                            "model",
-                            "pair_mode_state",
-                            "created_at",
-                            "updated_at"
-                          ]
-                        },
-                        "refuse_reason": {
-                          "type": "string"
-                        }
-                      },
-                      "required": ["kind", "session", "refuse_reason"]
-                    }
-                  ]
+                  "$ref": "#/components/schemas/AgentMessageResponse"
                 }
               },
               "text/event-stream": {
@@ -20966,11 +22200,11 @@
             }
           },
           "409": {
-            "description": "Agent session is closed/paused, its transcript capacity is exhausted, another turn is already running, or the Idempotency-Key is pending/reused with a different logical turn.",
+            "description": "Agent session is closed/paused, its control authority changed, its transcript capacity is exhausted, another turn is already running, or the Idempotency-Key is pending/reused with a different logical turn. Authority/lifecycle conflicts can include usage and redacted settled partial results; inspect that evidence before taking another action.",
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "$ref": "#/components/schemas/AgentMessageConflictProblem"
                 }
               }
             }
@@ -27779,16 +29013,22 @@
                             "type": "string"
                           },
                           "severity": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["minor", "major", "outage"]
                           },
                           "status": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": ["investigating", "identified", "monitoring", "resolved"]
                           },
                           "started_at": {
-                            "type": "string"
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                           },
                           "resolved_at": {
-                            "type": ["string", "null"]
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
                           }
                         },
                         "required": [
@@ -27800,9 +29040,22 @@
                           "resolved_at"
                         ]
                       }
+                    },
+                    "open_incidents": {
+                      "type": ["integer", "null"],
+                      "minimum": 0
+                    },
+                    "incident_data_complete": {
+                      "type": "boolean"
                     }
                   },
-                  "required": ["overall_status", "components", "recent_incidents"]
+                  "required": [
+                    "overall_status",
+                    "components",
+                    "recent_incidents",
+                    "open_incidents",
+                    "incident_data_complete"
+                  ]
                 }
               }
             }
@@ -27812,11 +29065,43 @@
     },
     "/v1/status/incidents": {
       "get": {
-        "summary": "Public incidents log",
+        "summary": "All-time open public incidents plus bounded resolved history",
         "tags": ["status"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+            },
+            "required": false,
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z",
+            "name": "since",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["30d", "90d"]
+            },
+            "required": false,
+            "name": "window",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Incidents (most recent first).",
+            "description": "Prioritized public feed with exact open/outage totals and explicit truncation.",
             "content": {
               "application/json": {
                 "schema": {
@@ -27824,10 +29109,88 @@
                   "properties": {
                     "data": {
                       "type": "array",
-                      "items": {}
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "severity": {
+                            "type": "string",
+                            "enum": ["minor", "major", "outage"]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["investigating", "identified", "monitoring", "resolved"]
+                          },
+                          "affected_components": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "public": {
+                            "type": "boolean"
+                          },
+                          "started_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "resolved_at": {
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "description",
+                          "severity",
+                          "status",
+                          "affected_components",
+                          "public",
+                          "started_at",
+                          "resolved_at",
+                          "created_at",
+                          "updated_at"
+                        ]
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "open_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "open_outage_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "truncated": {
+                      "type": "boolean"
                     }
                   },
-                  "required": ["data"]
+                  "required": ["data", "total", "open_count", "open_outage_count", "truncated"]
                 }
               }
             }
@@ -27859,13 +29222,99 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "incident": {},
+                    "incident": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["minor", "major", "outage"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": ["investigating", "identified", "monitoring", "resolved"]
+                        },
+                        "affected_components": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "public": {
+                          "type": "boolean"
+                        },
+                        "started_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "resolved_at": {
+                          "type": ["string", "null"],
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "description",
+                        "severity",
+                        "status",
+                        "affected_components",
+                        "public",
+                        "started_at",
+                        "resolved_at",
+                        "created_at",
+                        "updated_at"
+                      ]
+                    },
                     "updates": {
                       "type": "array",
-                      "items": {}
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "incident_id": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["investigating", "identified", "monitoring", "resolved"]
+                          },
+                          "posted_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": ["id", "incident_id", "message", "status", "posted_at"]
+                      }
                     }
                   },
-                  "required": ["updates"]
+                  "required": ["incident", "updates"]
                 }
               }
             }

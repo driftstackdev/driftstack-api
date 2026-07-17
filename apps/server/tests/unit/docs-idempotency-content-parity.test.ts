@@ -96,6 +96,22 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
     expect(body).toMatch(/application-encrypt the terminal response/);
   });
 
+  it('keeps credential and control-lane churn outside completed turn identity', () => {
+    expect(body).toMatch(/explicit BYOK credential.*deliberately outside receipt identity/is);
+    expect(body).toMatch(/control\s+lane.*deliberately outside receipt identity/is);
+    expect(body).toMatch(/session later closes/);
+    expect(body).toMatch(/control lane changes between AI and manual/);
+    expect(body).toMatch(/explicit BYOKs*\n?credential rotates/);
+    expect(body).toMatch(/replays\s*\n?the original terminal result/);
+    expect(body).toMatch(/never starts another provider request or\s*\n?browser operation/);
+    expect(body).toMatch(
+      /manual transcript turn never reads or hashes an\s*\n?irrelevant BYOK header/,
+    );
+    expect(body).toMatch(/new `Idempotency-Key` only for an intentionally\s*\n?new AI turn/);
+    expect(body).not.toMatch(/same session, message, approvals, and explicit BYOK key/i);
+    expect(body).not.toMatch(/Different session\/body\/BYOK fingerprint/);
+  });
+
   it('documents the audit-log behaviour (originals logged, replays not)', () => {
     expect(body).toMatch(/audit-log/i);
     expect(body).toMatch(/NOT the replays/);

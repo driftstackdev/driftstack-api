@@ -138,6 +138,16 @@ import {
   RecipeSchema,
   RecipeDetailSchema,
   ListArchetypesResponseSchema,
+  AddIncidentUpdateRequestSchema,
+  CreateIncidentRequestSchema,
+  IncidentDetailResponseSchema,
+  IncidentSchema,
+  IncidentUpdateSchema,
+  ListIncidentsQuerySchema,
+  ListIncidentsResponseSchema,
+  PublicIncidentFeedResponseSchema,
+  PutIncidentResponseSchema,
+  ResolveIncidentRequestSchema,
 } from '@driftstack/api-types';
 // S33 2026-07-07 (fable-truth-audit) — the cookie shape the agent-session
 // cookie read/import routes emit + validate. Imported from the harness
@@ -2229,13 +2239,21 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
-  // V-541.D — customer-facing per-cycle cost surface. Scoped to the
-  // calling account (account id pinned to ctx, not a URL param). The
-  // customer surface omits operator-tuned threshold caps; it returns
-  // only the account's actual spend + where it sits vs its thresholds.
+  // V-541.D — customer-facing UTC-month operational cost estimate. Scoped
+  // to the calling account (account id pinned to ctx, not a URL param). This
+  // is cost-to-serve telemetry, not an invoice or payment-provider ledger.
+  // The surface omits operator-tuned threshold values and returns only the
+  // estimate plus its operator unit-economics posture.
   const CostThresholdStateOpenApi = z
     .enum(['under-soft', 'between-soft-and-hard', 'over-hard'])
     .openapi('CostThresholdState');
+  const BillingCycleOpenApi = z
+    .string()
+    .regex(/^\d{4}-(?:0[1-9]|1[0-2])$/)
+    .openapi('BillingCycle', {
+      description: 'UTC calendar month in YYYY-MM form (month 01 through 12).',
+      example: '2026-07',
+    });
   const CostBreakdownOpenApi = z
     .object({
       computeCents: z.number().int().nonnegative(),
@@ -2250,7 +2268,7 @@ function buildRegistry(): OpenAPIRegistry {
   const AccountCostResponseOpenApi = z
     .object({
       account_id: z.string(),
-      billing_cycle: z.string().regex(/^\d{4}-\d{2}$/),
+      billing_cycle: BillingCycleOpenApi,
       tier: AccountTierSchema,
       breakdown: CostBreakdownOpenApi,
     })
@@ -2258,21 +2276,18 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/cost',
-    summary: 'Read the calling account cost breakdown for a billing cycle',
+    summary: 'Read the calling account operational cost estimate for a UTC month',
     tags: ['account'],
     security: auth,
     request: {
       query: z.object({
-        billing_cycle: z
-          .string()
-          .regex(/^\d{4}-\d{2}$/)
-          .optional(),
+        billing_cycle: BillingCycleOpenApi.optional(),
       }),
     },
     responses: {
       200: {
         description:
-          'Per-cycle cost breakdown. A fresh account with no usage gets a zero breakdown (not 404).',
+          'Per-month operational cost-to-serve estimate; not an invoice. A fresh account with no usage gets a zero breakdown (not 404).',
         content: { 'application/json': { schema: AccountCostResponseOpenApi } },
       },
       ...errors4xx,
@@ -2292,7 +2307,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'SSE stream of mixed billing, audit, incident, and session events for the calling account (text/event-stream). Requires broad `read` or `account_owner`; resource-granular read scopes do not authorize this cross-resource stream. Each frame carries an `event:` discriminator (e.g. cost.threshold_alert) and a JSON `data:` payload; heartbeat comments keep the connection alive.',
+          'SSE stream of mixed cost telemetry, audit, incident, and session events for the calling account (text/event-stream). Requires broad `read` or `account_owner`; resource-granular read scopes do not authorize this cross-resource stream. Each frame carries an `event:` discriminator (e.g. cost.threshold_alert) and a JSON `data:` payload; heartbeat comments keep the connection alive.',
         content: {
           'text/event-stream': {
             schema: z.string().openapi('AccountNotificationsStream', {
@@ -2574,29 +2589,21 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
   // ── Incidents (V-295) ───────────────────────────────────────────────────
-  const AdminIncidentResponseOpenApi = z.object({
-    id: z.string(),
-    title: z.string(),
-    body: z.string(),
-    severity: z.enum(['minor', 'major', 'outage']),
-    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']),
-    started_at: z.string(),
-    resolved_at: z.string().nullable(),
-    components_affected: z.array(z.string()),
-    public: z.boolean(),
+  const IncidentIdParamsOpenApi = z.object({
+    id: z.string().describe('Prefixed incident id: inc_<uuid>.'),
   });
-  const AdminIncidentCreateRequestOpenApi = z.object({
-    title: z.string().min(1).max(200),
-    body: z.string().min(1).max(10_000),
-    severity: z.enum(['minor', 'major', 'outage']),
-    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']).optional(),
-    started_at: z.string().optional(),
-    components_affected: z.array(z.string()).optional(),
-    public: z.boolean().optional(),
+  const AdminIncidentListQueryOpenApi = ListIncidentsQuerySchema.omit({ window: true });
+  const PublicIncidentListQueryOpenApi = ListIncidentsQuerySchema.pick({
+    since: true,
+    window: true,
+    limit: true,
   });
-  const AdminIncidentUpdateRequestOpenApi = z.object({
-    body: z.string().min(1).max(10_000),
-    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']).optional(),
+  const IdempotentCreateIncidentRequestOpenApi = CreateIncidentRequestSchema.required({
+    started_at: true,
+  });
+  const IncidentMutationResponseOpenApi = z.object({
+    incident: IncidentSchema,
+    update: IncidentUpdateSchema,
   });
   registerRoute(r, {
     method: 'get',
@@ -2605,24 +2612,15 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      query: z.object({
-        scope: z
-          .enum(['public', 'all'])
-          .optional()
-          .describe("'public' returns only public incidents; 'all' (default) returns everything."),
-        since: z
-          .string()
-          .optional()
-          .describe('ISO-8601 timestamp; filter to incidents started since this time.'),
-        limit: z.coerce.number().int().min(1).max(100).optional(),
-      }),
+      query: AdminIncidentListQueryOpenApi,
     },
     responses: {
       200: {
-        description: 'Incidents (newest first), filtered by scope/since/limit.',
+        description:
+          'Keyset-paginated incidents with exact filtered total and all-time open count for the selected scope.',
         content: {
           'application/json': {
-            schema: z.object({ data: z.array(AdminIncidentResponseOpenApi) }),
+            schema: ListIncidentsResponseSchema,
           },
         },
       },
@@ -2636,14 +2634,42 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: AdminIncidentCreateRequestOpenApi } } },
+      body: { content: { 'application/json': { schema: CreateIncidentRequestSchema } } },
     },
     responses: {
       201: {
-        description: 'Incident created.',
-        content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
+        description: 'Incident and its atomic initial timeline update created.',
+        content: { 'application/json': { schema: IncidentDetailResponseSchema } },
       },
       ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'put',
+    path: '/v1/admin/incidents/{id}',
+    summary: 'Idempotently create or replay an incident with a caller-owned id (admin; V-295)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      params: IncidentIdParamsOpenApi,
+      body: {
+        content: { 'application/json': { schema: IdempotentCreateIncidentRequestOpenApi } },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Exact same-id request replayed without duplicate timeline or audit effects.',
+        content: { 'application/json': { schema: PutIncidentResponseSchema } },
+      },
+      201: {
+        description: 'Incident and its atomic initial timeline update created.',
+        content: { 'application/json': { schema: PutIncidentResponseSchema } },
+      },
+      ...errors4xx,
+      409: {
+        description: 'The incident id already belongs to a different create request.',
+        content: problemContent,
+      },
     },
   });
   registerRoute(r, {
@@ -2652,10 +2678,11 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Get a single incident with its update timeline (admin; V-295)',
     tags: ['admin'],
     security: auth,
+    request: { params: IncidentIdParamsOpenApi },
     responses: {
       200: {
         description: 'Incident detail (incl. updates timeline).',
-        content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
+        content: { 'application/json': { schema: IncidentDetailResponseSchema } },
       },
       ...errors4xx,
       404: { description: 'Incident not found.', content: problemContent },
@@ -2668,12 +2695,13 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: AdminIncidentUpdateRequestOpenApi } } },
+      params: IncidentIdParamsOpenApi,
+      body: { content: { 'application/json': { schema: AddIncidentUpdateRequestSchema } } },
     },
     responses: {
       201: {
-        description: 'Update appended; incident timeline reflects the new entry.',
-        content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
+        description: 'Timeline update appended and the incident lifecycle state advanced.',
+        content: { 'application/json': { schema: IncidentUpdateSchema } },
       },
       ...errors4xx,
       404: { description: 'Incident not found.', content: problemContent },
@@ -2685,10 +2713,14 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Mark an incident resolved (admin; V-295)',
     tags: ['admin'],
     security: auth,
+    request: {
+      params: IncidentIdParamsOpenApi,
+      body: { content: { 'application/json': { schema: ResolveIncidentRequestSchema } } },
+    },
     responses: {
       200: {
         description: 'Incident transitioned to status=resolved + resolved_at set.',
-        content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
+        content: { 'application/json': { schema: IncidentMutationResponseOpenApi } },
       },
       ...errors4xx,
       404: { description: 'Incident not found.', content: problemContent },
@@ -2956,10 +2988,9 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
-  const AdminBillingCycleOpenApi = z.string().regex(/^\d{4}-\d{2}$/);
   const AdminCostSummaryOpenApi = z.object({
     account_id: z.string(),
-    billing_cycle: AdminBillingCycleOpenApi,
+    billing_cycle: BillingCycleOpenApi,
     breakdown: z.object({
       computeCents: z.number(),
       storageCents: z.number(),
@@ -2979,7 +3010,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin', 'cost'],
     security: auth,
     request: {
-      query: z.object({ billing_cycle: AdminBillingCycleOpenApi.optional() }),
+      query: z.object({ billing_cycle: BillingCycleOpenApi.optional() }),
     },
     responses: {
       200: {
@@ -3013,7 +3044,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       query: z.object({
         account_ids: z.string().min(1).max(4096),
-        billing_cycle: AdminBillingCycleOpenApi.optional(),
+        billing_cycle: BillingCycleOpenApi.optional(),
       }),
     },
     responses: {
@@ -3116,26 +3147,6 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
-  const AdminIncidentWireOpenApi = z.object({
-    id: z.string(),
-    title: z.string(),
-    description: z.string(),
-    severity: z.enum(['minor', 'major', 'outage']),
-    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']),
-    affected_components: z.array(z.string()),
-    public: z.boolean(),
-    started_at: z.string(),
-    resolved_at: z.string().nullable(),
-    created_at: z.string(),
-    updated_at: z.string(),
-  });
-  const AdminIncidentTimelineUpdateOpenApi = z.object({
-    id: z.string(),
-    incident_id: z.string(),
-    message: z.string(),
-    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']),
-    posted_at: z.string(),
-  });
   registerRoute(r, {
     method: 'post',
     path: '/v1/admin/incidents/{id}/reopen',
@@ -3143,11 +3154,12 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin', 'incidents'],
     security: auth,
     request: {
+      params: IncidentIdParamsOpenApi,
       body: {
         required: true,
         content: {
           'application/json': {
-            schema: z.object({ message: z.string().min(1).max(2000) }),
+            schema: ResolveIncidentRequestSchema,
           },
         },
       },
@@ -3157,10 +3169,7 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Reopened incident and the appended timeline update.',
         content: {
           'application/json': {
-            schema: z.object({
-              incident: AdminIncidentWireOpenApi,
-              update: AdminIncidentTimelineUpdateOpenApi,
-            }),
+            schema: IncidentMutationResponseOpenApi,
           },
         },
       },
@@ -3845,6 +3854,70 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+
+  const AgentMessageUsageOpenApi = z
+    .object({
+      decomposer_kind: z.enum(['claude', 'deterministic']),
+      anthropic_input_tokens: z.number().int().nonnegative().optional(),
+      anthropic_output_tokens: z.number().int().nonnegative().optional(),
+      cost_usd_cents: z.number().int().nonnegative().optional(),
+      model: z.string().optional(),
+    })
+    .openapi('AgentMessageUsage', {
+      description:
+        'Usage evidence for model-backed turns. Optional fields are present only when the selected decomposer/provider reports them; bundled turns expose the posted flat operational cost.',
+    });
+  const AgentMessageResponseOpenApi = z
+    .discriminatedUnion('kind', [
+      z.object({
+        kind: z.literal('plan-executed'),
+        session: AgentSessionSchema,
+        intents: z.array(AgentIntentSchema),
+        results: z.array(IntentResultSchema),
+        ok: z.boolean(),
+        usage: AgentMessageUsageOpenApi.optional(),
+      }),
+      z.object({
+        kind: z.literal('clarify'),
+        session: AgentSessionSchema,
+        clarifying_question: z.string(),
+        usage: AgentMessageUsageOpenApi.optional(),
+      }),
+      z.object({
+        kind: z.literal('refuse'),
+        session: AgentSessionSchema,
+        refuse_reason: z.string(),
+        usage: AgentMessageUsageOpenApi.optional(),
+      }),
+      z.object({
+        kind: z.literal('logged-manual'),
+        session: AgentSessionSchema,
+      }),
+    ])
+    .openapi('AgentMessageResponse');
+  const AgentMessageConflictProblemOpenApi = ProblemSchema.extend({
+    idempotency_status: z.enum(['mismatch', 'in_progress']).optional(),
+    ai_control_unavailable: z.literal(true).optional(),
+    phase: z
+      .enum([
+        'admission',
+        'message-publication',
+        'decompose',
+        'execution',
+        'plan-publication',
+        'observation',
+        'readback',
+        'finalize',
+      ])
+      .optional(),
+    tokens_consumed: z.number().int().nonnegative().optional(),
+    usage: AgentMessageUsageOpenApi.optional(),
+    partial_results: z.array(IntentResultSchema).optional(),
+  }).openapi('AgentMessageConflictProblem', {
+    description:
+      'RFC 7807 conflict with bounded agent-turn evidence. Idempotency conflicts identify mismatch versus unresolved work; authority/lifecycle conflicts may include consumed usage and redacted settled results that must be inspected before another action.',
+  });
+
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/message',
@@ -3862,7 +3935,7 @@ function buildRegistry(): OpenAPIRegistry {
           .max(255)
           .openapi({
             description:
-              'Strongly recommended durable identity for this logical turn. Reuse the same key only when retrying the exact same session, message, approvals, and explicit BYOK key after an ambiguous/lost response. A completed turn replays its exact terminal status and body without re-executing browser actions; a different request or still-in-progress outcome returns 409.',
+              'Strongly recommended durable identity for this logical turn. Reuse the same key only when retrying the exact same session, message, and approvals after an ambiguous/lost response. A completed turn replays its exact terminal status and body without re-executing browser actions, even if the explicit BYOK credential has since changed; use a new key for an intentionally new AI turn. Manual turns never read or hash an irrelevant BYOK header. A different request or still-in-progress outcome returns 409.',
           })
           .optional(),
         // BYOK Anthropic key (Tier-3 LOCKED 2026-05-16). Optional;
@@ -3895,28 +3968,10 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters.',
+          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
         content: {
           'application/json': {
-            schema: z.union([
-              z.object({
-                kind: z.literal('plan-executed'),
-                session: AgentSessionSchema,
-                intents: z.array(AgentIntentSchema),
-                results: z.array(IntentResultSchema),
-                ok: z.boolean(),
-              }),
-              z.object({
-                kind: z.literal('clarify'),
-                session: AgentSessionSchema,
-                clarifying_question: z.string(),
-              }),
-              z.object({
-                kind: z.literal('refuse'),
-                session: AgentSessionSchema,
-                refuse_reason: z.string(),
-              }),
-            ]),
+            schema: AgentMessageResponseOpenApi,
           },
           'text/event-stream': {
             schema: z.string().openapi('AgentMessageResponseStream', {
@@ -3933,8 +3988,10 @@ function buildRegistry(): OpenAPIRegistry {
       },
       409: {
         description:
-          'Agent session is closed/paused, its transcript capacity is exhausted, another turn is already running, or the Idempotency-Key is pending/reused with a different logical turn.',
-        content: problemContent,
+          'Agent session is closed/paused, its control authority changed, its transcript capacity is exhausted, another turn is already running, or the Idempotency-Key is pending/reused with a different logical turn. Authority/lifecycle conflicts can include usage and redacted settled partial results; inspect that evidence before taking another action.',
+        content: {
+          'application/problem+json': { schema: AgentMessageConflictProblemOpenApi },
+        },
       },
       503: {
         description: 'AI chat agent not enabled on this deployment.',
@@ -5579,28 +5636,22 @@ function buildRegistry(): OpenAPIRegistry {
     status: z.enum(['operational', 'degraded', 'major_outage']),
     last_checked_at: z.string(),
   });
-  // V-545.A — recent_incidents item shape (latest ≤5 public
-  // incidents from the last 30d). Mirror of PublicIncidentSummary in
-  // routes/status.ts; drift caught by W412.C parity test.
-  const StatusRecentIncidentOpenApi = z.object({
-    id: z.string(),
-    title: z.string(),
-    severity: z.string(),
-    status: z.string(),
-    started_at: z.string(),
-    resolved_at: z.string().nullable(),
+  // V-545.A — bounded display projection. Exact all-time open truth is
+  // carried separately by open_incidents + incident_data_complete.
+  const StatusRecentIncidentOpenApi = IncidentSchema.pick({
+    id: true,
+    title: true,
+    severity: true,
+    status: true,
+    started_at: true,
+    resolved_at: true,
   });
   const StatusResponseOpenApi = z.object({
     overall_status: z.enum(['operational', 'degraded', 'major_outage']),
     components: z.array(StatusComponentResultOpenApi),
     recent_incidents: z.array(StatusRecentIncidentOpenApi),
-  });
-  const StatusIncidentsResponseOpenApi = z.object({
-    data: z.array(z.unknown()),
-  });
-  const StatusIncidentDetailResponseOpenApi = z.object({
-    incident: z.unknown(),
-    updates: z.array(z.unknown()),
+    open_incidents: z.number().int().nonnegative().nullable(),
+    incident_data_complete: z.boolean(),
   });
   const StatusSlaResponseOpenApi = z.object({
     window_days: z.number().int().nonnegative(),
@@ -5673,12 +5724,14 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/status/incidents',
-    summary: 'Public incidents log',
+    summary: 'All-time open public incidents plus bounded resolved history',
     tags: ['status'],
+    request: { query: PublicIncidentListQueryOpenApi },
     responses: {
       200: {
-        description: 'Incidents (most recent first).',
-        content: { 'application/json': { schema: StatusIncidentsResponseOpenApi } },
+        description:
+          'Prioritized public feed with exact open/outage totals and explicit truncation.',
+        content: { 'application/json': { schema: PublicIncidentFeedResponseSchema } },
       },
     },
   });
@@ -5693,7 +5746,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Incident detail + update timeline (oldest first).',
-        content: { 'application/json': { schema: StatusIncidentDetailResponseOpenApi } },
+        content: { 'application/json': { schema: IncidentDetailResponseSchema } },
       },
       400: { description: 'Invalid id format. Expected inc_<uuid>.', content: problemContent },
       404: { description: 'Incident is private or does not exist.', content: problemContent },

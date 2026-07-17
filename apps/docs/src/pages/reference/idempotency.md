@@ -55,8 +55,10 @@ Stripe-pattern best practice: generate a new key per logical
 operation (not per retry of the same operation). A client retrying
 the same `POST /v1/agent-sessions` after a timeout should send the same
 key on the retry; the next create gets a fresh key. For an agent message,
-the key must stay attached to the exact same session, message, ordered
-approval list, and explicit BYOK key.
+the key must stay attached to the exact same session, message, and ordered
+approval list. The explicit BYOK credential and admitted AI/manual control
+lane are deliberately outside receipt identity: they are execution inputs
+read only after the receipt and control-authority fences.
 
 Constraints:
 
@@ -76,7 +78,8 @@ disconnects:
 1. Validate session ownership and the request, then atomically reserve
    `(account_id, idempotency_key)` before decomposition or dispatch.
 2. **Completed exact match** → replay the stored terminal status and JSON body.
-3. **Different session/body/BYOK fingerprint** → return `409` without dispatch.
+3. **Different session, message, or approval list** → return `409` without
+   dispatch.
 4. **Still running or terminal outcome unknown** → return `409` with
    `idempotency_status: "in_progress"`; inspect the durable transcript rather
    than minting a new key and repeating the task.
@@ -87,6 +90,14 @@ A completed replay returns the same status code and body as the original —
 including generated IDs or a terminal RFC 7807 problem.
 The client can treat the replay as if the original response had been
 received successfully.
+
+That completed terminal remains authoritative if the session later closes,
+its control lane changes between AI and manual, or the explicit BYOK
+credential rotates. Reusing the same key after any of those changes replays
+the original terminal result and never starts another provider request or
+browser operation. A manual transcript turn never reads or hashes an
+irrelevant BYOK header. Use a new `Idempotency-Key` only for an intentionally
+new AI turn with new browser work.
 
 ### What happens if I send the same key with a different body?
 
