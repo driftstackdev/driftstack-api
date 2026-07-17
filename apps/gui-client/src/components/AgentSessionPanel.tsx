@@ -60,6 +60,12 @@ export interface AgentSessionPanelProps {
    *  overlay) subscriber-only. Capture engages only once the customer clicks
    *  into the screen (`engaged`), so it never hijacks the rest of the UI. */
   interactive?: boolean;
+  /** GUI-local manual-control epoch captured by this render. Every deferred input
+   *  callback revalidates it against the parent before publishing. */
+  inputAuthorityEpoch?: number;
+  /** Exact session/Room/epoch predicate. Interactive without this proof remains
+   *  view-only, so a stale or standalone panel cannot publish by accident. */
+  canSendInput?: (room: Room, authorityEpoch: number) => boolean;
   /** Fired once the stream reports its REAL pixel dimensions (video
    *  loadedmetadata). The simulator window uses this to resize itself to the
    *  archetype's true proportions — no hardcoded per-archetype table. */
@@ -328,6 +334,8 @@ export function AgentSessionPanel({
   onPublisher,
   onNoPublisher,
   interactive = false,
+  inputAuthorityEpoch = 0,
+  canSendInput = () => false,
   onVideoDimensions,
   onRoom,
   onVideoEl,
@@ -380,7 +388,9 @@ export function AgentSessionPanel({
   // spawned on pointerdown over the live video and auto-cleared shortly after.
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rippleIdRef = useRef(0);
-  const [ripples, setRipples] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const [ripples, setRipples] = useState<
+    Array<{ id: number; x: number; y: number; authorityEpoch: number }>
+  >([]);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
   // Box aspect = the `aspectRatio` prop, which the simulator drives with the LIVE
   // CONTENT aspect (videoW/videoH) — the SAME value its window-sizing math uses to
@@ -408,10 +418,18 @@ export function AgentSessionPanel({
   // publish. Keep the transient congestion bit in a ref so it can gate pointerdown
   // immediately without adding another panel render on every buffer transition.
   const inputCongestedRef = useRef(false);
+  useEffect(() => {
+    // Visual feedback belongs to the same authority epoch as the wire gesture.
+    // Never leave an old accepted ripple/congestion latch painted after revocation.
+    setRipples([]);
+    inputCongestedRef.current = false;
+  }, [interactive, inputAuthorityEpoch, room]);
   useInputCapture({
     room,
     videoElement: videoEl,
     enabled: interactive,
+    authorityEpoch: inputAuthorityEpoch,
+    canSend: canSendInput,
     onPublishError,
     onCongestionChange: (congested, ownerRoom) => {
       if (inputCaptureRoomRef.current !== ownerRoom) return;
@@ -923,6 +941,7 @@ export function AgentSessionPanel({
         if (
           !interactive ||
           room === null ||
+          !canSendInput(room, inputAuthorityEpoch) ||
           inputCongestedRef.current ||
           e.target !== videoRef.current
         )
@@ -933,7 +952,18 @@ export function AgentSessionPanel({
         if (!Number.isFinite(x) || !Number.isFinite(y)) return; // no coords → nothing to place
         const id = (rippleIdRef.current += 1);
         // Cap the concurrent ring so a rapid tap storm can't unbound the array.
-        setRipples((prev) => [...prev.slice(-4), { id, x, y }]);
+        setRipples((prev) => {
+          if (!canSendInput(room, inputAuthorityEpoch)) return prev;
+          return [
+            ...prev.filter((r) => r.authorityEpoch === inputAuthorityEpoch).slice(-4),
+            {
+              id,
+              x,
+              y,
+              authorityEpoch: inputAuthorityEpoch,
+            },
+          ];
+        });
         window.setTimeout(() => setRipples((prev) => prev.filter((r) => r.id !== id)), 500);
       }}
     >
@@ -962,9 +992,11 @@ export function AgentSessionPanel({
       {/* Optimistic tap ripples (#124) — sit above the <video> (z-15) but below
           every terminal/reconnecting overlay (z-20+), so they never draw over a
           "Session ended" / "Switching…" state. */}
-      {ripples.map((r) => (
-        <TapRipple key={r.id} x={r.x} y={r.y} />
-      ))}
+      {ripples
+        .filter((r) => r.authorityEpoch === inputAuthorityEpoch)
+        .map((r) => (
+          <TapRipple key={r.id} x={r.x} y={r.y} />
+        ))}
       {/* Chrome-band masks REMOVED (A3 84de32ad4d content-only per-archetype fork on
           box mac-macstadium-us-001): the old fork baked a ~110px bottom + ~50px top
           bezel-black band into the capture (it hid the iOS-Safari URL bar but kept the

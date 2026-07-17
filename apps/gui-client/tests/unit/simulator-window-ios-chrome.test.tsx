@@ -13,6 +13,18 @@ import { useEffect } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 
+function immediateControl<T>(value: T): Promise<T> {
+  return {
+    then: (onfulfilled: (resolved: T) => unknown) => {
+      try {
+        return Promise.resolve(onfulfilled(value));
+      } catch (err: unknown) {
+        return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+  } as unknown as Promise<T>;
+}
+
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
   connectToAgentSession: () => new Promise(() => {}),
@@ -56,7 +68,14 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
-  getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
+  getAgentSession: () =>
+    immediateControl({
+      mode: 'manual',
+      pairKind: null,
+      status: 'active',
+      terminal: false,
+      capabilityReport: { manual_input_available: true },
+    }),
   getAgentSessionPageState: vi.fn(() => Promise.resolve(null)),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
   navigateAgentSessionHistory: vi.fn(() => Promise.resolve()),

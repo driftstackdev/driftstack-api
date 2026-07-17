@@ -15,6 +15,7 @@ import {
 } from '../../src/components/AgentSessionPanel';
 
 const connectMock = vi.fn();
+const sendInputEventMock = vi.fn(() => Promise.resolve());
 // A vi.fn() (not a plain arrow) so individual tests can override the room it
 // returns — e.g. to capture the TrackSubscribed handler and fire a real track.
 const createRoomMock = vi.fn(() => ({ on: vi.fn(), disconnect: vi.fn() }));
@@ -22,6 +23,7 @@ const createRoomMock = vi.fn(() => ({ on: vi.fn(), disconnect: vi.fn() }));
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: (...args: unknown[]) => createRoomMock(...args) as unknown,
   connectToAgentSession: (...args: unknown[]) => connectMock(...args) as unknown,
+  sendInputEvent: (...args: unknown[]) => sendInputEventMock(...args) as unknown,
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
     TrackUnsubscribed: 'trackUnsubscribed',
@@ -34,6 +36,7 @@ vi.mock('../../src/lib/livekit', () => ({
 }));
 
 const INFO = { ws_url: 'wss://lk', token: 'tok' } as never;
+const INPUT_AUTHORITY_EPOCH = 29;
 
 describe('friendlyConnectError — raw LiveKit errors → customer copy', () => {
   it('maps an invalid/expired token to an HONEST relaunch message (Reconnect cannot mint a fresh token)', () => {
@@ -290,11 +293,16 @@ describe('AgentSessionPanel overlay UX', () => {
       disconnect: vi.fn(),
     };
     createRoomMock.mockReturnValueOnce(roomA).mockReturnValueOnce(roomB);
+    let currentRoom = roomA;
+    const canSendInput = (ownerRoom: unknown, epoch: number): boolean =>
+      ownerRoom === currentRoom && epoch === INPUT_AUTHORITY_EPOCH;
     const onInputCongestionChange = vi.fn();
     const { container, rerender } = render(
       <AgentSessionPanel
         info={INFO}
         interactive
+        inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
+        canSendInput={canSendInput}
         onInputCongestionChange={onInputCongestionChange}
       />,
     );
@@ -304,10 +312,13 @@ describe('AgentSessionPanel overlay UX', () => {
     const staleRoomADrain = handlersA.dcBufferStatusChanged;
 
     await act(async () => {
+      currentRoom = roomB;
       rerender(
         <AgentSessionPanel
           info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
           interactive
+          inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
+          canSendInput={canSendInput}
           onInputCongestionChange={onInputCongestionChange}
         />,
       );
@@ -1046,7 +1057,16 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
     connectMock.mockReturnValueOnce(new Promise(() => {})); // stays connecting; room is still created on mount
     vi.useFakeTimers();
     try {
-      const { container } = render(<AgentSessionPanel info={INFO} interactive />);
+      const room = { on: vi.fn(), off: vi.fn(), disconnect: vi.fn() };
+      createRoomMock.mockReturnValueOnce(room);
+      const { container } = render(
+        <AgentSessionPanel
+          info={INFO}
+          interactive
+          inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
+          canSendInput={(ownerRoom, epoch) => ownerRoom === room && epoch === INPUT_AUTHORITY_EPOCH}
+        />,
+      );
       const video = container.querySelector('video') as HTMLVideoElement;
       // jsdom's PointerEvent drops clientX/Y; a MouseEvent typed 'pointerdown'
       // carries finite coords AND still triggers React's onPointerDown.
@@ -1067,6 +1087,80 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('fails closed for optimistic feedback when authority is omitted or denied', () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValue(new Promise(() => {}));
+    const roomA = { on: vi.fn(), off: vi.fn(), disconnect: vi.fn() };
+    const roomB = { on: vi.fn(), off: vi.fn(), disconnect: vi.fn() };
+    createRoomMock.mockReturnValueOnce(roomA).mockReturnValueOnce(roomB);
+    const omitted = render(<AgentSessionPanel info={INFO} interactive />);
+    const omittedVideo = omitted.container.querySelector('video') as HTMLVideoElement;
+    act(() => {
+      fireEvent(
+        omittedVideo,
+        new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }),
+      );
+    });
+    expect(omitted.container.querySelectorAll('[data-tap-ripple]')).toHaveLength(0);
+    omitted.unmount();
+
+    const denied = render(
+      <AgentSessionPanel
+        info={{ ws_url: 'wss://lk-denied', token: 'tok-denied' }}
+        interactive
+        inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
+        canSendInput={() => false}
+      />,
+    );
+    const deniedVideo = denied.container.querySelector('video') as HTMLVideoElement;
+    act(() => {
+      fireEvent(
+        deniedVideo,
+        new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }),
+      );
+    });
+    expect(denied.container.querySelectorAll('[data-tap-ripple]')).toHaveLength(0);
+  });
+
+  it('clears an accepted ripple on epoch replacement and rejects the retained stale owner', () => {
+    connectMock.mockReset();
+    connectMock.mockReturnValue(new Promise(() => {}));
+    const room = { on: vi.fn(), off: vi.fn(), disconnect: vi.fn() };
+    createRoomMock.mockReturnValueOnce(room);
+    let currentEpoch = INPUT_AUTHORITY_EPOCH;
+    const canSendInput = (ownerRoom: unknown, epoch: number): boolean =>
+      ownerRoom === room && epoch === currentEpoch;
+    const { container, rerender } = render(
+      <AgentSessionPanel
+        info={INFO}
+        interactive
+        inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
+        canSendInput={canSendInput}
+      />,
+    );
+    const video = container.querySelector('video') as HTMLVideoElement;
+    act(() => {
+      fireEvent(video, new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }));
+    });
+    expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(1);
+
+    currentEpoch += 1;
+    act(() => {
+      fireEvent(video, new MouseEvent('pointerdown', { bubbles: true, clientX: 50, clientY: 70 }));
+    });
+    expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(1);
+
+    rerender(
+      <AgentSessionPanel
+        info={INFO}
+        interactive
+        inputAuthorityEpoch={currentEpoch}
+        canSendInput={canSendInput}
+      />,
+    );
+    expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(0);
   });
 
   it('does NOT spawn a ripple when the panel is non-interactive (subscriber-only embed — no real tap is sent)', () => {
@@ -1097,6 +1191,8 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
       <AgentSessionPanel
         info={INFO}
         interactive
+        inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
+        canSendInput={(ownerRoom, epoch) => ownerRoom === room && epoch === INPUT_AUTHORITY_EPOCH}
         onInputCongestionChange={onInputCongestionChange}
       />,
     );

@@ -361,7 +361,7 @@ export async function sendNavigate(room: Room, url: string): Promise<void> {
 }
 
 interface TabListSendState {
-  pending: TabListUpdatePayload | null;
+  pending: { payload: TabListUpdatePayload; isCurrent?: () => boolean } | null;
   drain: Promise<void> | null;
 }
 
@@ -378,13 +378,27 @@ const tabListSendStates = new WeakMap<Room, TabListSendState>();
  *  replay obsolete lists before the latest truth. Keep at most one publish in flight
  *  and one latest-wins pending snapshot per Room: ordering and reliability remain,
  *  while queue growth is bounded and stale intermediate state is never replayed. */
-export function sendTabListUpdate(room: Room, payload: TabListUpdatePayload): Promise<void> {
+export function sendTabListUpdate(
+  room: Room,
+  payload: TabListUpdatePayload,
+  isCurrent?: () => boolean,
+): Promise<void> {
   let state = tabListSendStates.get(room);
   if (state === undefined) {
     state = { pending: null, drain: null };
     tabListSendStates.set(room, state);
   }
-  state.pending = boundTabListUpdate(payload);
+  const authorityIsCurrent = (): boolean => {
+    try {
+      return isCurrent === undefined || isCurrent();
+    } catch {
+      return false;
+    }
+  };
+  if (!authorityIsCurrent()) {
+    return state.drain ?? Promise.resolve();
+  }
+  state.pending = { payload: boundTabListUpdate(payload), ...(isCurrent ? { isCurrent } : {}) };
   if (state.drain !== null) return state.drain;
 
   const drain = async (): Promise<void> => {
@@ -392,7 +406,20 @@ export function sendTabListUpdate(room: Room, payload: TabListUpdatePayload): Pr
       while (state.pending !== null) {
         const latest = state.pending;
         state.pending = null;
-        await sendInputEvent(room, { type: 'tabListUpdate', ...latest }, { reliable: true });
+        let current = true;
+        try {
+          current = latest.isCurrent === undefined || latest.isCurrent();
+        } catch {
+          current = false;
+        }
+        if (!current) {
+          continue;
+        }
+        await sendInputEvent(
+          room,
+          { type: 'tabListUpdate', ...latest.payload },
+          { reliable: true },
+        );
       }
     } finally {
       // A genuine publish failure must not leave stale state armed for an

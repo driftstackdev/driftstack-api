@@ -465,6 +465,79 @@ describe('sendTabListUpdate', () => {
     await Promise.all([first, obsolete, latest]);
     expect(publishData).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps callers without an authority predicate supported, but drops an initially stale owner', async () => {
+    const { room, publishData } = makeRoom();
+    const snapshot: TabListUpdatePayload = {
+      sessionId: 'agt_x',
+      tabs: [{ id: 't1', url: 'about:blank', scrollY: 0, title: 'New Tab' }],
+      activeTabId: 't1',
+    };
+    await sendTabListUpdate(room, snapshot);
+    expect(publishData).toHaveBeenCalledTimes(1);
+
+    await sendTabListUpdate(room, { ...snapshot, activeTabId: null }, () => false);
+    expect(publishData).toHaveBeenCalledTimes(1);
+  });
+
+  it('rechecks a queued snapshot at drain time and drops it after its epoch becomes stale', async () => {
+    const releases: Array<() => void> = [];
+    const publishData = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releases.push(resolve);
+        }),
+    );
+    const room = { localParticipant: { publishData } } as unknown as Room;
+    const snapshot = (activeTabId: string): TabListUpdatePayload => ({
+      sessionId: 'agt_x',
+      tabs: [{ id: activeTabId, url: 'about:blank', scrollY: 0, title: '' }],
+      activeTabId,
+    });
+    let epochCurrent = true;
+    const first = sendTabListUpdate(room, snapshot('first'));
+    const stale = sendTabListUpdate(room, snapshot('stale'), () => epochCurrent);
+    epochCurrent = false;
+
+    releases.shift()?.();
+    await Promise.all([first, stale]);
+    expect(publishData).toHaveBeenCalledTimes(1);
+    expect(decodeEvent(firstCall(publishData))).toMatchObject({ activeTabId: 'first' });
+  });
+
+  it('an initially stale callback cannot erase a different current pending snapshot', async () => {
+    const releases: Array<() => void> = [];
+    const publishData = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releases.push(resolve);
+        }),
+    );
+    const room = { localParticipant: { publishData } } as unknown as Room;
+    const snapshot = (activeTabId: string): TabListUpdatePayload => ({
+      sessionId: 'agt_x',
+      tabs: [{ id: activeTabId, url: 'about:blank', scrollY: 0, title: '' }],
+      activeTabId,
+    });
+    const first = sendTabListUpdate(room, snapshot('first'));
+    const current = sendTabListUpdate(room, snapshot('current'), () => true);
+    const stale = sendTabListUpdate(room, snapshot('stale'), () => false);
+
+    releases.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(publishData).toHaveBeenCalledTimes(2);
+    const calls = publishData.mock.calls as unknown as Array<[Uint8Array, { reliable: boolean }]>;
+    const second = calls[1];
+    if (second === undefined) throw new Error('second publishData call missing');
+    expect(decodeEvent({ data: second[0], opts: second[1] })).toMatchObject({
+      activeTabId: 'current',
+    });
+
+    releases.shift()?.();
+    await Promise.all([first, current, stale]);
+    expect(publishData).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('sendActivateTab', () => {

@@ -178,7 +178,10 @@ const getAgentSessionSpy = vi.fn(() => {
   // check is over-strict for a mutable property read into a local, so scope-disable.
   // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
   if (err !== null) return Promise.reject(err);
-  return Promise.resolve({ ...sessionState.current });
+  return Promise.resolve({
+    ...sessionState.current,
+    capabilityReport: { manual_input_available: true },
+  });
 });
 const getAgentSessionPageStateSpy = vi.fn(() => Promise.resolve(null));
 vi.mock('../../src/lib/agent-session-control', () => ({
@@ -671,17 +674,18 @@ describe('SimulatorWindow — gui_control_key expiry surfaces controlUnreachable
     expect(badge(container)).not.toBeNull();
   });
 
-  it('does NOT raise the badge for a transient/network error (status 0 → silent retry)', async () => {
+  it('fails closed and raises the badge for a transient/network control read error too', async () => {
     vi.useFakeTimers();
     const { container } = renderSim();
-    // A bare Error (no status) models a network blip — must NOT read as a degraded key.
+    // A bare Error (no status) models a network blip. It does not prove current mode,
+    // lifecycle or capability, so the GUI stays view-only and reports degraded control.
     sessionState.error = new Error('network');
     await act(async () => {
       vi.advanceTimersByTime(5_100);
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(badge(container)).toBeNull();
+    expect(badge(container)).not.toBeNull();
   });
 
   // GUI UX pass (Wave 1) — the badge was an informational dead-end ("control may not be

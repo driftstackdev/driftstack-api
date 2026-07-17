@@ -29,6 +29,25 @@ const sendActivateTab = vi.fn(
   },
 );
 const getAgentSession = vi.fn((): Promise<unknown> => new Promise(() => {}));
+const manualControlState = {
+  mode: 'manual' as const,
+  pairKind: null,
+  terminal: false,
+  status: 'active' as const,
+  closedReason: null,
+  capabilityReport: { manual_input_available: true },
+};
+function immediateControl<T>(value: T): Promise<T> {
+  return {
+    then: (onfulfilled: (resolved: T) => unknown) => {
+      try {
+        return Promise.resolve(onfulfilled(value));
+      } catch (err: unknown) {
+        return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+  } as unknown as Promise<T>;
+}
 let dataHandler: ((payload: Uint8Array) => void) | null = null;
 
 // Browser mode defaults ON (founder 2026-06-21), which hosts the URL bar in the
@@ -43,7 +62,7 @@ beforeEach(() => {
     return Promise.resolve('req_test');
   });
   getAgentSession.mockReset();
-  getAgentSession.mockImplementation(() => new Promise(() => {}));
+  getAgentSession.mockImplementation(() => immediateControl(manualControlState));
   dataHandler = null;
   const store = new Map<string, string>([
     ['ds-sim-browser-mode', '0'],
@@ -160,7 +179,11 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
     });
     getAgentSession.mockImplementation(() => heldControl);
     const { container } = renderSim();
-    act(() => panelCbs.onRoom?.(fakeRoom, fakeRoom));
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      panelCbs.onPublisher?.('publishing', fakeRoom);
+    });
 
     expect(panelCbs.interactive).toBe(false);
     expect(container.querySelector('[data-component="simulator-keyboard-toggle"]')).toBeDisabled();
@@ -180,6 +203,7 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
         terminal: false,
         status: 'active',
         closedReason: null,
+        capabilityReport: { manual_input_available: true },
       });
       await Promise.resolve();
     });
@@ -266,18 +290,20 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
 describe('SimulatorWindow — harness capability health', () => {
   it('becomes honestly view-only and surfaces blank capture + dead proxy state', async () => {
     localStorage.setItem('ds-sim-browser-mode', '1');
-    getAgentSession.mockResolvedValueOnce({
-      mode: 'manual',
-      pairKind: null,
-      terminal: false,
-      status: 'active',
-      closedReason: null,
-      capabilityReport: {
-        manual_input_available: false,
-        streaming_state: 'blank',
-        egress_state: 'dead_proxy',
-      },
-    });
+    getAgentSession.mockImplementation(() =>
+      immediateControl({
+        mode: 'manual',
+        pairKind: null,
+        terminal: false,
+        status: 'active',
+        closedReason: null,
+        capabilityReport: {
+          manual_input_available: false,
+          streaming_state: 'blank',
+          egress_state: 'dead_proxy',
+        },
+      }),
+    );
 
     const { container } = renderSim();
     await vi.waitFor(() => {
@@ -392,7 +418,7 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     expect(container.textContent).toContain('Connection catching up — navigation paused');
   });
 
-  it('defers active-tab-close convergence until congestion drains', async () => {
+  it('cancels active-tab-close convergence when readiness replaces its authority epoch', async () => {
     const { ReliableInputCongestedError } = await import('../../src/lib/livekit-input-congestion');
     localStorage.setItem('ds-sim-browser-mode', '1');
     const { container } = renderSim();
@@ -419,8 +445,8 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     expect(sendActivateTab).toHaveBeenCalledTimes(1);
 
     act(() => panelCbs.onInputCongestionChange?.(true, fakeRoom));
-    // Congestion can drain while this same Room is temporarily reconnecting and
-    // has no publisher. Do not consume the deferred close activation in that gap.
+    // A reconnect/publisher transition replaces the exact manual-input epoch. The
+    // old close activation is canceled rather than lent the later ready authority.
     act(() => {
       panelCbs.onStateChange?.({ kind: 'reconnecting' }, fakeRoom);
       panelCbs.onPublisher?.('waiting', fakeRoom);
@@ -436,10 +462,10 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(sendActivateTab).toHaveBeenCalledTimes(2);
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
   });
 
-  it('moves a retry into deferred ownership during a same-Room readiness dip and resumes once ready', async () => {
+  it('cancels a retry and its cover during a same-Room readiness epoch replacement', async () => {
     vi.useFakeTimers();
     try {
       localStorage.setItem('ds-sim-browser-mode', '1');
@@ -472,14 +498,14 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
           ),
         );
       });
-      // The target can report a background/terminal frame while wire ownership is
-      // deferred. It is metadata only until the resumed activation is correlated.
-      expect(container.querySelector('[data-component="simulator-switch-blank"]')).not.toBeNull();
+      // The readiness change revoked the old epoch synchronously: its visual cover,
+      // retry and deferred owner are all gone before any later terminal frame.
+      expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
 
       act(() => panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom));
       expect(sendActivateTab).toHaveBeenCalledTimes(1);
       act(() => panelCbs.onPublisher?.('publishing', fakeRoom));
-      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
       act(() => {
         dataHandler?.(
           new TextEncoder().encode(
@@ -496,13 +522,13 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(5000);
       });
-      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('does not resurrect a dismissed switch cover when deferred wire work resumes', async () => {
+  it('does not resurrect a revoked switch cover or wire owner after readiness returns', async () => {
     vi.useFakeTimers();
     try {
       localStorage.setItem('ds-sim-browser-mode', '1');
@@ -521,18 +547,14 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
         await vi.advanceTimersByTimeAsync(3000);
       });
       expect(sendActivateTab).toHaveBeenCalledTimes(1);
-      fireEvent.click(
-        container.querySelector('[data-component="switch-blank-escape"]') as HTMLButtonElement,
-      );
       expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
 
       act(() => {
         panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
         panelCbs.onPublisher?.('publishing', fakeRoom);
       });
-      expect(sendActivateTab).toHaveBeenCalledTimes(2);
-      // Resuming the exact deferred wire owner must not recreate a visual cover the
-      // operator explicitly dismissed (nor reset its original six-second bound).
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+      // A newer ready epoch must not recreate the old visual or lend it transport.
       expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
       act(() => {
         dataHandler?.(
@@ -549,7 +571,7 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(5000);
       });
-      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
       expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
     } finally {
       vi.useRealTimers();

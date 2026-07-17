@@ -23,6 +23,10 @@ vi.mock('../../src/lib/livekit', () => ({
 const { useInputCapture } = await import('../../src/lib/livekit-input-capture');
 import type { InputEvent, Room } from '../../src/lib/livekit';
 
+const ROOM = {} as Room;
+const AUTHORITY_EPOCH = 13;
+const canSend = (room: Room, epoch: number): boolean => room === ROOM && epoch === AUTHORITY_EPOCH;
+
 /** A stub <video> sized 1:1 so video-px == element-px (the 402×874 CSS-point
  *  profile case — no bar-boxing, no scaling). */
 function stubVideo(el: HTMLVideoElement): void {
@@ -37,7 +41,13 @@ function mountCapture(): HTMLVideoElement {
   document.body.appendChild(video);
   stubVideo(video);
   function Wired(): JSX.Element {
-    useInputCapture({ room: {} as Room, videoElement: video, enabled: true });
+    useInputCapture({
+      room: ROOM,
+      videoElement: video,
+      enabled: true,
+      authorityEpoch: AUTHORITY_EPOCH,
+      canSend,
+    });
     return <span />;
   }
   render(<Wired />);

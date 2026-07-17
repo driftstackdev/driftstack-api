@@ -83,7 +83,14 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
-  getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
+  getAgentSession: () =>
+    Promise.resolve({
+      mode: 'manual',
+      pairKind: null,
+      status: 'active',
+      terminal: false,
+      capabilityReport: { manual_input_available: true },
+    }),
   getAgentSessionPageState: () => Promise.resolve(null),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
   navigateAgentSessionHistory: vi.fn(() => Promise.resolve()),

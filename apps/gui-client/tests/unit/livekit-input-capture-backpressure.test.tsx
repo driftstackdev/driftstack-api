@@ -29,6 +29,8 @@ vi.mock('../../src/lib/livekit', () => ({
 const { useInputCapture } = await import('../../src/lib/livekit-input-capture');
 import type { InputEvent, Room } from '../../src/lib/livekit';
 
+const AUTHORITY_EPOCH = 23;
+
 function stubVideo(el: HTMLVideoElement): void {
   el.getBoundingClientRect = () =>
     ({ left: 0, top: 0, width: 402, height: 874, right: 402, bottom: 874, x: 0, y: 0 }) as DOMRect;
@@ -79,7 +81,14 @@ function mount(
   document.body.appendChild(video);
   stubVideo(video);
   function Wired(): JSX.Element {
-    useInputCapture({ room, videoElement: video, enabled: true, onCongestionChange });
+    useInputCapture({
+      room,
+      videoElement: video,
+      enabled: true,
+      authorityEpoch: AUTHORITY_EPOCH,
+      canSend: (ownerRoom, epoch) => ownerRoom === room && epoch === AUTHORITY_EPOCH,
+      onCongestionChange,
+    });
     return <span />;
   }
   const { unmount } = render(<Wired />);
@@ -139,7 +148,7 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     expect(onCongestionChange).toHaveBeenLastCalledWith(false, room);
   });
 
-  it('keeps late publish failure and teardown callbacks bound to retired Room A after B mounts', async () => {
+  it('drops late publish failure callbacks once retired Room A loses exact authority', async () => {
     const { room: roomA } = makeRoom();
     const { room: roomB } = makeRoom();
     const video = document.createElement('video');
@@ -154,11 +163,16 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     );
     const onPublishError = vi.fn();
     const onCongestionChange = vi.fn();
+    let currentRoom = roomA;
+    const canSend = (ownerRoom: Room, epoch: number): boolean =>
+      ownerRoom === currentRoom && epoch === AUTHORITY_EPOCH;
     function Wired({ room }: { room: Room }): JSX.Element {
       useInputCapture({
         room,
         videoElement: video,
         enabled: true,
+        authorityEpoch: AUTHORITY_EPOCH,
+        canSend,
         onPublishError,
         onCongestionChange,
       });
@@ -169,16 +183,14 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     fireMouse(window, 'mouseup', 100, 100, 10);
     expect(sendInputEvent).toHaveBeenCalled();
 
+    currentRoom = roomB;
     mounted.rerender(<Wired room={roomB} />);
-    expect(onCongestionChange.mock.calls).toContainEqual([false, roomA]);
     expect(onCongestionChange).toHaveBeenLastCalledWith(false, roomB);
     await act(async () => {
       rejectA(new Error('old room reply lost'));
       await Promise.resolve();
     });
-    expect(onPublishError).toHaveBeenCalledTimes(1);
-    expect(onPublishError).toHaveBeenCalledWith(roomA);
-    expect(onPublishError).not.toHaveBeenCalledWith(roomB);
+    expect(onPublishError).not.toHaveBeenCalled();
   });
 
   it('baseline: with the channel healthy (no congestion event), a scroll emits touch events', () => {
@@ -237,6 +249,8 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
         room,
         videoElement: video,
         enabled: true,
+        authorityEpoch: AUTHORITY_EPOCH,
+        canSend: (ownerRoom, epoch) => ownerRoom === room && epoch === AUTHORITY_EPOCH,
         logical: { width, height: 874 },
         onCongestionChange,
       });
@@ -255,14 +269,21 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     expect(emitted()).toHaveLength(0);
   });
 
-  it('clears historical congestion across an intentional capture-off mode flip', () => {
-    const { room, fireDC } = makeRoom();
+  it('preserves same-Room congestion across capture off/on until buffer-low or reconnect', () => {
+    const { room, fireDC, fireReconnected } = makeRoom();
     const video = document.createElement('video');
     document.body.appendChild(video);
     stubVideo(video);
     const onCongestionChange = vi.fn();
     function Wired({ enabled }: { enabled: boolean }): JSX.Element {
-      useInputCapture({ room, videoElement: video, enabled, onCongestionChange });
+      useInputCapture({
+        room,
+        videoElement: video,
+        enabled,
+        authorityEpoch: AUTHORITY_EPOCH,
+        canSend: (ownerRoom, epoch) => ownerRoom === room && epoch === AUTHORITY_EPOCH,
+        onCongestionChange,
+      });
       return <span />;
     }
     const mounted = render(<Wired enabled />);
@@ -270,10 +291,74 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     expect(onCongestionChange).toHaveBeenLastCalledWith(true, room);
 
     mounted.rerender(<Wired enabled={false} />);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(false, room);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true, room);
     mounted.rerender(<Wired enabled />);
     scroll(video);
+    expect(emitted()).toHaveLength(0);
+
+    fireDC(true, 0);
+    scroll(video);
     expect(emitted().map((e) => e.type)).toContain('touchStart');
+
+    sendInputEvent.mockClear();
+    fireDC(false, 0);
+    mounted.rerender(<Wired enabled={false} />);
+    mounted.rerender(<Wired enabled />);
+    fireReconnected();
+    scroll(video);
+    expect(emitted().map((e) => e.type)).toContain('touchStart');
+  });
+
+  it('fails closed when capture authority is omitted or denied', () => {
+    const { room } = makeRoom();
+    const video = document.createElement('video');
+    document.body.appendChild(video);
+    stubVideo(video);
+    function Wired({ denied }: { denied: boolean }): JSX.Element {
+      useInputCapture({
+        room,
+        videoElement: video,
+        enabled: true,
+        authorityEpoch: AUTHORITY_EPOCH,
+        ...(denied ? { canSend: () => false } : {}),
+      });
+      return <span />;
+    }
+    const mounted = render(<Wired denied={false} />);
+    scroll(video);
+    expect(emitted()).toHaveLength(0);
+
+    mounted.rerender(<Wired denied />);
+    scroll(video);
+    expect(emitted()).toHaveLength(0);
+  });
+
+  it('drops rAF and release callbacks when their captured authority epoch becomes stale', () => {
+    const { room } = makeRoom();
+    const video = document.createElement('video');
+    document.body.appendChild(video);
+    stubVideo(video);
+    let currentEpoch = AUTHORITY_EPOCH;
+    const canSend = (ownerRoom: Room, epoch: number): boolean =>
+      ownerRoom === room && epoch === currentEpoch;
+    function Wired(): JSX.Element {
+      useInputCapture({
+        room,
+        videoElement: video,
+        enabled: true,
+        authorityEpoch: AUTHORITY_EPOCH,
+        canSend,
+      });
+      return <span />;
+    }
+    render(<Wired />);
+
+    fireWheel(video, 90);
+    fireMouse(video, 'mousedown', 100, 100, 0);
+    currentEpoch += 1;
+    fireMouse(window, 'mouseup', 100, 100, 10);
+    vi.advanceTimersByTime(500);
+    expect(emitted()).toHaveLength(0);
   });
 
   it('ignores a NON-reliable (lossy, kind 1) buffer-status event — only reliable gates the shed', () => {

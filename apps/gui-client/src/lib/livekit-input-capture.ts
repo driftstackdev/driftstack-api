@@ -46,7 +46,7 @@
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { type CanonicalModifier } from '@driftstack/sdk';
 import { sendInputEvent, RoomEvent, type InputEvent, type Room } from './livekit';
 import {
@@ -68,6 +68,12 @@ export interface UseInputCaptureOpts {
    *  parent view flips this when the customer engages "Take
    *  control". */
   enabled: boolean;
+  /** Epoch captured when the listeners are installed. A mode/capability/Room
+   *  replacement re-keys the effect and makes every older deferred callback stale. */
+  authorityEpoch?: number;
+  /** Invocation-time authority proof for the exact Room + captured epoch.
+   *  Omission is fail-closed even when `enabled` is true. */
+  canSend?: (room: Room, authorityEpoch: number) => boolean;
   /** Surfaced when the FIRST input publish fails — the data channel is
    *  effectively dead, so control isn't reaching the device. The parent wires
    *  this to a small non-fatal badge. Fired at most once per effect run. */
@@ -388,6 +394,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   // point in video-px) + `moved` drive the MOVE_DEADZONE scroll-vs-tap gate: no
   // touchMove is emitted until the cursor leaves the deadzone (A3 W2668).
   const active = useRef<{
+    authorityEpoch: number;
     touchId: number;
     startX: number;
     startY: number;
@@ -406,7 +413,13 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   } | null>(null);
   // The in-flight inertial glide (null = none). Holds the held touchId + current
   // glide position + the step timer so a new press / teardown can halt it cleanly.
-  const fling = useRef<{ touchId: number; x: number; y: number; timer: number } | null>(null);
+  const fling = useRef<{
+    authorityEpoch: number;
+    touchId: number;
+    x: number;
+    y: number;
+    timer: number;
+  } | null>(null);
   const touchIdSeq = useRef(0);
   // Keep the latest onPublishError in a ref so the capture effect does NOT
   // depend on the callback's identity — the natural usage is an inline arrow (a
@@ -430,6 +443,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   // livekit-latency-ping.ts) re-runs only on a real change, and keying on the
   // actual `videoElement` re-runs the effect when the element mounts.
   const { room, videoElement: video, enabled } = opts;
+  const authorityEpoch = opts.authorityEpoch ?? 0;
+  const canSend = opts.canSend;
+  const ownsAuthority = useCallback(
+    (ownerRoom: Room): boolean => canSend !== undefined && canSend(ownerRoom, authorityEpoch),
+    [canSend, authorityEpoch],
+  );
   // The per-archetype captured-frame logical dims (default 402×874 until the first
   // frame reports). Destructured to primitives so the effect re-keys on the actual
   // width/height VALUES — a parent passing an inline `{ width, height }` literal
@@ -440,16 +459,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   const logicalW = opts.logical?.width ?? DEVICE_LOGICAL_WIDTH;
   const logicalH = opts.logical?.height ?? DEVICE_LOGICAL_HEIGHT;
   useEffect(() => {
-    // A deliberate capture-off transition has no listener to observe a later buffer
-    // drain. Clear the old latch now so a future takeover on this same Room starts
-    // from the replacement/current channel state, not a historical pause.
-    if (room !== null && (!enabled || video === null)) {
-      setReliableInputCongested(room, false);
-      onCongestionChangeRef.current?.(false, room);
-    }
-  }, [room, video, enabled]);
-  useEffect(() => {
-    if (!enabled || room === null || video === null) return;
+    if (!enabled || room === null || video === null || !ownsAuthority(room)) return;
     // The captured-frame logical frame the injector addresses (per-archetype). Used
     // for the pointer mapping AND the scroll/glide clamps so both adapt together.
     const logical = { width: logicalW, height: logicalH };
@@ -478,11 +488,13 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     let reliableCongested = isReliableInputCongested(room);
     onCongestionChangeRef.current?.(reliableCongested, room);
     const setCongested = (congested: boolean): void => {
+      if (!ownsAuthority(room)) return;
       reliableCongested = congested;
       setReliableInputCongested(room, congested);
       onCongestionChangeRef.current?.(congested, room);
     };
     const onDCBufferStatus = (isLow: boolean, kind: number): void => {
+      if (!ownsAuthority(room)) return;
       // DataChannelKind.RELIABLE === 0 (livekit-client internal enum, stable). The
       // lossy channel already self-drops under congestion, so we gate only on
       // reliable; if livekit ever renumbered the enum the flag simply never trips and
@@ -504,9 +516,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // A reconnect can replace the underlying DataChannel with a fresh, empty one.
     // Its buffer begins low, so no low-threshold crossing is guaranteed; explicitly
     // clear the prior channel's latch or input could remain paused forever.
-    const onRoomReconnected = (): void => setCongested(false);
+    const onRoomReconnected = (): void => {
+      if (ownsAuthority(room)) setCongested(false);
+    };
 
     const send = (event: InputEvent, reliable: boolean): void => {
+      if (!ownsAuthority(room)) return;
       lastSend.current = sendInputEvent(room, event, { reliable }).catch((err: unknown) => {
         // Expected backpressure shedding is not a control failure. It self-heals on
         // buffer-low and must not raise the persistent "control unreachable" badge.
@@ -514,7 +529,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         // Swallow per-event (a rejected move must not throw into the UI), but
         // surface the FIRST failure: a silently-dead control channel reads as
         // "view-only" with no diagnostic (founder-hit 2026-06-12).
-        if (!warnedPublishFailure) {
+        if (!warnedPublishFailure && ownsAuthority(room)) {
           warnedPublishFailure = true;
           console.warn(
             '[simulator] input publish failed — control will not reach the device:',
@@ -552,7 +567,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // false (just clear the timer — the room is going away).
     const cancelFling = (endTouch: boolean): void => {
       const f = fling.current;
-      if (f === null) return;
+      if (f === null || f.authorityEpoch !== authorityEpoch) return;
       window.clearTimeout(f.timer);
       fling.current = null;
       if (endTouch) {
@@ -563,17 +578,18 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // The held touchId stays down through the glide so the device reads ONE
     // continuous finger sliding + settling (iOS momentum), not a new gesture.
     const startFling = (touchId: number, x0: number, y0: number, vx: number, vy: number): void => {
+      if (!ownsAuthority(room)) return;
       cancelFling(false);
       const path = computeFlingPath(x0, y0, vx, vy);
       if (path.length === 0) {
         endCommittedTouch(clampX(x0), devY(clampY(y0)), touchId);
         return;
       }
-      fling.current = { touchId, x: x0, y: y0, timer: 0 };
+      fling.current = { authorityEpoch, touchId, x: x0, y: y0, timer: 0 };
       let i = 0;
       const step = (): void => {
         const f = fling.current;
-        if (f === null) return;
+        if (f === null || f.authorityEpoch !== authorityEpoch || !ownsAuthority(room)) return;
         const pt = i < path.length ? path[i] : undefined;
         i += 1;
         if (pt === undefined) {
@@ -594,6 +610,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // A left-button mouse press = a finger down → touchStart. Right/middle
     // buttons have no iPhone touch analogue, so they're ignored.
     const onMouseDown = (e: MouseEvent): void => {
+      if (!ownsAuthority(room)) return;
       if (mouseButton(e.button) !== 0) return;
       // Defense-in-depth: if a prior committed drag never saw its release (a lost
       // pointercancel/blur the handlers below missed), lift that orphaned finger BEFORE
@@ -626,7 +643,14 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // stays a tap (→ clean touchStart+touchEnd at release, no move) until it
       // commits to a drag in onMouseMove. This is why a quick press→release never
       // scrolls, even with pointer drift (see DRAG_HOLD_MS / DRAG_HARD_PX).
-      active.current = { touchId, startX: p.x, startY: p.y, startT: e.timeStamp, committed: false };
+      active.current = {
+        authorityEpoch,
+        touchId,
+        startX: p.x,
+        startY: p.y,
+        startT: e.timeStamp,
+        committed: false,
+      };
     };
     // Move only while a finger is down (no iPhone hover). Until the gesture COMMITS
     // to a drag we send nothing (it might still be a tap); on commit we emit the
@@ -638,7 +662,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // later high-rate moves are lossy so a fast drag cannot congest reliable input.
     const onMouseMove = (e: MouseEvent): void => {
       const g = active.current;
-      if (g === null) return;
+      if (g === null || g.authorityEpoch !== authorityEpoch || !ownsAuthority(room)) return;
       let lifecycleAnchor = false;
       let p = pointerToViewport(e, video, logical);
       if (p === null) {
@@ -710,7 +734,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // the gesture and the rest no-op (no double touchEnd, no double fling).
     const finishGesture = (e: MouseEvent): void => {
       const g = active.current;
-      if (g === null) return;
+      if (g === null || g.authorityEpoch !== authorityEpoch || !ownsAuthority(room)) return;
       active.current = null;
       // Never committed = a TAP → clean touchStart+touchEnd at the press point (no
       // move, so the box can NEVER scroll it).
@@ -750,6 +774,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // onMouseDown, so a release we never see can't strand a pressed finger on the device.
     const liftActiveFinger = (): void => {
       const g = active.current;
+      if (g !== null && g.authorityEpoch !== authorityEpoch) return;
       active.current = null;
       if (g === null || !g.committed) return;
       endCommittedTouch(clampX(g.lastX ?? g.startX), devY(clampY(g.lastY ?? g.startY)), g.touchId);
@@ -761,6 +786,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // down (a spurious pinch / wrong-place tap). Run the same lift cleanup a real
     // release would: lift the committed finger, end the wheel drag, cancel any fling.
     const onLostGesture = (): void => {
+      if (!ownsAuthority(room)) return;
       liftActiveFinger();
       cancelFling(true);
       window.clearTimeout(wheelTimer);
@@ -870,6 +896,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // Re-arm: keep draining a big flick this frame, else end the gesture after the idle
     // grace (spans macOS inter-burst + momentum-decay gaps so one scroll = one gesture).
     const armWheelTail = (): void => {
+      if (!ownsAuthority(room)) {
+        wheelPendingDx = 0;
+        wheelPendingDy = 0;
+        return;
+      }
       if (Math.abs(wheelPendingDx) >= 0.5 || Math.abs(wheelPendingDy) >= 0.5) {
         wheelRaf = requestAnimationFrame(flushWheel);
       } else {
@@ -877,6 +908,14 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       }
     };
     const flushWheel = (): void => {
+      if (!ownsAuthority(room)) {
+        wheelRaf = 0;
+        window.clearTimeout(wheelTimer);
+        wheelPendingDx = 0;
+        wheelPendingDy = 0;
+        wheelDrag = null;
+        return;
+      }
       wheelRaf = 0;
       // A flush = activity → cancel any pending idle-end; re-armed below if the stream
       // has actually stopped.
@@ -1005,10 +1044,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       armWheelTail();
     };
     const onWheel = (e: WheelEvent): void => {
+      if (!ownsAuthority(room)) return;
       // A held mouse gesture owns the single virtual finger — ignore the wheel until
       // it releases, so a click-drag + trackpad scroll can't put a SECOND concurrent
       // touch on the wire (the device reads two touchIds as a pinch/multi-touch).
-      if (active.current !== null) return;
+      if (active.current?.authorityEpoch === authorityEpoch) return;
       // BACKPRESSURE shed (see reliableCongested): while the reliable channel is
       // backed up, DROP incoming wheel events so we don't pile seconds of stale
       // scroll onto a stalled ORDERED channel — that backlog is exactly what makes
@@ -1075,6 +1115,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       forwardedKeys.clear();
     };
     const onKeyDown = (e: KeyboardEvent): void => {
+      if (!ownsAuthority(room)) return;
       if (keyOwnedLocally()) return;
       if (isBareEscape(e)) return;
       // BACKPRESSURE shed (mirrors pointer/wheel): do not put a NEW keyDown behind a
@@ -1111,6 +1152,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       );
     };
     const onKeyUp = (e: KeyboardEvent): void => {
+      if (!ownsAuthority(room)) return;
       // Mirror the keyDown decision: only forward the up for a key whose down we
       // forwarded (so composer typing still never leaks), but do so regardless of
       // the CURRENT editing/escape state so a focus-moving key can't strand a
@@ -1208,7 +1250,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // already gone the touchEnd is harmlessly swallowed. An UNcommitted (buffered)
       // gesture sent no touchStart, so it needs no touchEnd.
       const g = active.current;
-      if (g !== null && g.committed) {
+      if (g !== null && g.authorityEpoch === authorityEpoch && g.committed) {
         endCommittedTouch(
           clampX(g.lastX ?? g.startX),
           devY(clampY(g.lastY ?? g.startY)),
@@ -1219,7 +1261,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // Lift an in-flight wheel-scroll finger + clear its end timer.
       window.clearTimeout(wheelTimer);
       endWheelDrag();
-      active.current = null;
+      if (active.current?.authorityEpoch === authorityEpoch) active.current = null;
     };
-  }, [room, video, enabled, logicalW, logicalH]);
+  }, [room, video, enabled, logicalW, logicalH, ownsAuthority]);
 }

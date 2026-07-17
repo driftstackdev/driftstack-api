@@ -116,8 +116,8 @@ import {
 /** Human input is an allowlisted ownership state, not merely "anything except AI".
  * `null` is the control API's still-loading/unknown state; failing open there can
  * forward a tap or raise the keyboard before we know who owns the session. */
-function isHumanControlMode(mode: SessionMode | null): mode is 'manual' | 'pair' {
-  return mode === 'manual' || mode === 'pair';
+function isHumanControlMode(mode: SessionMode | null): mode is 'manual' {
+  return mode === 'manual';
 }
 
 /** Frame chrome heights (px) used to derive the window size from the device's
@@ -159,9 +159,22 @@ interface SimulatorRoomBinding {
   room: Room;
 }
 
+interface ManualInputControlSnapshot {
+  sessionId: string;
+  epoch: number;
+  mode: SessionMode | null;
+  modeConfirmed: boolean;
+  lifecycleStatus: string | null;
+  lifecycleConfirmed: boolean;
+  lifecycleTerminal: boolean;
+  capabilityReport: AgentSessionCapabilityReport | null;
+  mutationPending: boolean;
+}
+
 interface LogicalTabActivation {
   sessionId: string;
   room: Room;
+  authorityEpoch: number;
   tabId: string;
   prevTabId: string;
   requestIds: Set<string>;
@@ -182,6 +195,7 @@ interface TabActivationRetry {
 interface DeferredTabActivation {
   sessionId: string;
   room: Room;
+  authorityEpoch: number;
   tabId: string;
   prevTabId: string;
   url: string;
@@ -515,6 +529,41 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
     controlKey,
     baseUrl,
   };
+}
+
+/** Apply the mode-aware close decision independently of Tauri listener loading.
+ * Keeping the policy in this deterministic seam makes the fail-closed decision
+ * directly testable without eagerly importing a native module in browser/jsdom. */
+export async function handleSimulatorCloseRequest({
+  event,
+  controlMode,
+  controlModeConfirmed,
+  endSession,
+  destroyWindow,
+}: {
+  event: { preventDefault: () => void };
+  controlMode: SessionMode | null;
+  controlModeConfirmed: boolean;
+  endSession: () => Promise<void>;
+  destroyWindow: () => Promise<void>;
+}): Promise<void> {
+  if (controlMode !== 'manual' || !controlModeConfirmed) return;
+  event.preventDefault();
+  let timeoutId: number | null = null;
+  try {
+    await Promise.race([
+      endSession(),
+      new Promise<void>((resolve) => {
+        timeoutId = window.setTimeout(resolve, 2000);
+      }),
+    ]);
+  } catch {
+    // Best-effort — the window MUST close even if end rejects because the
+    // session is already gone. The timeout handles an end call that hangs.
+  } finally {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+  }
+  await destroyWindow();
 }
 
 /** Tauri-only window ops, dynamically imported on use so the jsdom tests (no
@@ -2848,6 +2897,60 @@ export function SimulatorWindow(): JSX.Element {
   );
   const publisherStateRef = useRef(publisherState);
   publisherStateRef.current = publisherState;
+  // One monotonic GUI-local authority epoch fences every manual producer. The
+  // server-issued revision is not exposed to this client yet, so this is explicit
+  // defense-in-depth: every confirmed control/lifecycle/capability change and Room
+  // replacement advances the epoch, making A→B→A stale callbacks ineligible.
+  const [manualInputControl, setManualInputControl] = useState<ManualInputControlSnapshot>(() => ({
+    sessionId,
+    epoch: 0,
+    mode: null,
+    modeConfirmed: false,
+    lifecycleStatus: null,
+    lifecycleConfirmed: false,
+    lifecycleTerminal: false,
+    capabilityReport: null,
+    mutationPending: false,
+  }));
+  const manualInputControlRef = useRef(manualInputControl);
+  const clearManualAuthorityDeferredWorkRef = useRef<() => void>(() => undefined);
+  const manualInputAuthorityCheckRef = useRef<
+    (expectedSessionId: string, expectedRoom: Room | null, expectedEpoch: number) => boolean
+  >(() => false);
+  const updateManualInputControl = useCallback(
+    (patch: Partial<Omit<ManualInputControlSnapshot, 'epoch'>>, forceNewEpoch = false): number => {
+      const current = manualInputControlRef.current;
+      const candidate = { ...current, ...patch };
+      const currentCapability = current.capabilityReport;
+      const nextCapability = candidate.capabilityReport;
+      const capabilityUnchanged =
+        currentCapability === nextCapability ||
+        (currentCapability !== null &&
+          nextCapability !== null &&
+          currentCapability.manual_input_available === nextCapability.manual_input_available &&
+          currentCapability.streaming_state === nextCapability.streaming_state &&
+          currentCapability.egress_state === nextCapability.egress_state);
+      const unchanged =
+        current.sessionId === candidate.sessionId &&
+        current.mode === candidate.mode &&
+        current.modeConfirmed === candidate.modeConfirmed &&
+        current.lifecycleStatus === candidate.lifecycleStatus &&
+        current.lifecycleConfirmed === candidate.lifecycleConfirmed &&
+        current.lifecycleTerminal === candidate.lifecycleTerminal &&
+        current.mutationPending === candidate.mutationPending &&
+        capabilityUnchanged;
+      if (unchanged && !forceNewEpoch) return current.epoch;
+      const next: ManualInputControlSnapshot = {
+        ...candidate,
+        epoch: current.epoch + 1,
+      };
+      manualInputControlRef.current = next;
+      setManualInputControl(next);
+      clearManualAuthorityDeferredWorkRef.current();
+      return next.epoch;
+    },
+    [],
+  );
   // P1a — TERMINAL session-end signal. The box session actually ended (the worker
   // browser closed / the session was destroyed/errored / the orphan sweeper reaped
   // it): the control plane reports status='closed' (or a closed_at/closed_reason).
@@ -3230,7 +3333,7 @@ export function SimulatorWindow(): JSX.Element {
   // keyboard viewport-resize are deferred to A3's box-side signals (W2992). The
   // keyboard is GUI chrome mounted BELOW the video, so it never moves the
   // <video> on-screen rect the tap/scroll coord mapping reads. Forwarded only in
-  // manual/pair mode (in AI mode the agent drives — local input would fight it).
+  // confirmed manual mode (AI and pair modes remain agent-owned).
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   // Live mirror of keyboardVisible for the window-sizing closures (fitWindow /
   // resetToActualSize / refitForDrawer / the onResized aspect-lock), which close
@@ -3560,6 +3663,12 @@ export function SimulatorWindow(): JSX.Element {
   // a toggle reads a stale overlay flag and re-introduces the shrink for a frame.
   const toggleKeyboard = (): void => {
     const next = !keyboardVisibleRef.current;
+    // Hiding is always safe. Showing is a manual-input action and must belong to the
+    // exact session/Room/epoch captured by this rendered handler; a retained button
+    // from the revocation-before-render gap may not re-arm local keyboard state that
+    // later appears under a different authority epoch.
+    if (next && !manualInputAuthorityCheckRef.current(sessionId, room, manualInputControl.epoch))
+      return;
     // Explicit Show owns an already-focused warm tab. Explicit Hide prevents repeated
     // `true` snapshots from undoing the operator's choice until a real blur/focus edge.
     keyboardFocusSuppressedTabRef.current = next ? null : activeTabIdRef.current;
@@ -3648,13 +3757,31 @@ export function SimulatorWindow(): JSX.Element {
       e.preventDefault();
       e.stopPropagation(); // keep the raw ⌘V off the input-capture forward path
       if (room === null) return;
-      const requestSessionId = sessionIdRef.current;
+      const requestSessionId = sessionId;
+      const requestRoom = room;
+      const requestAuthorityEpoch = manualInputControl.epoch;
+      if (
+        !manualInputAuthorityCheckRef.current(requestSessionId, requestRoom, requestAuthorityEpoch)
+      )
+        return;
       void (async () => {
         if (navigator.clipboard === undefined) return;
         const result = await pasteClipboardToDevice(
           () => navigator.clipboard.readText(),
-          (text) => sendText(room, text),
-          () => sessionIdRef.current === requestSessionId,
+          (text) =>
+            manualInputAuthorityCheckRef.current(
+              requestSessionId,
+              requestRoom,
+              requestAuthorityEpoch,
+            )
+              ? sendText(requestRoom, text)
+              : Promise.resolve(),
+          () =>
+            manualInputAuthorityCheckRef.current(
+              requestSessionId,
+              requestRoom,
+              requestAuthorityEpoch,
+            ),
           MAX_DEVICE_TEXT_BYTES,
         );
         if (result === 'ok') {
@@ -3672,7 +3799,7 @@ export function SimulatorWindow(): JSX.Element {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [info, room, showNotice]);
+  }, [info, room, sessionId, manualInputControl.epoch, showNotice]);
 
   // Escape collapses the open pane back to the always-docked rail (the drawer is a
   // docked side panel, NOT an overlay — so an outside-pointer-down must NOT close
@@ -4069,6 +4196,7 @@ export function SimulatorWindow(): JSX.Element {
     switchAffordanceOwnerRef.current = null;
     setSwitchingTabId(null);
   }, []);
+  clearManualAuthorityDeferredWorkRef.current = clearAllActivationRetries;
   useEffect(() => () => clearAllActivationRetries(), [clearAllActivationRetries]);
   // SINGLE writer of a tab's stored url/title (live-state accuracy refactor). Applies
   // a box-sourced page_state to ONE tab: the frame's tabId when present (forward-
@@ -4095,7 +4223,15 @@ export function SimulatorWindow(): JSX.Element {
       // clears the spinner before the box actually switches). Data-channel + ack paths
       // are always authoritative.
       isAuthoritative: boolean,
+      expectedAuthorityEpoch: number,
     ): void => {
+      // This writer also serves passive (AI/view-only) page-state rendering, so it
+      // must not require manual-input authority. It must, however, belong to the
+      // exact current control epoch. A React functional updater may run after the
+      // caller's effect was synchronously revoked; reject both before touching
+      // activation/chrome state and again inside the updater so an A→B→A poll can
+      // never seed a later valid tab-list publication with stale A data.
+      if (manualInputControlRef.current.epoch !== expectedAuthorityEpoch) return;
       const rawFrameTabId =
         typeof frame.tabId === 'string' && frame.tabId !== '' ? frame.tabId : null;
       // Regression guard — the box's per-tab page_state TAGGING went live (#63). The
@@ -4128,12 +4264,20 @@ export function SimulatorWindow(): JSX.Element {
       const activationOwner = activationOwnersRef.current.get(targetId);
       const deferredOwner = deferredActivationUntilReadyRef.current;
       const binding = roomBindingRef.current;
+      const authorityEpochIsCurrent =
+        manualInputControlRef.current.epoch === expectedAuthorityEpoch;
       const awaitsDeferredForeground =
+        authorityEpochIsCurrent &&
         deferredOwner?.tabId === targetId &&
+        deferredOwner.authorityEpoch === expectedAuthorityEpoch &&
         deferredOwner.sessionId === sessionIdRef.current &&
         binding?.sessionId === deferredOwner.sessionId &&
         binding.room === deferredOwner.room;
-      const awaitingForegroundAck = activationOwner?.settled === false || awaitsDeferredForeground;
+      const awaitingForegroundAck =
+        (authorityEpochIsCurrent &&
+          activationOwner?.authorityEpoch === expectedAuthorityEpoch &&
+          activationOwner.settled === false) ||
+        awaitsDeferredForeground;
       const terminalTargetFrame =
         frame.state === 'loaded' || frame.state === 'errored' || frame.state === 'stalled';
       if (isAuthoritative && terminalTargetFrame && awaitingForegroundAck) {
@@ -4142,7 +4286,12 @@ export function SimulatorWindow(): JSX.Element {
           deferredOwner.terminalTargetFrameSeen = true;
         }
       }
-      if (isAuthoritative && terminalTargetFrame && !awaitingForegroundAck) {
+      if (
+        authorityEpochIsCurrent &&
+        isAuthoritative &&
+        terminalTargetFrame &&
+        !awaitingForegroundAck
+      ) {
         resolveSwitchRef.current(targetId);
       }
       // #116 — the founder's "tab switch blinks the new page then REVERTS to the old
@@ -4153,6 +4302,7 @@ export function SimulatorWindow(): JSX.Element {
       const inSwitchGrace =
         frameTabId === null && Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
       setTabs((prev) => {
+        if (manualInputControlRef.current.epoch !== expectedAuthorityEpoch) return prev;
         // Suppress ONLY the provably-stale case: an in-grace tabId-less frame whose url
         // is ALREADY the stored url of a DIFFERENT (non-target) tab — that is the prior
         // tab's lagging poll/reconcile, not a fresh load. A genuine first-load or in-tab
@@ -4181,7 +4331,7 @@ export function SimulatorWindow(): JSX.Element {
           return { ...t, ...patch };
         });
         if (!changed) return prev;
-        emitTabListRef.current(next, activeTabIdRef.current);
+        emitTabListRef.current(next, activeTabIdRef.current, expectedAuthorityEpoch);
         return next;
       });
     },
@@ -4189,10 +4339,12 @@ export function SimulatorWindow(): JSX.Element {
   );
   // emitTabList is defined later (after the tab callbacks); a ref lets the
   // box-sourced writer above publish without a forward-reference cycle.
-  const emitTabListRef = useRef<(tabs: SimTab[], activeId: string) => void>(() => {});
+  const emitTabListRef = useRef<
+    (tabs: SimTab[], activeId: string, expectedAuthorityEpoch: number) => void
+  >(() => {});
   // reconcilePageState is defined later too; a ref lets the data-channel onData handler
   // (the activateTabResult path) trigger a one-shot reconcile without a forward cycle.
-  const reconcilePageStateRef = useRef<() => void>(() => {});
+  const reconcilePageStateRef = useRef<(expectedAuthorityEpoch: number) => void>(() => {});
   const cancelLoadWatchdog = (): void => {
     if (loadWatchdogRef.current.timer !== null) {
       window.clearTimeout(loadWatchdogRef.current.timer);
@@ -4286,11 +4438,13 @@ export function SimulatorWindow(): JSX.Element {
     if (room === null) return;
     const listenerRoom = room;
     const listenerSessionId = sessionId;
+    const listenerAuthorityEpoch = manualInputControl.epoch;
     const unsubscribe = subscribeInputReceiptIssues(room, (issue) => {
       if (
         sessionIdRef.current !== listenerSessionId ||
         roomBindingRef.current?.sessionId !== listenerSessionId ||
-        roomBindingRef.current.room !== listenerRoom
+        roomBindingRef.current.room !== listenerRoom ||
+        manualInputControlRef.current.epoch !== listenerAuthorityEpoch
       ) {
         return;
       }
@@ -4301,16 +4455,18 @@ export function SimulatorWindow(): JSX.Element {
       unsubscribe();
       resetInputReceipts(room);
     };
-  }, [room, sessionId]);
+  }, [room, sessionId, manualInputControl.epoch]);
   useEffect(() => {
     if (room === null) return;
     const listenerRoom = room;
     const listenerSessionId = sessionId;
+    const listenerAuthorityEpoch = manualInputControl.epoch;
     const onData = (payload: Uint8Array): void => {
       if (
         sessionIdRef.current !== listenerSessionId ||
         roomBindingRef.current?.sessionId !== listenerSessionId ||
-        roomBindingRef.current.room !== listenerRoom
+        roomBindingRef.current.room !== listenerRoom ||
+        manualInputControlRef.current.epoch !== listenerAuthorityEpoch
       ) {
         return;
       }
@@ -4385,7 +4541,12 @@ export function SimulatorWindow(): JSX.Element {
             activationOwnersRef.current.get(pending.tabId) === pending &&
             pending.sessionId === sessionIdRef.current &&
             roomBindingRef.current?.sessionId === pending.sessionId &&
-            roomBindingRef.current.room === pending.room;
+            roomBindingRef.current.room === pending.room &&
+            manualInputAuthorityCheckRef.current(
+              pending.sessionId,
+              pending.room,
+              pending.authorityEpoch,
+            );
           if (!ownsCurrentActivation) return;
           const failed = msg.ok === false || typeof msg.error === 'string';
           // An older retry may fail while a newer sibling is already in flight. Keep
@@ -4434,7 +4595,7 @@ export function SimulatorWindow(): JSX.Element {
             // (correlated activateTab, like a normal switch). Look the prev tab up from
             // the live ref (onData closes over a stale `tabs`); guard on it still
             // existing + a connected room.
-            emitTabListRef.current(tabsRef.current, fallbackTab.id);
+            emitTabListRef.current(tabsRef.current, fallbackTab.id, pending.authorityEpoch);
             if (fallbackTab.id !== pending.tabId && room !== null) {
               const activateUrl = isBlankTabUrl(fallbackTab.url) ? NEW_TAB_URL : fallbackTab.url;
               sendActivateAttemptRef.current({
@@ -4442,6 +4603,7 @@ export function SimulatorWindow(): JSX.Element {
                 prevTabId: pending.tabId,
                 url: activateUrl,
                 scrollY: fallbackTab.scrollY,
+                authorityEpoch: pending.authorityEpoch,
               });
             }
             showNotice('Could not switch tab', 3000);
@@ -4451,7 +4613,7 @@ export function SimulatorWindow(): JSX.Element {
             // even if the data-channel page_state for the switched page dropped (the
             // immediate pull in onActivateTab can race ahead of the box settling; this
             // is the catch-up). Routes by tabId when the box stamps it, else active.
-            reconcilePageStateRef.current();
+            reconcilePageStateRef.current(pending.authorityEpoch);
           }
           return;
         }
@@ -4553,8 +4715,11 @@ export function SimulatorWindow(): JSX.Element {
         // because that focus belongs to the agent rather than the founder.
         if (
           typeof msg.inputFocused === 'boolean' &&
-          isHumanControlMode(controlModeRef.current) &&
-          manualInputAvailableRef.current !== false
+          manualInputAuthorityCheckRef.current(
+            listenerSessionId,
+            listenerRoom,
+            listenerAuthorityEpoch,
+          )
         ) {
           const rawFocusTabId =
             typeof msg.tabId === 'string' && msg.tabId !== '' ? msg.tabId : null;
@@ -4596,6 +4761,7 @@ export function SimulatorWindow(): JSX.Element {
           writeTabPageState(
             { tabId: msg.tabId, url: msg.url, title: msg.title, state: msg.state },
             true,
+            listenerAuthorityEpoch,
           );
         }
         // #116 warm-tabs pre-flight — the page chrome below (freeze badge / error
@@ -4767,6 +4933,7 @@ export function SimulatorWindow(): JSX.Element {
   }, [
     room,
     sessionId,
+    manualInputControl.epoch,
     writeTabPageState,
     applyStalledState,
     showNotice,
@@ -4783,7 +4950,7 @@ export function SimulatorWindow(): JSX.Element {
     resetInputReceipts(room);
     setControlReceiptIssue(null);
     setControlUnreachable(false);
-  }, [room, activeTabId, connState]);
+  }, [room, activeTabId, connState, manualInputControl.epoch]);
 
   // Live URL via the page-state API (A3 W2730): the box reports pageState over the
   // CONTROL PLANE (→ server sessionPageStateStore), NOT the LiveKit data channel —
@@ -4802,10 +4969,21 @@ export function SimulatorWindow(): JSX.Element {
     // the chrome in its last live state.
     if (sessionId === '' || room === null || !browserMode || sessionEnded !== null) return;
     let cancelled = false;
+    const pollSessionId = sessionId;
+    const pollRoom = room;
+    const pollAuthorityEpoch = manualInputControl.epoch;
     const tick = (): void => {
       void getAgentSessionPageState(sessionId, controlAuth)
         .then((ps) => {
-          if (cancelled || ps === null) return;
+          if (
+            cancelled ||
+            ps === null ||
+            pollAuthorityEpoch !== manualInputControlRef.current.epoch ||
+            pollSessionId !== sessionIdRef.current ||
+            roomBindingRef.current?.sessionId !== pollSessionId ||
+            roomBindingRef.current.room !== pollRoom
+          )
+            return;
           // Box-sourced url/title → tab storage (the box is the only writer). When
           // the poll frame carries a tabId, route precisely — no grace needed (it
           // lands on the right tab). When an older/self-hosted node omits it, the poll
@@ -4838,6 +5016,7 @@ export function SimulatorWindow(): JSX.Element {
               state: ps.state,
             },
             hasTabId || !inSwitchGrace,
+            pollAuthorityEpoch,
           );
           // #116 warm-tabs pre-flight (mirrors the data-channel path): the window-global
           // page chrome below (freeze badge / error overlay / load-stall advisory / loading
@@ -4966,6 +5145,7 @@ export function SimulatorWindow(): JSX.Element {
     writeTabPageState,
     applyStalledState,
     sessionEnded,
+    manualInputControl.epoch,
   ]);
 
   // P1a — TERMINAL session-end poll. The freeze cluster's auto-reconnect/resubscribe/
@@ -4988,22 +5168,33 @@ export function SimulatorWindow(): JSX.Element {
     let cancelled = false;
     const reqSessionId = sessionId;
     const tick = (): void => {
-      const reqControlEpoch = controlRequestIdRef.current;
+      const reqControlEpoch = ++controlReadGenerationRef.current;
       void getAgentSession(reqSessionId, controlAuth, {
         heartbeatClientId: clientIdRef.current,
       })
         .then((s) => {
           // Drop a result that resolved after an in-place session swap.
-          if (cancelled || reqSessionId !== sessionIdRef.current) return;
+          if (
+            cancelled ||
+            reqSessionId !== sessionIdRef.current ||
+            reqControlEpoch !== controlReadGenerationRef.current
+          )
+            return;
           // One-way: only LATCH terminal — never clear it (a non-terminal read after a
           // real end can't happen for the same id, and we must not let a stale/racing
           // poll un-end a closed session). A fresh session swap resets sessionEnded.
           if (s.terminal) {
+            updateManualInputControl({
+              sessionId: reqSessionId,
+              mode: s.mode,
+              modeConfirmed: true,
+              lifecycleStatus: s.status,
+              lifecycleConfirmed: true,
+              lifecycleTerminal: s.terminal,
+              capabilityReport: s.capabilityReport ?? null,
+            });
             setSessionEnded({ reason: s.errorEvent?.code ?? s.closedReason });
             return;
-          }
-          if (s.capabilityReport !== undefined) {
-            setSessionCapabilityReport(s.capabilityReport);
           }
           // Finding #11 — this same 5s round-trip already carries the live pair state
           // (s.pairKind), but it was thrown away. In pair mode the AGENT autonomously
@@ -5014,16 +5205,37 @@ export function SimulatorWindow(): JSX.Element {
           // onSetMode/onTakeover/onHandback). Zero extra network cost.
           if (
             controlActionRef.current === null &&
-            reqControlEpoch === controlRequestIdRef.current
+            reqControlEpoch === controlReadGenerationRef.current
           ) {
+            updateManualInputControl({
+              sessionId: reqSessionId,
+              mode: s.mode,
+              modeConfirmed: true,
+              lifecycleStatus: s.status,
+              lifecycleConfirmed: true,
+              lifecycleTerminal: s.terminal,
+              // Omitted/unknown capability is intentionally non-interactive.
+              capabilityReport: s.capabilityReport ?? null,
+            });
             setPairKind(s.pairKind);
-            setControlMode(s.mode);
-            setControlModeConfirmed(true);
+          } else {
+            updateManualInputControl({
+              sessionId: reqSessionId,
+              lifecycleStatus: s.status,
+              lifecycleConfirmed: true,
+              lifecycleTerminal: s.terminal,
+              capabilityReport: s.capabilityReport ?? null,
+            });
           }
         })
-        .catch((err: unknown) => {
+        .catch(() => {
           // Drop a result that resolved after an in-place session swap (mirrors .then).
-          if (cancelled || reqSessionId !== sessionIdRef.current) return;
+          if (
+            cancelled ||
+            reqSessionId !== sessionIdRef.current ||
+            reqControlEpoch !== controlReadGenerationRef.current
+          )
+            return;
           // An expired/invalid per-session gui_control_key (24h TTL, standalone
           // Simulator app) 401/403s EVERY poll, so this terminal session-end poll can
           // never read status='closed' again — `sessionEnded` silently stops latching,
@@ -5034,8 +5246,14 @@ export function SimulatorWindow(): JSX.Element {
           // case) so the operator knows live-status detection is degraded and to reopen
           // the session. Transient/network/5xx errors stay silent (retry next tick) — a
           // transport blip must NOT read as ended.
-          const status = err instanceof AgentSessionControlError ? err.status : 0;
-          if (status === 401 || status === 403) setControlUnreachable(true);
+          updateManualInputControl({
+            sessionId: reqSessionId,
+            modeConfirmed: false,
+            lifecycleConfirmed: false,
+            lifecycleTerminal: false,
+            capabilityReport: null,
+          });
+          setControlUnreachable(true);
         });
     };
     tick();
@@ -5044,7 +5262,7 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [sessionId, controlAuth, sessionEnded]);
+  }, [sessionId, controlAuth, sessionEnded, updateManualInputControl]);
 
   // Founder #48 — live cookie-jar view. Polls GET /v1/agent-sessions/:id/cookies
   // ONLY while the session-info / diagnostics panel is open (no background load on
@@ -5448,12 +5666,14 @@ export function SimulatorWindow(): JSX.Element {
     // actually receives on the dispatched archetype.
     return pointerToViewport(e.nativeEvent, video, deviceLogicalRef.current) === null;
   };
+  const ownsRenderedManualInput = (): boolean =>
+    manualInputAuthorityCheckRef.current(sessionId, room, manualInputControl.epoch);
   const showTap = (e: ReactPointerEvent<HTMLDivElement>): void => {
     // No tap feedback unless human input is positively owned. Input capture is off
     // while ownership is unknown/in AI mode/device-disabled, so a ripple there would
     // falsely signal "it worked" on a silent no-op (the same confusion the off-surface
     // guard below prevents).
-    if (!humanInputEnabled) return;
+    if (!humanInputEnabled || !ownsRenderedManualInput()) return;
     const host = screenHostRef.current;
     if (host === null) return;
     const r = host.getBoundingClientRect();
@@ -5505,6 +5725,7 @@ export function SimulatorWindow(): JSX.Element {
     touchCursorRef.current?.setPressed(pressed);
   };
   const moveTouchPoint = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    if (!ownsRenderedManualInput()) return;
     const host = screenHostRef.current;
     if (host === null) return;
     const r = host.getBoundingClientRect();
@@ -5533,6 +5754,7 @@ export function SimulatorWindow(): JSX.Element {
     positionDot(x, y); // direct DOM write — no re-render on a continuous move
   };
   const hideTouchPoint = (): void => {
+    if (!ownsRenderedManualInput()) return;
     touchCursorRef.current?.hide();
     setDotPressed(false);
   };
@@ -5540,17 +5762,26 @@ export function SimulatorWindow(): JSX.Element {
   // takeover/handback + a "tell the agent" composer in the expandable panel.
   // SimulatorWindow has no SDK client → lib/agent-session-control raw-fetches
   // (reads {apiKey,baseUrl} via loadSettings). null mode = not loaded yet.
-  const [controlMode, setControlMode] = useState<SessionMode | null>(null);
-  // The harness is the authority on whether the fork can currently accept
-  // human input and whether capture/egress is healthy. Older servers omit this
-  // report, which deliberately preserves the historical permissive behaviour.
-  const [sessionCapabilityReport, setSessionCapabilityReport] =
-    useState<AgentSessionCapabilityReport | null>(null);
+  const controlMode = manualInputControl.mode;
+  const controlModeConfirmed = manualInputControl.modeConfirmed;
+  const sessionCapabilityReport = manualInputControl.capabilityReport;
   const manualInputAvailable = sessionCapabilityReport?.manual_input_available;
   const streamingHealth = sessionCapabilityReport?.streaming_state;
   const egressHealth = sessionCapabilityReport?.egress_state;
   const streamingUnavailable = streamingHealth === 'blank' || streamingHealth === 'failed';
-  const humanInputEnabled = isHumanControlMode(controlMode) && manualInputAvailable !== false;
+  const humanInputEnabled =
+    manualInputControl.sessionId === sessionId &&
+    isHumanControlMode(controlMode) &&
+    controlModeConfirmed &&
+    manualInputControl.lifecycleConfirmed &&
+    !manualInputControl.lifecycleTerminal &&
+    manualInputControl.lifecycleStatus === 'active' &&
+    manualInputAvailable === true &&
+    !manualInputControl.mutationPending &&
+    sessionEnded === null &&
+    room !== null &&
+    connState === 'connected' &&
+    publisherState === 'publishing';
   useEffect(() => {
     if (humanInputEnabled) return;
     touchCursorRef.current?.hide();
@@ -5559,30 +5790,18 @@ export function SimulatorWindow(): JSX.Element {
     keyboardOverlayRef.current = false;
     setKeyboardVisible(false);
   }, [humanInputEnabled]);
-  // #6 — a fresh-reads mirror for the long-lived onData effect (deps [room, ...], so
-  // it does NOT re-subscribe on every controlMode change): without this the
-  // inputFocused→keyboard handler would close over a STALE mode and could pop the
-  // keyboard for the agent's own typing after a manual↔AI switch mid-session.
-  const controlModeRef = useRef(controlMode);
-  controlModeRef.current = controlMode;
-  const manualInputAvailableRef = useRef(manualInputAvailable);
-  manualInputAvailableRef.current = manualInputAvailable;
-  // Distinguishes a CONFIRMED mode (a successful getAgentSession round-trip) from
-  // one DEFAULTED to 'manual' because the control HTTP API was unreachable (e.g.
-  // the separate Simulator app reopened without its per-session control key). The
-  // mode-aware close handler ends a session ONLY when the mode is a confirmed
-  // 'manual' — an unconfirmed/defaulted 'manual' falls through to the non-manual
-  // (hide-and-leave-running) path, so closing a window that COULDN'T verify it's
-  // human-only never silently kills an agent session the founder meant to keep
-  // running (audit; matches the documented "never silently kill a session we
-  // can't confirm is human-only" intent). Reset to false on every session swap.
-  const [controlModeConfirmed, setControlModeConfirmed] = useState(false);
+  // A failed control read now revokes mode authority to null. The mode-aware close
+  // handler ends a session ONLY when a successful read or explicit mutation proves
+  // confirmed manual ownership; unknown/unconfirmed state takes the non-manual
+  // hide-and-leave-running path so an unreachable control plane cannot silently
+  // terminate an agent session. Reset to false on every session swap.
   const [pairKind, setPairKind] = useState<string | null>(null);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
   const [controlAction, setControlAction] = useState<OwnedSessionControlAction | null>(null);
   const controlActionRef = useRef<OwnedSessionControlAction | null>(null);
   const controlRequestIdRef = useRef(0);
+  const controlReadGenerationRef = useRef(0);
   const controlBusy = controlAction !== null;
   const [composerText, setComposerText] = useState('');
   const [endArmed, setEndArmed] = useState(false);
@@ -5601,6 +5820,8 @@ export function SimulatorWindow(): JSX.Element {
       requestId: ++controlRequestIdRef.current,
     };
     controlActionRef.current = owned;
+    controlReadGenerationRef.current += 1;
+    updateManualInputControl({ mutationPending: true });
     setControlAction(owned);
     return owned;
   };
@@ -5619,6 +5840,8 @@ export function SimulatorWindow(): JSX.Element {
     // Otherwise a slow pre-confirmation snapshot could arrive just after the
     // spinner clears and overwrite the newly confirmed mode/pair ownership.
     controlRequestIdRef.current += 1;
+    controlReadGenerationRef.current += 1;
+    updateManualInputControl({ mutationPending: false });
     setControlAction(null);
   };
   // CRITICAL session-switch reset. The relaunch listener swaps sessionId IN PLACE
@@ -5641,12 +5864,23 @@ export function SimulatorWindow(): JSX.Element {
       void stopRecording(activeRecIdRef.current).catch(() => {}); // never escalate to the fatal overlay
       activeRecIdRef.current = null;
     }
-    setControlMode(null);
-    setSessionCapabilityReport(null);
-    setControlModeConfirmed(false);
-    setPairKind(null);
     controlActionRef.current = null;
     controlRequestIdRef.current += 1;
+    controlReadGenerationRef.current += 1;
+    updateManualInputControl(
+      {
+        sessionId,
+        mode: null,
+        modeConfirmed: false,
+        lifecycleStatus: null,
+        lifecycleConfirmed: false,
+        lifecycleTerminal: false,
+        capabilityReport: null,
+        mutationPending: false,
+      },
+      true,
+    );
+    setPairKind(null);
     setControlAction(null);
     setComposerText('');
     if (endArmTimerRef.current !== null) window.clearTimeout(endArmTimerRef.current);
@@ -5711,7 +5945,7 @@ export function SimulatorWindow(): JSX.Element {
     // Drop every logical activation owner, sibling request id, retry timer and
     // affordance. None may survive into the replacement session/Room.
     clearAllActivationRetries();
-  }, [sessionId, stopRecording, clearNotice, clearAllActivationRetries]);
+  }, [sessionId, stopRecording, clearNotice, clearAllActivationRetries, updateManualInputControl]);
   // Control-channel load state for the panel caption (founder 2026-06-18: the
   // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
   // the error was swallowed). null = no error; a classified message = the last
@@ -5757,7 +5991,7 @@ export function SimulatorWindow(): JSX.Element {
         if (current?.sessionId !== ownerSessionId || current.room !== ownerRoom) {
           return;
         }
-        clearAllActivationRetries();
+        updateManualInputControl({}, true);
         roomBindingRef.current = null;
         setRoomBinding(null);
         connStateRef.current = 'idle';
@@ -5773,7 +6007,7 @@ export function SimulatorWindow(): JSX.Element {
         setControlUnreachable(false);
         return;
       }
-      clearAllActivationRetries();
+      updateManualInputControl({}, true);
       const next: SimulatorRoomBinding = { sessionId: ownerSessionId, room: nextRoom };
       roomBindingRef.current = next;
       setRoomBinding(next);
@@ -5785,7 +6019,7 @@ export function SimulatorWindow(): JSX.Element {
       setInputCongested(false);
       setControlUnreachable(false);
     },
-    [clearAllActivationRetries],
+    [updateManualInputControl],
   );
   const ownsPanelRoom = useCallback((ownerSessionId: string, ownerRoom: Room): boolean => {
     const binding = roomBindingRef.current;
@@ -5796,39 +6030,69 @@ export function SimulatorWindow(): JSX.Element {
       binding.room === ownerRoom
     );
   }, []);
+  const ownsManualInputAuthority = useCallback(
+    (expectedSessionId: string, expectedRoom: Room | null, expectedEpoch: number): boolean => {
+      const binding = roomBindingRef.current;
+      const authority = manualInputControlRef.current;
+      return (
+        expectedSessionId !== '' &&
+        expectedRoom !== null &&
+        expectedSessionId === sessionIdRef.current &&
+        binding?.sessionId === expectedSessionId &&
+        binding.room === expectedRoom &&
+        authority.sessionId === expectedSessionId &&
+        authority.epoch === expectedEpoch &&
+        authority.mode === 'manual' &&
+        authority.modeConfirmed &&
+        authority.lifecycleConfirmed &&
+        !authority.lifecycleTerminal &&
+        authority.lifecycleStatus === 'active' &&
+        authority.capabilityReport?.manual_input_available === true &&
+        !authority.mutationPending &&
+        controlActionRef.current === null &&
+        sessionEndedRef.current === null &&
+        connStateRef.current === 'connected' &&
+        publisherStateRef.current === 'publishing'
+      );
+    },
+    [],
+  );
+  manualInputAuthorityCheckRef.current = ownsManualInputAuthority;
+  const canSendPanelInput = useCallback(
+    (ownerRoom: Room, authorityEpoch: number): boolean =>
+      ownsManualInputAuthority(sessionId, ownerRoom, authorityEpoch),
+    [ownsManualInputAuthority, sessionId],
+  );
   // Navigation (address bar / back-forward / reload) is enabled ONLY once the device is
   // actually live — the LiveKit room reports 'connected' AND a video track is publishing
   // — not the instant the Room object exists (room !== null fired during "connecting…",
   // so a URL typed then trickled a fake loading bar and silently did nothing). Mirrors
   // the box readiness the navigate actually needs.
-  const canNavigate =
-    room !== null &&
-    connState === 'connected' &&
-    publisherState === 'publishing' &&
-    manualInputAvailable !== false;
+  const canNavigate = ownsManualInputAuthority(sessionId, room, manualInputControl.epoch);
   const canManipulateTabs = canNavigate && !inputCongested;
   // Event handlers must re-check the live transport owner at invocation time. React
   // can retain a rendered handler for one turn after onRoom synchronously replaces or
   // clears the binding; captured `room`/readiness values would otherwise admit one
   // local tab mutation (and possibly one publish) against the retired Room.
   const currentTabTransport = useCallback(
-    (expectedSessionId: string, expectedRoom: Room | null): SimulatorRoomBinding | null => {
+    (
+      expectedSessionId: string,
+      expectedRoom: Room | null,
+      expectedEpoch: number,
+    ): SimulatorRoomBinding | null => {
       const binding = roomBindingRef.current;
       if (
+        !ownsManualInputAuthority(expectedSessionId, expectedRoom, expectedEpoch) ||
         expectedRoom === null ||
         binding === null ||
         binding.sessionId !== expectedSessionId ||
-        binding.room !== expectedRoom ||
-        binding.sessionId !== sessionIdRef.current ||
-        connStateRef.current !== 'connected' ||
-        publisherStateRef.current !== 'publishing' ||
-        manualInputAvailableRef.current === false
+        binding.room !== expectedRoom
       ) {
         return null;
       }
       return binding;
     },
-    [],
+    [ownsManualInputAuthority],
   );
   // Keep the current session + action ownership readable from late async callbacks so a
   // getAgentSession result can't apply to the WRONG session (in-place relaunch
@@ -5838,7 +6102,7 @@ export function SimulatorWindow(): JSX.Element {
   const refreshControl = useCallback((): void => {
     if (sessionId === '') return;
     const reqSessionId = sessionId; // epoch: the session this fetch is for
-    const reqControlEpoch = controlRequestIdRef.current;
+    const reqControlEpoch = ++controlReadGenerationRef.current;
     setControlError(null); // clear any prior failure while this attempt is in flight
     void getAgentSession(sessionId, controlAuth)
       .then((s) => {
@@ -5849,18 +6113,20 @@ export function SimulatorWindow(): JSX.Element {
         if (
           reqSessionId !== sessionIdRef.current ||
           controlActionRef.current !== null ||
-          reqControlEpoch !== controlRequestIdRef.current
+          reqControlEpoch !== controlReadGenerationRef.current
         )
           return;
-        setControlMode(s.mode);
-        // The mode was actually fetched from the server — CONFIRMED. Only a
-        // confirmed 'manual' lets window-close end the session (see the close
-        // handler); a defaulted-to-manual (control unreachable) must not.
-        setControlModeConfirmed(true);
+        updateManualInputControl({
+          sessionId: reqSessionId,
+          mode: s.mode,
+          modeConfirmed: true,
+          lifecycleStatus: s.status,
+          lifecycleConfirmed: true,
+          lifecycleTerminal: s.terminal,
+          // Older/partial responses do not prove the fork accepts manual input.
+          capabilityReport: s.capabilityReport ?? null,
+        });
         setPairKind(s.pairKind);
-        if (s.capabilityReport !== undefined) {
-          setSessionCapabilityReport(s.capabilityReport);
-        }
         // P1a — the SAME round-trip carries lifecycle liveness. A terminal status
         // (the worker browser closed / the session was destroyed/errored/reaped)
         // latches the "Session ended" state so the reconnect/freeze machinery
@@ -5872,21 +6138,27 @@ export function SimulatorWindow(): JSX.Element {
         setControlUnreachable(false);
       })
       .catch((err: unknown) => {
-        if (reqSessionId !== sessionIdRef.current) return;
-        // The control HTTP API is unreachable (e.g. the separate Simulator app's
-        // per-session control key didn't reach this window). Manual control still
-        // works over the LiveKit data channel, so DEFAULT to 'manual' + a soft note
-        // rather than a blocking "controls unavailable — Retry" error (founder
-        // 2026-06-23: "should just be on manual unless changed" + "I can control
-        // manually just fine"). An explicit mode CHANGE that fails still surfaces
-        // its own error via noticeControlError. The root key-handoff fix is tracked
-        // separately; this keeps the panel usable meanwhile.
-        setControlMode((prev) => prev ?? 'manual');
-        setControlError(null);
-        // Log for diagnostics without scaring the operator.
-        console.warn('[simulator] control fetch failed; defaulting to manual:', err);
+        if (
+          reqSessionId !== sessionIdRef.current ||
+          reqControlEpoch !== controlReadGenerationRef.current
+        )
+          return;
+        // Authority is unknown after a failed lifecycle/control read. Stay view-only;
+        // never reinterpret an unreachable control plane as manual ownership.
+        updateManualInputControl({
+          sessionId: reqSessionId,
+          mode: null,
+          modeConfirmed: false,
+          lifecycleStatus: null,
+          lifecycleConfirmed: false,
+          lifecycleTerminal: false,
+          capabilityReport: null,
+        });
+        setControlError(controlErrorMessage(err));
+        setControlUnreachable(true);
+        console.warn('[simulator] control fetch failed; manual input disabled:', err);
       });
-  }, [sessionId, controlAuth]);
+  }, [sessionId, controlAuth, updateManualInputControl]);
   // Seed on mount + re-read whenever a pane opens (cheap, no idle polling). Keys
   // off the open/closed boolean (not the whole activePane string) so switching
   // BETWEEN open panes doesn't needlessly re-fetch the control state.
@@ -5917,10 +6189,9 @@ export function SimulatorWindow(): JSX.Element {
   // ai/pair (agent-driven) modes the agent keeps working in the background, so
   // closing just hides the window — the session keeps running and can be
   // reopened (the profile-row "Live view"). Unknown/null mode (controls never
-  // loaded) AND a manual that was only DEFAULTED because the control API was
-  // unreachable (controlModeConfirmed === false) are treated as NON-manual: never
-  // silently kill a session we can't CONFIRM is human-only. Only a confirmed
-  // manual (a successful getAgentSession / explicit mode set) ends on close.
+  // loaded or a failed read revoked authority) is treated as NON-manual: never
+  // silently kill a session we can't CONFIRM is human-only. Only a confirmed manual
+  // (a successful getAgentSession / explicit mode set) ends on close.
   // Covers the toolbar close button (window.close fires this) AND the OS close.
   // The MANUAL path preventDefaults + races a 2s timeout so a slow/failed end can
   // never wedge the window open; destroy() then closes without re-firing.
@@ -5941,25 +6212,18 @@ export function SimulatorWindow(): JSX.Element {
         if (closing) return;
         closing = true;
         // CONFIRMED manual → end the session before closing; agent-driven
-        // (ai/pair), unknown, OR a manual that was only DEFAULTED because the
-        // control API was unreachable → close immediately and leave the session
-        // running. Requiring controlModeConfirmed here is the safety guard: a
+        // (ai/pair) or unknown/unconfirmed state → close immediately and leave the
+        // session running. Requiring controlModeConfirmed here is the safety guard: a
         // window that couldn't verify the mode (reopened without its control key)
         // must NOT end what might be a live agent session on close (audit).
-        if (controlMode === 'manual' && controlModeConfirmed) {
-          event.preventDefault();
-          try {
-            await Promise.race([
-              endAgentSession(sessionId, controlAuth),
-              new Promise((resolve) => setTimeout(resolve, 2000)),
-            ]);
-          } catch {
-            // Best-effort — the window MUST close even if the end call fails
-            // (rejects, e.g. session already gone) or hangs (the 2s race wins).
-          }
+        await handleSimulatorCloseRequest({
+          event,
+          controlMode,
+          controlModeConfirmed,
+          endSession: () => endAgentSession(sessionId, controlAuth),
           // destroy() closes without re-firing onCloseRequested.
-          await win.destroy();
-        }
+          destroyWindow: () => win.destroy(),
+        });
         // Non-manual: don't preventDefault — let the default close proceed; the
         // agent session keeps running in the background.
       });
@@ -5991,23 +6255,45 @@ export function SimulatorWindow(): JSX.Element {
     if (sessionId === '' || target === controlMode) return;
     const request = beginControlAction({ kind: 'mode', target });
     if (request === null) return;
-    const prev = controlMode;
-    setControlMode(target); // optimistic
+    const prev = manualInputControlRef.current;
+    updateManualInputControl({ mode: target, modeConfirmed: false, mutationPending: true });
     void setSessionMode(request.sessionId, target, controlAuth)
       .then((s) => {
         if (!ownsControlAction(request)) return;
-        setControlMode(s.mode);
-        // The founder explicitly set the mode and the server confirmed it — a
-        // confirmed mode (so a deliberate switch to manual lets close end it).
-        setControlModeConfirmed(true);
+        updateManualInputControl({
+          sessionId: request.sessionId,
+          mode: s.mode,
+          modeConfirmed: true,
+          lifecycleStatus: s.status,
+          lifecycleConfirmed: true,
+          lifecycleTerminal: s.terminal,
+          capabilityReport: s.capabilityReport ?? null,
+          mutationPending: false,
+        });
         setPairKind(s.pairKind);
       })
       .catch((err: unknown) => {
         if (!ownsControlAction(request)) return;
-        setControlMode(prev); // revert on rejection
+        // A rejected optimistic mutation does not prove the old snapshot is still
+        // current. Keep its display value but require a fresh authoritative read
+        // before any manual producer can re-enable.
+        updateManualInputControl({
+          sessionId: request.sessionId,
+          mode: prev.mode,
+          modeConfirmed: false,
+          lifecycleStatus: null,
+          lifecycleConfirmed: false,
+          lifecycleTerminal: false,
+          capabilityReport: null,
+          mutationPending: false,
+        });
         noticeControlError(err, request.sessionId);
       })
-      .finally(() => finishControlAction(request));
+      .finally(() => {
+        const shouldRefresh = ownsControlAction(request);
+        finishControlAction(request);
+        if (shouldRefresh) refreshControl();
+      });
   };
   const onTakeover = (): void => {
     const request = beginControlAction({ kind: 'takeover' });
@@ -6138,15 +6424,29 @@ export function SimulatorWindow(): JSX.Element {
   // window (the 2026-06-18 blank-black-box incident). A dropped tab-list push
   // during a reconnect is harmless — the next new/close/switch re-syncs the set.
   const emitTabList = useCallback(
-    (nextTabs: SimTab[], nextActiveId: string): void => {
-      if (room === null || sessionId === '') return;
-      void sendTabListUpdate(room, {
-        sessionId,
-        tabs: nextTabs.map((t) => ({ id: t.id, url: t.url, scrollY: t.scrollY, title: t.title })),
-        activeTabId: nextActiveId,
-      }).catch(() => undefined);
+    (nextTabs: SimTab[], nextActiveId: string, authorityEpoch: number): void => {
+      if (
+        room === null ||
+        sessionId === '' ||
+        !ownsManualInputAuthority(sessionId, room, authorityEpoch)
+      )
+        return;
+      void sendTabListUpdate(
+        room,
+        {
+          sessionId,
+          tabs: nextTabs.map((t) => ({
+            id: t.id,
+            url: t.url,
+            scrollY: t.scrollY,
+            title: t.title,
+          })),
+          activeTabId: nextActiveId,
+        },
+        () => ownsManualInputAuthority(sessionId, room, authorityEpoch),
+      ).catch(() => undefined);
     },
-    [room, sessionId],
+    [room, sessionId, ownsManualInputAuthority],
   );
   // Keep the forward-reference ref (consumed by writeTabPageState, declared above
   // the tab callbacks) pointing at the latest emitTabList so a box-sourced page_state
@@ -6165,45 +6465,52 @@ export function SimulatorWindow(): JSX.Element {
   // frame routes precisely and is never suppressed. The HTTP round-trip resolves on a
   // macrotask AFTER the switch's activeTabIdRef commit, so the grace check must run at
   // RESOLVE time, not call time. Best-effort + guarded.
-  const reconcilePageState = useCallback(async (): Promise<void> => {
-    if (sessionId === '') return;
-    // Capture the session at call time so a ds-session relaunch that swaps the live
-    // session mid-round-trip can't route this (tabId-less) frame onto the new session's
-    // seed tab — the new address bar would briefly show the prior session's url. Re-check
-    // after the await, matching the sessionIdRef guard in the terminal-end poll +
-    // upload/download handlers (audit 2026-07-08).
-    const reqSessionId = sessionId;
-    try {
-      const ps = await getAgentSessionPageState(sessionId, controlAuth);
-      if (reqSessionId !== sessionIdRef.current) return; // session swapped — drop stale page_state
-      if (ps === null) return;
-      const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
-      const inGrace =
-        Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
-        Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
-      // #139-followup — suppress BOTH url + title for a tabId-less in-grace frame
-      // (it carries the PRIOR tab's page); mirrors the poll path so a wrong title
-      // can't leak onto the just-switched tab.
-      const suppress = !hasTabId && inGrace;
-      // Same switch-resolution gating as the poll: a tabId-less reconcile result that
-      // lands inside the switch grace window reflects the PRIOR page and must NOT
-      // resolve the switch (the box hasn't re-reported the switched page yet).
-      const inSwitchGrace = Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
-      writeTabPageState(
-        {
-          tabId: ps.tabId,
-          url: suppress ? null : ps.url,
-          title: suppress ? null : ps.title,
-          state: ps.state,
-        },
-        hasTabId || !inSwitchGrace,
-      );
-    } catch {
-      /* best-effort reconcile — transient errors are non-fatal */
-    }
-  }, [sessionId, controlAuth, writeTabPageState]);
+  const reconcilePageState = useCallback(
+    async (expectedAuthorityEpoch: number): Promise<void> => {
+      if (sessionId === '' || !ownsManualInputAuthority(sessionId, room, expectedAuthorityEpoch))
+        return;
+      // Capture the session at call time so a ds-session relaunch that swaps the live
+      // session mid-round-trip can't route this (tabId-less) frame onto the new session's
+      // seed tab — the new address bar would briefly show the prior session's url. Re-check
+      // after the await, matching the sessionIdRef guard in the terminal-end poll +
+      // upload/download handlers (audit 2026-07-08).
+      const reqSessionId = sessionId;
+      try {
+        const ps = await getAgentSessionPageState(sessionId, controlAuth);
+        if (reqSessionId !== sessionIdRef.current) return; // session swapped — drop stale page_state
+        if (!ownsManualInputAuthority(reqSessionId, room, expectedAuthorityEpoch)) return;
+        if (ps === null) return;
+        const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
+        const inGrace =
+          Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
+          Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
+        // #139-followup — suppress BOTH url + title for a tabId-less in-grace frame
+        // (it carries the PRIOR tab's page); mirrors the poll path so a wrong title
+        // can't leak onto the just-switched tab.
+        const suppress = !hasTabId && inGrace;
+        // Same switch-resolution gating as the poll: a tabId-less reconcile result that
+        // lands inside the switch grace window reflects the PRIOR page and must NOT
+        // resolve the switch (the box hasn't re-reported the switched page yet).
+        const inSwitchGrace = Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
+        writeTabPageState(
+          {
+            tabId: ps.tabId,
+            url: suppress ? null : ps.url,
+            title: suppress ? null : ps.title,
+            state: ps.state,
+          },
+          hasTabId || !inSwitchGrace,
+          expectedAuthorityEpoch,
+        );
+      } catch {
+        /* best-effort reconcile — transient errors are non-fatal */
+      }
+    },
+    [sessionId, controlAuth, writeTabPageState, ownsManualInputAuthority, room],
+  );
   useEffect(() => {
-    reconcilePageStateRef.current = () => void reconcilePageState();
+    reconcilePageStateRef.current = (expectedAuthorityEpoch) =>
+      void reconcilePageState(expectedAuthorityEpoch);
   }, [reconcilePageState]);
   // Patch the active tab's fields (url/title/scrollY) and re-publish the list. Used by
   // onNavigate to point the active tab at a just-submitted address (the OPTIMISTIC
@@ -6211,15 +6518,17 @@ export function SimulatorWindow(): JSX.Element {
   // A functional setState so it composes with concurrent updates; the list is emitted
   // from the SAME next state, only when something actually changed.
   const updateActiveTab = useCallback(
-    (patch: Partial<Omit<SimTab, 'id'>>): void => {
+    (patch: Partial<Omit<SimTab, 'id'>>, expectedAuthorityEpoch: number): void => {
+      if (!ownsManualInputAuthority(sessionId, room, expectedAuthorityEpoch)) return;
       setTabs((prev) => {
+        if (!ownsManualInputAuthority(sessionId, room, expectedAuthorityEpoch)) return prev;
         const next = prev.map((t) => (t.id === activeTabId ? { ...t, ...patch } : t));
         const changed = next.some((t, i) => t !== prev[i]);
-        if (changed) emitTabList(next, activeTabId);
+        if (changed) emitTabList(next, activeTabId, expectedAuthorityEpoch);
         return changed ? next : prev;
       });
     },
-    [activeTabId, emitTabList],
+    [activeTabId, emitTabList, ownsManualInputAuthority, room, sessionId],
   );
   // New tab — append a fresh tab pointed at the branded Driftstack new-tab page
   // (NEW_TAB_URL), activate it, publish. The box opens that page for the new tab
@@ -6227,7 +6536,8 @@ export function SimulatorWindow(): JSX.Element {
   // drives it onward via the address bar afterward. The stored url/title seed from
   // NEW_TAB_URL so the tab label + address bar read sensibly before the box reports.
   const onNewTab = useCallback((): void => {
-    if (currentTabTransport(sessionId, room) === null) return;
+    const authorityEpoch = manualInputControl.epoch;
+    if (currentTabTransport(sessionId, room, authorityEpoch) === null) return;
     if (inputCongestedRef.current) {
       showNotice('Connection catching up — try again in a moment', 2500);
       return;
@@ -6251,8 +6561,9 @@ export function SimulatorWindow(): JSX.Element {
       }
     }
     setTabs((prev) => {
+      if (currentTabTransport(sessionId, room, authorityEpoch) === null) return prev;
       const next = [...prev, tab];
-      emitTabList(next, tab.id);
+      emitTabList(next, tab.id, authorityEpoch);
       return next;
     });
     setActiveTabIdSynchronized(tab.id);
@@ -6279,8 +6590,9 @@ export function SimulatorWindow(): JSX.Element {
         prevTabId: prevActive,
         url: NEW_TAB_URL,
         scrollY: 0,
+        authorityEpoch,
       });
-      reconcilePageStateRef.current();
+      reconcilePageStateRef.current(authorityEpoch);
     }
   }, [
     canNavigate,
@@ -6294,13 +6606,15 @@ export function SimulatorWindow(): JSX.Element {
     beginSwitchAffordance,
     currentTabTransport,
     sessionId,
+    manualInputControl.epoch,
   ]);
   // Close a tab — remove it; if it was active, activate the nearest neighbor (prefer
   // the one to the left, else the right). NEVER drops below one tab (the close button
   // is hidden on the last tab too, but guard here as well).
   const onCloseTab = useCallback(
     (id: string): void => {
-      if (currentTabTransport(sessionId, room) === null) return;
+      const authorityEpoch = manualInputControl.epoch;
+      if (currentTabTransport(sessionId, room, authorityEpoch) === null) return;
       if (inputCongestedRef.current) {
         showNotice('Connection catching up — try again in a moment', 2500);
         return;
@@ -6346,6 +6660,7 @@ export function SimulatorWindow(): JSX.Element {
         resetPageChromeForSwitch();
       }
       setTabs((prev) => {
+        if (currentTabTransport(sessionId, room, authorityEpoch) === null) return prev;
         if (prev.length <= 1) return prev; // never go below one tab
         const idx = prev.findIndex((t) => t.id === id);
         if (idx === -1) return prev;
@@ -6362,7 +6677,7 @@ export function SimulatorWindow(): JSX.Element {
         // A reject can arrive immediately after the close commits, before passive
         // effects; it must not discover the removed previous tab in a stale mirror.
         tabsRef.current = next;
-        emitTabList(next, nextActive);
+        emitTabList(next, nextActive, authorityEpoch);
         if (nextActive !== activeTabId) setActiveTabIdSynchronized(nextActive);
         return next;
       });
@@ -6381,6 +6696,7 @@ export function SimulatorWindow(): JSX.Element {
           prevTabId: id,
           url: activateUrl,
           scrollY: focusNeighbor.scrollY,
+          authorityEpoch,
         });
       }
     },
@@ -6397,6 +6713,7 @@ export function SimulatorWindow(): JSX.Element {
       beginSwitchAffordance,
       currentTabTransport,
       sessionId,
+      manualInputControl.epoch,
     ],
   );
   // Send a single activateTab attempt for a switch + arm the ack-miss re-issue timer
@@ -6413,9 +6730,10 @@ export function SimulatorWindow(): JSX.Element {
       prevTabId: string;
       url: string;
       scrollY: number;
+      authorityEpoch: number;
       terminalTargetFrameSeen?: boolean;
     }): boolean => {
-      if (currentTabTransport(sessionId, room) === null || room === null) {
+      if (currentTabTransport(sessionId, room, ctx.authorityEpoch) === null || room === null) {
         // If this exact Room still owns the session, readiness merely dipped while
         // the retry timer was firing. Convert the live owner into one explicit
         // deferred convergence record; do not leave an expired timer + immortal
@@ -6426,7 +6744,8 @@ export function SimulatorWindow(): JSX.Element {
           room !== null &&
           binding?.sessionId === sessionId &&
           binding.room === room &&
-          sessionIdRef.current === sessionId
+          sessionIdRef.current === sessionId &&
+          manualInputControlRef.current.epoch === ctx.authorityEpoch
         ) {
           deferredActivationUntilReadyRef.current = {
             sessionId,
@@ -6447,12 +6766,14 @@ export function SimulatorWindow(): JSX.Element {
         pendingOwner.settled ||
         pendingOwner.sessionId !== sessionId ||
         pendingOwner.room !== room ||
+        pendingOwner.authorityEpoch !== ctx.authorityEpoch ||
         pendingOwner.prevTabId !== ctx.prevTabId
       ) {
         if (pendingOwner !== undefined) discardActivationOwner(pendingOwner);
         pendingOwner = {
           sessionId,
           room,
+          authorityEpoch: ctx.authorityEpoch,
           tabId: ctx.tabId,
           prevTabId: ctx.prevTabId,
           requestIds: new Set(),
@@ -6526,7 +6847,7 @@ export function SimulatorWindow(): JSX.Element {
           resolveSwitchRef.current(ctx.tabId);
           setActiveTabIdSynchronized(ctx.prevTabId);
           resetPageChromeForSwitch();
-          emitTabListRef.current(tabsRef.current, ctx.prevTabId);
+          emitTabListRef.current(tabsRef.current, ctx.prevTabId, ctx.authorityEpoch);
           showNotice('Connection catching up — tab switch paused', 2500);
         },
       );
@@ -6591,7 +6912,7 @@ export function SimulatorWindow(): JSX.Element {
         deferred.sessionId !== ownerSessionId ||
         deferred.room !== ownerRoom ||
         inputCongestedRef.current ||
-        currentTabTransport(ownerSessionId, ownerRoom) === null
+        currentTabTransport(ownerSessionId, ownerRoom, deferred.authorityEpoch) === null
       ) {
         return;
       }
@@ -6610,7 +6931,8 @@ export function SimulatorWindow(): JSX.Element {
   // reject reverts + notifies; a dropped ack retries then soft-fails (see onData).
   const onActivateTab = useCallback(
     (id: string): void => {
-      if (currentTabTransport(sessionId, room) === null) return;
+      const authorityEpoch = manualInputControl.epoch;
+      if (currentTabTransport(sessionId, room, authorityEpoch) === null) return;
       if (inputCongestedRef.current) {
         showNotice('Connection catching up — try again in a moment', 2500);
         return;
@@ -6650,7 +6972,7 @@ export function SimulatorWindow(): JSX.Element {
       // speed is A3's box-side no-reload). Cleared when the box reports the tab's
       // page (resolveSwitch via writeTabPageState / ack), or the hard timeout below.
       beginSwitchAffordance(id);
-      emitTabList(tabs, id);
+      emitTabList(tabs, id, authorityEpoch);
       if (room !== null) {
         // A blank/seed tab stores url='' (or about:blank); the box's navigate
         // allowlist REJECTS an empty url → "Could not switch tab". Send the
@@ -6663,11 +6985,12 @@ export function SimulatorWindow(): JSX.Element {
           prevTabId: prevActive,
           url: activateUrl,
           scrollY: target.scrollY,
+          authorityEpoch,
         });
         // One-shot reconcile: pull the box's current page-state immediately so the
         // active tab refreshes from the device without waiting for the next ~2s poll
         // tick. void it (no floating promise) — best-effort, transient errors ignored.
-        void reconcilePageState();
+        void reconcilePageState(authorityEpoch);
       } else {
         // No control channel yet — nothing to ack the switch; don't strand the
         // affordance (it would otherwise spin forever with no box to clear it).
@@ -6690,6 +7013,7 @@ export function SimulatorWindow(): JSX.Element {
       resolveSwitch,
       currentTabTransport,
       sessionId,
+      manualInputControl.epoch,
     ],
   );
   // DERIVE the address-bar view (liveUrl/liveTitle) from the ACTIVE tab's stored
@@ -6737,7 +7061,8 @@ export function SimulatorWindow(): JSX.Element {
     void withCurrentWindow((w) => w.setTitle(title));
   }, [liveTitle, liveUrl, deviceName, profileName]);
   const onNavigate = (raw: string): void => {
-    if (room === null) return;
+    const authorityEpoch = manualInputControl.epoch;
+    if (room === null || !ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
     if (inputCongested) {
       showNotice('Connection catching up — try again in a moment', 2500);
       return;
@@ -6782,7 +7107,7 @@ export function SimulatorWindow(): JSX.Element {
     // The navigate happens in the ACTIVE tab — point its url at the new address +
     // re-send the full list so the harness's per-tab page tracks the address bar
     // (the title follows via page_state). updateActiveTab emits tabListUpdate itself.
-    updateActiveTab({ url });
+    updateActiveTab({ url }, authorityEpoch);
     // An operator navigate optimistically clears the frozen-renderer badge — the
     // page is being driven again; the box re-asserts 'stalled' if it's still frozen.
     setPageStalled(false);
@@ -6801,9 +7126,11 @@ export function SimulatorWindow(): JSX.Element {
     currentNavTargetRef.current = normalizeNavUrl(url);
     lastNavAtRef.current = Date.now();
     setPageLoading(armLoadWatchdog(true));
+    if (!ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
     void sendNavigate(room, url).catch((err: unknown) => {
+      if (!ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
       if (err instanceof ReliableInputCongestedError) {
-        updateActiveTab({ url: previousNavigation.tabUrl });
+        updateActiveTab({ url: previousNavigation.tabUrl }, authorityEpoch);
         setLiveUrl(isBlankTabUrl(previousNavigation.tabUrl) ? '' : previousNavigation.tabUrl);
         setLoadProgress(previousNavigation.loadProgress);
         setPageStalled(previousNavigation.pageStalled);
@@ -6821,7 +7148,7 @@ export function SimulatorWindow(): JSX.Element {
         }
         setNavSendFailed(null);
         showNotice('Connection catching up — navigation paused', 2500);
-        void reconcilePageState();
+        void reconcilePageState(authorityEpoch);
         return;
       }
       // Persistent + actionable rather than a 3s auto-toast — the send can fail on a
@@ -6837,7 +7164,13 @@ export function SimulatorWindow(): JSX.Element {
   // Wired to BrowserBar's gated buttons (BACK_FORWARD_ENABLED, flag-off until A3's
   // daemon handler lands). No-op until the room is connected.
   const onHistory = (direction: 'back' | 'forward'): void => {
-    if (room === null || sessionId === '') return;
+    const authorityEpoch = manualInputControl.epoch;
+    if (
+      room === null ||
+      sessionId === '' ||
+      !ownsManualInputAuthority(sessionId, room, authorityEpoch)
+    )
+      return;
     // #72 — back/forward is a fresh top-level navigation: re-arm the error gate (and
     // grace window) so an 'errored' on the navigated-to page can surface, while a late
     // sub-resource error after it loads stays suppressed. Clear any stale overlay too.
@@ -6856,7 +7189,9 @@ export function SimulatorWindow(): JSX.Element {
     setLoadProgress(null);
     setPageStalled(false);
     setPageLoading(armLoadWatchdog(true));
+    if (!ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
     void navigateAgentSessionHistory(sessionId, direction, controlAuth).catch(() => {
+      if (!ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
       showNotice(`Could not go ${direction}`, 3000);
       setPageLoading(false);
       clearLoadWatchdog();
@@ -7393,13 +7728,13 @@ export function SimulatorWindow(): JSX.Element {
                   // video reads as bezel-black, never a light see-through border
                   // (founder 2026-06-23 white-border / A3 W2827).
                   className={`relative min-h-0 flex-1 bg-black ${humanInputEnabled ? 'cursor-none' : ''}`}
-                  onPointerDownCapture={
-                    inputCongested || manualInputAvailable === false ? undefined : showTap
-                  }
+                  onPointerDownCapture={inputCongested || !humanInputEnabled ? undefined : showTap}
                   onPointerMove={moveTouchPoint}
                   onPointerEnter={moveTouchPoint}
                   onPointerLeave={hideTouchPoint}
-                  onPointerUp={() => setDotPressed(false)}
+                  onPointerUp={() => {
+                    if (ownsRenderedManualInput()) setDotPressed(false);
+                  }}
                 >
                   <AgentSessionPanel
                     info={info}
@@ -7419,20 +7754,25 @@ export function SimulatorWindow(): JSX.Element {
                     // drive the tap/scroll coordinate mapping so coords land right on
                     // whatever device the box dispatched (no 402×874 hardcode).
                     inputLogical={inputLogical}
-                    // Forward mouse/keyboard to the device only in manual/pair
-                    // mode; in AI mode the agent is driving, so local input would
-                    // fight it.
+                    // Forward mouse/keyboard only under exact confirmed manual
+                    // ownership; AI and pair modes remain agent-owned.
                     interactive={humanInputEnabled}
+                    inputAuthorityEpoch={manualInputControl.epoch}
+                    canSendInput={canSendPanelInput}
                     onVideoDimensions={handleVideoDimensions}
                     onRoom={(nextRoom, ownerRoom) => handleRoom(sessionId, nextRoom, ownerRoom)}
                     onStateChange={(s, ownerRoom) => {
                       if (!ownsPanelRoom(sessionId, ownerRoom)) return;
+                      if (connStateRef.current !== s.kind) updateManualInputControl({}, true);
                       connStateRef.current = s.kind;
                       setConnState(s.kind);
                       resumeDeferredActivation(sessionId, ownerRoom);
                     }}
                     onPublisher={(nextPublisher, ownerRoom) => {
                       if (!ownsPanelRoom(sessionId, ownerRoom)) return;
+                      if (publisherStateRef.current !== nextPublisher) {
+                        updateManualInputControl({}, true);
+                      }
                       publisherStateRef.current = nextPublisher;
                       setPublisherState(nextPublisher);
                       resumeDeferredActivation(sessionId, ownerRoom);
@@ -7473,7 +7813,7 @@ export function SimulatorWindow(): JSX.Element {
                   {humanInputEnabled && <TouchCursorOverlay ref={touchCursorRef} />}
                   {/* iOS tap cursor — a ring that blooms at each tap point then
                     fades. pointer-events-none so it never intercepts the tap. */}
-                  {manualInputAvailable !== false && <TapRippleOverlay ref={tapRippleRef} />}
+                  {humanInputEnabled && <TapRippleOverlay ref={tapRippleRef} />}
                   {/* #75b — OVERLAY keyboard: on a short laptop work area the
                     docked-below keyboard would overflow the screen and trip the
                     screen-clamp, which carves KEYBOARD_H out of the video and narrows
@@ -7495,6 +7835,8 @@ export function SimulatorWindow(): JSX.Element {
                       <IOSKeyboard
                         room={room}
                         width={inputLogical.width}
+                        authorityEpoch={manualInputControl.epoch}
+                        canSendInput={canSendPanelInput}
                         onDismiss={() => {
                           if (!keyboardVisibleRef.current) return;
                           keyboardVisibleRef.current = false;
@@ -7518,8 +7860,8 @@ export function SimulatorWindow(): JSX.Element {
                   KEYBOARD_H in `chrome`, so `simulator-screen` (flex-1) still gets the
                   full video-aspect height and the <video>'s own on-screen rect that
                   pointerToViewport maps against is unchanged — taps/scroll stay
-                  aligned. Only in manual/pair mode (AI mode = the agent drives; local
-                  input would fight it). Emits the SAME keyDown/keyUp the host keyboard
+                  aligned. Only under exact confirmed manual ownership; AI and pair
+                  remain agent-owned. Emits the SAME keyDown/keyUp the host keyboard
                   does — pure chrome, no fingerprint change (the viewport-resize that
                   WOULD change the page's view is deferred to A3, W2992). */}
               {keyboardVisible && !keyboardOverlay && humanInputEnabled && (
@@ -7531,6 +7873,8 @@ export function SimulatorWindow(): JSX.Element {
                   <IOSKeyboard
                     room={room}
                     width={inputLogical.width}
+                    authorityEpoch={manualInputControl.epoch}
+                    canSendInput={canSendPanelInput}
                     onDismiss={() => {
                       if (!keyboardVisibleRef.current) return;
                       keyboardVisibleRef.current = false;

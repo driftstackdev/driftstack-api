@@ -4,11 +4,25 @@
 // device). Mocks the livekit wrapper so no real WebRTC spins up in jsdom.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, fireEvent, waitFor } from '@testing-library/react';
+
+let connectImmediately = false;
+const roomHandlers = new Map<string, Array<(...args: unknown[]) => void>>();
+const fakeRoom = {
+  on: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
+    const callbacks = roomHandlers.get(event) ?? [];
+    callbacks.push(callback);
+    roomHandlers.set(event, callbacks);
+  }),
+  off: vi.fn(),
+  disconnect: vi.fn(() => Promise.resolve()),
+  localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
+};
 
 vi.mock('../../src/lib/livekit', () => ({
-  createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
-  connectToAgentSession: () => new Promise(() => {}), // stays connecting
+  createLivekitRoom: () => fakeRoom,
+  connectToAgentSession: () =>
+    connectImmediately ? Promise.resolve(fakeRoom) : new Promise(() => {}),
   sendInputEvent: vi.fn(() => Promise.resolve()),
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
@@ -26,6 +40,7 @@ vi.mock('../../src/lib/agent-session-control', () => ({
       terminal: false,
       status: 'active',
       closedReason: null,
+      capabilityReport: { manual_input_available: true },
     }),
   getAgentSessionPageState: () => Promise.resolve(null),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
@@ -72,6 +87,11 @@ describe('SimulatorWindow — floating iPhone', () => {
   // any auto-open; harmless to leave seeded.)
   const lsStore = new Map<string, string>();
   beforeEach(() => {
+    connectImmediately = false;
+    roomHandlers.clear();
+    fakeRoom.on.mockClear();
+    fakeRoom.off.mockClear();
+    fakeRoom.disconnect.mockClear();
     mockConn = { ...EMPTY_CONN };
     lsStore.clear();
     vi.stubGlobal('localStorage', {
@@ -436,6 +456,7 @@ describe('SimulatorWindow — floating iPhone', () => {
   });
 
   it('iOS tap cursor: a pointer-down on the screen blooms a tap-ripple ring (purely visual — never intercepts the tap)', async () => {
+    connectImmediately = true;
     window.history.pushState(
       {},
       '',
@@ -446,6 +467,13 @@ describe('SimulatorWindow — floating iPhone', () => {
         <SimulatorWindow />
       </RecordingsProvider>,
     );
+    await act(async () => {
+      await Promise.resolve();
+      for (const callback of roomHandlers.get('trackSubscribed') ?? []) {
+        callback({ kind: 'video', attach: vi.fn(), setPlayoutDelay: vi.fn() }, {});
+      }
+      await Promise.resolve();
+    });
     await waitFor(() =>
       expect(
         container.querySelector('[data-component="simulator-keyboard-toggle"]'),
@@ -487,6 +515,7 @@ describe('SimulatorWindow — floating iPhone', () => {
   });
 
   it('iOS touch-point cursor: the screen host hides the PC arrow (cursor-none) and a pointer-move over the screen shows a fingertip dot that never intercepts the tap', async () => {
+    connectImmediately = true;
     window.history.pushState(
       {},
       '',
@@ -497,6 +526,13 @@ describe('SimulatorWindow — floating iPhone', () => {
         <SimulatorWindow />
       </RecordingsProvider>,
     );
+    await act(async () => {
+      await Promise.resolve();
+      for (const callback of roomHandlers.get('trackSubscribed') ?? []) {
+        callback({ kind: 'video', attach: vi.fn(), setPlayoutDelay: vi.fn() }, {});
+      }
+      await Promise.resolve();
+    });
     await waitFor(() =>
       expect(
         container.querySelector('[data-component="simulator-keyboard-toggle"]'),

@@ -16,6 +16,17 @@ import { render, fireEvent, act } from '@testing-library/react';
 const sendNavigate = vi.fn(() => Promise.resolve());
 // Controllable page-state poll — each test sets what the ~2s poll returns.
 const pageStateMock = vi.fn(() => Promise.resolve<unknown>(null));
+function immediateControl<T>(value: T): Promise<T> {
+  return {
+    then: (onfulfilled: (resolved: T) => unknown) => {
+      try {
+        return Promise.resolve(onfulfilled(value));
+      } catch (err: unknown) {
+        return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+  } as unknown as Promise<T>;
+}
 
 vi.mock('../../src/lib/livekit', () => ({
   createLivekitRoom: () => ({ on: vi.fn(), disconnect: vi.fn() }),
@@ -59,7 +70,14 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
-  getAgentSession: () => Promise.resolve({ mode: 'manual', pairKind: null }),
+  getAgentSession: () =>
+    immediateControl({
+      mode: 'manual',
+      pairKind: null,
+      status: 'active',
+      terminal: false,
+      capabilityReport: { manual_input_available: true },
+    }),
   getAgentSessionPageState: () => pageStateMock(),
   getAgentSessionCookies: () => Promise.resolve({ status: 'unavailable', cookies: null }),
   setSessionMode: vi.fn(),

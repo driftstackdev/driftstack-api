@@ -8,7 +8,8 @@ import { useState } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 import {
-  IOSKeyboard,
+  IOSKeyboard as IOSKeyboardImpl,
+  type IOSKeyboardProps,
   applyShift,
   keyForChar,
   DOUBLE_TAP_MS,
@@ -16,7 +17,7 @@ import {
   KEY_REPEAT_START_MS,
 } from '../../src/components/IOSKeyboard';
 import { DeviceToolbar } from '../../src/views/SimulatorWindow';
-import type { InputEvent } from '../../src/lib/livekit';
+import type { InputEvent, Room } from '../../src/lib/livekit';
 
 const sendInputEventMock = vi.fn();
 
@@ -26,7 +27,17 @@ vi.mock('../../src/lib/livekit', () => ({
 
 // A non-null sentinel Room — the component only forwards it to sendInputEvent
 // (which is mocked), so its shape is irrelevant.
-const ROOM = {} as never;
+const ROOM = {} as Room;
+const AUTHORITY_EPOCH = 7;
+const canSendInput = (room: Room, epoch: number): boolean =>
+  room === ROOM && epoch === AUTHORITY_EPOCH;
+
+/** Existing positive fixtures exercise a fully-authorized exact Room/epoch owner. */
+function IOSKeyboard(props: IOSKeyboardProps): JSX.Element {
+  return (
+    <IOSKeyboardImpl {...props} authorityEpoch={AUTHORITY_EPOCH} canSendInput={canSendInput} />
+  );
+}
 
 /** The InputEvent objects passed as the 2nd arg of each sendInputEvent call. */
 function emitted(): InputEvent[] {
@@ -140,6 +151,33 @@ describe('IOSKeyboard — character keys send keyDown/keyUp', () => {
 
   it('is a no-op when room is null (mirrors the host path)', () => {
     const { container } = render(<IOSKeyboard room={null} />);
+    pressKey(container, 'a');
+    expect(sendInputEventMock).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the authority predicate is omitted or false', () => {
+    const omitted = render(<IOSKeyboardImpl room={ROOM} authorityEpoch={AUTHORITY_EPOCH} />);
+    pressKey(omitted.container, 'a');
+    expect(sendInputEventMock).not.toHaveBeenCalled();
+    omitted.unmount();
+
+    const denied = render(
+      <IOSKeyboardImpl room={ROOM} authorityEpoch={AUTHORITY_EPOCH} canSendInput={() => false} />,
+    );
+    pressKey(denied.container, 'a');
+    expect(sendInputEventMock).not.toHaveBeenCalled();
+  });
+
+  it('drops a retained key callback after its exact authority epoch becomes stale', () => {
+    let currentEpoch = AUTHORITY_EPOCH;
+    const { container } = render(
+      <IOSKeyboardImpl
+        room={ROOM}
+        authorityEpoch={AUTHORITY_EPOCH}
+        canSendInput={(room, epoch) => room === ROOM && epoch === currentEpoch}
+      />,
+    );
+    currentEpoch += 1;
     pressKey(container, 'a');
     expect(sendInputEventMock).not.toHaveBeenCalled();
   });
@@ -376,6 +414,33 @@ describe('IOSKeyboard — delete key press-and-hold repeat (iOS fidelity)', () =
         { type: 'keyDown', key: 'Backspace' },
         { type: 'keyUp', key: 'Backspace' },
       ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels the deferred delete-repeat chain when its authority epoch is revoked', () => {
+    vi.useFakeTimers();
+    try {
+      let currentEpoch = AUTHORITY_EPOCH;
+      const { container } = render(
+        <IOSKeyboardImpl
+          room={ROOM}
+          authorityEpoch={AUTHORITY_EPOCH}
+          canSendInput={(room, epoch) => room === ROOM && epoch === currentEpoch}
+        />,
+      );
+      const del = el(container, '[data-key="⌫"]');
+      act(() => {
+        fireEvent.pointerDown(del);
+      });
+      expect(emitted()).toHaveLength(2);
+
+      currentEpoch += 1;
+      act(() => {
+        vi.advanceTimersByTime(KEY_REPEAT_INITIAL_MS + KEY_REPEAT_START_MS * 3);
+      });
+      expect(emitted()).toHaveLength(2);
     } finally {
       vi.useRealTimers();
     }

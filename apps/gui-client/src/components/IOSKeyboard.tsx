@@ -97,6 +97,10 @@ export interface IOSKeyboardProps {
    *  expose an optional collapse so the panel can wire its toolbar toggle to it).
    *  Optional — when omitted, no dismiss row is rendered. */
   onDismiss?: () => void;
+  /** Captured manual-control epoch; changes cancel any held repeat chain. */
+  authorityEpoch?: number;
+  /** Exact invocation-time Room/epoch proof. Omission is fail-closed. */
+  canSendInput?: (room: Room, authorityEpoch: number) => boolean;
 }
 
 /** Fire a real keypress: keyDown then keyUp with the SAME `key` (mirrors the
@@ -113,11 +117,17 @@ export interface IOSKeyboardProps {
  *  (the founder retypes; the input-capture path owns the dead-channel badge), so
  *  swallow here rather than widening the shared benign-teardown allowlist (which
  *  input-capture relies on re-throwing to surface a genuinely dead channel). */
-function pressKey(room: Room | null, key: string): void {
-  if (room === null) return;
+function pressKey(
+  room: Room | null,
+  key: string,
+  authorityEpoch: number,
+  canSendInput?: (room: Room, authorityEpoch: number) => boolean,
+): void {
+  if (room === null || canSendInput === undefined || !canSendInput(room, authorityEpoch)) return;
   // Promise.resolve wraps the call so .catch is safe even if sendInputEvent is
   // mocked to return a non-Promise (matches livekit-latency-ping's guard).
   void Promise.resolve(sendInputEvent(room, { type: 'keyDown', key })).catch(() => undefined);
+  if (!canSendInput(room, authorityEpoch)) return;
   void Promise.resolve(sendInputEvent(room, { type: 'keyUp', key })).catch(() => undefined);
 }
 
@@ -126,7 +136,13 @@ function pressKey(room: Room | null, key: string): void {
  * state, and emits keyDown/keyUp InputEvents over the LiveKit room exactly like
  * the host-keyboard path.
  */
-export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps): JSX.Element {
+export function IOSKeyboard({
+  room,
+  width = 402,
+  onDismiss,
+  authorityEpoch = 0,
+  canSendInput,
+}: IOSKeyboardProps): JSX.Element {
   const [layer, setLayer] = useState<KeyboardLayer>('letters');
   const [shift, setShift] = useState<ShiftState>('off');
   // The currently-pressed CHARACTER key for the iOS pop-up magnifier: its stable
@@ -140,12 +156,26 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
   const [poppedKey, setPoppedKey] = useState<{ id: string; glyph: string } | null>(null);
   // Last shift-tap timestamp, for the double-tap → caps-lock detection.
   const lastShiftTap = useRef(0);
+  const ownsAuthority = useCallback(
+    (): boolean =>
+      room !== null && canSendInput !== undefined && canSendInput(room, authorityEpoch),
+    [room, canSendInput, authorityEpoch],
+  );
+  useEffect(() => {
+    // Layer/shift/popover state belongs to one exact control epoch. An old local-only
+    // Shift/123 handler must not influence the next valid key under a new owner.
+    setLayer('letters');
+    setShift('off');
+    setPoppedKey(null);
+    lastShiftTap.current = 0;
+  }, [authorityEpoch, room]);
 
   // Send a character keypress, honoring shift, then consume a one-shot shift.
   const onCharPress = useCallback(
     (ch: string): void => {
+      if (!ownsAuthority()) return;
       const key = keyForChar(ch, layer === 'letters' ? shift : 'off');
-      pressKey(room, key);
+      pressKey(room, key, authorityEpoch, canSendInput);
       // A non-shift keypress BREAKS the shift double-tap sequence: caps-lock is
       // "two shift taps IN A ROW". Without clearing this, fast-typing an acronym
       // like "AB" (shift → a → shift, all within 300ms) had the second shift see
@@ -156,13 +186,14 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
       // One-shot shift reverts after a single letter (iOS); caps-lock persists.
       if (layer === 'letters' && shift === 'once') setShift('off');
     },
-    [room, layer, shift],
+    [room, layer, shift, authorityEpoch, canSendInput, ownsAuthority],
   );
 
   // Shift: single tap toggles one-shot on/off; a second tap within DOUBLE_TAP_MS
   // engages caps-lock; tapping while locked releases it. GUI-local — no event is
   // sent for the shift tap itself.
   const onShiftTap = useCallback((): void => {
+    if (!ownsAuthority()) return;
     const now = Date.now();
     const isDouble = now - lastShiftTap.current <= DOUBLE_TAP_MS;
     setShift((prev) => {
@@ -176,7 +207,7 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
       if (isDouble) return 'locked';
       return prev === 'once' ? 'off' : 'once';
     });
-  }, []);
+  }, [ownsAuthority]);
 
   // Named keys mirror the host path's `e.key` values exactly. Each is a NON-shift
   // keypress, so it must BREAK the shift double-tap sequence (mirror onCharPress's
@@ -187,17 +218,26 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
   // char presses reset it before; these named keys did not. (Keyboard audit w8cp0yp5d
   // 2026-07-11.)
   const onReturn = useCallback((): void => {
+    if (!ownsAuthority()) return;
     lastShiftTap.current = 0;
-    pressKey(room, 'Enter');
-  }, [room]);
+    pressKey(room, 'Enter', authorityEpoch, canSendInput);
+  }, [room, authorityEpoch, canSendInput, ownsAuthority]);
   const onDelete = useCallback((): void => {
+    if (!ownsAuthority()) return;
     lastShiftTap.current = 0;
-    pressKey(room, 'Backspace');
-  }, [room]);
+    pressKey(room, 'Backspace', authorityEpoch, canSendInput);
+  }, [room, authorityEpoch, canSendInput, ownsAuthority]);
   const onSpace = useCallback((): void => {
+    if (!ownsAuthority()) return;
     lastShiftTap.current = 0;
-    pressKey(room, ' ');
-  }, [room]);
+    pressKey(room, ' ', authorityEpoch, canSendInput);
+  }, [room, authorityEpoch, canSendInput, ownsAuthority]);
+  const selectLayer = useCallback(
+    (next: KeyboardLayer): void => {
+      if (ownsAuthority()) setLayer(next);
+    },
+    [ownsAuthority],
+  );
 
   const charRows =
     layer === 'letters' ? LETTER_ROWS : layer === 'numbers' ? NUMBER_ROWS : SYMBOL_ROWS;
@@ -235,10 +275,10 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
               />
             )}
             {isLastCharRow && layer === 'numbers' && (
-              <FnKey label="#+=" ariaLabel="Symbols" wide onPress={() => setLayer('symbols')} />
+              <FnKey label="#+=" ariaLabel="Symbols" wide onPress={() => selectLayer('symbols')} />
             )}
             {isLastCharRow && layer === 'symbols' && (
-              <FnKey label="123" ariaLabel="Numbers" wide onPress={() => setLayer('numbers')} />
+              <FnKey label="123" ariaLabel="Numbers" wide onPress={() => selectLayer('numbers')} />
             )}
 
             {row.map((ch) => {
@@ -250,17 +290,28 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
                   popped={poppedKey?.id === ch}
                   popLabel={poppedKey?.id === ch ? poppedKey.glyph : shown}
                   onDown={() => {
+                    if (!ownsAuthority()) return;
                     setPoppedKey({ id: ch, glyph: shown });
                     onCharPress(ch);
                   }}
-                  onUp={() => setPoppedKey(null)}
+                  onUp={() => {
+                    if (ownsAuthority()) setPoppedKey(null);
+                  }}
                 />
               );
             })}
 
             {/* Row 3 right flank: delete on every layer's last char row. */}
             {isLastCharRow && (
-              <FnKey label="⌫" ariaLabel="Delete" wide onPress={onDelete} repeatOnHold />
+              <FnKey
+                label="⌫"
+                ariaLabel="Delete"
+                wide
+                onPress={onDelete}
+                repeatOnHold
+                authorityEpoch={authorityEpoch}
+                canRepeat={ownsAuthority}
+              />
             )}
           </div>
         );
@@ -273,10 +324,15 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
             label="123"
             ariaLabel="Numbers and symbols"
             flex={1.6}
-            onPress={() => setLayer('numbers')}
+            onPress={() => selectLayer('numbers')}
           />
         ) : (
-          <FnKey label="ABC" ariaLabel="Letters" flex={1.6} onPress={() => setLayer('letters')} />
+          <FnKey
+            label="ABC"
+            ariaLabel="Letters"
+            flex={1.6}
+            onPress={() => selectLayer('letters')}
+          />
         )}
         {/* iOS bottom-row emoji key, left of the spacebar. The default single-
             keyboard iPhone shows 😀 here (the 🌐 globe appears only with ≥2
@@ -288,7 +344,14 @@ export function IOSKeyboard({ room, width = 402, onDismiss }: IOSKeyboardProps):
             worse than an obviously-inert one. */}
         <FnKey label="😀" ariaLabel="Emoji" flex={1} onPress={() => {}} disabled />
         {onDismiss !== undefined && (
-          <FnKey label="⌄" ariaLabel="Hide keyboard" flex={1.2} onPress={onDismiss} />
+          <FnKey
+            label="⌄"
+            ariaLabel="Hide keyboard"
+            flex={1.2}
+            onPress={() => {
+              if (ownsAuthority()) onDismiss();
+            }}
+          />
         )}
         <button
           type="button"
@@ -376,6 +439,8 @@ function FnKey({
   locked,
   disabled,
   repeatOnHold,
+  authorityEpoch = 0,
+  canRepeat,
 }: {
   label: string;
   ariaLabel: string;
@@ -394,16 +459,14 @@ function FnKey({
    *  until pointer up/leave/cancel (or unmount). Letters/space must NOT set it
    *  (real iOS shows an accent picker / cursor trackpad there instead). */
   repeatOnHold?: boolean;
+  /** Cancels a repeat admitted under a replaced manual-control epoch. */
+  authorityEpoch?: number;
+  /** Exact epoch predicate captured by the pointerdown that owns this repeat. */
+  canRepeat?: () => boolean;
 }): JSX.Element {
   // Held-repeat timer. Kept in a ref so pointer up/leave/cancel and unmount can
   // all cancel the same in-flight timeout chain.
   const repeatTimerRef = useRef<number | null>(null);
-  // onPress identity changes across renders (its useCallback deps include the
-  // live room); read it through a ref so a long hold always fires the current
-  // handler without re-arming the timer.
-  const onPressRef = useRef(onPress);
-  onPressRef.current = onPress;
-
   const stopRepeat = useCallback((): void => {
     if (repeatTimerRef.current !== null) {
       window.clearTimeout(repeatTimerRef.current);
@@ -421,16 +484,29 @@ function FnKey({
     stopRepeat();
     let interval = KEY_REPEAT_START_MS;
     const tick = (): void => {
-      onPressRef.current();
+      if (canRepeat === undefined || !canRepeat()) {
+        stopRepeat();
+        return;
+      }
+      // Capture the exact epoch's handler. A newer render must never lend its
+      // Room/authority to an older retained pointerdown timer.
+      onPress();
+      if (!canRepeat()) {
+        stopRepeat();
+        return;
+      }
       interval = Math.max(KEY_REPEAT_MIN_MS, interval - KEY_REPEAT_ACCEL_MS);
       repeatTimerRef.current = window.setTimeout(tick, interval);
     };
     repeatTimerRef.current = window.setTimeout(tick, KEY_REPEAT_INITIAL_MS);
-  }, [stopRepeat]);
+  }, [stopRepeat, onPress, canRepeat]);
 
   // Cancel any pending repeat if the key unmounts mid-hold (e.g. layout swaps to
   // the symbols page) so it can't keep firing Backspace into a torn-down view.
-  useEffect(() => stopRepeat, [stopRepeat]);
+  useEffect(() => {
+    stopRepeat();
+    return stopRepeat;
+  }, [stopRepeat, authorityEpoch]);
   // Grey function keys (#aeb3bd-ish); accent → blue is reserved (return is grey by
   // default like real iOS). Caps-locked shift gets a white highlight (iOS lights
   // the shift key); one-shot shift a lighter grey.
@@ -459,6 +535,7 @@ function FnKey({
       onPointerDown={(e) => {
         e.preventDefault();
         if (disabled === true) return;
+        if (repeatOnHold === true && (canRepeat === undefined || !canRepeat())) return;
         onPress();
         if (repeatOnHold === true) beginRepeat();
       }}

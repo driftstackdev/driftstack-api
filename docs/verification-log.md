@@ -29252,3 +29252,60 @@ strict-codec settlement currently records the narrow existing `refuse` result ta
 build/deploy, native build/sign/install/relaunch, harness/Fleet/Family-B activation,
 environment/customer/secret mutation, package publication or foreign pnpm action
 was performed.
+
+---
+
+## V-700 — GUI manual input fails closed under exact live authority
+
+**Date:** 2026-07-17
+
+The Simulator previously inferred local input permission from a permissive human-mode
+check and optimistic transport state. Missing capability data, a failed control read,
+pair mode, an old Room callback, or delayed work from an earlier control generation
+could therefore retain a path to pointer, keyboard, paste, navigation, history or tab
+publication after exact manual ownership was no longer proved.
+
+One GUI-local monotonic authority epoch now binds the exact session, exact Room,
+confirmed `manual` mode, confirmed active and non-terminal lifecycle,
+`manual_input_available:true`, no control mutation, no terminal session signal, a
+connected Room and a publishing video owner. Every control, lifecycle, capability or
+Room semantic change advances the epoch synchronously and cancels authority-owned
+timers, repeaters, gestures, tab activations and deferred work. Omitted capability,
+failed reads, AI/pair mode, connecting/reconnecting state and stale A→B→A handlers are
+view-only. Page-state polling may still serve passive rendering, but both its read
+owner and functional state write are fenced so an old epoch cannot contaminate the
+replacement session's tabs or page state.
+
+Pointer/touch, wheel, physical keys, the on-screen iOS keyboard, clipboard paste,
+address navigation, reload, history, tab creation/closure/activation and panel
+ripples all revalidate exact authority at invocation and after relevant awaits.
+Input-capture gestures, delayed releases and keyboard repeats carry their captured
+epoch. The same-Room reliable-channel congestion latch survives authority-off/on and
+recovers only from an actual buffer-low or reconnect signal. Coalesced tab-list work
+accepts an authority predicate, checks it before arming and again after each publish,
+and drops a stale pending update without erasing unrelated current work; established
+callers that do not provide a predicate remain compatible.
+
+`AgentSessionPanel` tags Room, state, publisher, error, congestion and ripple
+callbacks with the effect-owned Room. A retired panel cannot clear or mutate its
+successor. The Tauri close listener now uses one stable window-module binding; a
+failed control re-read revokes a formerly confirmed manual mode, surfaces degraded
+control and replaces the close policy so closing cannot terminate a session whose
+human ownership is unknown.
+
+Deterministic proof covers omitted/denied/stale capability, control-read failure,
+session and Room replacement, epoch ABA, stale page-state writes, forced DOM
+handlers, delayed paste, wheel/release/repeat cancellation, ripple replacement,
+same-Room congestion recovery, coalesced tab-list revocation, manual-to-unconfirmed
+close transition and all positive exact-authority paths. The expanded GUI matrix
+passes 18 files and 337/337 tests. Strict GUI TypeScript, targeted ESLint, Prettier
+and diff/whitespace checks are green.
+
+This is defense-in-depth around the current control truth, not the server-issued
+end-to-end lease required by V-699. Revocation intentionally emits no unauthorised
+synthetic key-up or touch-end; exact-session harness teardown/cancellation must own
+cleanup for an input already held at revocation. A low-buffer event that occurs only
+while capture is disabled may leave the congestion latch fail-closed until reconnect.
+No shared workspace build/deploy, native build/sign/install/relaunch, harness/Fleet/
+Family-B activation, environment/customer/secret mutation or foreign pnpm action was
+performed.

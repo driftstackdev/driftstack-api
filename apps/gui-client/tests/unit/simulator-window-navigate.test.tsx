@@ -14,12 +14,25 @@ import { act, render, fireEvent, waitFor } from '@testing-library/react';
 
 const sendNavigate = vi.fn(() => Promise.resolve());
 let terminalSession = false;
+function immediateControl<T>(value: T): Promise<T> {
+  return {
+    then: (onfulfilled: (resolved: T) => unknown) => {
+      try {
+        return Promise.resolve(onfulfilled(value));
+      } catch (err: unknown) {
+        return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+  } as unknown as Promise<T>;
+}
 const getAgentSession = vi.fn(() =>
-  Promise.resolve({
+  immediateControl({
     mode: 'manual' as const,
     pairKind: null,
+    status: 'active' as const,
     terminal: terminalSession,
     closedReason: terminalSession ? 'browser-closed' : null,
+    capabilityReport: { manual_input_available: true },
   }),
 );
 vi.mock('../../src/lib/livekit', () => ({
