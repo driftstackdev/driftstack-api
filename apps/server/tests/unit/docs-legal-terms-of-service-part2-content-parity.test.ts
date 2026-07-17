@@ -7,7 +7,7 @@
 //
 //   • Section 8: 5-payment-method matrix + NowPayments OÜ + crypto rules.
 //   • Section 8.4: NL BTW + EU Reverse-Charge + outside-EU framing.
-//   • Section 9: no SLA at Free/$39/$99/$299; commercial SLA at $999+.
+//   • Section 9: no SLA at lower tiers; API Scale/Enterprise SLA truth.
 //   • Section 13: liability cap = 12 months Fees; gross-negligence carve.
 //   • Part 2: sections 8-13 (Fees through Liability cap).
 
@@ -31,8 +31,10 @@ describe('W576.B /docs/legal/terms-of-service.md (part 2) content parity', () =>
     expect(body).toMatch(/## 8\. Fees \+ payment/);
     expect(body).toMatch(/8\.1 \*\*Fees\.\*\*/);
     expect(body).toMatch(/Customer pays the Fees for the Subscription tier/);
-    expect(body).toMatch(/selected at signup \(Free, \$39\/mo, \$99\/mo, \$299\/mo, \$999\/mo, or/);
-    expect(body).toMatch(/Enterprise — currently \$3,000\/mo and up\)\./);
+    expect(body).toMatch(/Driftstack offers a perpetual Free tier, a/);
+    expect(body).toMatch(/Manual ladder \(Personal, Team, Agency\), and an API ladder \(API/);
+    expect(body).toMatch(/Starter, API Builder, API Scale\), with a custom-priced Enterprise/);
+    expect(body).toMatch(/<https:\/\/driftstack\.dev\/pricing\/>/);
     expect(body).toMatch(/8\.2 \*\*Billing cycles\.\*\*/);
     expect(body).toMatch(/Enterprise tier bills annually in advance by default\./);
     expect(body).toMatch(/8\.3 \*\*Payment methods\.\*\*/);
@@ -45,16 +47,12 @@ describe('W576.B /docs/legal/terms-of-service.md (part 2) content parity', () =>
     expect(body).toMatch(/3\. \*\*iDEAL\*\* for Customers with a Dutch bank account, via Stripe\./);
     expect(body).toMatch(/4\. \*\*Bancontact\*\* for Customers with a Belgian bank account, via/);
     expect(body).toMatch(/Stripe\./);
-    expect(body).toMatch(/5\. \*\*Cryptocurrency\*\* \(BTC, LTC, USDT, USDC, ETH, XMR\) via/);
-    expect(body).toMatch(/NowPayments OÜ \(Estonia\)\./);
-    expect(body).toMatch(/Crypto-payment terms:/);
-    expect(body).toMatch(/- Customer chooses cryptocurrency and amount at checkout\./);
-    expect(body).toMatch(/quoted window \(typically 20 minutes\) after which/);
-    expect(body).toMatch(/re-quotation is required\./);
-    expect(body).toMatch(/- Payment is final upon on-chain confirmation per NowPayments'/);
-    expect(body).toMatch(/Underpayment by more than 1% of the quoted cryptocurrency/);
-    expect(body).toMatch(/Customer can switch payment method/);
-    expect(body).toMatch(/at any time via the customer portal\./);
+    expect(body).toMatch(/5\. \*\*Cryptocurrency\*\* in the assets and networks displayed at/);
+    expect(body).toMatch(/checkout, via NowPayments OÜ \(Estonia\)\./);
+    expect(body).toMatch(/converted into a time-limited crypto quote/);
+    expect(body).toMatch(/exact quoted asset and network/);
+    expect(body).toMatch(/Entitlement starts only after NowPayments reports the order paid/);
+    expect(body).toMatch(/does not custody crypto or initiate crypto refunds/);
   });
 
   it('Section 8.4 (VAT/BTW) + 8.5 (late) + 8.6 (disputes) + 8.7 (refunds) + 8.8 (tier) framing pinned', () => {
@@ -74,22 +72,20 @@ describe('W576.B /docs/legal/terms-of-service.md (part 2) content parity', () =>
     expect(body).toMatch(/seven \(7\) days' written notice/);
     expect(body).toMatch(/8\.6 \*\*Disputes\.\*\*/);
     expect(body).toMatch(/8\.7 \*\*Refunds\.\*\*/);
+    expect(body).toMatch(/8\.7\.1 \*\*Crypto payments are non-refundable\.\*\*/);
     expect(body).toMatch(/8\.8 \*\*Tier changes\.\*\*/);
   });
 
   it('Section 9 (Service levels) + Section 10 (Data + privacy) framing pinned', () => {
     expect(body).toMatch(/## 9\. Service levels/);
-    expect(body).toMatch(/9\.1 \*\*No guaranteed SLA at launch tiers\.\*\*/);
-    expect(body).toMatch(/The Free, \$39, \$99, and/);
-    expect(body).toMatch(
-      /\$299 tiers are provided \*\*without\*\* a contractually-binding service/,
-    );
-    expect(body).toMatch(/level agreement\./);
+    expect(body).toMatch(/9\.1 \*\*No guaranteed SLA at lower tiers\.\*\*/);
+    expect(body).toMatch(/The Free, Manual-ladder/);
+    expect(body).toMatch(/\(Personal, Team, Agency\), API Starter, and API Builder tiers are/);
+    expect(body).toMatch(/level\s+agreement\./);
     expect(body).toMatch(/9\.2 \*\*Commercial SLA at higher tiers\.\*\*/);
-    expect(body).toMatch(/The \$999 \(Scale\) and/);
-    expect(body).toMatch(/Enterprise tiers carry a contractual SLA published separately/);
-    expect(body).toMatch(/\(currently: 99\.9% monthly availability; 8-hour first-response SLA on/);
-    expect(body).toMatch(/Severity-1 incidents\)\./);
+    expect(body).toMatch(/The API Scale and Enterprise/);
+    expect(body).toMatch(/currently:\s+99\.9%\s+monthly availability/);
+    expect(body).toMatch(/four \(4\) hours on API Scale and one \(1\) hour on Enterprise/);
     expect(body).toMatch(/9\.3 \*\*Maintenance\.\*\*/);
     expect(body).toMatch(/status page at <https:\/\/status\.driftstack\.dev>/);
     expect(body).toMatch(/9\.4 \*\*Force majeure events\*\* \(Section 19\)/);
@@ -107,6 +103,8 @@ describe('W576.B /docs/legal/terms-of-service.md (part 2) content parity', () =>
     expect(body).toMatch(/11\.2 \*\*Disclaimer\.\*\*/);
     expect(body).toMatch(/Service is provided \*\*"as is"\*\* and \*\*"as available"\*\*/);
     expect(body).toMatch(/11\.3 \*\*Customer assumes risk on target compatibility\.\*\*/);
+    expect(body).toMatch(/notification\s+mechanism in Section 3\.4 of the DPA/);
+    expect(body).not.toMatch(/notification\s+mechanism in Section 5 of the DPA/);
     expect(body).toMatch(/## 12\. Indemnification/);
     expect(body).toMatch(/12\.1 \*\*Driftstack indemnifies Customer\*\*/);
     expect(body).toMatch(/12\.2 \*\*Carve-outs from Driftstack's indemnification\.\*\*/);

@@ -4,7 +4,7 @@ title: Terms of Service
 description: The master commercial agreement between Driftstack B.V. and Customer.
 ---
 
-**Version:** 1.0 · **Effective:** 2026-05-07
+**Version:** 1.1 · **Effective:** 2026-07-17
 
 These Terms of Service ("**ToS**") govern Customer's access to and
 use of the Service offered by Driftstack. Capitalised terms are
@@ -44,7 +44,7 @@ Driftstack provides an iPhone-archetype Safari automation platform.
 Specifically, Driftstack provides:
 
 1. An **API** (the `/v1/` endpoints) accepting Customer instructions
-   and returning Session, Capture, and Recording artifacts.
+   and returning Session and Capture artifacts.
 2. **SDKs** (TypeScript, Python, Go) that wrap the API.
 3. A **self-hosted GUI Client** for operating Sessions interactively.
 4. **Mac mini fleet infrastructure** that hosts the WebKit driver
@@ -63,6 +63,27 @@ timing). Customer does not have direct access to coordinate-level or
 event-level primitives through the customer-facing SDKs. (See L-001
 in `docs/locked-decisions.md` for the architectural reasoning, which
 informs but is not part of this ToS.)
+
+**Live-session viewing and desktop-local recording (optional,
+explicitly authorised).** An in-progress browser may be viewed in
+real time through LiveKit, Inc. (Sub-processor — see Privacy Policy
+§7 and DPA Annex 3). Live-session media is ephemeral: Driftstack does
+not store it, and frames are dropped on session end. The GUI Client
+may independently write streamed frames as local NDJSON recording
+files in the app data directory on Customer's device. That recording
+workflow does not upload those files or frames to Driftstack's API,
+control plane, or Cloudflare R2.
+
+Driftstack provides no API recording endpoint or cloud recording-
+retention window. The API Capture endpoint returns requested
+screenshot, DOM snapshot, or PDF bytes inline and does not retain the
+artifact. Driftstack-initiated live viewing for support assistance
+requires Customer's explicit authorisation through the support-
+impersonation gate. Live-session media is encrypted in transit on
+each WebRTC connection using DTLS-SRTP. LiveKit receives, processes,
+and forwards the media as a Sub-processor; Driftstack does not
+currently provide application-level end-to-end encryption through
+the SFU.
 
 ## 4. Account + authorised users
 
@@ -227,6 +248,14 @@ Enterprise tier bills annually in advance by default.
 3. **iDEAL** for Customers with a Dutch bank account, via Stripe.
 4. **Bancontact** for Customers with a Belgian bank account, via
    Stripe.
+5. **Cryptocurrency** in the assets and networks displayed at
+   checkout, via NowPayments OÜ (Estonia). The fiat tier price is
+   converted into a time-limited crypto quote. Customer must send the
+   exact quoted asset and network and bears applicable on-chain fees.
+   Entitlement starts only after NowPayments reports the order paid.
+   Driftstack does not custody crypto or initiate crypto refunds;
+   provider-initiated returns, if any, are governed by NowPayments.
+   Section 8.7.1 applies to every crypto-paid Subscription.
 
 8.4 **VAT / BTW.**
 
@@ -329,7 +358,7 @@ Organisational Measures) sets out the protective measures.
 2. It will not knowingly introduce malicious code into the Service.
 3. It will maintain the Sub-processor list in the Privacy Policy
    in good faith and reflect material changes per the notification
-   mechanism in Section 5 of the DPA.
+   mechanism in Section 3.4 of the DPA.
 4. It will respond to security vulnerability reports under a
    coordinated disclosure policy published separately.
 

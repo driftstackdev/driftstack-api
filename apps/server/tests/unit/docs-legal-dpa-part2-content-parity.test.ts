@@ -76,9 +76,10 @@ describe('W575.B /docs/legal/dpa.md (part 2) content parity', () => {
     expect(body).toMatch(/5\. \*\*Cost\.\*\* Borne by Customer except where the audit reveals a/);
     expect(body).toMatch(/material breach by Driftstack of this DPA/);
     expect(body).toMatch(/6\. \*\*Standardised reports\.\*\* Driftstack may, in lieu of a/);
-    expect(body).toMatch(/Customer-conducted audit, satisfy this obligation by providing/);
-    expect(body).toMatch(/Customer with the most recent SOC 2 Type II report or/);
-    expect(body).toMatch(/equivalent third-party audit report/);
+    expect(body).toMatch(/Customer-conducted audit, satisfy this obligation by providing a/);
+    expect(body).toMatch(/current SOC 2 Type II report or equivalent third-party audit report/);
+    expect(body).toMatch(/Driftstack does not currently hold such a/);
+    expect(body).toMatch(/report; that fact does not limit Customer's audit rights above/);
   });
 
   it('Section 4 (international transfers + SCCs + DPF + Schrems II) + Section 5 (Customer-Provided Secrets) framing pinned', () => {
@@ -156,7 +157,14 @@ describe('W575.B /docs/legal/dpa.md (part 2) content parity', () => {
     expect(body).toMatch(/incorporated under Annex 4\), the SCCs prevail on matters of/);
     expect(body).toMatch(/international transfer\./);
     expect(body).toMatch(/## 11\. Retention summary \(cross-reference\)/);
-    expect(body).toMatch(/- Session Recordings: Customer-controlled \(1–365 days, default 30\)\./);
+    expect(body).toMatch(/- Desktop-local recordings: not uploaded to or retained by/);
+    expect(body).toMatch(/Customer controls retention and deletion on Customer's/);
+    expect(body).toMatch(/- API Capture artifacts: returned inline; the Capture endpoint does/);
+    expect(body).toMatch(/not retain the response bytes\./);
+    expect(body).toMatch(/- Live-session media: not stored; streamed through LiveKit and/);
+    expect(body).toMatch(/dropped on session end\./);
+    expect(body).not.toMatch(/Session Recordings: Customer-controlled/);
+    expect(body).not.toMatch(/1–365 days/);
     expect(body).toMatch(/- Customer-Provided Secrets: deleted within 30 days of Account/);
     expect(body).toMatch(/termination\./);
     expect(body).toMatch(/- Session metadata \(non-content\): 90 days operational; aggregated/);

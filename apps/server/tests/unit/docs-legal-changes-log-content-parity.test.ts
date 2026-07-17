@@ -50,6 +50,44 @@ describe('W574.A /docs/legal/changes-log.md content parity', () => {
     expect(body).toMatch(/references the corresponding rows in this log\./);
   });
 
+  it('2026-07-17 legal v1.1 product/storage truth correction includes Definitions and included-service AI accounting', () => {
+    expect(body).toMatch(
+      /## 2026-07-17 — Privacy, DPA, Terms, and Definitions v1\.1 \(product \+ storage truth\)/,
+    );
+    expect(body).toMatch(
+      /advance together from version 1\.0 to version 1\.1, effective\s+2026-07-17/,
+    );
+    expect(body).toMatch(/Desktop recordings are local NDJSON files/);
+    expect(body).toMatch(/not\s+uploaded to Driftstack's API, control plane, or Cloudflare R2/);
+    expect(body).toMatch(/no API recording endpoint and no cloud recording-/);
+    expect(body).toMatch(/screenshot, DOM snapshot, and PDF Capture/);
+    expect(body).toMatch(/returned inline and are not retained by the Capture/);
+    expect(body).toMatch(/Live-session media remains ephemeral and is dropped on/);
+    expect(body).toMatch(/removed the nonexistent\s+optional cloud-Recording processing purpose/);
+    expect(body).toMatch(/Controller \/ Processor allocation, Special Category/);
+    expect(body).toMatch(/API now promises Session and Capture\s+artifacts only/);
+    expect(body).toMatch(/encrypted-in-\s+transit commitments/);
+    expect(body).toMatch(/former unimplemented application-level end-to-end-encryption claim/);
+    expect(body).toMatch(/LiveKit receives, processes, and forwards the media as a Sub-/);
+    expect(body).toMatch(/does not currently provide application-level/);
+    expect(body).toMatch(/\*\*Shared Definitions:\*\*/);
+    expect(body).toMatch(
+      /pending-API placeholder, obsolete\s+price and API-key-scope enumerations/,
+    );
+    expect(body).toMatch(/included-service budget rather than inventing a separately itemized/);
+    expect(body).toMatch(/\*\*Bundled-LLM commercial wording:\*\*/);
+    expect(body).toMatch(
+      /No price, budget enforcement, provider\s+data flow, consent gate, BYOK contract, or invoice was changed/,
+    );
+    expect(body).toMatch(
+      /no Sub-processor, transfer\s+mechanism, or R2 processing category changed/,
+    );
+    expect(body).toMatch(/subject to final counsel review before launch/);
+    expect(body).not.toMatch(/E2EE (?:on|is enabled by) default/i);
+    expect(body).not.toMatch(/end-to-end encryption is enabled by default/i);
+    expect(body).not.toMatch(/cannot decrypt/i);
+  });
+
   it('2026-05-09 V-353+V-359+V-298a+V-352b + 2026-05-08 V-352b + 2026-05-07 V-295c entries framing pinned', () => {
     expect(body).toMatch(
       /## 2026-05-09 — V-353 \+ V-359 \+ V-298a \+ V-352b cycle disclosure refresh/,
@@ -74,10 +112,13 @@ describe('W574.A /docs/legal/changes-log.md content parity', () => {
     expect(body).toMatch(
       /- \*\*DPA Annex 3 \/ sub-processor register\*\*: Cloudflare R2 row purpose/,
     );
-    expect(body).toMatch(/text expanded from "session recordings and screenshots" to also/);
-    expect(body).toMatch(/cover "public status-page snapshots, and customer-uploaded profile/);
-    expect(body).toMatch(/avatars"\./);
-    expect(body).toMatch(/Per V-294 methodology this counts as a disclosure-scope/);
+    expect(body).toMatch(/text expanded from an earlier, inaccurate browser-media storage/);
+    expect(body).toMatch(/description to also cover public status-page snapshots and/);
+    expect(body).toMatch(/customer-uploaded profile avatars/);
+    expect(body).toMatch(/did not reflect implemented storage and is superseded by the/);
+    expect(body).toMatch(/2026-07-17 v1\.1 correction/);
+    expect(body).not.toMatch(/session recordings and screenshots/i);
+    expect(body).toMatch(/Per V-294 methodology this counts as a disclosure-\s*scope/);
     expect(body).toMatch(/update on an already-disclosed sub-processor, not a new sub-/);
     expect(body).toMatch(/processor; no Art 28\(2\) 30-day notice is triggered\./);
     expect(body).toMatch(/- `SUB_PROCESSOR_REGISTER_LAST_UPDATED` bumped to 2026-05-08\./);
@@ -132,7 +173,10 @@ describe('W574.A /docs/legal/changes-log.md content parity', () => {
       /- \*\*Privacy Policy §3\.11 \(new\)\*\*: "Live-session media \(optional,/,
     );
     expect(body).toMatch(/opt-in only\)"/);
-    expect(body).toMatch(/Calls out E2EE on by default\./);
+    expect(body).toMatch(/application-level end-to-end encryption as enabled, but that/);
+    expect(body).toMatch(/configuration was not implemented/);
+    expect(body).toMatch(/supersedes both claims with desktop-local recording and encrypted-/);
+    expect(body).toMatch(/original application-level encryption wording is superseded/);
     expect(body).toMatch(/- \*\*Marketing-site sub-processors data\*\*: matching public-facing/);
     expect(body).toMatch(/entry\. V-271 mirror linter passes at 12 ↔ 13\./);
     expect(body).toMatch(

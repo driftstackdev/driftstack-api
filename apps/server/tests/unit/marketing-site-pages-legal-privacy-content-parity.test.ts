@@ -1,13 +1,12 @@
 // W506.A — drift guard for apps/marketing-site/src/pages/legal/privacy.md.
-// Privacy Policy v1.0 — Driftstack-as-Controller disclosures. Drift here
+// Privacy Policy v1.1 — Driftstack-as-Controller disclosures. Drift here
 // either weakens a GDPR-Article disclosure (would expose to supervisory-
 // authority complaints) or breaks the Driftstack-as-Controller-vs-
 // Processor split that the DPA cross-reference rests on.
 //
-//   • Version 1.0 effective 2026-05-07 + Driftstack B.V. Dutch entity.
-//   • 8 data-category sections (3.1–3.8): account / authentication /
-//     session-metadata / recordings / Customer-Provided Secrets /
-//     billing / support / marketing-site.
+//   • Version 1.1 effective 2026-07-17 + Driftstack B.V. Dutch entity.
+//   • 11 data-category sections (3.1–3.11), including status data,
+//     double-opt-in subscriptions, and opt-in live-session media.
 //   • 'do not collect' 4-no-list: no sale / no behavioural-advertising
 //     /no Customer-Connected-cross-Customer / no ML-training without
 //     consent.
@@ -38,8 +37,8 @@ function read(p: string): string {
 describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity', () => {
   const body = read(LIB);
 
-  it("Version 1.0 effective 2026-05-07 + Driftstack B.V. Amsterdam Dutch entity + Controller-vs-Processor split anchor pinned: 'This Privacy Policy describes Driftstack's processing as a **Controller** (account, billing, support correspondence, marketing site analytics where applicable). Driftstack's processing as a **Processor** on Customer's behalf (Customer Data, Session content, Customer-Provided Secrets) is governed by the [Data Processing Agreement (DPA)]' — pinned so the version stamp + Dutch BV jurisdiction + Controller-vs-Processor split + DPA cross-reference all survive (drift to dropping the Controller/Processor split would create GDPR-role confusion at the heart of the doc)", () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+  it("Version 1.1 effective 2026-07-17 + Driftstack B.V. Amsterdam Dutch entity + Controller-vs-Processor split anchor pinned: 'This Privacy Policy describes Driftstack's processing as a **Controller** (account, billing, support correspondence, marketing site analytics where applicable). Driftstack's processing as a **Processor** on Customer's behalf (Customer Data, Session content, Customer-Provided Secrets) is governed by the [Data Processing Agreement (DPA)]' — pinned so the version stamp + Dutch BV jurisdiction + Controller-vs-Processor split + DPA cross-reference all survive (drift to dropping the Controller/Processor split would create GDPR-role confusion at the heart of the doc)", () => {
+    expect(body).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-17/);
     expect(body).toMatch(
       /\*\*Driftstack B\.V\.\*\*, a private limited company organised under the laws of the Netherlands, established in Amsterdam\./,
     );
@@ -51,15 +50,26 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     );
   });
 
-  it("8-category data-collection taxonomy: 3.1 Account + 3.2 Authentication + 3.3 Session metadata + 3.4 Session recordings (optional) + 3.5 Customer-Provided Secrets + 3.6 Billing + 3.7 Support correspondence + 3.8 Marketing-site — pinned so the 8-category disclosure surface stays complete (drift to dropping any category would create a GDPR-Article-13 disclosure gap; drift to dropping the '(optional)' marker on Recordings would obscure the Customer-opt-in posture)", () => {
+  it('11-category data-collection taxonomy includes account through opt-in live-session media', () => {
     expect(body).toMatch(/### 3\.1 Account data/);
     expect(body).toMatch(/### 3\.2 Authentication data/);
     expect(body).toMatch(/### 3\.3 Session metadata/);
-    expect(body).toMatch(/### 3\.4 Session recordings \(optional\)/);
+    expect(body).toMatch(/### 3\.4 Desktop-local recordings and API Capture artifacts/);
     expect(body).toMatch(/### 3\.5 Customer-Provided Secrets/);
     expect(body).toMatch(/### 3\.6 Billing data/);
     expect(body).toMatch(/### 3\.7 Support correspondence/);
     expect(body).toMatch(/### 3\.8 Marketing-site data/);
+    expect(body).toMatch(/### 3\.9 Status-page data/);
+    expect(body).toMatch(/### 3\.10 Status-page email subscriptions/);
+    expect(body).toMatch(/### 3\.11 Live-session media \(optional, opt-in only\)/);
+  });
+
+  it('Account data truthfully discloses the R2 avatar and non-binding region preference', () => {
+    expect(body).toMatch(/optional profile avatar/);
+    expect(body).toMatch(/Customer-uploaded image, stored in the Cloudflare R2 sub-processor/);
+    expect(body).toMatch(/region preference/);
+    expect(body).toMatch(/does not change current data residency/);
+    expect(body).not.toMatch(/see §17/);
   });
 
   it('Article 6 GDPR legal-basis citations pinned: 6(1)(b) performance-of-contract + 6(1)(c) compliance-with-legal-obligation Article 32 + 6(1)(f) legitimate-interest — pinned so the 3-legal-basis anchoring stays explicit (drift to dropping Article 32 GDPR anchor on Authentication would orphan the security-of-processing legal basis; drift to dropping 6(1)(b) on Account would weaken the contract-performance basis)', () => {
@@ -76,10 +86,45 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     );
   });
 
-  it("Recording retention Customer-controlled framing pinned: 'Customer-controlled. Default 30 days; Customer can configure 1–365 days or disable entirely. Driftstack does not retain Recordings beyond Customer's configured window.' — pinned so the Customer-controlled-retention 4-state framing (default-30d + range-1-365 + disable-option + no-beyond-window commitment) survives (drift to dropping the disable-entirely option would block customers from minimising; drift to extending the 365d cap would create marketing↔retention-policy divergence)", () => {
+  it('Crypto billing disclosure pins stored order/provider fields and excludes wallet/transaction identifiers', () => {
     expect(body).toMatch(
-      /\*\*Retention:\*\* Customer-controlled\. Default 30 days; Customer can\s*\n?\s*configure 1–365 days or disable entirely\. Driftstack does not\s*\n?\s*retain Recordings beyond Customer's configured window\./,
+      /internal order id, selected tier, fiat price, NowPayments\s*\n?\s*payment id/,
     );
+    expect(body).toMatch(/signed provider notifications/);
+    expect(body).toMatch(
+      /does not persist a Customer wallet address or blockchain\s*\n?\s*transaction hash/,
+    );
+  });
+
+  it('desktop recordings stay local, API Captures return inline, and legacy cloud-retention claims are absent', () => {
+    expect(body).toMatch(
+      /recording workflow does \*\*not\*\* upload recording files or frames\s*\n?\s*to Driftstack's API, control plane, or Cloudflare R2/,
+    );
+    expect(body).toMatch(/Driftstack has\s*\n?\s*no API recording endpoint/);
+    expect(body).toMatch(/`POST \/v1\/sessions\/:id\/capture`/);
+    expect(body).toMatch(/Capture endpoint does not retain\s*\n?\s*the artifact/);
+    expect(body).toMatch(/Live-session\s*\n?\s*media is ephemeral/);
+    expect(body).toMatch(/encrypted in transit on each\s*\n?\s*WebRTC connection using DTLS-SRTP/);
+    expect(body).toMatch(
+      /LiveKit receives, processes, and\s*\n?\s*forwards the media as a Sub-processor/,
+    );
+    expect(body).toMatch(
+      /does not currently\s*\n?\s*provide application-level end-to-end encryption through the SFU/,
+    );
+    expect(body).not.toMatch(/Customer-controlled\. Default 30 days/);
+    expect(body).not.toMatch(/1–365 days/);
+    expect(body).not.toMatch(/E2EE (?:on|is enabled by) default/i);
+    expect(body).not.toMatch(/end-to-end encryption is enabled by default/i);
+    expect(body).not.toMatch(/cannot decrypt/i);
+  });
+
+  it('Status and live-session sections disclose lifecycle, consent, retention, and cryptography', () => {
+    expect(body).toMatch(/does \*\*not\*\* expose\s*\n?\s*Customer Data/);
+    expect(body).toMatch(/retained for 30 days for\s*\n?\s*diagnostic purposes/);
+    expect(body).toMatch(/double-opt-in flow/);
+    expect(body).toMatch(/purged from that row 90\s*\n?\s*days after unsubscribe/);
+    expect(body).toMatch(/live-session media is \*\*not stored\*\*/);
+    expect(body).toMatch(/DTLS-SRTP/);
   });
 
   it("Section 5 'do not collect' 4-no commitment: no-sale + no-behavioural-advertising-beyond-operation + no-Customer-Connected-cross-Customer-combination + no-ML-training-without-consent — pinned so the 4-promise-of-restraint commitment survives (drift to dropping 'no ML training' would let bundled-LLM data slip into training; drift to dropping 'no sale' would weaken the most-frequently-asked privacy commitment)", () => {
@@ -91,7 +136,7 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
       /Combine Customer-Connected Service data with Driftstack-internal\s*\n?\s*profiles or cross-Customer aggregates\./,
     );
     expect(body).toMatch(
-      /Use Customer Data \(Sessions, Workflows, Recordings\) to train\s*\n?\s*machine-learning models, including the bundled-LLM AI agent\s*\n?\s*feature, without Customer's separate explicit consent\./,
+      /Use Customer Data \(including Session content, Workflows,\s*\n?\s*live-session media, or Capture content\) to train machine-learning\s*\n?\s*models, including the bundled-LLM AI agent feature, without\s*\n?\s*Customer's separate explicit consent\./,
     );
   });
 
@@ -112,6 +157,8 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     expect(body).toMatch(/\*\*Stripe Payments Europe Limited\*\* \(Ireland\)/);
     expect(body).toMatch(/\*\*Stripe, Inc\.\*\* \(US, Delaware\)/);
     expect(body).toMatch(/\*\*Anthropic, PBC\*\* \(US, Delaware\) — _conditional_/);
+    expect(body).toMatch(/consents to Driftstack-provided model access/);
+    expect(body).not.toMatch(/opts into bundled-LLM billing/);
     expect(body).toMatch(/\*\*Moneybird B\.V\.\*\* \(Netherlands\)/);
     expect(body).toMatch(/\*\*Hetzner Online GmbH\*\* \(Germany\)/);
     expect(body).toMatch(/\*\*Neon, Inc\.\*\* \(US, Delaware\) — _data resident in EU Frankfurt_/);
@@ -132,6 +179,9 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     );
     expect(body).toMatch(/\*\*NowPayments OÜ\*\* \(Estonia, EU\) — _conditional_/);
     expect(body).toMatch(/\*\*LiveKit\*\* \(US, regional endpoints\) — _conditional_/);
+    expect(body).toMatch(/notice and\s*\n?\s*objection mechanism in Section 3\.4 of the DPA/);
+    expect(body).toMatch(/\[`\/trust\/sub-processors`\]\(\/trust\/sub-processors\/\)/);
+    expect(body).not.toMatch(/marketing site goes live|Section 5 of the DPA/i);
   });
 
   it('Customer-Connected Services 4-list NOT-Sub-processors: HTTP/SOCKS5 proxies + Captcha solvers + Email IMAP/Gmail-OAuth + SMS verification — pinned so the 4-service NOT-Sub-processor delineation survives (drift to merging any into Sub-processor list would create marketing↔DPA-Annex-3 divergence and would shift contractual responsibility incorrectly)', () => {
@@ -147,7 +197,7 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     expect(body).toMatch(/\*\*SMS-verification services\*\* \(e\.g\. TextVerified, Twilio\)\./);
   });
 
-  it("Section 9 retention summary key periods: Account data 7 years (AWR Art 52 Dutch tax) + Authentication 90-day revoked-retention + Session metadata 90d + Recordings Customer-controlled + Customer-Provided Secrets 30d-post-termination + Billing 7-year + Support 3-year + Marketing-site logs 30d — pinned so the per-category retention windows + the Dutch tax law (Algemene wet inzake rijksbelastingen Article 52) anchoring on 7-year retention survive (drift to changing the 7-year-tax-law window would orphan the Dutch-legal-basis; drift to dropping 'AWR Art 52' would lose the specific statute anchor)", () => {
+  it('Section 9 retention summary preserves statutory periods and pins the local/inline/ephemeral artifact boundaries', () => {
     expect(body).toMatch(/Article 52 _Algemene wet inzake rijksbelastingen_ — 7-year retention/);
     expect(body).toMatch(/7 years post-transaction \(Dutch tax law, AWR Art 52\)/);
     expect(body).toMatch(
@@ -155,6 +205,15 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     );
     expect(body).toMatch(/3 years post-resolution\./);
     expect(body).toMatch(/Marketing-site access logs\s*\n?\s*\|\s*\n?\s*30 days\./);
+    expect(body).toMatch(
+      /Desktop-local recordings\s*\n?\s*\|\s*\n?\s*Not uploaded to or retained by Driftstack/,
+    );
+    expect(body).toMatch(/API Capture artifacts\s*\n?\s*\|\s*\n?\s*Returned inline to Customer/);
+    expect(body).toMatch(/Live-session media\s*\n?\s*\|\s*\n?\s*Not stored by Driftstack/);
+    expect(body).toMatch(/Profile metadata \+ Profile Snapshots/);
+    expect(body).toMatch(/persist until Customer deletes them/);
+    expect(body).toMatch(/within 30 days of Customer Account termination/);
+    expect(body).not.toMatch(/Session Recordings\s*\n?\s*\|/);
   });
 
   it('Article 15-22 Data Subject rights pinned: access (15) + rectification (16) + erasure (17) + restriction (18) + portability (20) + objection (21) + automated-decision-making (22) — pinned so the 7-Article-rights enumeration stays complete (drift to dropping the Article-numbers would weaken the GDPR-anchored specificity; drift to dropping Article 22 would obscure the no-automated-decision-making posture)', () => {

@@ -3,17 +3,16 @@
 // derivation. This guard pins the load-bearing GDPR-Controller-side
 // claims a DPO reviewer anchors on:
 //
-//   • Version 1.0 + Effective 2026-05-07 (pin via doc-header drift).
+//   • Version 1.1 + Effective 2026-07-17 (pin via doc-header drift).
 //   • Controller identity: Driftstack B.V. Amsterdam.
 //   • §3.2 Authentication-data security: API Keys scrypt-hashed,
 //     TOTP AES-256-GCM, 10 recovery codes scrypt-hashed (matches
 //     /trust/security-overview).
-//   • §3.4 Session Recordings: Customer-controlled retention,
-//     default 30, range 1–365 days.
+//   • §3.4 desktop-local recordings + inline Capture artifacts;
+//     no cloud/API/R2 recording or server retention window.
 //   • §3.6 Renewal-reminder email mechanism (Stripe invoice.upcoming
 //     ~7 days before invoice).
-//   • §3.8 Marketing-site cookies: strictly-necessary only;
-//     no first-party analytics cookies.
+//   • §3.8–3.11 current marketing/status/live-session disclosures.
 //   • §5 4 do-not-do honesty list: no sale / no behavioural ads /
 //     no cross-customer aggregation / no ML training without consent.
 //   • §7 13 Sub-processor rows pinned with transfer mechanism.
@@ -36,6 +35,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/privacy.md');
+const CANONICAL = resolve(REPO_ROOT, 'docs/legal/privacy-policy.md');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -43,15 +43,28 @@ function read(p: string): string {
 
 describe('W377.B marketing-site /legal/privacy.md content parity', () => {
   const body = read(PAGE);
+  const canonical = read(CANONICAL);
 
-  it('version 1.0 + effective 2026-05-07 doc header pinned', () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+  it('version 1.1 + effective 2026-07-17 is mirrored to the canonical policy', () => {
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-17/);
+    }
   });
 
   it('§1 Controller identity = Driftstack B.V. (Netherlands, Amsterdam)', () => {
     expect(body).toMatch(
       /Controller of Personal Data described in this Privacy Policy is \*\*Driftstack B\.V\.\*\*, a private limited company organised under the laws of the Netherlands, established in Amsterdam/,
     );
+  });
+
+  it('§3.1 account avatar and region-preference disclosure is mirrored canonically', () => {
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/optional profile avatar/);
+      expect(doc).toMatch(/Cloudflare R2/);
+      expect(doc).toMatch(/infrastructure\s+region preference/);
+      expect(doc).toMatch(/does not change current data residency/);
+    }
+    expect(body).not.toMatch(/see §17/);
   });
 
   it('§3.2 API Keys scrypt-hashed + TOTP AES-256-GCM + 10 recovery codes scrypt-hashed', () => {
@@ -61,15 +74,46 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
     expect(body).toMatch(/per-session "MFA-satisfied-at"\s+timestamp/);
   });
 
-  it('§3.4 Session Recordings: Customer-controlled 1–365 days, default 30', () => {
-    expect(body).toMatch(
-      /Customer-controlled\. Default 30 days; Customer can\s+configure 1–365 days or disable entirely/,
-    );
+  it('§3.4 local-recording + inline-Capture boundary is mirrored and legacy cloud promises stay absent', () => {
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/### 3\.4 Desktop-local recordings and API Capture artifacts/);
+      expect(doc).toMatch(/completed recording as local NDJSON files in the app data directory/);
+      expect(doc).toMatch(
+        /does \*\*not\*\* upload recording files or frames\s+to Driftstack's API, control plane, or Cloudflare R2/,
+      );
+      expect(doc).toMatch(/Driftstack has\s+no API recording endpoint/);
+      expect(doc).toMatch(/`POST \/v1\/sessions\/:id\/capture`/);
+      expect(doc).toMatch(/returns the resulting\s+bytes inline in that response/);
+      expect(doc).toMatch(/Capture endpoint does not retain\s+the artifact/);
+      expect(doc).toMatch(/Live-session\s+media is\s+ephemeral/);
+      expect(doc).toMatch(/encrypted in transit on each\s+WebRTC connection using DTLS-SRTP/);
+      expect(doc).toMatch(
+        /LiveKit receives, processes, and\s+forwards the media as a Sub-processor/,
+      );
+      expect(doc).toMatch(
+        /does not currently\s+provide application-level end-to-end encryption through the SFU/,
+      );
+      expect(doc).not.toMatch(/Customer-controlled\. Default 30 days/);
+      expect(doc).not.toMatch(/1–365 days/);
+      expect(doc).not.toMatch(/optionally store Recordings/);
+      expect(doc).not.toMatch(/E2EE (?:on|is enabled by) default/i);
+      expect(doc).not.toMatch(/end-to-end encryption is enabled by default/i);
+      expect(doc).not.toMatch(/cannot decrypt/i);
+    }
   });
 
   it('§3.6 billing data: no PAN retention (PCI-DSS via Stripe) + 7-year retention (Article 52 AWR)', () => {
     expect(body).toMatch(/Driftstack does \*\*not\*\* retain primary account numbers\s+\(PANs\)/);
     expect(body).toMatch(/Article 52 of the\s+Dutch _Algemene wet inzake rijksbelastingen_/);
+  });
+
+  it('§3.6 crypto disclosure pins stored provider/order fields and excludes wallet/transaction identifiers', () => {
+    expect(body).toMatch(/internal order id, selected tier, fiat price, NowPayments\s+payment id/);
+    expect(body).toMatch(/quoted crypto amount and currency, payment status/);
+    expect(body).toMatch(/signed provider notifications/);
+    expect(body).toMatch(
+      /does not persist a Customer wallet address or blockchain\s+transaction hash/,
+    );
   });
 
   it('§3.6 renewal-reminder email: Stripe invoice.upcoming ~7 days before invoice + opt-outable', () => {
@@ -89,6 +133,23 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
       /strictly-necessary cookies on the\s+marketing site \(session-id for signup flow, CSRF token\)/,
     );
     expect(body).toMatch(/Article 5\(3\) of\s+Directive 2002\/58\/EC/);
+    expect(body).toMatch(
+      /remain disabled unless the required consent\s+mechanism and disclosure are active/,
+    );
+  });
+
+  it('§3.9–3.11 status data, double-opt-in subscriptions, and ephemeral live-session media are public', () => {
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/### 3\.9 Status-page data/);
+      expect(doc).toMatch(/does \*\*not\*\* expose(?: any)?\s+Customer Data/);
+      expect(doc).toMatch(/retained for 30 days for\s+diagnostic purposes/);
+      expect(doc).toMatch(/### 3\.10 Status-page email subscriptions/);
+      expect(doc).toMatch(/double-opt-in flow/);
+      expect(doc).toMatch(/purged from (?:this|that) row 90\s+days after unsubscribe/);
+      expect(doc).toMatch(/### 3\.11 Live-session media \(optional, opt-in only\)/);
+      expect(doc).toMatch(/live-session media is \*\*not stored\*\*/);
+      expect(doc).toMatch(/DTLS-SRTP/);
+    }
   });
 
   it('§5 4 do-not-do honesty list: no sale / no behavioural ads / no cross-customer / no ML training without consent', () => {
@@ -98,7 +159,7 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
       /Combine Customer-Connected Service data with Driftstack-internal\s+profiles or cross-Customer aggregates/,
     );
     expect(body).toMatch(
-      /Use Customer Data \(Sessions, Workflows, Recordings\) to train\s+machine-learning models/,
+      /Use Customer Data \(including Session content, Workflows,\s+live-session media, or Capture content\) to train machine-learning\s+models/,
     );
     expect(body).toMatch(/bundled-LLM AI agent\s+feature/);
   });
@@ -130,6 +191,9 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
     ]) {
       expect(body, `sub-processor missing: ${name}`).toContain(name);
     }
+    expect(body).toMatch(/notice and\s+objection mechanism in Section 3\.4 of the DPA/);
+    expect(body).toMatch(/\[`\/trust\/sub-processors`\]\(\/trust\/sub-processors\/\)/);
+    expect(body).not.toMatch(/marketing site goes live|Section 5 of the DPA/i);
   });
 
   it('§7 Neon + Upstash + Cloudflare data-residency = EU (Frankfurt / EU jurisdiction)', () => {
@@ -155,6 +219,17 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
     expect(body).toMatch(/Marketing-site access logs.*\|\s*30 days/);
     expect(body).toMatch(/Support correspondence.*\|\s*3 years post-resolution/);
     expect(body).toMatch(/Session metadata\s*\|\s*90 days operational/);
+    expect(body).toMatch(
+      /Desktop-local recordings\s*\|\s*Not uploaded to or retained by Driftstack/,
+    );
+    expect(body).toMatch(/API Capture artifacts\s*\|\s*Returned inline to Customer/);
+    expect(body).toMatch(/Live-session media\s*\|\s*Not stored by Driftstack/);
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/Profile metadata \+ Profile Snapshots/);
+      expect(doc).toMatch(/persist until Customer deletes them/);
+      expect(doc).toMatch(/within 30 days of Customer Account termination/);
+    }
+    expect(body).not.toMatch(/Session Recordings\s*\|/);
   });
 
   it('§10 data-subject rights: 1-month response, extendable by 2 months (Art 12(3))', () => {

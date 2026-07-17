@@ -1,15 +1,16 @@
 // W577.A — drift guard for /docs/legal/privacy-policy.md (Part 1 of 3).
-// Driftstack Privacy Policy Version 1.0 (2026-05-07). Drift here either
+// Driftstack Privacy Policy Version 1.1 (2026-07-17). Drift here either
 // weakens the Controller-vs-Processor split (where DPA governs Processor
 // path), drops a §3.* data-category legal-basis pin (Article 6 GDPR), or
 // breaks the §3.10 status-page double-opt-in / §3.11 live-session-not-
 // stored / §3.6 NowPayments-opt-in posture invariants.
 //
-//   • Privacy Policy Version 1.0. Effective 2026-05-07.
+//   • Privacy Policy Version 1.1. Effective 2026-07-17.
 //   • Driftstack B.V. (NL) is Controller; DPA governs Processor path.
 //   • §3 collected: 11 categories — each with What/Why/Legal-basis/Source.
 //   • §3.10 status-page email subs: double-opt-in (Art 6(1)(a) consent).
-//   • §3.11 live-session media: NOT stored; LiveKit SFU + E2EE-by-default.
+//   • §3.11 live-session media: NOT stored; encrypted in transit;
+//     LiveKit processes/forwards it; no application-level E2EE claim.
 //   • Part 1: header + sections 1-3 (Controller through 11 data categories).
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -28,9 +29,9 @@ function read(p: string): string {
 describe('W577.A /docs/legal/privacy-policy.md (part 1) content parity', () => {
   const body = read(LIB);
 
-  it('Header + Version-1.0 + 2026-05-07 + Controller-vs-Processor split + DPA-incorporation framing pinned', () => {
+  it('Header + Version-1.1 + 2026-07-17 + Controller-vs-Processor split + DPA-incorporation framing pinned', () => {
     expect(body).toMatch(/^# Driftstack — Privacy Policy$/m);
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+    expect(body).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-17/);
     expect(body).toMatch(/This Privacy Policy describes how Driftstack Processes Personal Data/);
     expect(body).toMatch(/in connection with the Service\./);
     expect(body).toMatch(/Capitalised terms are defined in/);
@@ -73,7 +74,7 @@ describe('W577.A /docs/legal/privacy-policy.md (part 1) content parity', () => {
     expect(body).toMatch(/the Processor\./);
   });
 
-  it('Section 3.1 Account + 3.2 Auth + 3.3 Session-metadata + 3.4 Recordings (Processor) framing pinned', () => {
+  it('Section 3.1 Account + 3.2 Auth + 3.3 Session-metadata + 3.4 local-recording/inline-Capture boundary pinned', () => {
     expect(body).toMatch(/## 3\. Data we collect \(and why\)/);
     expect(body).toMatch(/### 3\.1 Account data/);
     expect(body).toMatch(
@@ -94,14 +95,18 @@ describe('W577.A /docs/legal/privacy-policy.md (part 1) content parity', () => {
     expect(body).toMatch(/Article 6\(1\)\(c\) — compliance with legal obligation under Article 32/);
     expect(body).toMatch(/GDPR \(security of processing\)\./);
     expect(body).toMatch(/### 3\.3 Session metadata/);
-    expect(body).toMatch(/### 3\.4 Session recordings \(optional\)/);
+    expect(body).toMatch(/### 3\.4 Desktop-local recordings and API Capture artifacts/);
+    expect(body).toMatch(/completed recording as local NDJSON files in the app data directory/);
     expect(body).toMatch(
-      /\*\*Legal basis:\*\* Driftstack Processes Recordings as \*\*Processor on/,
+      /does \*\*not\*\* upload recording files or frames\s+to Driftstack's API, control plane, or Cloudflare R2/,
     );
-    expect(body).toMatch(/Customer's behalf\*\* under the \[DPA\]\(dpa\.md\), not as Controller\./);
-    expect(body).toMatch(/\*\*Retention:\*\* Customer-controlled\./);
-    expect(body).toMatch(/Default 30 days; Customer can/);
-    expect(body).toMatch(/configure 1–365 days or disable entirely\./);
+    expect(body).toMatch(/Driftstack has\s+no API recording endpoint/);
+    expect(body).toMatch(/`POST \/v1\/sessions\/:id\/capture`/);
+    expect(body).toMatch(/returns the resulting\s+bytes inline in that response/);
+    expect(body).toMatch(/Capture endpoint does not retain\s+the artifact/);
+    expect(body).toMatch(/under the \[DPA\]\(dpa\.md\), not as Controller/);
+    expect(body).not.toMatch(/Customer-controlled\. Default 30 days/);
+    expect(body).not.toMatch(/1–365 days/);
   });
 
   it('Section 3.5 Customer-Provided Secrets + 3.6 Billing data + NowPayments crypto + renewal-reminder framing pinned', () => {
@@ -115,11 +120,13 @@ describe('W577.A /docs/legal/privacy-policy.md (part 1) content parity', () => {
     expect(body).toMatch(/Driftstack does \*\*not\*\* retain primary account numbers/);
     expect(body).toMatch(/\(PANs\); these are tokenised by Stripe under PCI-DSS scope\./);
     expect(body).toMatch(/\*\*Cryptocurrency payments \(optional, opt-in only\)\.\*\*/);
-    expect(body).toMatch(/Customers may/);
-    expect(body).toMatch(/choose to pay Subscription Fees in BTC, LTC, USDT, USDC, ETH, or/);
-    expect(body).toMatch(/XMR via the NowPayments OÜ \(Estonia\) payment processor\./);
-    expect(body).toMatch(/Driftstack does \*\*not\*\* retain Customer wallet/);
-    expect(body).toMatch(/addresses/);
+    expect(body).toMatch(/chooses a crypto asset and network displayed at checkout/);
+    expect(body).toMatch(/stores the internal order id, selected tier, fiat price, NowPayments/);
+    expect(body).toMatch(/payment id, quoted crypto amount and currency, payment status/);
+    expect(body).toMatch(/does not persist a Customer wallet address or blockchain/);
+    expect(body).toMatch(/transaction hash in the crypto-order record/);
+    expect(body).toMatch(/NowPayments returns payment id, quote, amount, currency, and/);
+    expect(body).toMatch(/status data via signed webhook/);
     expect(body).toMatch(/Article 6\(1\)\(c\) — compliance with Dutch tax law \(Article 52 of the/);
     expect(body).toMatch(/Dutch _Algemene wet inzake rijksbelastingen_; 7-year retention\)\./);
     expect(body).toMatch(/\*\*Renewal-reminder emails\.\*\*/);
@@ -148,7 +155,7 @@ describe('W577.A /docs/legal/privacy-policy.md (part 1) content parity', () => {
     expect(body).toMatch(/dispatched via Postmark \(Sub-processor — see Annex 3 of the DPA\)\./);
   });
 
-  it('Section 3.11 Live-session media + LiveKit-not-stored + E2EE-by-default framing pinned', () => {
+  it('Section 3.11 Live-session media + LiveKit-not-stored + encrypted-in-transit framing pinned without E2EE overclaim', () => {
     expect(body).toMatch(/### 3\.11 Live-session media \(optional, opt-in only\)/);
     expect(body).toMatch(
       /\*\*What:\*\* real-time WebRTC media streams \(rendered browser screen \+/,
@@ -161,13 +168,23 @@ describe('W577.A /docs/legal/privacy-policy.md (part 1) content parity', () => {
     expect(body).toMatch(/are dropped on session end\./);
     expect(body).toMatch(/No durable copy lands in Driftstack's/);
     expect(body).toMatch(/control plane\./);
+    expect(body).toMatch(/Driftstack has no cloud recording endpoint or/);
+    expect(body).toMatch(/Customer may create a desktop-local/);
+    expect(body).toMatch(/artifact whose bytes are returned inline and not retained by the/);
+    expect(body).not.toMatch(/Recording feature \(§3\.4\) is the durable path/);
     expect(body).toMatch(/\*\*Recipients:\*\* LiveKit, Inc\. \(Sub-processor — see Annex 3 of the/);
     expect(body).toMatch(/DPA\) for SFU\./);
     expect(body).toMatch(
-      /\*\*Cryptography:\*\* WebRTC standard end-to-end encryption \(DTLS-SRTP\)/,
+      /\*\*Cryptography:\*\* live-session media is encrypted in transit on each/,
     );
-    expect(body).toMatch(/between peers; LiveKit's SFU is in the encrypted path but cannot/);
-    expect(body).toMatch(/decrypt media when end-to-end encryption is enabled/);
+    expect(body).toMatch(/WebRTC connection using DTLS-SRTP\./);
+    expect(body).toMatch(/LiveKit receives, processes, and/);
+    expect(body).toMatch(/forwards the media as a Sub-processor\./);
+    expect(body).toMatch(/does not currently/);
+    expect(body).toMatch(/provide application-level end-to-end encryption through the SFU\./);
+    expect(body).not.toMatch(/E2EE (?:on|is enabled by) default/i);
+    expect(body).not.toMatch(/end-to-end encryption is enabled by default/i);
+    expect(body).not.toMatch(/cannot decrypt/i);
   });
 
   it('file exists at canonical path', () => {

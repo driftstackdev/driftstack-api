@@ -1,12 +1,13 @@
 // W576.A — drift guard for /docs/legal/terms-of-service.md (Part 1 of 3).
-// Driftstack ToS Version 1.0 (2026-05-07). Drift here either weakens
+// Driftstack ToS Version 1.1 (2026-07-17). Drift here either weakens
 // the B2B-only carve-out (Article 7:5 BW + Directive 2011/83/EU non-
 // consumer scope), drops the Customer-Connected-Services-are-Customer's-
 // relationship invariant, or unsets the live-session opt-in framing.
 //
-//   • ToS Version 1.0. Effective 2026-05-07.
+//   • ToS Version 1.1. Effective 2026-07-17.
 //   • B2B-only — Article 7:5 BW + Directive 2011/83/EU exclusion.
-//   • Live-session via LiveKit, opt-in, E2EE by default.
+//   • Live-session via LiveKit, opt-in, encrypted in transit; LiveKit
+//     processes/forwards it; no application-level E2EE claim.
 //   • Customer-Connected Services: Customer's relationship, not Driftstack's.
 //   • Part 1: header + sections 1-7 (Acceptance through Confidentiality).
 
@@ -26,9 +27,9 @@ function read(p: string): string {
 describe('W576.A /docs/legal/terms-of-service.md (part 1) content parity', () => {
   const body = read(LIB);
 
-  it('Header + Version-1.0 + 2026-05-07 + B2B-only + Article-7:5-BW + Directive-2011/83/EU framing pinned', () => {
+  it('Header + Version-1.1 + 2026-07-17 + B2B-only + Article-7:5-BW + Directive-2011/83/EU framing pinned', () => {
     expect(body).toMatch(/^# Driftstack — Terms of Service$/m);
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+    expect(body).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-17/);
     expect(body).toMatch(
       /These Terms of Service \("\*\*ToS\*\*"\) govern Customer's access to and/,
     );
@@ -71,13 +72,31 @@ describe('W576.A /docs/legal/terms-of-service.md (part 1) content parity', () =>
     expect(body).toMatch(/4\. \*\*Mac mini fleet infrastructure\*\* that hosts the WebKit driver/);
     expect(body).toMatch(/processes underlying each Session\./);
     expect(body).toMatch(/The Service is \*\*intent-based\*\*\./);
-    expect(body).toMatch(/\*\*Live-session viewing \(optional, opt-in\)\.\*\*/);
-    expect(body).toMatch(/in-progress browser is viewed in real time via WebRTC streamed/);
-    expect(body).toMatch(/through LiveKit, Inc\. \(Sub-processor — see Privacy Policy §7 and/);
+    expect(body).toMatch(/returning Session and Capture artifacts\./);
+    expect(body).not.toMatch(/Session, Capture, and Recording artifacts/);
+    expect(body).toMatch(/\*\*Live-session viewing and desktop-local recording \(optional,/);
+    expect(body).toMatch(/in-progress browser may be viewed in/);
+    expect(body).toMatch(/real time through LiveKit, Inc\. \(Sub-processor — see Privacy Policy/);
     expect(body).toMatch(/DPA Annex 3\)\./);
-    expect(body).toMatch(/End-to-end encryption is/);
-    expect(body).toMatch(/enabled by default for live sessions; the LiveKit SFU forwards/);
-    expect(body).toMatch(/encrypted media without the ability to decrypt\./);
+    expect(body).toMatch(/Live-session media is ephemeral: Driftstack does/);
+    expect(body).toMatch(/not store it, and frames are dropped on session end\./);
+    expect(body).toMatch(/local NDJSON recording/);
+    expect(body).toMatch(/workflow does not upload those files or frames to Driftstack's API,/);
+    expect(body).toMatch(/control plane, or Cloudflare R2\./);
+    expect(body).toMatch(/provides no API recording endpoint or cloud recording-/);
+    expect(body).toMatch(/screenshot, DOM snapshot, or PDF bytes inline/);
+    expect(body).toMatch(/does not retain the/);
+    expect(body).toMatch(/artifact\./);
+    expect(body).not.toMatch(/Recording feature[\s\S]{0,80}Cloudflare R2/);
+    expect(body).toMatch(/Live-session media is encrypted in transit on/);
+    expect(body).toMatch(/each WebRTC connection using DTLS-SRTP\./);
+    expect(body).toMatch(/LiveKit receives, processes,/);
+    expect(body).toMatch(/and forwards the media as a Sub-processor/);
+    expect(body).toMatch(/does not/);
+    expect(body).toMatch(/currently provide application-level end-to-end encryption through/);
+    expect(body).not.toMatch(/E2EE (?:on|is enabled by) default/i);
+    expect(body).not.toMatch(/end-to-end encryption is enabled by default/i);
+    expect(body).not.toMatch(/cannot decrypt/i);
   });
 
   it('Section 4 (Account) + Section 5 (Customer responsibilities) + Section 5.5 warranties framing pinned', () => {

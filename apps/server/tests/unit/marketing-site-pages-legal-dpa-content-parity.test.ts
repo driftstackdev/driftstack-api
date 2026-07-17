@@ -1,11 +1,11 @@
 // W506.B — drift guard for apps/marketing-site/src/pages/legal/dpa.md.
-// Data Processing Agreement v1.0 — Article 28 GDPR Processor terms.
+// Data Processing Agreement v1.1 — Article 28 GDPR Processor terms.
 // Drift here either weakens an Article 28(3)(a)-(h) obligation (would
 // breach contractual commitment to GDPR-compliant Customer base) or
 // breaks the Customer-Connected-Services-are-NOT-Sub-processors
 // delineation that the AUP and Privacy Policy both rest on.
 //
-//   • Version 1.0 + Article 28(3) satisfaction + UK GDPR / Swiss FADP
+//   • Version 1.1 + Article 28(3) satisfaction + UK GDPR / Swiss FADP
 //     extension.
 //   • Section 1 subject-matter-duration-nature-purpose 6-row table.
 //   • Section 2 roles: Customer is Controller, Driftstack is Processor.
@@ -35,8 +35,8 @@ function read(p: string): string {
 describe('W506.B apps/marketing-site/src/pages/legal/dpa.md content parity', () => {
   const body = read(LIB);
 
-  it("Version 1.0 effective 2026-05-07 + Article 28(3) GDPR satisfaction structure pinned: 'This DPA is structured to satisfy Article 28(3) GDPR. To the extent applicable to a Customer's processing in another jurisdiction (UK GDPR, Swiss FADP), this DPA's provisions read with the corresponding provisions of those regimes.' — pinned so the Article-28(3) anchor + UK-GDPR + Swiss-FADP cross-regime extension survive (drift to dropping the multi-regime read-through would orphan UK/Swiss customers from contractual coverage)", () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+  it("Version 1.1 effective 2026-07-17 + Article 28(3) GDPR satisfaction structure pinned: 'This DPA is structured to satisfy Article 28(3) GDPR. To the extent applicable to a Customer's processing in another jurisdiction (UK GDPR, Swiss FADP), this DPA's provisions read with the corresponding provisions of those regimes.' — pinned so the Article-28(3) anchor + UK-GDPR + Swiss-FADP cross-regime extension survive (drift to dropping the multi-regime read-through would orphan UK/Swiss customers from contractual coverage)", () => {
+    expect(body).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-17/);
     expect(body).toMatch(
       /This DPA is structured to satisfy Article 28\(3\) GDPR\. To the extent\s*\n?\s*applicable to a Customer's processing in another jurisdiction \(UK\s*\n?\s*GDPR, Swiss FADP\), this DPA's provisions read with the corresponding\s*\n?\s*provisions of those regimes\./,
     );
@@ -60,11 +60,30 @@ describe('W506.B apps/marketing-site/src/pages/legal/dpa.md content parity', () 
     expect(body).toMatch(/The Acceptable Use Policy\./);
     expect(body).toMatch(/The Customer's API requests \(treated as instructions\)\./);
     expect(body).toMatch(
-      /Configuration Customer sets in the GUI Client or via the API\s*\n?\s*\(Recording retention windows, Sub-processor consent, etc\.\)\./,
+      /Configuration Customer sets in the GUI Client or via the API\s*\n?\s*\(Session, Capture, live-session, Sub-processor consent, etc\.\)\./,
     );
     expect(body).toMatch(
       /Any documented instruction Customer provides to Driftstack in\s*\n?\s*writing referencing this DPA\./,
     );
+  });
+
+  it('implemented local-recording, inline-Capture, and ephemeral-live-media boundary replaces fictional cloud recording', () => {
+    expect(body).toMatch(/return inline Capture artifacts, transmit ephemeral live-session media/);
+    expect(body).toMatch(
+      /Desktop-local recording files remain under Customer's\s*\n?\s*control and outside Driftstack's cloud processing/,
+    );
+    expect(body).toMatch(
+      /Desktop-local recordings: not uploaded to or retained by\s*\n?\s*Driftstack/,
+    );
+    expect(body).toMatch(
+      /API Capture artifacts: returned inline; the Capture endpoint does\s*\n?\s*not retain/,
+    );
+    expect(body).toMatch(
+      /Live-session media: not stored; streamed through LiveKit and\s*\n?\s*dropped/,
+    );
+    expect(body).not.toMatch(/optionally store Recordings/);
+    expect(body).not.toMatch(/Recording retention windows/);
+    expect(body).not.toMatch(/1–365 days/);
   });
 
   it("Section 3.4 Sub-processors 5-commitment pinned: general written authorisation (Annex 3) + 30-day notice + Customer objection right + downstream contractual obligations no-less-protective + fully-liable-for-Sub-processor (Article 28(4)) — pinned so the 5-state Sub-processor regime survives (drift to dropping 'fully liable' would close off the customer-recovery path for Sub-processor failures; drift to softening the 30-day window would breach Article 28(2))", () => {
@@ -112,8 +131,10 @@ describe('W506.B apps/marketing-site/src/pages/legal/dpa.md content parity', () 
       /\*\*Cost\.\*\* Borne by Customer except where the audit reveals a\s*\n?\s*material breach by Driftstack of this DPA/,
     );
     expect(body).toMatch(
-      /\*\*Standardised reports\.\*\* Driftstack may, in lieu of a\s*\n?\s*Customer-conducted audit, satisfy this obligation by providing\s*\n?\s*Customer with the most recent SOC 2 Type II report/,
+      /\*\*Standardised reports\.\*\* Driftstack may, in lieu of a\s*\n?\s*Customer-conducted audit, satisfy this obligation by providing a\s*\n?\s*current SOC 2 Type II report or equivalent third-party audit report/,
     );
+    expect(body).toMatch(/does not currently hold such a\s*\n?\s*report/);
+    expect(body).toMatch(/does not limit Customer's audit rights above/);
   });
 
   it("Section 4 international transfers 3-mechanism + Schrems II supplementary measures pinned: '**The 2021 Standard Contractual Clauses** (Commission Implementing Decision (EU) 2021/914)' + '**The EU-US Data Privacy Framework**' + '**Supplementary measures** where required following the CJEU's _Schrems II_ judgment' — pinned so the 3-transfer-mechanism + Schrems-II-supplementary-measures + 'SCCs prevail in case of conflict' commitment all survive (drift to dropping Schrems II would weaken the post-2020 transfer-compliance posture; drift to dropping 'SCCs prevail in case of conflict' would create ambiguity on which doc wins)", () => {
@@ -174,20 +195,34 @@ describe('W506.B apps/marketing-site/src/pages/legal/dpa.md content parity', () 
     expect(body).toMatch(/### G\. Logical separation/);
   });
 
-  it("Annex 3 13-vendor Sub-processor table + Region-preference-vs-routing framing pinned (S43 2026-07-07, founder-approved): database Customer Data EU-resident; R2 file objects use the default jurisdiction and replicate EU + US under the listed transfer mechanism — pinned so the honest 'preference doesn't move data yet' framing + the 30-day-pre-migration-notice future commitment survive, and so the old blanket 'all Customer Data … EU-jurisdiction' over-claim (false for R2-held objects) cannot reappear", () => {
+  it('pins current region routing and existing Section 3.4 change rights without a rollout promise', () => {
     expect(body).toMatch(/\*\*Region preference vs\. region routing\.\*\*/);
     expect(body).toMatch(
-      /Customer may state an\s*\n?\s*infrastructure region preference \(one of `us` \/ `eu` \/ `apac`\) via\s*\n?\s*the dashboard or API\. The preference is informational for v1:\s*\n?\s*Customer Data held in Driftstack's databases \(account, profile,\s*\n?\s*session, and audit data\) resides on the EU-resident infrastructure\s*\n?\s*listed above regardless of the preference selected/,
+      /Customer may state an\s*\n?\s*infrastructure region preference \(one of `us` \/ `eu` \/ `apac`\) via\s*\n?\s*the dashboard or API\. The preference does not change current data\s*\n?\s*residency: Customer Data held in Driftstack's databases \(account,\s*\n?\s*profile, session, and audit data\) resides on the EU-resident/,
+    );
+    expect(body).toMatch(/file objects held in Cloudflare R2/);
+    expect(body).toMatch(
+      /customer-uploaded avatars, encrypted profile blobs, public\s+status\s+snapshots/,
     );
     expect(body).toMatch(
-      /file objects\s*\n?\s*held in Cloudflare R2 \(customer-uploaded avatars, encrypted profile\s*\n?\s*blobs, public status snapshots\) use R2's default jurisdiction, which\s*\n?\s*replicates storage between the EU and the US under the transfer\s*\n?\s*mechanism listed above/,
+      /use R2's default jurisdiction, which replicates storage\s+between the EU and the US under the transfer mechanism listed above/,
     );
     expect(body).not.toMatch(
       /all\s*\n?\s*Customer Data resides on the EU-jurisdiction infrastructure/,
     );
     expect(body).toMatch(
-      /When the multi-region\s*\n?\s*rollout ships, Driftstack will give Customer at least 30 days'\s*\n?\s*notice/,
+      /Any change to a Sub-processor or processing location remains subject\s+to Section 3\.4 notice and objection rights/,
     );
+    expect(body).not.toMatch(/multi-region\s*\n?\s*rollout|informational for v1/i);
+  });
+
+  it('keeps redundancy operational, contractual commitments bounded, and the status page current', () => {
+    expect(body).toMatch(/Fleet capacity and redundancy are managed\s*\n?\s*operationally/);
+    expect(body).toMatch(
+      /Any contractually binding availability or\s*\n?\s*redundancy commitment is stated in Customer's applicable Order\s*\n?\s*Form or published SLA/,
+    );
+    expect(body).toMatch(/public status page at `status\.driftstack\.dev`/);
+    expect(body).not.toMatch(/status page planned|at launch/i);
   });
 
   it('Annex 4 SCC Module selections 3-module map: Module 1 controller-to-controller + Module 2 (no SCC for Customer→Driftstack EEA-internal) + Module 3 processor-to-(sub)processor — pinned so the SCC-Module selection survives (drift to a different module mapping would create SCC-compliance divergence)', () => {

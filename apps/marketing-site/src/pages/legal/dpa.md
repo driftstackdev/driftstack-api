@@ -4,7 +4,7 @@ title: Data Processing Agreement
 description: Article 28 GDPR processor terms for Customer Data, Session content, and Customer-Provided Secrets.
 ---
 
-**Version:** 1.0 · **Effective:** 2026-05-07
+**Version:** 1.1 · **Effective:** 2026-07-17
 
 This Data Processing Agreement ("**DPA**") forms part of the
 [Terms of Service](/legal/terms/) between Driftstack B.V. (the
@@ -20,22 +20,24 @@ provisions of those regimes.
 
 ## 1. Subject matter, duration, nature, and purpose
 
-| Element                         | Specification                                                                                                                                                                                                                                                                                                                            |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Subject matter**              | Processing of Personal Data by Driftstack as Processor on Customer's behalf in the course of providing the Service.                                                                                                                                                                                                                      |
-| **Duration**                    | The duration of Customer's Subscription, plus the retention periods specified in Section 11 of this DPA and Section 9 of the Privacy Policy.                                                                                                                                                                                             |
-| **Nature of Processing**        | Storage, transmission, transformation, retrieval, deletion, and execution of automated browsing instructions.                                                                                                                                                                                                                            |
-| **Purpose of Processing**       | To provide the Service to Customer: provision Sessions, execute Customer's intent-level instructions through the WebKit driver, return artifacts to Customer, optionally store Recordings, hold Customer-Provided Secrets for the duration required for Session execution, and surface Session metadata for Customer's operational view. |
-| **Categories of Data Subjects** | Customer's Authorized Users (where Customer's Account Data is processed) and the natural persons whose Personal Data Customer's automated browsing encounters at the Customer-selected target sites.                                                                                                                                     |
-| **Categories of Personal Data** | Set out in Annex 1.                                                                                                                                                                                                                                                                                                                      |
+| Element                         | Specification                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Subject matter**              | Processing of Personal Data by Driftstack as Processor on Customer's behalf in the course of providing the Service.                                                                                                                                                                                                                                   |
+| **Duration**                    | The duration of Customer's Subscription, plus the retention periods specified in Section 11 of this DPA and Section 9 of the Privacy Policy.                                                                                                                                                                                                          |
+| **Nature of Processing**        | Storage, transmission, transformation, retrieval, deletion, and execution of automated browsing instructions.                                                                                                                                                                                                                                         |
+| **Purpose of Processing**       | To provide the Service to Customer: provision Sessions, execute Customer's intent-level instructions through the WebKit driver, return inline Capture artifacts, transmit ephemeral live-session media, hold Customer-Provided Secrets for the duration required for Session execution, and surface Session metadata for Customer's operational view. |
+| **Categories of Data Subjects** | Customer's Authorized Users (where Customer's Account Data is processed) and the natural persons whose Personal Data Customer's automated browsing encounters at the Customer-selected target sites.                                                                                                                                                  |
+| **Categories of Personal Data** | Set out in Annex 1.                                                                                                                                                                                                                                                                                                                                   |
 
 ## 2. Roles
 
 2.1 **Customer is the Controller** of the Personal Data processed
 under this DPA. Customer determines the purposes and means of
 Processing, including the choice of target sites, the framing of
-Customer Workflows, the configuration of Recording, and the supply
-of Customer-Provided Secrets.
+Customer Workflows, whether to request API Capture artifacts or view
+ephemeral live-session media, and the supply of Customer-Provided
+Secrets. Desktop-local recording files remain under Customer's
+control and outside Driftstack's cloud processing.
 
 2.2 **Driftstack is the Processor.** Driftstack Processes Personal
 Data only on Customer's documented instructions, as set out in this
@@ -66,7 +68,7 @@ Customer's "documented instructions" comprise:
 3. The Acceptable Use Policy.
 4. The Customer's API requests (treated as instructions).
 5. Configuration Customer sets in the GUI Client or via the API
-   (Recording retention windows, Sub-processor consent, etc.).
+   (Session, Capture, live-session, Sub-processor consent, etc.).
 6. Any documented instruction Customer provides to Driftstack in
    writing referencing this DPA.
 
@@ -215,11 +217,10 @@ conducted by Customer or another auditor mandated by Customer
    material breach by Driftstack of this DPA, in which case
    Driftstack reimburses reasonable audit costs.
 6. **Standardised reports.** Driftstack may, in lieu of a
-   Customer-conducted audit, satisfy this obligation by providing
-   Customer with the most recent SOC 2 Type II report or
-   equivalent third-party audit report (when such reports become
-   available; the Service does not currently undergo such audits at
-   launch tiers).
+   Customer-conducted audit, satisfy this obligation by providing a
+   current SOC 2 Type II report or equivalent third-party audit report
+   if Driftstack holds one. Driftstack does not currently hold such a
+   report; that fact does not limit Customer's audit rights above.
 
 ## 4. International transfers
 
@@ -351,7 +352,13 @@ international transfer.
 The retention periods applicable to data Processed under this DPA
 are set out in Section 9 of the [Privacy Policy](/legal/privacy/#9-retention) and apply equally here. Notably:
 
-- Session Recordings: Customer-controlled (1–365 days, default 30).
+- Desktop-local recordings: not uploaded to or retained by
+  Driftstack; Customer controls retention and deletion on Customer's
+  device.
+- API Capture artifacts: returned inline; the Capture endpoint does
+  not retain the response bytes.
+- Live-session media: not stored; streamed through LiveKit and
+  dropped on session end.
 - Customer-Provided Secrets: deleted within 30 days of Account
   termination.
 - Session metadata (non-content): 90 days operational; aggregated
@@ -383,7 +390,8 @@ are set out in Section 9 of the [Privacy Policy](/legal/privacy/#9-retention) an
      authenticates to a target on the Customer's own behalf with
      Customer-Provided Secrets — this is Customer's own
      authentication, not third parties').
-   - Content of pages browsed where captured into a Recording.
+   - Content of pages browsed where transmitted through live-session
+     media or returned inline as an API Capture artifact.
 3. **Customer-Provided Secrets**: credentials Customer supplies
    (proxy auth, captcha API keys, email credentials, SMS API keys).
    These are technically credentials of natural persons or accounts
@@ -393,15 +401,19 @@ are set out in Section 9 of the [Privacy Policy](/legal/privacy/#9-retention) an
 
 Driftstack does **not** intentionally Process Special Category Data
 under Article 9 GDPR. Where Customer's automated browsing causes
-such data to enter a Recording, Customer is responsible for the
-underlying Article 9 lawful basis.
+such data to pass through live-session media or an API Capture
+request, Customer is responsible for the underlying Article 9 lawful
+basis. A desktop-local recording may contain the same data, but it
+remains on Customer's device and is not uploaded to or retained by
+Driftstack.
 
 ### Processing operations
 
 Storage, retrieval, transmission, transformation, deletion,
-forwarding to Customer-Connected Services on Customer's
-instruction, and execution of Customer Workflow logic on the
-Driftstack-hosted WebKit driver runtime.
+transient forwarding of live-session media, inline return of API
+Capture artifacts, forwarding to Customer-Connected Services on
+Customer's instruction, and execution of Customer Workflow logic on
+the Driftstack-hosted WebKit driver runtime.
 
 ---
 
@@ -448,9 +460,10 @@ of security appropriate to the risk. Measures are layered.
 
 1. **Backup.** Postgres point-in-time recovery configured;
    default 30-day retention. Backups are encrypted.
-2. **Redundancy.** Mac mini fleet capacity is provisioned with
-   N+1 redundancy at launch tiers; higher tiers receive
-   contractual SLA-backed redundancy.
+2. **Redundancy.** Fleet capacity and redundancy are managed
+   operationally. Any contractually binding availability or
+   redundancy commitment is stated in Customer's applicable Order
+   Form or published SLA.
 3. **Health monitoring.** Structured Pino logs; alerting on error
    rates and latency anomalies; public status page at `status.driftstack.dev`.
 4. **Incident response.** Documented runbook; on-call rotation
@@ -509,19 +522,15 @@ list for the avoidance of doubt; this Annex is a convenience copy.
 
 **Region preference vs. region routing.** Customer may state an
 infrastructure region preference (one of `us` / `eu` / `apac`) via
-the dashboard or API. The preference is informational for v1:
-Customer Data held in Driftstack's databases (account, profile,
-session, and audit data) resides on the EU-resident infrastructure
-listed above regardless of the preference selected; file objects
-held in Cloudflare R2 (customer-uploaded avatars, encrypted profile
-blobs, public status snapshots) use R2's default jurisdiction, which
-replicates storage between the EU and the US under the transfer
-mechanism listed above. When the multi-region
-rollout ships, Driftstack will give Customer at least 30 days'
-notice under Section 9 (Sub-processor amendment) before any data
-is migrated to a non-EU region, including the right to keep
-Customer's data on EU infrastructure or terminate the affected
-portion of the Subscription. The trust page at
+the dashboard or API. The preference does not change current data
+residency: Customer Data held in Driftstack's databases (account,
+profile, session, and audit data) resides on the EU-resident
+infrastructure listed above; file objects held in Cloudflare R2
+(customer-uploaded avatars, encrypted profile blobs, public status
+snapshots) use R2's default jurisdiction, which replicates storage
+between the EU and the US under the transfer mechanism listed above.
+Any change to a Sub-processor or processing location remains subject
+to Section 3.4 notice and objection rights. The trust page at
 [`/trust/sub-processors`](/trust/sub-processors/) carries the same
 explanation in plain language.
 

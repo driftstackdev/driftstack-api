@@ -1,10 +1,10 @@
 // W575.A — drift guard for /docs/legal/dpa.md (Part 1 of 3).
-// Driftstack DPA Version 1.0 (2026-05-07). Drift here either weakens
+// Driftstack DPA Version 1.1 (2026-07-17). Drift here either weakens
 // the Article 28(3) GDPR structural conformity, drops the Customer-
 // Connected-Services-are-NOT-Sub-processors invariant, or unsets the
 // 30-day Sub-processor notice + objection window.
 //
-//   • DPA Version 1.0. Effective 2026-05-07.
+//   • DPA Version 1.1. Effective 2026-07-17.
 //   • Article 28(3) GDPR structured. UK GDPR + Swiss FADP applicable.
 //   • Roles: Customer = Controller; Driftstack = Processor.
 //   • Sub-processor: 30-day notice + objection + commercial-alt path.
@@ -27,9 +27,9 @@ function read(p: string): string {
 describe('W575.A /docs/legal/dpa.md (part 1) content parity', () => {
   const body = read(LIB);
 
-  it('Header + Version-1.0 + 2026-05-07 + ToS-incorporation + Article-28(3)-GDPR + UK-GDPR + Swiss-FADP framing pinned', () => {
+  it('Header + Version-1.1 + 2026-07-17 + ToS-incorporation + Article-28(3)-GDPR + UK-GDPR + Swiss-FADP framing pinned', () => {
     expect(body).toMatch(/^# Driftstack — Data Processing Agreement$/m);
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+    expect(body).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-17/);
     expect(body).toMatch(/This Data Processing Agreement \("\*\*DPA\*\*"\) forms part of the/);
     expect(body).toMatch(
       /\[Terms of Service\]\(terms-of-service\.md\) between Driftstack B\.V\. \(the/,
@@ -62,6 +62,8 @@ describe('W575.A /docs/legal/dpa.md (part 1) content parity', () => {
     expect(body).toMatch(
       /\| \*\*Purpose of Processing\*\*\s+\| To provide the Service to Customer/,
     );
+    expect(body).toMatch(/return inline Capture artifacts, transmit ephemeral live-session media/);
+    expect(body).not.toMatch(/optionally store Recordings/);
     expect(body).toMatch(
       /\| \*\*Categories of Data Subjects\*\* \| Customer's Authorized Users \(where Customer's Account Data is processed\) and the natural persons whose Personal Data Customer's automated browsing encounters at the Customer-selected target sites\./,
     );
@@ -70,8 +72,10 @@ describe('W575.A /docs/legal/dpa.md (part 1) content parity', () => {
     expect(body).toMatch(/2\.1 \*\*Customer is the Controller\*\* of the Personal Data processed/);
     expect(body).toMatch(/under this DPA\. Customer determines the purposes and means of/);
     expect(body).toMatch(/Processing, including the choice of target sites, the framing of/);
-    expect(body).toMatch(/Customer Workflows, the configuration of Recording, and the supply/);
-    expect(body).toMatch(/of Customer-Provided Secrets\./);
+    expect(body).toMatch(/Customer Workflows, whether to request API Capture artifacts or view/);
+    expect(body).toMatch(/ephemeral live-session media, and the supply of Customer-Provided/);
+    expect(body).toMatch(/Desktop-local recording files remain under Customer's/);
+    expect(body).toMatch(/control and outside Driftstack's cloud processing\./);
     expect(body).toMatch(
       /2\.2 \*\*Driftstack is the Processor\.\*\* Driftstack Processes Personal/,
     );
@@ -99,7 +103,8 @@ describe('W575.A /docs/legal/dpa.md (part 1) content parity', () => {
     expect(body).toMatch(/3\. The Acceptable Use Policy\./);
     expect(body).toMatch(/4\. The Customer's API requests \(treated as instructions\)\./);
     expect(body).toMatch(/5\. Configuration Customer sets in the GUI Client or via the API/);
-    expect(body).toMatch(/\(Recording retention windows, Sub-processor consent, etc\.\)\./);
+    expect(body).toMatch(/\(Session, Capture, live-session, Sub-processor consent, etc\.\)\./);
+    expect(body).not.toMatch(/Recording retention windows/);
     expect(body).toMatch(/6\. Any documented instruction Customer provides to Driftstack in/);
     expect(body).toMatch(/writing referencing this DPA\./);
     expect(body).toMatch(/If Driftstack believes a Customer instruction infringes the GDPR,/);

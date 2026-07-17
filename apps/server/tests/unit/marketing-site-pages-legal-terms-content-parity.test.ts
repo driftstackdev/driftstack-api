@@ -1,11 +1,11 @@
 // W506.C — drift guard for apps/marketing-site/src/pages/legal/terms.md.
-// Terms of Service v1.0 — master commercial agreement Dutch BV.
+// Terms of Service v1.1 — master commercial agreement Dutch BV.
 // Drift here either weakens a liability cap (would expose Driftstack
 // to uncapped damages) or shifts the B2B-only positioning (would
 // inadvertently engage EU consumer-protection regime that the doc
 // explicitly disclaims).
 //
-//   • Version 1.0 effective 2026-05-07 + B2B-only (Dutch BW 7:5 +
+//   • Version 1.1 effective 2026-07-17 + B2B-only (Dutch BW 7:5 +
 //     Directive 2011/83/EU) + incorporates Privacy + DPA + AUP.
 //   • Section 8.1 fee tiers: perpetual Free + Manual ladder
 //     (Personal/Team/Agency) + API ladder (API Starter/Builder/Scale)
@@ -43,8 +43,8 @@ function read(p: string): string {
 describe('W506.C apps/marketing-site/src/pages/legal/terms.md content parity', () => {
   const body = read(LIB);
 
-  it('Version 1.0 effective 2026-05-07 + incorporates Privacy + DPA + AUP by reference pinned — pinned so the 3-doc incorporation stays consistent (drift to dropping any incorporation would orphan that downstream doc from the master agreement; drift to changing the version would silently desynchronise from the legal-acceptance machinery)', () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+  it('Version 1.1 effective 2026-07-17 + incorporates Privacy + DPA + AUP by reference pinned — pinned so the 3-doc incorporation stays consistent (drift to dropping any incorporation would orphan that downstream doc from the master agreement; drift to changing the version would silently desynchronise from the legal-acceptance machinery)', () => {
+    expect(body).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-17/);
     expect(body).toMatch(
       /The\s*\n?\s*\[Privacy Policy\]\(\/legal\/privacy\/\), the\s*\n?\s*\[Data Processing Agreement\]\(\/legal\/dpa\/\), and the\s*\n?\s*\[Acceptable Use Policy\]\(\/legal\/aup\/\) are incorporated\s*\n?\s*by reference and form part of the agreement between the Parties\./,
     );
@@ -55,6 +55,31 @@ describe('W506.C apps/marketing-site/src/pages/legal/terms.md content parity', (
     expect(body).toMatch(
       /The Service is provided to \*\*business customers\*\* only\. The Service\s*\n?\s*is not intended for, and is not offered to, consumers within the\s*\n?\s*meaning of Article 7:5 of the Dutch Civil Code \(_Burgerlijk Wetboek_\)\s*\n?\s*or Article 2\(1\) of Directive 2011\/83\/EU\./,
     );
+  });
+
+  it('Section 3 promises only live Session/Capture API artifacts and pins local recording plus ephemeral LiveKit truth', () => {
+    expect(body).toMatch(/returning Session and Capture artifacts/);
+    expect(body).toMatch(/\*\*Live-session viewing and desktop-local recording \(optional,/);
+    expect(body).toMatch(/Live-session media is ephemeral: Driftstack does\s*\n?\s*not store it/);
+    expect(body).toMatch(/local NDJSON recording\s*\n?\s*files in the app data directory/);
+    expect(body).toMatch(
+      /does not upload those files or frames to Driftstack's API,\s*\n?\s*control plane, or Cloudflare R2/,
+    );
+    expect(body).toMatch(/provides no API recording endpoint or cloud recording-/);
+    expect(body).toMatch(/screenshot, DOM snapshot, or PDF bytes inline/);
+    expect(body).toMatch(/does not retain the\s*\n?\s*artifact/);
+    expect(body).toMatch(/encrypted in transit on\s*\n?\s*each WebRTC connection using DTLS-SRTP/);
+    expect(body).toMatch(
+      /LiveKit receives, processes,\s*\n?\s*and forwards the media as a Sub-processor/,
+    );
+    expect(body).toMatch(
+      /does not\s*\n?\s*currently provide application-level end-to-end encryption through\s*\n?\s*the SFU/,
+    );
+    expect(body).not.toMatch(/Session, Capture, and Recording artifacts/);
+    expect(body).not.toMatch(/Recording feature[\s\S]{0,80}Cloudflare R2/);
+    expect(body).not.toMatch(/E2EE (?:on|is enabled by) default/i);
+    expect(body).not.toMatch(/end-to-end encryption is enabled by default/i);
+    expect(body).not.toMatch(/cannot decrypt/i);
   });
 
   it("Section 8.1 fee-tier ladder: perpetual Free tier + Manual ladder (Personal, Team, Agency) + API ladder (API Starter, API Builder, API Scale) + custom-priced Enterprise, with current prices published at driftstack.dev/pricing — pinned so the two-ladder ToS framing stays consistent (drift to dropping the published-at-pricing-page reference would re-introduce hardcoded marketing↔Stripe-invoice divergence at the contractual level; drift to dropping 'custom-priced Enterprise' would lose the Enterprise commitment)", () => {
@@ -68,7 +93,7 @@ describe('W506.C apps/marketing-site/src/pages/legal/terms.md content parity', (
     expect(body).not.toMatch(/\$39\/mo, \$99\/mo, \$299\/mo, \$999\/mo/);
   });
 
-  it('Section 8.3 payment methods 4-list: Stripe Card (Visa/MC/Amex) + SEPA Direct Debit + iDEAL + Bancontact — pinned so the 4-payment-method scope stays consistent (drift to dropping iDEAL would orphan Dutch customers from their preferred channel; drift to dropping SEPA would orphan EUR-bank customers)', () => {
+  it('Section 8.3 payment methods pin four Stripe rails plus truthful crypto checkout', () => {
     expect(body).toMatch(
       /\*\*Card payments\*\* \(Visa, Mastercard, American Express, regional\s*\n?\s*cards where available\) via Stripe\./,
     );
@@ -79,6 +104,17 @@ describe('W506.C apps/marketing-site/src/pages/legal/terms.md content parity', (
     expect(body).toMatch(
       /\*\*Bancontact\*\* for Customers with a Belgian bank account, via\s*\n?\s*Stripe\./,
     );
+    expect(body).toMatch(
+      /\*\*Cryptocurrency\*\* in the assets and networks displayed at\s*\n?\s*checkout, via NowPayments OÜ/,
+    );
+    expect(body).toMatch(/converted into a time-limited crypto quote/);
+    expect(body).toMatch(/Entitlement starts only after NowPayments reports the order paid/);
+    expect(body).toMatch(/does not custody crypto or initiate crypto refunds/);
+  });
+
+  it('Section 11.1 uses the operative DPA 3.4 Sub-processor notice mechanism', () => {
+    expect(body).toMatch(/notification\s*\n?\s*mechanism in Section 3\.4 of the DPA/);
+    expect(body).not.toMatch(/notification\s*\n?\s*mechanism in Section 5 of the DPA/);
   });
 
   it('Section 8.4 VAT/BTW 4-rule: NL 21% BTW + EU reverse-charge + non-EU no-BTW + place-of-supply Directive 2006/112/EC — pinned so the 4-VAT-jurisdiction-rule + the Directive 2006/112/EC anchor on place-of-supply rules survive (drift to dropping the reverse-charge rule would expose EU-Customer accounting; drift to dropping Directive 2006/112/EC would weaken the place-of-supply legal anchor)', () => {

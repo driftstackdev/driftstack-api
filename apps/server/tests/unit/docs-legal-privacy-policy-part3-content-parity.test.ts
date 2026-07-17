@@ -1,9 +1,10 @@
 // W577.C — drift guard for /docs/legal/privacy-policy.md (Part 3 of 3).
-// Driftstack Privacy Policy Version 1.0 (2026-05-07). Drift here either
+// Driftstack Privacy Policy Version 1.1 (2026-07-17). Drift here either
 // weakens the §8 Customer-Connected-Services-NOT-Sub-processors invariant,
-// drops a §9 8-row retention-schedule slot (Account 7yr / Auth 90d /
-// Session-metadata 90d / Recordings 1-365d / Secrets 30d-post-term /
-// Billing 7yr / Support 3yr / Marketing-logs 30d), removes a §10 Art-15-22
+// drops a §9 retention-schedule slot (Account 7yr / Auth 90d /
+// Session-metadata 90d / local recordings / inline Captures / ephemeral
+// live media / Secrets 30d-post-term / Billing 7yr / Support 3yr /
+// Marketing-logs 30d), removes a §10 Art-15-22
 // DSR right, breaks the §11 DPO-threshold policy, unsets the §13 72h
 // breach-notification window, or loosens the §14 under-16 children posture.
 //
@@ -50,7 +51,7 @@ describe('W577.C /docs/legal/privacy-policy.md (part 3) content parity', () => {
     expect(body).toMatch(/Driftstack does not contract with these providers/);
   });
 
-  it('Section 9 (Retention) 8-row schedule + AWR-Art-52 7yr framing pinned', () => {
+  it('Section 9 retention schedule + local/inline/ephemeral artifact boundaries + AWR-Art-52 7yr framing pinned', () => {
     expect(body).toMatch(/## 9\. Retention/);
     expect(body).toMatch(
       /\| Account data\s+\| Duration of Subscription \+ 7 years post-termination/,
@@ -62,8 +63,12 @@ describe('W577.C /docs/legal/privacy-policy.md (part 3) content parity', () => {
     expect(body).toMatch(/revoked records retained 90 days for audit then deleted\./);
     expect(body).toMatch(/\| Session metadata\s+\| 90 days operational/);
     expect(body).toMatch(
-      /\| Session Recordings\s+\| Customer-controlled \(1–365 days, default 30\)/,
+      /\| Desktop-local recordings\s+\| Not uploaded to or retained by Driftstack/,
     );
+    expect(body).toMatch(/\| API Capture artifacts\s+\| Returned inline to Customer/);
+    expect(body).toMatch(/\| Live-session media\s+\| Not stored by Driftstack/);
+    expect(body).not.toMatch(/\| Session Recordings\s+\|/);
+    expect(body).not.toMatch(/1–365 days/);
     expect(body).toMatch(
       /\| Customer-Provided Secrets\s+\| Deleted within 30 days of Customer Account termination/,
     );

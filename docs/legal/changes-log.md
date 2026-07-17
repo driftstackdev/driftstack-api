@@ -23,6 +23,60 @@ references the corresponding rows in this log.
 
 ---
 
+## 2026-07-17 — Privacy, DPA, Terms, and Definitions v1.1 (product + storage truth)
+
+- **Version / effective date:** the canonical and customer-facing
+  Privacy Policy, DPA, Terms of Service, and shared Definitions
+  advance together from version 1.0 to version 1.1, effective
+  2026-07-17.
+- **Privacy Policy §3.4 / §3.11 / §9:** corrected the implemented
+  storage boundary. Desktop recordings are local NDJSON files in the
+  GUI Client's app data directory on Customer's device and are not
+  uploaded to Driftstack's API, control plane, or Cloudflare R2.
+  Driftstack has no API recording endpoint and no cloud recording-
+  retention window. API screenshot, DOM snapshot, and PDF Capture
+  artifacts are returned inline and are not retained by the Capture
+  endpoint. Live-session media remains ephemeral and is dropped on
+  session end.
+- **DPA §1 / §2 / §3.1 / §11 and Annex 1:** removed the nonexistent
+  optional cloud-Recording processing purpose and configurable
+  retention instruction. The processing description now covers the
+  implemented ephemeral live-media and inline Capture paths while
+  making the Customer-controlled device-local recording boundary
+  explicit. The Controller / Processor allocation, Special Category
+  Data obligations, no-training commitment, Customer-Provided Secret
+  retention, and all Article 28 obligations remain unchanged.
+- **Terms of Service §3:** the API now promises Session and Capture
+  artifacts only. The live-session paragraph retains the LiveKit,
+  explicit-support-authorisation, ephemeral-media, and encrypted-in-
+  transit commitments while accurately describing local desktop
+  recordings and inline Capture artifacts. It also corrects the
+  former unimplemented application-level end-to-end-encryption claim:
+  LiveKit receives, processes, and forwards the media as a Sub-
+  processor; Driftstack does not currently provide application-level
+  end-to-end encryption through the SFU.
+- **Shared Definitions:** removed the pending-API placeholder, obsolete
+  price and API-key-scope enumerations, nonexistent cloud Recording
+  storage, and false EU-only R2 jurisdiction. Recording now means the
+  desktop-local NDJSON artifact; Capture is inline and unretained; R2
+  purpose and transfer posture match the live Sub-processor register.
+  The Fees definition now reflects the implemented bundled-LLM
+  included-service budget rather than inventing a separately itemized
+  metered charge.
+- **Bundled-LLM commercial wording:** the public bundled-LLM reference,
+  comparison page, and Sub-processor purposes now distinguish the
+  enforced 10-cent-per-standard-turn included-service accounting value
+  from Stripe invoice items. No price, budget enforcement, provider
+  data flow, consent gate, BYOK contract, or invoice was changed.
+- **Sub-processors / transfers:** no Sub-processor, transfer
+  mechanism, or R2 processing category changed. Cloudflare R2 remains
+  limited to the already-disclosed customer-uploaded avatars,
+  encrypted profile blobs, and public status snapshots; LiveKit
+  remains the conditional live-session media Sub-processor.
+- **Review:** this is a truth correction to the documented existing
+  product boundary, not a new processing activity or retention
+  program, and remains subject to final counsel review before launch.
+
 ## 2026-07-07 — S43 sub-processor register correction (founder-approved)
 
 - **DPA Annex 3 (sub-processors table)**: Cloudflare, Inc. location
@@ -46,9 +100,10 @@ references the corresponding rows in this log.
   replicated EU + US)", transfer mechanism "no transfer required" →
   2021 SCCs + EU-US DPF, and the purpose/data categories corrected
   to the objects actually stored (customer-uploaded profile avatars,
-  encrypted profile blobs, public status-page snapshots — not
-  "session recordings and screenshots"; session recording is not a
-  live feature). `SUB_PROCESSOR_REGISTER_LAST_UPDATED` bumped to
+  encrypted profile blobs, and public status-page snapshots — not
+  browser-session media or Capture responses; desktop recording files
+  stay on the Customer device and Capture bytes are returned inline).
+  `SUB_PROCESSOR_REGISTER_LAST_UPDATED` bumped to
   2026-07-07; a `material_change` correction entry added to the
   public change log. V-271 mirror linter unchanged (names did not
   change) and re-run green.
@@ -98,13 +153,15 @@ entry.
   inline cross-reference to §17 / DPA Annex 3 since the bytes are
   stored in the existing Cloudflare R2 sub-processor.
 - **DPA Annex 3 / sub-processor register**: Cloudflare R2 row purpose
-  text expanded from "session recordings and screenshots" to also
-  cover "public status-page snapshots, and customer-uploaded profile
-  avatars". The sub-processor itself does not change — the storage
-  vendor, region (EU jurisdiction), and transfer mechanism are
-  identical to the V-054 (recordings) and V-295c2 (status snapshots)
-  scope. Per V-294 methodology this counts as a disclosure-scope
-  update on an already-disclosed sub-processor, not a new sub-
+  text expanded from an earlier, inaccurate browser-media storage
+  description to also cover public status-page snapshots and
+  customer-uploaded profile avatars. That browser-media description
+  did not reflect implemented storage and is superseded by the
+  2026-07-17 v1.1 correction; R2 stores only the object categories
+  disclosed there. The sub-processor itself does not change — the
+  storage vendor and transfer mechanism are the same existing object-
+  storage scope. Per V-294 methodology this counts as a disclosure-
+  scope update on an already-disclosed sub-processor, not a new sub-
   processor; no Art 28(2) 30-day notice is triggered.
 - `SUB_PROCESSOR_REGISTER_LAST_UPDATED` bumped to 2026-05-08.
 - **No ToS / AUP / Definitions update**: avatars are an optional
@@ -195,11 +252,17 @@ entry.
   pipeline (WebRTC frames, screen-coordinate metadata, optional audio,
   LiveKit room id, connection metadata) plus the explicit non-storage
   promise (frames drop on session end; durable copy only via the
-  existing V-054 Recording feature). Calls out E2EE on by default.
+  existing V-054 Recording feature). The original entry described
+  application-level end-to-end encryption as enabled, but that
+  configuration was not implemented; the 2026-07-17 v1.1 correction
+  supersedes both claims with desktop-local recording and encrypted-
+  in-transit truth.
 - **Privacy Policy §7 (Sub-processors table)**: matching new row.
 - **Terms of Service §3 (The Service)**: extended with a "Live-
   session viewing (optional, opt-in)" paragraph. Documents ephemeral
-  semantics, support-impersonation gate requirement, E2EE default.
+  semantics and the support-impersonation gate requirement. Its
+  original application-level encryption wording is superseded by the
+  2026-07-17 v1.1 encrypted-in-transit correction.
 - **Marketing-site sub-processors data**: matching public-facing
   entry. V-271 mirror linter passes at 12 ↔ 13.
 - **No engineering work in this slice**: V-306b (server signaling),

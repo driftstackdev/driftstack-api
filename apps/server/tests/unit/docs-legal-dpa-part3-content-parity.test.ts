@@ -41,17 +41,23 @@ describe('W575.C /docs/legal/dpa.md (part 3) content parity', () => {
     expect(body).toMatch(/- Identifiers visible to the automated browsing \(account names,/);
     expect(body).toMatch(/screen names, profile photos, public posts, public profile/);
     expect(body).toMatch(/URLs\)\./);
+    expect(body).toMatch(/Content of pages browsed where transmitted through live-session/);
+    expect(body).toMatch(/media or returned inline as an API Capture artifact\./);
     expect(body).toMatch(/3\. \*\*Customer-Provided Secrets\*\*: credentials Customer supplies/);
     expect(body).toMatch(/\(proxy auth, captcha API keys, email credentials, SMS API keys\)\./);
     expect(body).toMatch(/### Special categories/);
     expect(body).toMatch(/Driftstack does \*\*not\*\* intentionally Process Special Category Data/);
     expect(body).toMatch(/under Article 9 GDPR\./);
     expect(body).toMatch(/Where Customer's automated browsing causes/);
-    expect(body).toMatch(/such data to enter a Recording, Customer is responsible for the/);
-    expect(body).toMatch(/underlying Article 9 lawful basis\./);
+    expect(body).toMatch(/such data to pass through live-session media or an API Capture/);
+    expect(body).toMatch(/request, Customer is responsible for the underlying Article 9 lawful/);
+    expect(body).toMatch(/desktop-local recording may contain the same data/);
+    expect(body).toMatch(/not uploaded to or retained by/);
     expect(body).toMatch(/### Processing operations/);
     expect(body).toMatch(/Storage, retrieval, transmission, transformation, deletion,/);
-    expect(body).toMatch(/forwarding to Customer-Connected Services on Customer's/);
+    expect(body).toMatch(/transient forwarding of live-session media, inline return of API/);
+    expect(body).toMatch(/Capture artifacts/);
+    expect(body).toMatch(/forwarding to Customer-Connected Services on\s+Customer's/);
     expect(body).toMatch(/instruction/);
     expect(body).toMatch(/## Annex 2 — Technical and Organisational Measures \(TOMs\)/);
     expect(body).toMatch(/These measures meet the requirement of Article 32 GDPR/);
@@ -88,9 +94,12 @@ describe('W575.C /docs/legal/dpa.md (part 3) content parity', () => {
     expect(body).toMatch(/### C\. Availability \+ resilience \(Article 32\(1\)\(b\)\)/);
     expect(body).toMatch(/1\. \*\*Backup\.\*\* Postgres point-in-time recovery configured;/);
     expect(body).toMatch(/default 30-day retention\./);
-    expect(body).toMatch(/2\. \*\*Redundancy\.\*\* Mac mini fleet capacity is provisioned with/);
-    expect(body).toMatch(/N\+1 redundancy at launch tiers/);
+    expect(body).toMatch(/2\. \*\*Redundancy\.\*\* Fleet capacity and redundancy are managed/);
+    expect(body).toMatch(/contractually binding availability or/);
+    expect(body).toMatch(/Form or published SLA\./);
     expect(body).toMatch(/3\. \*\*Health monitoring\.\*\* Structured Pino logs/);
+    expect(body).toMatch(/public status page at `status\.driftstack\.dev`/);
+    expect(body).not.toMatch(/status page \(planned|launch tiers/i);
     expect(body).toMatch(/4\. \*\*Incident response\.\*\* Documented runbook;/);
     expect(body).toMatch(/### D\. Restoration \(Article 32\(1\)\(c\)\)/);
     expect(body).toMatch(/Backups are tested for restore at least quarterly\./);
@@ -156,13 +165,19 @@ describe('W575.C /docs/legal/dpa.md (part 3) content parity', () => {
       /\| Sentry \(Functional Software, Inc\.\)\s+\| Error tracking\s+\| US \(corp\); EU region \(data\)\s+\| 2021 SCCs Module 2 \+ EU-US DPF \(verify\) \|/,
     );
     expect(body).toMatch(
-      /\| NowPayments OU \(conditional, opt-in only\) \| Crypto payment processing\s+\| Estonia\s+\| EEA-internal\s+\|/,
+      /\| NowPayments OÜ \(conditional, opt-in only\) \| Cryptocurrency payment processing\s+\| Estonia, EU\s+\| EEA-internal\s+\|/,
     );
     expect(body).toMatch(
-      /\| LiveKit, Inc\. \(conditional, opt-in only\)\s+\| WebRTC live-session signaling \+ media SFU \| US, Delaware\s+\| 2021 SCCs Module 2 \+ EU-US DPF \(verify\) \|/,
+      /\| LiveKit \(conditional, opt-in only\)\s+\| WebRTC live-session signaling \/ media\s+\| US \(regional endpoints; EU preferred\)\s+\| 2021 SCCs Module 2 \+ EU-US DPF \(verify\) \|/,
     );
     expect(body).toMatch(/The list as published in the Privacy Policy is the authoritative/);
     expect(body).toMatch(/list for the avoidance of doubt; this Annex is a convenience copy\./);
+    expect(body).toMatch(/\*\*Region preference vs\. region routing\.\*\*/);
+    expect(body).toMatch(/does not change current data\s+residency/);
+    expect(body).toMatch(/R2's default jurisdiction, which replicates storage/);
+    expect(body).toMatch(/Section 3\.4 notice and objection rights/);
+    expect(body).toMatch(/https:\/\/driftstack\.dev\/trust\/sub-processors\//);
+    expect(body).not.toMatch(/Section 9 notice and objection rights/);
   });
 
   it('Annex 4 (2021 SCCs Module 1/2/3) + Annex 5 (UK IDTA + Swiss FDPIC) + Contact + End-of-DPA framing pinned', () => {

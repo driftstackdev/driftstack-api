@@ -1,5 +1,5 @@
 // W577.B — drift guard for /docs/legal/privacy-policy.md (Part 2 of 3).
-// Driftstack Privacy Policy Version 1.0 (2026-05-07). Drift here either
+// Driftstack Privacy Policy Version 1.1 (2026-07-17). Drift here either
 // weakens the §4 Article-9-GDPR Special Category-not-collected posture,
 // breaks the §5 4-rule no-sell / no-profile / no-cross-customer-combine
 // / no-LLM-training-without-consent block, drops a §6 international-
@@ -38,11 +38,13 @@ describe('W577.B /docs/legal/privacy-policy.md (part 2) content parity', () => {
     expect(body).toMatch(/religious or philosophical beliefs, trade union membership, genetic/);
     expect(body).toMatch(/data, biometric data uniquely identifying a person, data concerning/);
     expect(body).toMatch(/health, or data concerning sex life or sexual orientation\)\./);
-    expect(body).toMatch(/If Customer's automated browsing causes Special Category Data to be/);
-    expect(body).toMatch(/captured in a Recording, that data is Processed by Driftstack only/);
-    expect(body).toMatch(/as Processor on Customer's behalf under the DPA\./);
-    expect(body).toMatch(/Customer is/);
-    expect(body).toMatch(/responsible for ensuring it has a lawful basis under Article 9\(2\)/);
+    expect(body).toMatch(/If Customer's automated browsing causes Special Category Data to/);
+    expect(body).toMatch(/pass through live-session media or an API Capture request, that data/);
+    expect(body).toMatch(/is Processed by Driftstack only as Processor on Customer's behalf/);
+    expect(body).toMatch(/desktop-local recording may contain the same data/);
+    expect(body).toMatch(/not uploaded or/);
+    expect(body).toMatch(/retained by Driftstack\. Customer is responsible/);
+    expect(body).toMatch(/lawful basis under Article 9\(2\)/);
     expect(body).toMatch(/GDPR for processing such data\./);
   });
 
@@ -54,9 +56,10 @@ describe('W577.B /docs/legal/privacy-policy.md (part 2) content parity', () => {
     expect(body).toMatch(/profiling beyond what is necessary to operate the Service\./);
     expect(body).toMatch(/3\. Combine Customer-Connected Service data with Driftstack-internal/);
     expect(body).toMatch(/profiles or cross-Customer aggregates\./);
-    expect(body).toMatch(/4\. Use Customer Data \(Sessions, Workflows, Recordings\) to train/);
-    expect(body).toMatch(/machine-learning models, including the bundled-LLM AI agent/);
-    expect(body).toMatch(/feature, without Customer's separate explicit consent\./);
+    expect(body).toMatch(/4\. Use Customer Data \(including Session content, Workflows,/);
+    expect(body).toMatch(/live-session media, or Capture content\) to train machine-learning/);
+    expect(body).toMatch(/models, including the bundled-LLM AI agent/);
+    expect(body).toMatch(/feature, without\s+Customer's separate explicit consent\./);
   });
 
   it('Section 6 (International transfers) DPF + 2021 SCCs + Article 49 framing pinned', () => {
@@ -96,6 +99,8 @@ describe('W577.B /docs/legal/privacy-policy.md (part 2) content parity', () => {
     );
     expect(body).toMatch(/\*\*Anthropic, PBC\*\* \(US, Delaware\) — _conditional_/);
     expect(body).toMatch(/Bundled LLM for the AI agent feature\./);
+    expect(body).toMatch(/consents to Driftstack-provided model access/);
+    expect(body).not.toMatch(/opts into bundled-LLM billing/);
     expect(body).toMatch(/\*\*Moneybird B\.V\.\*\* \(Netherlands\)/);
     expect(body).toMatch(/Accounting platform for invoice generation and bookkeeping\./);
     expect(body).toMatch(/\*\*Hetzner Online GmbH\*\* \(Germany\)/);
@@ -136,7 +141,9 @@ describe('W577.B /docs/legal/privacy-policy.md (part 2) content parity', () => {
     expect(body).toMatch(/\*\*LiveKit, Inc\.\*\* \(US, Delaware\) — _conditional, opt-in only_/);
     expect(body).toMatch(/WebRTC live-session signaling \+ media SFU/);
     expect(body).toMatch(/The Sub-processor list is \*\*subject to change\*\* under the/);
-    expect(body).toMatch(/notification mechanism in Section 5 of the DPA\./);
+    expect(body).toMatch(/notice and\s+objection mechanism in Section 3\.4 of the DPA\./);
+    expect(body).toMatch(/https:\/\/driftstack\.dev\/trust\/sub-processors\//);
+    expect(body).not.toMatch(/marketing site goes live|Section 5 of the DPA/i);
   });
 
   it('file exists at canonical path', () => {

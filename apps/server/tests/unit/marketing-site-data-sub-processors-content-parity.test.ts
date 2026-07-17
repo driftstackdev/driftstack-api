@@ -87,12 +87,16 @@ describe('W463.C apps/marketing-site/src/data/sub-processors.ts content parity',
     expect(body).toMatch(/name: 'LiveKit',/);
   });
 
-  it('Stripe and Anthropic purposes describe the shipped bundled-AI billing rail without misclassifying BYOK or changing data-flow scope', () => {
-    expect(body).toMatch(/billing for Driftstack-bundled AI usage/);
+  it('Stripe and Anthropic purposes describe the included-service AI budget without inventing a Stripe line item or misclassifying BYOK', () => {
+    expect(body).toMatch(/bundled-LLM turns use an included-service accounting budget/);
+    expect(body).toMatch(/not separately itemized by Stripe/);
     expect(body).toMatch(/BYOK AI usage is billed directly by the model provider/);
-    expect(body).toMatch(/standard Builder and Scale usage at \$0\.10 per agent turn/);
-    expect(body).toMatch(/Enterprise can use a contracted custom rate/);
+    expect(body).toMatch(
+      /\$0\.10 included-service accounting value per standard Builder or Scale turn/,
+    );
+    expect(body).toMatch(/Enterprise can use a contracted custom budget/);
     expect(body).toMatch(/Session data flows to Anthropic only when one of these two modes/);
+    expect(body).not.toMatch(/billing for Driftstack-bundled AI usage/);
     expect(body).not.toMatch(
       /usage-based billing for the bring-your-own-key|bills the customer at a markup/i,
     );

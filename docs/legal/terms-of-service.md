@@ -1,6 +1,6 @@
 # Driftstack — Terms of Service
 
-**Version:** 1.0 · **Effective:** 2026-05-07
+**Version:** 1.1 · **Effective:** 2026-07-17
 
 These Terms of Service ("**ToS**") govern Customer's access to and
 use of the Service offered by Driftstack. Capitalised terms are
@@ -40,7 +40,7 @@ Driftstack provides an iPhone-archetype Safari automation platform.
 Specifically, Driftstack provides:
 
 1. An **API** (the `/v1/` endpoints) accepting Customer instructions
-   and returning Session, Capture, and Recording artifacts.
+   and returning Session and Capture artifacts.
 2. **SDKs** (TypeScript, Python, Go) that wrap the API.
 3. A **self-hosted GUI Client** for operating Sessions interactively.
 4. **Mac mini fleet infrastructure** that hosts the WebKit driver
@@ -60,20 +60,26 @@ event-level primitives through the customer-facing SDKs. (See L-001
 in `docs/locked-decisions.md` for the architectural reasoning, which
 informs but is not part of this ToS.)
 
-**Live-session viewing (optional, opt-in).** Where Customer or
-Driftstack support explicitly initiates a "live session", the
-in-progress browser is viewed in real time via WebRTC streamed
-through LiveKit, Inc. (Sub-processor — see Privacy Policy §7 and
-DPA Annex 3). Live sessions are ephemeral: media is not stored;
-frames stream through the SFU and are dropped on session end. If
-Customer wants a durable copy, the standard Recording feature
-(written to Cloudflare R2) is the durable path. Driftstack-initiated
-live sessions for support assistance require Customer's explicit
-authorisation via the support-impersonation gate; staff-initiated
-support viewing without authorisation is a violation of the
-authorised-action invariants in §11. End-to-end encryption is
-enabled by default for live sessions; the LiveKit SFU forwards
-encrypted media without the ability to decrypt.
+**Live-session viewing and desktop-local recording (optional,
+explicitly authorised).** An in-progress browser may be viewed in
+real time through LiveKit, Inc. (Sub-processor — see Privacy Policy
+§7 and DPA Annex 3). Live-session media is ephemeral: Driftstack does
+not store it, and frames are dropped on session end. The GUI Client
+may independently write streamed frames as local NDJSON recording
+files in the app data directory on Customer's device. That recording
+workflow does not upload those files or frames to Driftstack's API,
+control plane, or Cloudflare R2.
+
+Driftstack provides no API recording endpoint or cloud recording-
+retention window. The API Capture endpoint returns requested
+screenshot, DOM snapshot, or PDF bytes inline and does not retain the
+artifact. Driftstack-initiated live viewing for support assistance
+requires Customer's explicit authorisation through the support-
+impersonation gate. Live-session media is encrypted in transit on
+each WebRTC connection using DTLS-SRTP. LiveKit receives, processes,
+and forwards the media as a Sub-processor; Driftstack does not
+currently provide application-level end-to-end encryption through
+the SFU.
 
 ## 4. Account + authorised users
 
@@ -217,10 +223,13 @@ character.
 ## 8. Fees + payment
 
 8.1 **Fees.** Customer pays the Fees for the Subscription tier
-selected at signup (Free, $39/mo, $99/mo, $299/mo, $999/mo, or
-Enterprise — currently $3,000/mo and up). Fees are exclusive of VAT
-unless explicitly stated; VAT is added at the rate applicable to
-Customer's location at invoice issuance.
+selected at signup. Driftstack offers a perpetual Free tier, a
+Manual ladder (Personal, Team, Agency), and an API ladder (API
+Starter, API Builder, API Scale), with a custom-priced Enterprise
+tier. The current tiers and prices are published at
+<https://driftstack.dev/pricing/>. Fees are exclusive of VAT unless
+explicitly stated; VAT is added at the rate applicable to Customer's
+location at invoice issuance.
 
 8.2 **Billing cycles.** Subscriptions bill monthly in advance unless
 the Customer's tier or contract explicitly states otherwise.
@@ -235,29 +244,14 @@ Enterprise tier bills annually in advance by default.
 3. **iDEAL** for Customers with a Dutch bank account, via Stripe.
 4. **Bancontact** for Customers with a Belgian bank account, via
    Stripe.
-5. **Cryptocurrency** (BTC, LTC, USDT, USDC, ETH, XMR) via
-   NowPayments OÜ (Estonia). Crypto-payment terms:
-   - Customer chooses cryptocurrency and amount at checkout.
-   - The fiat-equivalent invoice (in EUR or USD) is fixed at the
-     time of invoice issuance; the cryptocurrency amount is
-     calculated at the live rate at invoice issuance and is valid
-     for a quoted window (typically 20 minutes) after which
-     re-quotation is required.
-   - Payment is final upon on-chain confirmation per NowPayments'
-     confirmation policy. Driftstack does **not** issue refunds for
-     cryptocurrency payments to a different network than the
-     original; refunds are made in the original cryptocurrency to
-     the original sender address.
-   - The Customer bears the on-chain network fees (miner / gas
-     fees) for sending the payment; Driftstack bears the
-     NowPayments processor fee.
-   - Underpayment by more than 1% of the quoted cryptocurrency
-     amount results in invoice failure; the partial payment may be
-     refunded (less network fees) at Customer's request to a
-     wallet address Customer provides.
-   - The crypto-payment path is bypassed entirely for
-     Stripe-paying Customers; Customer can switch payment method
-     at any time via the customer portal.
+5. **Cryptocurrency** in the assets and networks displayed at
+   checkout, via NowPayments OÜ (Estonia). The fiat tier price is
+   converted into a time-limited crypto quote. Customer must send the
+   exact quoted asset and network and bears applicable on-chain fees.
+   Entitlement starts only after NowPayments reports the order paid.
+   Driftstack does not custody crypto or initiate crypto refunds;
+   provider-initiated returns, if any, are governed by NowPayments.
+   Section 8.7.1 applies to every crypto-paid Subscription.
 
 8.4 **VAT / BTW.**
 
@@ -294,6 +288,17 @@ Resolution).
 mandated by law. Driftstack may, at its discretion, issue pro-rated
 refunds for service failures attributable to Driftstack.
 
+8.7.1 **Crypto payments are non-refundable.** Subscriptions paid via
+crypto (NowPayments) are non-refundable in all cases, including but
+not limited to buyer's remorse, accidental over-payment, and price
+movement between order and any potential refund. Customer may cancel
+the Subscription at any time — cancellation stops future billing
+periods — but the current billing period is not refunded.
+Driftstack's sole obligation under this clause is to honour the
+service entitlement through the end of the current paid period.
+Card refund mechanics (8.7, above) do not apply to crypto-paid
+Subscriptions.
+
 8.8 **Tier changes.** Customer may upgrade or downgrade tiers at any
 time through the Service. Upgrades take effect immediately and are
 pro-rated against the current billing cycle. Downgrades take effect
@@ -301,17 +306,19 @@ at the end of the current billing cycle.
 
 ## 9. Service levels
 
-9.1 **No guaranteed SLA at launch tiers.** The Free, $39, $99, and
-$299 tiers are provided **without** a contractually-binding service
-level agreement. Driftstack uses commercially reasonable efforts to
+9.1 **No guaranteed SLA at lower tiers.** The Free, Manual-ladder
+(Personal, Team, Agency), API Starter, and API Builder tiers are
+provided **without** a contractually-binding service level
+agreement. Driftstack uses commercially reasonable efforts to
 maintain availability, but does not commit to a specific uptime
 percentage at these tiers. Customer should plan its use accordingly.
 
-9.2 **Commercial SLA at higher tiers.** The $999 (Scale) and
-Enterprise tiers carry a contractual SLA published separately
-(currently: 99.9% monthly availability; 8-hour first-response SLA on
-Severity-1 incidents). The contractual SLA, when in effect, governs
-in case of conflict with this Section 9.
+9.2 **Commercial SLA at higher tiers.** The API Scale and Enterprise
+tiers carry a contractual SLA published separately (currently: 99.9%
+monthly availability; first-response SLA on Severity-1 incidents of
+four (4) hours on API Scale and one (1) hour on Enterprise). The
+contractual SLA, when in effect, governs in case of conflict with
+this Section 9.
 
 9.3 **Maintenance.** Driftstack performs scheduled maintenance during
 windows announced at least 48 hours in advance through the Service's
@@ -347,7 +354,7 @@ Organisational Measures) sets out the protective measures.
 2. It will not knowingly introduce malicious code into the Service.
 3. It will maintain the Sub-processor list in the Privacy Policy
    in good faith and reflect material changes per the notification
-   mechanism in Section 5 of the DPA.
+   mechanism in Section 3.4 of the DPA.
 4. It will respond to security vulnerability reports under a
    coordinated disclosure policy published separately.
 

@@ -4,7 +4,9 @@
 // pins the load-bearing Article 28 GDPR processor obligations a
 // procurement / DPO reviewer anchors on:
 //
-//   • Version 1.0 + Effective 2026-05-07.
+//   • Version 1.1 + Effective 2026-07-17.
+//   • Desktop-local recordings stay outside Driftstack cloud
+//     processing; Capture artifacts return inline; live media is ephemeral.
 //   • §1 6-element subject-matter table (subject/duration/nature/
 //     purpose/categories of data subjects/categories of personal
 //     data) — Article 28(3) opening paragraph compliance.
@@ -40,6 +42,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/dpa.md');
+const CANONICAL = resolve(REPO_ROOT, 'docs/legal/dpa.md');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -47,9 +50,12 @@ function read(p: string): string {
 
 describe('W378.A marketing-site /legal/dpa.md content parity', () => {
   const body = read(PAGE);
+  const canonical = read(CANONICAL);
 
-  it('version 1.0 + effective 2026-05-07 doc header pinned', () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+  it('version 1.1 + effective 2026-07-17 is mirrored to the canonical DPA', () => {
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-17/);
+    }
   });
 
   it('Article 28(3) GDPR structure declaration + UK GDPR / Swiss FADP applicability', () => {
@@ -85,6 +91,24 @@ describe('W378.A marketing-site /legal/dpa.md content parity', () => {
     expect(body).toMatch(/The Customer's API requests \(treated as instructions\)/);
     expect(body).toMatch(/Configuration Customer sets in the GUI Client or via the API/);
     expect(body).toMatch(/Article 28\(3\)\(a\) GDPR/);
+  });
+
+  it('implemented recording/Capture/live-media processing boundary is mirrored without legacy cloud retention', () => {
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/return inline Capture artifacts, transmit ephemeral live-session media/);
+      expect(doc).toMatch(
+        /Desktop-local recording files remain under Customer's\s+control and outside Driftstack's cloud processing/,
+      );
+      expect(doc).toMatch(/\(Session, Capture, live-session, Sub-processor consent, etc\.\)/);
+      expect(doc).toMatch(/Desktop-local recordings: not uploaded to or retained by\s+Driftstack/);
+      expect(doc).toMatch(
+        /API Capture artifacts: returned inline; the Capture endpoint does\s+not retain/,
+      );
+      expect(doc).toMatch(/Live-session media: not stored; streamed through LiveKit and\s+dropped/);
+      expect(doc).not.toMatch(/optionally store Recordings/);
+      expect(doc).not.toMatch(/Recording retention windows/);
+      expect(doc).not.toMatch(/1–365 days/);
+    }
   });
 
   it('§3.4 Sub-processor 30-day notice + objection right + Article 28(4) full liability', () => {
@@ -128,11 +152,13 @@ describe('W378.A marketing-site /legal/dpa.md content parity', () => {
     expect(body).toMatch(/Provides Customer with a confirmation of deletion or return/);
   });
 
-  it('§3.9 audit cooperation: 12-month frequency + 30-day notice + cost-borne-by-Customer + SOC 2 substitution', () => {
+  it('§3.9 audit cooperation: 12-month frequency + notice + cost + truthful report substitution', () => {
     expect(body).toMatch(/Once per twelve \(12\) months/);
     expect(body).toMatch(/At least thirty \(30\) days' written notice/);
     expect(body).toMatch(/Driftstack reimburses reasonable audit costs/);
-    expect(body).toMatch(/most recent SOC 2 Type II report/);
+    expect(body).toMatch(/current SOC 2 Type II report or equivalent third-party audit report/);
+    expect(body).toMatch(/does not currently hold such a\s+report/);
+    expect(body).toMatch(/does not limit Customer's audit rights above/);
     expect(body).toMatch(/Article 28\(3\)\(h\) GDPR/);
   });
 
@@ -234,14 +260,26 @@ describe('W378.A marketing-site /legal/dpa.md content parity', () => {
     // replication). Now scoped: database data EU-resident; R2 file
     // objects replicate EU + US under the listed transfer mechanism.
     expect(body).toMatch(
-      /Customer Data held in Driftstack's databases \(account, profile,\s+session, and audit data\) resides on the EU-resident infrastructure/,
+      /Customer Data held in Driftstack's databases \(account,\s+profile, session, and audit data\) resides on the EU-resident\s+infrastructure/,
     );
     expect(body).toMatch(
-      /use R2's default jurisdiction, which\s+replicates storage between the EU and the US under the transfer\s+mechanism listed above/,
+      /use R2's default jurisdiction, which replicates\s+storage\s+between the EU and the US under the transfer mechanism listed above/,
     );
     expect(body).not.toMatch(/all\s+Customer Data resides on the EU-jurisdiction infrastructure/);
-    expect(body).toMatch(/at least 30 days'\s+notice under Section 9 \(Sub-processor amendment\)/);
+    expect(body).toMatch(
+      /Any change to a Sub-processor or processing location remains subject\s+to Section 3\.4 notice and objection rights/,
+    );
+    expect(body).not.toMatch(/multi-region\s+rollout|informational for v1/i);
     expect(body).toMatch(/\[`\/trust\/sub-processors`\]\(\/trust\/sub-processors\/\)/);
+  });
+
+  it('Annex 2 availability promises stay operational and the public status page is current', () => {
+    expect(body).toMatch(/Fleet capacity and redundancy are managed\s+operationally/);
+    expect(body).toMatch(
+      /Any contractually binding availability or\s+redundancy commitment is stated in Customer's applicable Order\s+Form or published SLA/,
+    );
+    expect(body).toMatch(/public status page at `status\.driftstack\.dev`/);
+    expect(body).not.toMatch(/status page planned|at launch/i);
   });
 
   it('Annex 4 SCCs: 3 module selections (no-SCC-internal / Module 3 sub-processor / Module 1+3 controller-capacity)', () => {

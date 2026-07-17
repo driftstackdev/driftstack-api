@@ -4,7 +4,7 @@
 // procurement/legal reviewer anchors on when assessing the master
 // commercial agreement:
 //
-//   • Version 1.0 + Effective 2026-05-07 (pin via doc-header drift).
+//   • Version 1.1 + Effective 2026-07-17 (pin via doc-header drift).
 //   • B2B-only carve-out: Burgerlijk Wetboek 7:5 + Directive
 //     2011/83/EU (excludes consumer-protection regime).
 //   • Service composition (§3): API + SDKs + self-hosted GUI Client
@@ -36,6 +36,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/terms.md');
+const CANONICAL = resolve(REPO_ROOT, 'docs/legal/terms-of-service.md');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -43,9 +44,12 @@ function read(p: string): string {
 
 describe('W377.A marketing-site /legal/terms.md content parity', () => {
   const body = read(PAGE);
+  const canonical = read(CANONICAL);
 
-  it('version 1.0 + effective 2026-05-07 doc header pinned', () => {
-    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+  it('version 1.1 + effective 2026-07-17 is mirrored to the canonical Terms', () => {
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/\*\*Version:\*\* 1\.1 · \*\*Effective:\*\* 2026-07-17/);
+    }
   });
 
   it('B2B-only carve-out: Burgerlijk Wetboek 7:5 + Directive 2011/83/EU', () => {
@@ -57,9 +61,36 @@ describe('W377.A marketing-site /legal/terms.md content parity', () => {
 
   it('§3 Service composition: API + SDKs + GUI Client + Mac mini fleet', () => {
     expect(body).toMatch(/An \*\*API\*\* \(the `\/v1\/` endpoints\)/);
+    expect(body).toMatch(/returning Session and Capture artifacts/);
     expect(body).toMatch(/\*\*SDKs\*\* \(TypeScript, Python, Go\)/);
     expect(body).toMatch(/\*\*self-hosted GUI Client\*\*/);
     expect(body).toMatch(/\*\*Mac mini fleet infrastructure\*\*/);
+  });
+
+  it('§3 local-recording/live-media/Capture boundary is mirrored and no cloud recording is promised', () => {
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/\*\*Live-session viewing and desktop-local recording \(optional,/);
+      expect(doc).toMatch(/Live-session media is ephemeral: Driftstack does\s+not store it/);
+      expect(doc).toMatch(/local NDJSON recording\s+files in the app data directory/);
+      expect(doc).toMatch(
+        /does not upload those files or frames to Driftstack's API,\s+control plane, or Cloudflare R2/,
+      );
+      expect(doc).toMatch(/provides no API recording endpoint or cloud recording-/);
+      expect(doc).toMatch(/screenshot, DOM snapshot, or PDF bytes inline/);
+      expect(doc).toMatch(/does not retain the\s+artifact/);
+      expect(doc).toMatch(/encrypted in transit on\s+each\s+WebRTC connection using DTLS-SRTP/);
+      expect(doc).toMatch(
+        /LiveKit receives, processes,\s+and\s+forwards the media as a Sub-processor/,
+      );
+      expect(doc).toMatch(
+        /does not\s+currently provide application-level end-to-end encryption through\s+the SFU/,
+      );
+      expect(doc).not.toMatch(/Session, Capture, and Recording artifacts/);
+      expect(doc).not.toMatch(/Recording feature[\s\S]{0,80}Cloudflare R2/);
+      expect(doc).not.toMatch(/E2EE (?:on|is enabled by) default/i);
+      expect(doc).not.toMatch(/end-to-end encryption is enabled by default/i);
+      expect(doc).not.toMatch(/cannot decrypt/i);
+    }
   });
 
   it('§8.1 tier structure pinned (Free + Manual + API ladders) + references driftstack.dev/pricing; no fictional figures', () => {
@@ -72,11 +103,17 @@ describe('W377.A marketing-site /legal/terms.md content parity', () => {
     expect(body).not.toMatch(/\$39\/mo|\$99\/mo|\$299\/mo|\$999\/mo|\$3,000\/mo/);
   });
 
-  it('§8.3 4 Stripe payment methods pinned (Card / SEPA DD / iDEAL / Bancontact)', () => {
+  it('§8.3 five payment methods pin Stripe rails plus truthful crypto checkout', () => {
     expect(body).toMatch(/\*\*Card payments\*\* \(Visa, Mastercard, American Express/);
     expect(body).toMatch(/\*\*SEPA Direct Debit\*\* for Customers with a EUR bank account/);
     expect(body).toMatch(/\*\*iDEAL\*\* for Customers with a Dutch bank account/);
     expect(body).toMatch(/\*\*Bancontact\*\* for Customers with a Belgian bank account/);
+    expect(body).toMatch(
+      /\*\*Cryptocurrency\*\* in the assets and networks displayed at\s+checkout/,
+    );
+    expect(body).toMatch(/converted into a time-limited crypto quote/);
+    expect(body).toMatch(/Entitlement starts only after NowPayments reports the order paid/);
+    expect(body).toMatch(/does not custody crypto or initiate crypto refunds/);
   });
 
   it('§8.4.1 Dutch BTW 21% pinned + §8.4.2 EU reverse-charge VAT', () => {
@@ -101,6 +138,11 @@ describe('W377.A marketing-site /legal/terms.md content parity', () => {
     expect(body).toMatch(
       /99\.9%\s+monthly availability; first-response SLA on Severity-1 incidents of\s+four \(4\) hours on API Scale and one \(1\) hour on Enterprise/,
     );
+  });
+
+  it('§11.1 Sub-processor change warranty points to the operative DPA section', () => {
+    expect(body).toMatch(/notification\s+mechanism in Section 3\.4 of the DPA/);
+    expect(body).not.toMatch(/notification\s+mechanism in Section 5 of the DPA/);
   });
 
   it('§9.3 maintenance: 48-hour advance notice via status.driftstack.dev', () => {

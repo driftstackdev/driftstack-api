@@ -48,7 +48,8 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     // (dig + prod-box verified) is the R2 default jurisdiction with
     // EU + US replication (a transfer mechanism IS required), and the
     // objects actually stored are avatars, encrypted profile blobs,
-    // and public status-page snapshots. Recordings are roadmap-only.
+    // and public status-page snapshots. Desktop recordings stay on
+    // the customer's device and API Capture responses are inline.
     name: 'Cloudflare R2',
     region: 'Default jurisdiction (data replicated EU + US)',
     purpose:
@@ -72,14 +73,14 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     name: 'Stripe',
     region: 'Stripe Payments Europe Ltd (Ireland)',
     purpose:
-      'Payment processing, subscription management, billing for Driftstack-bundled AI usage, and VAT (Dutch BTW) reverse-charge handling via Stripe Tax. BYOK AI usage is billed directly by the model provider, not Stripe through Driftstack.',
+      'Payment processing, subscription management, and VAT (Dutch BTW) reverse-charge handling via Stripe Tax. Standard bundled-LLM turns use an included-service accounting budget and are not separately itemized by Stripe; BYOK AI usage is billed directly by the model provider.',
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
   {
     name: 'Anthropic',
     region: 'United States',
     purpose:
-      "Large language model (LLM) behind the optional AI agent feature. Engaged in two modes: (1) Bring your own key (BYOK) — the customer supplies their own Anthropic API key; the customer's contract is with Anthropic directly, and Driftstack only passes the request through without keeping it (a transient proxy). (2) Bundled — opt-in only; Driftstack uses its own deployment-managed key and bills standard Builder and Scale usage at $0.10 per agent turn, while Enterprise can use a contracted custom rate. Session data flows to Anthropic only when one of these two modes is actually used in a given AI step.",
+      "Large language model (LLM) behind the optional AI agent feature. Engaged in two modes: (1) Bring your own key (BYOK) — the customer supplies their own Anthropic API key; the customer's contract is with Anthropic directly, and Driftstack only passes the request through without keeping it (a transient proxy). (2) Driftstack-provided access — opt-in only; Driftstack uses its deployment-managed key and posts a $0.10 included-service accounting value per standard Builder or Scale turn against the customer's enforced budget. That value is not separately itemized by Stripe; Enterprise can use a contracted custom budget. Session data flows to Anthropic only when one of these two modes is actually used in a given AI step.",
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
   {
