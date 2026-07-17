@@ -31,9 +31,15 @@ vi.mock('../../src/lib/livekit', () => ({
 // Surface a fake connected Room upward (jsdom can't do a real WebRTC connect) so
 // the data-channel consumer subscribes. `on` records handlers so the test can fire
 // a pageState frame; `off` + publishData keep the other effects from throwing.
+type DataReceivedHandler = (payload: Uint8Array) => void;
+const activeDataReceivedHandlers = new Set<DataReceivedHandler>();
 const fakeRoom = {
-  on: vi.fn(),
-  off: vi.fn(),
+  on: vi.fn((event: string, handler: DataReceivedHandler) => {
+    if (event === 'dataReceived') activeDataReceivedHandlers.add(handler);
+  }),
+  off: vi.fn((event: string, handler: DataReceivedHandler) => {
+    if (event === 'dataReceived') activeDataReceivedHandlers.delete(handler);
+  }),
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
@@ -78,27 +84,34 @@ function renderSim() {
 // + the latency-ping hook both subscribe; the latter ignores a non-ping message).
 function fireDataFrame(obj: unknown): void {
   const payload = new TextEncoder().encode(JSON.stringify(obj));
-  fakeRoom.on.mock.calls
-    .filter((c) => c[0] === 'dataReceived')
-    .forEach((c) => {
-      try {
-        (c[1] as (p: Uint8Array) => void)(payload);
-      } catch {
-        /* a non-page-state DataReceived subscriber (latency ping) — ignores it */
-      }
-    });
+  activeDataReceivedHandlers.forEach((handler) => {
+    try {
+      handler(payload);
+    } catch {
+      /* a non-page-state DataReceived subscriber (latency ping) — ignores it */
+    }
+  });
+}
+
+function dataReceivedSubscribers(): DataReceivedHandler[] {
+  return [...activeDataReceivedHandlers];
+}
+
+async function waitForPageStateSubscriber(): Promise<void> {
+  // Live latency subscribes first. Wait for both it and the page-state consumer
+  // so a loaded parallel test worker cannot fire into only the unrelated hook.
+  await waitFor(() => expect(dataReceivedSubscribers()).toHaveLength(2));
 }
 
 describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () => {
   beforeEach(() => {
     fakeRoom.on.mockClear();
+    activeDataReceivedHandlers.clear();
   });
 
   it('shows a non-black "Reconnecting — page unresponsive" badge on a pageState{state:stalled} data-channel frame', async () => {
     const { container } = renderSim();
-    await waitFor(() => {
-      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
-    });
+    await waitForPageStateSubscriber();
     act(() => {
       fireDataFrame({ state: 'stalled', url: 'https://app.example' });
     });
@@ -109,9 +122,7 @@ describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () =>
 
   it('clears the stalled badge when a subsequent non-stalled (loaded) frame arrives', async () => {
     const { container } = renderSim();
-    await waitFor(() => {
-      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
-    });
+    await waitForPageStateSubscriber();
     act(() => {
       fireDataFrame({ state: 'stalled', url: 'https://app.example' });
     });
@@ -141,7 +152,7 @@ describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () =>
       act(() => {
         vi.advanceTimersByTime(0);
       });
-      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+      expect(dataReceivedSubscribers()).toHaveLength(2);
       // A single stalled frame lights the badge…
       act(() => {
         fireDataFrame({ state: 'stalled', url: 'https://app.example' });
@@ -162,7 +173,7 @@ describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () =>
       act(() => {
         vi.advanceTimersByTime(0);
       });
-      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
+      expect(dataReceivedSubscribers()).toHaveLength(2);
       act(() => {
         fireDataFrame({ state: 'stalled', url: 'https://app.example' });
       });
@@ -187,13 +198,12 @@ describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () =>
 describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
   beforeEach(() => {
     fakeRoom.on.mockClear();
+    activeDataReceivedHandlers.clear();
   });
 
   it('shows the error overlay with per-kind copy on a pageState{state:errored} frame', async () => {
     const { container } = renderSim();
-    await waitFor(() => {
-      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
-    });
+    await waitForPageStateSubscriber();
     act(() => {
       fireDataFrame({
         state: 'errored',
@@ -210,9 +220,7 @@ describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
 
   it('renders an HTTP-status-specific message for kind:http', async () => {
     const { container } = renderSim();
-    await waitFor(() => {
-      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
-    });
+    await waitForPageStateSubscriber();
     act(() => {
       fireDataFrame({
         state: 'errored',
@@ -227,9 +235,7 @@ describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
 
   it('clears the error overlay when a subsequent loading/loaded frame arrives', async () => {
     const { container } = renderSim();
-    await waitFor(() => {
-      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
-    });
+    await waitForPageStateSubscriber();
     act(() => {
       fireDataFrame({ state: 'errored', url: 'https://x/', error: { kind: 'net', message: 'x' } });
     });
@@ -249,13 +255,12 @@ describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
 describe('SimulatorWindow — late sub-resource error does not nuke a loaded page (#72)', () => {
   beforeEach(() => {
     fakeRoom.on.mockClear();
+    activeDataReceivedHandlers.clear();
   });
 
   it('suppresses the error overlay when an errored frame arrives AFTER the page loaded', async () => {
     const { container } = renderSim();
-    await waitFor(() => {
-      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
-    });
+    await waitForPageStateSubscriber();
     // The page opens + paints (loaded), THEN a smaller late request fails (errored).
     act(() => {
       fireDataFrame({ state: 'loaded', url: 'https://app.example/' });
@@ -273,9 +278,7 @@ describe('SimulatorWindow — late sub-resource error does not nuke a loaded pag
 
   it('STILL shows the overlay for a top-level failure (errored before any loaded)', async () => {
     const { container } = renderSim();
-    await waitFor(() => {
-      expect(fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived')).toBe(true);
-    });
+    await waitForPageStateSubscriber();
     // A fresh navigation that fails before ever loading → a real nav failure.
     act(() => {
       fireDataFrame({ state: 'loading', url: 'https://nope.invalid/' });
