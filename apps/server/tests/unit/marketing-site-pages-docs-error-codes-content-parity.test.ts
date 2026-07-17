@@ -99,6 +99,22 @@ describe('W510.C apps/marketing-site/src/pages/docs/error-codes.astro content pa
     );
   });
 
+  it('describes terminal driver and deployment-capability failures without rollout language or unsafe automatic-retry advice', () => {
+    expect(body).toContain(
+      "when: 'The active browser runtime returned a structured failure.', action: 'Do not automatically retry; inspect `detail` and include X-Request-Id when contacting support.'",
+    );
+    expect(body).toContain(
+      "when: 'The selected operation is not supported by the active browser runtime.', action: 'Not retryable; choose a supported operation or contact support with X-Request-Id.'",
+    );
+    expect(body).toContain(
+      "when: 'A capability required by this operation is disabled or unavailable on the deployment.', action: 'Not retryable until the capability is available; contact the deployment operator with X-Request-Id.'",
+    );
+    expect(body).toContain("when: 'The agent-session turn has no usable Anthropic credential.'");
+    expect(body).not.toMatch(
+      /hasn't been wired|hasn’t been wired|documented path lands|operator must wire|BYOK-for-v1\.0|Often retryable/i,
+    );
+  });
+
   it("https://errors.driftstack.dev/<slug> URI-format + slug-stability commitment pinned: 'The full URI is https://errors.driftstack.dev/<slug> where <slug> is the value in the first column. Slugs are stable; they will not be renamed without a deprecation window.' — pinned so the canonical URI format + the slug-stability guarantee survive (drift to renaming a slug without deprecation would break customer log-grep pipelines)", () => {
     expect(body).toMatch(
       /The full URI is <code>https:\/\/errors\.driftstack\.dev\/&lt;slug&gt;<\/code>\s*\n?\s*where <code>&lt;slug&gt;<\/code> is the value in the first column\.\s*\n?\s*Slugs are stable; they will not be renamed without a deprecation\s*\n?\s*window\./,
