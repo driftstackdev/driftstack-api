@@ -135,10 +135,11 @@ describe('W366.A marketing-site /comparison page content parity', () => {
     expect(body).toMatch(/We don't sell proxies; we don't\s+mark up egress/);
   });
 
-  it('"bring-your-own Anthropic key" anti-Browserbase claim pinned (S20b: "LLM proxy markup" → "markup on AI usage", same no-markup commitment)', () => {
+  it('BYOK remains no-markup while provided model access is an included-service budget, not a Stripe line item', () => {
     expect(body).toMatch(
-      /Bring-your-own\s+Anthropic key is supported — no markup on AI usage unless you\s+explicitly opt into bundled billing/,
+      /Bring-your-own\s+Anthropic key is supported with no Driftstack markup\. Optional\s+Driftstack-provided model access draws against an enforced\s+included-service budget and is not a separate Stripe line item today/,
     );
+    expect(body).not.toMatch(/opt into bundled billing/);
   });
 
   it('support@driftstack.dev correction-mail link pinned (vendor-marketing-drift escape hatch)', () => {

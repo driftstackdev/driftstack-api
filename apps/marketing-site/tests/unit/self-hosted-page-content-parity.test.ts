@@ -18,8 +18,7 @@
 //     (Privacy / Volume / Sovereignty).
 //   • 4-step process pinned (Contact sales / Procure hardware
 //     / Onboard / Run) with sales@driftstack.dev contact.
-//   • Softened GA framing pinned (S43 2026-07-07: "GA follows the
-//     API public launch" — no dated commitment).
+//   • Current sales-led availability with no GA/early-access deferral.
 //   • Cross-link to /faq for procurement/compliance questions.
 //   • ASCII architecture diagram present with secure-channel
 //     callout.
@@ -105,14 +104,16 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
     }
   });
 
-  it('sales@driftstack.dev contact + softened GA framing pinned (S43 2026-07-07: intent-without-deadline, no dated GA promise)', () => {
+  it('sales@driftstack.dev contact + current guided sales-led availability', () => {
     expect(body).toMatch(/mailto:sales@driftstack\.dev\?subject=Self-Hosted%20inquiry/);
-    // S43 2026-07-07 (founder-approved) — the dated "GA within 6
-    // months of API public launch" commitment was softened to
-    // intent-without-deadline; the dated form must not reappear.
-    expect(body).toMatch(/Self-hosted GA follows the\s+API public launch/);
-    expect(body).not.toMatch(/GA within 6 months/);
-    expect(body).not.toMatch(/ships within 6 months/);
+    expect(body).toMatch(/Self-hosted is available through a guided sales-led engagement\./);
+    expect(body).toMatch(
+      /qualify the workload, plan the hardware and network, onboard\s+the deployment, and run a joint smoke test/,
+    );
+    expect(body).toMatch(/Available now through Contact Sales · scoped and supported directly/);
+    expect(body).not.toMatch(
+      /\bGA\b|generally available|early access|follows the API public launch|ships within/i,
+    );
   });
 
   it('cross-link to /faq resolves (common-questions teaser section)', () => {

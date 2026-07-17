@@ -15,7 +15,8 @@
 //   • W210 "Recipe library removed until ships" comment pinned
 //     (load-bearing honesty signal — drift would mean adding back a
 //     404 link).
-//   • SDK card distinguishes published TypeScript from alpha Python/Go.
+//   • SDK card pins all three published pre-1.0 registry packages and
+//     reproducible-install guidance.
 //   • API reference card distinguishes the curated local map from the
 //     complete interactive reference.
 //   • Help banner: "Doc not landing?" + support@driftstack.dev
@@ -90,10 +91,13 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
 
   it('SDK card states the current publish posture for all three languages', () => {
     expect(body).toMatch(/TypeScript · Python · Go →/);
-    expect(body).toMatch(/TypeScript is published on npm/);
-    expect(body).toMatch(/Python and Go are alpha source\s+distributions/);
-    expect(body).toMatch(/pinned to an exact revision/);
-    expect(body).not.toMatch(/Native packages on npm, PyPI/);
+    expect(body).toMatch(
+      /TypeScript, Python, and Go are published as pre-1\.0 packages on\s+npm, PyPI, and the Go module proxy/,
+    );
+    expect(body).toMatch(
+      /use your package-manager lockfile\s+or constraints for reproducible deployments/,
+    );
+    expect(body).not.toMatch(/alpha source\s+distributions|first registry tag|tag pending/i);
   });
 
   it('Webhooks card: all eight live subscribable event types + HMAC-SHA256', () => {

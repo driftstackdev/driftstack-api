@@ -15,7 +15,8 @@
 //   • W210 Recipe-library-removed inline comment (anti-404 guard).
 //   • Curated local map + complete live OpenAPI + SDK codegen framing.
 //   • All-5-event-types + HMAC-SHA256 verification framing.
-//   • SDK publish truth: TypeScript npm; Python/Go alpha source.
+//   • SDK publish truth: all three are published pre-1.0 packages;
+//     consumers retain lockfile/constraint reproducibility.
 //   • Help banner: mailto:support@driftstack.dev + github.com/
 //     driftstackdev.
 
@@ -79,12 +80,15 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     expect(body).not.toMatch(/Every endpoint, every shape/);
   });
 
-  it('SDKs card pins TypeScript npm and Python/Go alpha source distribution truth', () => {
+  it('SDKs card pins all three published pre-1.0 registries and reproducible installs', () => {
     expect(body).toMatch(/TypeScript · Python · Go →/);
-    expect(body).toMatch(/TypeScript is published on npm/);
-    expect(body).toMatch(/Python and Go are alpha source\s*\n?\s*distributions/);
-    expect(body).toMatch(/pinned to an exact revision/);
-    expect(body).not.toMatch(/Native packages on npm, PyPI/);
+    expect(body).toMatch(
+      /TypeScript, Python, and Go are published as pre-1\.0 packages on\s*\n?\s*npm, PyPI, and the Go module proxy/,
+    );
+    expect(body).toMatch(
+      /use your package-manager lockfile\s*\n?\s*or constraints for reproducible deployments/,
+    );
+    expect(body).not.toMatch(/alpha source\s*\n?\s*distributions|first registry tag|tag pending/i);
   });
 
   it('Webhooks card pins the canonical eight-event roster and HMAC-SHA256 verification', () => {

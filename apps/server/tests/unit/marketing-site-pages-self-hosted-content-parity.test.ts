@@ -20,9 +20,8 @@
 //     Sovereignty.
 //   • 4-step process: Contact sales → Procure hardware → Onboard →
 //     Run.
-//   • 'Available Contact Sales from day 0. Self-hosted GA follows
-//     the API public launch.' (S43 2026-07-07 softening — was 'within 6
-//     months of API public launch.'
+//   • Available now through a guided sales-led engagement, with no
+//     GA/early-access/future-launch deferral.
 //   • 'Concurrent capacity is bounded by your hardware, not by
 //     license.'
 
@@ -70,12 +69,14 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     expect(body).toMatch(/case 'unlimited':\s*\n?\s*return 'Unlimited';/);
   });
 
-  it('GA framing pinned (S43 2026-07-07, founder-approved softening): \'Available "Contact Sales" from day 0. Self-hosted GA follows the API public launch.\' — intent-without-deadline replaces the dated "within 6 months" commitment; the contact-sales-day-0 promise stays explicit and the dated form must not reappear', () => {
+  it('pins current guided sales-led availability and rejects deferred-launch copy', () => {
     expect(body).toMatch(
-      /Available "Contact Sales" from day 0\. Self-hosted GA follows the\s*\n?\s*API public launch\./,
+      /Self-hosted is available through a guided sales-led engagement\.\s*\n?\s*We qualify the workload, plan the hardware and network, onboard\s*\n?\s*the deployment, and run a joint smoke test with your team\./,
     );
-    expect(body).not.toMatch(/GA within 6 months/);
-    expect(body).not.toMatch(/ships within 6 months/);
+    expect(body).toMatch(/Available now through Contact Sales · scoped and supported directly/);
+    expect(body).not.toMatch(
+      /\bGA\b|generally available|early access|follows the API public launch|ships within/i,
+    );
   });
 
   it("Architecture framing pinned: 'Two boxes. One secure channel. Your hardware, our orchestration.' + 'Self-hosted is one piece of Driftstack software running on Mac hardware you own. The control plane orchestrates sessions, exposes the SDK + GUI, and never holds your session content.' — pinned so the two-box architecture metaphor + the 'we orchestrate, you hold session content' division of responsibility survive (drift to dropping 'never holds your session content' would weaken the privacy promise)", () => {
