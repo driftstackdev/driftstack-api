@@ -17,6 +17,7 @@ import { LazyStore } from '@tauri-apps/plugin-store';
 import { disposeResponseBody } from './dispose-response-body';
 import { readBoundedDiagnosticJson } from './read-bounded-json';
 import { humanizeError } from './humanize-error';
+import { makeWriteLock } from './store-write-lock';
 
 export interface FleetMember {
   id: string;
@@ -45,47 +46,65 @@ function getStore(): LazyStore {
   return store;
 }
 
+// Fleet mutations are read-modify-write operations over one shared array. The
+// view single-flights its editor, but removes and independent library callers
+// can still overlap. Own the read together with set+save so one add cannot
+// overwrite another, and an update cannot resurrect a concurrently removed
+// member. Public reads join the same queue and never observe a half-persisted
+// turn. A rejected operation cannot wedge makeWriteLock's non-rejecting tail.
+const writeLock = makeWriteLock();
+
 export async function listFleetMembers(): Promise<FleetMember[]> {
+  return writeLock(listFleetMembersUnlocked);
+}
+
+async function listFleetMembersUnlocked(): Promise<FleetMember[]> {
   const value = await getStore().get<FleetMember[]>(FLEET_KEY);
   if (!Array.isArray(value)) return [];
   return value.filter(isFleetMember);
 }
 
 export async function addFleetMember(draft: FleetMemberDraft): Promise<FleetMember> {
-  const all = await listFleetMembers();
-  const next: FleetMember = {
-    id: mintId(),
-    label: draft.label,
-    baseUrl: draft.baseUrl.replace(/\/+$/, ''),
-    notes: draft.notes,
-    createdAt: new Date().toISOString(),
-  };
-  await persist([...all, next]);
-  return next;
+  return writeLock(async () => {
+    const all = await listFleetMembersUnlocked();
+    const next: FleetMember = {
+      id: mintId(),
+      label: draft.label,
+      baseUrl: draft.baseUrl.replace(/\/+$/, ''),
+      notes: draft.notes,
+      createdAt: new Date().toISOString(),
+    };
+    await persist([...all, next]);
+    return next;
+  });
 }
 
 export async function updateFleetMember(
   id: string,
   patch: FleetMemberDraft,
 ): Promise<FleetMember | null> {
-  const all = await listFleetMembers();
-  const idx = all.findIndex((m) => m.id === id);
-  if (idx < 0) return null;
-  const updated: FleetMember = {
-    ...(all[idx] as FleetMember),
-    label: patch.label,
-    baseUrl: patch.baseUrl.replace(/\/+$/, ''),
-    notes: patch.notes,
-  };
-  const next = [...all];
-  next[idx] = updated;
-  await persist(next);
-  return updated;
+  return writeLock(async () => {
+    const all = await listFleetMembersUnlocked();
+    const idx = all.findIndex((m) => m.id === id);
+    if (idx < 0) return null;
+    const updated: FleetMember = {
+      ...(all[idx] as FleetMember),
+      label: patch.label,
+      baseUrl: patch.baseUrl.replace(/\/+$/, ''),
+      notes: patch.notes,
+    };
+    const next = [...all];
+    next[idx] = updated;
+    await persist(next);
+    return updated;
+  });
 }
 
 export async function removeFleetMember(id: string): Promise<void> {
-  const all = await listFleetMembers();
-  await persist(all.filter((m) => m.id !== id));
+  return writeLock(async () => {
+    const all = await listFleetMembersUnlocked();
+    await persist(all.filter((m) => m.id !== id));
+  });
 }
 
 async function persist(members: FleetMember[]): Promise<void> {

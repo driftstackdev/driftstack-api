@@ -73,9 +73,29 @@ describe('W469.B apps/gui-client/src/lib/fleet-members.ts content parity', () =>
     expect(body).toMatch(/const FLEET_KEY = 'fleetMembers';/);
   });
 
+  it('serializes public reads and every array-valued read-modify-write through one non-wedging store owner', () => {
+    expect(body).toContain("import { makeWriteLock } from './store-write-lock';");
+    expect(body).toContain('const writeLock = makeWriteLock();');
+    expect(body).toMatch(
+      /export async function listFleetMembers\(\): Promise<FleetMember\[]> \{\s*return writeLock\(listFleetMembersUnlocked\);\s*\}/,
+    );
+    expect(body).toMatch(
+      /async function listFleetMembersUnlocked\(\): Promise<FleetMember\[]> \{\s*const value = await getStore\(\)\.get<FleetMember\[]>\(FLEET_KEY\);/,
+    );
+    expect(body).toMatch(
+      /export async function addFleetMember[\s\S]*?return writeLock\(async \(\) => \{\s*const all = await listFleetMembersUnlocked\(\);/,
+    );
+    expect(body).toMatch(
+      /export async function updateFleetMember[\s\S]*?return writeLock\(async \(\) => \{\s*const all = await listFleetMembersUnlocked\(\);/,
+    );
+    expect(body).toMatch(
+      /export async function removeFleetMember[\s\S]*?return writeLock\(async \(\) => \{\s*const all = await listFleetMembersUnlocked\(\);\s*await persist\(all\.filter\(\(m\) => m\.id !== id\)\);\s*\}\);/,
+    );
+  });
+
   it("addFleetMember + updateFleetMember: baseUrl.replace(/\\/+$/, '') trailing-slash strip on BOTH paths (downstream `${baseUrl}/version` would double-slash without it)", () => {
     expect(body).toMatch(
-      /export async function addFleetMember\(draft: FleetMemberDraft\): Promise<FleetMember> \{\s*\n?\s*const all = await listFleetMembers\(\);\s*\n?\s*const next: FleetMember = \{\s*\n?\s*id: mintId\(\),\s*\n?\s*label: draft\.label,\s*\n?\s*baseUrl: draft\.baseUrl\.replace\(\/\\\/\+\$\/, ''\),/,
+      /export async function addFleetMember\(draft: FleetMemberDraft\): Promise<FleetMember> \{\s*\n?\s*return writeLock\(async \(\) => \{\s*\n?\s*const all = await listFleetMembersUnlocked\(\);\s*\n?\s*const next: FleetMember = \{\s*\n?\s*id: mintId\(\),\s*\n?\s*label: draft\.label,\s*\n?\s*baseUrl: draft\.baseUrl\.replace\(\/\\\/\+\$\/, ''\),/,
     );
     expect(body).toMatch(
       /const updated: FleetMember = \{\s*\n?\s*\.\.\.\(all\[idx\] as FleetMember\),\s*\n?\s*label: patch\.label,\s*\n?\s*baseUrl: patch\.baseUrl\.replace\(\/\\\/\+\$\/, ''\),\s*\n?\s*notes: patch\.notes,\s*\n?\s*\};/,
