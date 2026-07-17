@@ -16,12 +16,12 @@ import IconTile from '../components/IconTile.astro';
 
 <BaseLayout
   title="Docs"
-  description="Driftstack documentation: quickstart, SDK references for TypeScript / Python / Go, API reference, self-hosted setup, recipe library."
+  description="Driftstack documentation: desktop and code quickstarts, SDK guides for TypeScript / Python / Go, API reference, self-hosted setup, recipe library."
 >
   <!-- Hero -->
   <PageHero label="Docs" title="Everything you need to drive a session.">
     <p class="mt-5 max-w-prose text-lg leading-8 text-tk-ink-2">
-      Quickstarts for every supported language, the full API reference,
+      Desktop and code quickstarts, the living API reference,
       SDK guides, self-hosted setup, and the recipe catalogue. Driftstack
       is small enough to read end-to-end — start with the quickstart
       and follow the link trail.
@@ -42,12 +42,12 @@ import IconTile from '../components/IconTile.astro';
             Quickstart
           </p>
           <h2 class="mt-3 text-xl font-semibold text-tk-ink transition-colors group-hover:text-tk-accent-text">
-            Five minutes to first session →
+            Free desktop or paid code →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
-            Install the SDK in your language, paste an API key, drive
-            your first session. No prior browser-automation experience
-            needed.
+            On Free, sign in through the desktop app's browser flow; it stores
+            a restricted device credential automatically. Code quickstarts use
+            a paid tier and a customer API key.
           </p>
         </a>
 
@@ -61,12 +61,12 @@ import IconTile from '../components/IconTile.astro';
             API reference
           </p>
           <h2 class="mt-3 text-xl font-semibold text-tk-ink transition-colors group-hover:text-tk-accent-text">
-            Every endpoint, every shape →
+            Curated route map + live reference →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
-            Auto-generated from the OpenAPI 3.1 spec. Try requests
-            against your own API key directly in the browser. Same
-            spec the SDK codegen reads.
+            Browse common routes and runnable patterns here, then open the
+            complete interactive OpenAPI 3.1 reference on docs.driftstack.dev.
+            It is the same contract the SDK codegen reads.
           </p>
         </a>
 
@@ -81,10 +81,9 @@ import IconTile from '../components/IconTile.astro';
             TypeScript · Python · Go →
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
-            Native packages on npm, PyPI, and as a Go module. Typed
-            request/response shapes. Retry-with-backoff. Webhook
-            signature verification. Async iterators for paginated
-            list endpoints.
+            TypeScript is published on npm. Python and Go are alpha source
+            distributions that should be pinned to an exact revision. All
+            three expose typed shapes, retries, and webhook verification.
           </p>
         </a>
 

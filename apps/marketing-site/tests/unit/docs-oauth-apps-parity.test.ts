@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ApiKeyScopeSchema } from '@driftstack/api-types';
+import { ApiKeyScopeSchema, TIER_FEATURES } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -77,5 +77,24 @@ describe('W266.A /docs/oauth-apps ↔ live OAuth surface parity', () => {
     expect(page).toMatch(/PKCE-S256/);
     expect(page).not.toMatch(/PKCE plain/);
     expect(page).not.toMatch(/code_challenge_method=plain/);
+  });
+
+  it('documents the live paid, admin-gated, confidential-client posture', () => {
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(page).toContain('Customer authorization requires an API-enabled paid tier');
+    expect(page).toContain('cannot approve an OAuth authorization');
+    expect(page).toContain('rejected while an account is Free and resume after upgrade');
+    expect(page).toContain('OAuth client registration is admin-gated');
+    expect(page).toContain('Every supported');
+    expect(page).toContain('client is confidential');
+    expect(page).toContain('there is no public-client flow');
+    expect(page).not.toMatch(/pre-launch|follow-up/i);
+    expect(page).not.toContain('talk to support about a public-client variant');
+  });
+
+  it('does not present the Free device credential as an OAuth sandbox', () => {
+    expect(page).toContain('Driftstack has no separate sandbox environment');
+    expect(page).toContain('The Free desktop');
+    expect(page).toContain('<code>ds_test_…</code> credential is not an OAuth or API sandbox key');
   });
 });

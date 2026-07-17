@@ -8,6 +8,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { TIER_FEATURES } from '@driftstack/api-types';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
 const DOC_PATH = join(REPO, 'apps', 'marketing-site', 'src', 'pages', 'docs', 'api-keys.astro');
@@ -66,5 +67,18 @@ describe('W217.B api-keys doc parity', () => {
     const listed = new Set(docScopes());
     const missing = customerVisible.filter((s) => !listed.has(s));
     expect(missing, `granular scope table is missing: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  it('documents the real tier, device-credential, rotation, and audit-field boundary', () => {
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(doc).toContain('Customer-key format: <code>ds_live_&lt;random&gt;</code>');
+    expect(doc).toContain('restricted <code>ds_test_…</code> device credential');
+    expect(doc).toContain('not a customer API key, a general SDK key, or a sandbox credential');
+    expect(doc).toContain('A Free dashboard web session can list and revoke keys');
+    expect(doc).toContain('create and rotate return an RFC 9457');
+    expect(doc).toContain('<code>last_used_at</code>');
+    expect(doc).toContain('<code>actor_key_id</code>');
+    expect(doc).toContain('<code>actor_key_id: null</code>');
+    expect(doc).not.toContain('Every audit-log entry your account generates includes the acting');
   });
 });

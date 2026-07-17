@@ -19,6 +19,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       Driftstack.
     </p>
 
+    <p>
+      SDK automation requires an API-enabled paid tier, including any Manual
+      tier, and a <code>ds_live_…</code> customer API key. Free starts in the
+      desktop app: browser sign-in stores a restricted <code>ds_test_…</code>
+      device credential automatically, and that credential is not an SDK or
+      sandbox key.
+    </p>
+
     <h2>1. Install</h2>
     <pre><code>{`# bun
 bun add @driftstack/sdk
@@ -30,8 +38,7 @@ npm install @driftstack/sdk
 pnpm add @driftstack/sdk`}</code></pre>
 
     <p>
-      Node ≥ 20, Bun ≥ 1.1, and Deno ≥ 1.40 are supported. The
-      package is dual-published (ESM + CommonJS via conditional
+      Node ≥ 18 is supported. The package is dual-published (ESM + CommonJS via conditional
       <code>exports</code>); both <code>import</code> and
       <code>require('@driftstack/sdk')</code> work out of the box.
     </p>
@@ -114,7 +121,7 @@ await client.sessions.destroy(session.id);`}</code></pre>
       Every SDK method throws a typed <code>DriftstackError</code> on
       non-2xx responses. The error carries <code>kind</code>
       (discriminator, narrow with <code>===</code>),
-      <code>status</code>, <code>type</code> (the RFC 7807 URI),
+      <code>status</code>, <code>type</code> (the RFC 9457 URI),
       <code>detail</code>, and any extension fields from the problem
       response. Switch on <code>kind</code> for clean type-narrowing:
     </p>
@@ -132,24 +139,16 @@ try {
   }
 }`}</code></pre>
 
-    <h2>Bundled vs tree-shaken</h2>
-    <p>
-      The SDK is fully tree-shakeable. If you only import
-      <code>client.sessions.*</code>, the recordings and billing
-      modules never reach your bundle. Typical Next.js / Vite
-      production bundles add ~12 kB gzipped.
-    </p>
-
     <h2>Where to go next</h2>
     <ul>
-      <li><a href="/api-reference/">Full API reference</a> — every endpoint, every field.</li>
+      <li><a href="/api-reference/">Curated API map</a> — common routes and runnable patterns, with a link to the complete interactive reference.</li>
       <li><a href="/docs/sdk-typescript-crypto-orders/">SDK — crypto orders</a>
  — typed examples for the surface.</li>
       <li><a href="/docs/webhooks/">Webhooks</a> — avoid polling in production.</li>
       <li><a href="/docs/cost-monitoring/">Cost monitoring</a> — set
         alerts before the bill surprises you.</li>
       <li><a href="/docs/error-codes/">Error codes</a> — the stable
-        RFC 7807 type URIs the SDK's typed errors carry.</li>
+        RFC 9457 type URIs the SDK's typed errors carry.</li>
     </ul>
 
     <h2>Need help?</h2>

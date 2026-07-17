@@ -2,13 +2,17 @@
 //
 // Pins:
 //   - the free-tier concurrent-session cap (1, not 2)
-//   - the API key prefix (`ds_live_`, no `ds_test_` namespace)
+//   - the Free desktop (`ds_test_`) versus paid API (`ds_live_`) boundary
 //   - the non-refundable crypto claim
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PROFILES_PER_TIER, TIER_CONCURRENT_SESSION_LIMITS } from '@driftstack/api-types';
+import {
+  PROFILES_PER_TIER,
+  TIER_CONCURRENT_SESSION_LIMITS,
+  TIER_FEATURES,
+} from '@driftstack/api-types';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
 const DOC_PATH = join(REPO, 'apps', 'marketing-site', 'src', 'pages', 'docs', 'billing-faq.astro');
@@ -33,16 +37,12 @@ describe('W231.A billing-faq doc parity', () => {
     expect(doc).toMatch(/<strong>1 profile<\/strong>/);
   });
 
-  it('API key prefix claim is ds_live_, not the fictional ds_test_', () => {
-    expect(doc).toMatch(/ds_live_/);
-    // The ds_test_ prefix is mentioned only inside the explicit
-    // disavowal phrase.
-    const occurrences = doc.match(/ds_test_/g) ?? [];
-    // One acceptable use: the doc explicitly says it doesn't exist.
-    expect(occurrences.length).toBeLessThanOrEqual(1);
-    if (occurrences.length === 1) {
-      expect(doc).toMatch(/no separate\s+<code>ds_test_<\/code> namespace/i);
-    }
+  it('documents the authoritative Free desktop and paid customer-key boundary', () => {
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(doc).toMatch(/restricted\s+<code>ds_test_…<\/code> device credential/);
+    expect(doc).toMatch(/<code>ds_live_…<\/code> customer API keys require a\s+paid tier/);
+    expect(doc).toMatch(/not a\s+customer API key or a general sandbox key/);
+    expect(doc).not.toMatch(/no separate\s+<code>ds_test_<\/code> namespace/i);
   });
 
   it('crypto payments are flagged as non-refundable', () => {

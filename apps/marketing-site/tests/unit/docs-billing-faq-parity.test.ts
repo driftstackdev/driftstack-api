@@ -1,6 +1,6 @@
 // W264.B — drift-guard for /docs/billing-faq. Pins:
 // 1. Free-tier concurrent/profile caps + non-refundability of crypto match data.
-// 2. ds_live_ prefix and no separate ds_test_ namespace.
+// 2. Free desktop ds_test_ versus paid customer ds_live_ boundary.
 // 3. 14-day refund window for card payments.
 // 4. NowPayments + Stripe pathways are named (no fictional providers).
 
@@ -8,7 +8,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER } from '@driftstack/api-types';
+import {
+  TIER_CONCURRENT_SESSION_LIMITS,
+  PROFILES_PER_TIER,
+  TIER_FEATURES,
+} from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -28,10 +32,14 @@ describe('W264.B /docs/billing-faq ↔ live billing parity', () => {
     expect(page).toMatch(/1\s+profile/);
   });
 
-  it('ds_live_ prefix is the only key namespace today', () => {
-    expect(page).toMatch(/ds_live_/);
-    // The doc explicitly says no ds_test_ namespace exists today.
-    expect(page).toMatch(/no separate[^.]*ds_test_/);
+  it('Free is desktop-only while paid tiers provide ds_live customer API keys', () => {
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(page).toMatch(/launched and driven through the desktop app/);
+    expect(page).toMatch(/restricted\s+<code>ds_test_…<\/code> device credential automatically/);
+    expect(page).toMatch(/<code>ds_live_…<\/code> customer API keys require a\s+paid tier/);
+    expect(page).toMatch(/cannot create or\s+rotate them/);
+    expect(page).not.toMatch(/drive them from the API\/SDK/);
+    expect(page).not.toMatch(/no separate[^.]*ds_test_/);
   });
 
   it('card refund window is 14 days; crypto is non-refundable', () => {

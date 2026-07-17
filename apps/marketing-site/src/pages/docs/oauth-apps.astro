@@ -6,11 +6,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // introspect, revoke) from the perspective of an integrator, NOT
 // from the perspective of an internal Driftstack engineer.
 //
-// Posture: pre-launch / no public OAuth client registration. This
-// page exists so integrators can read the contract before we open
-// the admin route to self-service registration (V-667.F follow-up).
-// Today they email support to request a client; the steps below
-// describe what happens after that.
+// Posture: OAuth client registration is admin-gated. Integrators request a
+// confidential client through support; the live flow requires client_secret
+// plus PKCE-S256 and does not implement a public-client variant.
 
 // W214.B — scope set matches the `api_key_scope` Postgres enum
 // (apps/server/src/db/schema.ts). OAuth requests for any scope not
@@ -44,10 +42,17 @@ const SCOPES = [
       access. This page documents the authorization code flow your
       app uses to act on a Driftstack customer's behalf.
     </p>
+    <p>
+      Customer authorization requires an API-enabled paid tier, including any
+      Manual tier. Free remains available for interactive desktop use, but
+      cannot approve an OAuth authorization. Existing access tokens are
+      rejected while an account is Free and resume after upgrade only if they
+      have not expired or been revoked.
+    </p>
 
     <h2>Getting a client_id</h2>
     <p>
-      OAuth client registration is administered by Driftstack. Email
+      OAuth client registration is admin-gated. Email
       <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>
       with:
     </p>
@@ -215,9 +220,10 @@ Content-Type: application/json
         flow.</strong> Re-using a verifier defeats its purpose.</li>
       <li><strong>HTTPS-only redirect_uri</strong> in production.
         Driftstack rejects HTTP redirect URIs that aren't localhost.</li>
-      <li><strong>Store client_secret server-side.</strong> Browser
-        apps cannot keep it secret; if your app is browser-based, talk
-        to support about a public-client variant (no secret, PKCE-only).</li>
+      <li><strong>Store client_secret server-side.</strong> Every supported
+        client is confidential and the token, introspection, and revocation
+        endpoints require the secret. A browser UI must exchange through its
+        own trusted backend; there is no public-client flow.</li>
       <li><strong>Tokens are bearer tokens.</strong> Anyone who reads
         the token can act as the customer. Treat them like passwords.</li>
     </ul>
@@ -232,10 +238,11 @@ Content-Type: application/json
 
     <h2>Sandbox</h2>
     <p>
-      We don't yet operate a separate sandbox environment. Test
-      against your own dev account on the production API; use the
-      <code>read:*</code>-only scopes if you don't want your dev
-      account's session usage to count against billing.
+      Driftstack has no separate sandbox environment. Test with a paid dev
+      account on the production API and use least-privilege scopes. Read-only
+      scopes cannot create sessions, but the account still uses production
+      data, limits, and rate-limit budgets. The Free desktop
+      <code>ds_test_…</code> credential is not an OAuth or API sandbox key.
     </p>
 
     <h2>Support</h2>

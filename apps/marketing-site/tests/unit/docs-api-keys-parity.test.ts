@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ApiKeyScopeSchema } from '@driftstack/api-types';
+import { ApiKeyScopeSchema, TIER_FEATURES } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -33,8 +33,20 @@ describe('W265.A /docs/api-keys ↔ ApiKeyScopeSchema parity', () => {
     }
   });
 
-  it('ds_live_ prefix is documented as the key format', () => {
-    expect(page).toMatch(/<code>ds_live_/);
+  it('documents the paid customer-key and Free desktop-device boundary', () => {
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(page).toContain('Customer-key format: <code>ds_live_&lt;random&gt;</code>');
+    expect(page).toContain('restricted <code>ds_test_…</code> device credential');
+    expect(page).toContain('not a customer API key, a general SDK key, or a sandbox credential');
+    expect(page).toContain('A Free dashboard web session can list and revoke keys');
+    expect(page).toContain('create and rotate return an RFC 9457');
+  });
+
+  it('documents live rotation and audit metadata fields', () => {
+    expect(page).toContain('<code>last_used_at</code>');
+    expect(page).toContain('<code>actor_key_id</code>');
+    expect(page).toContain('<code>actor_key_id: null</code>');
+    expect(page).toContain('the public field is not named');
   });
 
   it('does not surface staff-only driftstack_internal_admin in customer copy', () => {

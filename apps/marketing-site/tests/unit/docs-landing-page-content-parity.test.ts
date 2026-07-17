@@ -15,10 +15,9 @@
 //   • W210 "Recipe library removed until ships" comment pinned
 //     (load-bearing honesty signal — drift would mean adding back a
 //     404 link).
-//   • SDK card mentions TypeScript / Python / Go + npm/PyPI/Go-
-//     module + async iterators.
-//   • API reference card: OpenAPI 3.1 + browser try + same-spec-
-//     codegen claim.
+//   • SDK card distinguishes published TypeScript from alpha Python/Go.
+//   • API reference card distinguishes the curated local map from the
+//     complete interactive reference.
 //   • Help banner: "Doc not landing?" + support@driftstack.dev
 //     mailto + same-business-day claim.
 //   • GitHub external link.
@@ -42,7 +41,7 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
   it('hero copy: "Everything you need to drive a session." + 4-line orientation', () => {
     expect(body).toMatch(/Everything you need to drive a session\./);
     expect(body).toMatch(
-      /Quickstarts for every supported language, the full API reference,\s+SDK guides, self-hosted setup, and the recipe catalogue/,
+      /Desktop and code quickstarts, the living API reference,\s+SDK guides, self-hosted setup, and the recipe catalogue/,
     );
     expect(body).toMatch(/Driftstack\s+is small enough to read end-to-end/);
   });
@@ -73,26 +72,28 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
     }
   });
 
-  it('Quickstart card: "Five minutes to first session" + paste-API-key framing', () => {
-    expect(body).toMatch(/Five minutes to first session →/);
-    expect(body).toMatch(
-      /Install the SDK in your language, paste an API key, drive\s+your first session/,
-    );
-    expect(body).toMatch(/No prior browser-automation experience\s+needed/);
+  it('Quickstart card separates Free browser-first desktop activation from paid code', () => {
+    expect(body).toMatch(/Free desktop or paid code →/);
+    expect(body).toMatch(/On Free, sign in through the desktop app's browser flow/);
+    expect(body).toMatch(/stores\s+a restricted device credential automatically/);
+    expect(body).toMatch(/Code quickstarts use\s+a paid tier and a customer API key/);
+    expect(body).not.toMatch(/paste an API key, drive/);
   });
 
-  it('API reference card: OpenAPI 3.1 + browser-try + same-spec-codegen-reads claim', () => {
-    expect(body).toMatch(/Every endpoint, every shape →/);
-    expect(body).toMatch(/Auto-generated from the OpenAPI 3\.1 spec/);
-    expect(body).toMatch(/Try requests\s+against your own API key directly in the browser/);
-    expect(body).toMatch(/Same\s+spec the SDK codegen reads/);
+  it('API reference card distinguishes curated route map from complete live OpenAPI reference', () => {
+    expect(body).toMatch(/Curated route map \+ live reference →/);
+    expect(body).toMatch(/Browse common routes and runnable patterns here/);
+    expect(body).toMatch(/complete interactive OpenAPI 3\.1 reference on docs\.driftstack\.dev/);
+    expect(body).toMatch(/same contract the SDK codegen reads/);
+    expect(body).not.toMatch(/Every endpoint, every shape/);
   });
 
-  it('SDK card: TypeScript · Python · Go + npm/PyPI/Go-module + async iterators', () => {
+  it('SDK card states the current publish posture for all three languages', () => {
     expect(body).toMatch(/TypeScript · Python · Go →/);
-    expect(body).toMatch(/Native packages on npm, PyPI, and as a Go module/);
-    expect(body).toMatch(/Async iterators for paginated\s+list endpoints/);
-    expect(body).toMatch(/Webhook\s+signature verification/);
+    expect(body).toMatch(/TypeScript is published on npm/);
+    expect(body).toMatch(/Python and Go are alpha source\s+distributions/);
+    expect(body).toMatch(/pinned to an exact revision/);
+    expect(body).not.toMatch(/Native packages on npm, PyPI/);
   });
 
   it('Webhooks card: all eight live subscribable event types + HMAC-SHA256', () => {
@@ -140,7 +141,7 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
     expect(body).toMatch(/import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';/);
     expect(body).toMatch(/<BaseLayout\s*\n?\s*title="Docs"/);
     expect(body).toMatch(
-      /Driftstack documentation: quickstart, SDK references for TypeScript \/ Python \/ Go/,
+      /Driftstack documentation: desktop and code quickstarts, SDK guides for TypeScript \/ Python \/ Go/,
     );
   });
 

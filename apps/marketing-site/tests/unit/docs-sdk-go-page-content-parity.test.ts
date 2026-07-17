@@ -26,7 +26,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SessionStatusSchema } from '@driftstack/api-types';
+import { SessionStatusSchema, TIER_FEATURES } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -96,6 +96,11 @@ describe('W364.A /docs/sdk-go parity', () => {
   });
 
   it('Go ≥ 1.22 supported claim pinned', () => {
+    expect(body).toContain(
+      'go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<exact-commit>',
+    );
+    expect(body).toContain('The Go SDK is alpha; pin an exact commit or Go pseudo-version');
+    expect(body).not.toContain('@latest');
     expect(body).toMatch(/Go ≥ 1\.22 is supported/);
     // go.mod actually requires >=1.22.
     if (existsSync(GO_GO_MOD)) {
@@ -106,7 +111,19 @@ describe('W364.A /docs/sdk-go parity', () => {
   it('context.Context propagation claim pinned (every method takes ctx)', () => {
     expect(body).toMatch(/Every method takes a <code>context\.Context<\/code>/);
     expect(body).toMatch(/Cancellation cascades through the underlying HTTP\s+requests/);
-    expect(body).toMatch(/No goroutine leaks even\s+under heavy concurrent load/);
+    expect(body).toMatch(/cleanly aborts the underlying in-flight HTTP call/);
+    expect(body).not.toMatch(/No goroutine leaks even/);
+  });
+
+  it('pins paid customer keys, RFC 9457, and curated-vs-complete reference truth', () => {
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(body).toContain('SDK automation requires an API-enabled paid tier');
+    expect(body).toContain('<code>ds_live_…</code> customer API key');
+    expect(body).toContain('<code>ds_test_…</code> device credential');
+    expect(body).toContain('RFC 9457');
+    expect(body).toContain('<a href="/api-reference/">Curated API map</a>');
+    expect(body).toContain('complete interactive reference');
+    expect(body).not.toContain('Full API reference');
   });
 
   it('zero non-stdlib runtime dependencies claim pinned (raw net/http)', () => {

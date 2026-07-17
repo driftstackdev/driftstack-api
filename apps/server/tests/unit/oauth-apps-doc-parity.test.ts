@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { TIER_FEATURES } from '@driftstack/api-types';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
 const DOC_PATH = join(REPO, 'apps', 'marketing-site', 'src', 'pages', 'docs', 'oauth-apps.astro');
@@ -103,5 +104,21 @@ describe('W214.B oauth-apps doc parity', () => {
     expect(doc).toMatch(/\boac_/);
     expect(doc).toMatch(/\boas_/);
     expect(doc).toMatch(/\boat_/);
+  });
+
+  it('documents the live paid and confidential-client authorization boundary', () => {
+    const doc = read(DOC_PATH);
+    const routes = read(OAUTH_ROUTES_PATH);
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(routes).toContain("requireTierFeature(ctx.account.tier, 'apiAccess')");
+    expect(doc).toContain('Customer authorization requires an API-enabled paid tier');
+    expect(doc).toContain('rejected while an account is Free and resume after upgrade');
+    expect(doc).toContain('OAuth client registration is admin-gated');
+    expect(doc).toContain('client is confidential');
+    expect(doc).toContain('there is no public-client flow');
+    expect(doc).toContain('Driftstack has no separate sandbox environment');
+    expect(doc).toContain('<code>ds_test_…</code> credential is not an OAuth or API sandbox key');
+    expect(doc).not.toMatch(/pre-launch|follow-up/i);
+    expect(doc).not.toContain('talk to support about a public-client variant');
   });
 });

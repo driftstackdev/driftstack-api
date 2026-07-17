@@ -37,23 +37,34 @@ const GRANULAR = [
     <h1>API keys</h1>
 
     <p class="lead">
-      API keys are how your code authenticates to Driftstack. Each key
-      carries a fixed scope set; pick the narrowest scope that fits
-      the integration's purpose.
+      Customer API keys are how code authenticates to Driftstack on a paid
+      tier, including any Manual tier. Each key carries a fixed scope set;
+      pick the narrowest scope that fits the integration's purpose.
+    </p>
+
+    <p>
+      Free uses browser sign-in in the desktop app. That flow stores a
+      restricted <code>ds_test_…</code> device credential automatically; it is
+      not a customer API key, a general SDK key, or a sandbox credential.
     </p>
 
     <h2>Minting a key</h2>
     <p>
-      From <a href="https://app.driftstack.dev">the dashboard</a> →
-      Settings → API keys → Create. You'll see the full plaintext
-      key once — copy it now and store it in your config / secret
-      manager. We only store the hash; if you lose the plaintext,
-      revoke and mint a new one.
+      On a paid tier, open <a href="https://app.driftstack.dev">the dashboard</a>
+      → Settings → API keys → Create. You'll see the full plaintext key once —
+      copy it now and store it in your config / secret manager. We only store
+      the hash; if you lose the plaintext, revoke and mint a new one.
     </p>
     <p>
-      Key format: <code>ds_live_&lt;random&gt;</code>. The
+      Customer-key format: <code>ds_live_&lt;random&gt;</code>. The
       <code>ds_live_</code> prefix is how Driftstack detects "this
       looks like an API key" during request parsing.
+    </p>
+    <p>
+      A Free dashboard web session can list and revoke keys retained from
+      before a downgrade, but create and rotate return an RFC 9457
+      <code>403 Forbidden</code>. Existing ordinary keys are rejected while the
+      account is Free and work again after an upgrade unless revoked or expired.
     </p>
 
     <h2>Scopes</h2>
@@ -94,7 +105,7 @@ const GRANULAR = [
 
     <h2>Using a key</h2>
     <p>
-      Bearer-token auth:
+      On an API-enabled paid tier, use bearer-token auth:
     </p>
     <pre><code>{`Authorization: Bearer ds_live_…`}</code></pre>
     <p>
@@ -111,10 +122,9 @@ const GRANULAR = [
     <ol>
       <li>Mint a new key with the same scope set as the old one.</li>
       <li>Deploy the new key to your environment.</li>
-      <li>Verify your production traffic is using the new key — the
-        dashboard's <strong>Audit log</strong> view filters by the
-        acting <code>api_key_id</code>, so traffic on a stale key is
-        visible at a glance.</li>
+      <li>Verify your production traffic is using the new key. The API Keys
+        page shows each key's <code>last_used_at</code>, so you can confirm the
+        successor is active and the old key has stopped advancing.</li>
       <li>Revoke the old key from the dashboard.</li>
     </ol>
 
@@ -143,17 +153,17 @@ const GRANULAR = [
       <li><strong>One key per third-party integration</strong> if
         you're handing keys to other services. Revoking one
         integration doesn't take out the others.</li>
-      <li>Don't share keys across team members. For human-driven
-        ad-hoc use, use the OAuth flow (see
-        <a href="/docs/oauth-apps/">/docs/oauth-apps</a>) — that ties
-        access to the human's account, not a shared key.</li>
+      <li>Don't share keys across team members. Humans should use their own
+        dashboard account. Use <a href="/docs/oauth-apps/">OAuth</a> when an
+        approved third-party application needs delegated customer access.</li>
     </ul>
 
     <h2>API key metadata in audit logs</h2>
     <p>
-      Every audit-log entry your account generates includes the
-      acting <code>api_key_id</code>. View the audit log at
-      <strong>Dashboard → Settings → Audit log</strong> or via
+      An API-key-authenticated audit entry carries the acting
+      <code>actor_key_id</code>. Dashboard-session and system entries can carry
+      <code>actor_key_id: null</code>; the public field is not named
+      <code>api_key_id</code>. View the audit log in the dashboard or via
       <code>GET /v1/account/audit-log</code>.
     </p>
 

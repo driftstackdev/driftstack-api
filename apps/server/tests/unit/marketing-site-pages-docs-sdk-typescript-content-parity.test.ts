@@ -7,8 +7,7 @@
 //   • V-703 doc-comment framing + V-680 posture + companion to
 //     docs.driftstack.dev/quickstart-curl/ (S47).
 //   • Package: @driftstack/sdk (npm/bun/pnpm install matrix).
-//   • Node ≥ 20 + Bun ≥ 1.1 + Deno ≥ 1.40 + dual-published (ESM +
-//     CommonJS via conditional exports) commitment.
+//   • Node ≥ 18 + dual-published (ESM + CommonJS) commitment.
 //   • new Driftstack({ apiKey, baseUrl }) constructor + reusable.
 //   • Session lifecycle: creating → ready → busy → destroyed / errored.
 //   • sessions.create no target URL; navigate separately.
@@ -17,7 +16,7 @@
 //   • iterate() async iterator + list() single-page.
 //   • DriftstackError with kind discriminator + ValidationError +
 //     RateLimitedError subclasses.
-//   • Tree-shakeable ~12kB gzipped for sessions-only.
+//   • Paid customer-key boundary + RFC 9457 + curated API map.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -52,12 +51,13 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
     expect(body).toMatch(/pnpm add @driftstack\/sdk/);
   });
 
-  it("Runtime floor + dual-publish commitment pinned (2026-06-24): 'Node ≥ 20, Bun ≥ 1.1, and Deno ≥ 1.40 are supported. The package is dual-published (ESM + CommonJS via conditional exports); both import and require('@driftstack/sdk') work out of the box.' — pinned so the 3-runtime floor + dual-publish (ESM + CJS) commitment survive. The previous pin asserted 'ships ESM-only ... use a dynamic import()' but @driftstack/sdk is dual-published — packages/sdk-typescript/package.json has main './dist/index.cjs' + exports['.'].require './dist/index.cjs', so both import and require work; the stale claim misled CJS consumers. Drift to a different runtime floor would create marketing↔package.json engines divergence; drift back to an ESM-only claim would re-introduce the falsehood.", () => {
+  it('Node ≥ 18 + dual-publish commitment is pinned without unsupported runtime claims', () => {
     expect(body).toMatch(
-      /Node ≥ 20, Bun ≥ 1\.1, and Deno ≥ 1\.40 are supported\. The\s*\n?\s*package is dual-published \(ESM \+ CommonJS via conditional\s*\n?\s*<code>exports<\/code>\); both <code>import<\/code> and\s*\n?\s*<code>require\('@driftstack\/sdk'\)<\/code> work out of the box\./,
+      /Node ≥ 18 is supported\. The package is dual-published \(ESM \+ CommonJS via conditional\s*\n?\s*<code>exports<\/code>\); both <code>import<\/code> and\s*\n?\s*<code>require\('@driftstack\/sdk'\)<\/code> work out of the box\./,
     );
     // The stale ESM-only / dynamic-import-required framing must NOT return.
     expect(body).not.toMatch(/ships ESM-only/);
+    expect(body).not.toMatch(/Node ≥ 20|Bun ≥ 1\.1|Deno ≥ 1\.40/);
   });
 
   it("Constructor framing pinned: 'new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY!, ... })' + 'The constructor does not make any network calls. Reuse one client across your process — it is internally pooled and safe for concurrent use.' — pinned so the apiKey + baseUrl-override + no-network-on-construct + reuse-pooled-concurrent commitments survive (drift to claiming a network call at construct-time would mislead about init cost)", () => {
@@ -97,9 +97,9 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
     );
   });
 
-  it("DriftstackError + kind discriminator + 4-attribute framing pinned: 'The error carries kind (discriminator, narrow with ===), status, type (the RFC 7807 URI), detail, and any extension fields from the problem response. Switch on kind for clean type-narrowing' + ValidationError + RateLimitedError subclass cases — pinned so the kind-discriminator + 4-attribute + 2-subclass + err.issues + err.retryAfterSeconds commitments survive (drift to renaming any attribute would create marketing↔SDK divergence)", () => {
+  it('DriftstackError kind discriminator + RFC 9457 fields are pinned', () => {
     expect(body).toMatch(
-      /The error carries <code>kind<\/code>\s*\n?\s*\(discriminator, narrow with <code>===<\/code>\),\s*\n?\s*<code>status<\/code>, <code>type<\/code> \(the RFC 7807 URI\),\s*\n?\s*<code>detail<\/code>, and any extension fields from the problem\s*\n?\s*response\./,
+      /The error carries <code>kind<\/code>\s*\n?\s*\(discriminator, narrow with <code>===<\/code>\),\s*\n?\s*<code>status<\/code>, <code>type<\/code> \(the RFC 9457 URI\),\s*\n?\s*<code>detail<\/code>, and any extension fields from the problem\s*\n?\s*response\./,
     );
     expect(body).toMatch(/err instanceof DriftstackError && err\.kind === 'validation'/);
     expect(body).toMatch(/err instanceof DriftstackError && err\.kind === 'rate_limited'/);
@@ -107,15 +107,16 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
     expect(body).toMatch(/err\.retryAfterSeconds/);
   });
 
-  it("Tree-shakeable + 12kB gzipped framing pinned: 'The SDK is fully tree-shakeable. If you only import client.sessions.*, the recordings and billing modules never reach your bundle. Typical Next.js / Vite production bundles add ~12 kB gzipped.' — pinned so the tree-shakeable commitment + 12kB-gzipped bundle-size claim survive (drift to dropping the bundle-size figure would let customers question the SDK's bundle-friendliness; drift to claiming non-tree-shakeable would lose the bundle-size guarantee)", () => {
-    expect(body).toMatch(
-      /The SDK is fully tree-shakeable\. If you only import\s*\n?\s*<code>client\.sessions\.\*<\/code>, the recordings and billing\s*\n?\s*modules never reach your bundle\. Typical Next\.js \/ Vite\s*\n?\s*production bundles add ~12 kB gzipped\./,
-    );
+  it('paid customer-key boundary is explicit and unverified bundle absolutes stay absent', () => {
+    expect(body).toContain('SDK automation requires an API-enabled paid tier');
+    expect(body).toContain('<code>ds_live_…</code> customer API key');
+    expect(body).toContain('restricted <code>ds_test_…</code>');
+    expect(body).not.toMatch(/~12 kB gzipped|fully tree-shakeable/);
   });
 
   it('5-related-doc cluster: /api-reference + /docs/sdk-typescript-crypto-orders + /docs/webhooks + /docs/cost-monitoring + /docs/error-codes — pinned so the 5-related-doc navigation surface stays complete (drift to dropping /docs/error-codes would orphan the RFC-7807-type cross-reference from the typed-errors framing)', () => {
     const relatedDocs = [
-      ['/api-reference', 'Full API reference'],
+      ['/api-reference', 'Curated API map'],
       ['/docs/sdk-typescript-crypto-orders', 'SDK — crypto orders'],
       ['/docs/webhooks', 'Webhooks'],
       ['/docs/cost-monitoring', 'Cost monitoring'],
@@ -126,6 +127,7 @@ describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content
       expect(body).toContain(`<a href="${path}/">${label}</a>`);
       expect(body).not.toContain(`<a href="${path}">${label}</a>`);
     }
+    expect(body).toContain('complete interactive reference');
   });
 
   it('file exists at canonical path', () => {

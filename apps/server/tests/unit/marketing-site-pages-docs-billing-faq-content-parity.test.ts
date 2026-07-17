@@ -5,8 +5,8 @@
 // the two paths).
 //
 //   • V-694 doc-comment framing.
-//   • Free tier: 1 concurrent / 1 profile + 20-min cap + no card +
-//     perpetual + no metering + single ds_live_… prefix (no ds_test_).
+//   • Free tier: browser-first desktop + restricted ds_test device credential;
+//     paid tiers provide API/SDK/OAuth + ds_live customer keys.
 //   • Crypto vs Stripe: prorate on upgrade (Stripe) vs full + cycle
 //     reset (NowPayments) + downgrade at cycle end (both, no refund).
 //   • 14-day card-refund window.
@@ -33,21 +33,29 @@ function read(p: string): string {
 describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-694 framing pinned: 'billing FAQ. Pulls together the questions that the /docs/cost-monitoring + /pricing/crypto pages don't explicitly answer (proration, refunds, trial → paid, NowPayments vs Stripe).' — pinned so the V-694 anchor + the explicit 4-topic gap-filling framing (proration / refunds / trial→paid / Now-vs-Stripe) survive", () => {
+  it('V-694 framing names the real Free-to-paid transition rather than a fictional trial conversion', () => {
     expect(body).toMatch(
-      /\/\/ V-694 — billing FAQ\. Pulls together the questions that the\s*\n?\s*\/\/ \/docs\/cost-monitoring \+ \/pricing\/crypto pages don't explicitly\s*\n?\s*\/\/ answer \(proration, refunds, trial → paid, NowPayments vs Stripe\)\./,
+      /\/\/ V-694 — billing FAQ\. Pulls together the questions that the\s*\n?\s*\/\/ \/docs\/cost-monitoring \+ \/pricing\/crypto pages don't explicitly\s*\n?\s*\/\/ answer \(proration, refunds, Free → paid, NowPayments vs Stripe\)\./,
     );
+    expect(body).not.toMatch(/trial conversion|trial → paid/);
   });
 
-  it("Free-tier framing pinned: '1 concurrent session and 1 profile, with sessions up to 20 minutes each — drive them from the API/SDK or the desktop GUI client. No card is required, and it never expires.' — pinned so the 1-concurrent/1-profile + 20-min-cap + no-card + perpetual + no-metering free-tier framing survives. (2026-05-28: API/SDK works within the free limits per the accept-+-reconcile-copy decision; the old 'manual-only / no API/SDK access' framing was dropped.)", () => {
+  it('Free-tier framing pins desktop-only use, restricted ds_test credential and paid API/OAuth boundary', () => {
     expect(body).toMatch(
       /<strong>1 concurrent\s*\n?\s*session<\/strong> and <strong>1 profile<\/strong>, with sessions\s*\n?\s*up to 20 minutes each/,
     );
-    expect(body).toMatch(/no usage metering, no credit, and no auto-charge\./);
+    expect(body).toMatch(/launched and driven through the desktop app/);
     expect(body).toMatch(
-      /All API keys\s*\n?\s*use the <code>ds_live_…<\/code> prefix; there is no separate\s*\n?\s*<code>ds_test_<\/code> namespace today\./,
+      /restricted\s*\n?\s*<code>ds_test_…<\/code> device credential automatically/,
     );
-    expect(body).toMatch(/when you need higher limits — more concurrency, more profiles/);
+    expect(body).toMatch(/not a\s*\n?\s*customer API key or a general sandbox key/);
+    expect(body).toMatch(
+      /Programmatic API\/SDK access,\s*\n?\s*OAuth approval, and <code>ds_live_…<\/code> customer API keys require a\s*\n?\s*paid tier, including the Manual tiers/,
+    );
+    expect(body).toMatch(/cannot create or\s*\n?\s*rotate them/);
+    expect(body).toMatch(/ordinary keys and OAuth tokens remain paused/);
+    expect(body).toMatch(/no usage charges, prepaid credits, or automatic charges/);
+    expect(body).not.toMatch(/drive them from the API\/SDK|no separate[^.]*ds_test_/);
   });
 
   it("Stripe vs NowPayments proration framing pinned: 'Upgrades are prorated by Stripe' + 'Crypto upgrades (NowPayments) charge the full new tier price and reset the billing cycle to the upgrade date — crypto is pay-as-you-go-style because we cannot guarantee in-cycle reconciliation against an on-chain payment.' — pinned so the asymmetric Stripe-prorates / NowPayments-full-price-cycle-reset commitment + the 'cannot guarantee in-cycle reconciliation' rationale all survive (drift to claiming crypto upgrades also prorate would create marketing↔NowPayments-flow divergence)", () => {

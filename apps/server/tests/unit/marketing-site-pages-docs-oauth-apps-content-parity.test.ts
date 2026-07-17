@@ -5,7 +5,7 @@
 // surface (would mislead integrators on PKCE-S256 + revocation flow).
 //
 //   • V-678 doc-comment framing.
-//   • Pre-launch / no self-service client registration (V-667.F follow-up).
+//   • Admin-gated confidential-client registration; no public-client flow.
 //   • W214.B SCOPES table mirrors api_key_scope enum; account_owner +
 //     gui_control + legacy read/write/admin aliases + driftstack_internal_admin
 //     intentionally NOT exposed to OAuth.
@@ -39,13 +39,21 @@ function read(p: string): string {
 describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-678 + V-667 family + W214.B accuracy-pass framing pinned: 'developer docs page for OAuth third-party app authors. Describes the V-667 family (registration, authorize, exchange, introspect, revoke) from the perspective of an integrator, NOT from the perspective of an internal Driftstack engineer.' + pre-launch + no-public-OAuth-client-registration (V-667.F follow-up) — pinned so the V-678 anchor + V-667 family + integrator-not-engineer perspective + pre-launch + V-667.F-follow-up commitments survive", () => {
+  it('V-678 framing and the current admin-gated confidential-client posture are pinned', () => {
     expect(body).toMatch(
       /\/\/ V-678 — developer docs page for OAuth third-party app authors\.\s*\n?\s*\/\/ Describes the V-667 family \(registration, authorize, exchange,\s*\n?\s*\/\/ introspect, revoke\) from the perspective of an integrator, NOT\s*\n?\s*\/\/ from the perspective of an internal Driftstack engineer\./,
     );
     expect(body).toMatch(
-      /\/\/ Posture: pre-launch \/ no public OAuth client registration\. This\s*\n?\s*\/\/ page exists so integrators can read the contract before we open\s*\n?\s*\/\/ the admin route to self-service registration \(V-667\.F follow-up\)\./,
+      /\/\/ Posture: OAuth client registration is admin-gated\. Integrators request a\s*\n?\s*\/\/ confidential client through support; the live flow requires client_secret\s*\n?\s*\/\/ plus PKCE-S256 and does not implement a public-client variant\./,
     );
+    expect(body).not.toMatch(/pre-launch|follow-up/i);
+  });
+
+  it('paid approval and downgrade token behavior are pinned', () => {
+    expect(body).toContain('Customer authorization requires an API-enabled paid tier');
+    expect(body).toContain('Free remains available for interactive desktop use');
+    expect(body).toContain('cannot approve an OAuth authorization');
+    expect(body).toContain('rejected while an account is Free and resume after upgrade');
   });
 
   it("W214.B api_key_scope enum + NOT-exposed-to-OAuth framing pinned: 'scope set matches the api_key_scope Postgres enum' + 'account_owner, gui_control, the legacy read/write/admin aliases, and the driftstack_internal_admin scope are issued via the API-keys flow and are intentionally NOT exposed to OAuth clients.' — pinned so the W214.B api_key_scope-enum-anchor + 4-NOT-exposed-scope-categories (account_owner + gui_control + legacy aliases + driftstack_internal_admin) commitment survives (drift to exposing any of these to OAuth would create marketing↔server divergence)", () => {
@@ -157,7 +165,7 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
     expect(body).toMatch(/Invalid or revoked client credentials return 401\./);
   });
 
-  it('5-security-expectation list pinned: validate-state-CSRF + fresh-PKCE-verifier-per-flow + HTTPS-only-redirect_uri-production-not-localhost + store-client_secret-server-side (browser-cannot-keep-it-secret, ask-support-about-public-client-PKCE-only variant) + tokens-are-bearer-treat-like-passwords — pinned so the 5-security-bullet + public-client-variant-via-support commitment survives', () => {
+  it('5-security-expectation list pins confidential-client handling with no public-client flow', () => {
     expect(body).toMatch(
       /<strong>Always validate <code>state<\/code><\/strong> on the\s*\n?\s*redirect back\. Without it, your callback is wide open to CSRF\./,
     );
@@ -168,19 +176,19 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
       /<strong>HTTPS-only redirect_uri<\/strong> in production\.\s*\n?\s*Driftstack rejects HTTP redirect URIs that aren't localhost\./,
     );
     expect(body).toMatch(
-      /<strong>Store client_secret server-side\.<\/strong> Browser\s*\n?\s*apps cannot keep it secret; if your app is browser-based, talk\s*\n?\s*to support about a public-client variant \(no secret, PKCE-only\)\./,
+      /<strong>Store client_secret server-side\.<\/strong> Every supported\s*\n?\s*client is confidential and the token, introspection, and revocation\s*\n?\s*endpoints require the secret\. A browser UI must exchange through its\s*\n?\s*own trusted backend; there is no public-client flow\./,
     );
     expect(body).toMatch(
       /<strong>Tokens are bearer tokens\.<\/strong> Anyone who reads\s*\n?\s*the token can act as the customer\. Treat them like passwords\./,
     );
   });
 
-  it("Token-counts-against-customer-account-rate-limits + no-sandbox-environment framing pinned: 'Token-issued requests count against the customer's account rate limits, not your app's.' + 'We don't yet operate a separate sandbox environment. Test against your own dev account on the production API; use the read:*-only scopes if you don't want your dev account's session usage to count against billing.' — pinned so the rate-limit-attribution + no-sandbox-prod-only-with-read:* commitment survives", () => {
+  it('account rate limits and the no-sandbox production boundary are pinned', () => {
     expect(body).toMatch(
       /Token-issued requests count against the customer's account\s*\n?\s*rate limits, not your app's\./,
     );
     expect(body).toMatch(
-      /We don't yet operate a separate sandbox environment\. Test\s*\n?\s*against your own dev account on the production API; use the\s*\n?\s*<code>read:\*<\/code>-only scopes if you don't want your dev\s*\n?\s*account's session usage to count against billing\./,
+      /Driftstack has no separate sandbox environment\. Test with a paid dev\s*\n?\s*account on the production API and use least-privilege scopes\. Read-only\s*\n?\s*scopes cannot create sessions, but the account still uses production\s*\n?\s*data, limits, and rate-limit budgets\. The Free desktop\s*\n?\s*<code>ds_test_…<\/code> credential is not an OAuth or API sandbox key\./,
     );
   });
 

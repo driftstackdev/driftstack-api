@@ -9,13 +9,13 @@
 //     reserved gui_control + driftstack_internal_admin not shown.
 //   • SCOPES: 3-broad-scope ladder (read / write / account_owner).
 //   • GRANULAR: 13-granular verb:resource scopes.
-//   • ds_live_<random> + only-store-hash + revoke-and-mint-on-loss.
+//   • Paid ds_live_<random> customer keys + Free desktop ds_test_ device credentials.
 //   • Bearer-token auth + rate-limit-headers + /docs/rate-limits.
 //   • 90-day rotation hygiene + 4-step rotation flow.
 //   • Leak response: revoke + 401 on subsequent + in-flight-keeps-running
 //     + audit-log + security@driftstack.dev.
-//   • One-key-per-environment + one-key-per-third-party + OAuth-for-humans.
-//   • api_key_id surfaces in /v1/account/audit-log.
+//   • One-key-per-environment + one-key-per-third-party + OAuth delegation.
+//   • Nullable actor_key_id surfaces in /v1/account/audit-log.
 //   • FAQ: no-plaintext-after-create + multi-region-OK + no-per-resource-scoping.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -75,13 +75,19 @@ describe('W516.A apps/marketing-site/src/pages/docs/api-keys.astro content parit
     );
   });
 
-  it('ds_live_<random> prefix + hash-only + revoke-and-mint-on-loss framing pinned + \'The ds_live_ prefix is how Driftstack detects "this looks like an API key" during request parsing.\' — pinned so the ds_live_-prefix + hash-only-storage + revoke-and-mint commitments survive (drift to a different prefix would create marketing↔server-key-detection divergence)', () => {
+  it('paid customer-key + Free desktop-device boundary and hash-only handling are pinned', () => {
     expect(body).toMatch(
-      /Key format: <code>ds_live_&lt;random&gt;<\/code>\. The\s*\n?\s*<code>ds_live_<\/code> prefix is how Driftstack detects "this\s*\n?\s*looks like an API key" during request parsing\./,
+      /Customer-key format: <code>ds_live_&lt;random&gt;<\/code>\. The\s*\n?\s*<code>ds_live_<\/code> prefix is how Driftstack detects "this\s*\n?\s*looks like an API key" during request parsing\./,
     );
-    expect(body).toMatch(
-      /You'll see the full plaintext\s*\n?\s*key once — copy it now and store it in your config \/ secret\s*\n?\s*manager\. We only store the hash; if you lose the plaintext,\s*\n?\s*revoke and mint a new one\./,
+    expect(body).toContain("You'll see the full plaintext key once —");
+    expect(body).toContain(
+      'copy it now and store it in your config / secret manager. We only store',
     );
+    expect(body).toMatch(/if you lose the plaintext,\s+revoke and mint a new one\./);
+    expect(body).toContain('restricted <code>ds_test_…</code> device credential');
+    expect(body).toContain('not a customer API key, a general SDK key, or a sandbox credential');
+    expect(body).toContain('A Free dashboard web session can list and revoke keys');
+    expect(body).toContain('create and rotate return an RFC 9457');
   });
 
   it("Bearer-token-auth framing pinned: 'Authorization: Bearer ds_live_…' + 'Every authenticated response carries rate-limit headers (see /docs/rate-limits). Watch them; they'll save you a 429 down the line.' — pinned so the Bearer-token + every-response-rate-limit-headers + 429-warning + /docs/rate-limits cross-ref survive", () => {
@@ -91,15 +97,14 @@ describe('W516.A apps/marketing-site/src/pages/docs/api-keys.astro content parit
     );
   });
 
-  it('90-day rotation hygiene + 4-step rotation flow pinned: mint new key (same scope set) + deploy new + verify via Audit log filter on api_key_id + revoke old — pinned so the 90-day cadence + 4-step rotation + audit-log filter-by-api_key_id-pattern survives (drift to dropping the verify-via-audit-log step would let stale keys persist undetected)', () => {
+  it('90-day rotation hygiene + last_used_at verification flow pinned', () => {
     expect(body).toMatch(
       /Routine hygiene: rotate any production key at least every 90\s*\n?\s*days\./,
     );
     expect(body).toMatch(/<li>Mint a new key with the same scope set as the old one\.<\/li>/);
     expect(body).toMatch(/<li>Deploy the new key to your environment\.<\/li>/);
-    expect(body).toMatch(
-      /<li>Verify your production traffic is using the new key — the\s*\n?\s*dashboard's <strong>Audit log<\/strong> view filters by the\s*\n?\s*acting <code>api_key_id<\/code>, so traffic on a stale key is\s*\n?\s*visible at a glance\.<\/li>/,
-    );
+    expect(body).toContain("page shows each key's <code>last_used_at</code>");
+    expect(body).toMatch(/the\s+successor is active and the old key has stopped advancing/);
     expect(body).toMatch(/<li>Revoke the old key from the dashboard\.<\/li>/);
   });
 
@@ -116,26 +121,26 @@ describe('W516.A apps/marketing-site/src/pages/docs/api-keys.astro content parit
     );
   });
 
-  it("Key-count guidance pinned: One-key-per-environment + One-key-per-third-party-integration + 'Don't share keys across team members. For human-driven ad-hoc use, use the OAuth flow (see /docs/oauth-apps) — that ties access to the human's account, not a shared key.' — pinned so the 3-pattern (env-split + integration-split + OAuth-for-humans) + don't-share-across-team commitment survives", () => {
+  it('key-count guidance distinguishes human dashboard accounts from approved OAuth delegation', () => {
     expect(body).toMatch(
       /<strong>One key per environment<\/strong> \(production,\s*\n?\s*staging, dev\)\. Makes rotation \+ revocation surgical\./,
     );
     expect(body).toMatch(
       /<strong>One key per third-party integration<\/strong> if\s*\n?\s*you're handing keys to other services\. Revoking one\s*\n?\s*integration doesn't take out the others\./,
     );
-    expect(body).toMatch(
-      /Don't share keys across team members\. For human-driven\s*\n?\s*ad-hoc use, use the OAuth flow \(see\s*\n?\s*<a href="\/docs\/oauth-apps\/">\/docs\/oauth-apps<\/a>\) — that ties\s*\n?\s*access to the human's account, not a shared key\./,
-    );
+    expect(body).toContain("Don't share keys across team members. Humans should use their own");
+    expect(body).toContain('dashboard account. Use <a href="/docs/oauth-apps/">OAuth</a> when an');
+    expect(body).toContain('approved third-party application needs delegated customer access.');
     expect(body).not.toMatch(/href="\/docs\/(?:rate-limits|oauth-apps)"/);
   });
 
-  it("api_key_id-in-audit-log + GET /v1/account/audit-log framing pinned: 'Every audit-log entry your account generates includes the acting api_key_id.' + 'View the audit log at Dashboard → Settings → Audit log or via GET /v1/account/audit-log.' — pinned so the api_key_id-on-every-audit-row + 2-access-path (Dashboard vs API) survives", () => {
-    expect(body).toMatch(
-      /Every audit-log entry your account generates includes the\s*\n?\s*acting <code>api_key_id<\/code>\./,
-    );
-    expect(body).toMatch(
-      /<strong>Dashboard → Settings → Audit log<\/strong> or via\s*\n?\s*<code>GET \/v1\/account\/audit-log<\/code>\./,
-    );
+  it('nullable actor_key_id audit metadata and both access paths are pinned', () => {
+    expect(body).toContain('An API-key-authenticated audit entry carries the acting');
+    expect(body).toContain('<code>actor_key_id</code>');
+    expect(body).toContain('<code>actor_key_id: null</code>');
+    expect(body).toContain('the public field is not named');
+    expect(body).toContain('<code>api_key_id</code>');
+    expect(body).toContain('<code>GET /v1/account/audit-log</code>');
   });
 
   it("FAQ 3-question framing pinned: 'Can I view a key's plaintext after creation?' (No, hash-only) + 'What happens if I use the same key from two regions simultaneously?' (Fine — keys aren't bound to a region. Rate limits are per-account, so the two regions share the bucket budget.) + 'Can I scope a key to a specific session id?' (No, current scopes are verb:resource) — pinned so the 3-FAQ + per-account-rate-limit + current authorization boundary survive", () => {

@@ -14,7 +14,7 @@
 //   • 5-method drive surface: Navigate / Interact / Wait / Capture / Destroy.
 //   • Typed errors with errors.As + errors.Is + ErrConflict sentinel +
 //     RetryAfterSeconds.
-//   • RFC 7807 4-field apiError shape: Status / ProblemType / Message / Problem.
+//   • RFC 9457 4-field apiError shape: Status / ProblemType / Message / Problem.
 //   • context.Context first-arg + cancellation cascades.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -39,10 +39,12 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     );
   });
 
-  it("Module path + Go ≥ 1.22 + zero-non-stdlib-deps framing pinned: 'go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest' + 'Go ≥ 1.22 is supported. The module has zero non-stdlib runtime dependencies (it speaks raw JSON over net/http); no transitive bloat.' — pinned so the canonical module path + Go-version floor + zero-deps commitment all survive (drift to a different module path would create marketing↔go-proxy divergence; drift to claiming non-zero deps would let the no-transitive-bloat story slip)", () => {
+  it('alpha module path is pinned to an exact revision with the Go floor and dependency posture', () => {
     expect(body).toMatch(
-      /go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@latest/,
+      /go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@<exact-commit>/,
     );
+    expect(body).toContain('The Go SDK is alpha; pin an exact commit or Go pseudo-version');
+    expect(body).not.toContain('@latest');
     expect(body).toMatch(
       /Go ≥ 1\.22 is supported\. The module has zero non-stdlib runtime\s*\n?\s*dependencies \(it speaks raw JSON over <code>net\/http<\/code>\); no\s*\n?\s*transitive bloat\./,
     );
@@ -124,21 +126,22 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     expect(body).toMatch(/\/\/ any 409, regardless of subclass/);
   });
 
-  it("apiError 4-attribute shape pinned: Status + ProblemType (RFC 7807 URI) + Message + Problem (full parsed problem map) + 'Read additional extension fields off err.Problem.' — pinned so the 4-attribute embedded-error + RFC-7807-URI anchor + extension-fields-via-Problem survive (drift to renaming any attribute would create marketing↔SDK divergence)", () => {
+  it('apiError 4-attribute RFC 9457 shape is pinned', () => {
     expect(body).toMatch(
-      /Every typed error embeds an <code>apiError<\/code> shape with\s*\n?\s*<code>Status<\/code>, <code>ProblemType<\/code> \(the RFC 7807\s*\n?\s*URI\), <code>Message<\/code>, and <code>Problem<\/code> \(the full\s*\n?\s*parsed problem map\)\. Read additional extension fields off\s*\n?\s*<code>err\.Problem<\/code>\./,
+      /Every typed error embeds an <code>apiError<\/code> shape with\s*\n?\s*<code>Status<\/code>, <code>ProblemType<\/code> \(the RFC 9457\s*\n?\s*URI\), <code>Message<\/code>, and <code>Problem<\/code> \(the full\s*\n?\s*parsed problem map\)\. Read additional extension fields off\s*\n?\s*<code>err\.Problem<\/code>\./,
     );
   });
 
-  it("context.Context first-arg + cancellation-cascades + no-goroutine-leaks framing pinned: 'Every method takes a context.Context as its first argument. Cancellation cascades through the underlying HTTP requests, so a parent deadline (or an HTTP request cancellation in a Gin / chi / standard http.Server handler) cleanly aborts in-flight SDK calls. No goroutine leaks even under heavy concurrent load.' — pinned so the context-first-arg + 3-framework-namedrop (Gin/chi/http.Server) + no-goroutine-leaks commitment survives (drift to dropping the goroutine-leak-free claim would weaken the concurrency story)", () => {
+  it('context.Context propagation is pinned without an unverified leak absolute', () => {
     expect(body).toMatch(
-      /Every method takes a <code>context\.Context<\/code> as its first\s*\n?\s*argument\. Cancellation cascades through the underlying HTTP\s*\n?\s*requests, so a parent deadline \(or an HTTP request cancellation\s*\n?\s*in a Gin \/ chi \/ standard <code>http\.Server<\/code> handler\)\s*\n?\s*cleanly aborts in-flight SDK calls\. No goroutine leaks even\s*\n?\s*under heavy concurrent load\./,
+      /Every method takes a <code>context\.Context<\/code> as its first\s*\n?\s*argument\. Cancellation cascades through the underlying HTTP\s*\n?\s*requests, so a parent deadline \(or an HTTP request cancellation\s*\n?\s*in a Gin \/ chi \/ standard <code>http\.Server<\/code> handler\)\s*\n?\s*cleanly aborts the underlying in-flight HTTP call\./,
     );
+    expect(body).not.toMatch(/No goroutine leaks even/);
   });
 
   it('7-where-to-go-next cluster: /api-reference + /docs/sdk-go-crypto-orders + /docs/sdk-typescript + /docs/sdk-python + /docs/webhooks + /docs/cost-monitoring + /docs/error-codes — pinned so the 7-related-doc navigation surface stays complete (drift to dropping /docs/sdk-go-crypto-orders would orphan the V-666 crypto-checkout cross-reference)', () => {
     const relatedDocs = [
-      ['/api-reference', 'Full API reference'],
+      ['/api-reference', 'Curated API map'],
       ['/docs/sdk-go-crypto-orders', 'Crypto orders'],
       ['/docs/sdk-typescript', 'TypeScript SDK'],
       ['/docs/sdk-python', 'Python SDK'],
@@ -151,6 +154,15 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
       expect(body).toContain(`<a href="${path}/">${label}</a>`);
       expect(body).not.toContain(`<a href="${path}">${label}</a>`);
     }
+    expect(body).toContain('complete interactive reference');
+  });
+
+  it('paid customer-key and Free desktop-device boundary is explicit', () => {
+    expect(body).toContain('SDK automation requires an API-enabled paid tier');
+    expect(body).toContain('<code>ds_live_…</code> customer API key');
+    expect(body).toContain('<code>ds_test_…</code> device credential');
+    expect(body).toContain('not an SDK');
+    expect(body).toContain('sandbox key');
   });
 
   it("developers@driftstack.dev + 'within one business day' SLA pinned — pinned so the developer-channel routing + 1-business-day response commitment stays consistent across SDK pages (drift to a different SLA would create cross-page divergence)", () => {

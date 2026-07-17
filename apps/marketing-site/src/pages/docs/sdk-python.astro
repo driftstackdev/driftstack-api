@@ -19,14 +19,23 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       plain script equally well.
     </p>
 
+    <p>
+      SDK automation requires an API-enabled paid tier, including any Manual
+      tier, and a <code>ds_live_…</code> customer API key. Free starts in the
+      desktop app, whose browser sign-in stores a restricted
+      <code>ds_test_…</code> device credential automatically; it is not an SDK
+      or sandbox key.
+    </p>
+
     <h2>1. Install</h2>
-    <pre><code>{`pip install driftstack-sdk
-# or, with poetry / uv:
-poetry add driftstack-sdk
-uv add driftstack-sdk`}</code></pre>
+    <pre><code>{`git clone https://github.com/driftstackdev/driftstack-api.git
+cd driftstack-api
+git checkout <exact-commit>
+python -m pip install ./packages/sdk-python`}</code></pre>
 
     <p>
-      Python ≥ 3.10 is supported. The package ships type stubs;
+      The Python SDK is currently an alpha source distribution, so pin the
+      checkout to an exact commit. Python ≥ 3.10 is supported. The package ships type stubs;
       <code>mypy --strict</code> works against the public surface
       without further config.
     </p>
@@ -107,7 +116,7 @@ asyncio.run(main())`}</code></pre>
     <p>
       Every SDK method raises a <code>DriftstackError</code> subclass
       on non-2xx responses. The exception carries
-      <code>status</code>, <code>problem_type</code> (the RFC 7807
+      <code>status</code>, <code>problem_type</code> (the RFC 9457
       URI), <code>message</code>, and <code>problem</code> (the full
       parsed problem dict, e.g. <code>exc.problem["retry_after_seconds"]</code>).
       Branch on the subclass for clean dispatch:
@@ -137,14 +146,14 @@ except RateLimitError as exc:
 
     <h2>Where to go next</h2>
     <ul>
-      <li><a href="/api-reference/">Full API reference</a> — every endpoint, every field.</li>
+      <li><a href="/api-reference/">Curated API map</a> — common routes and runnable patterns, with a link to the complete interactive reference.</li>
  <li><a href="/docs/sdk-python-crypto-orders/">Crypto orders</a> — customer-facing crypto-checkout surface.</li>
       <li><a href="/docs/sdk-typescript/">TypeScript SDK</a> — same surface, TS-native.</li>
       <li><a href="/docs/webhooks/">Webhooks</a> — avoid polling in production.</li>
       <li><a href="/docs/cost-monitoring/">Cost monitoring</a> — set
         alerts before the bill surprises you.</li>
       <li><a href="/docs/error-codes/">Error codes</a> — the stable
-        RFC 7807 type URIs the SDK's exception subclasses carry.</li>
+        RFC 9457 type URIs the SDK's exception subclasses carry.</li>
     </ul>
 
     <h2>Need help?</h2>

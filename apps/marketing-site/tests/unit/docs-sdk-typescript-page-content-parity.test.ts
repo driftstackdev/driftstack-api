@@ -18,14 +18,14 @@
 //   • Cross-links to api-quickstart / api-reference /
 //     sdk-typescript-crypto-orders / webhooks / cost-monitoring /
 //     error-codes all resolve.
-//   • Bundle-size claim "~12 kB gzipped" pinned (marketing-
-//     critical and falsifiable).
+//   • Published npm package, Node ≥ 18, paid-key boundary, RFC 9457,
+//     and curated-vs-complete API-reference wording pinned.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SessionStatusSchema } from '@driftstack/api-types';
+import { SessionStatusSchema, TIER_FEATURES } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -104,18 +104,32 @@ describe('W361.A /docs/sdk-typescript parity', () => {
     expect(body).toContain('/api-reference');
   });
 
-  it('bundle-size claim "~12 kB gzipped" pinned (marketing-critical, falsifiable)', () => {
-    expect(body).toMatch(/~12 kB gzipped/);
+  it('does not publish an unproven bundle-size or tree-shaking absolute', () => {
+    expect(body).not.toMatch(/~12 kB gzipped|fully tree-shakeable/);
   });
 
-  it('Node ≥ 20 / Bun ≥ 1.1 / Deno ≥ 1.40 + dual-published (ESM + CommonJS) posture pinned (2026-06-24). The previous pin asserted "SDK ships ESM-only" but @driftstack/sdk is dual-published (package.json main ./dist/index.cjs + exports["."].require) so both import and require work — the prior claim misled CJS consumers.', () => {
-    expect(body).toMatch(/Node ≥ 20, Bun ≥ 1\.1, and Deno ≥ 1\.40 are supported/);
+  it('Node ≥ 18 + npm-published dual ESM/CommonJS posture is pinned', () => {
+    expect(body).toMatch(/Node ≥ 18 is supported/);
     expect(body).toMatch(/package is dual-published \(ESM \+ CommonJS via conditional/);
     expect(body).toMatch(
       /both <code>import<\/code> and\s+<code>require\('@driftstack\/sdk'\)<\/code> work out of the box/,
     );
     // The stale ESM-only claim must NOT return.
     expect(body).not.toMatch(/ships ESM-only/);
+    expect(body).not.toMatch(/Node ≥ 20|Bun ≥ 1\.1|Deno ≥ 1\.40/);
+  });
+
+  it('pins the paid customer-key boundary, RFC 9457, and curated API map', () => {
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(body).toContain('SDK automation requires an API-enabled paid tier');
+    expect(body).toContain('<code>ds_live_…</code> customer API key');
+    expect(body).toContain('restricted <code>ds_test_…</code>');
+    expect(body).toContain('not an SDK or');
+    expect(body).toContain('sandbox key');
+    expect(body).toContain('RFC 9457');
+    expect(body).toContain('<a href="/api-reference/">Curated API map</a>');
+    expect(body).toContain('complete interactive reference');
+    expect(body).not.toContain('Full API reference');
   });
 
   it('thread-safety + connection-pooling claim pinned (reuse-one-client guidance)', () => {

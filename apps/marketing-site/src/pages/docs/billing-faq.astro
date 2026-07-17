@@ -3,10 +3,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
 // V-694 — billing FAQ. Pulls together the questions that the
 // /docs/cost-monitoring + /pricing/crypto pages don't explicitly
-// answer (proration, refunds, trial → paid, NowPayments vs Stripe).
+// answer (proration, refunds, Free → paid, NowPayments vs Stripe).
 ---
 
-<BaseLayout title="Billing FAQ — Driftstack" description="Common questions about Driftstack billing — proration, refunds, crypto vs card, trial conversion.">
+<BaseLayout title="Billing FAQ — Driftstack" description="Common questions about Driftstack billing — proration, refunds, crypto vs card, and Free-to-paid upgrades.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Billing FAQ</h1>
 
@@ -20,13 +20,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       Every new account starts on the <strong>Free</strong> tier:
       a perpetual evaluation tier capped at <strong>1 concurrent
       session</strong> and <strong>1 profile</strong>, with sessions
-      up to 20 minutes each — drive them from the API/SDK or the desktop
-      GUI client. No card is required, and it never expires; there
-      is no usage metering, no credit, and no auto-charge. All API keys
-      use the <code>ds_live_…</code> prefix; there is no separate
-      <code>ds_test_</code> namespace today. Subscribe to a paid tier
-      when you need higher limits — more concurrency, more profiles, or
-      longer sessions.
+      up to 20 minutes each, launched and driven through the desktop app.
+      Choose browser sign-in and the app stores a restricted
+      <code>ds_test_…</code> device credential automatically; it is not a
+      customer API key or a general sandbox key. Programmatic API/SDK access,
+      OAuth approval, and <code>ds_live_…</code> customer API keys require a
+      paid tier, including the Manual tiers. Free dashboard sessions can list
+      and revoke keys retained from before a downgrade, but cannot create or
+      rotate them; ordinary keys and OAuth tokens remain paused while the
+      account is Free. No card is required, Free never expires, and there are
+      no usage charges, prepaid credits, or automatic charges. Upgrade when
+      you need code access, higher limits, more profiles, or longer sessions.
     </p>
 
     <h2>How does upgrading to a paid tier work?</h2>

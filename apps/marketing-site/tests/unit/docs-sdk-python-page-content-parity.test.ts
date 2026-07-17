@@ -22,6 +22,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { TIER_FEATURES } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -57,13 +58,20 @@ describe('W362.A /docs/sdk-python parity', () => {
     expect(body).toContain('from driftstack.errors import RateLimitError, ValidationError');
   });
 
-  it('Python ≥ 3.10 + httpx-pooled + type-stubs (py.typed) claims pinned', () => {
+  it('alpha source install + Python ≥ 3.10 + httpx-pooled + type-stubs are pinned', () => {
+    expect(body).toContain('git clone https://github.com/driftstackdev/driftstack-api.git');
+    expect(body).toContain('git checkout <exact-commit>');
+    expect(body).toContain('python -m pip install ./packages/sdk-python');
+    expect(body).toContain('alpha source distribution');
     expect(body).toMatch(/Python ≥ 3\.10 is supported/);
     expect(body).toMatch(/internally pooled\s+via <code>httpx<\/code>/);
     expect(body).toMatch(/ships type stubs/);
     expect(body).toMatch(/<code>mypy --strict<\/code>/);
     // The package actually ships a py.typed marker.
     expect(existsSync(PY_TYPED)).toBe(true);
+    expect(body).not.toMatch(
+      /pip install driftstack-sdk|poetry add driftstack-sdk|uv add driftstack-sdk/,
+    );
   });
 
   it('session ids prefixed ses_ pinned', () => {
@@ -89,6 +97,18 @@ describe('W362.A /docs/sdk-python parity', () => {
   it('RateLimitError.retry_after_seconds extension pinned ↔ errors.py field', () => {
     expect(body).toMatch(/exc\.problem\["retry_after_seconds"\]/);
     expect(read(PY_ERRORS)).toMatch(/retry_after_seconds/);
+  });
+
+  it('pins paid customer keys, RFC 9457, and curated-vs-complete reference truth', () => {
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(body).toContain('SDK automation requires an API-enabled paid tier');
+    expect(body).toContain('<code>ds_live_…</code> customer API key');
+    expect(body).toContain('restricted');
+    expect(body).toContain('<code>ds_test_…</code> device credential');
+    expect(body).toContain('RFC 9457');
+    expect(body).toContain('<a href="/api-reference/">Curated API map</a>');
+    expect(body).toContain('complete interactive reference');
+    expect(body).not.toContain('Full API reference');
   });
 
   it('"no waitUntil helper" customer-facing guarantee pinned (mirrors TS SDK contract)', () => {

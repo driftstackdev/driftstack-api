@@ -19,11 +19,20 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       and the streaming surface is a channel.
     </p>
 
+    <p>
+      SDK automation requires an API-enabled paid tier, including any Manual
+      tier, and a <code>ds_live_…</code> customer API key. Free starts in the
+      desktop app, whose browser sign-in stores a restricted
+      <code>ds_test_…</code> device credential automatically; it is not an SDK
+      or sandbox key.
+    </p>
+
     <h2>1. Install</h2>
-    <pre><code>{`go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest`}</code></pre>
+    <pre><code>{`go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<exact-commit>`}</code></pre>
 
     <p>
-      Go ≥ 1.22 is supported. The module has zero non-stdlib runtime
+      The Go SDK is alpha; pin an exact commit or Go pseudo-version rather
+      than a floating tag. Go ≥ 1.22 is supported. The module has zero non-stdlib runtime
       dependencies (it speaks raw JSON over <code>net/http</code>); no
       transitive bloat.
     </p>
@@ -153,7 +162,7 @@ if errors.Is(err, driftstack.ErrConflict) {
 }`}</code></pre>
     <p>
       Every typed error embeds an <code>apiError</code> shape with
-      <code>Status</code>, <code>ProblemType</code> (the RFC 7807
+      <code>Status</code>, <code>ProblemType</code> (the RFC 9457
       URI), <code>Message</code>, and <code>Problem</code> (the full
       parsed problem map). Read additional extension fields off
       <code>err.Problem</code>.
@@ -165,13 +174,12 @@ if errors.Is(err, driftstack.ErrConflict) {
       argument. Cancellation cascades through the underlying HTTP
       requests, so a parent deadline (or an HTTP request cancellation
       in a Gin / chi / standard <code>http.Server</code> handler)
-      cleanly aborts in-flight SDK calls. No goroutine leaks even
-      under heavy concurrent load.
+      cleanly aborts the underlying in-flight HTTP call.
     </p>
 
     <h2>Where to go next</h2>
     <ul>
-      <li><a href="/api-reference/">Full API reference</a> — every endpoint, every field.</li>
+      <li><a href="/api-reference/">Curated API map</a> — common routes and runnable patterns, with a link to the complete interactive reference.</li>
  <li><a href="/docs/sdk-go-crypto-orders/">Crypto orders</a> — customer-facing crypto-checkout surface.</li>
       <li><a href="/docs/sdk-typescript/">TypeScript SDK</a> — same surface, TS-native.</li>
       <li><a href="/docs/sdk-python/">Python SDK</a> — same surface, sync + asyncio.</li>
@@ -179,7 +187,7 @@ if errors.Is(err, driftstack.ErrConflict) {
       <li><a href="/docs/cost-monitoring/">Cost monitoring</a> — set
         alerts before the bill surprises you.</li>
       <li><a href="/docs/error-codes/">Error codes</a> — the stable
-        RFC 7807 type URIs the SDK's typed errors carry.</li>
+        RFC 9457 type URIs the SDK's typed errors carry.</li>
     </ul>
 
     <h2>Need help?</h2>

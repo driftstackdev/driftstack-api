@@ -5,7 +5,7 @@
 // design.
 //
 //   • V-704 doc-comment framing + V-703 companion.
-//   • Install: pip install driftstack-sdk + poetry/uv variants.
+//   • Alpha source install pinned to an exact repository commit.
 //   • Python ≥ 3.10 + mypy --strict ready.
 //   • Construct: Driftstack(api_key=os.environ[...]) + base_url override.
 //   • Reuse client across process (httpx-pooled + thread/asyncio-safe).
@@ -39,13 +39,14 @@ describe('W511.C apps/marketing-site/src/pages/docs/sdk-python.astro content par
     );
   });
 
-  it('Install path 3-tool pinned: pip install driftstack-sdk + poetry add driftstack-sdk + uv add driftstack-sdk — pinned so the 3-tool install matrix stays consistent (drift to dropping uv would orphan modern-Python users). The PyPI DIST name is driftstack-sdk (the bare `driftstack` is only the IMPORT name); pinning the `-sdk` suffix prevents the marketing↔PyPI divergence that would make every install command fail. Anchored with a word boundary so a bare `driftstack` regresses the test.', () => {
-    expect(body).toMatch(/pip install driftstack-sdk\b/);
-    expect(body).toMatch(/poetry add driftstack-sdk\b/);
-    expect(body).toMatch(/uv add driftstack-sdk\b/);
-    // Guard the regression directly: no install command may target the bare
-    // import name (would install the wrong/nonexistent PyPI package).
-    expect(body).not.toMatch(/(pip install|poetry add|uv add) driftstack(?!-sdk)/);
+  it('alpha source distribution install is pinned to an exact revision', () => {
+    expect(body).toContain('git clone https://github.com/driftstackdev/driftstack-api.git');
+    expect(body).toContain('git checkout <exact-commit>');
+    expect(body).toContain('python -m pip install ./packages/sdk-python');
+    expect(body).toContain('alpha source distribution');
+    expect(body).not.toMatch(
+      /pip install driftstack-sdk|poetry add driftstack-sdk|uv add driftstack-sdk/,
+    );
   });
 
   it("Python ≥ 3.10 + mypy --strict + type-stubs commitment pinned: 'Python ≥ 3.10 is supported. The package ships type stubs; mypy --strict works against the public surface without further config.' — pinned so the 3.10-minimum + mypy-strict commitments survive (drift to a different Python floor would create marketing↔setup.cfg divergence; drift to dropping mypy --strict would let typed users question type completeness)", () => {
@@ -87,9 +88,9 @@ describe('W511.C apps/marketing-site/src/pages/docs/sdk-python.astro content par
     );
   });
 
-  it('DriftstackError + RateLimitError + ValidationError 4-attribute framing pinned: \'The exception carries status, problem_type (the RFC 7807 URI), message, and problem (the full parsed problem dict, e.g. exc.problem["retry_after_seconds"]).\' — pinned so the 4-attribute exception surface + the RFC-7807-URI anchor + the problem_dict-extension-access pattern survive (drift to renaming any attribute would create marketing↔SDK divergence)', () => {
+  it('DriftstackError + RateLimitError + ValidationError RFC 9457 fields are pinned', () => {
     expect(body).toMatch(
-      /Every SDK method raises a <code>DriftstackError<\/code> subclass\s*\n?\s*on non-2xx responses\. The exception carries\s*\n?\s*<code>status<\/code>, <code>problem_type<\/code> \(the RFC 7807\s*\n?\s*URI\), <code>message<\/code>, and <code>problem<\/code> \(the full\s*\n?\s*parsed problem dict, e\.g\. <code>exc\.problem\["retry_after_seconds"\]<\/code>\)\./,
+      /Every SDK method raises a <code>DriftstackError<\/code> subclass\s*\n?\s*on non-2xx responses\. The exception carries\s*\n?\s*<code>status<\/code>, <code>problem_type<\/code> \(the RFC 9457\s*\n?\s*URI\), <code>message<\/code>, and <code>problem<\/code> \(the full\s*\n?\s*parsed problem dict, e\.g\. <code>exc\.problem\["retry_after_seconds"\]<\/code>\)\./,
     );
     expect(body).toMatch(/from driftstack\.errors import RateLimitError, ValidationError/);
   });
@@ -101,7 +102,7 @@ describe('W511.C apps/marketing-site/src/pages/docs/sdk-python.astro content par
   });
 
   it('6-related-doc cluster pins canonical API, crypto, TypeScript, webhook, cost and error-code destinations so every next-step remains discoverable', () => {
-    expect(body).toMatch(/<a href="\/api-reference\/">Full API reference<\/a>/);
+    expect(body).toMatch(/<a href="\/api-reference\/">Curated API map<\/a>/);
     expect(body).toMatch(/<a href="\/docs\/sdk-python-crypto-orders\/">Crypto orders<\/a>/);
     expect(body).toMatch(/<a href="\/docs\/sdk-typescript\/">TypeScript SDK<\/a>/);
     expect(body).toMatch(/<a href="\/docs\/webhooks\/">Webhooks<\/a>/);
@@ -110,6 +111,15 @@ describe('W511.C apps/marketing-site/src/pages/docs/sdk-python.astro content par
     expect(body).not.toMatch(
       /href="\/(?:api-reference|docs\/sdk-python-crypto-orders|docs\/sdk-typescript|docs\/webhooks|docs\/cost-monitoring|docs\/error-codes)"/,
     );
+    expect(body).toContain('complete interactive reference');
+  });
+
+  it('paid customer-key and Free desktop-device boundary is explicit', () => {
+    expect(body).toContain('SDK automation requires an API-enabled paid tier');
+    expect(body).toContain('<code>ds_live_…</code> customer API key');
+    expect(body).toContain('<code>ds_test_…</code> device credential');
+    expect(body).toContain('not an SDK');
+    expect(body).toContain('sandbox key');
   });
 
   it("developers@driftstack.dev + 'within one business day' SLA pinned — pinned so the developer-channel routing + 1-business-day response commitment stays consistent across SDK pages (drift to a different SLA would create cross-page divergence)", () => {

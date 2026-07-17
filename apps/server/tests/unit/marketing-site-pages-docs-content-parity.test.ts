@@ -13,9 +13,9 @@
 //     now deleted + 301) + /api-reference + /docs/sdk-typescript +
 //     /docs/webhooks + /self-hosted.
 //   • W210 Recipe-library-removed inline comment (anti-404 guard).
-//   • OpenAPI 3.1 + try-in-browser + SDK codegen framing.
+//   • Curated local map + complete live OpenAPI + SDK codegen framing.
 //   • All-5-event-types + HMAC-SHA256 verification framing.
-//   • SDK runtime triad: npm / PyPI / Go module.
+//   • SDK publish truth: TypeScript npm; Python/Go alpha source.
 //   • Help banner: mailto:support@driftstack.dev + github.com/
 //     driftstackdev.
 
@@ -38,7 +38,7 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
   it("BaseLayout title='Docs' + description covering quickstart / SDK references for TypeScript-Python-Go / API reference / self-hosted setup / recipe library — pinned so the SEO description covers ALL the doc surface customers might search for (drift to dropping any would hurt search ranking for that doc category)", () => {
     expect(body).toMatch(/import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';/);
     expect(body).toMatch(
-      /<BaseLayout\s*\n?\s*title="Docs"\s*\n?\s*description="Driftstack documentation: quickstart, SDK references for TypeScript \/ Python \/ Go, API reference, self-hosted setup, recipe library\."/,
+      /<BaseLayout\s*\n?\s*title="Docs"\s*\n?\s*description="Driftstack documentation: desktop and code quickstarts, SDK guides for TypeScript \/ Python \/ Go, API reference, self-hosted setup, recipe library\."/,
     );
   });
 
@@ -63,24 +63,28 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     }
   });
 
-  it("Quickstart card framing: 'Five minutes to first session →' + 'Install the SDK in your language, paste an API key, drive your first session. No prior browser-automation experience needed.' — pinned so the 5-minute time-to-first-session promise + the no-prior-experience reassurance survive (drift to a longer time estimate would let customers expect a multi-hour onboarding; drift to dropping 'no prior experience' would lose the new-to-automation onboarding pull)", () => {
-    expect(body).toMatch(/Five minutes to first session →/);
-    expect(body).toMatch(
-      /Install the SDK in your language, paste an API key, drive\s*\n?\s*your first session\. No prior browser-automation experience\s*\n?\s*needed\./,
-    );
+  it('Quickstart card pins Free browser-first desktop activation and paid customer-key code access', () => {
+    expect(body).toMatch(/Free desktop or paid code →/);
+    expect(body).toMatch(/On Free, sign in through the desktop app's browser flow/);
+    expect(body).toMatch(/stores\s*\n?\s*a restricted device credential automatically/);
+    expect(body).toMatch(/Code quickstarts use\s*\n?\s*a paid tier and a customer API key/);
+    expect(body).not.toMatch(/paste an API key, drive/);
   });
 
-  it("API reference card framing: 'Auto-generated from the OpenAPI 3.1 spec. Try requests against your own API key directly in the browser. Same spec the SDK codegen reads.' — pinned so the OpenAPI 3.1 version + the in-browser try-it + the single-source-of-truth (same spec the SDK reads) all survive (drift to OpenAPI 3.0 would orphan tooling that requires 3.1; drift to dropping the codegen reference would hide the spec→SDK consistency story)", () => {
-    expect(body).toMatch(
-      /Auto-generated from the OpenAPI 3\.1 spec\. Try requests\s*\n?\s*against your own API key directly in the browser\. Same\s*\n?\s*spec the SDK codegen reads\./,
-    );
+  it('API reference card pins curated-local versus complete-live reference truth', () => {
+    expect(body).toMatch(/Curated route map \+ live reference →/);
+    expect(body).toMatch(/Browse common routes and runnable patterns here/);
+    expect(body).toMatch(/complete interactive OpenAPI 3\.1 reference on docs\.driftstack\.dev/);
+    expect(body).toMatch(/same contract the SDK codegen reads/);
+    expect(body).not.toMatch(/Every endpoint, every shape/);
   });
 
-  it("SDKs card framing: 'TypeScript · Python · Go →' + 'Native packages on npm, PyPI, and as a Go module. Typed request/response shapes. Retry-with-backoff. Webhook signature verification. Async iterators for paginated list endpoints.' — pinned so the 3-language SDK runtime triad (TS/Python/Go) + the 4-feature shortlist (typed + retry + webhook-verify + async-iter) survive (drift to dropping a language would shrink the supported-language surface; drift to dropping retry-with-backoff would hide a core SDK reliability feature)", () => {
+  it('SDKs card pins TypeScript npm and Python/Go alpha source distribution truth', () => {
     expect(body).toMatch(/TypeScript · Python · Go →/);
-    expect(body).toMatch(
-      /Native packages on npm, PyPI, and as a Go module\. Typed\s*\n?\s*request\/response shapes\. Retry-with-backoff\. Webhook\s*\n?\s*signature verification\. Async iterators for paginated\s*\n?\s*list endpoints\./,
-    );
+    expect(body).toMatch(/TypeScript is published on npm/);
+    expect(body).toMatch(/Python and Go are alpha source\s*\n?\s*distributions/);
+    expect(body).toMatch(/pinned to an exact revision/);
+    expect(body).not.toMatch(/Native packages on npm, PyPI/);
   });
 
   it('Webhooks card pins the canonical eight-event roster and HMAC-SHA256 verification', () => {
