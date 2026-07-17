@@ -28979,3 +28979,34 @@ records the state event and returns the complete capture. The direct suite passe
 21/21 tests; the expanded sixteen-file SessionsService union passes 227/227. Strict
 server source/test TypeScript, targeted ESLint, Prettier and diff/whitespace checks
 are green.
+
+---
+
+## V-695 — Post-success observability cannot withhold an authoritative response
+
+**Date:** 2026-07-17
+
+The V-694 correction handled rejected event and last-state writes, but a database
+pool wait or network operation that never settled could still withhold a response
+after its browser mutation had completed. `create` had the same ambiguity after its
+row was ready and worker live: either the created-event or customer-audit write
+could remain pending and invite a second live worker on caller retry.
+
+All post-success event, status and create-audit writes are now admitted exactly once
+before the successful response becomes observable, but their settlement is detached.
+Each write has its own unreferenced 5,000 ms monitoring watchdog. Early success or
+failure clears that timer; failure emits one closed-class diagnostic; timeout emits
+one fixed outcome-unknown diagnostic and does not claim the underlying write was
+cancelled. A later rejection is consumed without a second log, unhandled rejection,
+driver replay, teardown, terminalization or failure fan-out. The state timestamp and
+state event remain independent. Serialized destroy still uses its atomic terminal
+row and event transaction.
+
+Deterministic fake-time proof holds an interaction event at 4,999 and 5,000 ms,
+then rejects it late; holds both state writes independently; and holds both the
+created event and account audit while requiring one ready row and one worker. It also
+pins early resolution/rejection, synchronous repository throw, a throwing logger,
+a hostile non-string `Error.name`, explicit timer unref, zero residual timers and
+complete authoritative-result equality. The focused failure matrix passes 28/28;
+strict server source/test TypeScript, targeted ESLint, Prettier and diff/whitespace
+checks are green.

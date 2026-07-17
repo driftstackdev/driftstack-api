@@ -6,7 +6,12 @@
 // semantic).
 
 import { describe, expect, it, vi } from 'vitest';
-import { SESSION_DESTROY_DRIVER_TIMEOUT_MS, SessionsService } from '../../src/services/sessions.js';
+import {
+  SESSION_DESTROY_DRIVER_TIMEOUT_MS,
+  SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS,
+  SessionsService,
+  type SessionsServiceDeps,
+} from '../../src/services/sessions.js';
 import { ConcurrencyLimitError, SessionDestroyedError } from '../../src/lib/errors.js';
 import type {
   SessionRepo,
@@ -34,6 +39,24 @@ interface RecordedLifecycleEvent {
     | { kind: 'session.failed.first'; sessionId: string; errorMessage: string }
     | { kind: 'session.success.first'; sessionId: string };
 }
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+type AccountAuditInput = Parameters<NonNullable<SessionsServiceDeps['accountAudit']>['record']>[0];
 
 function buildCtx(): AccountContext {
   return {
@@ -88,8 +111,23 @@ class StubRepo implements SessionRepo {
    *  event type — exercises the create() best-effort created-event guard (a
    *  post-success event write must not fail the request + leak the live session). */
   throwOnRecordEventType: { type: string; error: Error } | null = null;
+  /** Opt-in: prove a synchronous repository throw is contained too. */
+  throwSynchronouslyOnRecordEventType: { type: string; error: Error } | null = null;
+  /** Opt-in: hold one event write past the detached watchdog. */
+  holdOnRecordEventType: { type: string; deferred: Deferred<void> } | null = null;
+  readonly recordEventAttempts: SessionEventInput[] = [];
   /** Opt-in: fail one matching status write after a successful state capture. */
   throwOnUpdateSessionStatus: { status: SessionRecord['status']; error: Error } | null = null;
+  /** Opt-in: hold one state-status write past the detached watchdog. */
+  holdOnUpdateSessionStatus: {
+    status: SessionRecord['status'];
+    deferred: Deferred<void>;
+  } | null = null;
+  readonly updateSessionStatusAttempts: Array<{
+    id: string;
+    status: SessionRecord['status'];
+    extra?: { lastStateAt?: Date; destroyedAt?: Date };
+  }> = [];
 
   insertSession(input: NewSessionInput): Promise<SessionRecord> {
     if (this.throwOnInsert !== null) return Promise.reject(this.throwOnInsert);
@@ -224,17 +262,28 @@ class StubRepo implements SessionRepo {
     status: SessionRecord['status'],
     extra?: { lastStateAt?: Date; destroyedAt?: Date },
   ): Promise<void> {
+    this.updateSessionStatusAttempts.push({
+      id,
+      status,
+      ...(extra === undefined ? {} : { extra }),
+    });
     if (this.throwOnUpdateSessionStatus?.status === status) {
       return Promise.reject(this.throwOnUpdateSessionStatus.error);
     }
-    const r = this.sessions.get(id);
-    if (!r || r.status === 'destroyed' || r.status === 'errored') return Promise.resolve();
-    this.sessions.set(id, {
-      ...r,
-      status,
-      ...(extra?.lastStateAt !== undefined ? { lastStateAt: extra.lastStateAt } : {}),
-      ...(extra?.destroyedAt !== undefined ? { destroyedAt: extra.destroyedAt } : {}),
-    });
+    const apply = (): void => {
+      const r = this.sessions.get(id);
+      if (!r || r.status === 'destroyed' || r.status === 'errored') return;
+      this.sessions.set(id, {
+        ...r,
+        status,
+        ...(extra?.lastStateAt !== undefined ? { lastStateAt: extra.lastStateAt } : {}),
+        ...(extra?.destroyedAt !== undefined ? { destroyedAt: extra.destroyedAt } : {}),
+      });
+    };
+    if (this.holdOnUpdateSessionStatus?.status === status) {
+      return this.holdOnUpdateSessionStatus.deferred.promise.then(apply);
+    }
+    apply();
     return Promise.resolve();
   }
   countActiveSessions(_accountId: string): Promise<number> {
@@ -258,8 +307,20 @@ class StubRepo implements SessionRepo {
     return Promise.resolve([]);
   }
   recordEvent(input: SessionEventInput): Promise<void> {
+    this.recordEventAttempts.push(input);
+    if (
+      this.throwSynchronouslyOnRecordEventType !== null &&
+      this.throwSynchronouslyOnRecordEventType.type === input.type
+    ) {
+      throw this.throwSynchronouslyOnRecordEventType.error;
+    }
     if (this.throwOnRecordEventType !== null && this.throwOnRecordEventType.type === input.type) {
       return Promise.reject(this.throwOnRecordEventType.error);
+    }
+    if (this.holdOnRecordEventType?.type === input.type) {
+      return this.holdOnRecordEventType.deferred.promise.then(() => {
+        this.events.push(input);
+      });
     }
     this.events.push(input);
     return Promise.resolve();
@@ -296,6 +357,7 @@ class ThrowingDriver implements Driver {
   /** Records every driver session id passed to destroy() — lets the
    *  create-rollback test assert the orphaned driver session was reaped. */
   readonly destroyedIds: string[] = [];
+  readonly createdIds: string[] = [];
   /** Exact non-lifecycle operation calls, used to prove no post-success replay. */
   readonly operationCalls: string[] = [];
   readonly capturedAt = new Date('2026-07-15T17:45:00.000Z');
@@ -350,6 +412,7 @@ class ThrowingDriver implements Driver {
     }
     this.nextId += 1;
     const driverSessionId = `mock-${this.nextId.toString()}`;
+    this.createdIds.push(driverSessionId);
     this.onCreateSession?.(driverSessionId);
     return Promise.resolve({ driverSessionId });
   }
@@ -447,19 +510,26 @@ interface LoggedError {
   msg: string;
 }
 
-function buildService(opts: { loggerThrows?: boolean } = {}): {
+function buildService(
+  opts: {
+    loggerThrows?: boolean;
+    accountAuditRecord?: (input: AccountAuditInput) => Promise<unknown>;
+  } = {},
+): {
   service: SessionsService;
   repo: StubRepo;
   driver: ThrowingDriver;
   webhookEvents: RecordedEvent[];
   lifecycleEvents: RecordedLifecycleEvent[];
   loggedErrors: LoggedError[];
+  accountAuditInputs: AccountAuditInput[];
 } {
   const repo = new StubRepo();
   const driver = new ThrowingDriver();
   const webhookEvents: RecordedEvent[] = [];
   const lifecycleEvents: RecordedLifecycleEvent[] = [];
   const loggedErrors: LoggedError[] = [];
+  const accountAuditInputs: AccountAuditInput[] = [];
   const service = new SessionsService({
     repo,
     driver,
@@ -475,6 +545,16 @@ function buildService(opts: { loggerThrows?: boolean } = {}): {
         return Promise.resolve();
       },
     },
+    ...(opts.accountAuditRecord === undefined
+      ? {}
+      : {
+          accountAudit: {
+            record: (input: AccountAuditInput) => {
+              accountAuditInputs.push(input);
+              return opts.accountAuditRecord?.(input) ?? Promise.resolve();
+            },
+          },
+        }),
     logger: {
       error: (obj, msg) => {
         loggedErrors.push({ obj, msg });
@@ -482,7 +562,15 @@ function buildService(opts: { loggerThrows?: boolean } = {}): {
       },
     },
   });
-  return { service, repo, driver, webhookEvents, lifecycleEvents, loggedErrors };
+  return {
+    service,
+    repo,
+    driver,
+    webhookEvents,
+    lifecycleEvents,
+    loggedErrors,
+    accountAuditInputs,
+  };
 }
 
 describe('SessionsService — V-090 driver-failure capture', () => {
@@ -743,7 +831,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
       expect(webhookEvents).toEqual([]);
       expect(lifecycleEvents).toEqual([]);
       expect(repo.events.some((event) => event.type === 'errored')).toBe(false);
-      expect(loggedErrors).toHaveLength(1);
+      await vi.waitFor(() => expect(loggedErrors).toHaveLength(1));
       expect(loggedErrors[0]?.obj).toMatchObject({
         event: 'post_success_persistence_failed',
         account_id: session.accountId,
@@ -795,7 +883,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     expect(repo.events.filter((event) => event.type === 'errored')).toHaveLength(0);
     expect(webhookEvents).toEqual([]);
     expect(lifecycleEvents).toEqual([]);
-    expect(loggedErrors).toHaveLength(1);
+    await vi.waitFor(() => expect(loggedErrors).toHaveLength(1));
     expect(loggedErrors[0]?.obj).toMatchObject({
       event: 'post_success_persistence_failed',
       operation: 'state_capture',
@@ -825,6 +913,324 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     expect(repo.events.filter((event) => event.type === 'errored')).toHaveLength(0);
     expect(webhookEvents).toEqual([]);
     expect(lifecycleEvents).toEqual([]);
+  });
+
+  it('a hostile non-string Error.name cannot reject the detached diagnostic monitor', async () => {
+    const { service, repo, driver, loggedErrors } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const hostileError = new Error('must not escape the monitor');
+    Object.defineProperty(hostileError, 'name', { value: Symbol('hostile-name') });
+    repo.throwOnRecordEventType = { type: 'interacted', error: hostileError };
+
+    await expect(
+      service.interact(ctx, session.id, { action: { kind: 'tap', selector: '#once' } }),
+    ).resolves.toEqual({ durationMs: 1 });
+    await vi.waitFor(() => expect(loggedErrors).toHaveLength(1));
+
+    expect(loggedErrors[0]?.obj).toMatchObject({
+      event: 'post_success_persistence_failed',
+      operation: 'interact',
+      persistence: 'event',
+      error_name: 'UnknownError',
+    });
+    expect(driver.operationCalls).toEqual(['interact']);
+    expect(driver.destroyedIds).toEqual([]);
+  });
+
+  it('unrefs the detached watchdog so a held observability write cannot keep the process alive', async () => {
+    const { service, repo } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const held = deferred<void>();
+    repo.holdOnRecordEventType = { type: 'interacted', deferred: held };
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+    try {
+      await service.interact(ctx, session.id, {
+        action: { kind: 'tap', selector: '#once' },
+      });
+
+      expect(timeoutSpy).toHaveBeenCalledTimes(1);
+      const timer = timeoutSpy.mock.results[0]?.value as ReturnType<typeof setTimeout> | undefined;
+      expect(timer).toBeDefined();
+      expect(timer?.hasRef()).toBe(false);
+    } finally {
+      timeoutSpy.mockRestore();
+      held.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  });
+
+  it('a held post-success event cannot withhold or replay the authoritative result and emits one bounded timeout diagnostic', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, repo, driver, webhookEvents, lifecycleEvents, loggedErrors } =
+        buildService();
+      const ctx = buildCtx();
+      const session = await service.create(ctx, {
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+
+      const held = deferred<void>();
+      repo.holdOnRecordEventType = { type: 'interacted', deferred: held };
+
+      await expect(
+        service.interact(ctx, session.id, {
+          action: { kind: 'tap', selector: '#exactly-once' },
+        }),
+      ).resolves.toEqual({ durationMs: 1 });
+
+      expect(driver.operationCalls).toEqual(['interact']);
+      expect(repo.recordEventAttempts.filter((event) => event.type === 'interacted')).toHaveLength(
+        1,
+      );
+      expect(loggedErrors).toEqual([]);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS - 1);
+      expect(loggedErrors).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(loggedErrors).toHaveLength(1);
+      expect(loggedErrors[0]?.obj).toMatchObject({
+        event: 'post_success_persistence_timed_out',
+        account_id: session.accountId,
+        session_id: session.id,
+        operation: 'interact',
+        persistence: 'event',
+        error_name: 'PostSuccessPersistenceTimeout',
+      });
+      expect(vi.getTimerCount()).toBe(0);
+
+      const lateError = new Error('late rejection with event_secret');
+      lateError.name = 'LatePersistenceError';
+      held.reject(lateError);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(loggedErrors).toHaveLength(1);
+      expect(driver.operationCalls).toEqual(['interact']);
+      expect(driver.destroyedIds).toEqual([]);
+      expect(repo.read(session.id)).toMatchObject({ status: 'ready', destroyedAt: null });
+      expect(repo.events.filter((event) => event.type === 'errored')).toHaveLength(0);
+      expect(webhookEvents).toEqual([]);
+      expect(lifecycleEvents).toEqual([]);
+      expect(JSON.stringify(loggedErrors)).not.toContain('event_secret');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('successful, rejected, and synchronously-throwing writes all settle detached monitors exactly once', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, repo, driver, loggedErrors } = buildService();
+      const ctx = buildCtx();
+      const session = await service.create(ctx, {
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+
+      const successful = deferred<void>();
+      repo.holdOnRecordEventType = { type: 'interacted', deferred: successful };
+      await expect(
+        service.interact(ctx, session.id, { action: { kind: 'tap', selector: '#success' } }),
+      ).resolves.toEqual({ durationMs: 1 });
+      expect(vi.getTimerCount()).toBe(1);
+      successful.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(loggedErrors).toEqual([]);
+
+      const rejected = deferred<void>();
+      repo.holdOnRecordEventType = { type: 'waited', deferred: rejected };
+      await expect(
+        service.wait(ctx, session.id, { condition: { kind: 'selector', selector: '#ready' } }),
+      ).resolves.toEqual({ satisfied: true, durationMs: 1 });
+      const rejectedError = new Error('rejected promptly');
+      rejectedError.name = 'PromptPersistenceError';
+      rejected.reject(rejectedError);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(loggedErrors).toHaveLength(1);
+      expect(loggedErrors[0]?.obj).toMatchObject({
+        event: 'post_success_persistence_failed',
+        operation: 'wait',
+        persistence: 'event',
+        error_name: 'PromptPersistenceError',
+      });
+      expect(vi.getTimerCount()).toBe(0);
+
+      repo.holdOnRecordEventType = null;
+      const synchronousError = new Error('synchronous repository throw');
+      synchronousError.name = 'SynchronousPersistenceError';
+      repo.throwSynchronouslyOnRecordEventType = {
+        type: 'screenshot_captured',
+        error: synchronousError,
+      };
+      await expect(
+        service.capture(ctx, session.id, { kind: 'screenshot', full_page: false }),
+      ).resolves.toMatchObject({ kind: 'screenshot', byteSize: 4 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(loggedErrors).toHaveLength(2);
+      expect(loggedErrors[1]?.obj).toMatchObject({
+        event: 'post_success_persistence_failed',
+        operation: 'capture',
+        persistence: 'event',
+        error_name: 'SynchronousPersistenceError',
+      });
+      expect(vi.getTimerCount()).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS * 2);
+      expect(loggedErrors).toHaveLength(2);
+      expect(driver.operationCalls).toEqual(['interact', 'wait', 'capture']);
+      expect(driver.destroyedIds).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('getState admits its status and event writes independently without withholding captured state', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, repo, driver, webhookEvents, lifecycleEvents, loggedErrors } =
+        buildService();
+      const ctx = buildCtx();
+      const session = await service.create(ctx, {
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      const heldStatus = deferred<void>();
+      const heldEvent = deferred<void>();
+      repo.holdOnUpdateSessionStatus = { status: 'ready', deferred: heldStatus };
+      repo.holdOnRecordEventType = { type: 'state_captured', deferred: heldEvent };
+
+      await expect(service.getState(ctx, session.id)).resolves.toEqual({
+        url: null,
+        title: null,
+        cookies: [],
+        localStorage: {},
+        pageState: null,
+        capturedAt: driver.capturedAt,
+      });
+      expect(
+        repo.updateSessionStatusAttempts.filter(
+          (attempt) => attempt.extra?.lastStateAt?.getTime() === driver.capturedAt.getTime(),
+        ),
+      ).toHaveLength(1);
+      expect(
+        repo.recordEventAttempts.filter((event) => event.type === 'state_captured'),
+      ).toHaveLength(1);
+      expect(vi.getTimerCount()).toBe(2);
+
+      await vi.advanceTimersByTimeAsync(SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS);
+      expect(loggedErrors).toHaveLength(2);
+      expect(loggedErrors.map((entry) => entry.obj.persistence).sort()).toEqual([
+        'event',
+        'status',
+      ]);
+      expect(vi.getTimerCount()).toBe(0);
+
+      heldStatus.resolve();
+      heldEvent.reject(new Error('late state-event rejection'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(loggedErrors).toHaveLength(2);
+      expect(repo.read(session.id)).toMatchObject({
+        status: 'ready',
+        destroyedAt: null,
+        lastStateAt: driver.capturedAt,
+      });
+      expect(driver.operationCalls).toEqual(['state_capture']);
+      expect(driver.destroyedIds).toEqual([]);
+      expect(webhookEvents).toEqual([]);
+      expect(lifecycleEvents).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('create returns one ready worker while created-event and account-audit writes remain held', async () => {
+    vi.useFakeTimers();
+    try {
+      const heldEvent = deferred<void>();
+      const heldAudit = deferred<unknown>();
+      const { service, repo, driver, accountAuditInputs, loggedErrors } = buildService({
+        accountAuditRecord: () => heldAudit.promise,
+      });
+      const ctx = buildCtx();
+      repo.holdOnRecordEventType = { type: 'created', deferred: heldEvent };
+
+      const session = await service.create(ctx, {
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+
+      expect(session).toMatchObject({ status: 'ready', driverSessionId: 'mock-1' });
+      expect(driver.createdIds).toEqual(['mock-1']);
+      expect(driver.destroyedIds).toEqual([]);
+      expect(repo.read(session.id)).toMatchObject({
+        status: 'ready',
+        driverSessionId: 'mock-1',
+        destroyedAt: null,
+      });
+      expect(repo.recordEventAttempts.filter((event) => event.type === 'created')).toHaveLength(1);
+      expect(accountAuditInputs).toHaveLength(1);
+      expect(vi.getTimerCount()).toBe(2);
+
+      await vi.advanceTimersByTimeAsync(SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS);
+      expect(loggedErrors).toHaveLength(2);
+      expect(loggedErrors.map((entry) => entry.obj.persistence).sort()).toEqual([
+        'account_audit',
+        'event',
+      ]);
+      expect(vi.getTimerCount()).toBe(0);
+
+      heldEvent.resolve();
+      heldAudit.reject(new Error('late audit rejection'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(loggedErrors).toHaveLength(2);
+      expect(driver.createdIds).toEqual(['mock-1']);
+      expect(driver.destroyedIds).toEqual([]);
+      expect(repo.events.filter((event) => event.type === 'created')).toHaveLength(1);
+      expect(repo.events.filter((event) => event.type === 'errored')).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a throwing diagnostic sink is contained even when the detached watchdog expires', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, repo, driver, loggedErrors } = buildService({ loggerThrows: true });
+      const ctx = buildCtx();
+      const session = await service.create(ctx, {
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      const held = deferred<void>();
+      repo.holdOnRecordEventType = { type: 'interacted', deferred: held };
+
+      await expect(
+        service.interact(ctx, session.id, { action: { kind: 'tap', selector: '#once' } }),
+      ).resolves.toEqual({ durationMs: 1 });
+      await vi.advanceTimersByTimeAsync(SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS);
+      expect(loggedErrors).toHaveLength(1);
+      expect(driver.operationCalls).toEqual(['interact']);
+      expect(driver.destroyedIds).toEqual([]);
+
+      held.reject(new Error('late failure after throwing logger'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(loggedErrors).toHaveLength(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('create: a DB reservation-insert failure spins NO worker (the slot is reserved before dispatch)', async () => {
@@ -1160,6 +1566,11 @@ describe('SessionsService — terminal-state resurrection guard', () => {
     // The row is live + non-terminal.
     expect(repo.read(session.id)?.status).toBe('ready');
     // The event failure was logged best-effort (not surfaced to the caller).
-    expect(loggedErrors.some((e) => e.obj.event === 'created_event_record_failed')).toBe(true);
+    await vi.waitFor(() => expect(loggedErrors).toHaveLength(1));
+    expect(loggedErrors[0]?.obj).toMatchObject({
+      event: 'post_success_persistence_failed',
+      operation: 'create',
+      persistence: 'event',
+    });
   });
 });

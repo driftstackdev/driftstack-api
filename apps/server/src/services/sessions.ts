@@ -43,6 +43,10 @@ import { redactText } from '../lib/redact-url.js';
 const SESSION_FAILURE_MESSAGE_MAX_CHARS = 500;
 const SESSION_FAILURE_NAME_MAX_CHARS = 100;
 export const SESSION_DESTROY_DRIVER_TIMEOUT_MS = 30_000;
+export const SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS = 5_000;
+
+type PostSuccessPersistenceOutcome =
+  { kind: 'succeeded' } | { kind: 'failed'; error: unknown } | { kind: 'timed_out' };
 
 export async function destroyDriverSessionWithTimeout(
   destroy: () => Promise<void>,
@@ -572,42 +576,27 @@ export class SessionsService {
       throw err;
     }
 
-    // Best-effort: the session is already fully created (status 'ready', worker
-    // live). A post-hoc created-event write failure (DB blip) must NOT surface
-    // as a raw 500 to the customer — that leaks a live session while the caller
-    // believes create failed. Swallow + log, mirroring the accountAudit block
-    // below (same posture: the session exists, an audit/event write can fail).
-    try {
-      await this.deps.repo.recordEvent({
+    // The session is already ready and its worker is live. Event/audit writes
+    // are detached observability: a rejection OR a non-settling pool/query
+    // must not withhold the authoritative create response and invite a second
+    // live session on caller retry.
+    this.persistPostSuccessObservability(record, 'create', 'event', () =>
+      this.deps.repo.recordEvent({
         sessionId: record.id,
         type: 'created',
         payload: { archetype, purpose, driver_session_id: driverResult.driverSessionId },
         durationMs: null,
-      });
-    } catch (err) {
-      try {
-        this.deps.logger?.error?.(
-          {
-            component: 'sessions-service',
-            event: 'created_event_record_failed',
-            account_id: accountId,
-            session_id: record.id,
-            err,
-          },
-          'session created-event record failed — session is live; swallowed so create still succeeds',
-        );
-      } catch {
-        // Swallow; logging is best-effort.
-      }
-    }
+      }),
+    );
 
     // V-216 — customer-facing audit entry.
     // V-326e1 — audit row goes on the OWNER's audit log (accountId
     // is the owner) but actor stays the member (so the audit reads
     // "Member X created session Y on team owner Z").
     if (this.deps.accountAudit) {
-      try {
-        await this.deps.accountAudit.record({
+      const accountAudit = this.deps.accountAudit;
+      this.persistPostSuccessObservability(record, 'create', 'account_audit', () =>
+        accountAudit.record({
           accountId,
           actorType: 'customer',
           actorAccountId: ctx.account.id,
@@ -615,10 +604,8 @@ export class SessionsService {
           action: 'session.created',
           targetResourceId: `ses_${record.id}`,
           payload: { archetype, purpose },
-        });
-      } catch {
-        /* swallow */
-      }
+        }),
+      );
     }
 
     return { ...record, status: 'ready' };
@@ -651,7 +638,7 @@ export class SessionsService {
         waitUntil: body.wait_until,
       }),
     );
-    await this.persistPostSuccessObservability(session, 'navigate', 'event', () =>
+    this.persistPostSuccessObservability(session, 'navigate', 'event', () =>
       this.deps.repo.recordEvent({
         sessionId: session.id,
         type: 'navigated',
@@ -675,7 +662,7 @@ export class SessionsService {
         timeoutMs: body.timeout_ms ?? 10_000,
       }),
     );
-    await this.persistPostSuccessObservability(session, 'interact', 'event', () =>
+    this.persistPostSuccessObservability(session, 'interact', 'event', () =>
       this.deps.repo.recordEvent({
         sessionId: session.id,
         type: 'interacted',
@@ -699,7 +686,7 @@ export class SessionsService {
         timeoutMs: body.timeout_ms ?? 10_000,
       }),
     );
-    await this.persistPostSuccessObservability(session, 'gui_input', 'event', () =>
+    this.persistPostSuccessObservability(session, 'gui_input', 'event', () =>
       this.deps.repo.recordEvent({
         sessionId: session.id,
         type: 'gui_input',
@@ -723,7 +710,7 @@ export class SessionsService {
         timeoutMs: body.timeout_ms ?? 30_000,
       }),
     );
-    await this.persistPostSuccessObservability(session, 'wait', 'event', () =>
+    this.persistPostSuccessObservability(session, 'wait', 'event', () =>
       this.deps.repo.recordEvent({
         sessionId: session.id,
         type: 'waited',
@@ -751,12 +738,12 @@ export class SessionsService {
     const state = await this.runWithFailureCapture(ctx, session, 'state_capture', () =>
       this.deps.driver.getState(session.driverSessionId),
     );
-    await this.persistPostSuccessObservability(session, 'state_capture', 'status', () =>
+    this.persistPostSuccessObservability(session, 'state_capture', 'status', () =>
       this.deps.repo.updateSessionStatus(session.id, session.status, {
         lastStateAt: state.capturedAt,
       }),
     );
-    await this.persistPostSuccessObservability(session, 'state_capture', 'event', () =>
+    this.persistPostSuccessObservability(session, 'state_capture', 'event', () =>
       this.deps.repo.recordEvent({
         sessionId: session.id,
         type: 'state_captured',
@@ -786,7 +773,7 @@ export class SessionsService {
         fullPage: body.full_page,
       }),
     );
-    await this.persistPostSuccessObservability(session, 'capture', 'event', () =>
+    this.persistPostSuccessObservability(session, 'capture', 'event', () =>
       this.deps.repo.recordEvent({
         sessionId: session.id,
         type:
@@ -1228,45 +1215,92 @@ export class SessionsService {
 
   /**
    * Once a driver call succeeds, its external browser outcome is authoritative.
-   * Event/last-state writes happen afterwards and are observability only; turning
-   * their failure into a request failure would invite callers to replay an action
-   * that already happened. Preserve the exact successful response and emit only
-   * a bounded, redacted diagnostic. Serialized destroy intentionally does not use
-   * this helper because its terminal row and event share one atomic transaction.
+   * Event/last-state/account-audit writes happen afterwards and are observability
+   * only; awaiting their rejection or non-settlement would invite callers to
+   * replay work that already happened. Start each write once, detach it from the
+   * response, and monitor it with a bounded watchdog plus one fixed diagnostic.
+   * Serialized destroy intentionally does not use this helper because its
+   * terminal row and event share one atomic transaction.
    */
-  private async persistPostSuccessObservability(
+  private persistPostSuccessObservability(
     session: SessionRecord,
     operation: string,
-    persistence: 'event' | 'status',
-    persist: () => Promise<void>,
-  ): Promise<void> {
+    persistence: 'event' | 'status' | 'account_audit',
+    persist: () => Promise<unknown>,
+  ): void {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutOutcome = new Promise<PostSuccessPersistenceOutcome>((resolve) => {
+      timer = setTimeout(
+        () => resolve({ kind: 'timed_out' }),
+        SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS,
+      );
+      timer.unref();
+    });
+    let writeOutcome: Promise<PostSuccessPersistenceOutcome>;
     try {
-      await persist();
-    } catch (err) {
-      // Persistence errors can embed SQL values or driver/customer data. This
-      // log only needs a bounded class for routing; allowlist it rather than
-      // trying to redact arbitrary free text at a truncation boundary.
-      const rawErrorName = err instanceof Error ? err.name : 'UnknownError';
-      const errorName = /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(rawErrorName)
-        ? rawErrorName
-        : 'Error';
-      try {
-        this.deps.logger?.error?.(
-          {
-            component: 'sessions-service',
-            event: 'post_success_persistence_failed',
-            account_id: session.accountId,
-            session_id: session.id,
-            operation,
-            persistence,
-            error_name: errorName,
-          },
-          'session post-success observability write failed; preserving authoritative driver success',
-        );
-      } catch {
-        // Logging is best-effort; never turn a committed browser action into an ambiguous failure.
-      }
+      // Invoke synchronously so admission is ordered before the successful API
+      // response becomes observable. Settlement remains deliberately detached.
+      writeOutcome = Promise.resolve(persist()).then(
+        () => ({ kind: 'succeeded' }),
+        (error: unknown) => ({ kind: 'failed', error }),
+      );
+    } catch (error) {
+      writeOutcome = Promise.resolve({ kind: 'failed', error });
     }
+
+    void Promise.race([writeOutcome, timeoutOutcome])
+      .then((outcome) => {
+        if (outcome.kind === 'succeeded') return;
+
+        // A timeout says only that the outcome is unknown: the database
+        // promise is not cancellable and may still commit later. Resolve both
+        // promise branches so a late rejection is consumed and cannot create
+        // a second diagnostic or an unhandled rejection.
+        let rawErrorName = 'UnknownError';
+        if (outcome.kind === 'timed_out') {
+          rawErrorName = 'PostSuccessPersistenceTimeout';
+        } else {
+          try {
+            if (outcome.error instanceof Error) {
+              const candidate = outcome.error.name as unknown;
+              if (typeof candidate === 'string') rawErrorName = candidate;
+            }
+          } catch {
+            rawErrorName = 'UnknownError';
+          }
+        }
+        const errorName = /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(rawErrorName)
+          ? rawErrorName
+          : 'Error';
+        const timedOut = outcome.kind === 'timed_out';
+        try {
+          this.deps.logger?.error?.(
+            {
+              component: 'sessions-service',
+              event: timedOut
+                ? 'post_success_persistence_timed_out'
+                : 'post_success_persistence_failed',
+              account_id: session.accountId,
+              session_id: session.id,
+              operation,
+              persistence,
+              error_name: errorName,
+            },
+            timedOut
+              ? 'session post-success observability write timed out with unknown outcome; preserving authoritative driver success'
+              : 'session post-success observability write failed; preserving authoritative driver success',
+          );
+        } catch {
+          // Logging is best-effort; never turn committed browser work into an ambiguous failure.
+        }
+      })
+      .finally(() => {
+        if (timer !== undefined) clearTimeout(timer);
+      })
+      .catch(() => {
+        // The detached monitor itself is best-effort. Hostile runtime values or
+        // instrumentation hooks must not become an unhandled rejection.
+      });
   }
 
   /**
