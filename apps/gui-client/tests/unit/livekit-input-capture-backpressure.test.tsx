@@ -12,7 +12,7 @@
 // REAL hook in jsdom with a Room stub whose `.on` captures the buffer-status handler, so
 // we can toggle congestion and assert the wheel path is shed / resumes / stays untouched.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 
 const sendInputEvent = vi.fn(() => Promise.resolve());
 // The hook reads RoomEvent.DCBufferStatusChanged; our Room stub's `.on` ignores the event
@@ -73,7 +73,7 @@ function makeRoom(): {
 
 function mount(
   room: Room,
-  onCongestionChange?: (congested: boolean) => void,
+  onCongestionChange?: (congested: boolean, room: Room) => void,
 ): { video: HTMLVideoElement; unmount: () => void } {
   const video = document.createElement('video');
   document.body.appendChild(video);
@@ -108,7 +108,8 @@ function fireMouse(el: EventTarget, type: string, x: number, y: number, ts: numb
 
 describe('useInputCapture — reliable-channel backpressure shed', () => {
   beforeEach(() => {
-    sendInputEvent.mockClear();
+    sendInputEvent.mockReset();
+    sendInputEvent.mockResolvedValue(undefined);
     document.body.innerHTML = '';
     vi.useFakeTimers(); // fakes rAF (~16ms) + setTimeout, like the real wheel cadence
   });
@@ -127,15 +128,57 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     const { room, fireDC } = makeRoom();
     const onCongestionChange = vi.fn();
     const { unmount } = mount(room, onCongestionChange);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false, room);
     fireDC(false, 0);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true, room);
     fireDC(true, 0);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false, room);
     fireDC(false, 1);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false, room);
     unmount();
-    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false, room);
+  });
+
+  it('keeps late publish failure and teardown callbacks bound to retired Room A after B mounts', async () => {
+    const { room: roomA } = makeRoom();
+    const { room: roomB } = makeRoom();
+    const video = document.createElement('video');
+    document.body.appendChild(video);
+    stubVideo(video);
+    let rejectA!: (reason: Error) => void;
+    sendInputEvent.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectA = reject;
+        }),
+    );
+    const onPublishError = vi.fn();
+    const onCongestionChange = vi.fn();
+    function Wired({ room }: { room: Room }): JSX.Element {
+      useInputCapture({
+        room,
+        videoElement: video,
+        enabled: true,
+        onPublishError,
+        onCongestionChange,
+      });
+      return <span />;
+    }
+    const mounted = render(<Wired room={roomA} />);
+    fireMouse(video, 'mousedown', 100, 100, 0);
+    fireMouse(window, 'mouseup', 100, 100, 10);
+    expect(sendInputEvent).toHaveBeenCalled();
+
+    mounted.rerender(<Wired room={roomB} />);
+    expect(onCongestionChange.mock.calls).toContainEqual([false, roomA]);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false, roomB);
+    await act(async () => {
+      rejectA(new Error('old room reply lost'));
+      await Promise.resolve();
+    });
+    expect(onPublishError).toHaveBeenCalledTimes(1);
+    expect(onPublishError).toHaveBeenCalledWith(roomA);
+    expect(onPublishError).not.toHaveBeenCalledWith(roomB);
   });
 
   it('baseline: with the channel healthy (no congestion event), a scroll emits touch events', () => {
@@ -175,10 +218,10 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     const onCongestionChange = vi.fn();
     const { video } = mount(room, onCongestionChange);
     fireDC(false, 0);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true, room);
 
     fireReconnected();
-    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false, room);
     scroll(video);
     expect(emitted().map((e) => e.type)).toContain('touchStart');
   });
@@ -201,10 +244,13 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     }
     const mounted = render(<Wired width={402} />);
     fireDC(false, 0);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true, room);
 
+    const callsBeforeReattach = onCongestionChange.mock.calls.length;
     mounted.rerender(<Wired width={390} />);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true, room);
+    const reattachCalls = onCongestionChange.mock.calls.slice(callsBeforeReattach);
+    expect(reattachCalls).not.toContainEqual([false, room]);
     scroll(video);
     expect(emitted()).toHaveLength(0);
   });
@@ -221,10 +267,10 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     }
     const mounted = render(<Wired enabled />);
     fireDC(false, 0);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(true);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(true, room);
 
     mounted.rerender(<Wired enabled={false} />);
-    expect(onCongestionChange).toHaveBeenLastCalledWith(false);
+    expect(onCongestionChange).toHaveBeenLastCalledWith(false, room);
     mounted.rerender(<Wired enabled />);
     scroll(video);
     expect(emitted().map((e) => e.type)).toContain('touchStart');

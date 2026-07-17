@@ -41,15 +41,15 @@ const fakeRoom = {
 let panelRenderCount = 0;
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
-    onRoom?: (room: unknown) => void;
-    onStateChange?: (s: { kind: string }) => void;
-    onPublisher?: (p: string) => void;
+    onRoom?: (room: unknown, ownerRoom: unknown) => void;
+    onStateChange?: (s: { kind: string }, room: unknown) => void;
+    onPublisher?: (p: string, room: unknown) => void;
   }) => {
     panelRenderCount += 1;
     useEffect(() => {
-      props.onRoom?.(fakeRoom);
-      props.onStateChange?.({ kind: 'connected' });
-      props.onPublisher?.('publishing');
+      props.onRoom?.(fakeRoom, fakeRoom);
+      props.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      props.onPublisher?.('publishing', fakeRoom);
     }, [props]);
     return <div data-component="agent-session-panel-mock" />;
   },

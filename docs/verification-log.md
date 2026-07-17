@@ -29074,3 +29074,63 @@ customer rows, rewrite existing R2 objects, run a shared build, or deploy. Exist
 hot rows, archives and backups require the separately guarded aggregate-only
 inventory plus manifest/checksum remediation and an explicit PITR-expiry residual;
 V-696 does not claim that historical-data operation complete.
+
+---
+
+## V-697 — Tab activation and streaming callbacks retain exact Room ownership
+
+**Date:** 2026-07-17
+
+The standalone Simulator previously treated each `activateTab` retry as an
+independent outcome. An older retry error could cancel the whole switch even while a
+newer sibling was live, and a background target renderer's terminal page-state could
+drop the cover before the foreground activation was acknowledged. Tab controls also
+mutated optimistically while no exact connected, publishing Room could carry the
+operation. During an in-place reconnect or session replacement, untagged panel and
+input-capture callbacks could apply a retired Room's state to its successor.
+
+One logical activation owner now contains every distinct wire request id in a retry
+sequence. A failure is provisional while another sibling remains live; any correlated
+success wins once and makes later results inert. Target page-state may update that
+tab's stored URL/title but cannot prove foreground ownership. A warm acknowledgement
+reveals immediately; a cold acknowledgement waits for the target's terminal frame,
+including a frame that arrived before the acknowledgement. Retry and six-second
+cover timers are identity-owned and cancelled, so an old same-tab A→B→A deadline
+cannot clear a successor cover. A loopback-fast acknowledgement cannot resurrect a
+retired retry owner. The visual “Show current page” escape dismisses only its exact
+cover while correlated ownership continues to a bounded terminal outcome. A
+same-Room readiness dip converts a fired retry into one explicitly Room-bound
+deferred record, resumes only after connected+publishing authority returns, retains
+terminal-frame evidence, and never recreates a cover the operator dismissed. A
+final rejection chooses only a still-present tab when the previous tab closed.
+
+Rendered tab controls and their forced handler paths now require the invocation-time
+identity of the current session's exact connected Room and publishing video owner.
+Room attach/detach updates those refs synchronously, closing the render-commit gap in
+which an old handler could otherwise mutate locally or publish to the replaced Room.
+`AgentSessionPanel` carries its effect-owned Room through connection, publisher,
+teardown, publish-error and congestion callbacks. `useInputCapture` retains callback
+identity decoupling but supplies the Room captured by the listener/send effect, so a
+late rejection or cleanup from same-session Room A is rejected after Room B binds.
+Data and input-receipt listeners apply the same exact session-plus-Room comparison.
+The origin argument is mandatory with no legacy fallback. Retired Room callbacks
+cannot clear the replacement publication/stats handles or complete a delayed
+resubscribe, and a same-Room input-capture re-key never emits a synthetic false
+congestion drain while the Room-owned latch remains set.
+
+Deterministic proof covers absent/connecting/waiting/publishing controls, forced DOM
+handlers during synchronous detach/replacement, error-first/success-late and
+success-first/error-late retry orderings, target-loaded-before-ack, fast publish
+settlement, title-only non-terminal frames, same-tab timer ABA, visual escape plus
+later same-tab ownership, retry/deferred readiness recovery, terminal frames during
+deferral, closed-previous rejection, in-place session replacement, hostile missing-
+origin callbacks, and same-session Room A→B state/publisher/error/congestion/detach
+tails. The direct five-file matrix passes 124/124 tests; the expanded Simulator,
+panel, input-capture and live-view union passes 29 files and 447/447 tests. Strict GUI
+TypeScript, targeted ESLint, Prettier and
+diff/whitespace checks are green.
+
+This is a GUI ownership and continuity correction. Retries intentionally retain
+distinct wire request ids; it does not claim harness-side retry idempotency. No
+harness, native build/sign/install/relaunch, shared workspace build, deployment,
+Fleet, Family-B, customer-session, environment or foreign pnpm action was performed.

@@ -34,13 +34,13 @@ const fakeRoom = {
 let fakeVideoWidth = 402;
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
-    onRoom?: (room: unknown) => void;
-    onPublisher?: (p: string) => void;
+    onRoom?: (room: unknown, ownerRoom: unknown) => void;
+    onPublisher?: (p: string, room: unknown) => void;
     onVideoEl?: (el: HTMLVideoElement | null) => void;
   }) => {
     useEffect(() => {
-      props.onRoom?.(fakeRoom);
-      props.onPublisher?.('publishing');
+      props.onRoom?.(fakeRoom, fakeRoom);
+      props.onPublisher?.('publishing', fakeRoom);
       const el = document.createElement('video');
       Object.defineProperty(el, 'videoWidth', { get: () => fakeVideoWidth, configurable: true });
       Object.defineProperty(el, 'videoHeight', { value: 874, configurable: true });

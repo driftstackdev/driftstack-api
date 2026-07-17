@@ -67,6 +67,283 @@ describe('friendlyConnectError — raw LiveKit errors → customer copy', () => 
 });
 
 describe('AgentSessionPanel overlay UX', () => {
+  it('tags connection, publisher and teardown callbacks with the exact effect-owned Room', () => {
+    connectMock.mockReset();
+    connectMock.mockImplementation(() => new Promise(() => {}));
+    createRoomMock.mockClear();
+    const handlersA: Record<string, (...args: unknown[]) => void> = {};
+    const handlersB: Record<string, (...args: unknown[]) => void> = {};
+    const roomA = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        handlersA[event] = handler;
+      }),
+      off: vi.fn(),
+      disconnect: vi.fn(),
+    };
+    const roomB = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        handlersB[event] = handler;
+      }),
+      off: vi.fn(),
+      disconnect: vi.fn(),
+    };
+    createRoomMock.mockReturnValueOnce(roomA).mockReturnValueOnce(roomB);
+    const onRoom = vi.fn();
+    const onStateChange = vi.fn();
+    const onPublisher = vi.fn();
+    const { rerender } = render(
+      <AgentSessionPanel
+        info={INFO}
+        onRoom={onRoom}
+        onStateChange={onStateChange}
+        onPublisher={onPublisher}
+      />,
+    );
+    expect(onRoom).toHaveBeenCalledWith(roomA, roomA);
+    expect(onStateChange).toHaveBeenCalledWith({ kind: 'connecting' }, roomA);
+    expect(onPublisher).toHaveBeenCalledWith('waiting', roomA);
+
+    rerender(
+      <AgentSessionPanel
+        info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+        onRoom={onRoom}
+        onStateChange={onStateChange}
+        onPublisher={onPublisher}
+      />,
+    );
+    expect(onRoom).toHaveBeenCalledWith(null, roomA);
+    expect(onRoom).toHaveBeenCalledWith(roomB, roomB);
+    expect(onStateChange).toHaveBeenCalledWith({ kind: 'connecting' }, roomB);
+    expect(onPublisher).toHaveBeenCalledWith('waiting', roomB);
+
+    const stateCalls = onStateChange.mock.calls.length;
+    const publisherCalls = onPublisher.mock.calls.length;
+    act(() => {
+      handlersA.reconnected?.();
+      handlersA.trackSubscribed?.({ kind: 'video', attach: vi.fn() }, {});
+    });
+    expect(onStateChange).toHaveBeenCalledTimes(stateCalls);
+    expect(onPublisher).toHaveBeenCalledTimes(publisherCalls);
+
+    act(() => {
+      handlersB.reconnected?.();
+      handlersB.trackSubscribed?.({ kind: 'video', attach: vi.fn() }, {});
+    });
+    expect(onStateChange).toHaveBeenLastCalledWith({ kind: 'connected' }, roomB);
+    expect(onPublisher).toHaveBeenLastCalledWith('publishing', roomB);
+  });
+
+  it('keeps replacement Room B publication authority when a late Room A unsubscribe arrives', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      connectMock.mockResolvedValue(undefined);
+      createRoomMock.mockClear();
+      const handlersA: Record<string, (...args: unknown[]) => void> = {};
+      const handlersB: Record<string, (...args: unknown[]) => void> = {};
+      const roomA = {
+        on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+          handlersA[event] = handler;
+        }),
+        off: vi.fn(),
+        disconnect: vi.fn(),
+      };
+      const roomB = {
+        on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+          handlersB[event] = handler;
+        }),
+        off: vi.fn(),
+        disconnect: vi.fn(),
+      };
+      createRoomMock.mockReturnValueOnce(roomA).mockReturnValueOnce(roomB);
+      const onPublisher = vi.fn();
+      const { rerender } = render(<AgentSessionPanel info={INFO} onPublisher={onPublisher} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      act(() => {
+        handlersA.trackSubscribed?.({ kind: 'video', attach: vi.fn() }, { setSubscribed: vi.fn() });
+      });
+      await act(async () => {
+        rerender(
+          <AgentSessionPanel
+            info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+            onPublisher={onPublisher}
+          />,
+        );
+        await Promise.resolve();
+      });
+
+      const setSubscribedB = vi.fn();
+      act(() => {
+        handlersB.trackSubscribed?.(
+          { kind: 'video', attach: vi.fn() },
+          { setSubscribed: setSubscribedB },
+        );
+      });
+      expect(onPublisher).toHaveBeenLastCalledWith('publishing', roomB);
+
+      // A callback already queued by LiveKit can arrive after the effect cleanup.
+      // It must not null the component-wide publication ref now owned by Room B.
+      act(() => {
+        handlersA.trackUnsubscribed?.({ kind: 'video' });
+        rerender(
+          <AgentSessionPanel
+            info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+            onPublisher={onPublisher}
+            recoverAction={{ nonce: 1, mode: 'resubscribe' }}
+          />,
+        );
+      });
+      expect(setSubscribedB).toHaveBeenCalledWith(false);
+      expect(setSubscribedB).not.toHaveBeenCalledWith(true);
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(setSubscribedB.mock.calls).toEqual([[false], [true]]);
+      expect(onPublisher).toHaveBeenLastCalledWith('publishing', roomB);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels Room A pending resubscribe before replacement Room B takes ownership', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      connectMock.mockResolvedValue(undefined);
+      createRoomMock.mockClear();
+      const handlersA: Record<string, (...args: unknown[]) => void> = {};
+      const handlersB: Record<string, (...args: unknown[]) => void> = {};
+      const roomA = {
+        on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+          handlersA[event] = handler;
+        }),
+        off: vi.fn(),
+        disconnect: vi.fn(),
+      };
+      const roomB = {
+        on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+          handlersB[event] = handler;
+        }),
+        off: vi.fn(),
+        disconnect: vi.fn(),
+      };
+      createRoomMock.mockReturnValueOnce(roomA).mockReturnValueOnce(roomB);
+      const { rerender } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const setSubscribedA = vi.fn();
+      act(() => {
+        handlersA.trackSubscribed?.(
+          { kind: 'video', attach: vi.fn() },
+          { setSubscribed: setSubscribedA },
+        );
+        rerender(
+          <AgentSessionPanel info={INFO} recoverAction={{ nonce: 1, mode: 'resubscribe' }} />,
+        );
+      });
+      expect(setSubscribedA.mock.calls).toEqual([[false]]);
+
+      await act(async () => {
+        rerender(
+          <AgentSessionPanel
+            info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+            recoverAction={{ nonce: 1, mode: 'resubscribe' }}
+          />,
+        );
+        await Promise.resolve();
+      });
+      expect(handlersB.trackSubscribed).toBeDefined();
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      // The delayed `true` belongs to A's publication and must never cross the
+      // connection replacement boundary, even though its nonce remains rendered.
+      expect(setSubscribedA.mock.calls).toEqual([[false]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores a stale Room A congestion drain while Room B remains congested', async () => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockClear();
+    const handlersA: Record<string, (...args: unknown[]) => void> = {};
+    const handlersB: Record<string, (...args: unknown[]) => void> = {};
+    const roomA = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        handlersA[event] = handler;
+      }),
+      off: vi.fn(),
+      disconnect: vi.fn(),
+    };
+    const roomB = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        handlersB[event] = handler;
+      }),
+      off: vi.fn(),
+      disconnect: vi.fn(),
+    };
+    createRoomMock.mockReturnValueOnce(roomA).mockReturnValueOnce(roomB);
+    const onInputCongestionChange = vi.fn();
+    const { container, rerender } = render(
+      <AgentSessionPanel
+        info={INFO}
+        interactive
+        onInputCongestionChange={onInputCongestionChange}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const staleRoomADrain = handlersA.dcBufferStatusChanged;
+
+    await act(async () => {
+      rerender(
+        <AgentSessionPanel
+          info={{ ws_url: 'wss://lk-b', token: 'tok-b' }}
+          interactive
+          onInputCongestionChange={onInputCongestionChange}
+        />,
+      );
+      await Promise.resolve();
+    });
+    act(() => {
+      handlersB.dcBufferStatusChanged?.(false, 0);
+    });
+    expect(onInputCongestionChange).toHaveBeenLastCalledWith(true, roomB);
+
+    const video = container.querySelector('video') as HTMLVideoElement;
+    act(() => {
+      fireEvent(video, new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }));
+    });
+    expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(0);
+
+    onInputCongestionChange.mockClear();
+    act(() => {
+      // This is the old listener's late "buffer low" callback. It may update A's
+      // Room-owned latch, but must not clear B's panel-local eligibility gate.
+      staleRoomADrain?.(true, 0);
+    });
+    expect(onInputCongestionChange).not.toHaveBeenCalled();
+    act(() => {
+      fireEvent(video, new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }));
+    });
+    expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(0);
+
+    act(() => {
+      handlersB.dcBufferStatusChanged?.(true, 0);
+      fireEvent(video, new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 60 }));
+    });
+    expect(onInputCongestionChange).toHaveBeenLastCalledWith(false, roomB);
+    expect(container.querySelectorAll('[data-tap-ripple]')).toHaveLength(1);
+  });
+
   it('shows a connecting spinner (no Reconnect button) before connect resolves', () => {
     connectMock.mockReset();
     connectMock.mockReturnValueOnce(new Promise(() => {})); // never resolves → stays connecting
@@ -807,13 +1084,14 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
     connectMock.mockReset();
     connectMock.mockReturnValueOnce(new Promise(() => {}));
     const handlers: Record<string, (...args: unknown[]) => void> = {};
-    createRoomMock.mockReturnValueOnce({
+    const room = {
       on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
         handlers[event] = handler;
       }),
       off: vi.fn(),
       disconnect: vi.fn(),
-    });
+    };
+    createRoomMock.mockReturnValueOnce(room);
     const onInputCongestionChange = vi.fn();
     const { container } = render(
       <AgentSessionPanel
@@ -826,7 +1104,7 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
       await Promise.resolve();
     });
     act(() => handlers.dcBufferStatusChanged?.(false, 0));
-    expect(onInputCongestionChange).toHaveBeenLastCalledWith(true);
+    expect(onInputCongestionChange).toHaveBeenLastCalledWith(true, room);
 
     const video = container.querySelector('video') as HTMLVideoElement;
     act(() => {

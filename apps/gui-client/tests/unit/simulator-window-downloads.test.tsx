@@ -37,9 +37,9 @@ const fakeRoom = {
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
-  AgentSessionPanel: (props: { onRoom?: (room: unknown) => void }) => {
+  AgentSessionPanel: (props: { onRoom?: (room: unknown, ownerRoom: unknown) => void }) => {
     useEffect(() => {
-      props.onRoom?.(fakeRoom);
+      props.onRoom?.(fakeRoom, fakeRoom);
     }, [props]);
     return <div data-component="agent-session-panel-mock" />;
   },
@@ -104,8 +104,7 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
 
   it('labels a long poll as refreshing while retaining the last good download list', async () => {
     let resolveRefresh:
-      | ((value: { status: 'ok'; files: Array<Record<string, unknown>> }) => void)
-      | undefined;
+      ((value: { status: 'ok'; files: Array<Record<string, unknown>> }) => void) | undefined;
     listMock
       .mockResolvedValueOnce({
         status: 'ok',

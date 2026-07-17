@@ -51,16 +51,16 @@ const fakeRoom = {
 };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
-    onRoom?: (room: unknown) => void;
-    onStateChange?: (s: { kind: string }) => void;
-    onPublisher?: (p: string) => void;
+    onRoom?: (room: unknown, ownerRoom: unknown) => void;
+    onStateChange?: (s: { kind: string }, room: unknown) => void;
+    onPublisher?: (p: string, room: unknown) => void;
   }) => {
     useEffect(() => {
-      props.onRoom?.(fakeRoom);
+      props.onRoom?.(fakeRoom, fakeRoom);
       // A fully-live session (connected + a publishing video track) so the tab-bar
       // navigation chrome is enabled (canNavigate gates on connected+publishing).
-      props.onStateChange?.({ kind: 'connected' });
-      props.onPublisher?.('publishing');
+      props.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      props.onPublisher?.('publishing', fakeRoom);
     }, [props]);
     return <div data-component="agent-session-panel-mock" />;
   },
@@ -210,8 +210,9 @@ describe('SimulatorWindow — page tab strip', () => {
   // carrying the TARGET url at nav-START; resolving the switch on that frame dropped the
   // blank while the box was still re-navigating → the OLD/loading page flashed through (the
   // founder's persistent "keeps other tab's content open + not smooth" on switch). A loading
-  // frame must NOT resolve the switch; only a TERMINAL (loaded/errored/stalled) one does.
-  it('holds the "switching…" affordance on a page_state{loading} frame and clears it only on {loaded}', () => {
+  // frame must NOT resolve the switch. A terminal frame may update the target's stored
+  // page, but only the correlated activation success proves it is now foreground.
+  it('holds the "switching…" affordance through loading/loaded until correlated success', async () => {
     const { container } = renderSim();
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // 2 tabs, tab2 active
     // Switch back to tab1 → the "switching…" affordance shows on it immediately.
@@ -221,8 +222,15 @@ describe('SimulatorWindow — page tab strip', () => {
     // NOT drop the blank (else the old page is exposed mid-navigation).
     pushPageState({ state: 'loading', url: 'https://example.test/target' });
     expect(container.querySelector('[data-component="simulator-tab-switching"]')).not.toBeNull();
-    // The terminal loaded frame (page painted) resolves the switch → the blank clears.
+    // A terminal target frame can come from a warm background renderer before the
+    // foreground switch commits. It updates page state but must NOT clear the blank.
     pushPageState({ state: 'loaded', url: 'https://example.test/target', title: 'Target' });
+    expect(container.querySelector('[data-component="simulator-tab-switching"]')).not.toBeNull();
+    await Promise.resolve();
+    await Promise.resolve();
+    // Once the exact request is acknowledged, the already-seen terminal target frame
+    // lets the cover clear without waiting for a duplicate page_state delivery.
+    pushPageState({ type: 'activateTabResult', requestId: 'req_1', ok: true });
     expect(container.querySelector('[data-component="simulator-tab-switching"]')).toBeNull();
   });
 
@@ -1091,12 +1099,13 @@ describe('SimulatorWindow — page tab strip', () => {
 
   // ── Tab-switch UX round 2 (founder 2026-06-25) ────────────────────────────────
 
-  it('shows a "switching…" affordance on the target tab, then CLEARS it when the box reports the tab page', async () => {
+  it('stores a target page before ack but clears the switch only after correlated success', async () => {
     const { container } = renderSim();
     expect(dataHandler).not.toBeNull();
     // Two tabs, each with its own loaded page.
     pushPageState({ state: 'loaded', url: 'https://alpha.example/', title: 'Alpha' });
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // tab2 active
+    const tab1Id = (lastTabListCall().tabs[0] as { id: string }).id;
     pushPageState({ state: 'loaded', url: 'https://bravo.example/', title: 'Bravo' });
     // Switch back to tab 1 — the affordance appears on tab 1 immediately (instant feedback).
     fireEvent.click(tabEls(container)[0]);
@@ -1104,9 +1113,20 @@ describe('SimulatorWindow — page tab strip', () => {
     const tab1 = tabEls(container)[0];
     expect(tab1.getAttribute('data-switching')).toBe('true');
     expect(tab1.querySelector('[data-component="simulator-tab-switching"]')).not.toBeNull();
-    // The box reports tab 1's page (the one-shot reconcile / data-channel frame) → the
-    // affordance clears (no spinner hung on the tab).
-    pushPageState({ state: 'loaded', url: 'https://alpha.example/', title: 'Alpha' });
+    // A title-only update is useful tab metadata, but it is not a terminal
+    // navigation state. Missing `state` must not be mistaken for foreground proof.
+    pushPageState({ type: 'page_state', tabId: tab1Id, title: 'Alpha — updated' });
+    expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+    // A target-tagged loaded frame may be emitted by its background renderer. Store it,
+    // but keep the foreground cover/retry owner until the exact activation succeeds.
+    pushPageState({
+      state: 'loaded',
+      tabId: tab1Id,
+      url: 'https://alpha.example/',
+      title: 'Alpha',
+    });
+    expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+    pushPageState({ type: 'activateTabResult', requestId: 'req_1', ok: true });
     expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
     expect(
       tabEls(container)[0].querySelector('[data-component="simulator-tab-switching"]'),
@@ -1175,6 +1195,119 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
   });
 
+  it('an old same-tab cover timeout cannot clear a later A→B→A switch owner', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // B active
+
+      // First B→A switch at t=0. A warm ack clears its visible cover, but the old
+      // implementation left the anonymous six-second timeout alive.
+      fireEvent.click(tabEls(container)[0]);
+      pushPageState({
+        type: 'activateTabResult',
+        requestId: 'req_1',
+        ok: true,
+        wasWarm: true,
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+
+      // A→B, then B→A again at t=2s. Leave the successor as a cold acknowledged
+      // switch: its cover must remain until its own terminal frame or its own t=8s net.
+      fireEvent.click(tabEls(container)[1]);
+      pushPageState({
+        type: 'activateTabResult',
+        requestId: 'req_1',
+        ok: true,
+        wasWarm: true,
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      fireEvent.click(tabEls(container)[0]);
+      pushPageState({ type: 'activateTabResult', requestId: 'req_1', ok: true });
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+
+      // The first A owner's former deadline lands at t=6s. It has no authority over
+      // the distinct successor owner for the same tab id.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+      expect(container.querySelector('[data-component="simulator-switch-blank"]')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the visual escape keeps correlated ownership bounded; a stale old ack cannot settle a later same-tab switch', async () => {
+    vi.useFakeTimers();
+    try {
+      let n = 0;
+      sendActivateTab.mockImplementation((_room, _payload, onRequestId) => {
+        const requestId = `req_escape_${++n}`;
+        onRequestId?.(requestId);
+        return Promise.resolve(requestId);
+      });
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element); // B active
+      pushPageState({
+        type: 'activateTabResult',
+        requestId: 'req_escape_1',
+        ok: true,
+        wasWarm: true,
+      });
+
+      fireEvent.click(tabEls(container)[0]); // B→A, req2
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      const escape = container.querySelector(
+        '[data-component="switch-blank-escape"]',
+      ) as HTMLButtonElement;
+      expect(escape).not.toBeNull();
+      fireEvent.click(escape);
+      expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
+
+      // Visual dismissal must not orphan req2/req3/req4. Its final bounded retry
+      // deadline still retires the logical owner and surfaces the soft outcome.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(700);
+      });
+      expect(container.querySelector('[role="status"]')?.textContent).toContain('switching');
+
+      fireEvent.click(tabEls(container)[1]); // A→B, req5
+      pushPageState({
+        type: 'activateTabResult',
+        requestId: 'req_escape_5',
+        ok: true,
+        wasWarm: true,
+      });
+      fireEvent.click(tabEls(container)[0]); // B→A successor, req6
+      expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
+
+      // The retired first A owner's late reject is inert against the same-tab successor.
+      pushPageState({ type: 'activateTabResult', requestId: 'req_escape_2', ok: false });
+      expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
+      pushPageState({
+        type: 'activateTabResult',
+        requestId: 'req_escape_6',
+        ok: true,
+        wasWarm: true,
+      });
+      const sendsAfterSuccess = sendActivateTab.mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(sendsAfterSuccess);
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('RE-SENDS activateTab on a missed ack (retry), then SOFT-fails without an alert', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
     vi.useFakeTimers();
@@ -1240,6 +1373,57 @@ describe('SimulatorWindow — page tab strip', () => {
         await vi.advanceTimersByTimeAsync(5000);
       });
       expect(sendActivateTab).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps one logical switch when an older retry errors before a newer sibling succeeds', async () => {
+    vi.useFakeTimers();
+    try {
+      let n = 0;
+      sendActivateTab.mockImplementation((_room, _payload, onRequestId) => {
+        const requestId = `req_${++n}`;
+        onRequestId?.(requestId);
+        return Promise.resolve(requestId);
+      });
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+      sendActivateTab.mockClear();
+      n = 0;
+
+      fireEvent.click(tabEls(container)[0]);
+      await act(async () => {
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+
+      // R1 fails after R2 is already live. It cannot revert, clear the cover, show a
+      // failure notice or issue a reject-driven activation of the previous tab.
+      pushPageState({ type: 'activateTabResult', requestId: 'req_1', ok: false });
+      expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('true');
+      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+      expect(container.querySelector('[role="status"]')?.textContent ?? '').not.toContain(
+        'Could not switch tab',
+      );
+
+      // Any sibling success wins exactly once. The older error is now permanently inert.
+      pushPageState({
+        type: 'activateTabResult',
+        requestId: 'req_2',
+        ok: true,
+        wasWarm: true,
+      });
+      expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
+      expect(tabEls(container)[0].getAttribute('data-switching')).toBe('false');
+      pushPageState({ type: 'activateTabResult', requestId: 'req_1', ok: false });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
+      expect(sendActivateTab).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
@@ -1333,5 +1517,22 @@ describe('SimulatorWindow — page tab strip', () => {
     } finally {
       alertSpy.mockRestore();
     }
+  });
+
+  it('a final reject never selects a previous tab that closed while the switch was pending', () => {
+    const { container } = renderSim();
+    // The + activation owns B with previous=A. Close inactive A before B's result.
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    const tabs = tabEls(container);
+    const survivingId = lastTabListCall().activeTabId;
+    fireEvent.click(within(tabs[0]).getByLabelText('Close tab'));
+    expect(tabEls(container)).toHaveLength(1);
+
+    // Deliver synchronously after close — before a passive tabsRef mirror could
+    // rescue a stale implementation. Active ownership must stay on surviving B.
+    pushPageState({ type: 'activateTabResult', requestId: 'req_1', ok: false });
+    expect(tabEls(container)).toHaveLength(1);
+    expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
+    expect(lastTabListCall().activeTabId).toBe(survivingId);
   });
 });

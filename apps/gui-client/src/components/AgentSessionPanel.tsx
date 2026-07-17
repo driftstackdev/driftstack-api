@@ -39,13 +39,14 @@ export interface AgentSessionPanelProps {
    *  (iphone17_ios18_7_safari26_4) for v1.0 per the orchestrator brief. */
   aspectRatio?: number;
   /** Callback fired on every connection-state transition. LK.6.c
-   *  wires the chrome badge to this. */
-  onStateChange?: (state: LivekitConnectionState) => void;
+   *  wires the chrome badge to this. The originating Room is mandatory so an
+   *  old same-session connection cannot mutate its replacement. */
+  onStateChange?: (state: LivekitConnectionState, room: Room) => void;
   /** Fired on every publisher-state transition (waiting → publishing → none).
    *  The simulator gates the address bar / back-forward / reload on a video
    *  track actually arriving ('publishing'), so a URL typed while the box
    *  renderer isn't up yet can't silently no-op. */
-  onPublisher?: (publisher: 'waiting' | 'publishing' | 'none') => void;
+  onPublisher?: (publisher: 'waiting' | 'publishing' | 'none', room: Room) => void;
   /** W617 — offered when the room connects but NO video track arrives
    *  within NO_PUBLISHER_TIMEOUT_MS (founder-hit: empty LiveKit room on a
    *  deployment with no browser worker → black screen). The parent wires
@@ -67,15 +68,16 @@ export interface AgentSessionPanelProps {
    *  toolbar can grab snapshot frames. Called once the element mounts. */
   onVideoEl?: (el: HTMLVideoElement | null) => void;
   /** Night-arc C: surfaces the connected Room upward so the simulator
-   *  cockpit can run the (previously dormant) latency ping. Called with
-   *  the room once connected and with null on teardown. */
-  onRoom?: (room: Room | null) => void;
+   *  cockpit can run the (previously dormant) latency ping. `ownerRoom` is the
+   *  exact effect-owned Room for both attach and teardown, so a stale cleanup
+   *  cannot clear a newer same-session binding. */
+  onRoom?: (room: Room | null, ownerRoom: Room) => void;
   /** Fired (at most once per connection) when an input publish fails — the
    *  control data channel is effectively dead, so taps/keys aren't reaching the
    *  device. The simulator surfaces this as a small non-fatal badge. */
-  onPublishError?: () => void;
+  onPublishError?: (room: Room) => void;
   /** Fired when reliable input temporarily enters/leaves backpressure. */
-  onInputCongestionChange?: (congested: boolean) => void;
+  onInputCongestionChange?: (congested: boolean, room: Room) => void;
   /** Legacy no-op (kept for prop-plumbing compatibility). It USED to mask the freed
    *  iOS-Safari chrome bands (a ~110px bottom + ~50px top band the old fork baked
    *  into the capture when it hid the URL bar but kept the 714px web-view inside an
@@ -398,6 +400,10 @@ export function AgentSessionPanel({
   // device, so window-focus naturally scopes the keyboard and there's no other
   // UI to hijack. Non-interactive embeds stay subscriber-only.
   const [room, setRoom] = useState<Room | null>(null);
+  // Updated during render so an old input-capture effect's cleanup/rejection can
+  // prove whether its Room still owns panel-local state before touching shared refs.
+  const inputCaptureRoomRef = useRef<Room | null>(room);
+  inputCaptureRoomRef.current = room;
   // Optimistic tap feedback must reflect whether input is actually eligible for
   // publish. Keep the transient congestion bit in a ref so it can gate pointerdown
   // immediately without adding another panel render on every buffer transition.
@@ -407,9 +413,10 @@ export function AgentSessionPanel({
     videoElement: videoEl,
     enabled: interactive,
     onPublishError,
-    onCongestionChange: (congested) => {
+    onCongestionChange: (congested, ownerRoom) => {
+      if (inputCaptureRoomRef.current !== ownerRoom) return;
       inputCongestedRef.current = congested;
-      onInputCongestionChange?.(congested);
+      onInputCongestionChange?.(congested, ownerRoom);
     },
     // Per-archetype captured-frame logical dims so the tap/scroll mapping matches the
     // dispatched device's content-only frame (A3 84de32ad4d); undefined → 402×874.
@@ -419,6 +426,8 @@ export function AgentSessionPanel({
   // 'publishing' on TrackSubscribed, 'waiting' → 'none' on timeout after
   // connect. 'none' renders the honest no-worker overlay.
   const [publisher, setPublisher] = useState<'waiting' | 'publishing' | 'none'>('waiting');
+  const publisherRef = useRef(publisher);
+  publisherRef.current = publisher;
   // A3 UX audit ww5k0xkmx (cold-start blank pane) — 'publishing' flips on
   // TrackSubscribed, but on a cold start the first DECODED frame can lag the
   // subscription by seconds (box encoder ramping to the first keyframe). If the
@@ -479,16 +488,13 @@ export function AgentSessionPanel({
   useEffect(() => {
     onStateChangeRef.current = onStateChange;
   }, [onStateChange]);
-  // Surface publisher transitions upward (same ref-decoupling rationale as
-  // onStateChange) so the simulator can gate navigation on a video track actually
-  // arriving. Keyed on the publisher VALUE so it fires on every real change.
+  // Surface publisher transitions upward without making the connection effect depend
+  // on callback identity. The effect-local publisher writer below supplies its exact
+  // originating Room; a scalar state-effect callback would erase that authority.
   const onPublisherRef = useRef(onPublisher);
   useEffect(() => {
     onPublisherRef.current = onPublisher;
   }, [onPublisher]);
-  useEffect(() => {
-    onPublisherRef.current?.(publisher);
-  }, [publisher]);
   // Aspect-track — onVideoDimensions in a ref (same identity-decoupling rationale) so the
   // resize-listener effect below depends ONLY on the video element, not the callback's
   // identity (re-attaching the listener every render would be churn).
@@ -581,10 +587,17 @@ export function AgentSessionPanel({
     // Expose the room to the input-capture hook (simulator control). Cleared
     // in cleanup so a stale room can't receive input after disconnect.
     setRoom(room);
-    onRoom?.(room);
+    onRoom?.(room, room);
     const setS = (next: LivekitConnectionState): void => {
+      if (cancelled) return;
       setState(next);
-      onStateChangeRef.current?.(next);
+      onStateChangeRef.current?.(next, room);
+    };
+    const setP = (next: 'waiting' | 'publishing' | 'none'): void => {
+      if (cancelled) return;
+      publisherRef.current = next;
+      setPublisher(next);
+      onPublisherRef.current?.(next, room);
     };
     // #1 — pending grace timer after a track drop. Held in the effect closure
     // (not a render ref) so it's naturally cleared when the effect re-runs/tears
@@ -633,7 +646,7 @@ export function AgentSessionPanel({
       // the launch-failed overlay now.
       clearPublisherLostTimer();
       setPublisherReconnecting(false);
-      setPublisher('publishing');
+      setP('publishing');
       // #8 — a real video frame arrived → the session is GENUINELY healthy, so
       // reset the auto-reconnect attempt counter. A later unrelated drop then
       // starts a fresh 1s→3s→9s backoff sequence. A link that only flaps and
@@ -659,24 +672,22 @@ export function AgentSessionPanel({
       // harmless — the terminal overlay renders on top regardless — but skipping the
       // calm-pill path avoids a misleading "reconnecting…" flash.)
       if (sessionEndedRef.current !== null) return;
-      setPublisher((p) => {
-        if (p !== 'publishing') return p;
-        setPublisherReconnecting(true);
-        clearPublisherLostTimer();
-        publisherLostTimer = setTimeout(() => {
-          if (cancelled) return;
-          publisherLostTimer = null;
-          setPublisherReconnecting(false);
-          // The grace expired with no TrackSubscribed (which would have CLEARED this
-          // timer on re-arrival) → the publisher really is gone. Surface the honest
-          // launch-failed overlay.
-          setPublisher('none');
-        }, PUBLISHER_LOST_GRACE_MS);
-        // Stay 'publishing' (keep the last frame + the calm pill) for now.
-        return p;
-      });
+      if (publisherRef.current !== 'publishing') return;
+      setPublisherReconnecting(true);
+      clearPublisherLostTimer();
+      publisherLostTimer = setTimeout(() => {
+        if (cancelled) return;
+        publisherLostTimer = null;
+        setPublisherReconnecting(false);
+        // The grace expired with no TrackSubscribed (which would have CLEARED this
+        // timer on re-arrival) → the publisher really is gone. Surface the honest
+        // launch-failed overlay.
+        setP('none');
+      }, PUBLISHER_LOST_GRACE_MS);
+      // Stay 'publishing' (keep the last frame + the calm pill) for now.
     };
     (room as any).on(RoomEvent.TrackUnsubscribed, (track: any) => {
+      if (cancelled) return;
       if (track?.kind === 'video') {
         // #5/#9 — the publication's track is gone; drop the stale handle so a
         // recovery toggle can't act on a detached track. A re-subscribe re-stashes it.
@@ -725,7 +736,7 @@ export function AgentSessionPanel({
     });
 
     setS({ kind: 'connecting' });
-    setPublisher('waiting');
+    setP('waiting');
     setFirstFramePainted(false);
     setPublisherReconnecting(false);
     // W617 / #59 — empty-room detector: connected but no video track within the
@@ -739,7 +750,7 @@ export function AgentSessionPanel({
         setS({ kind: 'connected' });
         noPublisherTimer = setTimeout(() => {
           if (cancelled) return;
-          setPublisher((p) => (p === 'waiting' ? 'none' : p));
+          if (publisherRef.current === 'waiting') setP('none');
         }, NO_PUBLISHER_TIMEOUT_MS);
       })
       .catch((err: unknown) => {
@@ -758,7 +769,7 @@ export function AgentSessionPanel({
       // torn-down room (a fresh connect re-stashes it on the next TrackSubscribed).
       videoPublicationRef.current = null;
       setRoom(null);
-      onRoom?.(null);
+      onRoom?.(null, room);
       // .catch the teardown: disconnect() can reject on a teardown race with a
       // message OUTSIDE main.tsx's benign allowlist (aborted reconnect / signal
       // socket error), which would otherwise blank the app via the fatal overlay.
@@ -872,6 +883,7 @@ export function AgentSessionPanel({
       /* publication detached mid-toggle — ignore */
     }
     const resubHandle = setTimeout(() => {
+      if (inputCaptureRoomRef.current !== room) return;
       try {
         pub.setSubscribed?.(true);
       } catch {
@@ -879,7 +891,7 @@ export function AgentSessionPanel({
       }
     }, 250);
     return () => clearTimeout(resubHandle);
-  }, [recoverAction]);
+  }, [recoverAction, room]);
 
   return (
     <div

@@ -57,9 +57,9 @@ const fakeRoom = {
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
-  AgentSessionPanel: (props: { onRoom?: (room: unknown) => void }) => {
+  AgentSessionPanel: (props: { onRoom?: (room: unknown, ownerRoom: unknown) => void }) => {
     useEffect(() => {
-      props.onRoom?.(fakeRoom);
+      props.onRoom?.(fakeRoom, fakeRoom);
     }, [props]);
     return <div data-component="agent-session-panel-mock" />;
   },

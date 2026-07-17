@@ -53,17 +53,17 @@ const fakeRoom = {
 };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
-    onRoom?: (room: unknown) => void;
-    onStateChange?: (s: { kind: string }) => void;
-    onPublisher?: (p: string) => void;
+    onRoom?: (room: unknown, ownerRoom: unknown) => void;
+    onStateChange?: (s: { kind: string }, room: unknown) => void;
+    onPublisher?: (p: string, room: unknown) => void;
   }) => {
     // Fire onRoom + a fully-live connection state in an effect (not during render) to
     // avoid a setState-in-render warning — mirrors the real panel surfacing a connected
     // room with a publishing video track. canNavigate now gates on connected+publishing.
     useEffect(() => {
-      props.onRoom?.(fakeRoom);
-      props.onStateChange?.({ kind: 'connected' });
-      props.onPublisher?.('publishing');
+      props.onRoom?.(fakeRoom, fakeRoom);
+      props.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      props.onPublisher?.('publishing', fakeRoom);
     }, [props]);
     return <div data-component="agent-session-panel-mock" />;
   },

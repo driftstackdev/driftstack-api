@@ -154,6 +154,46 @@ interface SimTab {
   title: string;
 }
 
+interface SimulatorRoomBinding {
+  sessionId: string;
+  room: Room;
+}
+
+interface LogicalTabActivation {
+  sessionId: string;
+  room: Room;
+  tabId: string;
+  prevTabId: string;
+  requestIds: Set<string>;
+  terminalTargetFrameSeen: boolean;
+  settled: boolean;
+}
+
+interface TabActivationRetry {
+  tabId: string;
+  prevTabId: string;
+  url: string;
+  scrollY: number;
+  attempts: number;
+  timer: number;
+  owner: LogicalTabActivation;
+}
+
+interface DeferredTabActivation {
+  sessionId: string;
+  room: Room;
+  tabId: string;
+  prevTabId: string;
+  url: string;
+  scrollY: number;
+  terminalTargetFrameSeen: boolean;
+}
+
+interface TabSwitchAffordanceOwner {
+  tabId: string;
+  timer: number | null;
+}
+
 /** Mint a stable, unique tab id. crypto.randomUUID() in the app + Tauri webview;
  *  falls back to a time+random token in any (test) env without it. */
 function makeTabId(): string {
@@ -2784,7 +2824,15 @@ export function SimulatorWindow(): JSX.Element {
   }, []);
   // Night-arc C cockpit: live room handle (from the panel) drives the
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
-  const [room, setRoom] = useState<Room | null>(null);
+  const [roomBinding, setRoomBinding] = useState<SimulatorRoomBinding | null>(null);
+  // A session relaunch swaps `sessionId` during render, before the old panel's passive
+  // cleanup runs. Derive the usable Room from exact ownership so the replacement
+  // session is disconnected immediately instead of borrowing the old session's Room
+  // for one render. The ref is updated synchronously by handleRoom below so callbacks
+  // fired in the same AgentSessionPanel effect can validate their owner.
+  const room = roomBinding?.sessionId === sessionId ? roomBinding.room : null;
+  const roomBindingRef = useRef<SimulatorRoomBinding | null>(roomBinding);
+  roomBindingRef.current = roomBinding;
   // The panel's live connection + publisher state, surfaced via its callbacks. The
   // BrowserBar / address bar / back-forward / reload gate on these (NOT merely room !==
   // null) so a URL typed during "connecting…" — before the box renderer is up — can't
@@ -2793,9 +2841,13 @@ export function SimulatorWindow(): JSX.Element {
   const [connState, setConnState] = useState<
     'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
   >('idle');
+  const connStateRef = useRef(connState);
+  connStateRef.current = connState;
   const [publisherState, setPublisherState] = useState<'waiting' | 'publishing' | 'none'>(
     'waiting',
   );
+  const publisherStateRef = useRef(publisherState);
+  publisherStateRef.current = publisherState;
   // P1a — TERMINAL session-end signal. The box session actually ended (the worker
   // browser closed / the session was destroyed/errored / the orphan sweeper reaped
   // it): the control plane reports status='closed' (or a closed_at/closed_reason).
@@ -2874,6 +2926,8 @@ export function SimulatorWindow(): JSX.Element {
   // during this window so it cannot replay late against another page; unlike
   // controlUnreachable this self-clears on buffer drain and needs no reconnect.
   const [inputCongested, setInputCongested] = useState(false);
+  const inputCongestedRef = useRef(inputCongested);
+  inputCongestedRef.current = inputCongested;
   const latencyStoreRef = useRef<LiveLatencyStore | null>(null);
   if (latencyStoreRef.current === null) latencyStoreRef.current = createLiveLatencyStore();
   const latencyStore = latencyStoreRef.current;
@@ -3856,12 +3910,12 @@ export function SimulatorWindow(): JSX.Element {
     activeTabIdRef.current = tabId;
     setActiveTabId(tabId);
   }, []);
-  // In-flight activateTab requests keyed by requestId so the harness's
-  // activateTabResult reply (handled in onData) can revert an optimistic switch that
-  // the box rejected. A missed reply just leaves the optimistic switch (v1 behaviour).
-  const pendingActivationsRef = useRef<Map<string, { tabId: string; prevTabId: string }>>(
-    new Map(),
-  );
+  // One logical activation owns every wire requestId minted by its retry sequence.
+  // Results are correlated by requestId but settle by owner identity: one sibling's
+  // failure cannot erase/revert another still-live sibling, while any success wins
+  // once and makes every later sibling result inert.
+  const pendingActivationsRef = useRef<Map<string, LogicalTabActivation>>(new Map());
+  const activationOwnersRef = useRef<Map<string, LogicalTabActivation>>(new Map());
   // INSTANT switch-feedback (founder 2026-06-25: "kinda slow to switch"). The real
   // speed lever is A3's box-side no-reload; on the GUI we make the switch FEEL
   // responsive with a subtle "switching…" affordance on the target tab. Holds the
@@ -3869,6 +3923,7 @@ export function SimulatorWindow(): JSX.Element {
   // page_state for that tab arrives (the one-shot reconcile / activateTabResult ok /
   // a tab-routed page_state frame) or on a bounded timeout so it never hangs.
   const [switchingTabId, setSwitchingTabId] = useState<string | null>(null);
+  const switchAffordanceOwnerRef = useRef<TabSwitchAffordanceOwner | null>(null);
   // Cold-switch "taking longer than usual" escape: the switch-blank cover holds the
   // video black until the target tab's `loaded` frame (or the 6s affordance net drops
   // it). A cold reload can eat most of that window, so after 3s we surface a hint +
@@ -3890,15 +3945,12 @@ export function SimulatorWindow(): JSX.Element {
   // short backoff before giving up. One in-flight retry context per target tab,
   // keyed by tabId; cleared on any ack (ok or reject) or when superseded by a newer
   // switch. The re-issue is the ONLY non-blocking failure path — no alert().
-  const activationRetryRef = useRef<
-    Map<string, { tabId: string; prevTabId: string; attempts: number; timer: number }>
-  >(new Map());
-  const deferredActivationAfterCongestionRef = useRef<{
-    tabId: string;
-    prevTabId: string;
-    url: string;
-    scrollY: number;
-  } | null>(null);
+  const activationRetryRef = useRef<Map<string, TabActivationRetry>>(new Map());
+  // Exactly one admitted activation may wait for the SAME Room to become writable
+  // again. This is used both for reliable-channel congestion and for a transient
+  // connected/publisher readiness drop. It carries explicit transport ownership so
+  // a replacement Room can never inherit the retired Room's work.
+  const deferredActivationUntilReadyRef = useRef<DeferredTabActivation | null>(null);
   const loadWatchdogRef = useRef<{
     timer: number | null;
     target: string;
@@ -3927,44 +3979,94 @@ export function SimulatorWindow(): JSX.Element {
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
-  // Resolve a tab's switch: clear the "switching…" affordance if THIS tab is the one
-  // being switched to, and cancel any pending re-issue timer for it. Called when the
-  // box acks the switch, reports a page for the tab, or a newer switch supersedes it.
-  const resolveSwitch = useCallback((tabId: string): void => {
-    const retry = activationRetryRef.current.get(tabId);
-    if (retry !== undefined) {
-      window.clearTimeout(retry.timer);
-      activationRetryRef.current.delete(tabId);
+  const discardActivationOwner = useCallback((owner: LogicalTabActivation): void => {
+    if (owner.settled) return;
+    owner.settled = true;
+    if (activationOwnersRef.current.get(owner.tabId) === owner) {
+      activationOwnersRef.current.delete(owner.tabId);
     }
-    setSwitchingTabId((cur) => (cur === tabId ? null : cur));
+    for (const requestId of owner.requestIds) {
+      if (pendingActivationsRef.current.get(requestId) === owner) {
+        pendingActivationsRef.current.delete(requestId);
+      }
+    }
+    owner.requestIds.clear();
+    const retry = activationRetryRef.current.get(owner.tabId);
+    if (retry?.owner === owner) {
+      window.clearTimeout(retry.timer);
+      activationRetryRef.current.delete(owner.tabId);
+    }
   }, []);
+  const discardActivationForTab = useCallback(
+    (tabId: string): void => {
+      const owner = activationOwnersRef.current.get(tabId);
+      if (owner !== undefined) discardActivationOwner(owner);
+      const retry = activationRetryRef.current.get(tabId);
+      if (retry !== undefined) {
+        window.clearTimeout(retry.timer);
+        activationRetryRef.current.delete(tabId);
+      }
+      for (const [requestId, pending] of pendingActivationsRef.current) {
+        if (pending.tabId === tabId) pendingActivationsRef.current.delete(requestId);
+      }
+      if (deferredActivationUntilReadyRef.current?.tabId === tabId) {
+        deferredActivationUntilReadyRef.current = null;
+      }
+    },
+    [discardActivationOwner],
+  );
+  const beginSwitchAffordance = useCallback((tabId: string): void => {
+    const prior = switchAffordanceOwnerRef.current;
+    if (prior?.timer !== null && prior?.timer !== undefined) window.clearTimeout(prior.timer);
+    const owner: TabSwitchAffordanceOwner = { tabId, timer: null };
+    switchAffordanceOwnerRef.current = owner;
+    setSwitchingTabId(tabId);
+    owner.timer = window.setTimeout(() => {
+      if (switchAffordanceOwnerRef.current !== owner) return;
+      switchAffordanceOwnerRef.current = null;
+      setSwitchingTabId((current) => (current === tabId ? null : current));
+    }, SWITCH_AFFORDANCE_TIMEOUT_MS);
+  }, []);
+  const dismissSwitchAffordance = useCallback((tabId: string): void => {
+    const affordance = switchAffordanceOwnerRef.current;
+    if (affordance?.tabId !== tabId) return;
+    if (affordance.timer !== null) window.clearTimeout(affordance.timer);
+    switchAffordanceOwnerRef.current = null;
+    setSwitchingTabId((current) => (current === tabId ? null : current));
+  }, []);
+  // Resolve a tab's switch: clear the "switching…" affordance if THIS tab is the one
+  // being switched to, and cancel any pending re-issue/cover timer for it. Cover
+  // ownership is identity-fenced so an old A→B timer cannot clear a later A→B owner.
+  const resolveSwitch = useCallback(
+    (tabId: string): void => {
+      const retry = activationRetryRef.current.get(tabId);
+      if (retry !== undefined) {
+        window.clearTimeout(retry.timer);
+        activationRetryRef.current.delete(tabId);
+      }
+      dismissSwitchAffordance(tabId);
+    },
+    [dismissSwitchAffordance],
+  );
   const resolveSwitchRef = useRef(resolveSwitch);
   useEffect(() => {
     resolveSwitchRef.current = resolveSwitch;
   }, [resolveSwitch]);
-  // #116 warm-tabs — cancel a tab's re-issue timer WITHOUT clearing the "switching…"
-  // affordance. Used on a COLD activate ack: the switch is acked (stop re-issuing) but
-  // the blank stays up until the target's `loaded` frame hides the re-navigation, so a
-  // cold switch never flashes the old/loading page. A WARM ack uses resolveSwitch (clears
-  // the blank immediately — the live view is already front).
-  const cancelActivationRetry = useCallback((tabId: string): void => {
-    const retry = activationRetryRef.current.get(tabId);
-    if (retry !== undefined) {
-      window.clearTimeout(retry.timer);
-      activationRetryRef.current.delete(tabId);
-    }
-  }, []);
-  const cancelActivationRetryRef = useRef(cancelActivationRetry);
-  useEffect(() => {
-    cancelActivationRetryRef.current = cancelActivationRetry;
-  }, [cancelActivationRetry]);
   // Cancel every pending switch re-issue timer + clear the affordance. Used when the
   // tab set is replaced (tabListRestore / relaunch) and on unmount so no orphan timer
   // re-sends an activateTab for a tab that no longer exists. Functionless on []-deps.
   const clearAllActivationRetries = useCallback((): void => {
+    for (const owner of activationOwnersRef.current.values()) owner.settled = true;
+    activationOwnersRef.current.clear();
+    pendingActivationsRef.current.clear();
     for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
     activationRetryRef.current.clear();
-    deferredActivationAfterCongestionRef.current = null;
+    deferredActivationUntilReadyRef.current = null;
+    const affordance = switchAffordanceOwnerRef.current;
+    if (affordance?.timer !== null && affordance?.timer !== undefined) {
+      window.clearTimeout(affordance.timer);
+    }
+    switchAffordanceOwnerRef.current = null;
     setSwitchingTabId(null);
   }, []);
   useEffect(() => () => clearAllActivationRetries(), [clearAllActivationRetries]);
@@ -4008,21 +4110,41 @@ export function SimulatorWindow(): JSX.Element {
           ? rawFrameTabId
           : null;
       const targetId = frameTabId ?? activeTabIdRef.current;
-      // The box reported a page for this tab → the switch (if any) landed; clear the
-      // "switching…" affordance + cancel its re-issue timer (instant-feedback path).
-      // Only on an authoritative frame: a stale in-grace tabId-less poll must keep the
-      // retry net running until a genuine frame/ack for the switched page arrives. And
-      // NEVER resolve on a `loading` frame: a cold switch's page_state fires state:'loading'
+      // A page-state frame may come from a warm BACKGROUND renderer before the box has
+      // committed it to the foreground. It can update that tab's url/title below, but
+      // it cannot settle a live activation owner: only a correlated success proves the
+      // foreground switch. After a COLD success removes the owner, its terminal target
+      // frame may clear the cover. Also NEVER resolve on a `loading` frame: a cold
+      // switch's page_state fires state:'loading'
       // carrying the TARGET url at nav-START — resolving there dropped the "switching…"
       // blank while the box was still re-navigating, flashing the OLD/loading page through
       // (the founder's persistent "keeps other tab's content open + not smooth" on switch;
       // tab-switch audit wap1x781b, 3/3 verified). Wait for a TERMINAL frame (loaded/
-      // errored/stalled) — exactly how the cold ACK path already holds the blank (it uses
-      // cancelActivationRetry, not resolveSwitch). The url/title write below STILL happens
+      // errored/stalled) — exactly how the cold ACK path already holds the blank after
+      // discarding retry ownership without calling resolveSwitch. The url/title write below STILL happens
       // on a loading frame, so the address bar tracks the target url live during the load;
       // and the 6s SWITCH_AFFORDANCE_TIMEOUT hard net (sendActivateAttempt) drops the blank
       // even if a terminal frame never arrives, so this can't hang the affordance.
-      if (isAuthoritative && frame.state !== 'loading') resolveSwitchRef.current(targetId);
+      const activationOwner = activationOwnersRef.current.get(targetId);
+      const deferredOwner = deferredActivationUntilReadyRef.current;
+      const binding = roomBindingRef.current;
+      const awaitsDeferredForeground =
+        deferredOwner?.tabId === targetId &&
+        deferredOwner.sessionId === sessionIdRef.current &&
+        binding?.sessionId === deferredOwner.sessionId &&
+        binding.room === deferredOwner.room;
+      const awaitingForegroundAck = activationOwner?.settled === false || awaitsDeferredForeground;
+      const terminalTargetFrame =
+        frame.state === 'loaded' || frame.state === 'errored' || frame.state === 'stalled';
+      if (isAuthoritative && terminalTargetFrame && awaitingForegroundAck) {
+        if (activationOwner?.settled === false) activationOwner.terminalTargetFrameSeen = true;
+        if (awaitsDeferredForeground && deferredOwner !== null) {
+          deferredOwner.terminalTargetFrameSeen = true;
+        }
+      }
+      if (isAuthoritative && terminalTargetFrame && !awaitingForegroundAck) {
+        resolveSwitchRef.current(targetId);
+      }
       // #116 — the founder's "tab switch blinks the new page then REVERTS to the old
       // tab" + wrong url/title. Current fleet harnesses stamp page_state.tabId; retain
       // this compatibility net for older/self-hosted nodes where a tabId-LESS frame lands in the
@@ -4162,7 +4284,16 @@ export function SimulatorWindow(): JSX.Element {
   }, []);
   useEffect(() => {
     if (room === null) return;
+    const listenerRoom = room;
+    const listenerSessionId = sessionId;
     const unsubscribe = subscribeInputReceiptIssues(room, (issue) => {
+      if (
+        sessionIdRef.current !== listenerSessionId ||
+        roomBindingRef.current?.sessionId !== listenerSessionId ||
+        roomBindingRef.current.room !== listenerRoom
+      ) {
+        return;
+      }
       setControlReceiptIssue(issue);
       setControlUnreachable(issue !== null);
     });
@@ -4170,10 +4301,19 @@ export function SimulatorWindow(): JSX.Element {
       unsubscribe();
       resetInputReceipts(room);
     };
-  }, [room]);
+  }, [room, sessionId]);
   useEffect(() => {
     if (room === null) return;
+    const listenerRoom = room;
+    const listenerSessionId = sessionId;
     const onData = (payload: Uint8Array): void => {
+      if (
+        sessionIdRef.current !== listenerSessionId ||
+        roomBindingRef.current?.sessionId !== listenerSessionId ||
+        roomBindingRef.current.room !== listenerRoom
+      ) {
+        return;
+      }
       try {
         const msg = JSON.parse(new TextDecoder().decode(payload)) as {
           type?: string;
@@ -4235,44 +4375,52 @@ export function SimulatorWindow(): JSX.Element {
         // a DROPPED reply leaves the optimistic switch in place (acceptable for v1).
         if (msg.type === 'activateTabResult' && typeof msg.requestId === 'string') {
           const pending = pendingActivationsRef.current.get(msg.requestId);
-          if (pending !== undefined) {
-            // A switch can have SEVERAL in-flight requestIds for the SAME tab (each
-            // re-issue mints a new one). The first ack RESOLVES that tab; drop EVERY
-            // pending entry for the same tabId so a sibling retry's late/colliding ack
-            // (a duplicate wd.navigate can collide → -1005 error even though the page
-            // switched) can't later REVERT a switch that already landed (founder
-            // 2026-06-25 "could not switch tab" yank under lag).
-            for (const [id, p] of pendingActivationsRef.current) {
-              if (p.tabId === pending.tabId) pendingActivationsRef.current.delete(id);
-            }
-            // #116 warm-tabs — the affordance-clear now depends on warm vs cold:
-            //  - WARM swap (wasWarm=true): the box brought the live tab to front INSTANTLY,
-            //    so drop the "switching…" blank now — the target is already showing.
-            //  - COLD success ack: the box RE-NAVIGATES, so clearing the blank on the ack
-            //    would flash the old/loading page — cancel only the re-issue timer and keep
-            //    the blank until the target's `loaded` frame hides the reload.
-            //  - ERROR ack (ok:false / error): clear here; the revert path below resets the
-            //    chrome for the tab we fall back to.
-            if (msg.wasWarm === true || msg.ok === false || typeof msg.error === 'string') {
-              resolveSwitchRef.current(pending.tabId);
-            } else {
-              cancelActivationRetryRef.current(pending.tabId);
-            }
+          if (pending === undefined) return;
+          if (pendingActivationsRef.current.get(msg.requestId) === pending) {
+            pendingActivationsRef.current.delete(msg.requestId);
+          }
+          pending.requestIds.delete(msg.requestId);
+          const ownsCurrentActivation =
+            !pending.settled &&
+            activationOwnersRef.current.get(pending.tabId) === pending &&
+            pending.sessionId === sessionIdRef.current &&
+            roomBindingRef.current?.sessionId === pending.sessionId &&
+            roomBindingRef.current.room === pending.room;
+          if (!ownsCurrentActivation) return;
+          const failed = msg.ok === false || typeof msg.error === 'string';
+          // An older retry may fail while a newer sibling is already in flight. Keep
+          // the logical activation, retry timer, optimistic target and cover intact;
+          // success from any remaining sibling dominates. Revert only when the final
+          // live sibling has explicitly failed.
+          if (failed && pending.requestIds.size > 0) return;
+
+          discardActivationOwner(pending);
+          // #116 warm-tabs — a warm success proves the live target is already front,
+          // so clear immediately. A cold success only cancels retry ownership; its
+          // terminal target page_state clears the cover after this correlated commit.
+          // A final explicit failure clears before reverting.
+          if (msg.wasWarm === true || pending.terminalTargetFrameSeen || failed) {
+            resolveSwitchRef.current(pending.tabId);
           }
           // A superseded ack (the operator has since switched to a DIFFERENT tab, or a
           // sibling retry already resolved this one) must never yank the current tab.
           // Only revert when this ack's tab is STILL the active one — i.e. its switch is
           // the live one. activeTabIdRef mirrors the latest active tab (the closure's
           // activeTabId is stale across switches).
-          if (
-            pending !== undefined &&
-            pending.tabId === activeTabIdRef.current &&
-            (msg.ok === false || typeof msg.error === 'string')
-          ) {
+          if (pending !== undefined && pending.tabId === activeTabIdRef.current && failed) {
             // SOFT failure (founder 2026-06-25): revert to the previously-active tab
             // (a sensible state — never leave it half-switched) and show a brief,
             // NON-BLOCKING notice. No alert(); the toast auto-dismisses.
-            setActiveTabIdSynchronized(pending.prevTabId);
+            // The previous tab can be closed while this activation is in flight.
+            // Never publish a removed id as active: prefer the exact previous tab,
+            // then another surviving tab, and finally the failed target itself.
+            const fallbackTab =
+              tabsRef.current.find((tab) => tab.id === pending.prevTabId) ??
+              tabsRef.current.find((tab) => tab.id !== pending.tabId) ??
+              tabsRef.current.find((tab) => tab.id === pending.tabId) ??
+              tabsRef.current[0];
+            if (fallbackTab === undefined) return;
+            setActiveTabIdSynchronized(fallbackTab.id);
             // audit wb1w3015f #6 — reset the (window-global) page chrome on the revert
             // exactly like the forward-switch paths do, so the REJECTED tab's overlay /
             // spinner / stalled badge / load-gate can't bleed onto the reverted-to tab
@@ -4286,22 +4434,18 @@ export function SimulatorWindow(): JSX.Element {
             // (correlated activateTab, like a normal switch). Look the prev tab up from
             // the live ref (onData closes over a stale `tabs`); guard on it still
             // existing + a connected room.
-            const prevTab = tabsRef.current.find((t) => t.id === pending.prevTabId);
-            if (prevTab !== undefined && room !== null) {
-              const activateUrl = isBlankTabUrl(prevTab.url) ? NEW_TAB_URL : prevTab.url;
+            emitTabListRef.current(tabsRef.current, fallbackTab.id);
+            if (fallbackTab.id !== pending.tabId && room !== null) {
+              const activateUrl = isBlankTabUrl(fallbackTab.url) ? NEW_TAB_URL : fallbackTab.url;
               sendActivateAttemptRef.current({
-                tabId: prevTab.id,
+                tabId: fallbackTab.id,
                 prevTabId: pending.tabId,
                 url: activateUrl,
-                scrollY: prevTab.scrollY,
+                scrollY: fallbackTab.scrollY,
               });
             }
             showNotice('Could not switch tab', 3000);
-          } else if (
-            pending !== undefined &&
-            pending.tabId === activeTabIdRef.current &&
-            !(msg.ok === false || typeof msg.error === 'string')
-          ) {
+          } else if (pending !== undefined && pending.tabId === activeTabIdRef.current && !failed) {
             // CONFIRMED switch — the box acknowledged it landed on `pending.tabId`.
             // Fire a one-shot reconcile so the now-active tab refreshes from the box
             // even if the data-channel page_state for the switched page dropped (the
@@ -4343,10 +4487,7 @@ export function SimulatorWindow(): JSX.Element {
           // a late activateTabResult can't revert into a tab that no longer exists.
           // Cancel any in-flight switch re-issue timers + the affordance too (their
           // target tab ids are gone).
-          pendingActivationsRef.current.clear();
-          for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
-          activationRetryRef.current.clear();
-          setSwitchingTabId(null);
+          clearAllActivationRetries();
           // Replacing the tab model is also a page-context transition. Clear focus
           // owned by the pre-restore renderer and arm the same grace used by an
           // operator switch so an older tabId-less frame cannot immediately reopen it.
@@ -4623,7 +4764,16 @@ export function SimulatorWindow(): JSX.Element {
         /* ignore */
       }
     };
-  }, [room, writeTabPageState, applyStalledState, showNotice, resetPageChromeForSwitch]);
+  }, [
+    room,
+    sessionId,
+    writeTabPageState,
+    applyStalledState,
+    showNotice,
+    resetPageChromeForSwitch,
+    discardActivationOwner,
+    clearAllActivationRetries,
+  ]);
 
   // Receipts intentionally omit tab identity. A tab ownership change therefore
   // invalidates every pending id before the new renderer can accept input. A
@@ -5558,13 +5708,10 @@ export function SimulatorWindow(): JSX.Element {
     setTabs([seed]);
     setActiveTabIdSynchronized(seed.id);
     setLiveTitle('');
-    pendingActivationsRef.current.clear();
-    // Drop any in-flight switch re-issue timers + the affordance — they reference the
-    // PRIOR session's tab ids.
-    for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
-    activationRetryRef.current.clear();
-    setSwitchingTabId(null);
-  }, [sessionId, stopRecording, clearNotice]);
+    // Drop every logical activation owner, sibling request id, retry timer and
+    // affordance. None may survive into the replacement session/Room.
+    clearAllActivationRetries();
+  }, [sessionId, stopRecording, clearNotice, clearAllActivationRetries]);
   // Control-channel load state for the panel caption (founder 2026-06-18: the
   // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
   // the error was swallowed). null = no error; a classified message = the last
@@ -5598,14 +5745,56 @@ export function SimulatorWindow(): JSX.Element {
   const noticeControlError = (err: unknown, reqSessionId = sessionIdRef.current): void => {
     if (sessionIdRef.current === reqSessionId) showNotice(controlErrorMessage(err));
   };
-  // The LiveKit room handle, surfaced by the panel after a (re)connect. Wrap
-  // setRoom so a fresh/reconnected room CLEARS the latched controlUnreachable
-  // badge — the data channel is live again, so a stale "control may not be
-  // reaching the device" warning from a prior failed publish must not persist
-  // (it was set but previously never reset on recovery).
-  const handleRoom = useCallback((r: Room | null): void => {
-    setRoom(r);
-    if (r !== null) setControlUnreachable(false);
+  // The LiveKit room handle is owned by the session whose panel produced it. An
+  // in-place relaunch keeps this component mounted, so an old panel cleanup or late
+  // callback must not clear/replace the new session's Room. Binding also invalidates
+  // every logical activation tied to the replaced transport.
+  const handleRoom = useCallback(
+    (ownerSessionId: string, nextRoom: Room | null, ownerRoom: Room): void => {
+      if (ownerSessionId === '' || ownerSessionId !== sessionIdRef.current) return;
+      const current = roomBindingRef.current;
+      if (nextRoom === null) {
+        if (current?.sessionId !== ownerSessionId || current.room !== ownerRoom) {
+          return;
+        }
+        clearAllActivationRetries();
+        roomBindingRef.current = null;
+        setRoomBinding(null);
+        connStateRef.current = 'idle';
+        setConnState('idle');
+        publisherStateRef.current = 'waiting';
+        setPublisherState('waiting');
+        inputCongestedRef.current = false;
+        setInputCongested(false);
+        return;
+      }
+      if (ownerRoom !== nextRoom) return;
+      if (current?.sessionId === ownerSessionId && current.room === nextRoom) {
+        setControlUnreachable(false);
+        return;
+      }
+      clearAllActivationRetries();
+      const next: SimulatorRoomBinding = { sessionId: ownerSessionId, room: nextRoom };
+      roomBindingRef.current = next;
+      setRoomBinding(next);
+      connStateRef.current = 'connecting';
+      setConnState('connecting');
+      publisherStateRef.current = 'waiting';
+      setPublisherState('waiting');
+      inputCongestedRef.current = false;
+      setInputCongested(false);
+      setControlUnreachable(false);
+    },
+    [clearAllActivationRetries],
+  );
+  const ownsPanelRoom = useCallback((ownerSessionId: string, ownerRoom: Room): boolean => {
+    const binding = roomBindingRef.current;
+    return (
+      ownerSessionId !== '' &&
+      ownerSessionId === sessionIdRef.current &&
+      binding?.sessionId === ownerSessionId &&
+      binding.room === ownerRoom
+    );
   }, []);
   // Navigation (address bar / back-forward / reload) is enabled ONLY once the device is
   // actually live — the LiveKit room reports 'connected' AND a video track is publishing
@@ -5613,7 +5802,34 @@ export function SimulatorWindow(): JSX.Element {
   // so a URL typed then trickled a fake loading bar and silently did nothing). Mirrors
   // the box readiness the navigate actually needs.
   const canNavigate =
-    connState === 'connected' && publisherState === 'publishing' && manualInputAvailable !== false;
+    room !== null &&
+    connState === 'connected' &&
+    publisherState === 'publishing' &&
+    manualInputAvailable !== false;
+  const canManipulateTabs = canNavigate && !inputCongested;
+  // Event handlers must re-check the live transport owner at invocation time. React
+  // can retain a rendered handler for one turn after onRoom synchronously replaces or
+  // clears the binding; captured `room`/readiness values would otherwise admit one
+  // local tab mutation (and possibly one publish) against the retired Room.
+  const currentTabTransport = useCallback(
+    (expectedSessionId: string, expectedRoom: Room | null): SimulatorRoomBinding | null => {
+      const binding = roomBindingRef.current;
+      if (
+        expectedRoom === null ||
+        binding === null ||
+        binding.sessionId !== expectedSessionId ||
+        binding.room !== expectedRoom ||
+        binding.sessionId !== sessionIdRef.current ||
+        connStateRef.current !== 'connected' ||
+        publisherStateRef.current !== 'publishing' ||
+        manualInputAvailableRef.current === false
+      ) {
+        return null;
+      }
+      return binding;
+    },
+    [],
+  );
   // Keep the current session + action ownership readable from late async callbacks so a
   // getAgentSession result can't apply to the WRONG session (in-place relaunch
   // swaps sessionId without remount) or clobber an in-flight mode mutation —
@@ -6011,10 +6227,13 @@ export function SimulatorWindow(): JSX.Element {
   // drives it onward via the address bar afterward. The stored url/title seed from
   // NEW_TAB_URL so the tab label + address bar read sensibly before the box reports.
   const onNewTab = useCallback((): void => {
-    if (inputCongested) {
+    if (currentTabTransport(sessionId, room) === null) return;
+    if (inputCongestedRef.current) {
       showNotice('Connection catching up — try again in a moment', 2500);
       return;
     }
+    // A new operator choice supersedes any previously deferred convergence work.
+    deferredActivationUntilReadyRef.current = null;
     const tab: SimTab = { id: makeTabId(), url: NEW_TAB_URL, scrollY: 0, title: NEW_TAB_TITLE };
     const prevActive = activeTabId;
     // SUPERSEDE any in-flight switch to a DIFFERENT tab (same guard onActivateTab L~5702 +
@@ -6026,13 +6245,9 @@ export function SimulatorWindow(): JSX.Element {
     // tabId-less poll write B's url onto the active tab. The new tab has no retry entry yet
     // (its activateTab fires below), so this prunes only the stale in-flight ones.
     // (warm-tabs pre-flight, workflow w58dcbhxt #4.)
-    for (const [tid, r] of activationRetryRef.current) {
+    for (const tid of activationRetryRef.current.keys()) {
       if (tid !== tab.id) {
-        window.clearTimeout(r.timer);
-        activationRetryRef.current.delete(tid);
-        for (const [rid, p] of pendingActivationsRef.current) {
-          if (p.tabId === tid) pendingActivationsRef.current.delete(rid);
-        }
+        discardActivationForTab(tid);
       }
     }
     setTabs((prev) => {
@@ -6058,7 +6273,7 @@ export function SimulatorWindow(): JSX.Element {
     // immediately + the GUI shows instant "switching…" feedback. Via the *Ref handles
     // because sendActivateAttempt / reconcilePageState are defined below this callback.
     if (room !== null) {
-      setSwitchingTabId(tab.id);
+      beginSwitchAffordance(tab.id);
       sendActivateAttemptRef.current({
         tabId: tab.id,
         prevTabId: prevActive,
@@ -6066,17 +6281,27 @@ export function SimulatorWindow(): JSX.Element {
         scrollY: 0,
       });
       reconcilePageStateRef.current();
-      window.setTimeout(() => {
-        setSwitchingTabId((s) => (s === tab.id ? null : s));
-      }, SWITCH_AFFORDANCE_TIMEOUT_MS);
     }
-  }, [emitTabList, resetPageChromeForSwitch, activeTabId, room, inputCongested, showNotice]);
+  }, [
+    canNavigate,
+    emitTabList,
+    resetPageChromeForSwitch,
+    activeTabId,
+    room,
+    inputCongested,
+    showNotice,
+    discardActivationForTab,
+    beginSwitchAffordance,
+    currentTabTransport,
+    sessionId,
+  ]);
   // Close a tab — remove it; if it was active, activate the nearest neighbor (prefer
   // the one to the left, else the right). NEVER drops below one tab (the close button
   // is hidden on the last tab too, but guard here as well).
   const onCloseTab = useCallback(
     (id: string): void => {
-      if (inputCongested) {
+      if (currentTabTransport(sessionId, room) === null) return;
+      if (inputCongestedRef.current) {
         showNotice('Connection catching up — try again in a moment', 2500);
         return;
       }
@@ -6085,14 +6310,16 @@ export function SimulatorWindow(): JSX.Element {
       // would try to switch its published page to a removed tab). Same root cause
       // as the superseded-switch cancel in onActivateTab. (Fable GUI re-audit
       // 2026-07-02.)
-      const closingRetry = activationRetryRef.current.get(id);
-      if (closingRetry !== undefined) {
-        window.clearTimeout(closingRetry.timer);
-        activationRetryRef.current.delete(id);
-      }
+      discardActivationForTab(id);
       // Whether the close moves focus to a neighbour (we closed the ACTIVE tab). Side
       // effects (grace-arm + chrome reset) run OUTSIDE the setTabs reducer to keep it pure.
       const closingActive = id === activeTabId;
+      if (closingActive) {
+        // Moving focus to a neighbour is a newer explicit choice than any deferred
+        // activation for the tab being removed. An inactive previous tab may close
+        // while the current target is pending, so do not erase that target's work.
+        deferredActivationUntilReadyRef.current = null;
+      }
       // Compute the neighbour we're focusing (deterministic from the current `tabs`) so we
       // can ask the box to ACTIVATE it — tabListUpdate is fire-and-forget state-only and
       // does NOT switch the published page (only activateTab does, per the A2↔A3 contract,
@@ -6131,6 +6358,10 @@ export function SimulatorWindow(): JSX.Element {
           const neighbor = next[Math.max(0, idx - 1)] ?? next[0];
           if (neighbor !== undefined) nextActive = neighbor.id;
         }
+        // Publish the structural removal synchronously for data-channel callbacks.
+        // A reject can arrive immediately after the close commits, before passive
+        // effects; it must not discover the removed previous tab in a stale mirror.
+        tabsRef.current = next;
         emitTabList(next, nextActive);
         if (nextActive !== activeTabId) setActiveTabIdSynchronized(nextActive);
         return next;
@@ -6142,7 +6373,7 @@ export function SimulatorWindow(): JSX.Element {
       // rejects → send the branded new-tab url instead (mirrors onActivateTab).
       if (closingActive && focusNeighbor !== undefined && room !== null) {
         const activateUrl = isBlankTabUrl(focusNeighbor.url) ? NEW_TAB_URL : focusNeighbor.url;
-        setSwitchingTabId(focusNeighbor.id);
+        beginSwitchAffordance(focusNeighbor.id);
         // Via the ref (sendActivateAttempt is declared below; the ref is stable + the
         // handler runs post-render, so .current is always the latest).
         sendActivateAttemptRef.current({
@@ -6151,12 +6382,22 @@ export function SimulatorWindow(): JSX.Element {
           url: activateUrl,
           scrollY: focusNeighbor.scrollY,
         });
-        window.setTimeout(() => {
-          setSwitchingTabId((s) => (s === focusNeighbor?.id ? null : s));
-        }, SWITCH_AFFORDANCE_TIMEOUT_MS);
       }
     },
-    [activeTabId, emitTabList, resetPageChromeForSwitch, room, tabs, inputCongested, showNotice],
+    [
+      canNavigate,
+      activeTabId,
+      emitTabList,
+      resetPageChromeForSwitch,
+      room,
+      tabs,
+      inputCongested,
+      showNotice,
+      discardActivationForTab,
+      beginSwitchAffordance,
+      currentTabTransport,
+      sessionId,
+    ],
   );
   // Send a single activateTab attempt for a switch + arm the ack-miss re-issue timer
   // (founder 2026-06-25 softer "could not switch tab" handling). On a missed ack the
@@ -6167,13 +6408,60 @@ export function SimulatorWindow(): JSX.Element {
   // reject (activateTabResult{ok:false}) still reverts via onData. resolveSwitch
   // (box page-state / ack) cancels the timer so a healthy switch never retries.
   const sendActivateAttempt = useCallback(
-    (ctx: { tabId: string; prevTabId: string; url: string; scrollY: number }): void => {
-      if (room === null) return;
+    (ctx: {
+      tabId: string;
+      prevTabId: string;
+      url: string;
+      scrollY: number;
+      terminalTargetFrameSeen?: boolean;
+    }): boolean => {
+      if (currentTabTransport(sessionId, room) === null || room === null) {
+        // If this exact Room still owns the session, readiness merely dipped while
+        // the retry timer was firing. Convert the live owner into one explicit
+        // deferred convergence record; do not leave an expired timer + immortal
+        // requestIds behind. Room replacement/session teardown clears all work.
+        const binding = roomBindingRef.current;
+        const owner = activationOwnersRef.current.get(ctx.tabId);
+        if (
+          room !== null &&
+          binding?.sessionId === sessionId &&
+          binding.room === room &&
+          sessionIdRef.current === sessionId
+        ) {
+          deferredActivationUntilReadyRef.current = {
+            sessionId,
+            room,
+            ...ctx,
+            terminalTargetFrameSeen: owner?.terminalTargetFrameSeen === true,
+          };
+          if (owner?.sessionId === sessionId && owner.room === room && !owner.settled) {
+            discardActivationOwner(owner);
+          }
+        }
+        return false;
+      }
       let requestId: string | null = null;
-      const pendingOwner = {
-        tabId: ctx.tabId,
-        prevTabId: ctx.prevTabId,
-      };
+      let pendingOwner = activationOwnersRef.current.get(ctx.tabId);
+      if (
+        pendingOwner === undefined ||
+        pendingOwner.settled ||
+        pendingOwner.sessionId !== sessionId ||
+        pendingOwner.room !== room ||
+        pendingOwner.prevTabId !== ctx.prevTabId
+      ) {
+        if (pendingOwner !== undefined) discardActivationOwner(pendingOwner);
+        pendingOwner = {
+          sessionId,
+          room,
+          tabId: ctx.tabId,
+          prevTabId: ctx.prevTabId,
+          requestIds: new Set(),
+          terminalTargetFrameSeen: ctx.terminalTargetFrameSeen === true,
+          settled: false,
+        };
+        activationOwnersRef.current.set(ctx.tabId, pendingOwner);
+      }
+      const owner = pendingOwner;
       void sendActivateTab(
         room,
         {
@@ -6187,7 +6475,13 @@ export function SimulatorWindow(): JSX.Element {
           requestId = reservedRequestId;
           // Reserve before publish. A local/loopback-fast activateTabResult can now
           // correlate even while LiveKit's publish promise is still pending.
-          pendingActivationsRef.current.set(reservedRequestId, pendingOwner);
+          const displaced = pendingActivationsRef.current.get(reservedRequestId);
+          if (displaced !== undefined && displaced !== owner) {
+            displaced.requestIds.delete(reservedRequestId);
+          }
+          if (owner.settled || activationOwnersRef.current.get(owner.tabId) !== owner) return;
+          owner.requestIds.add(reservedRequestId);
+          pendingActivationsRef.current.set(reservedRequestId, owner);
         },
       ).then(
         () => undefined,
@@ -6195,10 +6489,12 @@ export function SimulatorWindow(): JSX.Element {
           // A retry or reject-driven reactivation may have installed a newer owner
           // under the same id in a deterministic test/mocked UUID environment. Never
           // let this older publish failure delete that replacement.
-          if (requestId !== null && pendingActivationsRef.current.get(requestId) === pendingOwner) {
+          if (requestId !== null && pendingActivationsRef.current.get(requestId) === owner) {
             pendingActivationsRef.current.delete(requestId);
+            owner.requestIds.delete(requestId);
           }
           if (!(err instanceof ReliableInputCongestedError)) return;
+          if (owner.settled || activationOwnersRef.current.get(owner.tabId) !== owner) return;
           // Congestion can begin in the narrow gap after the GUI's local guard but
           // before publish. If the previous tab still exists (normal switch/new-tab),
           // cancel the ack retry and immediately undo the optimistic switch: the box
@@ -6207,55 +6503,79 @@ export function SimulatorWindow(): JSX.Element {
           // the remaining neighbour can converge once the channel drains.
           const prevTabStillExists = tabsRef.current.some((tab) => tab.id === ctx.prevTabId);
           const retry = activationRetryRef.current.get(ctx.tabId);
-          if (retry !== undefined) window.clearTimeout(retry.timer);
-          activationRetryRef.current.delete(ctx.tabId);
+          if (retry?.owner === owner) {
+            window.clearTimeout(retry.timer);
+            activationRetryRef.current.delete(ctx.tabId);
+          }
           if (!prevTabStillExists) {
             // Active-tab close: the previous tab was intentionally removed, so it
             // cannot be restored. Keep one latest deferred activation and send it
             // when the shared congestion signal drains instead of burning all retry
             // attempts while publish is guaranteed to reject.
-            deferredActivationAfterCongestionRef.current = ctx;
+            deferredActivationUntilReadyRef.current = {
+              sessionId,
+              room,
+              ...ctx,
+              terminalTargetFrameSeen: owner.terminalTargetFrameSeen,
+            };
+            discardActivationOwner(owner);
             return;
           }
           if (activeTabIdRef.current !== ctx.tabId) return;
-          setSwitchingTabId((current) => (current === ctx.tabId ? null : current));
+          discardActivationOwner(owner);
+          resolveSwitchRef.current(ctx.tabId);
           setActiveTabIdSynchronized(ctx.prevTabId);
           resetPageChromeForSwitch();
           emitTabListRef.current(tabsRef.current, ctx.prevTabId);
           showNotice('Connection catching up — tab switch paused', 2500);
         },
       );
+      // `onRequestId` runs before publish settles, and a loopback-fast result may
+      // synchronously settle/revert this logical activation from inside that publish.
+      // Do not resurrect the retired owner by arming a retry after the callback has
+      // already removed it (or after a reject installed a replacement owner).
+      if (owner.settled || activationOwnersRef.current.get(ctx.tabId) !== owner) return true;
       const existing = activationRetryRef.current.get(ctx.tabId);
-      const attempts = (existing?.attempts ?? 0) + 1;
+      const attempts = (existing?.owner === owner ? existing.attempts : 0) + 1;
       if (existing !== undefined) window.clearTimeout(existing.timer);
       const timer = window.setTimeout(() => {
         const cur = activationRetryRef.current.get(ctx.tabId);
-        if (cur === undefined) return; // resolved (ack / page-state) — nothing to do
+        if (
+          cur?.owner !== owner ||
+          owner.settled ||
+          activationOwnersRef.current.get(ctx.tabId) !== owner
+        ) {
+          return;
+        }
         if (cur.attempts < ACTIVATE_MAX_ATTEMPTS) {
           sendActivateAttemptRef.current(ctx); // re-issue on the missed ack
         } else {
           // Exhausted — give up softly. Clear the affordance + retry record; leave the
           // operator on the tab they tapped (a dropped ack ≠ a reject). A gentle toast.
-          activationRetryRef.current.delete(ctx.tabId);
-          // Also drop this tab's now-orphaned pending-activation entries (keyed by
-          // requestId): we've stopped retrying, so their acks will never resolve, and
-          // otherwise only a relaunch/restore/unmount clears them — a slow bounded Map
-          // leak on a lossy channel (audit #4, 2026-07-08).
-          for (const [rid, p] of pendingActivationsRef.current) {
-            if (p.tabId === ctx.tabId) pendingActivationsRef.current.delete(rid);
-          }
-          setSwitchingTabId((s) => (s === ctx.tabId ? null : s));
+          discardActivationOwner(owner);
+          resolveSwitchRef.current(ctx.tabId);
           showNotice('Still switching tabs…', 3000);
         }
       }, ACTIVATE_ACK_TIMEOUT_MS);
       activationRetryRef.current.set(ctx.tabId, {
         tabId: ctx.tabId,
         prevTabId: ctx.prevTabId,
+        url: ctx.url,
+        scrollY: ctx.scrollY,
         attempts,
         timer,
+        owner,
       });
+      return true;
     },
-    [room, sessionId, resetPageChromeForSwitch, showNotice],
+    [
+      room,
+      sessionId,
+      currentTabTransport,
+      resetPageChromeForSwitch,
+      showNotice,
+      discardActivationOwner,
+    ],
   );
   // Stable self-reference so the setTimeout closure always re-issues via the latest
   // sendActivateAttempt (it captures room/sessionId) without a forward-ref cycle.
@@ -6263,6 +6583,26 @@ export function SimulatorWindow(): JSX.Element {
   useEffect(() => {
     sendActivateAttemptRef.current = sendActivateAttempt;
   }, [sendActivateAttempt]);
+  const resumeDeferredActivation = useCallback(
+    (ownerSessionId: string, ownerRoom: Room): void => {
+      const deferred = deferredActivationUntilReadyRef.current;
+      if (
+        deferred === null ||
+        deferred.sessionId !== ownerSessionId ||
+        deferred.room !== ownerRoom ||
+        inputCongestedRef.current ||
+        currentTabTransport(ownerSessionId, ownerRoom) === null
+      ) {
+        return;
+      }
+      if (sendActivateAttemptRef.current(deferred)) {
+        if (deferredActivationUntilReadyRef.current === deferred) {
+          deferredActivationUntilReadyRef.current = null;
+        }
+      }
+    },
+    [currentTabTransport],
+  );
   // Switch tabs — set active, OPTIMISTICALLY switch (the address bar + viewport follow
   // immediately) + show a subtle "switching…" affordance on the target tab, then ask
   // the harness to publish that tab's page via activateTab (correlated by requestId,
@@ -6270,12 +6610,15 @@ export function SimulatorWindow(): JSX.Element {
   // reject reverts + notifies; a dropped ack retries then soft-fails (see onData).
   const onActivateTab = useCallback(
     (id: string): void => {
-      if (inputCongested) {
+      if (currentTabTransport(sessionId, room) === null) return;
+      if (inputCongestedRef.current) {
         showNotice('Connection catching up — try again in a moment', 2500);
         return;
       }
       const target = tabs.find((t) => t.id === id);
       if (target === undefined || id === activeTabId) return;
+      // A fresh tab click supersedes any same-Room activation waiting for readiness.
+      deferredActivationUntilReadyRef.current = null;
       const prevActive = activeTabId;
       // SUPERSEDE any in-flight switch to a DIFFERENT tab: cancel its ack-miss
       // retry timer so a stale timer can't later re-issue activateTab for the
@@ -6286,15 +6629,9 @@ export function SimulatorWindow(): JSX.Element {
       // tab C (corrupting the active tab's stored URL). resolveSwitch's own doc
       // says it's called "when a newer switch supersedes it" — this wires that.
       // (Fable GUI re-audit 2026-07-02.)
-      for (const [tid, r] of activationRetryRef.current) {
+      for (const tid of activationRetryRef.current.keys()) {
         if (tid !== id) {
-          window.clearTimeout(r.timer);
-          activationRetryRef.current.delete(tid);
-          // Prune the superseded tab's pending-activation entries too (audit #4) — a late
-          // ack for a pruned requestId is a safe no-op (the ack handler guards on presence).
-          for (const [rid, p] of pendingActivationsRef.current) {
-            if (p.tabId === tid) pendingActivationsRef.current.delete(rid);
-          }
+          discardActivationForTab(tid);
         }
       }
       // Mark the switch BEFORE flipping active so the ~2s poll's grace window is
@@ -6312,7 +6649,7 @@ export function SimulatorWindow(): JSX.Element {
       // INSTANT feedback — show "switching…" on the target tab immediately (real
       // speed is A3's box-side no-reload). Cleared when the box reports the tab's
       // page (resolveSwitch via writeTabPageState / ack), or the hard timeout below.
-      setSwitchingTabId(id);
+      beginSwitchAffordance(id);
       emitTabList(tabs, id);
       if (room !== null) {
         // A blank/seed tab stores url='' (or about:blank); the box's navigate
@@ -6331,15 +6668,10 @@ export function SimulatorWindow(): JSX.Element {
         // active tab refreshes from the device without waiting for the next ~2s poll
         // tick. void it (no floating promise) — best-effort, transient errors ignored.
         void reconcilePageState();
-        // Hard safety net: never let the "switching…" affordance hang on the tab even
-        // if both the ack AND the page-state for it are dropped.
-        window.setTimeout(() => {
-          setSwitchingTabId((s) => (s === id ? null : s));
-        }, SWITCH_AFFORDANCE_TIMEOUT_MS);
       } else {
         // No control channel yet — nothing to ack the switch; don't strand the
         // affordance (it would otherwise spin forever with no box to clear it).
-        setSwitchingTabId(null);
+        resolveSwitch(id);
       }
     },
     [
@@ -6350,8 +6682,14 @@ export function SimulatorWindow(): JSX.Element {
       sendActivateAttempt,
       reconcilePageState,
       resetPageChromeForSwitch,
+      canNavigate,
       inputCongested,
       showNotice,
+      discardActivationForTab,
+      beginSwitchAffordance,
+      resolveSwitch,
+      currentTabTransport,
+      sessionId,
     ],
   );
   // DERIVE the address-bar view (liveUrl/liveTitle) from the ACTIVE tab's stored
@@ -6695,7 +7033,7 @@ export function SimulatorWindow(): JSX.Element {
               tabs={tabs}
               activeTabId={activeTabId}
               switchingTabId={switchingTabId}
-              inputEnabled={manualInputAvailable !== false}
+              inputEnabled={canManipulateTabs}
               onActivate={onActivateTab}
               onClose={onCloseTab}
               onNew={onNewTab}
@@ -6758,7 +7096,10 @@ export function SimulatorWindow(): JSX.Element {
                         <button
                           type="button"
                           data-component="switch-blank-escape"
-                          onClick={() => setSwitchingTabId(null)}
+                          // Visual escape only: the correlated retry/owner continues
+                          // to its bounded success/failure path. Deleting its timer
+                          // here used to leave requestIds alive but unreachable.
+                          onClick={() => dismissSwitchAffordance(switchingTabId)}
                           className="mt-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-medium text-white/80 transition hover:bg-white/20"
                         >
                           Show current page
@@ -7083,18 +7424,28 @@ export function SimulatorWindow(): JSX.Element {
                     // fight it.
                     interactive={humanInputEnabled}
                     onVideoDimensions={handleVideoDimensions}
-                    onRoom={handleRoom}
-                    onStateChange={(s) => setConnState(s.kind)}
-                    onPublisher={setPublisherState}
-                    onPublishError={() => setControlUnreachable(true)}
-                    onInputCongestionChange={(congested) => {
+                    onRoom={(nextRoom, ownerRoom) => handleRoom(sessionId, nextRoom, ownerRoom)}
+                    onStateChange={(s, ownerRoom) => {
+                      if (!ownsPanelRoom(sessionId, ownerRoom)) return;
+                      connStateRef.current = s.kind;
+                      setConnState(s.kind);
+                      resumeDeferredActivation(sessionId, ownerRoom);
+                    }}
+                    onPublisher={(nextPublisher, ownerRoom) => {
+                      if (!ownsPanelRoom(sessionId, ownerRoom)) return;
+                      publisherStateRef.current = nextPublisher;
+                      setPublisherState(nextPublisher);
+                      resumeDeferredActivation(sessionId, ownerRoom);
+                    }}
+                    onPublishError={(ownerRoom) => {
+                      if (ownsPanelRoom(sessionId, ownerRoom)) setControlUnreachable(true);
+                    }}
+                    onInputCongestionChange={(congested, ownerRoom) => {
+                      if (!ownsPanelRoom(sessionId, ownerRoom)) return;
+                      inputCongestedRef.current = congested;
                       setInputCongested(congested);
                       if (congested) setDotPressed(false);
-                      else if (deferredActivationAfterCongestionRef.current !== null) {
-                        const deferred = deferredActivationAfterCongestionRef.current;
-                        deferredActivationAfterCongestionRef.current = null;
-                        sendActivateAttemptRef.current(deferred);
-                      }
+                      else resumeDeferredActivation(sessionId, ownerRoom);
                     }}
                     onVideoEl={(el) => {
                       videoElRef.current = el;

@@ -22,7 +22,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 
 const sendNavigate = vi.fn(() => Promise.resolve());
-const sendActivateTab = vi.fn(() => Promise.resolve('req_test'));
+const sendActivateTab = vi.fn(
+  (_room: unknown, _payload: unknown, onRequestId?: (requestId: string) => void) => {
+    onRequestId?.('req_test');
+    return Promise.resolve('req_test');
+  },
+);
 const getAgentSession = vi.fn((): Promise<unknown> => new Promise(() => {}));
 let dataHandler: ((payload: Uint8Array) => void) | null = null;
 
@@ -33,7 +38,10 @@ let dataHandler: ((payload: Uint8Array) => void) | null = null;
 beforeEach(() => {
   sendNavigate.mockClear();
   sendActivateTab.mockReset();
-  sendActivateTab.mockResolvedValue('req_test');
+  sendActivateTab.mockImplementation((_room, _payload, onRequestId) => {
+    onRequestId?.('req_test');
+    return Promise.resolve('req_test');
+  });
   getAgentSession.mockReset();
   getAgentSession.mockImplementation(() => new Promise(() => {}));
   dataHandler = null;
@@ -82,21 +90,21 @@ const fakeRoom = {
 // Capture the panel's callbacks so the test can fire onPublishError / onRoom on
 // demand (the real panel only surfaces these after a live connect).
 const panelCbs: {
-  onPublishError?: () => void;
-  onInputCongestionChange?: (congested: boolean) => void;
-  onRoom?: (room: unknown) => void;
-  onStateChange?: (s: { kind: string }) => void;
-  onPublisher?: (p: string) => void;
+  onPublishError?: (room: unknown) => void;
+  onInputCongestionChange?: (congested: boolean, room: unknown) => void;
+  onRoom?: (room: unknown, ownerRoom: unknown) => void;
+  onStateChange?: (s: { kind: string }, room: unknown) => void;
+  onPublisher?: (p: string, room: unknown) => void;
   interactive?: boolean;
   recoverAction?: { nonce: number; mode: 'resubscribe' | 'rebuild' };
 } = {};
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
-    onPublishError?: () => void;
-    onInputCongestionChange?: (congested: boolean) => void;
-    onRoom?: (room: unknown) => void;
-    onStateChange?: (s: { kind: string }) => void;
-    onPublisher?: (p: string) => void;
+    onPublishError?: (room: unknown) => void;
+    onInputCongestionChange?: (congested: boolean, room: unknown) => void;
+    onRoom?: (room: unknown, ownerRoom: unknown) => void;
+    onStateChange?: (s: { kind: string }, room: unknown) => void;
+    onPublisher?: (p: string, room: unknown) => void;
     interactive?: boolean;
     recoverAction?: { nonce: number; mode: 'resubscribe' | 'rebuild' };
   }) => {
@@ -152,7 +160,7 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
     });
     getAgentSession.mockImplementation(() => heldControl);
     const { container } = renderSim();
-    act(() => panelCbs.onRoom?.(fakeRoom));
+    act(() => panelCbs.onRoom?.(fakeRoom, fakeRoom));
 
     expect(panelCbs.interactive).toBe(false);
     expect(container.querySelector('[data-component="simulator-keyboard-toggle"]')).toBeDisabled();
@@ -200,19 +208,20 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
 
   it('shows the badge on a failed input-publish, then CLEARS it when a room (re)connects', () => {
     const { container } = renderSim();
+    act(() => panelCbs.onRoom?.(fakeRoom, fakeRoom));
     // No badge initially.
     expect(container.querySelector('[data-component="control-unreachable-badge"]')).toBeNull();
     // A failed publish raises the badge.
-    act(() => panelCbs.onPublishError?.());
+    act(() => panelCbs.onPublishError?.(fakeRoom));
     expect(container.querySelector('[data-component="control-unreachable-badge"]')).not.toBeNull();
     // A fresh/reconnected room clears it (the latch is gone).
-    act(() => panelCbs.onRoom?.(fakeRoom));
+    act(() => panelCbs.onRoom?.(fakeRoom, fakeRoom));
     expect(container.querySelector('[data-component="control-unreachable-badge"]')).toBeNull();
   });
 
   it('surfaces truthful receipt failure copy and clears it on a confirmed input', () => {
     const { container } = renderSim();
-    act(() => panelCbs.onRoom?.(fakeRoom));
+    act(() => panelCbs.onRoom?.(fakeRoom, fakeRoom));
     act(() => {
       registerInputReceipt(fakeRoom as never, 'input_1', 10_000);
       handleInputAck(fakeRoom as never, {
@@ -239,7 +248,11 @@ describe('SimulatorWindow — controlUnreachable badge does not latch', () => {
   it('invalidates pending receipts when tab ownership changes', async () => {
     localStorage.setItem('ds-sim-browser-mode', '1');
     const { container } = renderSim();
-    act(() => panelCbs.onRoom?.(fakeRoom));
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      panelCbs.onPublisher?.('publishing', fakeRoom);
+    });
     act(() => registerInputReceipt(fakeRoom as never, 'old_tab_input', 10_000));
     expect(pendingInputReceiptCount(fakeRoom as never)).toBe(1);
 
@@ -289,22 +302,24 @@ describe('SimulatorWindow — harness capability health', () => {
 describe('SimulatorWindow — temporary input congestion feedback', () => {
   it('shows a calm catching-up badge during congestion and clears it on drain', () => {
     const { container } = renderSim();
+    act(() => panelCbs.onRoom?.(fakeRoom, fakeRoom));
     expect(container.querySelector('[data-component="input-congestion-badge"]')).toBeNull();
 
-    act(() => panelCbs.onInputCongestionChange?.(true));
+    act(() => panelCbs.onInputCongestionChange?.(true, fakeRoom));
     const badge = container.querySelector('[data-component="input-congestion-badge"]');
     expect(badge).not.toBeNull();
     expect(badge).toHaveTextContent('Connection catching up — input paused briefly');
 
-    act(() => panelCbs.onInputCongestionChange?.(false));
+    act(() => panelCbs.onInputCongestionChange?.(false, fakeRoom));
     expect(container.querySelector('[data-component="input-congestion-badge"]')).toBeNull();
   });
 
   it('offers a full Room reconnect when congestion does not drain', () => {
     const { container } = renderSim();
+    act(() => panelCbs.onRoom?.(fakeRoom, fakeRoom));
     const initialNonce = panelCbs.recoverAction?.nonce ?? 0;
 
-    act(() => panelCbs.onInputCongestionChange?.(true));
+    act(() => panelCbs.onInputCongestionChange?.(true, fakeRoom));
     const reconnect = container.querySelector(
       '[data-component="input-congestion-reconnect"]',
     ) as HTMLButtonElement;
@@ -324,9 +339,9 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     localStorage.setItem('ds-sim-browser-mode', '1');
     const { container } = renderSim();
     act(() => {
-      panelCbs.onRoom?.(fakeRoom);
-      panelCbs.onStateChange?.({ kind: 'connected' });
-      panelCbs.onPublisher?.('publishing');
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      panelCbs.onPublisher?.('publishing', fakeRoom);
     });
 
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
@@ -355,9 +370,9 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     localStorage.setItem('ds-sim-browser-mode', '1');
     const { container } = renderSim();
     act(() => {
-      panelCbs.onRoom?.(fakeRoom);
-      panelCbs.onStateChange?.({ kind: 'connected' });
-      panelCbs.onPublisher?.('publishing');
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      panelCbs.onPublisher?.('publishing', fakeRoom);
     });
     const address = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
     expect(address.value).toBe('');
@@ -382,9 +397,9 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     localStorage.setItem('ds-sim-browser-mode', '1');
     const { container } = renderSim();
     act(() => {
-      panelCbs.onRoom?.(fakeRoom);
-      panelCbs.onStateChange?.({ kind: 'connected' });
-      panelCbs.onPublisher?.('publishing');
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      panelCbs.onPublisher?.('publishing', fakeRoom);
     });
 
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
@@ -403,27 +418,161 @@ describe('SimulatorWindow — temporary input congestion feedback', () => {
     expect(container.querySelectorAll('[data-component="simulator-tab"]')).toHaveLength(1);
     expect(sendActivateTab).toHaveBeenCalledTimes(1);
 
-    act(() => panelCbs.onInputCongestionChange?.(true));
-    act(() => panelCbs.onInputCongestionChange?.(false));
+    act(() => panelCbs.onInputCongestionChange?.(true, fakeRoom));
+    // Congestion can drain while this same Room is temporarily reconnecting and
+    // has no publisher. Do not consume the deferred close activation in that gap.
+    act(() => {
+      panelCbs.onStateChange?.({ kind: 'reconnecting' }, fakeRoom);
+      panelCbs.onPublisher?.('waiting', fakeRoom);
+      panelCbs.onInputCongestionChange?.(false, fakeRoom);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
+    act(() => panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom));
+    expect(sendActivateTab).toHaveBeenCalledTimes(1); // publisher still waiting
+    act(() => panelCbs.onPublisher?.('publishing', fakeRoom));
     await act(async () => {
       await Promise.resolve();
     });
     expect(sendActivateTab).toHaveBeenCalledTimes(2);
   });
 
+  it('moves a retry into deferred ownership during a same-Room readiness dip and resumes once ready', async () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem('ds-sim-browser-mode', '1');
+      const { container } = renderSim();
+      act(() => {
+        panelCbs.onRoom?.(fakeRoom, fakeRoom);
+        panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+        panelCbs.onPublisher?.('publishing', fakeRoom);
+      });
+
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+      act(() => {
+        panelCbs.onStateChange?.({ kind: 'reconnecting' }, fakeRoom);
+        panelCbs.onPublisher?.('waiting', fakeRoom);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1200);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({
+              type: 'page_state',
+              state: 'loaded',
+              url: 'https://target.example/',
+              title: 'Target',
+            }),
+          ),
+        );
+      });
+      // The target can report a background/terminal frame while wire ownership is
+      // deferred. It is metadata only until the resumed activation is correlated.
+      expect(container.querySelector('[data-component="simulator-switch-blank"]')).not.toBeNull();
+
+      act(() => panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom));
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+      act(() => panelCbs.onPublisher?.('publishing', fakeRoom));
+      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({
+              type: 'activateTabResult',
+              requestId: 'req_test',
+              ok: true,
+              wasWarm: true,
+            }),
+          ),
+        );
+      });
+      expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not resurrect a dismissed switch cover when deferred wire work resumes', async () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem('ds-sim-browser-mode', '1');
+      const { container } = renderSim();
+      act(() => {
+        panelCbs.onRoom?.(fakeRoom, fakeRoom);
+        panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+        panelCbs.onPublisher?.('publishing', fakeRoom);
+      });
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
+      act(() => {
+        panelCbs.onStateChange?.({ kind: 'reconnecting' }, fakeRoom);
+        panelCbs.onPublisher?.('waiting', fakeRoom);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(1);
+      fireEvent.click(
+        container.querySelector('[data-component="switch-blank-escape"]') as HTMLButtonElement,
+      );
+      expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
+
+      act(() => {
+        panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+        panelCbs.onPublisher?.('publishing', fakeRoom);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+      // Resuming the exact deferred wire owner must not recreate a visual cover the
+      // operator explicitly dismissed (nor reset its original six-second bound).
+      expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
+      act(() => {
+        dataHandler?.(
+          new TextEncoder().encode(
+            JSON.stringify({
+              type: 'activateTabResult',
+              requestId: 'req_test',
+              ok: true,
+              wasWarm: true,
+            }),
+          ),
+        );
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(sendActivateTab).toHaveBeenCalledTimes(2);
+      expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not optimistically create a tab or navigate while input is paused', () => {
     localStorage.setItem('ds-sim-browser-mode', '1');
     const { container } = renderSim();
-    act(() => panelCbs.onRoom?.(fakeRoom));
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      panelCbs.onPublisher?.('publishing', fakeRoom);
+    });
     expect(container.querySelectorAll('[data-component="simulator-tab"]')).toHaveLength(1);
 
-    act(() => panelCbs.onInputCongestionChange?.(true));
+    act(() => panelCbs.onInputCongestionChange?.(true, fakeRoom));
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as HTMLButtonElement);
     expect(container.querySelectorAll('[data-component="simulator-tab"]')).toHaveLength(1);
 
     const address = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
     fireEvent.change(address, { target: { value: 'example.com' } });
-    fireEvent.keyDown(address, { key: 'Enter' });
+    fireEvent.submit(address.closest('form') as HTMLFormElement);
     expect(sendNavigate).not.toHaveBeenCalled();
     expect(container.textContent).toContain('Connection catching up — try again in a moment');
   });
@@ -453,8 +602,8 @@ describe('SimulatorWindow — address bar connect state', () => {
     // ("connecting…"). This is the edge-errors fix: navigation no longer enables on
     // room !== null during connect.
     act(() => {
-      panelCbs.onRoom?.(fakeRoom);
-      panelCbs.onStateChange?.({ kind: 'connected' });
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
     });
     expect(
       (container.querySelector('[aria-label="Address bar"]') as HTMLInputElement).disabled,
@@ -462,7 +611,7 @@ describe('SimulatorWindow — address bar connect state', () => {
 
     // Once a video track is actually publishing the device is live → the bar unlocks and
     // the connecting caption is gone.
-    act(() => panelCbs.onPublisher?.('publishing'));
+    act(() => panelCbs.onPublisher?.('publishing', fakeRoom));
     const connectedInput = container.querySelector(
       '[aria-label="Address bar"]',
     ) as HTMLInputElement;

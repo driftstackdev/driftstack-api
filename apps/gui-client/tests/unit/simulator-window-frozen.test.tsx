@@ -99,8 +99,8 @@ const fakeRoom = {
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
 const panelCbs: {
-  onStateChange?: (s: { kind: string }) => void;
-  onPublisher?: (p: string) => void;
+  onStateChange?: (s: { kind: string }, room: unknown) => void;
+  onPublisher?: (p: string, room: unknown) => void;
   video?: FakeVideo;
   // #5/#9 — every distinct recoverAction the simulator pushes down (the panel reacts
   // to each .nonce bump; the test asserts the resubscribe→rebuild sequence).
@@ -110,9 +110,9 @@ const panelCbs: {
 } = { recoverActions: [] };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
-    onRoom?: (room: unknown) => void;
-    onStateChange?: (s: { kind: string }) => void;
-    onPublisher?: (p: string) => void;
+    onRoom?: (room: unknown, ownerRoom: unknown) => void;
+    onStateChange?: (s: { kind: string }, room: unknown) => void;
+    onPublisher?: (p: string, room: unknown) => void;
     onVideoEl?: (el: HTMLVideoElement | null) => void;
     recoverAction?: { nonce: number; mode: string };
     sessionEnded?: { reason: string | null } | null;
@@ -134,10 +134,10 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
     // Fire the initial live state ONCE (empty deps). Re-asserting 'connected' on every
     // render would clobber a test-driven 'reconnecting' transition.
     useEffect(() => {
-      props.onRoom?.(fakeRoom);
+      props.onRoom?.(fakeRoom, fakeRoom);
       props.onVideoEl?.(ref.current);
-      props.onStateChange?.({ kind: 'connected' });
-      props.onPublisher?.('publishing');
+      props.onStateChange?.({ kind: 'connected' }, fakeRoom);
+      props.onPublisher?.('publishing', fakeRoom);
     }, []);
     return <div data-component="agent-session-panel-mock" />;
   },
@@ -299,7 +299,7 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     // longer 'connected'. The freeze badge must stay suppressed (the panel's
     // disconnected overlay is the single source of truth).
     act(() => {
-      panelCbs.onStateChange?.({ kind: 'reconnecting' });
+      panelCbs.onStateChange?.({ kind: 'reconnecting' }, fakeRoom);
     });
     advance(6);
     expect(frozenBadge(container)).toBeNull();
@@ -316,9 +316,9 @@ describe('SimulatorWindow — client video-freeze detector', () => {
       panelCbs.video?.__fireFrame();
       panelCbs.video?.__setCurrentTime(1);
     });
-    act(() => panelCbs.onStateChange?.({ kind: 'reconnecting' }));
+    act(() => panelCbs.onStateChange?.({ kind: 'reconnecting' }, fakeRoom));
     advance(5);
-    act(() => panelCbs.onStateChange?.({ kind: 'connected' }));
+    act(() => panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom));
 
     // The resumed room has not painted a frame yet. Reusing the old timestamp would
     // show the badge immediately here and eventually trigger resubscribe/rebuild.
@@ -405,9 +405,9 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     // detector but < SUSTAINED_PROGRESS_TICKS, so NOT genuine recovery — the cap must
     // survive) → re-freeze → next rebuild. Without the cap this repeats forever.
     const cycle = (): void => {
-      act(() => panelCbs.onStateChange?.({ kind: 'reconnecting' }));
+      act(() => panelCbs.onStateChange?.({ kind: 'reconnecting' }, fakeRoom));
       advance(1);
-      act(() => panelCbs.onStateChange?.({ kind: 'connected' }));
+      act(() => panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom));
       advance(1, frame); // ONE frame on reconnect, then it re-freezes
       advance(5); // re-detect the freeze
       advance(9); // resubscribe
@@ -440,9 +440,9 @@ describe('SimulatorWindow — client video-freeze detector', () => {
     advance(9);
     advance(5); // rebuild #1
     const cycle = (): void => {
-      act(() => panelCbs.onStateChange?.({ kind: 'reconnecting' }));
+      act(() => panelCbs.onStateChange?.({ kind: 'reconnecting' }, fakeRoom));
       advance(1);
-      act(() => panelCbs.onStateChange?.({ kind: 'connected' }));
+      act(() => panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom));
       advance(1, frame);
       advance(5);
       advance(9);

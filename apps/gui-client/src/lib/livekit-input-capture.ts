@@ -71,10 +71,10 @@ export interface UseInputCaptureOpts {
   /** Surfaced when the FIRST input publish fails — the data channel is
    *  effectively dead, so control isn't reaching the device. The parent wires
    *  this to a small non-fatal badge. Fired at most once per effect run. */
-  onPublishError?: () => void;
+  onPublishError?: (room: Room) => void;
   /** Temporary reliable-channel backpressure state. Fresh input is intentionally
    * paused until LiveKit reports the ordered buffer low again. */
-  onCongestionChange?: (congested: boolean) => void;
+  onCongestionChange?: (congested: boolean, room: Room) => void;
   /** The live captured-frame logical device-CSS-px dims the Mac touch injector
    *  addresses (per-archetype, A3 84de32ad4d). The parent computes this from the
    *  <video> element's FIRST full-res natural size ÷ dpr (= screen_width ×
@@ -445,7 +445,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // from the replacement/current channel state, not a historical pause.
     if (room !== null && (!enabled || video === null)) {
       setReliableInputCongested(room, false);
-      onCongestionChangeRef.current?.(false);
+      onCongestionChangeRef.current?.(false, room);
     }
   }, [room, video, enabled]);
   useEffect(() => {
@@ -476,11 +476,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // legitimately reattaches when first-frame logical dimensions settle; inherit the
     // same Room's latch so that re-key cannot accidentally resume input mid-stall.
     let reliableCongested = isReliableInputCongested(room);
-    onCongestionChangeRef.current?.(reliableCongested);
+    onCongestionChangeRef.current?.(reliableCongested, room);
     const setCongested = (congested: boolean): void => {
       reliableCongested = congested;
       setReliableInputCongested(room, congested);
-      onCongestionChangeRef.current?.(congested);
+      onCongestionChangeRef.current?.(congested, room);
     };
     const onDCBufferStatus = (isLow: boolean, kind: number): void => {
       // DataChannelKind.RELIABLE === 0 (livekit-client internal enum, stable). The
@@ -520,7 +520,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
             '[simulator] input publish failed — control will not reach the device:',
             err,
           );
-          onPublishErrorRef.current?.();
+          onPublishErrorRef.current?.(room);
         }
         return undefined;
       });
@@ -1186,8 +1186,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       }
       // Do not clear the room-owned latch here: this cleanup can be a same-Room
       // logical-dimension reattach, not a disconnect. WeakSet ownership means an
-      // actually discarded Room is collectible without explicit deletion.
-      onCongestionChangeRef.current?.(false);
+      // actually discarded Room is collectible without explicit deletion. Do not
+      // publish a synthetic `false` either: a same-Room re-key while the latch is
+      // true would look like a real drain to the parent and briefly resume deferred
+      // input/tab work before setup re-reported the still-congested state.
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', finishGesture);
       window.removeEventListener('pointerup', finishGesture);
