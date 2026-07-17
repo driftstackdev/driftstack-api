@@ -12,7 +12,11 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
 ## Prerequisites
 
 - Python 3.10+ (the SDK uses modern type hints + structural matches).
-- A Driftstack API key. Mint one at
+- Any paid Driftstack tier, including Manual. Free is supported through the
+  desktop app, whose browser sign-in automatically stores a restricted
+  `ds_test_…` device credential; that credential is not a general SDK or
+  sandbox key.
+- A `ds_live_…` customer API key. Mint one at
   [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/).
 
 ## 1. Install
@@ -119,6 +123,10 @@ except DriftstackError as err:
         # Tier usage quota reached (not the concurrency cap — that is
         # /concurrency-limit). Wait + retry, or upgrade.
         print("cap reached:", err.problem.get("detail"))
+    elif err.status == 403 and "apiAccess" in str(err.problem.get("detail", "")):
+        # Free keeps desktop access, but customer API/SDK access is paid.
+        # Upgrade to resume this key unless it was revoked or expired.
+        print(err.problem.get("detail"))
     elif err.status == 401:
         print("bad API key")
     else:

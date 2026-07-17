@@ -24,8 +24,8 @@ import DocLayout from '../../layouts/DocLayout.astro';
       timezone, slug, region, avatar). Team-RBAC interaction notes.
     </li>
     <li>
- <a href="/api/api-keys/">API keys</a> — create, list, rotate (24-hour grace), revoke.
-      Scopes table.
+      <a href="/api/api-keys/">API keys</a> — paid tiers create and rotate; dashboard web
+      sessions can list and revoke. Includes 24-hour rotation grace and the scopes table.
     </li>
     <li>
       <a href="/api/sessions/">Sessions</a> — create, navigate, interact, capture, wait, destroy.
@@ -84,7 +84,7 @@ import DocLayout from '../../layouts/DocLayout.astro';
     <li>
       <a href="/api/oauth/">OAuth 2.0 (third-party clients)</a> — Authorization-code + PKCE
       flow so third-party apps can act on a customer's behalf without holding the
-      customer's API key. Register, authorize, exchange, introspect, revoke.
+      customer's API key. Paid-tier approval; register, authorize, exchange, introspect, revoke.
     </li>
     <li>
       <a href="/api/versioning/">Versioning policy</a> — additive vs breaking changes, deprecation
@@ -129,9 +129,10 @@ import DocLayout from '../../layouts/DocLayout.astro';
       SDK consumers; a deliberately committed copy lives in the repository for SDK regeneration.
     </li>
     <li>
-      <strong>Authentication.</strong> Bearer API keys (<code>ds_live_…</code> for production,
-      <code>ds_test_…</code> for the free tier). Web sessions on the customer dashboard use
-      opaque sha256-hashed tokens; Bearer header in both cases.
+      <strong>Authentication.</strong> Customer API keys are <code>ds_live_…</code> on every
+      paid tier, including Manual. Free desktop browser sign-in stores a restricted
+      <code>ds_test_…</code> device credential automatically; it is not a general sandbox key.
+      Dashboard web sessions use opaque SHA-256-hashed tokens. All use a Bearer header.
     </li>
     <li>
       <strong>Rate limits.</strong> Per-tier token-bucket policy. Response headers include

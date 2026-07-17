@@ -7,14 +7,20 @@ description: Drive your first iPhone Safari session with nothing but curl — cr
 # Quickstart (curl)
 
 This page runs your first Driftstack session using only `curl` — no
-SDK, no install step. Every Driftstack feature is a plain HTTPS call,
-so this is also the fastest way to see exactly what goes over the
-wire. If you'd rather start in TypeScript, Python, or Go, use the
-[SDK quickstart](/quickstart/) instead.
+SDK, no install step. The core create, drive, capture, and destroy
+lifecycle uses plain HTTPS calls, so this is the fastest way to see
+that wire contract directly. Live video and event streams use their
+documented streaming transports. If you'd rather start in TypeScript,
+Python, or Go, use the [SDK quickstart](/quickstart/) instead.
 
-You will need a Driftstack account
+You will need a Driftstack account on any paid tier (including a Manual tier)
 ([sign up](https://app.driftstack.dev/signup/) or
 [sign in](https://app.driftstack.dev/login/)) and `curl`.
+
+> Free is an interactive desktop tier, so this HTTP quickstart is paid-only.
+> The desktop's browser sign-in automatically stores a restricted
+> `ds_test_…` device credential; it is not a general sandbox/customer key and
+> should not be copied into curl or an SDK.
 
 ## 1. Get an API key
 
@@ -28,15 +34,17 @@ You will need a Driftstack account
 export DRIFTSTACK_API_KEY="ds_live_…"
 ```
 
-Keys on paid tiers start with `ds_live_`; free-tier accounts get
-`ds_test_` keys. Both authenticate the same way — an
-`Authorization: Bearer` header on every call.
+Customer keys on every paid tier, including Manual, start with `ds_live_` and
+authenticate through an `Authorization: Bearer` header on every call. Free
+does not create or rotate customer keys. Its browser-authorized desktop
+credential starts with `ds_test_` and is restricted to the supported desktop
+route surface.
 
 Pick the narrowest scopes that fit the job — a scope is a permission
-attached to the key. `write:sessions` is enough for everything on
-this page; `read` + `write` cover a typical production app; keep
-`account_owner` (full account control) for dashboards, not runtime
-automation. Full list: [API key scopes](/reference/scopes/).
+attached to the key. This page uses `read` + `write`: account/state
+requests are reads, while create/navigate/capture/destroy drive the
+session. Keep `account_owner` (full account control) for dashboards,
+not runtime automation. Full list: [API key scopes](/reference/scopes/).
 
 ## 2. Check the key works
 
@@ -64,7 +72,10 @@ curl -H "Authorization: Bearer $DRIFTSTACK_API_KEY" \
 
 A `200` with a flat account object (no wrapper envelope) means the
 key is good. A `401` means the key is wrong, malformed, or revoked —
-check the dashboard. `concurrent_session_cap` /
+check the dashboard. A `403` after a downgrade to Free means customer API
+access is paused; its RFC 9457 `detail` tells you to upgrade to a tier that
+includes the `apiAccess` feature. Upgrade to resume an unexpired, unrevoked
+key. `concurrent_session_cap` /
 `concurrent_session_active` are worth noting now: they're the
 [concurrency budget](/guides/concurrency/) the next step draws from.
 

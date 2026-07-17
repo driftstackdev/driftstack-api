@@ -84,10 +84,11 @@ describe('W760 docs /api index page content parity', () => {
     expect(p).toMatch(/Team-RBAC interaction notes\./);
   });
 
-  it('CRITICAL /api/api-keys 24-hour rotate grace pinned. Matches W750 dashboard api-key rotate-confirm framing + V-296b rotate-reveal contract.', () => {
+  it('CRITICAL /api/api-keys paid-create/rotate and dashboard list/revoke boundary plus 24-hour grace pinned.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/create, list, rotate \(24-hour grace\), revoke\./);
+    expect(p).toMatch(/paid tiers create and rotate; dashboard web/);
+    expect(p).toMatch(/sessions can list and revoke\. Includes 24-hour rotation grace/);
   });
 
   it('CRITICAL /api/sessions 6-action lifecycle pinned — create/navigate/interact/capture/wait/destroy. Drift to dropping an action would hide the lifecycle from SDK consumers.', () => {
@@ -118,18 +119,20 @@ describe('W760 docs /api index page content parity', () => {
     expect(p).toMatch(/rendered via Scalar UI on the API host at <code>\/docs\/<\/code>\./);
   });
 
-  it('CRITICAL Bearer-API-key prefix pair pinned — ds_live_… + ds_test_…. Matches V-205 api-keys ds_<env>_ format + W746 server-side scrypt-kdf contract.', () => {
+  it('CRITICAL auth boundary pins ds_live customer keys on every paid tier and ds_test restricted desktop credentials on Free.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Bearer API keys \(<code>ds_live_…<\/code> for production,/);
-    expect(p).toMatch(/<code>ds_test_…<\/code> for the free tier\)\./);
+    expect(p).toMatch(/Customer API keys are <code>ds_live_…<\/code> on every/);
+    expect(p).toMatch(/paid tier, including Manual/);
+    expect(p).toMatch(/<code>ds_test_…<\/code> device credential automatically/);
+    expect(p).toMatch(/it is not a general sandbox key/);
   });
 
   it('CRITICAL web-session sha256-hashed-opaque-tokens framing pinned. Drift to suggesting a JWT/symmetric framing would diverge from the V-079 dashboard-session lifecycle.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Web sessions on the customer dashboard use\s*\n\s+opaque sha256-hashed tokens; Bearer header in both cases\./,
+      /Dashboard web sessions use opaque SHA-256-hashed tokens\. All use a Bearer header\./,
     );
   });
 

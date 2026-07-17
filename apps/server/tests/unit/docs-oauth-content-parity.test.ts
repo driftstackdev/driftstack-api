@@ -141,4 +141,14 @@ describe('Arc 6 docs.oauth — apps/docs/src/pages/api/oauth.md parity', () => {
     expect(idx).toMatch(/\/api\/oauth\//);
     expect(idx).toMatch(/OAuth 2\.0/i);
   });
+
+  it('pins paid OAuth approval, non-consuming Free denial and post-upgrade token recovery', () => {
+    expect(body).toMatch(
+      /OAuth customer authorization requires a paid account tier, including any\s*\n?Manual tier/,
+    );
+    expect(body).toMatch(/approval returns RFC 9457 `403 Forbidden`/);
+    expect(body).toMatch(/does not consume the staged authorization/);
+    expect(body).toMatch(/resume after an\s*\n?upgrade if they have not expired or been revoked/);
+    expect(body).not.toMatch(/feature_not_available/);
+  });
 });

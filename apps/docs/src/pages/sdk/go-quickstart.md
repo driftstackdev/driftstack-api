@@ -12,7 +12,11 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
 ## Prerequisites
 
 - Go 1.22+ (the SDK uses generic constraints + `slices` package).
-- A Driftstack API key. Mint one at
+- Any paid Driftstack tier, including Manual. Free is supported through the
+  desktop app, whose browser sign-in automatically stores a restricted
+  `ds_test_…` device credential; that credential is not a general SDK or
+  sandbox key.
+- A `ds_live_…` customer API key. Mint one at
   [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/).
 
 ## 1. Install
@@ -120,6 +124,7 @@ for category-only matching:
 import (
     "errors"
     "log"
+    "strings"
     "time"
 )
 
@@ -127,6 +132,7 @@ if _, err := client.Sessions.Create(ctx, req); err != nil {
     var rl *driftstack.RateLimitError
     var cl *driftstack.ConcurrencyLimitError
     var qe *driftstack.QuotaExceededError
+    var forbidden *driftstack.ForbiddenError
     switch {
     case errors.As(err, &rl):
         time.Sleep(time.Duration(rl.RetryAfterSeconds) * time.Second)
@@ -135,6 +141,14 @@ if _, err := client.Sessions.Create(ctx, req); err != nil {
         log.Printf("concurrent cap reached (%d/%d)", cl.CurrentSessions, cl.Limit)
     case errors.As(err, &qe):
         log.Printf("tier limit reached (current=%d/limit=%d)", qe.Current, qe.Limit)
+    case errors.As(err, &forbidden):
+        if strings.Contains(forbidden.Message, "apiAccess") {
+            // A Free account keeps desktop access but pauses customer API access.
+            // The server detail is actionable; upgrade resumes an unrevoked key.
+            log.Print(forbidden.Message)
+        } else {
+            log.Printf("forbidden: %s", forbidden.Message)
+        }
     case errors.Is(err, driftstack.ErrAuth):
         log.Print("bad API key")
     default:

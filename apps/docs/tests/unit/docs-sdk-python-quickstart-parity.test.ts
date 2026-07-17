@@ -95,4 +95,12 @@ describe('W260.A docs/sdk/python-quickstart ↔ live Python SDK parity', () => {
     expect(doc).toMatch(/screenshot\.byte_size/);
     expect(doc).toMatch(/state\.url/);
   });
+
+  it('pins the paid SDK prerequisite and actionable Free 403 branch', () => {
+    expect(doc).toMatch(/Any paid Driftstack tier, including Manual/);
+    expect(doc).toMatch(/A `ds_live_…` customer API key/);
+    expect(doc).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+    expect(doc).toMatch(/err\.status == 403 and "apiAccess"/);
+    expect(doc).toMatch(/Upgrade to resume this key unless it was revoked or expired/);
+  });
 });

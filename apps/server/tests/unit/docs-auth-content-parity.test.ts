@@ -1,7 +1,7 @@
 // Drift guard for apps/docs/src/pages/api/auth.md — final unguarded
 // docs/api/*.md file in the slice 153/154/155/160/161/162/163
 // coverage-completion track. Pins:
-//   - the API-key-vs-web-session two-mode framing (the load-bearing
+//   - the customer-key/web-session/device-credential framing (the load-bearing
 //     "which auth do I use?" decision tree for customers);
 //   - the discriminated-union login response (no-MFA → session;
 //     MFA enrolled → challenge token);
@@ -35,16 +35,21 @@ describe('docs api/auth content parity', () => {
     );
   });
 
-  it('two-auth-mode framing pinned: API-key bearer (SDK consumers, 99% case) vs web-session (customer dashboard). Drift to dropping this top-of-file framing would lead new customers to wire web-session auth into production code', () => {
-    expect(body).toMatch(/\*\*API-key bearer auth\*\* for SDK consumers/);
+  it('three-auth-surface framing pins paid customer keys, dashboard web sessions, and restricted desktop device credentials', () => {
+    expect(body).toMatch(/Driftstack has three auth surfaces:/);
+    expect(body).toMatch(/\*\*Customer API-key bearer auth\*\* for SDK consumers on any paid/);
+    expect(body).toMatch(/tier, including Manual/);
     expect(body).toMatch(/\*\*Web-session auth\*\* for the customer dashboard/);
-    expect(body).toMatch(/The 99% case for production code/);
+    expect(body).toMatch(/\*\*Browser-authorized device credentials\*\* for the desktop app/);
+    expect(body).toMatch(/it is not a general sandbox\/customer key/);
   });
 
-  it('token-shape discriminator pinned: ds_live_… / ds_test_… for API keys vs opaque base64 for web sessions — drift to dropping would orphan customers from understanding which token-shape ends up where', () => {
-    expect(body).toMatch(
-      /`ds_live_…` \/\s*`ds_test_…` for API keys; opaque base64 for web sessions/,
-    );
+  it('credential truth pins ds_live paid keys, ds_test Free desktop credentials, upgrade recovery, and the actionable 403 detail', () => {
+    expect(body).toMatch(/Paid\s*\n?customer keys use `ds_live_…`/);
+    expect(body).toMatch(/`ds_test_…` on Free/);
+    expect(body).toMatch(/They resume after an upgrade unless separately revoked or expired/);
+    expect(body).toMatch(/The "apiAccess" feature is not available on the "free" tier/);
+    expect(body).not.toMatch(/feature_not_available/);
   });
 
   it('discriminated-union login response pinned: no-MFA → session shape, MFA enrolled → challenge_token shape with mfa_required: true literal — drift to dropping the discriminator would make SDK consumers branch on token-shape inspection instead of the literal field', () => {

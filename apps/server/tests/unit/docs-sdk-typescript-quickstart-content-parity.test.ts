@@ -66,4 +66,14 @@ describe('docs sdk/typescript-quickstart content parity', () => {
     );
     expect(body).not.toMatch(/per-tier idle timeout/);
   });
+
+  it('paid SDK and Free desktop boundary plus actionable 403 detail are pinned', () => {
+    expect(body).toMatch(/Any paid Driftstack tier, including Manual/);
+    expect(body).toMatch(/A `ds_live_…` customer API key/);
+    expect(body).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+    expect(body).toMatch(/err\.status === 403 && err\.detail\?\.includes\('apiAccess'\) === true/);
+    expect(body).toMatch(
+      /Upgrade to\s*\n?\s*\/\/ resume this key unless it was separately revoked or expired/,
+    );
+  });
 });

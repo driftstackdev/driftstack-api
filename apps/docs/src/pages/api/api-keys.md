@@ -10,6 +10,17 @@ Driftstack uses bearer-token authentication. Every API request includes
 `Authorization: Bearer <key>`. Keys are issued, listed, rotated, and
 revoked via the `/v1/api-keys` endpoints below.
 
+Customer API keys require a paid tier. Every paid tier, including Manual,
+issues `ds_live_…` keys. Free is supported through desktop browser sign-in,
+which automatically stores a restricted `ds_test_…` device credential; that
+credential is not a customer API key or a general sandbox key.
+
+Free dashboard web sessions may still list and revoke keys created before a
+downgrade, but create and rotate return the normal RFC 9457 `403 Forbidden`:
+`The "apiAccess" feature is not available on the "free" tier. Upgrade to a tier that includes this feature.`
+Existing ordinary keys are rejected on every request while the account is
+Free and resume after upgrade unless revoked or expired.
+
 > **Plaintext is shown ONCE.** When a key is created or rotated, the
 > response includes the plaintext value. Store it now — Driftstack
 > hashes it server-side and cannot recover it later. If you lose a key,
@@ -18,6 +29,9 @@ revoked via the `/v1/api-keys` endpoints below.
 ## Create a key
 
 `POST /v1/api-keys`
+
+Available to all paid tiers, including Manual. The entitlement check runs
+before key, audit, or webhook side effects.
 
 Request:
 
@@ -60,6 +74,9 @@ account. Plaintext is never included.
 ## Rotate a key
 
 `POST /v1/api-keys/:id/rotate`
+
+Available to all paid tiers. Free may revoke an old key but cannot rotate it
+into new programmatic authority.
 
 Rotation mints a fresh plaintext while keeping the old key active for a
 24-hour grace period. Use this to swap deployments without downtime:

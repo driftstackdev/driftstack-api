@@ -85,4 +85,14 @@ describe('W259.C docs/sdk/typescript-quickstart ↔ live TS SDK parity', () => {
     expect(Object.keys(CaptureResponseSchema.shape)).toContain('byte_size');
     expect(doc).toMatch(/screenshot\.byte_size/);
   });
+
+  it('pins the paid SDK prerequisite and actionable Free 403 branch', () => {
+    expect(doc).toMatch(/Any paid Driftstack tier, including Manual/);
+    expect(doc).toMatch(/A `ds_live_…` customer API key/);
+    expect(doc).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+    expect(doc).toMatch(/err\.status === 403 && err\.detail\?\.includes\('apiAccess'\) === true/);
+    expect(doc).toMatch(
+      /Upgrade to\s*\n?\s*\/\/ resume this key unless it was separately revoked or expired/,
+    );
+  });
 });

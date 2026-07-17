@@ -67,4 +67,13 @@ describe('W256.A docs/api/auth ↔ /v1/auth/* parity', () => {
   it('says /v1/auth/* does not honor X-Driftstack-Account team scoping', () => {
     expect(doc).toMatch(/None of `\/v1\/auth\/\*` honors the team-RBAC/);
   });
+
+  it('pins browser-authorized Free device credentials separately from paid API keys', () => {
+    expect(doc).toMatch(/Driftstack has three auth surfaces/);
+    expect(doc).toMatch(/Customer API-key bearer auth/);
+    expect(doc).toMatch(/Browser-authorized device credentials/);
+    expect(doc).toMatch(/not a general sandbox\/customer key/);
+    expect(doc).toMatch(/The "apiAccess" feature is not available on the "free" tier/);
+    expect(doc).not.toMatch(/feature_not_available/);
+  });
 });

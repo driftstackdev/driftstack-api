@@ -14,7 +14,11 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
 - Node.js 18+ (Node 22 LTS recommended; the SDK declares
   `engines.node: ">=18"` and is built / tested against the same
   toolchain Driftstack runs in production).
-- A Driftstack API key. Mint one at
+- Any paid Driftstack tier, including Manual. Free is supported through the
+  desktop app, whose browser sign-in automatically stores a restricted
+  `ds_test_…` device credential; that credential is not a general SDK or
+  sandbox key.
+- A `ds_live_…` customer API key. Mint one at
   [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/);
   the plaintext is shown once on creation.
 
@@ -102,6 +106,10 @@ try {
       // Tier usage quota reached (not the concurrency cap — that is
       // /concurrency-limit). Wait + retry, or upgrade tier.
       console.error('cap reached:', err.detail);
+    } else if (err.status === 403 && err.detail?.includes('apiAccess') === true) {
+      // Customer API access is paused while the account is Free. Upgrade to
+      // resume this key unless it was separately revoked or expired.
+      console.error(err.detail);
     } else if (err.status === 401) {
       console.error('bad API key');
     } else {

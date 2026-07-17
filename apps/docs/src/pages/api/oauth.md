@@ -13,6 +13,13 @@ with **PKCE required** (RFC 7636 — no exceptions, even for confidential
 clients); access tokens are bearer-style and short-lived (one hour);
 no refresh tokens are issued.
 
+OAuth customer authorization requires a paid account tier, including any
+Manual tier. Free dashboard sessions remain valid for interactive desktop use,
+but approval returns RFC 9457 `403 Forbidden` with the actionable `apiAccess`
+upgrade detail and does not consume the staged authorization. Existing OAuth
+access tokens are rejected while their account is Free and resume after an
+upgrade if they have not expired or been revoked.
+
 > Bearer API keys (`ds_live_…`) and OAuth access tokens BOTH use the
 > `Authorization: Bearer <token>` header on `/v1/*` requests. The
 > server differentiates by token prefix; both surfaces respect the
@@ -128,6 +135,10 @@ body (a body-supplied `account_id` is rejected to prevent
 cross-account takeover). General API keys cannot call this endpoint,
 even if they have broad scopes: consent must be a human action from an
 interactive dashboard session.
+
+The approving account must currently include customer API access. On Free,
+this endpoint fails before consuming the pending authorization, so the same
+request can be approved after an upgrade.
 
 An account-scoped client can be approved only by its registered
 account. A different customer's consent attempt returns `access_denied`
@@ -296,14 +307,15 @@ Rotating only the client secret does not revoke existing bearer tokens.
 
 ## Errors at a glance
 
-| Status | Code (problem+json)   | When                                                          |
-| -----: | --------------------- | ------------------------------------------------------------- |
-|    400 | `invalid_request`     | body / query failed validation                                |
-|    400 | `invalid_grant`       | code unknown / expired / already used; PKCE verifier mismatch |
-|    400 | `invalid_scope`       | requested scope outside the client's allowed set              |
-|    400 | `access_denied`       | customer rejected the consent screen                          |
-|    401 | `invalid_client`      | `client_id` + `client_secret` mismatch OR client revoked      |
-|    401 | `unauthorized_client` | the client isn't allowed to use this grant type               |
+| Status | Code / problem                            | When                                                          |
+| -----: | ----------------------------------------- | ------------------------------------------------------------- |
+|    400 | `invalid_request`                         | body / query failed validation                                |
+|    400 | `invalid_grant`                           | code unknown / expired / already used; PKCE verifier mismatch |
+|    400 | `invalid_scope`                           | requested scope outside the client's allowed set              |
+|    400 | `access_denied`                           | customer rejected the consent screen                          |
+|    401 | `invalid_client`                          | `client_id` + `client_secret` mismatch OR client revoked      |
+|    401 | `unauthorized_client`                     | the client isn't allowed to use this grant type               |
+|    403 | `https://errors.driftstack.dev/forbidden` | approving account is Free; upgrade to a tier with `apiAccess` |
 
 All responses use `application/problem+json` per RFC 9457 (status,
 type, title, detail). The `type` field is a real RFC 9457 type URI:

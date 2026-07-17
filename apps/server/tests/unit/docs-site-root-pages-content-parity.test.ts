@@ -76,7 +76,7 @@ describe('W600 apps/docs root pages content parity', () => {
     );
     expect(body).toMatch(/^# Quickstart$/m);
     expect(body).toMatch(
-      /This guide takes you from a fresh signup to your first iPhone Safari session\./,
+      /This guide takes you from a fresh signup to your first iPhone Safari session from code\./,
     );
     expect(body).toMatch(/Allow about five minutes\./);
     // 2026-06-24: go.mod declares `go 1.22`, so the Go floor is 1.22+ (was a stale 1.21+).
@@ -88,10 +88,12 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(/^## 4\. What happened$/m);
     expect(body).toMatch(/^## 5\. Next steps$/m);
     expect(body).toMatch(/export DRIFTSTACK_API_KEY="ds_live_…"/);
-    // S31 2026-07-07 (fable-truth-audit) — corrected: free tier mints ds_test_ keys.
+    expect(body).toMatch(/This code quickstart requires a paid tier with API access/);
+    expect(body).toMatch(/`ds_live_` prefix on every paid tier, including Manual/);
     expect(body).toMatch(
-      /Paid-tier keys carry the `ds_live_` prefix; free-tier accounts get `ds_test_` keys/,
+      /restricted device credential\s*\n?the desktop app obtains and stores automatically/,
     );
+    expect(body).not.toMatch(/same shape, test environment/);
     expect(body).toMatch(/npm install @driftstack\/sdk/);
     expect(body).toMatch(/pip install driftstack-sdk/);
     expect(body).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
@@ -113,11 +115,10 @@ describe('W600 apps/docs root pages content parity', () => {
     const body = read(LICENSE);
     expect(body).toMatch(/^title: License activation \(GUI client\)$/m);
     expect(body).toMatch(/^# License activation \(GUI client\)$/m);
-    expect(body).toMatch(
-      /The Driftstack macOS desktop GUI client doesn't use a separate license-key system\./,
-    );
+    expect(body).toMatch(/client defaults to secure browser sign-in/);
+    expect(body).toMatch(/Free users do not create or paste a customer API key/);
     expect(body).toMatch(/^## What you need$/m);
-    expect(body).toMatch(/Same shape as the API key your SDK calls use\./);
+    expect(body).toMatch(/A Driftstack dashboard account for the default browser sign-in flow/);
     expect(body).toMatch(/Your tier supports GUI client access\./);
     expect(body).toMatch(/^## First-run flow$/m);
     expect(body).toMatch(/On first launch, the GUI client opens a five-step wizard:/);
@@ -128,14 +129,16 @@ describe('W600 apps/docs root pages content parity', () => {
     // 2026-05-20 — port 7780→3000 (DEFAULT_SETTINGS.baseUrl shift per
     // 6d117edb / beed59db; matches the port apps/server binds to in dev).
     expect(body).toMatch(/defaults to `http:\/\/localhost:3000`/);
-    expect(body).toMatch(/3\. \*\*API key\*\*/);
-    expect(body).toMatch(/The wizard immediately calls `GET \/v1\/account\/me` to validate\./);
+    expect(body).toMatch(/3\. \*\*Sign in\*\* — use \*\*Sign in with browser\*\* by default/);
+    expect(body).toMatch(/calls `GET \/v1\/account\/me` to validate it/);
     expect(body).toMatch(/4\. \*\*First profile\*\* \(skippable\)/);
     expect(body).toMatch(/The wizard calls `POST \/v1\/profiles`/);
     expect(body).toMatch(/5\. \*\*Done\*\* — flag flipped; main app shell takes over\./);
     expect(body).toMatch(/^## Where credentials live$/m);
-    expect(body).toMatch(/\*\*API key\*\* — stored in macOS Keychain through `keyring-rs`\./);
-    expect(body).toMatch(/The key never lands in `settings\.json` on disk\./);
+    expect(body).toMatch(
+      /\*\*Device credential or fallback API key\*\* — stored in macOS Keychain/,
+    );
+    expect(body).toMatch(/It never lands in `settings\.json` on disk\./);
     expect(body).toMatch(/^## Switching deployments$/m);
     expect(body).toMatch(/^## Self-hosted activation$/m);
     expect(body).toMatch(/^## Platform support$/m);
@@ -146,12 +149,17 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(/does not publish Windows or Linux installers\./);
     expect(body).not.toMatch(/pending pre-launch|once the first ones ship|page is not live yet/i);
     expect(body).toMatch(/^## Updates$/m);
-    expect(body).toMatch(/Tauri Updater \+ GitHub Releases ship updates automatically\./);
+    expect(body).toMatch(
+      /Tauri Updater checks the signed GitHub Releases manifest once at startup/,
+    );
+    expect(body).toMatch(/does not\s*\n?download anything until you choose \*\*Install\*\*/);
+    expect(body).toMatch(/installs it,\s*\n?and relaunches the app/);
     expect(body).toMatch(/^## Troubleshooting$/m);
     expect(body).toMatch(/\*\*"Authentication failed"\*\*/);
     expect(body).toMatch(/\*\*"Couldn't reach control plane"\*\*/);
     expect(body).toMatch(/check \[status\.driftstack\.dev\]\(https:\/\/status\.driftstack\.dev\)/);
     expect(body).toMatch(/\*\*Wizard re-fires on every launch\*\*/);
+    expect(body).toMatch(/\*\*"You do not have permission" on activation\*\*/);
     expect(body).toMatch(/^## Next steps$/m);
     expect(existsSync(LICENSE)).toBe(true);
   });

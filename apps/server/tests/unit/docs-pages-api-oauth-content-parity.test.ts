@@ -131,4 +131,13 @@ describe('docs/pages/api/oauth content parity', () => {
       /Bearer API keys \(`ds_live_…`\) and OAuth access tokens BOTH use the\s*\n?\s*> `Authorization: Bearer <token>` header on `\/v1\/\*` requests\. The\s*\n?\s*> server differentiates by token prefix; both surfaces respect the\s*\n?\s*> same scope \+ rate-limit \+ audit pipeline\./,
     );
   });
+
+  it('pins paid-only approval, non-consuming Free failure and upgrade recovery', () => {
+    expect(body).toMatch(/OAuth customer authorization requires a paid account tier/);
+    expect(body).toMatch(/approval returns RFC 9457 `403 Forbidden`/);
+    expect(body).toMatch(/does not consume the staged authorization/);
+    expect(body).toMatch(/same\s*\n?request can be approved after an upgrade/);
+    expect(body).toMatch(/resume after an\s*\n?upgrade if they have not expired or been revoked/);
+    expect(body).not.toMatch(/feature_not_available/);
+  });
 });

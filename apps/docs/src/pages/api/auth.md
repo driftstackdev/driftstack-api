@@ -6,17 +6,29 @@ description: Sign up, log in, verify email, MFA challenge + step-up, magic link,
 
 # Authentication flows
 
-Driftstack has two auth surfaces:
+Driftstack has three auth surfaces:
 
-1. **API-key bearer auth** for SDK consumers — covered in
-   [API keys](/api/api-keys/). The 99% case for production code.
+1. **Customer API-key bearer auth** for SDK consumers on any paid
+   tier, including Manual — covered in [API keys](/api/api-keys/).
 2. **Web-session auth** for the customer dashboard — covered here.
    Email + password (or magic link), optional TOTP, exchanged for an
    opaque session token stored in the dashboard's local storage.
+3. **Browser-authorized device credentials** for the desktop app.
+   On Free, this restricted `ds_test_…` credential is stored
+   automatically and is limited to the supported desktop route surface;
+   it is not a general sandbox/customer key.
 
-Both auth modes use the same `Authorization: Bearer <token>` header.
-The server distinguishes them by token shape (`ds_live_…` /
-`ds_test_…` for API keys; opaque base64 for web sessions).
+All three use the same `Authorization: Bearer <token>` header. Paid
+customer keys use `ds_live_…`; the desktop device flow returns a
+provenance-bound credential (`ds_test_…` on Free); web sessions are
+opaque base64 tokens. The server enforces the stored credential type
+and account tier as well as the token shape.
+
+Ordinary customer API keys and OAuth access tokens are rejected while
+their account is on Free, even if authentication was previously cached.
+They resume after an upgrade unless separately revoked or expired. The
+response is the normal RFC 9457 `403 Forbidden`, with actionable detail:
+`The "apiAccess" feature is not available on the "free" tier. Upgrade to a tier that includes this feature.`
 
 ## Sign up
 
@@ -263,20 +275,20 @@ the `/v1/account/web-sessions` endpoints — they let customers see
 every device currently signed in and revoke any individual session
 or every-other.
 
-## CLI / GUI activation flow
+## Desktop device activation flow
 
-Browser-OAuth-style activation lets CLI and GUI tools obtain an API
-key without asking the user to copy/paste from the dashboard. The
+Browser authorization lets the desktop app obtain a restricted device
+credential without asking the user to copy/paste a customer API key. The
 dance is three steps — [Initiate](#initiate-activation),
 [Bind](#bind-activation-dashboard), then
-[Exchange](#exchange-for-the-api-key) — each backed by one endpoint
+[Exchange](#exchange-for-the-device-credential) — each backed by one endpoint
 below.
 
 ## Initiate activation
 
 `POST /v1/auth/cli-authorize/initiate`
 
-Step 1 — **Initiate** — the CLI/GUI generates a CSRF nonce + optional
+Step 1 — **Initiate** — the desktop app generates a CSRF nonce + optional
 client label, calls `POST /v1/auth/cli-authorize/initiate`, and
 gets back a one-shot `code`, a separate device-displayed `user_code`,
 and a `browser_url` that opens the dashboard's Authorize page.
@@ -289,22 +301,22 @@ Step 2 — **Bind** — the user signs in to the dashboard (if not already),
 types the `user_code` shown by the initiating device, and clicks
 Authorize. The dashboard hits
 `POST /v1/auth/cli-authorize/bind-device-code` with the user's
-web-session bearer; the server mints a scoped API key on the calling
-account and stores only its encrypted envelope under a hashed code
+web-session bearer; the server mints a provenance-bound device credential
+on the calling account and stores only its encrypted envelope under a hashed code
 identifier (Redis, 2-minute post-bind TTL).
 
-## Exchange for the API key
+## Exchange for the device credential
 
 `POST /v1/auth/cli-authorize/exchange`
 
-Step 3 — **Exchange** — the CLI/GUI polls
+Step 3 — **Exchange** — the desktop app polls
 `POST /v1/auth/cli-authorize/exchange` until the response
 transitions from `{ status: "pending" }` to
 `{ status: "bound", api_key, account_id }`. Bound is one-shot: the
 server deletes the code as it hands back the key, so a subsequent
 poll returns `{ status: "expired" }` (HTTP `200`). The same
 `{ status: "expired" }` is returned if the user takes too long;
-either way the CLI/GUI restarts the flow.
+either way the desktop app restarts the flow.
 
 ## CSRF state
 
@@ -318,7 +330,7 @@ a code that wasn't issued in the same session.
 ```ts
 const { code, user_code, browser_url } = await client.auth.cliAuthorizeInitiate({
   state: crypto.randomUUID(),
-  client_label: 'My CLI on darwin-arm64',
+  client_label: 'Driftstack Desktop on darwin-arm64',
 });
 console.log(`Enter ${user_code} in the browser to approve this device.`);
 open(browser_url); // open in system browser
@@ -337,7 +349,7 @@ for (;;) {
 ```python
 out = client.auth.cli_authorize_initiate({
     "state": secrets.token_urlsafe(24),
-    "client_label": "My CLI",
+    "client_label": "Driftstack Desktop",
 })
 print(f'Enter {out["user_code"]} in the browser to approve this device.')
 webbrowser.open(out["browser_url"])
@@ -358,7 +370,7 @@ while True:
 ```go
 init, _ := client.Auth.CliAuthorizeInitiate(ctx, &driftstack.CliAuthorizeInitiateRequest{
     State:       state,
-    ClientLabel: "My Go CLI",
+    ClientLabel: "Driftstack Desktop",
 })
 fmt.Printf("Enter %s in the browser to approve this device.\n", init.UserCode)
 exec.Command("open", init.BrowserURL).Run()
@@ -379,12 +391,14 @@ for {
 }
 ```
 
-## Default scopes
+## Default scopes and Free restrictions
 
-The minted key carries `["account_owner"]` scope by default. CLI tools
-that only need read access should pass `scopes: ["read"]` on the
-`bind` call to follow least-privilege; GUI clients that drive sessions
-end-to-end keep the default.
+The minted device credential carries `["account_owner"]` scope by default. Device
+clients that only need read access should pass `scopes: ["read"]` on the
+`bind` call to follow least-privilege; the desktop app drives sessions
+end-to-end and keeps the default. On Free, the server additionally restricts
+this credential to the registered desktop route allowlist. Its broad scope
+does not turn it into a general-purpose customer API key.
 
 ## Auth + scoping
 

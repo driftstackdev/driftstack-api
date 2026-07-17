@@ -48,4 +48,13 @@ describe('W255.A docs/api/api-keys ↔ live api-keys parity', () => {
   it('warns plaintext is shown ONCE', () => {
     expect(doc).toMatch(/Plaintext is shown ONCE/i);
   });
+
+  it('pins the paid customer-key and restricted Free desktop boundary', () => {
+    expect(doc).toMatch(/Every paid tier, including Manual/);
+    expect(doc).toMatch(/restricted `ds_test_…` device credential/);
+    expect(doc).toMatch(/Free dashboard web sessions may still list and revoke/);
+    expect(doc).toMatch(/create and rotate return the normal RFC 9457 `403 Forbidden`/);
+    expect(doc).toMatch(/resume after upgrade unless revoked or expired/);
+    expect(doc).not.toMatch(/feature_not_available|general sandbox key\s+and customer key/);
+  });
 });

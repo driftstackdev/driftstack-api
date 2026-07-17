@@ -37,23 +37,27 @@ describe('W764 docs /api/auth content parity', () => {
     );
   });
 
-  it('CRITICAL two-auth-surfaces framing pinned. The "API-key bearer auth for SDK consumers" + "Web-session auth for the customer dashboard" 2-surface split is the load-bearing customer-facing model.', () => {
+  it('CRITICAL three-auth-surfaces framing pins paid customer keys, dashboard sessions and restricted browser-authorized desktop credentials.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Driftstack has two auth surfaces:/);
-    expect(p).toMatch(/\*\*API-key bearer auth\*\* for SDK consumers/);
+    expect(p).toMatch(/Driftstack has three auth surfaces:/);
+    expect(p).toMatch(/\*\*Customer API-key bearer auth\*\* for SDK consumers on any paid/);
     expect(p).toMatch(/\*\*Web-session auth\*\* for the customer dashboard — covered here\./);
+    expect(p).toMatch(/\*\*Browser-authorized device credentials\*\* for the desktop app/);
     expect(p).toMatch(/Email \+ password \(or magic link\), optional TOTP, exchanged for an/);
     expect(p).toMatch(/opaque session token stored in the dashboard's local storage\./);
   });
 
-  it('CRITICAL same-bearer-header-two-token-shapes framing pinned. The "Both auth modes use the same Authorization: Bearer <token> header. The server distinguishes them by token shape (ds_live_… / ds_test_… for API keys; opaque base64 for web sessions)" wording matches W760 /api index Bearer-prefix pair.', () => {
+  it('CRITICAL bearer framing distinguishes paid ds_live keys, restricted Free ds_test device credentials, and opaque dashboard sessions.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Both auth modes use the same `Authorization: Bearer <token>` header\./);
-    expect(p).toMatch(
-      /The server distinguishes them by token shape \(`ds_live_…` \/\s*\n?`ds_test_…` for API keys; opaque base64 for web sessions\)\./,
-    );
+    expect(p).toMatch(/All three use the same `Authorization: Bearer <token>` header\./);
+    expect(p).toMatch(/customer keys use `ds_live_…`/);
+    expect(p).toMatch(/`ds_test_…` on Free/);
+    expect(p).toMatch(/web sessions are\s*\n?opaque base64 tokens/);
+    expect(p).toMatch(/They resume after an upgrade unless separately revoked or expired/);
+    expect(p).toMatch(/The "apiAccess" feature is not available on the "free" tier/);
+    expect(p).not.toMatch(/feature_not_available/);
   });
 
   it('CRITICAL signup 12-char-min password pinned. Matches W737 dashboard signup-form minlength=12 + W736 reset-password.', () => {
@@ -198,26 +202,27 @@ describe('W764 docs /api/auth content parity', () => {
     );
   });
 
-  it('CRITICAL CLI activation 3-step flow pinned — initiate / bind / exchange. The steps match the V-266/V-267 dashboard /cli/authorize page contract. S27 (2026-07-07) re-pin: the "Three steps" numbered list became three h2 endpoint sections (Initiate activation / Bind activation (dashboard) / Exchange for the API key) so the endpoints surface in the docs nav tree; the step wording is otherwise verbatim.', () => {
+  it('CRITICAL desktop activation 3-step flow pinned — initiate / bind / exchange for the device credential.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/^## Initiate activation$/m);
     expect(p).toMatch(/^## Bind activation \(dashboard\)$/m);
-    expect(p).toMatch(/^## Exchange for the API key$/m);
-    expect(p).toMatch(/Step 1 — \*\*Initiate\*\* — the CLI\/GUI generates a CSRF nonce/);
+    expect(p).toMatch(/^## Exchange for the device credential$/m);
+    expect(p).toMatch(/\[Exchange\]\(#exchange-for-the-device-credential\)/);
+    expect(p).toMatch(/Step 1 — \*\*Initiate\*\* — the desktop app generates a CSRF nonce/);
     expect(p).toMatch(/Step 2 — \*\*Bind\*\* — the user signs in to the dashboard/);
-    expect(p).toMatch(/Step 3 — \*\*Exchange\*\* — the CLI\/GUI polls/);
+    expect(p).toMatch(/Step 3 — \*\*Exchange\*\* — the desktop app polls/);
   });
 
-  it('CRITICAL CLI bind stores only an encrypted key envelope under a hashed identifier', () => {
+  it('CRITICAL desktop bind stores only an encrypted provenance-bound device credential envelope under a hashed identifier', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /the server mints a scoped API key on the calling\s*\n?\s*account and stores only its encrypted envelope under a hashed code\s*\n?\s*identifier \(Redis, 2-minute post-bind TTL\)\./,
+      /the server mints a provenance-bound device credential\s*\n?on the calling account and stores only its encrypted envelope under a hashed code\s*\n?identifier \(Redis, 2-minute post-bind TTL\)\./,
     );
   });
 
-  it('CRITICAL CLI exchange status state-machine pinned — pending / bound / expired. The 3-state transition is what the polling-poll-poll SDK loop drives off. (S27 re-pin: same sentence, unindented paragraph instead of list-item continuation.)', () => {
+  it('CRITICAL desktop exchange status state-machine pinned — pending / bound / expired. The 3-state transition is what the polling device client drives off. (S27 re-pin: same sentence, unindented paragraph instead of list-item continuation.)', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
@@ -237,13 +242,19 @@ describe('W764 docs /api/auth content parity', () => {
     );
   });
 
-  it('CRITICAL CLI activation default scope `account_owner` + read-only override pinned. The "CLI tools that only need read access should pass scopes: [\'read\'] on the bind call to follow least-privilege" wording matches W762 api-keys least-privilege guidance.', () => {
+  it('CRITICAL desktop activation default scope `account_owner` + read-only override pinned.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/The minted key carries `\["account_owner"\]` scope by default\./);
     expect(p).toMatch(
-      /CLI tools\s*\n?that only need read access should pass `scopes: \["read"\]` on the\s*\n?`bind` call to follow least-privilege/,
+      /The minted device credential carries `\["account_owner"\]` scope by default\./,
     );
+    expect(p).toMatch(
+      /Device\s*\n?clients that only need read access should pass `scopes: \["read"\]` on the\s*\n?`bind` call to follow least-privilege/,
+    );
+    expect(p).toMatch(
+      /On Free, the server additionally restricts\s*\n?this credential to the registered desktop route allowlist/,
+    );
+    expect(p).toMatch(/does not turn it into a general-purpose customer API key/);
   });
 
   it("CRITICAL /v1/auth/* does NOT honor X-Driftstack-Account header pinned. The 'None of /v1/auth/* honors the team-RBAC X-Driftstack-Account header — auth is always per-credential, not per-team-context' wording is the load-bearing scope-discrimination framing.", () => {
@@ -273,7 +284,7 @@ describe('W764 docs /api/auth content parity', () => {
     expect(p).toMatch(/`POST \/v1\/auth\/logout`/);
   });
 
-  it('CRITICAL 3-step CLI activation endpoint set pinned — initiate/bind/exchange.', () => {
+  it('CRITICAL 3-step desktop activation endpoint set pinned — initiate/bind/exchange.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`POST \/v1\/auth\/cli-authorize\/initiate`/);
@@ -281,7 +292,7 @@ describe('W764 docs /api/auth content parity', () => {
     expect(p).toMatch(/`POST \/v1\/auth\/cli-authorize\/exchange`/);
   });
 
-  it('CRITICAL 3-language SDK examples for both login + CLI activation. TypeScript + Python + Go each have a code block in the login + CLI-activation sections.', () => {
+  it('CRITICAL 3-language SDK examples for both login + desktop activation. TypeScript + Python + Go each have a code block in the login + device-activation sections.', () => {
     const p = read(PAGE);
 
     // Login section: TypeScript discriminated-union narrowing.
@@ -291,11 +302,11 @@ describe('W764 docs /api/auth content parity', () => {
     // Login section: Go.
     expect(p).toMatch(/\/\/ Go — LoginResponse carries both branches; check MfaRequired\./);
 
-    // CLI section: TypeScript.
+    // Device activation section: TypeScript.
     expect(p).toMatch(/await client\.auth\.cliAuthorizeInitiate\(/);
-    // CLI section: Python.
+    // Device activation section: Python.
     expect(p).toMatch(/client\.auth\.cli_authorize_initiate\(/);
-    // CLI section: Go.
+    // Device activation section: Go.
     expect(p).toMatch(/client\.Auth\.CliAuthorizeInitiate\(ctx,/);
   });
 

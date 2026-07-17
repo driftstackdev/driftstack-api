@@ -266,6 +266,16 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
     expect(read(GO_PAGE)).toMatch(/\[API versioning\]\(\/api\/versioning\/\)/);
   });
 
+  it('CRITICAL every SDK quickstart requires a paid tier and distinguishes the restricted Free desktop credential', () => {
+    for (const page of [TS_PAGE, PY_PAGE, GO_PAGE]) {
+      const p = read(page);
+      expect(p).toMatch(/Any paid Driftstack tier, including Manual/);
+      expect(p).toMatch(/A `ds_live_…` customer API key/);
+      expect(p).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+      expect(p).toMatch(/not a general SDK or\s*\n?\s*sandbox key/);
+    }
+  });
+
   it('test file metadata — file exists at canonical path', () => {
     expect(
       existsSync(

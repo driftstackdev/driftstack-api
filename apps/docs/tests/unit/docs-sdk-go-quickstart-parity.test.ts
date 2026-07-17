@@ -97,4 +97,15 @@ describe('W260.B docs/sdk/go-quickstart ↔ live Go SDK parity', () => {
     }
     expect(missing).toEqual([]);
   });
+
+  it('pins the paid SDK prerequisite and restricted Free desktop credential', () => {
+    expect(doc).toMatch(/Any paid Driftstack tier, including Manual/);
+    expect(doc).toMatch(/A `ds_live_…` customer API key/);
+    expect(doc).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+    expect(doc).toMatch(/not a general SDK or\s*\n?\s*sandbox key/);
+    expect(doc).toMatch(/var forbidden \*driftstack\.ForbiddenError/);
+    expect(doc).toMatch(/strings\.Contains\(forbidden\.Message, "apiAccess"\)/);
+    expect(doc).toMatch(/log\.Print\(forbidden\.Message\)/);
+    expect(doc).toMatch(/log\.Printf\("forbidden: %s", forbidden\.Message\)/);
+  });
 });

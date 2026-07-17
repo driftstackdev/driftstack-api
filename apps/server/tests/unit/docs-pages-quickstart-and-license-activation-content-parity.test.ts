@@ -16,6 +16,9 @@ function read(p: string): string {
 
 const QS = resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart.md');
 const LIC = resolve(REPO_ROOT, 'apps/docs/src/pages/license-activation.md');
+const FIRST_RUN = resolve(REPO_ROOT, 'apps/gui-client/src/views/FirstRunWizard.tsx');
+const SETTINGS_VIEW = resolve(REPO_ROOT, 'apps/gui-client/src/views/SettingsView.tsx');
+const UPDATER = resolve(REPO_ROOT, 'apps/gui-client/src/lib/updater.ts');
 
 describe('W785 docs quickstart + license-activation content parity', () => {
   it('both files exist', () => {
@@ -38,15 +41,15 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     );
   });
 
-  it("CRITICAL quickstart 5-min framing pinned. The 'This guide takes you from a fresh signup to your first iPhone Safari session. Allow about five minutes' wording matches W775 SDK index quickstart promise.", () => {
+  it('CRITICAL paid code quickstart 5-min framing pinned.', () => {
     const p = read(QS);
 
     expect(p).toMatch(
-      /This guide takes you from a fresh signup to your first iPhone Safari session\. Allow about five minutes\./,
+      /This guide takes you from a fresh signup to your first iPhone Safari session from code\. Allow about five minutes\./,
     );
   });
 
-  it('CRITICAL quickstart 3-prerequisite list pinned — Driftstack account + API key + Node 18+/Python 3.10+/Go 1.22+. 2026-06-24: packages/sdk-go/go.mod declares `go 1.22`, so the Go floor is 1.22+ (was a stale 1.21+); matches the per-language quickstarts + installation.md. Drift to a different toolchain floor would mismatch W779 quickstart triplet.', () => {
+  it('CRITICAL quickstart prerequisites pin paid tier, ds_live customer key, and language floors.', () => {
     const p = read(QS);
 
     expect(p).toMatch(
@@ -58,22 +61,29 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).not.toMatch(
       /\(https:\/\/(?:app\.driftstack\.dev\/(?:signup|login|api-keys)|driftstack\.dev\/pricing)\)/,
     );
-    expect(p).toMatch(/An API key \(created in the dashboard under \*\*API keys\*\*\)/);
+    expect(p).toMatch(/Any paid Driftstack tier \(Manual, API, or Enterprise\)/);
+    expect(p).toMatch(
+      /A `ds_live_…` customer API key \(created in the dashboard under \*\*API keys\*\*\)/,
+    );
     expect(p).toMatch(/Node\.js 18\+, Python 3\.10\+, or Go 1\.22\+/);
     // The stale Go 1.21+ floor must NOT return.
     expect(p).not.toMatch(/Go 1\.21\+/);
   });
 
-  it("CRITICAL quickstart ds_live_ key-prefix framing pinned. The 'API keys are scoped to the account that created them. The key prefix (ds_live_) tells you it\\'s a production key. Trial-pack and pre-billing accounts get the same key shape' wording matches W760 + W762 + W764 ds_live_/ds_test_ prefix contract.", () => {
+  it('CRITICAL quickstart pins paid ds_live keys, restricted Free desktop credentials, downgrade 403 and upgrade recovery.', () => {
     const p = read(QS);
 
+    expect(p).toMatch(/This code quickstart requires a paid tier with API access/);
+    expect(p).toMatch(/`ds_live_` prefix on every paid tier, including Manual/);
+    expect(p).toMatch(/Free does not mint\s*\n?customer API keys/);
     expect(p).toMatch(
-      // S31 2026-07-07 (fable-truth-audit) — free tier mints ds_test_ keys (services/api-keys.ts
-      // env = tier === 'free' ? 'test' : 'live'), so the old 'same key
-      // shape for free accounts' framing was wrong.
-      /API keys are scoped to the account that created them\. Paid-tier keys carry the `ds_live_` prefix; free-tier accounts get `ds_test_` keys/,
+      /restricted device credential\s*\n?the desktop app obtains and stores automatically/,
     );
-    expect(p).toMatch(/free-tier accounts get `ds_test_` keys \(same shape, test environment\)/);
+    expect(p).toMatch(
+      /They become usable again after an\s*\n?upgrade unless they were revoked or expired/,
+    );
+    expect(p).toMatch(/The "apiAccess" feature is not available on the "free" tier/);
+    expect(p).not.toMatch(/same shape, test environment|feature_not_available/);
   });
 
   it('CRITICAL quickstart 3-language install commands pinned — npm/pip/go-get matching W778 SDK installation. Drift would let SDK adopters drift between install pages.', () => {
@@ -153,59 +163,53 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(
       /^---\nlayout: \.\.\/layouts\/DocLayout\.astro\ntitle: License activation \(GUI client\)\n/,
     );
-    // Plain-words-first description: leads with the supported macOS app
-    // and keeps the no-separate-license-key + cloud/self-hosted facts.
     expect(p).toMatch(
-      /description: Activate the Driftstack macOS desktop app with the API key you already have — no separate license key, for both cloud and self-hosted deployments\./,
+      /description: Activate the Driftstack macOS desktop app through browser sign-in, with a paid customer key or self-hosted key as an explicit fallback\./,
     );
   });
 
-  it('CRITICAL supported macOS desktop framing and shared API-key activation are pinned.', () => {
+  it('CRITICAL supported macOS desktop defaults to browser sign-in; Free has no customer-key paste; paid/self-hosted paste is fallback.', () => {
     const p = read(LIC);
 
+    expect(p).toMatch(/client defaults to secure browser sign-in/);
+    expect(p).toMatch(/app automatically stores its restricted device credential/);
+    expect(p).toMatch(/Free users do not create or paste a customer API key/);
     expect(p).toMatch(
-      /The Driftstack macOS desktop GUI client doesn't use a separate license-key system\./,
-    );
-    expect(p).toMatch(
-      /It activates against the same API key you use for SDK calls, and points at either the cloud control plane or your own self-hosted instance\./,
+      /paid cloud customer\s*\n?key or a key minted by your self-hosted control plane remains available as an\s*\n?explicit fallback/,
     );
   });
 
-  it('CRITICAL 5-step first-run wizard pinned — Welcome + Deployment mode + API key + First profile + Done. Drift to dropping a step would break the onboarding sequence.', () => {
+  it('CRITICAL 5-step first-run wizard pinned — Welcome + Deployment mode + browser sign-in + First profile + Done.', () => {
     const p = read(LIC);
+    const wizard = read(FIRST_RUN);
 
     expect(p).toMatch(/1\. \*\*Welcome\*\* — brand intro and a one-line value prop\./);
     expect(p).toMatch(/2\. \*\*Deployment mode\*\* — radio: \*\*Cloud\*\*/);
-    expect(p).toMatch(/3\. \*\*API key\*\* — paste the key/);
+    expect(p).toMatch(/3\. \*\*Sign in\*\* — use \*\*Sign in with browser\*\* by default/);
+    expect(p).toMatch(/\*\*Have an API key\? Paste it instead\*\* is the/);
     expect(p).toMatch(/4\. \*\*First profile\*\* \(skippable\)/);
     expect(p).toMatch(/5\. \*\*Done\*\*/);
+    expect(wizard).toMatch(/>\s*Sign in with browser\s*<\/button>/);
   });
 
-  it('CRITICAL 4-validation-state framing pinned on API-key wizard step. valid / wrong-key / unreachable / tier-suspended. The wording maps to W764 /api/auth + V-323 wizard validation states.', () => {
+  it('CRITICAL browser/default and privacy-safe fallback validation states match the live wizard.', () => {
     const p = read(LIC);
 
     expect(p).toMatch(/✅ valid — wizard advances\./);
-    // W578 — wrong-key copy is deployment-aware since W566 (wizard) +
-    // W577 (Settings): cloud points at app.driftstack.dev/api-keys,
-    // self-hosted explains deployment-bound keys.
-    expect(p).toMatch(/❌ wrong key — the message is deployment-aware\./);
-    expect(p).toMatch(
-      /Cloud mode: "Authentication failed \(401\)\. Double-check the key, or create a new one at app\.driftstack\.dev\/api-keys\."/,
-    );
-    expect(p).toMatch(/keys are bound to the deployment that minted them/);
-    expect(p).toMatch(
-      /❌ unreachable — "Couldn't reach the control plane at `<url>`\. Check the URL and your network\."/,
-    );
-    expect(p).toMatch(
-      /❌ tier-suspended — "This account is suspended\. Email support@driftstack\.dev\."/,
-    );
+    expect(p).toMatch(/❌ wrong fallback key — the message is deployment-aware/);
+    expect(p).toMatch(/Authentication failed \(401\)\. Double-check the key/);
+    expect(p).toMatch(/cloud key will not\s*\n?\s*authenticate against a self-hosted server/);
+    expect(p).toMatch(/❌ unreachable — the message starts with "Couldn't reach `<url>`\."/);
+    expect(p).toMatch(/URL, connection, firewall, VPN, and self-hosted-server guidance/);
+    expect(p).toMatch(/❌ not permitted — the privacy-safe fixed message is "You do not have/);
+    expect(p).toMatch(/permission to perform this action\."/);
   });
 
   it('CRITICAL credentials-in-macOS-Keychain framing pinned.', () => {
     const p = read(LIC);
 
     expect(p).toMatch(
-      /\*\*API key\*\* — stored in macOS Keychain through `keyring-rs`\. The key never lands in `settings\.json` on disk\./,
+      /\*\*Device credential or fallback API key\*\* — stored in macOS Keychain through\s*\n?\s*`keyring-rs`\. It never lands in `settings\.json` on disk\./,
     );
     expect(p).toMatch(
       /\*\*Base URL\*\* — stored in the Tauri settings store \(`settings\.json`\)\. Plaintext is fine here; the URL alone confers no access\./,
@@ -235,27 +239,45 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).not.toMatch(/pending|coming soon|once the first ones ship|page is not live yet/i);
   });
 
-  it("CRITICAL Tauri Updater + GitHub Releases framing pinned. The 'Tauri Updater + GitHub Releases ship updates automatically. The app polls the manifest URL on startup, downloads + signature-verifies new versions in the background, and prompts you on next launch' wording is the canonical update-protocol contract.", () => {
+  it('CRITICAL updater checks once, waits for consent, then verifies, installs, and relaunches.', () => {
     const p = read(LIC);
+    const updater = read(UPDATER);
 
-    expect(p).toMatch(
-      /Tauri Updater \+ GitHub Releases ship updates automatically\. The app polls the manifest URL on startup, downloads \+ signature-verifies new versions in the background, and prompts you on next launch\./,
-    );
+    expect(p).toMatch(/Tauri Updater checks the signed GitHub Releases manifest once at startup/);
+    expect(p).toMatch(/shows a non-blocking in-app banner/);
+    expect(p).toMatch(/does not\s*\n?download anything until you choose \*\*Install\*\*/);
+    expect(p).toMatch(/verifies its signature against the embedded public key/);
+    expect(p).toMatch(/installs it,\s*\n?and relaunches the app/);
+    expect(p).not.toMatch(/downloads \+ signature-verifies new versions in the background/);
+    expect(updater).toMatch(/await offered\.downloadAndInstall\(/);
+    expect(updater).toMatch(/await deps\.relaunch\(\)/);
   });
 
-  it("CRITICAL 4-troubleshooting bullet set pinned — Authentication failed + Couldn't reach + Wizard re-fires + Tier-suspended. Drift to dropping a row would force customers to file a support ticket for self-recoverable issues.", () => {
+  it("CRITICAL 4-troubleshooting bullet set pinned — Authentication failed + Couldn't reach + Wizard re-fires + privacy-safe permission denial.", () => {
     const p = read(LIC);
 
-    // W578 — auth-failed bullet covers both modes (deployment-bound keys).
-    expect(p).toMatch(/\*\*"Authentication failed"\*\* — in cloud mode, verify the key in/);
+    expect(p).toMatch(/\*\*"Authentication failed"\*\* — retry cloud browser sign-in first/);
     expect(p).toMatch(/a cloud key never works against your own server/);
-    expect(p).toMatch(/Settings also re-validates the key on every save/);
+    expect(p).toMatch(/Settings re-validates credentials and shows the same guidance/);
     expect(p).toMatch(/\*\*"Couldn't reach control plane"\*\* — for cloud, check/);
     expect(p).toMatch(
       /\*\*Wizard re-fires on every launch\*\* — macOS Keychain may be unavailable to the app/,
     );
-    expect(p).toMatch(
-      /\*\*Tier-suspended on activation\*\* — the account is in a suspended state in billing/,
+    expect(p).toMatch(/\*\*"You do not have permission" on activation\*\*/);
+    expect(p).toMatch(/check the account status and selected team/);
+  });
+
+  it('CRITICAL sign-out deletes only the scoped credential and immediately re-arms deployment selection.', () => {
+    const p = read(LIC);
+    const settingsView = read(SETTINGS_VIEW);
+
+    expect(p).toMatch(/Removes the current deployment's\s*\n?\s*credential from Keychain/);
+    expect(p).toMatch(/without revoking it on the server/);
+    expect(p).toMatch(/base URL and other preferences remain in `settings\.json`/);
+    expect(p).toMatch(/The first-run wizard reappears immediately/);
+    expect(p).not.toMatch(/Wipes the keychain entry and `settings\.json` baseUrl/);
+    expect(settingsView).toMatch(
+      /await update\(\{\s*apiKey: null,\s*baseUrl: settings\.baseUrl,\s*telemetryOptIn: settings\.telemetryOptIn,/,
     );
   });
 

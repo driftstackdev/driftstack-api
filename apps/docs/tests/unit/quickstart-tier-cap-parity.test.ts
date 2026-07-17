@@ -15,6 +15,7 @@ import { TIER_CONCURRENT_SESSION_LIMITS } from '@driftstack/api-types';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart.md');
+const CURL_PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -22,6 +23,7 @@ function read(p: string): string {
 
 describe('W338.A /quickstart tier-cap parity', () => {
   const body = read(PAGE);
+  const curl = read(CURL_PAGE);
 
   it('cites Free cap (1) matching TIER_CONCURRENT_SESSION_LIMITS.free', () => {
     expect(TIER_CONCURRENT_SESSION_LIMITS.free).toBe(1);
@@ -56,5 +58,27 @@ describe('W338.A /quickstart tier-cap parity', () => {
     // source-of-truth for the full table; the link must exist so
     // readers can verify the smaller tiers (solo_manual, etc).
     expect(body).toContain('https://driftstack.dev/pricing');
+  });
+
+  it('does not present the restricted Free desktop credential as a curl or sandbox key', () => {
+    expect(body).toMatch(/This code quickstart requires a paid tier with API access/);
+    expect(body).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+    expect(body).toMatch(/not a general sandbox or SDK key/);
+    expect(curl).toMatch(/this HTTP quickstart is paid-only/i);
+    expect(curl).toMatch(/not a general sandbox\/customer key/);
+    expect(curl).toMatch(/Customer keys on every paid tier, including Manual/);
+    expect(curl).toMatch(/This page uses `read` \+ `write`/);
+    expect(curl).not.toMatch(/`write:sessions` is enough for everything/);
+    expect(curl).toMatch(/A `403` after a downgrade to Free/);
+  });
+
+  it('does not claim streaming surfaces are plain HTTPS calls', () => {
+    expect(curl).toMatch(
+      /The core create, drive, capture, and destroy\s*\n?lifecycle uses plain HTTPS calls/,
+    );
+    expect(curl).toMatch(
+      /Live video and event streams use their\s*\n?documented streaming transports/,
+    );
+    expect(curl).not.toMatch(/Every Driftstack feature is a plain HTTPS call/);
   });
 });

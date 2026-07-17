@@ -74,4 +74,12 @@ describe('docs sdk/python-quickstart content parity', () => {
     expect(body).toMatch(/client\.sessions\.get_state\(sid\)/);
     expect(body).toMatch(/client\.sessions\.destroy\(sid\)/);
   });
+
+  it('paid SDK and Free desktop boundary plus actionable 403 detail are pinned', () => {
+    expect(body).toMatch(/Any paid Driftstack tier, including Manual/);
+    expect(body).toMatch(/A `ds_live_…` customer API key/);
+    expect(body).toMatch(/restricted\s*\n?\s*`ds_test_…` device credential/);
+    expect(body).toMatch(/err\.status == 403 and "apiAccess"/);
+    expect(body).toMatch(/Upgrade to resume this key unless it was revoked or expired/);
+  });
 });

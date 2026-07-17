@@ -73,4 +73,13 @@ describe('W254.D docs/quickstart ↔ SDK method parity', () => {
     expect(doc).toContain("Buffer.from(shot.data, 'base64')");
     expect(doc).toMatch(/base64-encoded/);
   });
+
+  it('pins paid API access, Free desktop onboarding and actionable downgrade recovery', () => {
+    expect(doc).toMatch(/Any paid Driftstack tier \(Manual, API, or Enterprise\)/);
+    expect(doc).toMatch(/Free does not mint\s*\n?customer API keys/);
+    expect(doc).toMatch(
+      /They become usable again after an\s*\n?upgrade unless they were revoked or expired/,
+    );
+    expect(doc).toMatch(/The "apiAccess" feature is not available on the "free" tier/);
+  });
 });

@@ -200,6 +200,18 @@ describe('W762 docs /api/api-keys content parity', () => {
     );
   });
 
+  it('CRITICAL customer API keys are paid, Manual is included, and Free can list/revoke but not create/rotate', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/Customer API keys require a paid tier/);
+    expect(p).toMatch(/Every paid tier, including Manual/);
+    expect(p).toMatch(/restricted `ds_test_…` device credential/);
+    expect(p).toMatch(/Free dashboard web sessions may still list and revoke/);
+    expect(p).toMatch(/create and rotate return the normal RFC 9457 `403 Forbidden`/);
+    expect(p).toMatch(/resume after upgrade unless revoked or expired/);
+    expect(p).not.toMatch(/feature_not_available/);
+  });
+
   it('test file metadata — file exists at canonical path', () => {
     expect(
       existsSync(
