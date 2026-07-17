@@ -138,17 +138,24 @@ describe('admin: suspend → blocked → unsuspend → restored', () => {
   });
 
   it('cross-account: tier change on B doesn’t affect A’s tier', async () => {
-    fx = await buildTestApp({ tier: 'free' });
+    // The administrator must have customer API access. A Free ordinary API
+    // key is intentionally denied before every route, including this admin
+    // mutation and /whoami; using one here would test neither tier change nor
+    // cache invalidation. Keep B on Free so the transition under test still
+    // crosses the entitlement boundary.
+    fx = await buildTestApp({ tier: 'api_builder' });
     const target = await seedAdditionalAccount(fx, { tier: 'free' });
     const adminAuth = { authorization: `Bearer ${fx.plaintext}` };
 
     // Admin changes B's tier to scale.
-    await fx.app.inject({
+    const changed = await fx.app.inject({
       method: 'POST',
       url: `/v1/admin/accounts/acc_${target.accountId}/tier`,
       headers: adminAuth,
       payload: { tier: 'api_scale' },
     });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json<{ tier: string }>().tier).toBe('api_scale');
 
     // A's tier is unchanged.
     const aWhoami = await fx.app.inject({
@@ -157,7 +164,7 @@ describe('admin: suspend → blocked → unsuspend → restored', () => {
       headers: adminAuth,
     });
     expect(aWhoami.statusCode).toBe(200);
-    expect(aWhoami.json<{ tier: string }>().tier).toBe('free');
+    expect(aWhoami.json<{ tier: string }>().tier).toBe('api_builder');
 
     // B sees the new tier on the next request (cache invalidation
     // forces a re-load).
