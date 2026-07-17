@@ -1,9 +1,7 @@
-"""AgentSessions resource — /v1/agent-sessions/* (AI-D, planning 132 §"Phase 7").
+"""Typed access to /v1/agent-sessions and its control subresources.
 
-Mirrors the TypeScript AgentSessionsResource (commit aadc3ffb). Server
-registers the route surface as 503 ``FeatureUnavailable`` stubs until
-the LLM key path is enabled on the deployment; SDK surface is stable so
-consumers compile ahead of time.
+Availability depends on the deployment's agent-runtime configuration.
+Unsupported deployments return typed ``FeatureUnavailable`` errors.
 
 Discriminated message response: branch on ``["kind"]`` —
 ``plan-executed`` (carries ``intents`` + ``results`` + ``ok``),

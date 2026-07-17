@@ -73,10 +73,9 @@ export class Driftstack {
   readonly team: TeamResource;
   /** EG-API-1.2/1.3 — customer-configurable egress (planning 133). */
   readonly egress: EgressResource;
-  /** AI-D — agent chat sessions (decompose → execute → transcript). */
+  /** Agent sessions: create, inspect, control, stream, and close browser-agent work. */
   readonly agentSessions: AgentSessionsResource;
-  /** AI-B4 — write-only recipe library (snapshot agent-session
-   *  intent_log + transcript for later replay). */
+  /** Saved recipes: create, list, inspect, delete, and request reusable suggestions. */
   readonly recipes: RecipesResource;
 
   private readonly http: HttpClient;

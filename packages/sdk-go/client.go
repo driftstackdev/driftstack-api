@@ -109,10 +109,9 @@ type Client struct {
 	Team *TeamResource
 	// EG-API-1.2/1.3 — customer-configurable egress (planning 133).
 	Egress *EgressResource
-	// AI-D — agent chat sessions (planning 132 §"Phase 7").
+	// Agent sessions: create, inspect, control, stream, and close browser-agent work.
 	AgentSessions *AgentSessionsResource
-	// AI-B4 — write-only recipe library (snapshot agent-session
-	// intent_log + transcript for later replay).
+	// Saved recipes: create, list, inspect, delete, and request reusable suggestions.
 	Recipes *RecipesResource
 }
 

@@ -123,10 +123,9 @@ class Driftstack:
         self.team = TeamResource(self._http)
         # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
         self.egress = EgressResource(self._http)
-        # AI-D — agent chat sessions (planning 132 §"Phase 7").
+        # Agent sessions: create, inspect, control, stream, and close browser-agent work.
         self.agent_sessions = AgentSessionsResource(self._http)
-        # AI-B4 — write-only recipe library (snapshot agent-session
-        # intent_log + transcript for later replay).
+        # Saved recipes: create, list, inspect, delete, and request reusable suggestions.
         self.recipes = RecipesResource(self._http)
 
     def close(self) -> None:
@@ -192,9 +191,9 @@ class AsyncDriftstack:
         self.team = AsyncTeamResource(self._http)
         # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
         self.egress = AsyncEgressResource(self._http)
-        # AI-D — agent chat sessions (planning 132 §"Phase 7").
+        # Agent sessions: create, inspect, control, stream, and close browser-agent work.
         self.agent_sessions = AsyncAgentSessionsResource(self._http)
-        # AI-B4 — write-only recipe library.
+        # Saved recipes: create, list, inspect, delete, and request reusable suggestions.
         self.recipes = AsyncRecipesResource(self._http)
 
     async def aclose(self) -> None:

@@ -187,6 +187,18 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     expect(body).toMatch(/if found \{\s*\n\s*return 0, nil, transportErrorFromHTTP/);
   });
 
+  it('describes live agent-session and saved-recipe capabilities without internal roadmap or defer language', () => {
+    expect(body).toContain(
+      '// Agent sessions: create, inspect, control, stream, and close browser-agent work.',
+    );
+    expect(body).toContain(
+      '// Saved recipes: create, list, inspect, delete, and request reusable suggestions.',
+    );
+    expect(body).not.toMatch(
+      /AI-B4|AI-D|planning 132|write-only recipe|snapshot agent-session|stubs until|compile ahead/i,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

@@ -1,6 +1,5 @@
 // Drift guard for packages/sdk-go/agent_sessions.go.
-// Pins the AI-D / planning 132 §"Phase 7" surface — mirrors TS +
-// Python agent-sessions resources but in idiomatic Go (pointer-
+// Pins the public agent-session surface in idiomatic Go (pointer-
 // receiver methods, context-first signatures, *Options structs
 // for optional headers).
 
@@ -24,16 +23,14 @@ describe('sdk-go agent_sessions content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('AI-D / planning 132 §Phase 7 anchor framing pinned: \'AgentSessionsResource handles /v1/agent-sessions/* (AI-D; planning 132 §"Phase 7"). Mirrors the TypeScript + Python agent-sessions resources.\' — pinned so the cross-SDK mirror reference + the planning 132 Phase-7 anchor survive (drift would orphan the AI-chat SDK from its planning anchor)', () => {
+  it('resource framing describes the live typed surface and deployment-dependent availability without roadmap or defer copy', () => {
     expect(body).toMatch(
-      /\/\/ AgentSessionsResource handles \/v1\/agent-sessions\/\* \(AI-D; planning\s*\n?\s*\/\/ 132 §"Phase 7"\)\. Mirrors the TypeScript \+ Python agent-sessions\s*\n?\s*\/\/ resources\./,
+      /\/\/ AgentSessionsResource provides typed access to \/v1\/agent-sessions\s*\n?\s*\/\/ and its control subresources\./,
     );
-  });
-
-  it("503 activation-gate framing pinned: 'Server registers these endpoints as 503 FeatureUnavailable stubs until the LLM key path is enabled on the deployment. SDK surface is stable so consumers compile ahead of time.' — pinned so the compile-ahead-of-time rationale survives (matches TS + Python framing exactly so the cross-SDK story is uniform)", () => {
     expect(body).toMatch(
-      /\/\/ Server registers these endpoints as 503 FeatureUnavailable stubs\s*\n?\s*\/\/ until the LLM key path is enabled on the deployment\. SDK surface\s*\n?\s*\/\/ is stable so consumers compile ahead of time\./,
+      /\/\/ Availability depends on the deployment's agent-runtime configuration\.\s*\n?\s*\/\/ Unsupported deployments return a typed FeatureUnavailable error\./,
     );
+    expect(body).not.toMatch(/\bAI-D\b|planning 132|stubs until|compile ahead/i);
   });
 
   it("LK.5 LiveKitInfo framing pinned: 'LiveKitInfo is the per-Mac LiveKit join info returned on session-create (when a Mac is available) and by the dedicated POST /v1/agent-sessions/:id/livekit-token endpoint.' + 'Token TTL is 24h. Room name is always the agent_session id.' + 'Use with the official livekit-server-sdk-go consumer side.' — pinned so the 24h-TTL + room-name-is-session-id + canonical-livekit-go-sdk reference all stay documented (drift would silently break Go consumers expecting these stable contracts)", () => {

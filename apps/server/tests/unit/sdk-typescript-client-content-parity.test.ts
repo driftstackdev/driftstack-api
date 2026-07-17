@@ -196,6 +196,18 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
     expect(instantiations, 'expected 19 resource instantiations').toBe(19);
   });
 
+  it('describes live agent-session and saved-recipe capabilities without internal roadmap or defer language', () => {
+    expect(body).toContain(
+      '/** Agent sessions: create, inspect, control, stream, and close browser-agent work. */',
+    );
+    expect(body).toContain(
+      '/** Saved recipes: create, list, inspect, delete, and request reusable suggestions. */',
+    );
+    expect(body).not.toMatch(
+      /AI-B4|AI-D|planning 132|write-only recipe|snapshot agent-session|stubs until|compile ahead/i,
+    );
+  });
+
   it('Cross-SDK core resource-name invariant includes public archetype discovery and the established customer resources', () => {
     const fieldNames = [
       'archetypes',

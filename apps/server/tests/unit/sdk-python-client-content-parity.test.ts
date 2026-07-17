@@ -151,6 +151,22 @@ describe('W585.A packages/sdk-python/src/driftstack/client.py content parity', (
     );
   });
 
+  it('describes live agent-session and saved-recipe capabilities without internal roadmap or defer language', () => {
+    expect(
+      body.match(
+        /# Agent sessions: create, inspect, control, stream, and close browser-agent work\./g,
+      ),
+    ).toHaveLength(2);
+    expect(
+      body.match(
+        /# Saved recipes: create, list, inspect, delete, and request reusable suggestions\./g,
+      ),
+    ).toHaveLength(2);
+    expect(body).not.toMatch(
+      /AI-B4|AI-D|planning 132|write-only recipe|snapshot agent-session|stubs until|compile ahead/i,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

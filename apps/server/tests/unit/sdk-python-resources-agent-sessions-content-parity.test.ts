@@ -1,6 +1,6 @@
 // Drift guard for packages/sdk-python/src/driftstack/resources/
-// agent_sessions.py. Pins the AI-D / planning 132 §"Phase 7" Python
-// surface: TypedDict LiveKitInfo + sync/async mirror + the 7-method
+// agent_sessions.py. Pins the public Python agent-session surface:
+// TypedDict LiveKitInfo + sync/async mirror + the 7-method
 // shape + BYOK header + Stripe-pattern Idempotency-Key + the
 // LK.3 5-field worked example.
 
@@ -24,13 +24,12 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('Module-level docstring AI-D / planning 132 §Phase 7 anchor framing pinned + cross-SDK mirror reference (TypeScript AgentSessionsResource @ commit aadc3ffb). Drift would orphan the cross-SDK mirror chain', () => {
+  it('module framing describes the live typed surface and deployment-dependent availability without roadmap or defer copy', () => {
+    expect(body).toMatch(/"""Typed access to \/v1\/agent-sessions and its control subresources\./);
     expect(body).toMatch(
-      /"""AgentSessions resource — \/v1\/agent-sessions\/\* \(AI-D, planning 132 §"Phase 7"\)\./,
+      /Availability depends on the deployment's agent-runtime configuration\.\s*\n?\s*Unsupported deployments return typed ``FeatureUnavailable`` errors\./,
     );
-    expect(body).toMatch(
-      /Mirrors the TypeScript AgentSessionsResource \(commit aadc3ffb\)\. Server\s*\n?\s*registers the route surface as 503 ``FeatureUnavailable`` stubs until\s*\n?\s*the LLM key path is enabled on the deployment; SDK surface is stable so\s*\n?\s*consumers compile ahead of time\./,
-    );
+    expect(body).not.toMatch(/\bAI-D\b|planning 132|aadc3ffb|stubs until|compile ahead/i);
   });
 
   it('Discriminated message-response framing pinned: branch on `["kind"]` — plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason). Drift would force Python callers to introspect undocumented response shapes', () => {
