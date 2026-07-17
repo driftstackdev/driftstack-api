@@ -6,25 +6,59 @@
 // active workspace falls back to personal scope in each case.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { useSettings, SettingsProvider } from '../../src/lib/SettingsContext';
 
 // ── module mocks ───────────────────────────────────────────────
 // loadSettings resolves whatever the test seeds; saveSettings can be failed to
 // prove the provider's default best-effort vs explicit-reporting boundary.
-let seededSettings: { apiKey: string | null; baseUrl: string; telemetryOptIn: boolean | null } = {
+interface TestSettings {
+  apiKey: string | null;
+  baseUrl: string;
+  themeMode: 'light' | 'dark';
+  themeAccent: 'violet' | 'oxblood' | 'teal';
+  telemetryOptIn: boolean | null;
+  startUrl: string;
+}
+
+interface SaveCall {
+  settings: TestSettings;
+  credentialUnchanged: boolean | undefined;
+}
+
+const INITIAL_SETTINGS: TestSettings = {
   apiKey: 'ds_live_a',
   baseUrl: 'https://api.driftstack.dev',
+  themeMode: 'dark',
+  themeAccent: 'oxblood',
   telemetryOptIn: null,
+  startUrl: 'https://driftstack.dev',
 };
+
+let seededSettings: TestSettings = { ...INITIAL_SETTINGS };
 let persistError: Error | null = null;
 let lastCredentialUnchanged: boolean | undefined;
+let saveCalls: SaveCall[] = [];
+let saveOverride: ((call: SaveCall, index: number) => Promise<void>) | null = null;
 vi.mock('../../src/lib/settings', () => ({
-  DEFAULT_SETTINGS: { apiKey: null, baseUrl: 'http://localhost:3000', telemetryOptIn: null },
+  DEFAULT_SETTINGS: {
+    apiKey: null,
+    baseUrl: 'http://localhost:3000',
+    themeMode: 'dark',
+    themeAccent: 'oxblood',
+    telemetryOptIn: null,
+    startUrl: 'https://driftstack.dev',
+  },
   loadSettings: () => Promise.resolve(seededSettings),
-  saveSettings: (_settings: unknown, options?: { credentialUnchanged?: boolean }) => {
+  saveSettings: (settings: TestSettings, options?: { credentialUnchanged?: boolean }) => {
     lastCredentialUnchanged = options?.credentialUnchanged;
+    const call: SaveCall = {
+      settings: { ...settings },
+      credentialUnchanged: options?.credentialUnchanged,
+    };
+    saveCalls.push(call);
+    if (saveOverride !== null) return saveOverride(call, saveCalls.length - 1);
     return persistError === null ? Promise.resolve() : Promise.reject(persistError);
   },
 }));
@@ -61,15 +95,27 @@ vi.mock('../../src/lib/client', () => ({
 
 // A consumer that surfaces the live activeWorkspace + lets the test drive
 // update() and setActiveWorkspace().
+type SettingsUpdate = (
+  next: Partial<TestSettings>,
+  options?: { reportPersistenceFailure?: boolean },
+) => Promise<void>;
+let capturedUpdate: SettingsUpdate | null = null;
+
 function Probe(): JSX.Element {
   const { activeWorkspace, setActiveWorkspace, update, accountMe, settings } = useSettings();
   const [persistOutcome, setPersistOutcome] = useState('idle');
+  const [settlementOrder, setSettlementOrder] = useState('');
+  capturedUpdate = update;
   return (
     <div>
       <span data-testid="ws">{activeWorkspace ?? 'personal'}</span>
       <span data-testid="me-email">{accountMe?.email ?? 'none'}</span>
       <span data-testid="persist-outcome">{persistOutcome}</span>
+      <span data-testid="settlement-order">{settlementOrder}</span>
+      <span data-testid="current-api">{settings.apiKey ?? 'none'}</span>
       <span data-testid="current-base">{settings.baseUrl}</span>
+      <span data-testid="current-theme-mode">{settings.themeMode}</span>
+      <span data-testid="current-theme-accent">{settings.themeAccent}</span>
       <button type="button" onClick={() => setActiveWorkspace('acct_team')}>
         pick-team
       </button>
@@ -88,6 +134,20 @@ function Probe(): JSX.Element {
         }}
       >
         switch-account
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void update(
+            { apiKey: 'ds_live_b', baseUrl: 'https://api-b.example.test' },
+            { reportPersistenceFailure: true },
+          ).then(
+            () => setPersistOutcome('credential-saved'),
+            () => setPersistOutcome('credential-failed'),
+          );
+        }}
+      >
+        save-account-b
       </button>
       <button
         type="button"
@@ -130,16 +190,59 @@ function Probe(): JSX.Element {
       >
         preferences-save
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          void update({ themeAccent: 'teal' });
+        }}
+      >
+        theme-teal
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setSettlementOrder('');
+          void update({ themeMode: 'light' }).then(() => {
+            setSettlementOrder((current) => `${current}1`);
+          });
+          void update({ themeAccent: 'teal' }).then(() => {
+            setSettlementOrder((current) => `${current}2`);
+          });
+        }}
+      >
+        queue-preferences
+      </button>
     </div>
   );
 }
 
-function renderProvider(): void {
-  render(
+function renderProvider(): ReturnType<typeof render> {
+  return render(
     <SettingsProvider>
       <Probe />
     </SettingsProvider>,
   );
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason: unknown) => void = () => undefined;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function waitForInitialSettings(): Promise<void> {
+  await waitFor(() => expect(screen.getByTestId('current-api')).toHaveTextContent('ds_live_a'));
+  expect(screen.getByTestId('current-base')).toHaveTextContent('https://api.driftstack.dev');
 }
 
 // jsdom in this project's config doesn't ship a usable localStorage; provide a
@@ -165,15 +268,14 @@ function installLocalStorage(): void {
 
 beforeEach(() => {
   installLocalStorage();
-  seededSettings = {
-    apiKey: 'ds_live_a',
-    baseUrl: 'https://api.driftstack.dev',
-    telemetryOptIn: null,
-  };
+  seededSettings = { ...INITIAL_SETTINGS };
   meTeams = [];
   meReject = false;
   persistError = null;
   lastCredentialUnchanged = undefined;
+  saveCalls = [];
+  saveOverride = null;
+  capturedUpdate = null;
 });
 
 describe('SettingsContext — persistence outcome boundary', () => {
@@ -200,6 +302,166 @@ describe('SettingsContext — persistence outcome boundary', () => {
       expect(screen.getByTestId('persist-outcome')).toHaveTextContent('preferences-saved'),
     );
     expect(lastCredentialUnchanged).toBe(true);
+  });
+
+  it('serializes a held account switch before a theme change and merges the theme onto the new account', async () => {
+    const firstSave = deferred<void>();
+    saveOverride = (_call, index) => (index === 0 ? firstSave.promise : Promise.resolve());
+    renderProvider();
+    await waitForInitialSettings();
+
+    screen.getByRole('button', { name: 'save-account-b' }).click();
+    await waitFor(() => expect(saveCalls).toHaveLength(1));
+    expect(saveCalls[0]).toEqual({
+      settings: {
+        ...INITIAL_SETTINGS,
+        apiKey: 'ds_live_b',
+        baseUrl: 'https://api-b.example.test',
+      },
+      credentialUnchanged: false,
+    });
+    // An explicit save has not published before its persistence succeeds.
+    expect(screen.getByTestId('current-api')).toHaveTextContent('ds_live_a');
+
+    screen.getByRole('button', { name: 'theme-teal' }).click();
+    await act(async () => Promise.resolve());
+    // The later mutation is queued before its merge, not pre-merged from A.
+    expect(saveCalls).toHaveLength(1);
+
+    await act(async () => {
+      firstSave.resolve(undefined);
+      await firstSave.promise;
+    });
+    await waitFor(() => expect(saveCalls).toHaveLength(2));
+    expect(saveCalls[1]).toEqual({
+      settings: {
+        ...INITIAL_SETTINGS,
+        apiKey: 'ds_live_b',
+        baseUrl: 'https://api-b.example.test',
+        themeAccent: 'teal',
+      },
+      credentialUnchanged: true,
+    });
+    await waitFor(() => expect(screen.getByTestId('current-api')).toHaveTextContent('ds_live_b'));
+    expect(screen.getByTestId('current-base')).toHaveTextContent('https://api-b.example.test');
+    expect(screen.getByTestId('current-theme-accent')).toHaveTextContent('teal');
+  });
+
+  it('serializes sign-out after a held account switch and deletes the newly selected account tuple', async () => {
+    const firstSave = deferred<void>();
+    saveOverride = (_call, index) => (index === 0 ? firstSave.promise : Promise.resolve());
+    renderProvider();
+    await waitForInitialSettings();
+
+    screen.getByRole('button', { name: 'save-account-b' }).click();
+    await waitFor(() => expect(saveCalls).toHaveLength(1));
+    screen.getByRole('button', { name: 'sign-out' }).click();
+    await act(async () => Promise.resolve());
+    expect(saveCalls).toHaveLength(1);
+
+    await act(async () => {
+      firstSave.resolve(undefined);
+      await firstSave.promise;
+    });
+    await waitFor(() => expect(saveCalls).toHaveLength(2));
+    expect(saveCalls[1]).toEqual({
+      settings: {
+        ...INITIAL_SETTINGS,
+        apiKey: null,
+        baseUrl: 'https://api-b.example.test',
+      },
+      credentialUnchanged: false,
+    });
+    await waitFor(() => expect(screen.getByTestId('current-api')).toHaveTextContent('none'));
+    expect(screen.getByTestId('current-base')).toHaveTextContent('https://api-b.example.test');
+  });
+
+  it('recovers after an explicit rejection without leaking that failed credential tuple', async () => {
+    const firstSave = deferred<void>();
+    saveOverride = (_call, index) => (index === 0 ? firstSave.promise : Promise.resolve());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    renderProvider();
+    await waitForInitialSettings();
+
+    screen.getByRole('button', { name: 'save-account-b' }).click();
+    await waitFor(() => expect(saveCalls).toHaveLength(1));
+    screen.getByRole('button', { name: 'theme-teal' }).click();
+    firstSave.reject(new Error('credential store locked'));
+
+    await waitFor(() => expect(saveCalls).toHaveLength(2));
+    expect(saveCalls[1]).toEqual({
+      settings: { ...INITIAL_SETTINGS, themeAccent: 'teal' },
+      credentialUnchanged: true,
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('persist-outcome')).toHaveTextContent('credential-failed'),
+    );
+    expect(screen.getByTestId('current-api')).toHaveTextContent('ds_live_a');
+    expect(screen.getByTestId('current-base')).toHaveTextContent('https://api.driftstack.dev');
+    expect(screen.getByTestId('current-theme-accent')).toHaveTextContent('teal');
+    warn.mockRestore();
+  });
+
+  it('composes same-turn preferences in FIFO order and settles their promises in order', async () => {
+    const firstSave = deferred<void>();
+    const secondSave = deferred<void>();
+    saveOverride = (_call, index) => (index === 0 ? firstSave.promise : secondSave.promise);
+    renderProvider();
+    await waitForInitialSettings();
+
+    screen.getByRole('button', { name: 'queue-preferences' }).click();
+    await waitFor(() => expect(saveCalls).toHaveLength(1));
+    expect(saveCalls[0]?.settings).toMatchObject({ themeMode: 'light', themeAccent: 'oxblood' });
+    expect(saveCalls[0]?.credentialUnchanged).toBe(true);
+
+    await act(async () => {
+      firstSave.resolve(undefined);
+      await firstSave.promise;
+    });
+    await waitFor(() => expect(saveCalls).toHaveLength(2));
+    expect(saveCalls[1]?.settings).toMatchObject({ themeMode: 'light', themeAccent: 'teal' });
+    expect(saveCalls[1]?.credentialUnchanged).toBe(true);
+    await waitFor(() => expect(screen.getByTestId('settlement-order')).toHaveTextContent('1'));
+
+    await act(async () => {
+      secondSave.resolve(undefined);
+      await secondSave.promise;
+    });
+    await waitFor(() => expect(screen.getByTestId('settlement-order')).toHaveTextContent('12'));
+    expect(screen.getByTestId('current-theme-mode')).toHaveTextContent('light');
+    expect(screen.getByTestId('current-theme-accent')).toHaveTextContent('teal');
+  });
+
+  it('settles a queued explicit save and preference safely after provider unmount', async () => {
+    const firstSave = deferred<void>();
+    const secondSave = deferred<void>();
+    saveOverride = (_call, index) => (index === 0 ? firstSave.promise : secondSave.promise);
+    const rendered = renderProvider();
+    await waitForInitialSettings();
+    if (capturedUpdate === null) throw new Error('Settings update was not captured');
+
+    let accountSave: Promise<void> | undefined;
+    let themeSave: Promise<void> | undefined;
+    await act(async () => {
+      accountSave = capturedUpdate?.(
+        { apiKey: 'ds_live_b', baseUrl: 'https://api-b.example.test' },
+        { reportPersistenceFailure: true },
+      );
+      themeSave = capturedUpdate?.({ themeAccent: 'teal' });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(saveCalls).toHaveLength(1));
+    rendered.unmount();
+
+    firstSave.resolve(undefined);
+    await waitFor(() => expect(saveCalls).toHaveLength(2));
+    secondSave.resolve(undefined);
+    await expect(Promise.all([accountSave, themeSave])).resolves.toEqual([undefined, undefined]);
+    expect(saveCalls[1]?.settings).toMatchObject({
+      apiKey: 'ds_live_b',
+      baseUrl: 'https://api-b.example.test',
+      themeAccent: 'teal',
+    });
   });
 });
 

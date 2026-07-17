@@ -56,13 +56,30 @@ export const SettingsContext = createContext<SettingsContextValue | null>(null);
 export function SettingsProvider({ children }: { children: ReactNode }): JSX.Element {
   const [settings, setSettings] = useState<DriftstackSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
+  // `update()` is callable from independent chrome/view actions. Keep one
+  // synchronous authority for the last state accepted by this provider: a
+  // render-captured `settings` value is stale until React commits, and merging
+  // two whole-setting writes against it can restore an old key/deployment.
+  const settingsRef = useRef<DriftstackSettings>(DEFAULT_SETTINGS);
+  const mountedRef = useRef(true);
+  // Serialize the MERGE together with persistence. saveSettings() already
+  // serializes disk writes, but locking only after the merge is too late: a
+  // held explicit key/base save followed by a theme change or sign-out would
+  // already have captured the previous credential tuple.
+  const settingsUpdateTailRef = useRef<Promise<void>>(Promise.resolve());
+
+  const publishSettings = useCallback((next: DriftstackSettings): void => {
+    settingsRef.current = next;
+    if (mountedRef.current) setSettings(next);
+  }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     let cancelled = false;
     void loadSettings()
       .then((s) => {
         if (!cancelled) {
-          setSettings(s);
+          publishSettings(s);
           setLoading(false);
         }
       })
@@ -72,14 +89,15 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
         // their key in Settings).
         console.warn('[settings] load failed; using defaults:', err);
         if (!cancelled) {
-          setSettings(DEFAULT_SETTINGS);
+          publishSettings(DEFAULT_SETTINGS);
           setLoading(false);
         }
       });
     return () => {
       cancelled = true;
+      mountedRef.current = false;
     };
-  }, []);
+  }, [publishSettings]);
 
   // Fleet theme axes (2026-06-12 rework) — apply mode + accent to the
   // document root so the token layer (styles/index.css) flips the whole
@@ -97,28 +115,43 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
   }, [settings.baseUrl, settings.telemetryOptIn]);
 
   const update = useCallback(
-    async (next: Partial<DriftstackSettings>, options?: { reportPersistenceFailure?: boolean }) => {
-      const merged: DriftstackSettings = { ...settings, ...next };
+    (
+      next: Partial<DriftstackSettings>,
+      options?: { reportPersistenceFailure?: boolean },
+    ): Promise<void> => {
       const reportPersistenceFailure = options?.reportPersistenceFailure === true;
-      const credentialUnchanged =
-        merged.apiKey === settings.apiKey && merged.baseUrl === settings.baseUrl;
-      // Background appearance/preferences changes keep the historical
-      // best-effort behavior. An explicit Save commits in-memory state only
-      // after persistence succeeds, so a reported failure stays retryable.
-      if (!reportPersistenceFailure) setSettings(merged);
-      // Persistence stays best-effort for default callers: a keychain/store
-      // failure must not turn a void theme update into a global rejection. The
-      // explicit path is awaited by customer-facing save flows and rejects so
-      // they can render a bounded, actionable failure. (#9)
-      try {
-        await saveSettings(merged, { credentialUnchanged });
-        if (reportPersistenceFailure) setSettings(merged);
-      } catch (e) {
-        console.warn('[settings] persist failed:', e);
-        if (reportPersistenceFailure) throw e;
-      }
+      const operation = settingsUpdateTailRef.current.then(async () => {
+        const previous = settingsRef.current;
+        const merged: DriftstackSettings = { ...previous, ...next };
+        const credentialUnchanged =
+          merged.apiKey === previous.apiKey && merged.baseUrl === previous.baseUrl;
+
+        // Background appearance/preferences changes keep the historical
+        // best-effort behavior and become visible when their serialized turn
+        // starts. An explicit Save publishes only after persistence succeeds,
+        // so a reported failure cannot leak its credential tuple into a later
+        // queued update.
+        if (!reportPersistenceFailure) publishSettings(merged);
+        try {
+          await saveSettings(merged, { credentialUnchanged });
+          if (reportPersistenceFailure) publishSettings(merged);
+        } catch (e) {
+          console.warn('[settings] persist failed:', e);
+          if (reportPersistenceFailure) throw e;
+        }
+      });
+
+      // A rejection belongs to its caller, but the provider queue must always
+      // recover so a later sign-out/preference change can still run. Keeping a
+      // non-rejecting tail also prevents an abandoned operation from becoming
+      // a process-level unhandled rejection.
+      settingsUpdateTailRef.current = operation.then(
+        () => undefined,
+        () => undefined,
+      );
+      return operation;
     },
-    [settings],
+    [publishSettings],
   );
 
   const [activeWorkspace, setActiveWorkspaceState] = useState<string | null>(() => {

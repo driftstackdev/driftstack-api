@@ -90,11 +90,11 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     expect(body).toContain('let cancelled = false;');
     expect(body).toContain('void loadSettings()');
     expect(body).toContain('if (!cancelled) {');
-    expect(body).toContain('setSettings(s);');
+    expect(body).toContain('publishSettings(s);');
     expect(body).toContain('cancelled = true;');
     // A keychain/store read failure degrades to defaults so the GUI boots
     // instead of blanking via the global unhandledrejection handler.
-    expect(body).toContain('setSettings(DEFAULT_SETTINGS);');
+    expect(body).toContain('publishSettings(DEFAULT_SETTINGS);');
   });
 
   it('V-242 telemetry re-init effect — dependency array [settings.baseUrl, settings.telemetryOptIn]. initTelemetry is "idempotent + reconfigure-safe; it close()s the existing client when the customer opts out mid-session" — so a customer flipping the opt-in toggle MID-SESSION doesn\'t need to refresh the app for the change to take effect.', () => {
@@ -109,23 +109,46 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     expect(body).toMatch(/\}, \[settings\.baseUrl, settings\.telemetryOptIn\]\);/);
   });
 
-  it('update() — useCallback with [settings] dep, merges Partial<DriftstackSettings> over previous settings + persists via saveSettings. Returns once the on-disk write resolves so callers can chain on completion. Drift to a different merge order (e.g. previous over next) would break the "partial update overwrites only the passed fields" contract.', () => {
-    // Contract fragments (merge ORDER + setSettings + persist + [settings] dep). saveSettings
-    // is now wrapped in a best-effort try/catch so a persist failure can't blank the app via an
-    // unhandled rejection (#9) — assert the durable contract, not the exact whitespace.
-    expect(body).toMatch(
-      /async \(\s*next: Partial<DriftstackSettings>,\s*options\?: \{ reportPersistenceFailure\?: boolean \},?\s*\) => \{/,
+  it('update() — provider-owned FIFO serializes merge + persistence against settingsRef; explicit writes publish only after success, best-effort writes publish at their turn, and a rejection cannot wedge later work.', () => {
+    // Locking saveSettings alone is insufficient because a second caller may
+    // already have merged a whole object from a render-stale credential tuple.
+    // Pin merge ownership, publication ordering, rejection recovery and the
+    // stable callback dependency together.
+    expect(body).toContain('const settingsRef = useRef<DriftstackSettings>(DEFAULT_SETTINGS);');
+    expect(body).toContain(
+      'const settingsUpdateTailRef = useRef<Promise<void>>(Promise.resolve());',
     );
-    expect(body).toContain('const merged: DriftstackSettings = { ...settings, ...next };');
     expect(body).toMatch(
-      /const credentialUnchanged =\s*merged\.apiKey === settings\.apiKey && merged\.baseUrl === settings\.baseUrl;/,
+      /const publishSettings = useCallback\(\(next: DriftstackSettings\): void => \{\s*settingsRef\.current = next;\s*if \(mountedRef\.current\) setSettings\(next\);\s*\}, \[\]\);/,
     );
-    expect(body).toContain('if (!reportPersistenceFailure) setSettings(merged);');
+    expect(body).toMatch(
+      /\(\s*next: Partial<DriftstackSettings>,\s*options\?: \{ reportPersistenceFailure\?: boolean \},?\s*\): Promise<void> => \{/,
+    );
+    expect(body).toContain('const operation = settingsUpdateTailRef.current.then(async () => {');
+    expect(body).toContain('const previous = settingsRef.current;');
+    expect(body).toContain('const merged: DriftstackSettings = { ...previous, ...next };');
+    expect(body).toMatch(
+      /const credentialUnchanged =\s*merged\.apiKey === previous\.apiKey && merged\.baseUrl === previous\.baseUrl;/,
+    );
+    expect(body).toContain('if (!reportPersistenceFailure) publishSettings(merged);');
     expect(body).toContain('await saveSettings(merged, { credentialUnchanged });');
-    expect(body).toContain('if (reportPersistenceFailure) setSettings(merged);');
+    expect(body).toContain('if (reportPersistenceFailure) publishSettings(merged);');
     expect(body).toContain('if (reportPersistenceFailure) throw e;');
     expect(body).toMatch(
-      /const update = useCallback\([\s\S]{0,1800}?\n\s*\[settings\],\s*\n\s*\);/,
+      /settingsUpdateTailRef\.current = operation\.then\(\s*\(\) => undefined,\s*\(\) => undefined,\s*\);\s*return operation;/,
+    );
+    expect(body).toMatch(
+      /const update = useCallback\([\s\S]{0,3000}?\n\s*\[publishSettings\],\s*\n\s*\);/,
+    );
+  });
+
+  it('initial load and queued settlement are unmount-safe: the state ref always advances, but React publication is mounted-only and cleanup revokes it', () => {
+    expect(body).toContain('const mountedRef = useRef(true);');
+    expect(body).toContain('mountedRef.current = true;');
+    expect(body).toContain('publishSettings(s);');
+    expect(body).toContain('publishSettings(DEFAULT_SETTINGS);');
+    expect(body).toMatch(
+      /return \(\) => \{\s*cancelled = true;\s*mountedRef\.current = false;\s*\};/,
     );
   });
 
