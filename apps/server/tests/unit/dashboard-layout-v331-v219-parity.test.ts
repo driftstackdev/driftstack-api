@@ -138,31 +138,39 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l).toMatch(/data-act-as-clear/);
   });
 
-  it("CRITICAL V-331 window.driftstackActAsHeaders global helper pinned — returns { 'x-driftstack-account': 'acc_<uuid>' } when active OR {} when self. Inline-script pages call it when building fetch headers. Drift to a different return shape would break every consumer.", () => {
+  it('CRITICAL V-331 window.driftstackActAsHeaders is installed before <slot />, accepts only canonical stored owners, and locks to authoritative scope for the page life.', () => {
     const l = read(LAYOUT);
 
-    expect(l).toMatch(/Exposes window\.driftstackActAsHeaders\(\) returning either/);
-    expect(l).toMatch(/\{ 'x-driftstack-account': 'acc_<uuid>' \} or \{\}/);
+    const helperAt = l.indexOf('data-act-as-header-preflight');
+    expect(helperAt).toBeGreaterThan(-1);
+    expect(helperAt).toBeLessThan(l.indexOf('<slot />'));
+    expect(l).toMatch(/var provisionalOwner = readCanonicalStoredOwner\(\)/);
     expect(l).toMatch(
-      /window\.driftstackActAsHeaders = function \(\) \{\s*\n\s+try \{\s*\n\s+const v = localStorage\.getItem\('ds_act_as_account'\);\s*\n\s+return v && v\.length > 0 \? \{ 'x-driftstack-account': v \} : \{\};/,
+      /return provisionalOwner \? \{ 'x-driftstack-account': provisionalOwner \} : \{\};/,
     );
+    expect(l).toMatch(
+      /if \(authorityResolved\) \{\s*return verifiedOwner \? \{ 'x-driftstack-account': verifiedOwner \} : \{\};/,
+    );
+    expect(l).toMatch(/actAsHeaders\.setVerifiedOwner = function \(owner\)/);
+    expect(l).toMatch(/window\.driftstackActAsHeaders = actAsHeaders/);
   });
 
-  it('CRITICAL V-331 picker GET /v1/account/me fetch + me.teams branch pinned. Quiet failure (no token / network blip leaves the picker hidden) matches W742 graceful-degradation pattern.', () => {
+  it('CRITICAL V-331 picker authority distinguishes transport failure from accepted malformed authority, validates one exact owner+role row, and fail-closes stale scope.', () => {
     const l = read(LAYOUT);
 
     expect(l).toMatch(/Fetch \/v1\/account\/me to populate the picker\./);
-    expect(l).toMatch(/Quiet failure:/);
-    expect(l).toMatch(/no token \/ network blip leaves the picker hidden/);
-
-    // Implementation. 2026-05-XX split the !me check earlier in the
-    // chain so other dashboard surfaces can short-circuit before the
-    // picker-specific teams check fires.
     expect(l).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/account\/me', \{\s*\n\s+headers: \{ authorization: 'Bearer ' \+ token \}/,
     );
-    expect(l).toMatch(/if \(!me\) return;/);
-    expect(l).toMatch(/if \(!Array\.isArray\(me\.teams\) \|\| me\.teams\.length === 0\) return/);
+    expect(l).toMatch(/if \(!r\.ok\) return \{ kind: 'unavailable' \};/);
+    expect(l).toMatch(/if \(result\.kind === 'unavailable'\) \{\s*markAuthorityUnavailable\(\);/);
+    expect(l).toMatch(/!Array\.isArray\(me\.teams\)/);
+    expect(l).toMatch(/candidate\.role === 'admin' \|\| candidate\.role === 'member'/);
+    expect(l).toMatch(/teamCounts\.get\(candidate\.owner_account_id\) === 1/);
+    expect(l).toMatch(/if \(active && !activeTeam\) \{\s*resetInvalidAuthority\(\);/);
+    expect(l).toMatch(/setVerifiedOwner\(activeTeam \? activeTeam\.owner_account_id : ''\)/);
+    expect(l).toMatch(/main\.setAttribute\('inert', ''\)/);
+    expect(l).toMatch(/window\.location\.reload\(\)/);
   });
 
   it("CRITICAL V-331 picker options include 'Self' + each team owner with role. The Self option has empty value (which clears ds_act_as_account); each team has owner_account_id + role labeled.", () => {

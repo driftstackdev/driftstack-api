@@ -150,17 +150,49 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
-  it("window.driftstackActAsHeaders global helper pinned: returns { 'x-driftstack-account': 'acc_<uuid>' } when active OR {} otherwise. Load-bearing — every authedFetch wrapper across the dashboard pages consumes this. Drift to a different header name would silently break team-scoped reads/writes on every page", () => {
+  it('window.driftstackActAsHeaders is pre-slot, canonical-id-only, and locks to the verified owner after authority resolves', () => {
+    const helperAt = body.indexOf('data-act-as-header-preflight');
+    expect(helperAt).toBeGreaterThan(-1);
+    expect(helperAt).toBeLessThan(body.indexOf('<slot />'));
+    expect(body).toMatch(/window\.driftstackActAsHeaders = actAsHeaders/);
+    expect(body).toMatch(/var provisionalOwner = readCanonicalStoredOwner\(\)/);
     expect(body).toMatch(
-      /window\.driftstackActAsHeaders = function \(\) \{\s*\n?\s*try \{\s*\n?\s*const v = localStorage\.getItem\('ds_act_as_account'\);\s*\n?\s*return v && v\.length > 0 \? \{ 'x-driftstack-account': v \} : \{\};\s*\n?\s*\} catch \(_\) \{\s*\n?\s*return \{\};\s*\n?\s*\}\s*\n?\s*\};/,
+      /return provisionalOwner \? \{ 'x-driftstack-account': provisionalOwner \} : \{\};/,
     );
+    expect(body).toMatch(
+      /if \(authorityResolved\) \{\s*return verifiedOwner \? \{ 'x-driftstack-account': verifiedOwner \} : \{\};/,
+    );
+    expect(body).toMatch(/actAsHeaders\.setVerifiedOwner = function \(owner\)/);
   });
 
-  it("V-331 'Acting as' indicator banner pinned: visible only when ds_act_as_account differs from self; copy 'Acting as <owner>. All actions read + write that team's resources.' + Clear button reloads page. Drift to dropping the banner would leave the customer unaware they're acting on a team-mate's account", () => {
+  it("V-331 'Acting as' banner pins provisional read-only, authoritative admin read+write, and authoritative member read-only copy", () => {
     expect(body).toMatch(
-      /\s*Acting as <span class="font-mono" data-act-as-owner>—<\/span>\. All actions read \+\s*\n?\s*write that team's resources\./,
+      /Team access is being verified\. Until then, treat this workspace as read-only\./,
     );
+    expect(body).toContain("Admin access: read + write this team's resources.");
+    expect(body).toContain("Member access: read-only for this team's resources.");
+    expect(body).not.toMatch(/All actions read \+[\s\S]*?write that team's resources/);
     expect(body).toMatch(/data-act-as-clear/);
+  });
+
+  it('successful account authority admits one exact valid role row and fail-closes removed, duplicate, malformed, or zero-team owners before reload', () => {
+    expect(body).toMatch(/!Array\.isArray\(me\.teams\)/);
+    expect(body).toMatch(/candidate\.role === 'admin' \|\| candidate\.role === 'member'/);
+    expect(body).toMatch(/teamCounts\.get\(candidate\.owner_account_id\) === 1/);
+    expect(body).toMatch(/if \(active && !activeTeam\) \{\s*resetInvalidAuthority\(\);/);
+    expect(body).toMatch(/setVerifiedOwner\(''\);\s*clearStoredOwner\(\);/);
+    expect(body).toMatch(/main\.setAttribute\('inert', ''\)/);
+    expect(body).toMatch(/window\.location\.reload\(\)/);
+  });
+
+  it('transport/non-auth HTTP failure keeps the provisional owner but publishes unverified read-only truth', () => {
+    expect(body).toMatch(/if \(!r\.ok\) return \{ kind: 'unavailable' \};/);
+    expect(body).toMatch(
+      /if \(result\.kind === 'unavailable'\) \{\s*markAuthorityUnavailable\(\);/,
+    );
+    expect(body).toMatch(
+      /could not be verified\. Treat this workspace as read-only until you reload/,
+    );
   });
 
   it('clearBtn click handler removes ds_act_as_account from localStorage + reloads page. Drift to dropping the reload would leave downstream fetches still sending the stale x-driftstack-account header for the next page-life', () => {

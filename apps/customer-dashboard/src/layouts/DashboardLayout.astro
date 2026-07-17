@@ -149,6 +149,50 @@ const navSections: NavSection[] = [
         }
       })();
     </script>
+    <script is:inline data-act-as-header-preflight>
+      // The account-scoping helper must exist before <slot /> parses. Slotted
+      // page scripts synchronously capture it before starting their first
+      // request; defining it with the picker hydration at body-end silently
+      // made those requests self-scoped on every fresh page load.
+      (function () {
+        var OWNER_ACCOUNT_ID_RE =
+          /^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+        var authorityResolved = false;
+        var verifiedOwner = '';
+
+        function readCanonicalStoredOwner() {
+          try {
+            var value = localStorage.getItem('ds_act_as_account') || '';
+            if (!value) return '';
+            if (!OWNER_ACCOUNT_ID_RE.test(value)) {
+              localStorage.removeItem('ds_act_as_account');
+              return '';
+            }
+            return value;
+          } catch (_) {
+            return '';
+          }
+        }
+        var provisionalOwner = readCanonicalStoredOwner();
+
+        function actAsHeaders() {
+          if (authorityResolved) {
+            return verifiedOwner ? { 'x-driftstack-account': verifiedOwner } : {};
+          }
+          return provisionalOwner ? { 'x-driftstack-account': provisionalOwner } : {};
+        }
+
+        // Body-end hydration calls this only after a successful, structurally
+        // valid /account/me response. Once resolved, forced localStorage edits
+        // cannot switch a live page to an owner it did not render for.
+        actAsHeaders.setVerifiedOwner = function (owner) {
+          authorityResolved = true;
+          verifiedOwner = OWNER_ACCOUNT_ID_RE.test(owner || '') ? owner : '';
+        };
+
+        window.driftstackActAsHeaders = actAsHeaders;
+      })();
+    </script>
     <style>
       /* 2026-05-21 — when the pre-paint script confirms the cached
        * `ds_is_team_user` flag, override the picker wrap's default
@@ -859,8 +903,10 @@ const navSections: NavSection[] = [
           >
             <div class="mx-auto flex max-w-6xl items-center justify-between gap-4">
               <span>
-                Acting as <span class="font-mono" data-act-as-owner>—</span>. All actions read +
-                write that team's resources.
+                Acting as <span class="font-mono" data-act-as-owner>—</span>.
+                <span data-act-as-access>
+                  Team access is being verified. Until then, treat this workspace as read-only.
+                </span>
               </span>
               <button
                 type="button"
@@ -1167,27 +1213,78 @@ const navSections: NavSection[] = [
           })();
       </script>
       <script is:inline define:vars={{ apiBaseUrl }}>
-        // V-331 — "Acting as" picker + global helper.
-        // Exposes window.driftstackActAsHeaders() returning either
-        // { 'x-driftstack-account': 'acc_<uuid>' } or {}. Inline-script
-        // pages call it when building fetch headers so they pick up
-        // the active team selection. Reads localStorage; never blocks
-        // the render. Picker UI auto-hides for self-only accounts.
+        // V-331 — asynchronous "Acting as" picker + authority hydration.
+        // The synchronous header helper is installed in <head>, before
+        // <slot />, so every slotted page captures the persisted owner on its
+        // first request. This later pass validates that provisional owner
+        // against the caller-only /account/me team list and locks the helper to
+        // the exact verified owner for the rest of this page life.
         (function () {
-          window.driftstackActAsHeaders = function () {
-            try {
-              const v = localStorage.getItem('ds_act_as_account');
-              return v && v.length > 0 ? { 'x-driftstack-account': v } : {};
-            } catch (_) {
-              return {};
-            }
-          };
-
           const banner = document.querySelector('[data-act-as-banner]');
           const ownerEl = document.querySelector('[data-act-as-owner]');
+          const accessEl = document.querySelector('[data-act-as-access]');
           const clearBtn = document.querySelector('[data-act-as-clear]');
           const wrap = document.querySelector('[data-act-as-picker-wrap]');
           const picker = document.querySelector('[data-act-as-picker]');
+          const main = document.querySelector('#main-content');
+          const OWNER_ACCOUNT_ID_RE =
+            /^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+          function setVerifiedOwner(owner) {
+            const helper = window.driftstackActAsHeaders;
+            if (typeof helper === 'function' && typeof helper.setVerifiedOwner === 'function') {
+              helper.setVerifiedOwner(owner);
+            }
+          }
+
+          function clearStoredOwner() {
+            try {
+              localStorage.removeItem('ds_act_as_account');
+              localStorage.removeItem('ds_is_team_user');
+            } catch (_) {
+              /* swallow */
+            }
+          }
+
+          function markAuthorityUnavailable() {
+            if (!active || !banner) return;
+            banner.classList.remove('hidden');
+            if (ownerEl) ownerEl.textContent = active;
+            if (accessEl) {
+              accessEl.textContent =
+                'Team access could not be verified. Treat this workspace as read-only until you reload.';
+            }
+          }
+
+          function resetInvalidAuthority() {
+            setVerifiedOwner('');
+            clearStoredOwner();
+            if (picker) picker.disabled = true;
+            if (wrap) {
+              wrap.classList.add('hidden');
+              wrap.removeAttribute('data-act-as-picker-wrap-reserved');
+            }
+            if (active && banner) {
+              banner.classList.remove('hidden');
+              if (ownerEl) ownerEl.textContent = active;
+              if (accessEl) {
+                accessEl.textContent =
+                  'Team access changed. Reloading this page before any more actions can run…';
+              }
+            }
+            // The slotted page may already have rendered data for the
+            // provisional owner. Never let it remain interactive after that
+            // owner was disproved, even if navigation is blocked by the host.
+            if (main) {
+              main.setAttribute('inert', '');
+              main.setAttribute('aria-busy', 'true');
+            }
+            try {
+              window.location.reload();
+            } catch (_) {
+              /* inert is the fail-closed fallback when reload is unavailable */
+            }
+          }
 
           function getToken() {
             try {
@@ -1207,11 +1304,10 @@ const navSections: NavSection[] = [
           }
 
           function getActiveOwnerId() {
-            try {
-              return localStorage.getItem('ds_act_as_account') || '';
-            } catch (_) {
-              return '';
-            }
+            const helper = window.driftstackActAsHeaders;
+            if (typeof helper !== 'function') return '';
+            const headers = helper();
+            return headers['x-driftstack-account'] || '';
           }
 
           if (clearBtn) {
@@ -1230,6 +1326,10 @@ const navSections: NavSection[] = [
           if (active && banner) {
             banner.classList.remove('hidden');
             if (ownerEl) ownerEl.textContent = active;
+            if (accessEl) {
+              accessEl.textContent =
+                'Team access is being verified. Until then, treat this workspace as read-only.';
+            }
           }
 
           // 2026-06-22 (dashboard audit #1) — wire Sign out UNCONDITIONALLY here, before
@@ -1306,11 +1406,67 @@ const navSections: NavSection[] = [
                 }
                 window.location.href =
                   '/login/?next=' + encodeURIComponent(location.pathname + location.search);
-                return null;
+                return { kind: 'redirecting' };
               }
-              return r.ok ? r.json() : null;
+              if (!r.ok) return { kind: 'unavailable' };
+              return r
+                .json()
+                .then(function (me) {
+                  return { kind: 'resolved', me: me };
+                })
+                .catch(function () {
+                  return { kind: 'malformed' };
+                });
             })
-            .then(function (me) {
+            .then(function (result) {
+              if (!result || result.kind === 'redirecting') return;
+              if (result.kind === 'unavailable') {
+                markAuthorityUnavailable();
+                return;
+              }
+              if (result.kind !== 'resolved') {
+                if (active) resetInvalidAuthority();
+                else setVerifiedOwner('');
+                return;
+              }
+              const me = result.me;
+              if (!me || typeof me !== 'object' || !Array.isArray(me.teams)) {
+                if (active) resetInvalidAuthority();
+                else setVerifiedOwner('');
+                return;
+              }
+
+              const teamCounts = new Map();
+              for (const candidate of me.teams) {
+                if (
+                  !candidate ||
+                  typeof candidate !== 'object' ||
+                  !OWNER_ACCOUNT_ID_RE.test(candidate.owner_account_id || '')
+                ) {
+                  continue;
+                }
+                teamCounts.set(
+                  candidate.owner_account_id,
+                  (teamCounts.get(candidate.owner_account_id) || 0) + 1,
+                );
+              }
+              const teams = me.teams.filter(
+                (candidate) =>
+                  candidate &&
+                  typeof candidate === 'object' &&
+                  OWNER_ACCOUNT_ID_RE.test(candidate.owner_account_id || '') &&
+                  (candidate.role === 'admin' || candidate.role === 'member') &&
+                  teamCounts.get(candidate.owner_account_id) === 1,
+              );
+              const activeTeam = active
+                ? teams.find((candidate) => candidate.owner_account_id === active) || null
+                : null;
+              if (active && !activeTeam) {
+                resetInvalidAuthority();
+                return;
+              }
+              setVerifiedOwner(activeTeam ? activeTeam.owner_account_id : '');
+
               // 2026-05-19 — populate the signed-in-as identity badge
               // above the nav. Avatar from /account/me (R2 upload OR
               // OAuth IDP fallback); name → email → id as label
@@ -1318,8 +1474,6 @@ const navSections: NavSection[] = [
               const sa = document.querySelector('[data-signed-in-as]');
               const saName = document.querySelector('[data-signed-in-name]');
               const saAvatar = document.querySelector('[data-signed-in-avatar]');
-              if (!me) return;
-
               if (sa && saName && saAvatar) {
                 const displayName = me.name || me.email || me.id;
                 saName.textContent = displayName;
@@ -1377,7 +1531,7 @@ const navSections: NavSection[] = [
               };
               setBadge(
                 'team',
-                Array.isArray(me.teams) && me.teams.length > 0 ? String(me.teams.length) : null,
+                teams.length > 0 ? String(teams.length) : null,
               );
 
               // 2026-05-21 — staff probe + "Open admin panel" reveal.
@@ -1446,7 +1600,7 @@ const navSections: NavSection[] = [
               // load can pre-reserve picker space (avoids first-render
               // shift for team users moving between dashboard pages).
               try {
-                if (Array.isArray(me.teams) && me.teams.length > 0) {
+                if (teams.length > 0) {
                   localStorage.setItem('ds_is_team_user', '1');
                 } else {
                   localStorage.removeItem('ds_is_team_user');
@@ -1455,7 +1609,10 @@ const navSections: NavSection[] = [
                 /* swallow */
               }
 
-              if (!Array.isArray(me.teams) || me.teams.length === 0) return;
+              if (teams.length === 0) {
+                if (banner) banner.classList.add('hidden');
+                return;
+              }
               // Human label for a team-owner account. Prefer the owner's
               // name / email / slug when the API exposes it (so a multi-team
               // user can tell workspaces apart); fall back to the opaque
@@ -1469,7 +1626,7 @@ const navSections: NavSection[] = [
               }
               // Build options: Self + each team owner.
               const options = [{ value: '', label: 'Self (' + (me.email || me.id) + ')' }];
-              for (const t of me.teams) {
+              for (const t of teams) {
                 const label = ownerLabel(t);
                 ownerLabelById[t.owner_account_id] = label;
                 options.push({
@@ -1488,8 +1645,15 @@ const navSections: NavSection[] = [
               // Re-label the "Acting as" banner with the friendly owner name
               // now that the team list resolved (the early banner toggle ran
               // before /account/me returned, so it could only show the id).
-              if (active && ownerEl && ownerLabelById[active]) {
+              if (activeTeam && ownerEl && ownerLabelById[active]) {
                 ownerEl.textContent = ownerLabelById[active];
+              }
+              if (activeTeam && accessEl) {
+                accessEl.textContent =
+                  activeTeam.role === 'admin'
+                    ? "Admin access: read + write this team's resources."
+                    : "Member access: read-only for this team's resources.";
+                if (banner) banner.setAttribute('data-act-as-role', activeTeam.role);
               }
               // 2026-05-21 — clear the pre-paint reserved slot so the
               // picker takes its natural layout (rather than the
@@ -1511,7 +1675,10 @@ const navSections: NavSection[] = [
               });
             })
             .catch(function () {
-              /* swallow — picker stays hidden */
+              // Transport failure cannot disprove the provisional owner. Keep
+              // the same header that slotted reads already captured, but never
+              // claim write authority without a successful role response.
+              markAuthorityUnavailable();
             });
         })();
       </script>

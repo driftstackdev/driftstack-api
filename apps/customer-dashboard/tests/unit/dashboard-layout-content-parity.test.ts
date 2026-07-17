@@ -18,8 +18,8 @@
 //     GET /v1/account/me teams; localStorage ds_act_as_account;
 //     x-driftstack-account header. window.driftstackActAsHeaders()
 //     global helper.
-//   • Acting-as banner: "All actions read + write that team's
-//     resources" + "Switch back to self" button.
+//   • Acting-as banner: verified admin read+write vs member read-only
+//     authority + "Switch back to self" button.
 //   • W211 absolute https://driftstack.dev/* legal-doc footer
 //     links: Privacy / Terms / DPA / AUP / Sub-processors.
 //   • Onboarding pages opt out via withSidebar={false}.
@@ -150,32 +150,50 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/<select\s*\n?\s*id="act-as-picker"\s*\n?\s*data-act-as-picker/);
   });
 
-  it('"Acting as" banner: x-team-resources framing + "Switch back to self" button', () => {
+  it('"Acting as" banner: provisional read-only + exact verified role truth + clear control', () => {
     expect(body).toMatch(/data-act-as-banner/);
     expect(body).toMatch(
-      /Acting as <span class="font-mono" data-act-as-owner>—<\/span>\. All actions read \+\s*\n?\s*write that team's resources/,
+      /Team access is being verified\. Until then, treat this workspace as read-only\./,
     );
+    expect(body).toContain("Admin access: read + write this team's resources.");
+    expect(body).toContain("Member access: read-only for this team's resources.");
+    expect(body).not.toContain("All actions read +\n                write that team's resources.");
     expect(body).toMatch(/data-act-as-clear/);
     expect(body).toMatch(/>\s*\n?\s*Switch back to self\s*\n?\s*</);
   });
 
-  it('window.driftstackActAsHeaders() global helper exposed (x-driftstack-account header pickup)', () => {
-    expect(body).toMatch(/window\.driftstackActAsHeaders = function/);
-    expect(body).toMatch(/'x-driftstack-account': v/);
+  it('window.driftstackActAsHeaders() is installed before <slot /> and accepts canonical owner ids only', () => {
+    const helperAt = body.indexOf('data-act-as-header-preflight');
+    const slotAt = body.indexOf('<slot />');
+    expect(helperAt).toBeGreaterThan(-1);
+    expect(helperAt).toBeLessThan(slotAt);
+    expect(body).toMatch(/window\.driftstackActAsHeaders = actAsHeaders/);
+    expect(body).toMatch(/var provisionalOwner = readCanonicalStoredOwner\(\)/);
+    expect(body).toMatch(
+      /return provisionalOwner \? \{ 'x-driftstack-account': provisionalOwner \} : \{\};/,
+    );
     expect(body).toMatch(/localStorage\.getItem\('ds_act_as_account'\)/);
+    expect(body).toMatch(/\^acc_\[0-9a-f\]\{8\}/);
+    expect(body).toMatch(
+      /if \(authorityResolved\) \{\s*return verifiedOwner \? \{ 'x-driftstack-account': verifiedOwner \} : \{\};/,
+    );
   });
 
-  it('GET /v1/account/me fetch populates picker (quiet failure leaves picker hidden)', () => {
+  it('GET /v1/account/me fetch populates picker while transport failure retains provisional read-only scope', () => {
     expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me'/);
     expect(body).toMatch(/authorization: 'Bearer ' \+ token/);
-    expect(body).toMatch(/swallow — picker stays hidden/);
+    expect(body).toMatch(/markAuthorityUnavailable\(\)/);
+    expect(body).toMatch(/could not be verified\. Treat this workspace as read-only/);
   });
 
-  it('picker self-only opt-out: split-guard — early-bail on !me first (lets non-picker dashboard surfaces short-circuit) then empty/non-array teams hides the widget', () => {
-    expect(body).toMatch(/if \(!me\) return;/);
-    expect(body).toMatch(
-      /if \(!Array\.isArray\(me\.teams\) \|\| me\.teams\.length === 0\) return;/,
-    );
+  it('successful authority validates exact unique owner+role and reload-locks removed/malformed owners', () => {
+    expect(body).toMatch(/!Array\.isArray\(me\.teams\)/);
+    expect(body).toMatch(/candidate\.role === 'admin' \|\| candidate\.role === 'member'/);
+    expect(body).toMatch(/teamCounts\.get\(candidate\.owner_account_id\) === 1/);
+    expect(body).toMatch(/if \(active && !activeTeam\) \{\s*resetInvalidAuthority\(\);/);
+    expect(body).toMatch(/main\.setAttribute\('inert', ''\)/);
+    expect(body).toMatch(/window\.location\.reload\(\)/);
+    expect(body).toMatch(/setVerifiedOwner\(activeTeam \? activeTeam\.owner_account_id : ''\)/);
   });
 
   it('picker change → localStorage set + page reload (no SPA-like inline update)', () => {
