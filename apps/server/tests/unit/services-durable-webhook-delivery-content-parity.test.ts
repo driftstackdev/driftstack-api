@@ -174,16 +174,23 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).not.toMatch(/'x-driftstack-signature-prev':/);
   });
 
-  it('deliver outcome: 2xx → success with null excerpt; non-2xx → http_error with bounded excerpt; AbortError|TimeoutError → timeout; else → transport_error', () => {
+  it('deliver outcome: 2xx and session.failed suppress response bodies; other non-2xx retains bounded excerpt; timeout/transport stay classified', () => {
     expect(body).toMatch(/const successful = response\.status >= 200 && response\.status < 300;/);
     expect(body).toMatch(
-      /const responseExcerpt = successful \? null : await readResponseExcerpt\(response\);/,
+      /const suppressResponseDiagnostics =\s*\n?\s*successful \|\| delivery\.eventType === 'session\.failed';/,
     );
+    expect(body).toMatch(
+      /const responseExcerpt = suppressResponseDiagnostics\s*\n?\s*\? null\s*\n?\s*: await readResponseExcerpt\(response\);/,
+    );
+    expect(body).toMatch(/if \(suppressResponseDiagnostics\) \{/);
     expect(body).toMatch(/outcome: successful \? 'success' : 'http_error',/);
     expect(body).toMatch(
       /const isTimeout = error\.name === 'AbortError' \|\| error\.name === 'TimeoutError';/,
     );
     expect(body).toMatch(/outcome: isTimeout \? 'timeout' : 'transport_error',/);
+    expect(body).toMatch(
+      /if \(delivery\.eventType === 'session\.failed'\) \{[\s\S]*?attempt = \{ \.\.\.attempt, responseExcerpt: null, errorMessage: null \};/,
+    );
   });
 
   it('transport diagnostics: central redaction, exact timeout, and a 500-character pre/post bound', () => {

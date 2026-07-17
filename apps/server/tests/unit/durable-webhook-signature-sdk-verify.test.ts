@@ -36,6 +36,7 @@ function makeMockDb(
   delivery: Record<string, unknown>,
   endpoint: Record<string, unknown>,
   attemptRows: unknown[] = [],
+  updateRows: unknown[] = [],
 ): Database {
   const claimed = [{ delivery, endpoint }];
   const tx = {
@@ -64,7 +65,10 @@ function makeMockDb(
     // UPDATE inside the txn (above) still resolves to a bare Promise — it has
     // no .returning().
     update: () => ({
-      set: () => ({ where: () => ({ returning: () => Promise.resolve([{ id: delivery.id }]) }) }),
+      set: (value: unknown) => {
+        updateRows.push(value);
+        return { where: () => ({ returning: () => Promise.resolve([{ id: delivery.id }]) }) };
+      },
     }),
   };
   return { db } as unknown as Database;
@@ -92,13 +96,14 @@ const PREV_SECRET = 'whsec_' + 'prev_secret_value_here';
 const BODY = JSON.stringify({ id: 'ses_001', event: 'session.completed' });
 const EMITTED_AT_SEC = Math.floor(Date.UTC(2026, 4, 28, 12, 0, 0) / 1000);
 
-function baseDelivery() {
+function baseDelivery(over: Record<string, unknown> = {}) {
   return {
     id: 'wd_1111',
     eventId: 'evt_abc',
     eventType: 'session.completed',
     attempts: 0,
     payload: { body: BODY, emittedAtSec: EMITTED_AT_SEC },
+    ...over,
   };
 }
 
@@ -288,6 +293,95 @@ describe('durable webhook response lifecycle', () => {
       responseExcerpt: 'z'.repeat(200),
       outcome: 'http_error',
     });
+  });
+
+  it('cancels and discards session.failed response echoes while preserving retry truth', async () => {
+    const responseEchoSentinel = 'session-failed-response-echo-must-not-persist';
+    const requestSentinel = 'legacy-session-failed-request-must-not-be-echo-retained';
+    let cancelled = false;
+    const attemptRows: unknown[] = [];
+    const updateRows: unknown[] = [];
+    const fetchFn: typeof fetch = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(responseEchoSentinel));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          { status: 500 },
+        ),
+      );
+    const delivery = baseDelivery({
+      eventType: 'session.failed',
+      payload: {
+        body: JSON.stringify({ data: { error_message: requestSentinel } }),
+        emittedAtSec: EMITTED_AT_SEC,
+      },
+    });
+    const worker = new DurableWebhookWorker(
+      makeMockDb(delivery, baseEndpoint(), attemptRows, updateRows),
+      fetchFn,
+      () => EMITTED_AT_SEC * 1000,
+    );
+
+    const result = await worker.processTick();
+
+    expect(result.retried).toBe(1);
+    expect(cancelled).toBe(true);
+    expect(attemptRows).toHaveLength(1);
+    expect(attemptRows[0]).toMatchObject({
+      responseStatus: 500,
+      responseExcerpt: null,
+      outcome: 'http_error',
+      errorMessage: null,
+    });
+    expect(updateRows).toContainEqual(
+      expect.objectContaining({
+        status: 'pending',
+        lastResponseStatus: 500,
+        lastResponseExcerpt: null,
+        lastError: null,
+      }),
+    );
+    expect(JSON.stringify({ attemptRows, updateRows })).not.toContain(responseEchoSentinel);
+    expect(JSON.stringify({ attemptRows, updateRows })).not.toContain(requestSentinel);
+  });
+
+  it('discards session.failed transport diagnostics from both attempt and parent rows', async () => {
+    const transportSentinel = 'session-failed-transport-diagnostic-must-not-persist';
+    const attemptRows: unknown[] = [];
+    const updateRows: unknown[] = [];
+    const delivery = baseDelivery({ eventType: 'session.failed' });
+    const fetchFn = (() => Promise.reject(new Error(transportSentinel))) as typeof fetch;
+    const worker = new DurableWebhookWorker(
+      makeMockDb(delivery, baseEndpoint(), attemptRows, updateRows),
+      fetchFn,
+      () => EMITTED_AT_SEC * 1000,
+    );
+
+    const result = await worker.processTick();
+
+    expect(result.retried).toBe(1);
+    expect(attemptRows).toHaveLength(1);
+    expect(attemptRows[0]).toMatchObject({
+      responseStatus: null,
+      responseExcerpt: null,
+      outcome: 'transport_error',
+      errorMessage: null,
+    });
+    expect(updateRows).toContainEqual(
+      expect.objectContaining({
+        status: 'pending',
+        lastResponseStatus: null,
+        lastResponseExcerpt: null,
+        lastError: null,
+      }),
+    );
+    expect(JSON.stringify({ attemptRows, updateRows })).not.toContain(transportSentinel);
   });
 
   it('bounds and redacts credential-bearing transport errors before persistence', async () => {

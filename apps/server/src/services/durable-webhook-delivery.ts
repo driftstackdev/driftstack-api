@@ -536,11 +536,15 @@ export class DurableWebhookWorker {
           redirect: 'error',
         });
         const successful = response.status >= 200 && response.status < 300;
-        const responseExcerpt = successful ? null : await readResponseExcerpt(response);
-        if (successful) {
-          // Delivery responses are status-only on success. Dispose the body
-          // while the attempt timer is still armed so success headers plus an
-          // endless stream cannot retain a connection after persistence.
+        const suppressResponseDiagnostics = successful || delivery.eventType === 'session.failed';
+        const responseExcerpt = suppressResponseDiagnostics
+          ? null
+          : await readResponseExcerpt(response);
+        if (suppressResponseDiagnostics) {
+          // Success responses are status-only. session.failed responses are
+          // also body-free because a customer endpoint can echo the signed
+          // request, turning a response excerpt into a second retention path.
+          // Dispose either body while the attempt timer is still armed.
           await response.body?.cancel().catch(() => undefined);
         }
         const durationMs = this.now() - startedMs;
@@ -569,6 +573,13 @@ export class DurableWebhookWorker {
         outcome: isTimeout ? 'timeout' : 'transport_error',
         errorMessage: safeTransportError(error),
       };
+    }
+
+    if (delivery.eventType === 'session.failed') {
+      // Keep delivery truth (status/outcome/duration/retry count), but never
+      // retain endpoint-controlled diagnostics for a failure event. This also
+      // covers transport and timeout paths, not only HTTP response bodies.
+      attempt = { ...attempt, responseExcerpt: null, errorMessage: null };
     }
 
     // Persist the attempt row.
