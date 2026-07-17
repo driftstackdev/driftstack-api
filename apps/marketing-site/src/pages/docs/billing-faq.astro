@@ -39,8 +39,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       pay with a <strong>credit/debit card</strong> (Stripe Checkout)
       or with <strong>crypto</strong> (NowPayments — BTC, ETH, USDC,
       USDT, and more). The upgrade applies immediately on payment
-      confirmation; usage from the moment of upgrade is billed against
-      the new tier.
+      confirmation; the new fixed subscription price and entitlement limits
+      apply from that point. Browser session-hours, API calls, and page
+      navigations do not create usage overages.
     </p>
 
     <h2>What about proration on upgrades / downgrades?</h2>
@@ -106,13 +107,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>How do I see what I've been billed?</h2>
     <p>
-      The <strong>Billing</strong> view in the dashboard
-      (<a href="/docs/cost-monitoring/">/docs/cost-monitoring</a>)
-      shows your current cycle's spend, the cost breakdown by line
-      item (sessions, recordings, egress), and the next renewal
-      date. Stripe customers also get an emailed invoice within 24h
-      of each renewal. Crypto customers get an order receipt email
-      within 24h of payment confirmation.
+      Stripe's Customer Portal and Stripe-issued invoices are the source of
+      truth for card subscription charges. Crypto customers use the
+      NowPayments order receipt for the amount paid. The dashboard's
+      <a href="/docs/cost-monitoring/">operational cost estimate</a> is a
+      unit-economics view, not an invoice: it does not itemize sessions,
+      recordings, storage, egress, email, or LLM as customer charges. Bundled
+      LLM's separate settings view shows its included-service monthly budget.
     </p>
 
     <h2>How do tax / VAT work?</h2>
@@ -143,9 +144,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       Cancellation is available via the dashboard at any time — no
       retention friction. Cancellation takes effect at the end of
       the current cycle; the account continues to function fully
-      until then. Sessions, profiles, recordings, and API keys
-      stay accessible for <strong>30 days</strong> after the cycle
-      end, then are purged.
+      until then. The account then moves to the Free tier
+      automatically. Cancellation itself does not schedule a data
+      purge: the account and profiles remain, Free-tier capacity and
+      API restrictions apply, and recordings saved by the desktop
+      app stay on that device. You can resubscribe at any time.
     </p>
 
     <h2>Support</h2>

@@ -1,25 +1,34 @@
 ---
 layout: ../../layouts/DocLayout.astro
-title: Cost monitoring
-description: Read your account's per-dimension spend (compute, storage, egress, email, LLM) for the current billing cycle, with threshold state.
+title: Operational cost estimate
+description: Read Driftstack's estimated cost to serve your account for a UTC month. This is operational telemetry, not your invoice.
 ---
 
-# Cost monitoring
+# Operational cost estimate
 
-Every account accrues cost across five dimensions:
+Driftstack browser subscriptions are fixed-price and enforced by
+concurrent-session capacity. Session hours, API calls, and page
+navigations do not create browser-usage overages.
 
-- **Compute** — session-minutes.
-- **Storage** — reserved in the response and currently reported as zero.
-- **Egress** — reserved in the response and currently reported as zero.
-- **Email** — reserved in the response and currently reported as zero.
-- **LLM** — reserved in the response and currently reported as zero;
-  BYOK usage is billed directly by the model provider.
+`GET /v1/account/cost` exposes a UTC-calendar-month estimate of
+Driftstack's operational cost to serve the calling account. It is not
+the amount charged to you, a Stripe invoice, or a NowPayments receipt.
 
-`GET /v1/account/cost` returns the current cycle's breakdown plus
-a threshold state so customers can see whether they're approaching
-their tier's soft / hard cap.
+The response keeps five stable component fields:
 
-## Read your cost
+- **Compute** — populated from lifecycle-derived session minutes and
+  Driftstack's internal fleet-cost rate. Session minutes remain
+  analytics/unit-economics input; `quotas.session_minute` is `null` on
+  every tier.
+- **Storage**, **egress**, **email**, and **LLM** — reserved fields that
+  currently return zero because production has no per-account meters
+  feeding them.
+
+Bundled LLM has a separate settings/status endpoint. Its 10-cent-per-turn
+value is an included-service monthly budget guardrail today; it is not
+included in this estimate or separately itemized by Stripe.
+
+## Read the estimate
 
 `GET /v1/account/cost?billing_cycle=YYYY-MM`
 
@@ -28,11 +37,11 @@ their tier's soft / hard cap.
 const res = await fetch(`${baseUrl}/v1/account/cost?billing_cycle=2026-05`, {
   headers: { authorization: `Bearer ${apiKey}` },
 });
-const cost = await res.json();
+const estimate = await res.json();
 ```
 
-`billing_cycle` is optional; omitted requests use the current
-cycle (UTC).
+`billing_cycle` is optional; omitted requests use the current UTC
+calendar month.
 
 Returns:
 
@@ -45,43 +54,47 @@ Returns:
     "computeCents": 4720,
     "storageCents": 0,
     "egressCents": 0,
-    "emailCents": 12,
+    "emailCents": 0,
     "llmCents": 0,
-    "totalCents": 4732,
+    "totalCents": 4720,
     "thresholdState": "between-soft-and-hard"
   }
 }
 ```
 
-`account_id` carries the canonical `acc_` prefix, matching the
-`id` returned by `GET /v1/account/me` — the two are directly
-string-comparable.
+`account_id` carries the canonical `acc_` prefix, matching the `id`
+returned by `GET /v1/account/me`.
 
-All amounts are in USD cents. `totalCents` is the sum of the
-five dimensions; rounding is per-dimension (the cost engine rounds
-each dimension to the nearest cent via `Math.round`, then sums the
-already-rounded integer cents).
+All amounts are integer accounting cents. `totalCents` is the sum of
+the five response fields; because only compute is populated today, it
+currently equals `computeCents`. Do not use it as an invoice total.
+Use [billing state](/api/billing/) and Stripe-issued invoices, or the
+relevant NowPayments receipt, for payment truth. Read the separate
+[bundled-LLM status](/api/bundled-llm/#get-current-status-settings--spend)
+for its included-service budget.
 
-### Threshold state
+### Operator threshold state
 
-`breakdown.thresholdState` is one of three values relative to
-your tier's per-cycle soft warn / hard cap:
+`breakdown.thresholdState` compares the operational estimate with
+operator-tuned unit-economics thresholds:
 
-| State                   | Meaning                                                               |
-| ----------------------- | --------------------------------------------------------------------- |
-| `under-soft`            | Spend below the soft-warn threshold. Default.                         |
-| `between-soft-and-hard` | Spend ≥ soft-warn, < hard cap. We'll email you when this transitions. |
-| `over-hard`             | Spend ≥ hard cap. New sessions may be rate-limited.                   |
+| State                   | Meaning                                                   |
+| ----------------------- | --------------------------------------------------------- |
+| `under-soft`            | Estimate is below the operator warning threshold.         |
+| `between-soft-and-hard` | Estimate crossed the operator warning threshold.          |
+| `over-hard`             | Estimate crossed the higher operator attention threshold. |
 
-The actual soft/hard cents values are tier-tuned + operator-
-adjustable. The customer surface intentionally hides the numeric
-caps (they're operator-only); you see your actual spend + a
-qualitative state, not the threshold values.
+This state is not a customer spending cap. Crossing it does not add an
+invoice item, email a customer billing warning, rate-limit a new
+session, or stop work already running. The platform records an operator
+alert and can publish an in-app account notification. Numeric threshold
+values remain operator-only and are not included in this response.
 
 ## Empty-state response
 
-For a fresh account with no usage in the cycle, the response
-synthesizes a zero breakdown instead of 404:
+For a fresh account with no lifecycle-derived session minutes in the
+selected month, the endpoint returns `200` with a zero breakdown rather
+than `404`:
 
 ```json
 {
@@ -100,23 +113,7 @@ synthesizes a zero breakdown instead of 404:
 }
 ```
 
-This makes the customer dashboard's `/usage` page rendering
-trivial — you can always destructure `breakdown.*` without an
-existence check.
-
-## When do dimensions populate?
-
-- **Compute** populates from session completion. Each
-  `session.completed` webhook event corresponds to a
-  `compute_cents` row in the usage ledger.
-- **Email** populates from outbound Postmark sends.
-- **Storage**, **egress**, **email**, and **LLM** currently return zero.
-  They remain in the response so clients can use one stable shape.
-
-`breakdown.totalCents` always sums the live dimensions; it's
-safe to use as your customer-facing "this cycle" amount.
-
 ## Rate limits
 
-Standard `'global'` bucket. Polling every minute is fine; polling
-faster than every 10s on a free tier may hit the bucket.
+Standard `global` bucket. Polling every minute is sufficient; polling
+faster than every 10 seconds on the free tier may hit the bucket.

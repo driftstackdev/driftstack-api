@@ -152,17 +152,29 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
     );
   });
 
-  it('AI billing states the shipped flat-per-turn and self-serve consent paths without launch promises', () => {
+  it('operational cost copy keeps payment truth, compute-only estimate and thresholds separate', () => {
+    expect(body).toContain(`q: "Where can I see what I've actually been billed?"`);
+    expect(body).toMatch(/Stripe-issued invoices are payment truth for card subscriptions/);
+    expect(body).toMatch(/crypto customers use their NowPayments order receipt/);
+    expect(body).toMatch(/operational cost-to-serve estimate for a UTC month, not your invoice/);
+    expect(body).toMatch(/only its compute estimate is populated/);
+    expect(body).toMatch(/storage, egress, email, and LLM are reserved zero fields/);
+    expect(body).toMatch(/operator unit-economics signal, not a customer spending cap/);
+    expect(body).toMatch(/does not send a customer billing email, add an invoice item, rate-limit/);
+    expect(body).toMatch(/recomputed on each request from lifecycle-derived session minutes/);
+  });
+
+  it('AI billing states the shipped included-service budget and self-serve consent paths without launch promises', () => {
     expect(body).toContain("q: 'How is AI usage billed?'");
     expect(body).toContain("q: 'What is the bundled LLM?'");
     expect(body).toMatch(/BYOK has no Driftstack markup/);
-    expect(body).toMatch(/bundled LLM usage is \$0\.10 per agent turn/);
-    expect(body).toMatch(/Standard Builder and Scale usage is \$0\.10 per agent turn/);
-    expect(body).toMatch(/Enterprise can use a contracted custom rate/);
+    expect(body).toMatch(/\$0\.10 included-service accounting value against the monthly budget/);
+    expect(body).toMatch(/budget is enforced but not separately itemized by Stripe today/);
+    expect(body).toMatch(/Enterprise can use a contracted custom budget/);
     expect(body).toMatch(/Settings → AI &amp; billing/);
     expect(body).toMatch(/PATCH \/v1\/account\/me\/bundled-llm-settings/);
     expect(body).not.toMatch(
-      /announced at launch|arrives at v1\.1|until then|at a markup over|metered in "tokens"/i,
+      /announced at launch|arrives at v1\.1|until then|at a markup over|metered in "tokens"|billed on one invoice|contracted custom rate/i,
     );
   });
 

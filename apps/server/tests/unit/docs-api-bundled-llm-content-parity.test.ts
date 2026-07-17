@@ -24,9 +24,9 @@ describe('docs/api/bundled-llm content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Bundled-LLM overview framing pinned: 'Driftstack's bundled LLM rail lets customers run AI-driven agent sessions without supplying their own Anthropic API key. Driftstack hosts the decomposer + bills usage against a customer-controlled monthly soft cap (default $20).' + 'Opt-in is explicit (consent: true) and revocable; the soft cap is customer-configurable up to a $10,000/month ceiling.' + 'The agent session route's resolution chain prefers BYOK (per-request header or stored) over bundled-LLM — bundled-LLM is the no-BYOK fallback.' — pinned so the $20-default + $10k-ceiling + explicit-opt-in + BYOK-precedence contract all stay documented", () => {
+  it('documents the bundled model-access rail as an included-service budget with BYOK precedence', () => {
     expect(body).toMatch(
-      /without supplying their own\s*\n?\s*Anthropic API key\. Driftstack hosts the decomposer \+ bills usage\s*\n?\s*against a customer-controlled monthly soft cap \(default \$20\)\./,
+      /without supplying their own\s*\n?\s*Anthropic API key\. Driftstack hosts the decomposer and posts an\s*\n?\s*included-service accounting value against a customer-controlled\s*\n?\s*monthly soft cap \(default \$20\)\./,
     );
     expect(body).toMatch(
       /Opt-in is explicit \(`consent: true`\) and revocable; the soft cap is\s*\n?\s*customer-configurable up to a \$10,000\/month ceiling\./,
@@ -42,14 +42,18 @@ describe('docs/api/bundled-llm content parity', () => {
     expect(body).toMatch(/`PATCH \/v1\/account\/me\/bundled-llm-settings`/);
   });
 
-  it('pins the shipped desktop settings path and the flat standard turn rate without leaking upstream provider cost', () => {
+  it('pins the desktop settings path and flat included-service turn value without inventing a Stripe item', () => {
     expect(body).toMatch(/desktop app under \*\*Settings → AI\s*\n?\s*& billing\*\*/);
-    expect(body).toMatch(/flat \*\*\$0\.10 per agent turn\*\*/);
-    expect(body).toMatch(/independent of model choice and\s*\n?\s*token count/);
-    expect(body).toMatch(/Enterprise can use a contracted custom rate/);
+    expect(body).toMatch(
+      /flat \*\*\$0\.10\s*\n?\s*included-service accounting value per agent turn\*\*/,
+    );
+    expect(body).toMatch(/independent of model choice\s*\n?\s*and token count/);
+    expect(body).toMatch(/Enterprise can\s*\n?\s*use a contracted custom budget/);
+    expect(body).toMatch(/not a\s*\n?\s*separately itemized Stripe invoice charge today/);
     expect(body).toMatch(/`cost_basis = 'bundled_flat_per_turn'`/);
     expect(body).toMatch(/does\s*\n?\s*not expose Driftstack's upstream provider cost/);
     expect(body).not.toMatch(/Cost-per-turn varies with the underlying model/);
+    expect(body).not.toMatch(/costs are billed alongside the customer's tier/i);
   });
 
   it('status-panel prose keeps consent, cap, used spend, and remaining budget in one coherent sentence', () => {

@@ -2,16 +2,15 @@
 // Pricing landing page — the canonical $79/$249/$699 Manual + $149/$499/$1,499
 // API ladder + Enterprise-from-$4k + self-hosted SKUs + the perpetual free tier.
 // Drift here either changes a tier price (would create marketing↔Stripe
-// invoice divergence) or breaks the 'pay per concurrent session, no surprise
-// overage' framing that the entire pricing narrative rests on.
+// invoice divergence) or breaks the fixed-browser-subscription + concurrent-cap
+// framing that the entire pricing narrative rests on.
 //
 //   • 5-import set from pricing.ts: API_TIERS + SELF_HOSTED_* (TRIAL_PACK retired).
 //   • fmtUsd helper (whole vs decimal formatting branch).
 //   • fmtAiAgent 3-state: byok_only / byok_or_bundled / byok_or_bundled_custom.
 //   • Free-tier hero card: $0 perpetual, data-bound profiles/concurrent,
 //     20-min session cap, never expires.
-//   • Positioning band: 'Pay per concurrent session.' + 'No surprise
-//     overage bills.' framing.
+//   • Positioning band: fixed browser subscription + no browser-usage overages.
 //   • v2 Band-A decision fork (2026-07-03): 'who drives the sessions'
 //     question + '#manual / #api' anchor cards + both-workflows card.
 //   • One-sentence concurrent/profile glossary above the ladders
@@ -58,13 +57,13 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(imp![1]!).not.toContain('TRIAL_PACK');
   });
 
-  it("fmtAiAgent 3-state LLM-billing map: byok_only → 'BYOK — bring your own Anthropic key' (S20b self-glossing cell) / byok_or_bundled → 'BYOK or bundled (your choice)' / byok_or_bundled_custom → 'BYOK or bundled (custom rate)' — pinned so the 3-state AI-agent column display strings stay consistent (drift to dropping the Anthropic naming would obscure which model provider; drift to dropping 'custom rate' would lose the Enterprise-tier signal)", () => {
+  it('fmtAiAgent 3-state LLM map: byok_only / byok_or_bundled / byok_or_bundled_custom, with Enterprise custom-budget truth', () => {
     expect(body).toMatch(/case 'byok_only':\s*\n?\s*return 'BYOK — bring your own Anthropic key';/);
     expect(body).toMatch(
       /case 'byok_or_bundled':\s*\n?\s*return 'BYOK or bundled \(your choice\)';/,
     );
     expect(body).toMatch(
-      /case 'byok_or_bundled_custom':\s*\n?\s*return 'BYOK or bundled \(custom rate\)';/,
+      /case 'byok_or_bundled_custom':\s*\n?\s*return 'BYOK or bundled \(custom budget\)';/,
     );
   });
 
@@ -84,10 +83,12 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/Upgrade to a paid tier when you need the\s+API/);
   });
 
-  it("Positioning band pinned: 'Pay per concurrent session.' + 'Run as many hours as you want within your concurrent cap.' + 'No surprise overage bills.' — pinned so the 3-part flat-pricing-no-surprise narrative survives (drift to dropping 'No surprise overage bills' would weaken the central differentiation against per-hour vendors like Browserless)", () => {
-    expect(body).toMatch(/Pay per concurrent session\./);
+  it('Positioning band pins fixed browser subscription, concurrent capacity and no browser-usage overages', () => {
+    expect(body).toMatch(/Browser subscriptions are priced by concurrent capacity\./);
     expect(body).toMatch(/Run as many hours as you want within your concurrent cap\./);
-    expect(body).toMatch(/No surprise overage bills\./);
+    expect(body).toMatch(/No browser-usage overage bills\./);
+    expect(body).toMatch(/session hours, API calls, and page navigations are unmetered within/);
+    expect(body).toMatch(/bundled LLM uses a separate included-service monthly budget/);
   });
 
   it("V-502 decision-tree section 8 tier cards: Free $0 + Personal $79 + Team $249 + Agency $699 + API Starter $149 + API Builder $499 + API Scale $1,499 + Enterprise from $4,000 — pinned so the 8-tier 'which is right for me' decision-tree stays complete (drift to dropping any tier would orphan that-tier prospects; drift to changing a price would create marketing↔Stripe-invoice divergence)", () => {
@@ -171,15 +172,17 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     );
   });
 
-  it('BYOK / Bundled LLM section pins the live $0.10 standard turn rate, Enterprise custom-rate boundary, desktop/API enablement, and self-hosted BYOK-only posture', () => {
+  it('BYOK / Bundled LLM section pins the live included-service budget, Enterprise custom-budget boundary, enablement, and self-hosted BYOK-only posture', () => {
     expect(body).toMatch(/BYOK or bundled — your call\./);
     expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
     expect(body).toMatch(/\$0\.10 per agent turn/);
-    expect(body).toMatch(/counts against the monthly cap you control/);
-    expect(body).toMatch(/Enterprise can use a\s*\n?\s*contracted custom rate/);
+    expect(body).toMatch(/included-service accounting value/);
+    expect(body).toMatch(/against the monthly budget you control/);
+    expect(body).toMatch(/not separately itemized on\s*\n?\s*today's Stripe invoice/);
+    expect(body).toMatch(/Enterprise can use a contracted custom budget/);
     expect(body).toMatch(/Settings → AI &amp; billing/);
     expect(body).toMatch(/bundled-LLM settings API/);
-    expect(body).not.toMatch(/announced at launch|per-token rate/i);
+    expect(body).not.toMatch(/announced at launch|per-token rate|billed on one invoice/i);
     // S20b 2026-07-06: same architectural reason, plain words.
     expect(body).toMatch(
       /Self-hosted\s+plans are BYOK-only\s+because we don't route AI calls into hardware you\s+own\./,

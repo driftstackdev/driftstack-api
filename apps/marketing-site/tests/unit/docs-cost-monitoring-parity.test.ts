@@ -1,8 +1,4 @@
-// W265.B — drift-guard for /docs/cost-monitoring. Pins:
-// 1. /v1/account/cost endpoint matches the live route.
-// 2. The 5 breakdown components cited (compute / storage / egress /
-//    email / bundled LLM) match the live service response keys.
-// 3. billing_cycle query param format matches the live regex.
+// W265.B — public operational-cost docs ↔ live route and aggregator truth.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -11,48 +7,63 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/cost-monitoring.astro');
-const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/account-cost.ts');
+const PAGE = read('apps/marketing-site/src/pages/docs/cost-monitoring.astro');
+const ROUTE = read('apps/server/src/routes/account-cost.ts');
+const AGGREGATOR = read('apps/server/src/services/cost-aggregator.ts');
+const USAGE = read('apps/server/src/services/usage.ts');
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
+function read(path: string): string {
+  return readFileSync(resolve(REPO_ROOT, path), 'utf8');
 }
 
-describe('W265.B /docs/cost-monitoring ↔ /v1/account/cost route parity', () => {
-  const page = read(PAGE);
-  const route = read(ROUTE);
-
-  it('/v1/account/cost endpoint is documented + registered', () => {
-    expect(page).toMatch(/\/v1\/account\/cost/);
-    expect(route).toContain(`'/v1/account/cost'`);
+describe('W265.B operational cost estimate public/runtime parity', () => {
+  it('documents the registered UTC-month endpoint and zero fresh-account response', () => {
+    expect(PAGE).toMatch(/GET \/v1\/account\/cost\?billing_cycle=YYYY-MM/);
+    expect(ROUTE).toContain(`'/v1/account/cost'`);
+    expect(ROUTE).toMatch(/regex\(\/\^\\d\{4\}-\\d\{2\}\$\//);
+    expect(PAGE).toMatch(/synthesised zero-breakdown for fresh accounts/);
+    expect(PAGE).toMatch(/\(no 404\)/);
   });
 
-  it('breakdown components cited in the doc match the live response keys', () => {
-    // Live keys per the route handler: computeCents / storageCents /
-    // egressCents / emailCents / llmCents / totalCents.
-    for (const key of ['computeCents', 'storageCents', 'egressCents', 'emailCents', 'llmCents']) {
-      expect(route).toContain(key);
+  it('pins compute as the only populated production input and four reserved zero fields', () => {
+    expect(AGGREGATOR).toMatch(/const sessionMinutes = totals\.totals\.session_minute \?\? 0/);
+    for (const input of [
+      'storageGbMonths: 0',
+      'egressGb: 0',
+      'emailSends: 0',
+      'llmInputTokens: 0',
+      'llmOutputTokens: 0',
+    ]) {
+      expect(AGGREGATOR).toContain(input);
     }
-    // The doc names the human-readable component labels.
-    for (const label of ['Compute', 'Storage', 'Egress', 'Email']) {
-      expect(page).toMatch(new RegExp(label));
+    for (const field of ['storageCents', 'egressCents', 'emailCents', 'llmCents']) {
+      expect(PAGE).toMatch(new RegExp(`<code class="font-mono">${field}<\\/code>[\\s\\S]*?zero`));
+      expect(PAGE).toMatch(new RegExp(`"${field}": 0`));
     }
   });
 
-  it('billing_cycle YYYY-MM query format matches the live regex', () => {
-    expect(route).toMatch(/regex\(\/\^\\d\{4\}-\\d\{2\}\$\//);
+  it('keeps browser subscriptions fixed/concurrency-only and the endpoint out of billing truth', () => {
+    expect(USAGE).toMatch(/All TIER_QUOTAS values are now `null` \(unmetered\) across every/);
+    expect(PAGE).toMatch(
+      /Browser subscriptions are fixed-price and enforced by concurrent-session/,
+    );
+    expect(PAGE).toMatch(/It is not\s+the amount charged to you/);
+    expect(PAGE).toMatch(/does not replace a Stripe invoice or\s+NowPayments receipt/);
+    expect(PAGE).not.toMatch(/will move to nightly|metered overage charges|customer's bill/i);
   });
 
-  it('Postmark + Cloudflare R2 sub-processor names are consistent', () => {
-    expect(page).toMatch(/Postmark/);
-    expect(page).toMatch(/Cloudflare R2/);
+  it('separates the bundled-LLM included-service budget from cost and Stripe invoices', () => {
+    expect(PAGE).toMatch(/10-cent-per-turn included-service budget value/);
+    expect(PAGE).toMatch(/not rolled into\s+this estimate or separately itemized by Stripe today/);
+    expect(PAGE).toMatch(/<code class="font-mono">llmCents<\/code> currently returns zero/);
   });
 
-  it('does not advertise overage charges (Driftstack uses concurrent caps, not metered overages)', () => {
-    // Per the FAQ + pricing pages: no overage charges, paid tiers are
-    // concurrent-only. The cost endpoint is an internal cost tracker;
-    // it must not be framed as the customer's bill.
-    expect(page).not.toMatch(/overage charges/i);
-    expect(page).not.toMatch(/overage line items?/i);
+  it('describes thresholds as operator posture with no customer billing or control effect', () => {
+    for (const state of ['under-soft', 'between-soft-and-hard', 'over-hard']) {
+      expect(PAGE).toContain(state);
+    }
+    expect(PAGE).toMatch(/operator-tuned unit-economics configuration/);
+    expect(PAGE).toMatch(/does not email a customer billing warning/);
+    expect(PAGE).toMatch(/add an invoice item, rate-limit a session, or silently stop work/);
   });
 });

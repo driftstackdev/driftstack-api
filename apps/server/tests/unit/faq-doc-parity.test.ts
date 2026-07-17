@@ -36,9 +36,10 @@ describe('W247.B faq doc parity', () => {
     expect(doc).not.toMatch(/HTTP 409/);
   });
 
-  it('free tier framed as $0 forever, no metering, manual-only', () => {
+  it('free tier framed as $0 forever, no usage charges, manual-only', () => {
     expect(doc).toMatch(/The free tier is \$0 forever/);
-    expect(doc).toMatch(/The free tier has no metering at all/);
+    expect(doc).toMatch(/The free tier likewise has no usage charges/);
+    expect(doc).toMatch(/one concurrent session is its capacity limit/);
     // Free tier is manual-only (GUI client). S43 2026-07-07: every
     // PAID tier includes programmatic API/SDK access (TIER_FEATURES
     // apiAccess: true across the paid ladder) — the old "starts on

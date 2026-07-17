@@ -226,7 +226,7 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     for (const comment of [
       '// Core automation resources.',
       '// Account + access control.',
-      '// Billing + spend.',
+      '// Billing + operational estimate.',
       '// Remaining surfaces.',
     ]) {
       expect(apiSlice).toContain(comment);
@@ -254,7 +254,7 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
       ['/api/audit-log/', 'Audit log'],
       ['/api/billing/', 'Billing'],
       ['/api/billing-crypto/', 'Crypto checkout'],
-      ['/api/cost-monitoring/', 'Cost monitoring'],
+      ['/api/cost-monitoring/', 'Operational cost estimate'],
       ['/api/bundled-llm/', 'Bundled LLM'],
       ['/api/byok-anthropic/', 'Bring your own Anthropic key'],
       ['/api/account-notifications/', 'Account notifications (SSE)'],
@@ -272,6 +272,13 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
       );
       expect(body).toMatch(re);
     }
+  });
+
+  it('operational estimate child uses the canonical current heading anchor', () => {
+    expect(body).toMatch(
+      /href: '\/api\/cost-monitoring\/#read-the-estimate',\s*\n?\s*label: 'Read estimate',\s*\n?\s*method: 'GET'/,
+    );
+    expect(body).not.toContain('/api/cost-monitoring/#read-your-cost');
   });
 
   it('S22.4 children shape spot-checks: sessions carries its 12 endpoint anchors in page order (full census + md lockstep live in the apps/docs docs-nav-endpoint-children-integrity suite)', () => {

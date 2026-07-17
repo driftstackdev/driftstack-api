@@ -8,8 +8,9 @@ description: Customer-facing API for the bundled-LLM agent layer — opt-in cons
 
 Driftstack's **bundled LLM** rail lets customers run AI-driven
 [agent sessions](/api/agent-sessions/) without supplying their own
-Anthropic API key. Driftstack hosts the decomposer + bills usage
-against a customer-controlled monthly soft cap (default $20).
+Anthropic API key. Driftstack hosts the decomposer and posts an
+included-service accounting value against a customer-controlled
+monthly soft cap (default $20).
 
 Opt-in is explicit (`consent: true`) and revocable; the soft cap is
 customer-configurable up to a $10,000/month ceiling. The agent
@@ -113,12 +114,12 @@ Constraints:
   Negative values rejected with `400`.
 
 > **Tier availability.** Opting **in** (`consent: true`) requires a
-> tier that offers bundled-LLM billing: API Builder, API Scale, or
+> tier that offers bundled-LLM access: API Builder, API Scale, or
 > Enterprise. On BYOK-only tiers (Team, Agency, API Starter) — and
 > on tiers without the AI agent at all — the opt-in is refused with
 > a 403 `forbidden` tier error. Opting **out** (`consent: false`)
 > and cap-only updates are accepted on every tier, so a downgraded
-> account can always switch bundled billing off. BYOK key management
+> account can always switch bundled access off. BYOK key management
 > (`/v1/account/me/byok-anthropic`) is not tier-gated beyond the
 > AI-agent tiers themselves.
 
@@ -184,25 +185,27 @@ extension fields).
 
 ## Errors
 
-| Status | Type                         | When                                                                      |
-| -----: | ---------------------------- | ------------------------------------------------------------------------- |
-|    400 | validation                   | body fails schema (negative cap, > 1_000_000 cap)                         |
-|    401 | unauthorized                 | missing or invalid bearer token                                           |
-|    403 | forbidden                    | `consent: true` on a tier without bundled-LLM billing (below API Builder) |
-|    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month              |
-|    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in               |
+| Status | Type                         | When                                                                     |
+| -----: | ---------------------------- | ------------------------------------------------------------------------ |
+|    400 | validation                   | body fails schema (negative cap, > 1_000_000 cap)                        |
+|    401 | unauthorized                 | missing or invalid bearer token                                          |
+|    403 | forbidden                    | `consent: true` on a tier without bundled-LLM access (below API Builder) |
+|    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month             |
+|    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in              |
 
 The settings + status routes above do not return a `503`. A `503`
 for an unwired bundled-LLM service is returned on the **agent-session
 turn** route, not on these reads.
 
-## Privacy + billing
+## Privacy + included-service accounting
 
-- Bundled-LLM costs are billed alongside the customer's tier
-  subscription. Standard API Builder and API Scale usage posts a
-  flat **$0.10 per agent turn**, independent of model choice and
-  token count; Enterprise can use a contracted custom rate. The
-  recorder stores the posted per-call amount in cents with
+- Standard API Builder and API Scale usage posts a flat **$0.10
+  included-service accounting value per agent turn** against the
+  customer-controlled monthly budget, independent of model choice
+  and token count. It is enforced as a service budget but is not a
+  separately itemized Stripe invoice charge today; Enterprise can
+  use a contracted custom budget. The recorder stores the posted
+  per-call amount in cents with
   `cost_basis = 'bundled_flat_per_turn'` for auditability. It does
   not expose Driftstack's upstream provider cost.
 - No prompt content is logged on Driftstack's side beyond what

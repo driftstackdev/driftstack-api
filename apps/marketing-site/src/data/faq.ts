@@ -39,7 +39,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'How does concurrent metering work?',
-        a: "<strong>Concurrent</strong> means how many sessions you can run at the same time — think of it like the number of browser tabs you have open at once. That's the only thing we meter on paid tiers. Per-tier caps: Personal = 1 concurrent / Team = 3 / Agency = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — a 5-minute session and a 6-hour session count exactly the same. The cap only limits how many run side by side; your monthly total is whatever your sessions produce running continuously. No monthly meter, no per-hour metering, no overage line items. The free tier has no metering at all — one concurrent session, no usage charges.",
+        a: "<strong>Concurrent</strong> means how many sessions you can run at the same time — think of it like the number of browser tabs you have open at once. That's the browser-capacity meter on paid tiers. Per-tier caps: Personal = 1 concurrent / Team = 3 / Agency = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — a 5-minute session and a 6-hour session count exactly the same. The cap only limits how many run side by side; there is no monthly browser-hour meter, per-hour charge, or browser-usage overage line item. Optional bundled LLM has a separate included-service monthly budget. The free tier likewise has no usage charges — one concurrent session is its capacity limit.",
       },
       {
         q: 'What happens when I hit my concurrent cap?',
@@ -107,7 +107,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'How does Enterprise pricing work?',
-        a: 'Enterprise is custom — from $4,000/mo on annual contracts only. Actual pricing depends on how many sessions you run at once, how many profiles, custom device types (archetypes), how you want AI usage billed (your own Anthropic key, or through us), and any compliance paperwork (custom data-protection agreement terms and add-ons). Email <a href="mailto:sales@driftstack.dev" class="text-tk-accent-text underline">sales@driftstack.dev</a> with a description of your workload and team.',
+        a: 'Enterprise is custom — from $4,000/mo on annual contracts only. Actual pricing depends on how many sessions you run at once, how many profiles, custom device types (archetypes), whether AI uses your Anthropic key or Driftstack-provided access, and any compliance paperwork (custom data-protection agreement terms and add-ons). Email <a href="mailto:sales@driftstack.dev" class="text-tk-accent-text underline">sales@driftstack.dev</a> with a description of your workload and team.',
       },
     ],
   },
@@ -131,16 +131,16 @@ export const FAQ_GROUPS: FaqGroup[] = [
         a: 'Yes — via NowPayments on tiers where crypto checkout is enabled. Open the crypto checkout from the billing dashboard, send the displayed amount in the displayed currency, and the order moves through pending → confirming → paid as on-chain confirmations land. (For developers: the webhook events — the automatic notifications our system sends yours as a payment progresses — are documented in the <a href="https://docs.driftstack.dev/webhooks/crypto-events/" class="text-tk-accent-text underline">crypto webhook events docs</a>.) <strong>Crypto payments are non-refundable</strong> — you can cancel anytime, which stops future billing, but the current period is not refunded (see <a href="/legal/refunds/" class="text-tk-accent-text underline">refund policy</a>). Most customers use Stripe; crypto is a fallback for jurisdictions where card payments are awkward.',
       },
       {
-        q: "How can I tell how much I've spent this month?",
-        a: 'The desktop app shows a Cost panel with this month\'s spend broken down by component: compute, storage, network traffic out (egress), email, and AI usage — plus whether you\'re on track for your tier\'s cap, approaching it, or over it. Developers can fetch the same numbers from GET <code class="font-mono">/v1/account/cost</code> (totals in whole cents; the on-track state is reported as under-soft / between / over-hard). See the <a href="/docs/cost-monitoring/" class="text-tk-accent-text underline">cost-monitoring docs</a>.',
+        q: "Where can I see what I've actually been billed?",
+        a: 'Stripe\'s Customer Portal and Stripe-issued invoices are payment truth for card subscriptions; crypto customers use their NowPayments order receipt. The desktop app\'s Cost panel and GET <code class="font-mono">/v1/account/cost</code> show Driftstack\'s operational cost-to-serve estimate for a UTC month, not your invoice. Today only its compute estimate is populated; storage, egress, email, and LLM are reserved zero fields. See the <a href="/docs/cost-monitoring/" class="text-tk-accent-text underline">cost-monitoring docs</a>.',
       },
       {
-        q: "What if I cross my tier's cap?",
-        a: 'You get one email when your spending passes the early-warning level (the "soft cap") and another if it crosses the hard cap. Nothing is auto-blocked — running sessions stay running. The account team reaches out to discuss raising the cap or moving to a higher tier. We don\'t silently kill traffic to enforce a soft cap.',
+        q: 'What if the operational estimate crosses a threshold?',
+        a: 'The threshold is an operator unit-economics signal, not a customer spending cap. Crossing it can produce an operator log and an in-app account notification, but it does not send a customer billing email, add an invoice item, rate-limit a new session, or interrupt work already running. Browser capacity is still enforced only by your concurrent-session cap.',
       },
       {
-        q: 'Are the spend numbers live or cached?',
-        a: "Live — recalculated every time you look. If traffic grows we may switch to nightly pre-computed snapshots, but the API response shape won't change, so anything you've built on it keeps working.",
+        q: 'Is the operational estimate live or cached?',
+        a: 'It is recomputed on each request from lifecycle-derived session minutes. It does not read Stripe invoices or a customer usage-billing ledger.',
       },
     ],
   },
@@ -149,7 +149,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     entries: [
       {
         q: 'What is the bundled LLM?',
-        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model (LLM) — useful for describing tests in plain English, automatically spotting what changed between screenshots, or letting the AI explore a flow on its own. On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; the AI usage is then billed to you by your provider, not Driftstack), or use bundled billing so Driftstack carries the AI calls and puts them on one invoice. Standard Builder and Scale usage is $0.10 per agent turn; Enterprise can use a contracted custom rate.',
+        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model (LLM) — useful for describing tests in plain English, automatically spotting what changed between screenshots, or letting the AI explore a flow on its own. On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; the AI usage is then billed to you by your provider, not Driftstack), or use Driftstack-provided model access. Standard Builder and Scale turns post a $0.10 included-service accounting value against the monthly budget you control; it is not separately itemized on today\'s Stripe invoice. Enterprise can use a contracted custom budget.',
       },
       {
         q: 'How do agent sessions work?',
@@ -157,7 +157,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'How is AI usage billed?',
-        a: 'BYOK has no Driftstack markup — your Anthropic API key, your provider bill, your control. Set a stored key from the dashboard <span class="font-mono">/settings</span> page, <span class="font-mono">PUT /v1/account/me/byok-anthropic-key</span>, or per request with <span class="font-mono">x-byok-anthropic-api-key</span>. Team, Agency, and API Starter are BYOK-only. On API Builder and API Scale, bundled LLM usage is $0.10 per agent turn and counts against the monthly cap you control; Enterprise can use a contracted custom rate. Enable bundled usage in the desktop app under <strong>Settings → AI &amp; billing</strong>, or with <span class="font-mono">PATCH /v1/account/me/bundled-llm-settings</span>.',
+        a: 'BYOK has no Driftstack markup — your Anthropic API key, your provider bill, your control. Set a stored key from the dashboard <span class="font-mono">/settings</span> page, <span class="font-mono">PUT /v1/account/me/byok-anthropic-key</span>, or per request with <span class="font-mono">x-byok-anthropic-api-key</span>. Team, Agency, and API Starter are BYOK-only; API Builder, API Scale, and Enterprise support bundled-LLM with consent. On API Builder and API Scale, bundled LLM turns post a $0.10 included-service accounting value against the monthly budget you control; this budget is enforced but not separately itemized by Stripe today. Enterprise can use a contracted custom budget. Enable bundled usage in the desktop app under <strong>Settings → AI &amp; billing</strong>, or with <span class="font-mono">PATCH /v1/account/me/bundled-llm-settings</span>.',
       },
       {
         q: 'Is BYOK secret-handling secure?',

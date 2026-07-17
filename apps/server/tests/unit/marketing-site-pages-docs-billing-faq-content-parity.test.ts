@@ -58,6 +58,27 @@ describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content pa
     expect(body).not.toMatch(/drive them from the API\/SDK|no separate[^.]*ds_test_/);
   });
 
+  it('pins fixed-subscription browser pricing and real payment sources of truth', () => {
+    expect(body).toMatch(/new fixed subscription price and entitlement limits/);
+    expect(body).toMatch(
+      /Browser session-hours, API calls, and page\s+\n?\s*navigations do not create usage overages/,
+    );
+    expect(body).toMatch(
+      /Stripe's Customer Portal and Stripe-issued invoices are the source of\s+\n?\s*truth/,
+    );
+    expect(body).toMatch(/NowPayments order receipt for the amount paid/);
+  });
+
+  it('pins the operational estimate as non-invoice telemetry and LLM as a separate included budget', () => {
+    expect(body).toMatch(/operational cost estimate/);
+    expect(body).toMatch(/unit-economics view, not an invoice/);
+    expect(body).toMatch(
+      /does not itemize sessions,\s+\n?\s*recordings, storage, egress, email, or LLM as customer charges/,
+    );
+    expect(body).toMatch(/included-service monthly budget/);
+    expect(body).not.toMatch(/cost estimate[\s\S]{0,120}(?:customer bill|invoice total)/i);
+  });
+
   it("Stripe vs NowPayments proration framing pinned: 'Upgrades are prorated by Stripe' + 'Crypto upgrades (NowPayments) charge the full new tier price and reset the billing cycle to the upgrade date — crypto is pay-as-you-go-style because we cannot guarantee in-cycle reconciliation against an on-chain payment.' — pinned so the asymmetric Stripe-prorates / NowPayments-full-price-cycle-reset commitment + the 'cannot guarantee in-cycle reconciliation' rationale all survive (drift to claiming crypto upgrades also prorate would create marketing↔NowPayments-flow divergence)", () => {
     expect(body).toMatch(
       /<strong>Upgrades<\/strong> are prorated by Stripe: you pay the\s*\n?\s*pro-rata difference for the remainder of the current billing\s*\n?\s*cycle/,
@@ -123,13 +144,15 @@ describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content pa
     );
   });
 
-  it("Cancel-anytime + 30-day post-cancel data retention pinned: 'Cancellation is available via the dashboard at any time — no retention friction. Cancellation takes effect at the end of the current cycle' + 'Sessions, profiles, recordings, and API keys stay accessible for 30 days after the cycle end, then are purged.' — pinned so the no-retention-friction + end-of-cycle-effect + 30-day-post-cancel-retention commitments survive (drift to a longer cycle-end-to-purge gap would create marketing↔DPA-retention-schedule divergence)", () => {
+  it('pins cancellation as an end-of-cycle Free downgrade without inventing a purge or cloud recording lifecycle', () => {
     expect(body).toMatch(
       /Cancellation is available via the dashboard at any time — no\s*\n?\s*retention friction\./,
     );
-    expect(body).toMatch(
-      /Sessions, profiles, recordings, and API keys\s*\n?\s*stay accessible for <strong>30 days<\/strong> after the cycle\s*\n?\s*end, then are purged\./,
-    );
+    expect(body).toMatch(/account then moves to the Free tier\s*\n?\s*automatically/);
+    expect(body).toMatch(/Cancellation itself does not schedule a data\s*\n?\s*purge/);
+    expect(body).toMatch(/recordings saved by the desktop\s*\n?\s*app stay on that device/);
+    expect(body).toMatch(/resubscribe at any time/);
+    expect(body).not.toMatch(/30 days[\s\S]{0,100}(?:purged|deleted)/i);
   });
 
   it('billing@driftstack.dev + order_id include-from-checkout-confirmation framing pinned — pinned so the billing-team-specific routing + the support-ticket-template (include order_id) survive (drift to dropping the order_id-include guidance would let support tickets land without the NowPayments status-lookup key)', () => {

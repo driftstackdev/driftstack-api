@@ -56,6 +56,28 @@ describe('W264.B /docs/billing-faq ↔ live billing parity', () => {
     expect(page).not.toMatch(/BitPay/);
   });
 
+  it('separates fixed subscription payment truth from the operational cost estimate', () => {
+    expect(page).toMatch(/new fixed subscription price and entitlement limits/);
+    expect(page).toMatch(/do not create usage overages/);
+    expect(page).toMatch(
+      /Stripe's Customer Portal and Stripe-issued invoices are the source of\s+truth/,
+    );
+    expect(page).toMatch(/NowPayments order receipt for the amount paid/);
+    expect(page).toMatch(/operational cost estimate[\s\S]*unit-economics view, not an invoice/);
+    expect(page).toMatch(
+      /does not itemize sessions,\s+recordings, storage, egress, email, or LLM as customer charges/,
+    );
+    expect(page).toMatch(/included-service monthly budget/);
+  });
+
+  it('states the real cancellation lifecycle without a fictional 30-day purge', () => {
+    expect(page).toMatch(/account then moves to the Free tier\s+automatically/);
+    expect(page).toMatch(/Cancellation itself does not schedule a data\s+purge/);
+    expect(page).toMatch(/recordings saved by the desktop\s+app stay on that device/);
+    expect(page).toMatch(/resubscribe at any time/);
+    expect(page).not.toMatch(/30 days[\s\S]{0,100}(?:purged|deleted)/i);
+  });
+
   it('VAT / reverse-charge framing is consistent with EU + UK Stripe Tax', () => {
     expect(page).toMatch(/VAT/);
     expect(page).toMatch(/reverse-charge/);

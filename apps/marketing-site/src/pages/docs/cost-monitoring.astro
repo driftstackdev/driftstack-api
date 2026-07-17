@@ -1,15 +1,14 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
-// V-671 — customer-facing cost-monitoring docs. The companion to
-// V-541.D's GET /v1/account/cost route. Walks through how spend is
-// computed, what each component covers, when threshold alerts fire,
-// and how to interpret the response shape.
+// V-671 — customer-facing operational-cost docs. The companion to
+// V-541.D's GET /v1/account/cost route. The endpoint exposes an
+// estimated cost-to-serve view, not customer billing or an invoice.
 ---
 
 <BaseLayout
-  title="Cost monitoring"
-  description="How Driftstack computes per-account spend, what each cost component represents, and how to interpret the GET /v1/account/cost endpoint."
+  title="Operational cost estimate"
+  description="How to interpret Driftstack's operational cost-to-serve estimate without confusing it with your fixed subscription or invoice."
 >
   <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
     {/* 2026-05-24 — hero-glow atmosphere matches site family. */}
@@ -17,74 +16,70 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <div class="relative mx-auto max-w-4xl px-6 pb-12 pt-20 md:pt-24">
       {/* S24: eyebrow is TEXT → the AA-safe accent-text tone. */}
       <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
-        Docs · Cost monitoring
+        Docs · Operational cost estimate
       </p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">Knowing what you're spending.</h1>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">
+        Understanding the operational cost estimate.
+      </h1>
       <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
-        Driftstack pricing is metered. Compute, storage, egress, email,
-        and bundled LLM each have a per-unit rate. This page explains
-        how the rates are applied, what counts as "this billing cycle",
-        and how to read the live spend endpoint from your dashboard or
-        the SDK.
+        Browser subscriptions are fixed-price and enforced by concurrent-session
+        capacity, not by hours, calls, or page navigations. The
+        <code class="font-mono">GET /v1/account/cost</code> endpoint is a UTC-month
+        estimate of Driftstack's operational cost to serve your account. It is not
+        the amount charged to you and it does not replace a Stripe invoice or
+        NowPayments receipt.
       </p>
     </div>
   </section>
 
   <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Cost components</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Estimate components</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
-        Each component is metered separately and shows up as a line on
-        your monthly invoice. The breakdown returned by
-        <code class="font-mono">/v1/account/cost</code> mirrors the
-        same five components.
+        The response keeps a stable five-component shape. Today only the compute
+        estimate is populated. Storage, egress, email, and LLM are reserved fields
+        and return zero; none of these values is an invoice line item.
       </p>
 
       <dl class="mt-8 space-y-6">
         <div>
-          <dt class="text-sm font-medium text-tk-ink">Compute (session-minutes)</dt>
+          <dt class="text-sm font-medium text-tk-ink">Compute estimate</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
-            Wall-clock time a session occupies a Mac mini slot. Charged
-            per minute. A 15-minute session counts as 15 session-minutes
-            regardless of how active you are within it — the slot is
-            reserved for you.
+            Derived from session lifecycle time in whole minutes and Driftstack's
+            internal fleet-cost rate. Session minutes are analytics for unit
+            economics; your browser subscription is not charged per minute.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-tk-ink">Storage (R2 GB-months)</dt>
+          <dt class="text-sm font-medium text-tk-ink">Storage (reserved)</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
-            Captures (screenshots, DOM dumps, PDFs, recordings) and
-            profile state live in Cloudflare R2. We charge per
-            GB-month, prorated to the second. Retention defaults are
-            30 days for screenshots / DOM, 90 days for recordings;
-            shorter retention reduces this line.
+            <code class="font-mono">storageCents</code> is present for response-shape
+            stability, but no per-account storage meter feeds it in production.
+            It currently returns zero.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-tk-ink">Egress (TURN GB)</dt>
+          <dt class="text-sm font-medium text-tk-ink">Egress (reserved)</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
-            WebRTC stream bandwidth that traverses our TURN relay.
-            Sessions where the customer's network can do direct
-            peer-to-peer don't accumulate this line.
+            <code class="font-mono">egressCents</code> currently returns zero. Browser
+            stream traffic is not itemized as a customer usage charge.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-tk-ink">Email (Postmark sends)</dt>
+          <dt class="text-sm font-medium text-tk-ink">Email (reserved)</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
-            Transactional emails fired against your account (signup
-            verification, billing receipts, incident notifications).
-            Capped at the volume implied by your tier; one cent per
-            send at the metering layer.
+            <code class="font-mono">emailCents</code> currently returns zero. The
+            endpoint does not turn transactional email into an invoice line item.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-tk-ink">Bundled AI usage</dt>
+          <dt class="text-sm font-medium text-tk-ink">LLM (reserved here)</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
-            When bundled LLM is enabled, standard API Builder and API
-            Scale usage posts $0.10 per agent turn; Enterprise can use
-            its contracted custom rate. The amount accumulates in the
-            response's <code class="font-mono">llmCents</code> field and
-            counts against your monthly cap. BYOK customers see 0 here.
+            <code class="font-mono">llmCents</code> currently returns zero, including
+            for bundled-LLM users. Bundled LLM's separate status endpoint records
+            a 10-cent-per-turn included-service budget value; it is not rolled into
+            this estimate or separately itemized by Stripe today. BYOK charges stay
+            with the model provider.
           </dd>
         </div>
       </dl>
@@ -93,7 +88,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
   <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Threshold state</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Operator threshold state</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
         Every cost response includes a
         <code class="font-mono">thresholdState</code> field with one
@@ -106,9 +101,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             >under-soft</span
           >
           <p class="mt-2 text-sm text-tk-ink-2">
-            Spend is below the soft warning threshold for your tier.
-            The dashboard shows an "on track" indicator. No
-            email-based alerts fire.
+            The operational estimate is below the operator warning threshold for
+            your tier.
           </p>
         </li>
         <li>
@@ -117,10 +111,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             >between-soft-and-hard</span
           >
           <p class="mt-2 text-sm text-tk-ink-2">
-            Spend is above the soft warning and below the hard cap.
-            You receive an "approaching limit" email the first time
-            this transition happens in a cycle. The dashboard shows
-            an amber indicator.
+            The estimate crossed the operator warning threshold but remains below
+            the higher attention threshold. The platform may publish an in-app
+            account notification and an operator log; it does not send a billing
+            email or change your subscription.
           </p>
         </li>
         <li>
@@ -129,18 +123,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             >over-hard</span
           >
           <p class="mt-2 text-sm text-tk-ink-2">
-            Spend has crossed the hard cap configured for your tier
-            (or the per-account override your account-team set). The
-            dashboard surfaces a red indicator + an "over limit"
-            email fires once per crossing.
+            The estimate crossed the operator attention threshold. This is an
+            operational signal, not a customer spending cap: it does not add an
+            overage, rate-limit new sessions, or stop work already running.
           </p>
         </li>
       </ul>
       <p class="mt-6 max-w-prose text-sm text-tk-ink-2">
-        Threshold numeric values are not part of the customer
-        response (they're operator-tuned configuration). What you see
-        in the response is your spend and the categorical state — the
-        admin team contacts you if you need higher caps.
+        Threshold numeric values are not part of the customer response because
+        they are operator-tuned unit-economics configuration. The categorical
+        state is diagnostic context only; your concurrent-session cap remains the
+        browser-capacity enforcement boundary.
       </p>
     </div>
   </section>
@@ -162,21 +155,21 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   "billing_cycle": "2026-05",
   "tier": "api_builder",
   "breakdown": {
-    "computeCents": 12_000,
-    "storageCents": 200,
-    "egressCents": 50,
-    "emailCents": 5,
-    "llmCents": 1_800,
-    "totalCents": 14_055,
+    "computeCents": 4720,
+    "storageCents": 0,
+    "egressCents": 0,
+    "emailCents": 0,
+    "llmCents": 0,
+    "totalCents": 4720,
     "thresholdState": "under-soft"
   }
 }
 `}</code></pre>
       <p class="mt-6 max-w-prose text-sm text-tk-ink-2">
-        All amounts are integer cents. Format with your locale of
-        choice (the GUI client defaults to EUR; see
-        <code class="font-mono">cost-panel.ts</code> for the
-        formatter).
+        All amounts are integer accounting cents in the operational estimate.
+        <code class="font-mono">totalCents</code> is the sum of the five response
+        fields, but it is not an invoice total. Use Stripe billing state and
+        invoices, or the relevant NowPayments receipt, for payment truth.
       </p>
     </div>
   </section>
@@ -190,35 +183,30 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             Is the response real-time?
           </p>
           <p class="mt-1">
-            Within a few seconds of the underlying usage event.
-            Snapshots aren't persisted yet, so the endpoint
-            recomputes every request. This will move to nightly
-            snapshots when traffic justifies caching — your
-            integration won't notice the change.
+            The endpoint recomputes each request from current lifecycle-derived
+            session minutes. It does not read a Stripe invoice or a customer
+            usage-billing ledger.
           </p>
         </div>
         <div>
           <p class="font-medium text-tk-ink">
-            Why is bundled AI cost 0 even though I'm using the agent?
+            Why is LLM cost 0 even though I'm using bundled AI?
           </p>
           <p class="mt-1">
-            BYOK accounts (Bring Your Own Anthropic Key) settle LLM
-            cost directly with the LLM vendor; we don't meter what
-            we don't pay for. If bundled billing is enabled, each
-            standard Builder or Scale agent turn adds $0.10; Enterprise
-            follows its contracted custom rate. Open a support ticket if
-            completed bundled turns still show 0.
+            The LLM field in this endpoint is reserved and always zero today.
+            Bundled LLM records its 10-cent-per-turn included-service budget on
+            <code class="font-mono">GET /v1/account/me/bundled-llm-settings</code>,
+            not here. BYOK usage is billed directly by your model provider.
           </p>
         </div>
         <div>
           <p class="font-medium text-tk-ink">
-            What happens if I cross the hard cap?
+            What happens if the estimate crosses the higher threshold?
           </p>
           <p class="mt-1">
-            Nothing is automatically blocked. The platform alerts our
-            ops team and emails you. We reach out to discuss raising
-            the cap or moving you to a higher tier; we never silently
-            kill running sessions to enforce a soft cap.
+            The platform records an operator alert and can publish an in-app
+            account notification. It does not email a customer billing warning,
+            add an invoice item, rate-limit a session, or silently stop work.
           </p>
         </div>
       </div>

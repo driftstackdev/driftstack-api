@@ -482,7 +482,7 @@ export const DOC_NAV: DocNavSection[] = [
           { href: '/api/audit-log/#export', label: 'Export', method: 'GET' },
         ],
       },
-      // Billing + spend.
+      // Billing + operational estimate.
       {
         href: '/api/billing/',
         label: 'Billing',
@@ -518,9 +518,13 @@ export const DOC_NAV: DocNavSection[] = [
       },
       {
         href: '/api/cost-monitoring/',
-        label: 'Cost monitoring',
+        label: 'Operational cost estimate',
         children: [
-          { href: '/api/cost-monitoring/#read-your-cost', label: 'Read your cost', method: 'GET' },
+          {
+            href: '/api/cost-monitoring/#read-the-estimate',
+            label: 'Read estimate',
+            method: 'GET',
+          },
         ],
       },
       // Remaining surfaces.

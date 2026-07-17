@@ -20,7 +20,7 @@
 //     verbatim title strings (Free $0 → Enterprise from $4,000).
 //   • Monthly/annual toggle wired (id=billing-toggle + data-
 //     period-target=monthly/annual).
-//   • "Pay per concurrent session" landing-band copy pinned.
+//   • Fixed browser subscription + concurrent-cap landing copy pinned.
 //   • Product + AggregateOffer JSON-LD, figures DERIVED from
 //     API_TIERS, with NO fabricated ratings/reviews.
 //   • BYOK-or-bundled LLM explainer: Anthropic console link +
@@ -137,21 +137,28 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(/setPeriod\('monthly'\);/);
   });
 
-  it('"Pay per concurrent session" landing-band copy pinned', () => {
-    expect(body).toMatch(/Pay per concurrent session\./);
-    expect(body).toMatch(/No surprise overage bills/);
+  it('fixed browser subscription + concurrent-cap landing-band copy pinned', () => {
+    expect(body).toMatch(/Browser subscriptions are priced by concurrent capacity\./);
+    expect(body).toMatch(/No browser-usage overage bills/);
+    expect(body).toMatch(/session hours, API calls, and page navigations are unmetered within/);
+    expect(body).toMatch(/bundled LLM uses a separate included-service monthly budget/);
     // Concurrent definition aligned with /faq + /index.
     expect(body).toMatch(
       /Concurrent sessions<\/strong> = how many\s+sessions you can run at the same time, like browser tabs you'd have\s+open at once/,
     );
   });
 
-  it('BYOK-or-bundled LLM explainer: Anthropic console link + Self-hosted SKUs are BYOK-only', () => {
+  it('BYOK-or-bundled LLM explainer: included-service budget + Anthropic link + Self-hosted BYOK-only', () => {
     expect(body).toMatch(/BYOK or bundled — your call\./);
     expect(body).toContain('console.anthropic.com');
     expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
     expect(body).toMatch(/Self-hosted\s*\n?\s*plans are BYOK-only/);
-    expect(body).toMatch(/bundled per-token rate is announced at launch/);
+    expect(body).toMatch(/\$0\.10 per agent turn/);
+    expect(body).toMatch(/included-service accounting value/);
+    expect(body).toMatch(/not separately itemized on\s+today's Stripe invoice/);
+    expect(body).not.toMatch(
+      /billed on one invoice|bundled per-token rate is announced at launch/i,
+    );
   });
 
   it('free-tier perpetual claim pinned: never expires + upgrade to a paid tier (matches /faq; S20b: whitespace-tolerant — the sentence rewrapped)', () => {

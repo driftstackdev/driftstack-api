@@ -47,9 +47,10 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
     expect(page).toMatch(/RFC 9457 problem-detail/i);
   });
 
-  it('free-tier framing pinned: $0-forever / one concurrent / manual-only (no API) / no metering', () => {
+  it('free-tier framing pinned: $0-forever / one concurrent / manual-only (no API) / no usage charges', () => {
     expect(page).toMatch(/The free tier is \$0 forever/);
-    expect(page).toMatch(/The free tier has no metering at all/);
+    expect(page).toMatch(/The free tier likewise has no usage charges/);
+    expect(page).toMatch(/one concurrent session is its capacity limit/);
     // Free tier is manual-only (desktop app); access from code (API/SDK)
     // starts on the API ladder. Old "API-within-free-limits" framing is
     // superseded. S20b 2026-07-06: same fact, plain words.

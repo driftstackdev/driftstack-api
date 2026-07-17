@@ -155,6 +155,23 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toMatch(/auto-renew unless cancelled at least 30 days before renewal/);
   });
 
+  it('billing truth stays with Stripe/NowPayments; cost remains an operational estimate', () => {
+    expect(body).toMatch(/Stripe-issued invoices are payment truth for card subscriptions/);
+    expect(body).toMatch(/crypto customers use their NowPayments order receipt/);
+    expect(body).toMatch(/operational cost-to-serve estimate for a UTC month, not your invoice/);
+    expect(body).toMatch(/only its compute estimate is populated/);
+    expect(body).toMatch(/storage, egress, email, and LLM are reserved zero fields/);
+    expect(body).toMatch(/recomputed on each request from lifecycle-derived session minutes/);
+  });
+
+  it('operator threshold and bundled LLM budget have no fictional invoice effect', () => {
+    expect(body).toMatch(/operator unit-economics signal, not a customer spending cap/);
+    expect(body).toMatch(/does not send a customer billing email, add an invoice item, rate-limit/);
+    expect(body).toMatch(/\$0\.10 included-service accounting value against the monthly budget/);
+    expect(body).toMatch(/budget is enforced but not separately itemized by Stripe today/);
+    expect(body).not.toMatch(/billed on one invoice|contracted custom rate|announced at launch/i);
+  });
+
   // S31 2026-07-07 (fable-truth-audit) — the suspended-state/90-day-purge flow never existed:
   // Stripe cancellation downgrades to the perpetual free tier
   // (services/stripe-webhooks.ts) and deletes nothing.

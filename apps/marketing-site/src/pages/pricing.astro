@@ -34,7 +34,7 @@ function fmtAiAgent(aiAgent: boolean, llmBilling: LlmBilling): string {
     case 'byok_or_bundled':
       return 'BYOK or bundled (your choice)';
     case 'byok_or_bundled_custom':
-      return 'BYOK or bundled (custom rate)';
+      return 'BYOK or bundled (custom budget)';
     default:
       return '—';
   }
@@ -200,17 +200,18 @@ const pricingStructuredData = {
   <section id="no-overages" class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
       <p class="text-2xl font-medium tracking-tight text-tk-ink md:text-3xl">
-        Pay per concurrent session.
+        Browser subscriptions are priced by concurrent capacity.
         <span class="text-tk-ink-3"
           >Run as many hours as you want within your concurrent cap.</span
-        > No surprise overage bills.
+        > No browser-usage overage bills.
       </p>
       <p class="mt-4 max-w-prose text-sm text-tk-ink-2">
         <strong class="text-tk-ink">Concurrent sessions</strong> = how many
         sessions you can run at the same time, like browser tabs you'd have
         open at once. The number after each tier (e.g. "3 concurrent") is the
-        cap; everything else (hours, calls, page navigations) is unmetered
-        within the cap.
+        cap; session hours, API calls, and page navigations are unmetered within
+        it. Optional bundled LLM uses a separate included-service monthly budget,
+        described below; it is not a browser-session overage.
       </p>
     </div>
   </section>
@@ -391,7 +392,8 @@ const pricingStructuredData = {
             8 sessions at a time; 100 profiles. Production automation and CI
             test suites (the checks that run automatically on every code
             change) that need iPhone Safari on real WebKit. AI agent with
-            your own key or billed on one invoice.
+            your own key or bundled access governed by an included-service
+            monthly budget.
           </p>
         </li>
         <li class="card p-5">
@@ -630,9 +632,11 @@ const pricingStructuredData = {
             <em>bring your own API key</em> from Anthropic for the optional AI
             agent feature. You pay Anthropic directly for the AI usage —
             Driftstack adds no markup and never sits in the middle. Bundled
-            LLM is the alternative — Driftstack carries the AI calls for you
-            and bills them on your one Driftstack invoice. Detail below the
-            tier tables.
+            LLM is the alternative — Driftstack supplies the model access and
+            posts a 10-cent accounting value per agent turn against the monthly
+            budget you set. That budget is an included-service guardrail today,
+            not a separately itemized Stripe usage charge. Detail below the tier
+            tables.
           </p>
         </div>
       </div>
@@ -855,11 +859,12 @@ const pricingStructuredData = {
         target="_blank"
         rel="noopener noreferrer">console.anthropic.com</a
       > and pay Anthropic directly. Bundled LLM (API Builder, API Scale, Enterprise)
-      means the AI calls run through Driftstack and land on your Driftstack
-      invoice. Standard API Builder and API Scale usage is <strong
+      means the AI calls run through Driftstack. Standard API Builder and API
+      Scale usage posts an included-service accounting value of <strong
         >$0.10 per agent turn</strong
-      > and counts against the monthly cap you control; Enterprise can use a
-      contracted custom rate. Enable it in the desktop app under <strong
+      > against the monthly budget you control; it is not separately itemized on
+      today's Stripe invoice. Enterprise can use a contracted custom budget. Enable
+      it in the desktop app under <strong
         >Settings → AI &amp; billing</strong
       > or through the bundled-LLM settings API. Self-hosted plans are BYOK-only
       because we don't route AI calls into hardware you own.
@@ -881,11 +886,12 @@ const pricingStructuredData = {
       <div>
         <h3 class="font-medium text-tk-ink">Why concurrent caps and not hours?</h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Hours metering breaks for manual users — an account manager running 3
+          Browser-hours metering breaks for manual users — an account manager running 3
           persistent profiles 8 hours a day generates 720 browser-hours/month
-          and a surprise overage bill. Concurrent caps mean you only pay for how
-          many sessions you can run simultaneously. Use them as much as you
-          want.
+          and a surprise overage bill. Concurrent caps mean your browser subscription
+          is based on how many sessions you can run simultaneously. Use them as much
+          as you want within that capacity; optional bundled LLM has its own included
+          monthly budget.
         </p>
       </div>
       <div>
