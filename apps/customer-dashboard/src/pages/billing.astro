@@ -170,7 +170,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         <div class="min-w-0 flex-1">
           <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Crypto payments</p>
           <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Recent orders</h2>
-          <p data-crypto-empty class="mt-3 hidden text-sm text-tk-ink-3">
+          <p
+            data-crypto-empty
+            data-crypto-state="idle"
+            class="mt-3 hidden text-sm text-tk-ink-3"
+          >
             No crypto payments yet. Pay with crypto from the
             <a href="/select-tier/" class="text-tk-accent-text hover:underline">plan picker</a>.
           </p>
@@ -502,9 +506,9 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       // ─── Crypto payments history (slice 3.3) ──────────────────────────
       // GET /v1/billing/crypto-orders?limit=5 — the same orders the GUI's
-      // Billing "Orders" tab lists. Quiet failure: the section keeps its
-      // empty state (crypto is optional; a transient error here must not
-      // alarm a card-paying customer).
+      // Billing "Orders" tab lists. Empty and unavailable are deliberately
+      // separate: a failed billing-history read must never claim that the
+      // customer has no crypto payments.
       function escapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
           if (c === '&') return '&amp;';
@@ -530,19 +534,42 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!isFinite(n)) return '—';
         return (n / 100).toFixed(2) + ' ' + String(currency || 'USD');
       }
+      function renderCryptoHistoryState(kind) {
+        const empty = root.querySelector('[data-crypto-empty]');
+        const list = root.querySelector('[data-crypto-list]');
+        if (list) {
+          list.classList.add('hidden');
+          list.innerHTML = '';
+        }
+        if (!empty) return;
+        empty.setAttribute('data-crypto-state', kind);
+        if (kind === 'empty') {
+          empty.innerHTML =
+            'No crypto payments yet. Pay with crypto from the ' +
+            '<a href="/select-tier/" class="text-tk-accent-text hover:underline">plan picker</a>.';
+        } else {
+          empty.textContent =
+            "Couldn't load crypto payment history. Reload this page to try again.";
+        }
+        empty.classList.remove('hidden');
+      }
       authedFetch('/v1/billing/crypto-orders?limit=5', { method: 'GET' })
         .then(function (r) {
           return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
         })
         .then(function (body) {
-          const orders = body && Array.isArray(body.orders) ? body.orders : [];
+          if (!body || !Array.isArray(body.orders)) {
+            throw new Error('Crypto payment history response was incomplete.');
+          }
+          const orders = body.orders;
           const list = root.querySelector('[data-crypto-list]');
           const empty = root.querySelector('[data-crypto-empty]');
           if (!orders.length) {
-            if (empty) empty.classList.remove('hidden');
+            renderCryptoHistoryState('empty');
             return;
           }
           if (!list) return;
+          if (empty) empty.classList.add('hidden');
           list.classList.remove('hidden');
           list.innerHTML = orders
             .map(function (o) {
@@ -623,8 +650,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
         })
         .catch(function () {
-          const empty = root.querySelector('[data-crypto-empty]');
-          if (empty) empty.classList.remove('hidden');
+          renderCryptoHistoryState('unavailable');
         });
     })();
   </script>

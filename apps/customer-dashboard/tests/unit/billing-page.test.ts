@@ -221,11 +221,11 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     win = window;
     await flush();
     expect(isHidden(window, '[data-banner]')).toBe(false);
-    expect(text(window, '[data-banner]')).toContain('Live billing is not available yet');
+    expect(text(window, '[data-banner]')).toContain('Billing is unavailable for this deployment');
     // W588 — the mock subscription card is replaced with an honest state, not
     // left showing a fabricated tier/renew that a real customer misreads.
-    expect(text(window, '[data-field="sub-tier"]')).toBe('Billing not configured yet');
-    expect(text(window, '[data-field="sub-status-badge"]')).toBe('pending setup');
+    expect(text(window, '[data-field="sub-tier"]')).toBe('Billing unavailable');
+    expect(text(window, '[data-field="sub-status-badge"]')).toBe('unavailable');
     expect(isHidden(window, '[data-action="portal"]')).toBe(true);
   });
 
@@ -386,19 +386,46 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     expect(receipts[0]?.getAttribute('data-crypto-receipt')).toBe('cro_paid1');
   });
 
-  it('crypto orders: empty list reveals the empty state; a failing fetch does the same (quiet failure)', async () => {
+  it('crypto orders: a successful empty list is the only response that claims no payments', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: (call) => {
-        if (/crypto-orders/.test(call.url)) return json({ detail: 'nope' }, 500);
+        if (/crypto-orders/.test(call.url)) return json({ orders: [], next_cursor: null });
         return json({ subscription: null });
       },
     });
     win = window;
     await flush();
+    const state = window.document.querySelector('[data-crypto-empty]');
     expect(isHidden(window, '[data-crypto-empty]')).toBe(false);
     expect(isHidden(window, '[data-crypto-list]')).toBe(true);
+    expect(state?.getAttribute('data-crypto-state')).toBe('empty');
+    expect(state?.textContent).toContain('No crypto payments yet');
   });
+
+  it.each([
+    ['HTTP failure', () => json({ detail: 'nope' }, 500)],
+    ['malformed success', () => json({ next_cursor: null })],
+  ])(
+    'crypto orders: %s renders unavailable rather than a false empty history',
+    async (_name, response) => {
+      const { window } = setUpDom(loadBuiltPage(), {
+        token: 'tok',
+        route: (call) => {
+          if (/crypto-orders/.test(call.url)) return response();
+          return json({ subscription: null });
+        },
+      });
+      win = window;
+      await flush();
+      const state = window.document.querySelector('[data-crypto-empty]');
+      expect(isHidden(window, '[data-crypto-empty]')).toBe(false);
+      expect(isHidden(window, '[data-crypto-list]')).toBe(true);
+      expect(state?.getAttribute('data-crypto-state')).toBe('unavailable');
+      expect(state?.textContent).toContain("Couldn't load crypto payment history");
+      expect(state?.textContent).not.toContain('No crypto payments yet');
+    },
+  );
 
   it('crypto receipt click: fetches receipt.pdf WITH the Bearer header (a plain link would 401)', async () => {
     const pdf = new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status: 200 });

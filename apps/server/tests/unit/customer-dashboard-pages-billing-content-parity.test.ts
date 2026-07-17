@@ -79,6 +79,16 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     expect(body).toContain('receiptDownloadsInFlight.delete(btn);');
   });
 
+  it('crypto history distinguishes an authoritative empty list from HTTP, transport, or malformed-response unavailability', () => {
+    expect(body).toMatch(
+      /if \(!body \|\| !Array\.isArray\(body\.orders\)\) \{\s*throw new Error\('Crypto payment history response was incomplete\.'\);/,
+    );
+    expect(body).toMatch(/if \(!orders\.length\) \{\s*renderCryptoHistoryState\('empty'\);/);
+    expect(body).toMatch(/\.catch\(function \(\) \{\s*renderCryptoHistoryState\('unavailable'\);/);
+    expect(body).toContain("Couldn't load crypto payment history. Reload this page to try again.");
+    expect(body).toMatch(/empty\.setAttribute\('data-crypto-state', kind\)/);
+  });
+
   it("Cancel button → handlePortal indirection: 'cancellation goes through Stripe portal' inline comment + cancelBtn.addEventListener('click', handlePortal) — pinned so customers can't accidentally land on a self-serve cancel API path that bypasses Stripe's retention/save offers (Stripe portal is the canonical cancel surface, with their own UX for offering pauses/discounts)", () => {
     expect(body).toMatch(
       /if \(cancelBtn\) cancelBtn\.addEventListener\('click', handlePortal\); \/\/ cancellation goes through Stripe portal/,
