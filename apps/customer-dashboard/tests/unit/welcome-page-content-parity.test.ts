@@ -54,23 +54,25 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     expect(body).toMatch(/Personal for hand-\s*\n?\s*driven sessions, all the way up to API Scale/);
   });
 
-  it('"What happens next" 3-step contract pinned (Stripe / session / API key)', () => {
+  it('"What happens next" separates Free desktop credentialing from paid customer API keys', () => {
     expect(body).toContain('What happens next');
     // Step 1 — free-start (no card) OR paid Stripe redirect + card-
     // detail reassurance.
     expect(body).toMatch(
       /Start free with no card — or pick a paid tier and we'll send you\s+to Stripe to confirm payment\. Your card details stay between you\s+and Stripe — we never see them/,
     );
-    // Step 2 — download the desktop app + sign in; sessions launch there
-    // (2026-07-02 account-portal IA — the web dashboard no longer creates
-    // sessions).
+    // Step 2 — Free uses browser sign-in to provision the app's restricted
+    // device credential; this is deliberately not framed as a customer key.
     expect(body).toMatch(
-      /Download the Driftstack desktop app and sign in from your\s+browser — that's where you launch and drive iPhone Safari\s+sessions, with the option to route traffic through your own\s+proxy or VPN/,
+      /Download the Driftstack desktop app and choose browser sign-in\.\s+Driftstack provisions a restricted device credential for the app;\s+that's where Free customers launch and drive iPhone Safari sessions/,
     );
-    // Step 3 — create an API key to connect the app or the SDKs.
+    // Step 3 — customer keys and SDK automation are paid-tier capabilities.
     expect(body).toMatch(
-      /Create an API key on the API keys page to connect the desktop\s+app or the SDKs\. You can revoke or rotate it any time/,
+      /On an API-enabled paid tier, create a customer API key for SDK\s+automation\. Customer keys can be revoked or rotated any time;\s+Free desktop sign-in does not require one/,
     );
+    expect(body).toMatch(/restricted device credential for the app, not a customer API key/);
+    expect(body).toMatch(/customer API\s+keys, and SDK automation/);
+    expect(body).not.toMatch(/API key[^.]*connect the desktop app/i);
   });
 
   it('defensive redirect: no ds_web_session_token → canonical /signup/ (no orphan landings or static-host redirect hop)', () => {

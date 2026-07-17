@@ -37,8 +37,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
         <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
           Your account is already on the free plan: 1 profile, 1 concurrent
           session of up to 20 minutes. No subscription, no expiry — the best way to
-          try Driftstack before committing. Launch sessions from the desktop app whenever
-          you're ready.
+          try Driftstack before committing. Launch the desktop app and choose browser sign-in;
+          that provisions a restricted device credential for the app, not a customer API key.
         </p>
         <a href="/" class="btn-primary mt-4 inline-flex">
           Go to your dashboard
@@ -50,8 +50,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
           <span class="font-mono text-sm text-tk-ink-3">$79–$1,499 / mo</span>
         </div>
         <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
-          Upgrade to a paid plan for more concurrency, more profiles, and API
-          access — Personal for hand-
+          Upgrade to a paid plan for more concurrency, more profiles, customer API
+          keys, and SDK automation — Personal for hand-
           driven sessions, all the way up to API Scale for high-volume
           automation. Cancel anytime.
         </p>
@@ -82,10 +82,9 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
             >2</span
           >
           <span class="leading-relaxed">
-            Download the Driftstack desktop app and sign in from your
-            browser — that's where you launch and drive iPhone Safari
-            sessions, with the option to route traffic through your own
-            proxy or VPN.
+            Download the Driftstack desktop app and choose browser sign-in.
+            Driftstack provisions a restricted device credential for the app;
+            that's where Free customers launch and drive iPhone Safari sessions.
           </span>
         </li>
         <li class="flex gap-4">
@@ -94,8 +93,9 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
             >3</span
           >
           <span class="leading-relaxed">
-            Create an API key on the API keys page to connect the desktop
-            app or the SDKs. You can revoke or rotate it any time.
+            On an API-enabled paid tier, create a customer API key for SDK
+            automation. Customer keys can be revoked or rotated any time;
+            Free desktop sign-in does not require one.
           </span>
         </li>
       </ol>

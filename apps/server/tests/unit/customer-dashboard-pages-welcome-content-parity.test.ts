@@ -45,12 +45,12 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     );
   });
 
-  it("Monthly-tiers framing (R6 plain language): '$79–$1,499 / mo' + Personal for hand-driven sessions / API Scale", () => {
+  it("Monthly-tiers framing (R6 plain language): '$79–$1,499 / mo' + paid customer keys/SDK automation", () => {
     expect(body).toMatch(
       /<span class="font-mono text-sm text-tk-ink-3">\$79–\$1,499 \/ mo<\/span>/,
     );
     expect(body).toMatch(
-      /Upgrade to a paid plan for more concurrency, more profiles, and API\s*\n?\s*access — Personal for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
+      /Upgrade to a paid plan for more concurrency, more profiles, customer API\s*\n?\s*keys, and SDK automation — Personal for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
     );
     expect(body).toMatch(
       /<a href="\/select-tier\/" class="btn-secondary mt-4 inline-flex">View tiers<\/a>/,
@@ -66,16 +66,16 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(
       /Your card details stay between you\s*\n?\s*and Stripe — we never see them\./,
     );
-    // Step 2 — download the desktop app + sign in; that's where iPhone
-    // Safari sessions are launched (2026-07-02 account-portal IA — the
-    // web dashboard no longer creates sessions).
+    // Step 2 — browser sign-in provisions the restricted app credential.
     expect(body).toMatch(
-      /Download the Driftstack desktop app and sign in from your\s*\n?\s*browser — that's where you launch and drive iPhone Safari\s*\n?\s*sessions, with the option to route traffic through your own\s*\n?\s*proxy or VPN\./,
+      /Download the Driftstack desktop app and choose browser sign-in\.\s*\n?\s*Driftstack provisions a restricted device credential for the app;\s*\n?\s*that's where Free customers launch and drive iPhone Safari sessions\./,
     );
-    // Step 3 — create an API key to connect the app or the SDKs.
+    // Step 3 — customer keys/SDK automation require a paid API tier.
     expect(body).toMatch(
-      /Create an API key on the API keys page to connect the desktop\s*\n?\s*app or the SDKs\. You can revoke or rotate it any time\./,
+      /On an API-enabled paid tier, create a customer API key for SDK\s*\n?\s*automation\. Customer keys can be revoked or rotated any time;\s*\n?\s*Free desktop sign-in does not require one\./,
     );
+    expect(body).toMatch(/restricted device credential for the app, not a customer API key/);
+    expect(body).not.toMatch(/API key[^.]*connect the desktop app/i);
     // The numbered-circle visual treatment: glow-red bordered round badges 1/2/3.
     expect(body).toMatch(/rounded-full border border-tk-accent\/40 bg-tk-accent\/10/);
   });

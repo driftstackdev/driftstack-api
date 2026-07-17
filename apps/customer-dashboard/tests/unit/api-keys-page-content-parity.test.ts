@@ -27,7 +27,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ApiKeyScopeSchema } from '@driftstack/api-types';
+import { ApiKeyScopeSchema, TIER_FEATURES } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -77,6 +77,8 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     );
     expect(body).toMatch(/<strong>read<\/strong>\s*—\s*list \+ get only/);
     expect(body).toMatch(/<strong>granular \(advanced\)<\/strong>/);
+    expect(body).toMatch(/trusted account administration or your primary\s+automation/);
+    expect(body).not.toMatch(/keys driving the GUI client/);
   });
 
   it('plaintext-shown-ONCE claim pinned on the create-reveal pane', () => {
@@ -108,6 +110,39 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toMatch(/Authorization: Bearer\s*&lt;key&gt;/);
   });
 
+  it('derives API-key controls from canonical tier apiAccess and fails closed before rendering paid actions', () => {
+    expect(TIER_FEATURES.free.apiAccess).toBe(false);
+    expect(body).toMatch(/import \{ TIER_FEATURES \} from '@driftstack\/api-types'/);
+    expect(body).toMatch(
+      /Object\.entries\(TIER_FEATURES\)\.map\(\(\[tier, features\]\) => \[tier, features\.apiAccess\]\)/,
+    );
+    expect(body).toMatch(/data-tier-api-access=\{JSON\.stringify\(tierApiAccess\)\}/);
+    expect(body).toMatch(/JSON\.parse\(root\.getAttribute\('data-tier-api-access'\) \|\| '\{\}'\)/);
+    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/usage'/);
+    expect(body).toMatch(/headers: authedHeaders\(\),\s*signal: controller\.signal/);
+    expect(body).toMatch(/Object\.prototype\.hasOwnProperty\.call\(tierApiAccess, tier\)/);
+    expect(body).toMatch(/setApiAccess\(knownTier, knownTier && tierApiAccess\[tier\] === true\)/);
+    expect(body).toMatch(/class="btn-primary hidden"\s*data-show-create\s*data-api-access-only/);
+    expect(body).toMatch(/class="dashboard-card mb-8 hidden" data-api-access-only/);
+    expect(body).toMatch(
+      /\/v1\/account\/me intentionally describes the caller and ignores\s*\/\/ X-Driftstack-Account\. \/v1\/usage resolves the selected effective\s*\/\/ account and returns its authoritative tier/,
+    );
+    expect(body).not.toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me'/);
+  });
+
+  it('keeps list/revoke live while Free, unknown, and failed entitlement states guard forced mutations', () => {
+    expect(body).toMatch(/const rotateAction = apiAccessGranted\s*\?/);
+    expect(body).toMatch(/rotateAction \+\s*'<button type="button" data-revoke="'/);
+    expect(body).toContain('Existing keys remain visible so you can revoke them.');
+    expect(body).toContain('revocation remains available.');
+    expect(
+      body.match(/if \(!apiAccessVerified \|\| !apiAccessGranted\)/g)?.length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(body).toContain('API-key rotation requires verified access on an API-enabled tier.');
+    expect(body).toContain('API-key creation requires an API-enabled tier.');
+    expect(body).toMatch(/if \(!showPaidControls\) \{[\s\S]*?revealPre\.textContent = ''/);
+  });
+
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
     // Rename here without a coordinated migration would silently
     // sign every customer out of the page.
@@ -137,7 +172,9 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toContain('let keySnapshot = [];');
     expect(body).toMatch(/!keyIdsBefore\.has\(key\.id\)/);
     expect(body).toMatch(/String\(key\.name \|\| ''\) === String\(name\)/);
-    expect(body).toMatch(/createSubmit\.disabled =\s*!keyDataAvailable \|\| createOutcomeBlocked/);
+    expect(body).toMatch(
+      /createSubmit\.disabled = !canManageApiKeys\(\) \|\| createOutcomeBlocked/,
+    );
     expect(body).toMatch(/if \(createOutcomeBlocked\)/);
     expect(body).toMatch(/lockRotateAction\(sourceId, Boolean\(matchingKey\)\)/);
     expect(body).toMatch(/if \(ambiguousRotateIds\.has\(String\(id \|\| ''\)\)\)/);

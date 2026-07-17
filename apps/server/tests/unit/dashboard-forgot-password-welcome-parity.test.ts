@@ -119,19 +119,21 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     expect(w).toMatch(/<a href="\/select-tier\/" class="btn-secondary/);
   });
 
-  it('CRITICAL welcome 3-step what-happens-next ordered list pinned. The 3 steps (Stripe payment + get the desktop app + create an API key) tell customers what to expect post-tier-select (2026-07-02 account-portal IA — step 2 funnels into the desktop app instead of creating a session in the web dashboard).', () => {
+  it('CRITICAL welcome 3-step list separates Free restricted desktop credentials from paid customer API keys.', () => {
     const w = read(WELCOME);
 
     expect(w).toMatch(
       /Start free with no card — or pick a paid tier and we'll send you\s*\n\s+to Stripe to confirm payment\. Your card details stay between you\s*\n\s+and Stripe — we never see them/,
     );
-    // Step 2 — download the desktop app + sign in; that's where sessions launch.
+    // Step 2 — browser sign-in provisions a restricted device credential.
     expect(w).toMatch(
-      /Download the Driftstack desktop app and sign in from your\s*\n\s+browser — that's where you launch and drive iPhone Safari\s*\n\s+sessions, with the option to route traffic through your own\s*\n\s+proxy or VPN/,
+      /Download the Driftstack desktop app and choose browser sign-in\.\s*\n\s+Driftstack provisions a restricted device credential for the app;\s*\n\s+that's where Free customers launch and drive iPhone Safari sessions/,
     );
     expect(w).toMatch(
-      /Create an API key on the API keys page to connect the desktop\s*\n\s+app or the SDKs\. You can revoke or rotate it any time/,
+      /On an API-enabled paid tier, create a customer API key for SDK\s*\n\s+automation\. Customer keys can be revoked or rotated any time;\s*\n\s+Free desktop sign-in does not require one/,
     );
+    expect(w).toMatch(/restricted device credential for the app, not a customer API key/);
+    expect(w).not.toMatch(/API key[^.]*connect the desktop app/i);
   });
 
   it('CRITICAL welcome defensive redirect to canonical /signup/ when no ds_web_session_token. The redirect prevents direct-nav to /welcome without an active session and avoids a static-host redirect hop.', () => {

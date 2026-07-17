@@ -48,7 +48,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     );
   });
 
-  it("4-option scope radio with account_owner default: account_owner (checked) / write / read / granular — pinned so the new-key form defaults to the full-access scope (matches typical 'first key drives the GUI client + automation' usage) + the 4-option enum stays complete (drift to defaulting write would force customers to bump scope manually for the common case; drift to dropping granular would force all keys to use broad scopes even for tightly-scoped jobs)", () => {
+  it('4-option scope radio with account_owner default: account_owner (checked) / write / read / granular — pinned for trusted administration/automation without claiming desktop-app credential reuse', () => {
     expect(body).toMatch(
       /<input\s*\n?\s*type="radio"\s*\n?\s*name="scope"\s*\n?\s*value="account_owner"\s*\n?\s*checked/,
     );
@@ -57,6 +57,10 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     expect(body).toMatch(
       /<input\s*\n?\s*type="radio"\s*\n?\s*name="scope"\s*\n?\s*value="granular"/,
     );
+    expect(body).toMatch(
+      /Choose this for trusted account administration or your primary\s*\n?\s*automation/,
+    );
+    expect(body).not.toMatch(/keys driving the GUI client/);
   });
 
   it('V-481 granular scope picker framing pinned. Re-enabled by slice 268 after restoring the V-481 anchor on the HTML comment at api-keys.astro:124', () => {
@@ -123,12 +127,15 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     );
   });
 
-  it('all four API-key reads/mutations share authorization + selected-owner headers while preserving timeout signals and wire contracts', () => {
+  it('effective-account tier read plus all four API-key operations share authorization + selected-owner headers', () => {
     expect(body).toMatch(
       /function authedHeaders\(extra = \{\}\) \{[\s\S]*?authorization: 'Bearer ' \+ token,[\s\S]*?window\.driftstackActAsHeaders\(\)/,
     );
     expect(body.match(/fetch\(apiBaseUrl \+ '\/v1\/api-keys/g)).toHaveLength(4);
-    expect(body.match(/headers: authedHeaders\(/g)).toHaveLength(4);
+    expect(body.match(/headers: authedHeaders\(/g)).toHaveLength(5);
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/usage', \{\s*headers: authedHeaders\(\),\s*signal: controller\.signal/,
+    );
     expect(body).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: authedHeaders\(\{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\}\),\s*\n?\s*body: JSON\.stringify\(\{ name: name, scopes: scopes \}\),\s*\n?\s*signal: controller\.signal,/,
     );
@@ -141,10 +148,13 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
   });
 
   it('Static, signed-out, and failed list states keep key creation unavailable and replace indefinite skeletons with an explicit non-authoritative row', () => {
-    expect(body.match(/data-show-create\s*disabled\s*aria-disabled="true"/g)).toHaveLength(2);
+    expect(body.match(/data-show-create\s*data-api-access-only\s*disabled/g)).toHaveLength(2);
     expect(body).toMatch(/let keyDataAvailable = false;/);
     expect(body).toMatch(
-      /function setCreateAvailability\(available\) \{\s*keyDataAvailable = available;[\s\S]*?button\.disabled = !available;[\s\S]*?Live API keys must load before creating another\./,
+      /function setCreateAvailability\(available\) \{\s*keyDataAvailable = available;\s*syncApiAccessUi\(\);\s*\}/,
+    );
+    expect(body).toMatch(
+      /const available = canManageApiKeys\(\);[\s\S]*?button\.disabled = !available/,
     );
     expect(body).toMatch(
       /function renderUnavailable\(message\) \{\s*keySnapshot = \[\];\s*setCreateAvailability\(false\);[\s\S]*?ul\.classList\.remove\('hidden'\);[\s\S]*?message \+\s*'<\/li>';/,
@@ -155,11 +165,34 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     expect(body).toMatch(
       /\.catch\(\(err\) => \{\s*if \(!isCurrent\(\)\) return;\s*renderUnavailable\(/,
     );
-    expect(body).toMatch(/function showCreate\(\) \{\s*if \(!token \|\| !keyDataAvailable\) \{/);
+    expect(body).toMatch(
+      /function showCreate\(\) \{\s*if \(!apiAccessVerified \|\| !apiAccessGranted\) \{[\s\S]*?if \(!token \|\| !keyDataAvailable\) \{/,
+    );
     expect(body).toMatch(
       /if \(!token\) \{\s*renderUnavailable\('Sign in to load your API keys\.'\);\s*showBanner\('Sign in to see live API keys\.'\);[\s\S]*?window\.dashboardHydrated\(\);[\s\S]*?return;/,
     );
     expect(body).not.toMatch(/Showing preview data below/);
+  });
+
+  it('canonical apiAccess entitlement is fail-closed and keeps revoke outside the paid-only branch', () => {
+    expect(body).toMatch(/import \{ TIER_FEATURES \} from '@driftstack\/api-types'/);
+    expect(body).toMatch(/features\.apiAccess/);
+    expect(body).toMatch(/data-tier-api-access=\{JSON\.stringify\(tierApiAccess\)\}/);
+    expect(body).toMatch(/JSON\.parse\(root\.getAttribute\('data-tier-api-access'\) \|\| '\{\}'\)/);
+    expect(body).toMatch(/Object\.prototype\.hasOwnProperty\.call\(tierApiAccess, tier\)/);
+    expect(body).toMatch(/setApiAccess\(knownTier, knownTier && tierApiAccess\[tier\] === true\)/);
+    expect(body).toMatch(
+      /\/v1\/account\/me intentionally describes the caller and ignores[\s\S]*?\/v1\/usage resolves the selected effective[\s\S]*?account and returns its authoritative tier/,
+    );
+    expect(body).not.toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me'/);
+    expect(body).toMatch(/const rotateAction = apiAccessGranted\s*\?/);
+    expect(body).toMatch(/rotateAction \+\s*'<button type="button" data-revoke="'/);
+    expect(body).toContain('Existing keys remain visible so you can revoke them.');
+    expect(body).toContain('revocation remains available.');
+    expect(body).toMatch(/if \(!showPaidControls\) \{[\s\S]*?revealPre\.textContent = ''/);
+    expect(
+      body.match(/if \(!apiAccessVerified \|\| !apiAccessGranted\)/g)?.length,
+    ).toBeGreaterThanOrEqual(3);
   });
 
   it("Rotate-reveal plaintext-wipe-on-dismiss framing pinned: 'Wipe plaintext from DOM so it isn't recoverable post-dismiss.' + rotatePlaintext.textContent = '' on hide — pinned so the plaintext doesn't linger in the DOM after the customer dismisses (drift to leaving it would let post-dismiss page inspectors recover the plaintext, defeating the 'shown ONCE' contract)", () => {

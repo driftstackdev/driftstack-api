@@ -29,6 +29,10 @@ interface SetUpOpts {
   token?: string | null;
   storageDenied?: boolean;
   confirmReturns?: boolean;
+  callerTier?: string;
+  effectiveTier?: string;
+  entitlementPlan?: (call: MockFetchCall) => Response | Promise<Response>;
+  actAsHeaders?: Record<string, string>;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
   clipboardPlan?: Array<(text: string) => Promise<void>>;
 }
@@ -63,6 +67,14 @@ function setUpDom(
   window.fetch = (input: string, init: RequestInit | undefined) => {
     const call: MockFetchCall = { url: String(input), init };
     fetchCalls.push(call);
+    if (/\/v1\/account\/me$/.test(call.url)) {
+      return Promise.resolve(json({ tier: opts.callerTier ?? 'free' }));
+    }
+    if (/\/v1\/usage$/.test(call.url)) {
+      return Promise.resolve(
+        opts.entitlementPlan?.(call) ?? json({ tier: opts.effectiveTier ?? 'api_builder' }),
+      );
+    }
     const handler = plan.shift();
     if (!handler) {
       // eslint-disable-next-line no-console
@@ -89,6 +101,8 @@ function setUpDom(
   const __cr = opts.confirmReturns ?? true;
   // @ts-expect-error — driftstackConfirm is injected by DashboardLayout (not eval'd here)
   window.driftstackConfirm = () => Promise.resolve(__cr);
+  // @ts-expect-error — injected by DashboardLayout
+  window.driftstackActAsHeaders = () => opts.actAsHeaders ?? {};
   window.confirm = () => __cr;
   Object.defineProperty(window.navigator, 'clipboard', {
     configurable: true,
@@ -224,6 +238,119 @@ describe('api-keys page — local integration', () => {
     expect(window.document.querySelector('[data-revoke="key_revoked"]')).toBeNull();
     expect(text.toLowerCase()).toContain('revoked');
   });
+
+  it('Free: lists and revokes existing keys while every create/rotate surface and forced form submit stay inert', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      effectiveTier: 'free',
+      fetchPlan: [
+        () => json({ data: [ACTIVE_KEY] }),
+        () => new Response(null, { status: 204 }),
+        () => json({ data: [{ ...ACTIVE_KEY, revoked_at: '2026-07-17T10:00:00.000Z' }] }),
+      ],
+    });
+    win = window;
+    await flush();
+
+    expect(window.document.querySelector('[data-revoke="key_active"]')).toBeTruthy();
+    expect(window.document.querySelector('[data-rotate="key_active"]')).toBeNull();
+    expect(isHidden(window, '[data-api-access-notice]')).toBe(false);
+    expect(window.document.querySelector('[data-api-access-notice]')?.textContent).toContain(
+      'Free sessions',
+    );
+    for (const element of window.document.querySelectorAll('[data-api-access-only]')) {
+      expect(element.classList.contains('hidden')).toBe(true);
+    }
+
+    const forcedButton = window.document.querySelector('[data-show-create]') as HTMLButtonElement;
+    forcedButton.disabled = false;
+    forcedButton.classList.remove('hidden');
+    forcedButton.click();
+    expect(isHidden(window, '[data-create-form-wrap]')).toBe(true);
+
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'Forced key';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushMicrotasks();
+    expect(
+      fetchCalls.filter((call) => call.init?.method === 'POST' && /\/v1\/api-keys$/.test(call.url)),
+    ).toHaveLength(0);
+
+    (window.document.querySelector('[data-revoke="key_active"]') as HTMLButtonElement).click();
+    await flush();
+    expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
+  });
+
+  it.each([
+    ['unknown tier', { effectiveTier: 'future_unknown' }],
+    ['effective-tier lookup failure', { entitlementPlan: () => json({}, 503) }],
+  ])(
+    '%s: fails closed for creation/rotation without blocking list or revoke',
+    async (_label, account) => {
+      const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+        token: 'tok',
+        ...account,
+        fetchPlan: [() => json({ data: [ACTIVE_KEY] })],
+      });
+      win = window;
+      await flush();
+
+      expect(window.document.querySelector('[data-revoke="key_active"]')).toBeTruthy();
+      expect(window.document.querySelector('[data-rotate="key_active"]')).toBeNull();
+      expect(isHidden(window, '[data-api-access-notice]')).toBe(false);
+      expect(fetchCalls.some((call) => /\/v1\/usage$/.test(call.url))).toBe(true);
+      expect(
+        fetchCalls.filter(
+          (call) => call.init?.method === 'POST' && /\/v1\/api-keys$/.test(call.url),
+        ),
+      ).toHaveLength(0);
+    },
+  );
+
+  it('uses the same bearer and selected-owner headers for effective-tier entitlement and key listing', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      actAsHeaders: { 'x-driftstack-account': 'acc_owner' },
+      fetchPlan: [() => json({ data: [] })],
+    });
+    win = window;
+    await flush();
+
+    const reads = fetchCalls.filter((call) => /\/v1\/(?:api-keys|usage)$/.test(call.url));
+    expect(reads).toHaveLength(2);
+    for (const read of reads) {
+      expect(read.init?.headers).toMatchObject({
+        authorization: 'Bearer tok',
+        'x-driftstack-account': 'acc_owner',
+      });
+    }
+  });
+
+  it.each([
+    ['Free caller acting as a paid owner', 'free', 'api_builder', true],
+    ['paid caller acting as a Free owner', 'api_builder', 'free', false],
+  ])(
+    '%s derives controls from the selected effective account',
+    async (_label, callerTier, effectiveTier, shouldManage) => {
+      const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+        token: 'tok',
+        callerTier,
+        effectiveTier,
+        actAsHeaders: { 'x-driftstack-account': 'acc_owner' },
+        fetchPlan: [() => json({ data: [ACTIVE_KEY] })],
+      });
+      win = window;
+      await flush();
+
+      expect(fetchCalls.some((call) => /\/v1\/account\/me$/.test(call.url))).toBe(false);
+      expect(fetchCalls.some((call) => /\/v1\/usage$/.test(call.url))).toBe(true);
+      expect(Boolean(window.document.querySelector('[data-rotate="key_active"]'))).toBe(
+        shouldManage,
+      );
+      expect(isHidden(window, 'section[data-api-access-only]')).toBe(!shouldManage);
+      expect(window.document.querySelector('[data-revoke="key_active"]')).toBeTruthy();
+    },
+  );
 
   it('requires the initial authoritative list before allowing a create', async () => {
     let releaseInitial: (response: Response) => void = () => {};

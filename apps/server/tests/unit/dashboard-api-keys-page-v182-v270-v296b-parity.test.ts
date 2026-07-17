@@ -271,6 +271,29 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     expect(p).toMatch(/body: JSON\.stringify\(\{ name: name, scopes: scopes \}\)/);
   });
 
+  it('CRITICAL plan entitlement is canonical, fail-closed, no-flash, and cannot be bypassed through forced DOM handlers.', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/import \{ TIER_FEATURES \} from '@driftstack\/api-types'/);
+    expect(p).toMatch(/features\.apiAccess/);
+    expect(p).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/usage'/);
+    expect(p).toMatch(/headers: authedHeaders\(\),\s*signal: controller\.signal/);
+    expect(p).toMatch(/Object\.prototype\.hasOwnProperty\.call\(tierApiAccess, tier\)/);
+    expect(p).toMatch(/class="btn-primary hidden"\s*data-show-create\s*data-api-access-only/);
+    expect(p).toMatch(/class="dashboard-card mb-8 hidden" data-api-access-only/);
+    expect(p).toMatch(/const rotateAction = apiAccessGranted\s*\?/);
+    expect(p).toMatch(/rotateAction \+\s*'<button type="button" data-revoke="'/);
+    expect(p).toContain('Existing keys remain visible so you can revoke them.');
+    expect(p).toContain('revocation remains available.');
+    expect(p).toMatch(
+      /\/v1\/account\/me intentionally describes the caller and ignores[\s\S]*?\/v1\/usage resolves the selected effective[\s\S]*?account and returns its authoritative tier/,
+    );
+    expect(p).not.toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me'/);
+    expect(
+      p.match(/if \(!apiAccessVerified \|\| !apiAccessGranted\)/g)?.length,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
   it('CRITICAL resolveApiBaseUrl + DashboardLayout used. /api-keys IS sidebar-enabled — customers navigate from here to sessions and back.', () => {
     const p = read(PAGE);
 

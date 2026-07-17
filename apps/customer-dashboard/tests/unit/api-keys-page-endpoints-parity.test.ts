@@ -31,6 +31,19 @@ describe('W269.B /api-keys page ↔ /v1/api-keys/* route parity', () => {
     expect(route).toContain(`'/v1/api-keys/:id'`);
   });
 
+  it('GET /v1/usage is the effective-account tier authority and shares selected-owner headers with key listing', () => {
+    expect(page).toContain("fetch(apiBaseUrl + '/v1/usage'");
+    expect(route).toContain("'/v1/usage'");
+    expect(route).toMatch(
+      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\)/,
+    );
+    expect(route).toMatch(/usageService\.summaryFor\(owner\.id, owner\.tier\)/);
+    const entitlementRead = page.match(/fetch\(apiBaseUrl \+ '\/v1\/usage',[\s\S]*?\n\s*\}\)/)?.[0];
+    expect(entitlementRead).toContain('headers: authedHeaders()');
+    expect(page).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*headers: authedHeaders\(\)/);
+    expect(page).not.toContain("fetch(apiBaseUrl + '/v1/account/me'");
+  });
+
   it('granular scope checkboxes reference real ApiKeyScopeSchema values', () => {
     const granular = [...page.matchAll(/value="([a-z]+:[a-z-]+)"/g)].map((m) => m[1]!);
     expect(granular.length).toBeGreaterThan(0);

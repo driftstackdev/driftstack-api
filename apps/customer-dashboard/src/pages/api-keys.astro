@@ -1,15 +1,23 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { TIER_FEATURES } from '@driftstack/api-types';
 
 // V-182 — progressive-enhancement wiring against /v1/api-keys.
 // V-270 — wired the New-key form + revoke confirmation flow.
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
+const tierApiAccess = Object.fromEntries(
+  Object.entries(TIER_FEATURES).map(([tier, features]) => [tier, features.apiAccess]),
+);
 ---
 
 <DashboardLayout title="API keys">
-  <div class="mx-auto max-w-5xl px-6 py-10" data-page="api-keys">
+  <div
+    class="mx-auto max-w-5xl px-6 py-10"
+    data-page="api-keys"
+    data-tier-api-access={JSON.stringify(tierApiAccess)}
+  >
     <div
       data-banner
       class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
@@ -39,8 +47,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         </a>
         <button
           type="button"
-          class="btn-primary"
+          class="btn-primary hidden"
           data-show-create
+          data-api-access-only
           disabled
           aria-disabled="true"
           title="Live API keys must load before creating another."
@@ -52,7 +61,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         SDK install using a PLACEHOLDER key (ds_live_…) — never a real key
         (the one-time plaintext lives only in the reveal pane below, which
         wipes on dismiss). Links the auth + SDK references. */}
-    <section class="dashboard-card mb-8">
+    <section class="dashboard-card mb-8 hidden" data-api-access-only>
       <div class="flex flex-wrap items-center gap-2">
         <p class="section-label">Use it now</p>
         <span class="flex-1"></span>
@@ -78,6 +87,19 @@ npm i @driftstack/sdk</code></pre>
         Replace <code class="font-mono">ds_live_&lt;your-key&gt;</code> with the key you copy on
         creation — the plaintext is shown once and never stored.
       </p>
+    </section>
+
+    <section
+      class="dashboard-card mb-8 hidden"
+      data-api-access-notice
+      role="status"
+      aria-live="polite"
+    >
+      <p class="section-label">Programmatic access</p>
+      <p class="mt-2 text-sm text-tk-ink-2" data-api-access-notice-copy></p>
+      <a href="/select-tier/" class="btn-secondary mt-4 inline-flex" data-api-access-upgrade>
+        Compare API-enabled tiers
+      </a>
     </section>
 
     <!-- V-270: Create-key form (hidden by default) -->
@@ -122,7 +144,7 @@ npm i @driftstack/sdk</code></pre>
               />
               <span>
                 <strong>account_owner</strong> — full access. Manage webhooks, billing, mint
-                other keys. Choose this for keys driving the GUI client or your primary
+                other keys. Choose this for trusted account administration or your primary
                 automation.
               </span>
             </label>
@@ -413,8 +435,9 @@ npm i @driftstack/sdk</code></pre>
       </p>
       <button
         type="button"
-        class="btn-primary mt-6 inline-flex"
+        class="btn-primary mt-6 hidden"
         data-show-create
+        data-api-access-only
         disabled
         aria-disabled="true"
         title="Live API keys must load before creating another."
@@ -440,7 +463,7 @@ npm i @driftstack/sdk</code></pre>
       ))}
     </ul>
 
-    <p class="mt-8 text-xs text-tk-ink-3">
+    <p class="mt-8 hidden text-xs text-tk-ink-3" data-api-access-only>
       Scopes: <code class="font-mono">read</code> (list/get-only),
       <code class="font-mono">write</code> (create sessions, navigate, interact),
       <code class="font-mono">account_owner</code> (manage webhooks, billing, mint other keys).
@@ -472,6 +495,19 @@ npm i @driftstack/sdk</code></pre>
       const revealCopyFb = root.querySelector('[data-created-copy-feedback]');
       const revealDismiss = root.querySelector('[data-created-dismiss]');
       const showCreateBtns = root.querySelectorAll('[data-show-create]');
+      const apiAccessOnly = root.querySelectorAll('[data-api-access-only]');
+      const apiAccessNotice = root.querySelector('[data-api-access-notice]');
+      const apiAccessNoticeCopy = root.querySelector('[data-api-access-notice-copy]');
+      const apiAccessUpgrade = root.querySelector('[data-api-access-upgrade]');
+      const emptyCopy = root.querySelector('[data-empty] p');
+      const tierApiAccess = (() => {
+        try {
+          const parsed = JSON.parse(root.getAttribute('data-tier-api-access') || '{}');
+          return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch {
+          return {};
+        }
+      })();
       const copyFeedbackTimers = new WeakMap();
 
       function clearCopyFeedback(element) {
@@ -512,7 +548,12 @@ npm i @driftstack/sdk</code></pre>
       let createOutcomeReason = '';
       let refreshController = null;
       let refreshGeneration = 0;
+      let entitlementController = null;
+      let entitlementGeneration = 0;
       let keyDataAvailable = false;
+      let apiAccessGranted = false;
+      let apiAccessVerified = false;
+      let apiAccessSettled = false;
 
       function showBanner(text) {
         if (!banner) return;
@@ -525,8 +566,39 @@ npm i @driftstack/sdk</code></pre>
         banner.classList.add('hidden');
       }
 
-      function setCreateAvailability(available) {
-        keyDataAvailable = available;
+      function canManageApiKeys() {
+        return Boolean(token && keyDataAvailable && apiAccessVerified && apiAccessGranted);
+      }
+
+      function syncApiAccessUi() {
+        const showPaidControls = apiAccessVerified && apiAccessGranted;
+        apiAccessOnly.forEach((element) => {
+          element.classList.toggle('hidden', !showPaidControls);
+        });
+        if (apiAccessNotice) {
+          apiAccessNotice.classList.toggle('hidden', showPaidControls || !apiAccessSettled);
+        }
+        if (apiAccessNoticeCopy) {
+          apiAccessNoticeCopy.textContent = apiAccessVerified
+            ? "The selected account's current plan keeps customer API-key creation, rotation, and SDK automation disabled. Existing keys remain visible so you can revoke them. Use the desktop app and browser sign-in for Free sessions, or choose an API-enabled tier."
+            : 'Your API-key list remains available, but plan access could not be verified. Creation and rotation stay disabled until access can be checked; revocation remains available.';
+        }
+        if (apiAccessUpgrade) {
+          apiAccessUpgrade.classList.toggle('hidden', !apiAccessVerified);
+        }
+        if (emptyCopy && apiAccessSettled && !showPaidControls) {
+          emptyCopy.textContent = apiAccessVerified
+            ? 'No customer API keys are active. Free sessions use the desktop app with browser sign-in; API-enabled tiers can create keys for SDK automation.'
+            : 'No API keys are available to list. Creation and rotation stay disabled until plan access can be verified.';
+        }
+        if (!showPaidControls) {
+          if (formWrap) formWrap.classList.add('hidden');
+          if (reveal) reveal.classList.add('hidden');
+          if (revealPre) revealPre.textContent = '';
+          if (rotateReveal) rotateReveal.classList.add('hidden');
+          if (rotatePlaintext) rotatePlaintext.textContent = '';
+        }
+        const available = canManageApiKeys();
         showCreateBtns.forEach((button) => {
           button.disabled = !available;
           if (available) {
@@ -534,13 +606,31 @@ npm i @driftstack/sdk</code></pre>
             button.removeAttribute('title');
           } else {
             button.setAttribute('aria-disabled', 'true');
-            button.title = 'Live API keys must load before creating another.';
+            button.title = showPaidControls
+              ? 'Live API keys must load before creating another.'
+              : 'API-key creation requires verified access on an API-enabled tier.';
           }
         });
         if (createSubmit) {
-          createSubmit.disabled =
-            !available || createInFlight || createOutcomeBlocked;
+          createSubmit.disabled = !available || createInFlight || createOutcomeBlocked;
         }
+        if (keyDataAvailable && ul && !ul.classList.contains('hidden')) {
+          ul.innerHTML = keySnapshot.map(keyLi).join('');
+          wireRevokeButtons();
+          if (showPaidControls) wireRotateButtons();
+        }
+      }
+
+      function setApiAccess(verified, granted) {
+        apiAccessSettled = true;
+        apiAccessVerified = verified;
+        apiAccessGranted = verified && granted;
+        syncApiAccessUi();
+      }
+
+      function setCreateAvailability(available) {
+        keyDataAvailable = available;
+        syncApiAccessUi();
       }
 
       function renderUnavailable(message) {
@@ -568,6 +658,44 @@ npm i @driftstack/sdk</code></pre>
             ? window.driftstackActAsHeaders()
             : {}),
         };
+      }
+
+      function loadApiAccess() {
+        if (!token) return;
+        if (entitlementController) entitlementController.abort();
+        const controller = new AbortController();
+        entitlementController = controller;
+        const generation = ++entitlementGeneration;
+        const isCurrent = () => generation === entitlementGeneration;
+        const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
+        // /v1/account/me intentionally describes the caller and ignores
+        // X-Driftstack-Account. /v1/usage resolves the selected effective
+        // account and returns its authoritative tier, matching API-key routes.
+        return fetch(apiBaseUrl + '/v1/usage', {
+          headers: authedHeaders(),
+          signal: controller.signal,
+        })
+          .then((response) => {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+          })
+          .then((summary) => {
+            if (!isCurrent()) return false;
+            const tier = typeof summary.tier === 'string' ? summary.tier : '';
+            const knownTier = Object.prototype.hasOwnProperty.call(tierApiAccess, tier);
+            setApiAccess(knownTier, knownTier && tierApiAccess[tier] === true);
+            return knownTier;
+          })
+          .catch(() => {
+            if (!isCurrent()) return false;
+            setApiAccess(false, false);
+            return false;
+          })
+          .finally(() => {
+            window.clearTimeout(timeout);
+            if (!isCurrent()) return;
+            entitlementController = null;
+          });
       }
 
       function escapeHtml(s) {
@@ -645,12 +773,8 @@ npm i @driftstack/sdk</code></pre>
               '</span>',
           )
           .join('');
-        const revokeAction = isRevoked
-          ? '<span class="rounded-full bg-tk-surface px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked ' +
-            escapeHtml(fmtIso(k.revoked_at)) +
-            '</span>'
-          : '<div class="flex items-center gap-3">' +
-            '<button type="button" data-rotate="' +
+        const rotateAction = apiAccessGranted
+          ? '<button type="button" data-rotate="' +
             escapeHtml(k.id) +
             '" data-rotate-name="' +
             escapeHtml(k.name) +
@@ -660,7 +784,14 @@ npm i @driftstack/sdk</code></pre>
             rotateDisabledClass +
             '">' +
             (rotateOutcomeUnknown ? 'Rotation outcome unknown' : 'Rotate') +
-            '</button>' +
+            '</button>'
+          : '';
+        const revokeAction = isRevoked
+          ? '<span class="rounded-full bg-tk-surface px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked ' +
+            escapeHtml(fmtIso(k.revoked_at)) +
+            '</span>'
+          : '<div class="flex items-center gap-3">' +
+            rotateAction +
             '<button type="button" data-revoke="' +
             escapeHtml(k.id) +
             '" data-revoke-name="' +
@@ -898,6 +1029,9 @@ npm i @driftstack/sdk</code></pre>
         refreshGeneration += 1;
         if (refreshController) refreshController.abort();
         refreshController = null;
+        entitlementGeneration += 1;
+        if (entitlementController) entitlementController.abort();
+        entitlementController = null;
       });
 
       function wireRevokeButtons() {
@@ -1024,6 +1158,12 @@ npm i @driftstack/sdk</code></pre>
         const buttons = ul.querySelectorAll('[data-rotate]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', async () => {
+            if (!apiAccessVerified || !apiAccessGranted) {
+              showBanner(
+                'API-key rotation requires verified access on an API-enabled tier.',
+              );
+              return;
+            }
             const id = btn.getAttribute('data-rotate');
             const name = btn.getAttribute('data-rotate-name') || '(unnamed)';
             if (mutationButtonsInFlight.has(btn)) return;
@@ -1112,6 +1252,14 @@ npm i @driftstack/sdk</code></pre>
       }
 
       function showCreate() {
+        if (!apiAccessVerified || !apiAccessGranted) {
+          showBanner(
+            apiAccessVerified
+              ? 'API-key creation requires an API-enabled tier.'
+              : 'API-key creation stays disabled until plan access can be verified.',
+          );
+          return;
+        }
         if (!token || !keyDataAvailable) {
           showBanner(
             token
@@ -1167,6 +1315,14 @@ npm i @driftstack/sdk</code></pre>
 
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
+        if (!apiAccessVerified || !apiAccessGranted) {
+          showBanner(
+            apiAccessVerified
+              ? 'API-key creation requires an API-enabled tier.'
+              : 'API-key creation stays disabled until plan access can be verified.',
+          );
+          return;
+        }
         if (!token || !keyDataAvailable) {
           showBanner('Reload live API keys before creating another.');
           return;
@@ -1247,7 +1403,7 @@ npm i @driftstack/sdk</code></pre>
           .finally(() => {
             window.clearTimeout(timeout);
             createInFlight = false;
-            createSubmit.disabled = !keyDataAvailable || createOutcomeBlocked;
+            createSubmit.disabled = !canManageApiKeys() || createOutcomeBlocked;
             createSubmit.setAttribute('aria-busy', 'false');
             createSubmit.textContent = createOutcomeBlocked
               ? createOutcomeReason === 'created'
@@ -1300,6 +1456,7 @@ npm i @driftstack/sdk</code></pre>
       }
 
       void refresh();
+      void loadApiAccess();
     })();
   </script>
 </DashboardLayout>
