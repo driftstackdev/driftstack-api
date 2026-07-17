@@ -50,7 +50,7 @@ import StatusBadge from '../../components/StatusBadge.astro';
                card said "Five pillars" while /security (the page it
                links to) renders SIX (01 Transport / 02 Egress /
                03 API keys / 04 Webhooks / 05 Team roles / 06
-               No-customer-data-access). The old five-item list also
+               Live-media handling). The old five-item list also
                counted "EU-resident infrastructure", which is not one
                of the /security pillars — it now rides as its own
                sentence, and the enumeration matches the
@@ -62,15 +62,16 @@ import StatusBadge from '../../components/StatusBadge.astro';
                jurisdiction (EU + US replication). */}
           <p class="mt-3 text-sm text-tk-ink-2">
             Six pillars shipped today: everything between you and us
-            travelling encrypted (TLS), each profile bringing its own internet
-            exit — your SOCKS5 proxy (including UDP/QUIC/WebRTC
-            traffic) or your OpenVPN / WireGuard VPN, API keys stored only as
+            travelling encrypted (TLS), profiles able to attach a public
+            SOCKS5 exit while profiles without one use managed egress, API keys stored only as
             one-way scrypt hashes (unreadable even to us), webhooks
             cryptographically signed so you can prove each message
             came from us (HMAC), team roles where your whole team can
-            look but only admins can change, and a design that keeps our staff from
-            ever seeing your session content. All of it runs on EU
-            servers. The live posture
+            look but only admins can change, and live-session media that is
+            not retained by default — media is transport-encrypted, and the
+            product exposes no administrative staff join path. The API control
+            plane and primary database run on EU infrastructure; LiveKit picks
+            a media region per session with EU preferred. The live posture
             across each pillar is
             on the security overview (its own card below).
           </p>
@@ -231,11 +232,12 @@ import StatusBadge from '../../components/StatusBadge.astro';
       <div>
         <dt class="text-sm font-medium text-tk-ink">Do you see our destination URLs?</dt>
         <dd class="mt-1 text-sm text-tk-ink-2">
-          No. Session traffic leaves for the web through the exit you
-          configure (your egress) — your own SOCKS5 proxy or OpenVPN /
-          WireGuard VPN. Driftstack starts and manages the session;
-          your proxy carries the actual browsing traffic, so the
-          addresses you visit don't pass through us.
+          Yes, when you send a navigate request or an agent plans one,
+          Driftstack's control plane processes the destination URL and
+          records the navigation event for your account. The browser's
+          destination traffic then leaves through your configured public
+          SOCKS5 proxy, or through Driftstack-managed infrastructure when
+          the profile has no attached exit.
         </dd>
       </div>
       <div>
@@ -296,7 +298,7 @@ import StatusBadge from '../../components/StatusBadge.astro';
   <CtaBand
     label="Compliance review"
     title="Bring the questionnaire. We'll fill it."
-    lead="Standard security-questionnaire formats (CAIQ, VSAQ) and custom enterprise vendor questionnaires — all welcome. Most answers come out of the pages linked above; the rest we write line-by-line within a working day."
+    lead="Standard security-questionnaire formats (CAIQ, VSAQ) and custom enterprise vendor questionnaires — all welcome. Most answers come from the pages linked above; we answer the remaining items in writing."
     primaryHref="mailto:support@driftstack.dev"
     primaryLabel="Email us"
   />

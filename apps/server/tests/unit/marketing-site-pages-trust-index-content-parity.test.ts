@@ -67,7 +67,7 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
   // S26 2026-07-06 (#132) — re-pinned: the card said "Five pillars"
   // while /security (the page this card links to) renders SIX
   // (01 Transport / 02 Egress / 03 API keys / 04 Webhooks /
-  // 05 Team roles / 06 No-customer-data-access). The enumeration now
+  // 05 Team roles / 06 Live-media handling). The enumeration now
   // matches the real six; the EU-hosting sentence (not one of the
   // /security pillars) rides as its own sentence — softened to "EU
   // servers" by S30 2026-07-07 (founder decision: soften).
@@ -78,8 +78,9 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     // All six pillars, plain words leading, precise terms in parens.
     expect(body).toMatch(/everything between you and us\s+travelling encrypted \(TLS\)/);
     expect(body).toMatch(
-      /each profile bringing its own internet\s+exit — your SOCKS5 proxy \(including UDP\/QUIC\/WebRTC\s+traffic\) or your OpenVPN \/ WireGuard VPN/,
+      /profiles able to attach a public\s+SOCKS5 exit while profiles without one use managed egress/,
     );
+    expect(body).not.toMatch(/OpenVPN \/ WireGuard VPN/);
     expect(body).toMatch(
       /API keys stored only as\s+one-way scrypt hashes \(unreadable even to us\)/,
     );
@@ -87,13 +88,13 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
       /webhooks\s+cryptographically signed so you can prove each message\s+came from us \(HMAC\)/,
     );
     expect(body).toMatch(/team roles where your whole team can\s+look but only admins can change/);
-    expect(body).toMatch(/a design that keeps our staff from\s+ever seeing your session content/);
-    // EU hosting stays claimed (its own sentence, not a pillar).
-    // S30 2026-07-07 (founder decision: soften): "EU servers" replaces
-    // "EU-resident infrastructure" — the six pillars run on the EU
-    // control plane (true), but the blanket infrastructure claim
-    // over-reached since R2-held file objects replicate EU + US.
-    expect(body).toMatch(/All of it runs on EU\s+servers\./);
+    expect(body).toMatch(
+      /live-session media that is\s+not retained by default — media is transport-encrypted, and the\s+product exposes no administrative staff join path/,
+    );
+    expect(body).not.toMatch(/keeps our staff from\s+ever seeing your session content/);
+    expect(body).toMatch(/API control\s+plane and primary database run on EU infrastructure/);
+    expect(body).toMatch(/LiveKit picks\s+a media region per session with EU preferred/);
+    expect(body).not.toMatch(/All of it runs on EU\s+servers\./);
     expect(body).not.toMatch(/All of it runs on EU-resident\s+infrastructure\./);
   });
 
@@ -148,13 +149,12 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
   });
 
-  it("Destination-URL answer pinned: 'No. Session traffic exits through your egress (the SOCKS5 / OpenVPN / WireGuard proxies you configure). Driftstack orchestrates the session; the proxy carries the bytes.' — pinned so the no-we-don't-see-URLs + customer-egress posture survives (drift to softening 'No' would let buyers question what Driftstack actually sees; drift to dropping the SOCKS5/OpenVPN/WG list would lose the customer-controlled-egress specifics). Priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16; matches the API server's user-facing 503 messages.", () => {
-    // S20c 2026-07-06 plain-language pass: hard 'No.' + the
-    // SOCKS5/OpenVPN/WireGuard priority order survive; plain words
-    // explain what 'egress' and 'carries the bytes' meant.
+  it('Destination-URL answer distinguishes control-plane URL processing/event recording from browser egress', () => {
     expect(body).toMatch(
-      /No\. Session traffic leaves for the web through the exit you\s+configure \(your egress\) — your own SOCKS5 proxy or OpenVPN \/\s+WireGuard VPN\. Driftstack starts and manages the session;\s+your proxy carries the actual browsing traffic, so the\s+addresses you visit don't pass through us\./,
+      /Yes, when you send a navigate request or an agent plans one,\s+Driftstack's control plane processes the destination URL and\s+records the navigation event for your account\. The browser's\s+destination traffic then leaves through your configured public\s+SOCKS5 proxy, or through Driftstack-managed infrastructure when\s+the profile has no attached exit\./,
     );
+    expect(body).not.toMatch(/OpenVPN \/ WireGuard VPN/);
+    expect(body).not.toMatch(/the\s+addresses you visit don't pass through us/);
   });
 
   it("API-keys-recoverable answer pinned: 'No. Keys are scrypt-hashed at rest. A database breach surfaces hashes, not keys. If a key leaks, rotate via the dashboard's 24-hour grace flow.' — pinned so the scrypt-hashing + breach-doesn't-leak-keys + 24-hour-rotation-grace commitments survive (drift to dropping 'scrypt-hashed' would lose the specific-algorithm signal; drift to dropping '24-hour grace' would obscure the rotation-policy)", () => {
@@ -165,7 +165,7 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     );
   });
 
-  it("CTA pinned: 'Bring the questionnaire. We'll fill it.' + 'CAIQ, VSAQ, custom enterprise vendor questionnaires — all welcome.' + mailto:support@driftstack.dev — pinned so the 'we fill questionnaires' commitment + the CAIQ/VSAQ scope + the support-team routing all survive (drift to dropping CAIQ/VSAQ specificity would let buyers question whether their format is supported; drift to dropping 'working day' implicit SLA would let response time slip). Fleet v2 (S10): the hand-rolled CTA section became a <CtaBand> — the btn-primary anchor now renders from the primaryHref/primaryLabel props, so the pin matches the prop form", () => {
+  it('CTA truthfully accepts CAIQ, VSAQ and custom questionnaires without an unimplemented response-time SLA', () => {
     expect(body).toMatch(/title="Bring the questionnaire\. We'll fill it\."/);
     // S20c 2026-07-06 plain-language pass: CAIQ/VSAQ named as
     // standard security-questionnaire formats.
@@ -175,6 +175,8 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).toMatch(
       /primaryHref="mailto:support@driftstack\.dev"\s*\n?\s*primaryLabel="Email us"/,
     );
+    expect(body).toMatch(/we answer the remaining items in writing/);
+    expect(body).not.toMatch(/within a working day/);
   });
 
   it('file exists at canonical path', () => {

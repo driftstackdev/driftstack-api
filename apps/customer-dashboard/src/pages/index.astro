@@ -221,10 +221,9 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         common operations as full-card buttons so a customer landing
         on the dashboard can act in one click without hunting in
         the side nav. */}
-    {/* Your-data-is-sealed trust surface (demo-concepts arc, 2026-06-12).
-        Every claim mirrors the verified architecture: sealed client-encrypted
-        profiles (profile-store), per-tenant cryptographic key isolation,
-        audited secret access. Static truth — no API call needed. */}
+    {/* Data-protection trust surface. Recoverable profile/credential keys use
+        context-bound wrapping under platform-held keys; the audit surface shows
+        successfully recorded management events, not every runtime read/use. */}
     <section class="mt-10 rounded-xl border border-tk-border bg-gradient-to-br from-tk-accent/5 to-transparent p-6">
       <div class="flex flex-wrap items-center gap-3">
         <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
@@ -234,40 +233,40 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           </svg>
         </span>
         <div>
-          <h2 class="text-lg font-semibold text-tk-ink">Your data is sealed</h2>
+          <h2 class="text-lg font-semibold text-tk-ink">Your data is protected</h2>
           <p class="text-sm text-tk-ink-2">
-            Profiles are client-encrypted — Driftstack moves opaque bytes and can't read them.
+            Saved profile state and recoverable credentials are encrypted at rest with context-bound wrapping under platform-held keys.
           </p>
         </div>
       </div>
       <div class="mt-5 grid gap-3 sm:grid-cols-3">
         <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
           <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Profile encryption</p>
-          <p class="mt-1.5 text-sm font-semibold text-tk-ink">AES-256-GCM, sealed</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">AES-256-GCM at rest</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Encrypted before it reaches us; the server stores ciphertext only.
+            Profile state is stored as ciphertext; when it is used, the platform unwraps its bound key for that authorized session.
           </p>
         </div>
         <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Tenant isolation</p>
-          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Cryptographic</p>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Envelope binding</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Context-bound encryption</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            A wrong account cannot decrypt your data — enforced by math, not policy.
+            Authenticated encryption binds wrapped values to the owning account and, for record-scoped stores, the exact record and value slot.
           </p>
         </div>
         <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Secret access</p>
-          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Always audited</p>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Credential audit</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Recorded management events</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Every credential read lands in your <a href="/audit-log/" class="text-tk-accent-text underline">audit log</a>.
+            Review credential-management events that were recorded in your <a href="/audit-log/" class="text-tk-accent-text underline">audit log</a>. Routine runtime use is not logged as a credential-read event.
           </p>
         </div>
       </div>
       <p class="mt-4 text-xs text-tk-ink-3">
         Full model at
         <a href="https://driftstack.dev/trust/security-overview/" class="text-tk-accent-text underline">driftstack.dev/trust</a>
-        · your data, your call — export or delete anytime from
-        <a href="/settings/" class="text-tk-accent-text underline">Settings</a>.
+        · export and deletion are request-based today; start from
+        <a href="/security/#danger-zone" class="text-tk-accent-text underline">Privacy &amp; security</a>.
       </p>
     </section>
 

@@ -4,9 +4,9 @@
 // sentence; the precise, falsifiable fact rides as mono small print),
 // canonically deferring to /trust/security-overview for parameter-level
 // depth. Fleet v2 recipes (PageHero/Section/IconTile/CtaBand, AA-safe
-// accent text). Every pinned security claim — TLS/HSTS, scrypt logN=15,
-// webhook HMAC shape, threat model, retention, egress — is byte-identical
-// to the pre-redesign page (W306/W313/W321/W325/W332/W333 baselines).
+// accent text). The 2026-07-17 truth pass preserves the verified TLS/HSTS,
+// scrypt, webhook, threat-model, and egress facts while replacing technical
+// zero-access claims with the implemented LiveKit/support/retention boundary.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
 import Section from '../components/Section.astro';
@@ -16,16 +16,20 @@ import CtaBand from '../components/CtaBand.astro';
 
 <BaseLayout
   title="Security"
-  description="How Driftstack protects customer keys and content. TLS 1.2+1.3 with HSTS preload, scrypt-hashed API keys, HMAC-SHA256 webhook signatures, no-customer-data-access posture, EU-resident control plane."
+  description="How Driftstack protects customer keys and content: TLS and HSTS, one-way API-key hashing, account-bound encryption at rest, signed webhooks, and customer-owned live-session access."
   ogImage="/og/security.png"
 >
   <!-- Hero -->
-  <PageHero label="Security" title="We don't see your traffic. We can't read your keys.">
+  <PageHero label="Security" title="Keys protected at rest. Live media not retained by default.">
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
-      Driftstack's security posture starts from a single principle:
-      Driftstack should never have a copy of anything that would let us
-      impersonate you, intercept your traffic, or replay your sessions.
-      The architecture below enforces that — not as policy, as code.
+      Driftstack stores customer API keys as one-way hashes and wraps
+      recoverable credentials with context-bound encryption under
+      platform-held keys. The owning account is part of the protected
+      context; record and value-slot identity are also bound where the
+      store has a stable record identity. Live-session media is processed only to
+      run and stream the session and is not retained by default. Session
+      metadata and agent transcripts follow their documented retention
+      periods. The architecture below makes those boundaries concrete.
     </p>
     <p class="mt-4 max-w-2xl text-sm text-tk-ink-3">
       This page is security in plain terms. The deep technical posture —
@@ -81,23 +85,19 @@ import CtaBand from '../components/CtaBand.astro';
           02 · Egress
         </p>
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">
-          Sessions leave through the connection you choose.
+          Sessions can leave through your configured SOCKS5 exit.
         </h3>
-        <p class="mt-2 font-mono text-xs text-tk-ink-3">Customer-configurable egress, per profile.</p>
+        <p class="mt-2 font-mono text-xs text-tk-ink-3">Per-profile SOCKS5; capability reported after launch.</p>
         <p class="mt-3 text-tk-ink-2">
-          Each profile can attach its own egress configuration — its
-          own exit to the internet
-          (<a href="/glossary/#egress" class="text-tk-accent-text underline">egress</a>):
-          a SOCKS5 proxy — including the video-call and modern-web
-          traffic types (UDP / WebRTC / QUIC) that many proxies drop —
-          an OpenVPN file (.ovpn), or a WireGuard file (.conf). A
-          session bound to the profile connects to your proxy or VPN
-          ("dials the tunnel") before the browser even launches, and
-          address-lookup traffic can't slip out around it (DNS
-          leaks blocked). Without an attached config, session traffic
-          exits via Driftstack-managed infrastructure. We never
-          store destination response bodies — the pages your
-          sessions visit. See
+          A profile can attach a public SOCKS5 proxy as its exit to the
+          internet (<a href="/glossary/#egress" class="text-tk-accent-text underline">egress</a>).
+          Driftstack validates the configuration and basic reachability
+          before launch, blocks internal proxy targets, and requests
+          remote DNS. UDP / WebRTC / QUIC routing depends on the proxy's
+          reported UDP capability and is shown after launch. Without an
+          attached config, session traffic exits via Driftstack-managed
+          infrastructure. We never store destination response bodies —
+          the pages your sessions visit. See
           <a href="/trust/security-overview/" class="text-tk-accent-text underline">/trust/security-overview</a>
           for the full posture.
         </p>
@@ -180,10 +180,10 @@ import CtaBand from '../components/CtaBand.astro';
           only admin-role members can change anything (role-based
           access control — RBAC). Sessions, profiles, webhooks, API
           keys, email preferences — every change is permission-checked
-          before it runs (the role check sits at the route layer), and
-          the log records who did it (the member) separately from
-          whose account it was (the owner). Team owners review who
-          did what on their account at any time via
+          before it runs (the role check sits at the route layer).
+          Successfully recorded audit entries identify who acted (the
+          member) separately from whose account it was (the owner).
+          Team owners review recorded activity via
           <code class="font-mono">/v1/account/audit-log</code>.
         </p>
       </div>
@@ -196,24 +196,28 @@ import CtaBand from '../components/CtaBand.astro';
           </svg>
         </IconTile>
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
-          06 · No-customer-data-access posture
+          06 · Live-media handling
         </p>
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">
-          Nobody at Driftstack can watch your sessions.
+          Live-session media is not retained by default.
         </h3>
         <p class="mt-2 font-mono text-xs text-tk-ink-3">
-          Driftstack staff cannot read your sessions — metadata only, by design.
+          DTLS-SRTP live media; no administrative staff join path.
         </p>
         <p class="mt-3 max-w-prose text-tk-ink-2">
           Driftstack's control plane stores license metadata, session
           metadata (id, lifecycle status, timestamps), and aggregate
-          usage counters. It does not store the session content itself.
-          URLs visited, form data submitted, screenshots captured,
-          copies of page content (DOM snapshots), browser cookies —
-          none of it ever reaches our servers. For
-          self-hosted deployments, even the metadata stays inside your
-          network; only license-validity heartbeats — periodic "is
-          this license still valid?" check-ins — reach our servers.
+          usage counters. Live-session media is encrypted in transport,
+          processed through LiveKit to deliver the stream, and dropped
+          when the session ends. The product exposes no administrative
+          path for Driftstack staff to join a customer's live session.
+          Requested screenshots, DOM snapshots, and PDFs pass through
+          the API inline and are not retained by the Capture endpoint;
+          desktop recordings stay on the customer's device and are not
+          uploaded. For self-hosted deployments, even session metadata
+          stays inside your network; only license-validity heartbeats —
+          periodic "is this license still valid?" check-ins — reach our
+          servers.
         </p>
       </div>
     </div>
@@ -252,10 +256,10 @@ import CtaBand from '../components/CtaBand.astro';
             <path d="M3 9h18M9 4v16" />
           </svg>
         </IconTile>
-        <strong class="block text-tk-ink">Sub-processors are listed.</strong>
-        Hetzner, Neon, Upstash, Cloudflare, Postmark, Sentry, Stripe,
-        Anthropic, Moneybird, MacStadium. Full list with purpose +
-        jurisdiction at <a href="/trust/sub-processors/" class="text-tk-accent-text underline">/trust/sub-processors</a>.
+        <strong class="block text-tk-ink">Sub-processors are published.</strong>
+        The live register lists every provider with its purpose, region,
+        and transfer mechanism, including conditional services. Read it at
+        <a href="/trust/sub-processors/" class="text-tk-accent-text underline">/trust/sub-processors</a>.
       </li>
       <li class="card bg-tk-raised p-6 text-sm text-tk-ink-2">
         <IconTile class="mb-3">
@@ -392,14 +396,14 @@ import CtaBand from '../components/CtaBand.astro';
           Audit
         </p>
         <h3 class="mt-2 text-lg font-medium text-tk-ink">
-          Append-only customer audit log
+          Recorded customer audit trail
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Every customer-visible event lands in an audit log that can
-          only ever be added to — never edited, never deleted
-          (append-only): API key lifecycle, MFA enrollment, profile
-          changes, webhook secret rotations, login + password changes.
-          Customers export the full log via the dashboard or
+          Successfully recorded account-security and management events
+          are append-only at the record level: API key lifecycle, MFA
+          enrollment, profile changes, webhook secret rotations, login
+          and password changes. Routine credential use is not emitted as
+          a read event. Customers export available records via the dashboard or
           <code class="font-mono">/v1/account/audit-log/export</code>
           (your data-portability right under GDPR Article 20).
         </p>

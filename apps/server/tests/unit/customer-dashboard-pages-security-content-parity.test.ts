@@ -14,8 +14,8 @@
 //   • Danger-zone: 7-year Dutch tax law invoice retention +
 //     support@driftstack.dev pre-launch deletion, anchored at
 //     #danger-zone for the trust-panel deep link.
-//   • "Your data is sealed" trust panel (copied from the overview,
-//     footer retargeted at the in-page danger zone).
+//   • Honest data-protection trust panel (copied from the overview,
+//     with request-based export/deletion linked to the danger zone).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -107,20 +107,30 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
     expect(body).toMatch(/<section id="danger-zone"/);
   });
 
-  it('"Your data is sealed" trust panel pinned: the 3 cells (Profile encryption / Tenant isolation / Secret access) + the footer deep link to the in-page #danger-zone (this copy replaced the overview\'s "from Settings" link when the panel was copied here 2026-07-03) — pinned so the sealed-data claims stay verbatim with the verified architecture and the export/delete pointer stays on-page', () => {
-    expect(body).toMatch(/Your data is sealed/);
+  it('Data-protection trust panel pins context-bound platform-held encryption and recorded-event audit truth', () => {
+    expect(body).toMatch(/Your data is protected/);
     expect(body).toMatch(
-      /Profiles are client-encrypted — Driftstack moves opaque bytes and can't read them\./,
+      /recoverable credentials are encrypted at rest with context-bound wrapping under platform-held keys\./,
     );
-    expect(body).toMatch(/AES-256-GCM, sealed/);
+    expect(body).toMatch(/AES-256-GCM at rest/);
+    expect(body).toMatch(/Context-bound encryption/);
     expect(body).toMatch(
-      /A wrong account cannot decrypt your data — enforced by math, not policy\./,
+      /owning account and, for record-scoped stores, the exact record and value slot/,
     );
-    expect(body).toMatch(/Every credential read lands in your <a href="\/audit-log\/"/);
+    expect(body).toMatch(/Recorded management events/);
+    expect(body).toMatch(
+      /credential-management events that were recorded in your <a href="\/audit-log\/"[\s\S]{0,180}routine runtime use is not logged as a credential-read event\./i,
+    );
+    expect(body).not.toMatch(/Profiles are client-encrypted/);
+    expect(body).not.toMatch(/Every credential read lands/);
+    expect(body).not.toMatch(/Always audited/);
+    expect(body).not.toMatch(/Management changes audited/);
+    expect(body).not.toMatch(/Account \+ record bound/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /export or delete anytime from\s*\n?\s*<a href="#danger-zone" class="text-tk-accent-text underline">the danger zone<\/a>\./,
+      /export and deletion are request-based today; start in\s*\n?\s*<a href="#danger-zone" class="text-tk-accent-text underline">the danger zone<\/a>\./,
     );
+    expect(body).not.toMatch(/export or delete anytime/);
   });
 
   it("V-331b act-as header in authedFetch — pinned so the team-scoped flow propagates to security reads/writes (drift would let team managers accidentally modify their OWN MFA / sign-ins when trying to manage a team-mate's account)", () => {

@@ -8,7 +8,7 @@
 //   • V-316 framing pinned + 4-endpoint independent-fetch pattern.
 //   • 4 endpoints: /v1/account/me + /v1/api-keys + /v1/sessions +
 //     /v1/billing.
-//   • 3-tile metric grid: Concurrent now / Profiles / API keys.
+//   • 4-tile metric grid: Concurrent now / Profiles / Usage / Billing.
 //   • V-331 driftstackActAsHeaders propagation for team-scoped
 //     reads.
 //   • Subscription card: active subscription vs no-subscription
@@ -120,12 +120,26 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('Your-data-is-sealed trust surface pinned (demo-concepts arc 2026-06-12): the three verified-architecture claims (AES-256-GCM sealed profiles / cryptographic tenant isolation / always-audited secret access) + audit-log and trust cross-links — every claim mirrors the real architecture (profile-store sealed blobs, per-tenant TMK, D-025 audit)', () => {
-    expect(body).toMatch(/Your data is sealed/);
-    expect(body).toMatch(/AES-256-GCM, sealed/);
-    expect(body).toMatch(/enforced by math, not policy\./);
-    expect(body).toMatch(/Always audited/);
+  it('Data-protection trust surface pins context-bound wrapping and recorded-event audit truth', () => {
+    expect(body).toMatch(/Your data is protected/);
+    expect(body).toMatch(/AES-256-GCM at rest/);
+    expect(body).toMatch(/Context-bound encryption/);
+    expect(body).toMatch(/platform-held keys/);
+    expect(body).toMatch(
+      /owning account and, for record-scoped stores, the exact record and value slot/,
+    );
+    expect(body).toMatch(/Recorded management events/);
+    expect(body).toMatch(/credential-management events that were recorded/);
+    expect(body).toMatch(/routine runtime use is not logged as a credential-read event/i);
     expect(body).toMatch(/href="\/audit-log\/"/);
     expect(body).toMatch(/driftstack\.dev\/trust\/security-overview\//);
+    expect(body).not.toMatch(/Profiles are client-encrypted/);
+    expect(body).not.toMatch(/Every credential read lands/);
+    expect(body).not.toMatch(/Always audited/);
+    expect(body).not.toMatch(/Management changes audited/);
+    expect(body).not.toMatch(/Account \+ record bound/);
+    expect(body).toMatch(/export and deletion are request-based today/);
+    expect(body).toMatch(/href="\/security\/#danger-zone"/);
+    expect(body).not.toMatch(/export or delete anytime from/);
   });
 });

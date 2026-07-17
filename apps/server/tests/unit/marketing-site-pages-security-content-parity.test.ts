@@ -7,7 +7,7 @@
 //
 //   • 6-pillar architecture: Transport + Egress (shipped per profile,
 //     2026-05-22) + API keys + Webhooks + Team RBAC +
-//     No-customer-data-access.
+//     Live-media handling.
 //   • TLS 1.2 + 1.3 + 2-year HSTS preload-eligible (includeSubDomains
 //     + preload).
 //   • API keys: scrypt logN=15 + 30-second sha256-keyed cache + no
@@ -55,21 +55,31 @@ function read(p: string): string {
 describe('W501.B apps/marketing-site/src/pages/security.astro content parity', () => {
   const body = read(LIB);
 
-  it("Hero framing: 'We don't see your traffic. We can't read your keys.' + 'Driftstack should never have a copy of anything that would let us impersonate you, intercept your traffic, or replay your sessions. The architecture below enforces that — not as policy, as code.' — pinned so the no-access-by-design hero + the 'not as policy, as code' framing both survive (drift to softer language would weaken the security-by-architecture commitment)", () => {
-    expect(body).toMatch(/We don't see your traffic\. We can't read your keys\./);
+  it('Hero truthfully distinguishes one-way API-key hashes, platform-held encrypted envelopes, and the no-retention-by-default session boundary', () => {
+    expect(body).toMatch(/Keys protected at rest\. Live media not retained by default\./);
     expect(body).toMatch(
-      /Driftstack should never have a copy of anything that would let us\s*\n?\s*impersonate you, intercept your traffic, or replay your sessions\./,
+      /stores customer API keys as one-way hashes and wraps\s+recoverable credentials with context-bound encryption under\s+platform-held keys/,
     );
-    expect(body).toMatch(/The architecture below enforces that — not as policy, as code\./);
+    expect(body).toMatch(
+      /owning account is part of the protected\s+context; record and value-slot identity are also bound where the\s+store has a stable record identity/,
+    );
+    expect(body).toMatch(
+      /Live-session media is processed only to\s+run and stream the session and is not retained by default/,
+    );
+    expect(body).toMatch(
+      /Session\s+metadata and agent transcripts follow their documented retention\s+periods/,
+    );
+    expect(body).not.toMatch(/We don't see your traffic\. We can't read your keys\./);
+    expect(body).not.toMatch(/never have a copy of anything/);
   });
 
-  it('6-pillar architecture: 01 Transport + 02 Egress (shipped per profile) + 03 API keys + 04 Webhooks + 05 Team RBAC + 06 No-customer-data-access posture — pinned so the 6-pillar security overview taxonomy stays consistent. 2026-05-22 — Pillar 02 label flipped from "(roadmap)" to plain "Egress" + body rewritten to reflect shipped SOCKS5/OpenVPN/WireGuard per-profile capability.', () => {
+  it('6-pillar architecture pins Transport, SOCKS5 egress, API keys, Webhooks, Team RBAC and honest live-media handling', () => {
     expect(body).toMatch(/01 · Transport/);
     expect(body).toMatch(/02 · Egress/);
     expect(body).toMatch(/03 · API keys/);
     expect(body).toMatch(/04 · Webhooks/);
     expect(body).toMatch(/05 · Team roles \(RBAC\)/); // S20c 2026-07-06: plain words lead, RBAC kept
-    expect(body).toMatch(/06 · No-customer-data-access posture/);
+    expect(body).toMatch(/06 · Live-media handling/);
   });
 
   it("TLS 1.2 + 1.3 + HSTS framing pinned: 'All inbound traffic is HTTPS — Cloudflare terminates TLS at the edge with full (strict) origin validation against our Hetzner host. The API server speaks TLS 1.2 / 1.3 only and sets a 2-year HSTS header with includeSubDomains + preload.' — pinned so the TLS-1.2+1.3-only + Cloudflare-strict-origin-validation + 2-year HSTS with both directives stay explicit (drift to dropping the 2-year HSTS would weaken the preload-eligibility)", () => {
@@ -106,39 +116,57 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     );
   });
 
-  it("No-customer-data-access posture: 'Driftstack's control plane stores license metadata, session metadata (id, lifecycle status, timestamps), and aggregate usage counters. It does not store the session content itself. URLs visited, form data submitted, screenshots captured, DOM snapshots, browser cookies — these never reach our infra.' + self-hosted-metadata-stays-inside-network — pinned so the explicit 5-state never-stored scope (URLs / form / screenshots / DOM / cookies) + the self-hosted-license-heartbeat-only flow survive (drift to dropping any item would weaken the no-collection commitment)", () => {
-    // S20c 2026-07-06 plain-language pass: all 5 never-stored items
-    // survive (DOM snapshots glossed as "copies of page content");
-    // license-validity heartbeats glossed as periodic check-ins.
+  it('Live-media handling states the implemented processing, access, and retention boundaries without claiming broad content non-retention', () => {
+    expect(body).toMatch(/Live-session media is not retained by default\./);
     expect(body).toMatch(
-      /URLs visited, form data submitted, screenshots captured,\s+copies of page content \(DOM snapshots\), browser cookies —\s+none of it ever reaches our servers\./,
+      /Live-session media is encrypted in transport,\s+processed through LiveKit to deliver the stream, and dropped\s+when the session ends\./,
     );
     expect(body).toMatch(
-      /For\s+self-hosted deployments, even the metadata stays inside your\s+network; only license-validity heartbeats — periodic "is\s+this license still valid\?" check-ins — reach our servers\./,
+      /product exposes no administrative\s+path for Driftstack staff to join a customer's live session\./,
     );
+    expect(body).toMatch(
+      /screenshots, DOM snapshots, and PDFs pass through\s+the API inline and are not retained by the Capture endpoint;\s+desktop recordings stay on the customer's device and are not\s+uploaded\./,
+    );
+    expect(body).toMatch(
+      /For self-hosted deployments, even session metadata\s+stays inside your network; only license-validity heartbeats/,
+    );
+    expect(body).not.toMatch(/Nobody at Driftstack can watch your sessions/);
+    expect(body).not.toMatch(/Driftstack staff cannot read your sessions/);
+    expect(body).not.toMatch(/none of it ever reaches our servers/);
+    expect(body).not.toMatch(/support can join/i);
   });
 
-  it("Honest-scope 4-card pinned: 'No SOC 2' + 'No ISO 27001' + 'Sub-processors are listed' + 'Data residency is EU-default' — pinned so the no-SOC2 + no-ISO27001 honest framing + sub-processor + EU-default 4-card combo survives (drift to claiming SOC 2 would break the integrity narrative; drift to vague 'enterprise-grade' language would weaken the comparison-against-competitor positioning)", () => {
+  it("Honest-scope 4-card pinned: 'No SOC 2' + 'No ISO 27001' + published sub-processors + EU-default residency", () => {
     expect(body).toMatch(/<strong class="block text-tk-ink">No SOC 2\.<\/strong>/);
     expect(body).toMatch(/<strong class="block text-tk-ink">No ISO 27001\.<\/strong>/);
-    expect(body).toMatch(/<strong class="block text-tk-ink">Sub-processors are listed\.<\/strong>/);
+    expect(body).toMatch(
+      /<strong class="block text-tk-ink">Sub-processors are published\.<\/strong>/,
+    );
     expect(body).toMatch(
       /<strong class="block text-tk-ink">Data residency is EU-default\.<\/strong>/,
     );
   });
 
-  it("Sub-processor 10-vendor list pinned: Hetzner + Neon + Upstash + Cloudflare + Postmark + Sentry + Stripe + Anthropic + Moneybird + MacStadium — pinned so the canonical 10-vendor sub-processor list stays consistent with /trust/sub-processors (drift to dropping any would create cross-page divergence the DPA Annex 3 won't match)", () => {
+  it('links the canonical live sub-processor register instead of duplicating a stale partial vendor list', () => {
     expect(body).toMatch(
-      /Hetzner, Neon, Upstash, Cloudflare, Postmark, Sentry, Stripe,\s*\n?\s*Anthropic, Moneybird, MacStadium\./,
+      /live register lists every provider with its purpose, region,\s+and transfer mechanism/,
     );
+    expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
+    expect(body).not.toMatch(/Hetzner, Neon, Upstash, Cloudflare, Postmark/);
   });
 
-  it('V-503 defense-in-depth 6-layer pinned: Edge (Cloudflare TLS 1.3 + WAF) + Origin (nginx hardening + UFW + fail2ban) + Application (Auth gate + scope check + rate limit) + Data (Encryption at rest + isolation) + Audit (Append-only customer audit log) + Observability (Sentry + structured logs) — pinned so the 6-layer defense-in-depth narrative stays consistent (drift to dropping any layer would create a single-line-of-defense gap; drift to renaming would break the at-a-glance security-review story)', () => {
+  it('V-503 defense-in-depth keeps six honest layers, including recorded audit events without universal-delivery claims', () => {
     expect(body).toMatch(/Cloudflare TLS 1\.3 \+ WAF/);
     expect(body).toMatch(/A locked-down server \(nginx \+ UFW \+ fail2ban\)/); // S20c 2026-07-06
     expect(body).toMatch(/Auth gate \+ scope check \+ rate limit/);
     expect(body).toMatch(/Encryption at rest \+ isolation/);
-    expect(body).toMatch(/Append-only customer audit log/);
+    expect(body).toMatch(/Recorded customer audit trail/);
+    expect(body).toMatch(
+      /Successfully recorded account-security and management events\s+are append-only at the record level/,
+    );
+    expect(body).toMatch(/Routine credential use is not emitted as\s+a read event/);
+    expect(body).not.toMatch(/Every customer-visible event lands/);
+    expect(body).not.toMatch(/never edited, never deleted/);
     expect(body).toMatch(/Sentry \+ structured logs/);
   });
 

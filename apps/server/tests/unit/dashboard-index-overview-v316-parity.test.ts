@@ -190,6 +190,23 @@ describe('W748 dashboard index/overview V-316 live-data parity', () => {
     expect(i).not.toMatch(/<DashboardLayout title="Overview" withSidebar=\{false\}/);
   });
 
+  it('CRITICAL overview trust panel describes recoverable-key and audit boundaries without zero-knowledge claims.', () => {
+    const i = read(INDEX);
+
+    expect(i).toMatch(/context-bound wrapping under platform-held keys/);
+    expect(i).toMatch(
+      /owning account and, for record-scoped stores, the exact record and value slot/,
+    );
+    expect(i).toMatch(/the platform unwraps its bound key for that authorized session/);
+    expect(i).toMatch(/credential-management events that were recorded/);
+    expect(i).toMatch(/routine runtime use is not logged as a credential-read event/i);
+    expect(i).not.toMatch(/Profiles are client-encrypted/);
+    expect(i).not.toMatch(/Every credential read lands/);
+    expect(i).not.toMatch(/Always audited/);
+    expect(i).not.toMatch(/Management changes audited/);
+    expect(i).not.toMatch(/Account \+ record bound/);
+  });
+
   it('test file metadata — file exists at canonical path', () => {
     expect(
       existsSync(

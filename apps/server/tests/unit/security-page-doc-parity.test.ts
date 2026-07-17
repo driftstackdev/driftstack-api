@@ -1,8 +1,7 @@
 // W246.A — drift-guard for /security (the public security marketing
-// page). Previous revision asserted "mTLS, end to end" + "Customer-
-// controlled egress (SOCKS5 / WireGuard / OpenVPN)" as shipped
-// pillars; neither has a server-side implementation today. This
-// guard pins the page to /trust/security-overview's truth.
+// page). Previous revisions asserted unsupported mTLS and treated
+// SOCKS5 / WireGuard / OpenVPN as one all-or-nothing capability.
+// Production currently wires only the concrete SOCKS5 backend.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -42,21 +41,16 @@ describe('W246.A /security page doc parity', () => {
     }
   });
 
-  it('flags customer-controlled egress as roadmap while no impl exists', () => {
-    // V-540.E (2026-05-16): gate now requires the CONCRETE wire — the
-    // interface-alone scaffolding (E1) is NOT a gate trip; only the
-    // full backend (E2/E3/E4) + bootstrap wire (E8) flips it.
-    const hasEgressImpl =
-      serverSourceMatches(/sessionEgressService:\s*sessionEgressService/) &&
-      serverSourceMatches(/implements SessionEgressService\b/);
-    if (!hasEgressImpl) {
-      // Must NOT call it shipped.
-      expect(doc).not.toMatch(/Customer-controlled\.?\s*Always\./);
-      // Must flag as roadmap and cross-link to security-overview.
-      expect(doc).toMatch(/Customer-configurable egress/);
-      expect(doc).toMatch(/roadmap/i);
-      expect(doc).toMatch(/\/trust\/security-overview/);
-    }
+  it('publishes only the concrete SOCKS5 egress backend', () => {
+    expect(serverSourceMatches(/class SocksProxyBackend implements SessionEgressService/)).toBe(
+      true,
+    );
+    expect(doc).toMatch(/public SOCKS5 proxy/);
+    expect(doc).toMatch(
+      /Without an\s+attached config, session traffic exits via Driftstack-managed\s+infrastructure/,
+    );
+    expect(doc).not.toMatch(/OpenVPN/);
+    expect(doc).not.toMatch(/WireGuard/);
   });
 
   it('does not promise "session traffic exits through your proxy" as a current scope-exclusion', () => {
@@ -73,5 +67,15 @@ describe('W246.A /security page doc parity', () => {
   it('aligns transport pillar with the helmet HSTS posture', () => {
     expect(doc).toMatch(/TLS 1\.2 \+ 1\.3|TLS 1\.3/);
     expect(doc).toMatch(/HSTS/i);
+  });
+
+  it('aligns session access and recoverable-key wording with the implemented legal/crypto boundary', () => {
+    expect(doc).toMatch(/platform-held keys/);
+    expect(doc).toMatch(/processed through LiveKit/);
+    expect(doc).toMatch(/no administrative\s+path for Driftstack staff to join/);
+    expect(doc).toMatch(/not retained by the Capture endpoint/);
+    expect(doc).not.toMatch(/We don't see your traffic\. We can't read your keys\./);
+    expect(doc).not.toMatch(/Nobody at Driftstack can watch your sessions/);
+    expect(doc).not.toMatch(/none of it ever reaches our servers/);
   });
 });

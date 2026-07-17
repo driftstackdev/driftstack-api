@@ -149,6 +149,23 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
     expect(p).toMatch(/showBanner\('Sign in to see live security status \+ recent activity\.'\);/);
   });
 
+  it('CRITICAL trust panel describes platform-held account-bound encryption and management-event audit coverage without zero-knowledge/read-audit overclaims.', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/context-bound wrapping under platform-held keys/);
+    expect(p).toMatch(
+      /owning account and, for record-scoped stores, the exact record and value slot/,
+    );
+    expect(p).toMatch(/the platform unwraps its bound key for that authorized session/);
+    expect(p).toMatch(/credential-management events that were recorded/);
+    expect(p).toMatch(/routine runtime use is not logged as a credential-read event/i);
+    expect(p).not.toMatch(/Profiles are client-encrypted/);
+    expect(p).not.toMatch(/Every credential read lands/);
+    expect(p).not.toMatch(/Always audited/);
+    expect(p).not.toMatch(/Management changes audited/);
+    expect(p).not.toMatch(/Account \+ record bound/);
+  });
+
   it('CRITICAL resolveApiBaseUrl + DashboardLayout used with the "Privacy & security" title.', () => {
     const p = read(PAGE);
 
