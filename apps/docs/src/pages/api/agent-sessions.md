@@ -222,16 +222,22 @@ string-matching the prose:
 {
   "kind": "failure",
   "intent": { "kind": "interact", "action": "tap", "selector": "#buy" },
-  "reason": "the browser couldn't act on the target element — it may be missing, hidden, or the page may still be loading; try a broader selector or wait for it to appear: no such element: #buy",
-  "diagnosis": { "category": "element_not_found", "retryable": true }
+  "reason": "the browser action or pacing may have taken effect even though its result was not confirmed — inspect the current page before deciding whether to try another action",
+  "diagnosis": { "category": "unknown", "retryable": false }
 }
 ```
 
 `diagnosis.category` is one of `element_not_found`, `page_load_failed`,
 `condition_not_met`, `capture_failed`, `scroll_failed`, `session_error`,
 `invalid_request`, `result_too_large`, `unknown`. `retryable: true`
-means re-running the same step may succeed (transient/timing cause);
-`false` means the request must change first.
+means automatic replay of the same step is considered safe. `false` means
+never replay automatically: an invalid request must change, while an
+outcome-unknown action or pacing may already have taken effect and requires state
+inspection before any deliberate next action. It does not prove that the
+action succeeded or failed. This fail-closed rule applies to `navigate`,
+`interact`, `scroll`, and `behavioral_pause` when a coarse WebDriver or
+dispatch failure cannot prove that the browser action or pacing did not run. Read-only
+`capture` remains eligible for bounded automatic replay.
 
 ```json
 // "clarify" — decomposer needs more info

@@ -96,4 +96,21 @@ describe('docs/pages/api/agent-sessions content parity', () => {
       /control plane\s*\n?\s*is not wired|activation gate is off|key path wired/,
     );
   });
+
+  it('documents outcome-unknown action failures as non-replayable without claiming the command failed before application', () => {
+    expect(body).toContain(
+      'the browser action or pacing may have taken effect even though its result was not confirmed — inspect the current page before deciding whether to try another action',
+    );
+    expect(body).toMatch(/"diagnosis": \{ "category": "unknown", "retryable": false \}/);
+    expect(body).toMatch(/`retryable: true`\s*\n?\s*means automatic replay/);
+    expect(body).toMatch(/`false` means\s*\n?\s*never replay automatically/);
+    expect(body).toMatch(/does not prove that the\s*\n?\s*action succeeded or failed/);
+    expect(body).toMatch(
+      /applies to `navigate`,\s*\n?\s*`interact`, `scroll`, and `behavioral_pause`/,
+    );
+    expect(body).toMatch(
+      /Read-only\s*\n?\s*`capture` remains eligible for bounded automatic replay/,
+    );
+    expect(body).not.toContain('try a broader selector or wait for it to appear');
+  });
 });

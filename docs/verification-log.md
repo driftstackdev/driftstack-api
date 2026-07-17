@@ -29134,3 +29134,52 @@ This is a GUI ownership and continuity correction. Retries intentionally retain
 distinct wire request ids; it does not claim harness-side retry idempotency. No
 harness, native build/sign/install/relaunch, shared workspace build, deployment,
 Fleet, Family-B, customer-session, environment or foreign pnpm action was performed.
+
+## V-698 — Ambiguous browser-command failures are outcome-unknown and single-shot
+
+**Date:** 2026-07-17
+
+The harness reports every WebDriver request failure through one coarse
+`intent_webdriver_failed` code, while the correlator and generic harness catches use
+`intent_dispatch_error` for both pre-send refusal and transmitted/result-lost work.
+Neither code proves that the browser action or pacing did not run. Navigation itself performs
+`POST /url` and then reads the current URL inside one catch, so the page can commit
+before readback fails. The API previously treated these codes as retryable and issued
+each retry with a fresh intent id. A callback/magic/unsubscribe URL could therefore
+be consumed twice; a click or keypress could submit more than once; typing could
+duplicate a committed prefix; relative/segmented scrolling could add movement; and a
+behavioral pause could repeat its scroll-through or dwell.
+
+One shared predicate now classifies `navigate`, `interact`, top-level `scroll`, and
+`behavioral_pause` as potentially applied after either coarse ambiguous failure.
+Their customer diagnosis is `unknown` and non-retryable, directing the caller to
+inspect current page state without claiming success or failure. The executor uses the
+same predicate and exact raw codes, so it cannot mint a fresh id or enter retry
+backoff for those failures.
+
+The correction deliberately preserves patient retry for
+`intent_session_not_established`, because no browser session existed to execute the
+command. Pre-execution `session_paused` and `session_intent_in_flight` refusals remain
+retryable with their resume/wait guidance. Read-only capture failures retain bounded
+recovery, wait-condition failures remain single-shot, and deadline/invalid/over-cap
+results remain non-retryable.
+
+Deterministic tests simulate committed navigation before URL/result loss and an
+action or pacing taking effect before an unconfirmed WebDriver result for tap, type,
+keypress, interact-scroll, top-level scroll, reading pause and explicit pause. Every
+case proves one simulated applied effect, one dispatch, one generated intent id, zero
+retry sleeps, a non-retryable diagnosis and outcome-unknown guidance. Positive
+capture, pause/in-flight refusal, and
+navigation/type/scroll cold-start recovery remain load-bearing. The direct and
+expanded counts below were taken after the public API-types/SDK/docs parity gate.
+
+The direct executable/public-contract matrix passes 5 files and 114/114 tests; the
+expanded agent executor/runtime, mapper, protocol, fleet-routing, API-types, SDK and
+docs union passes 18 files and 403/403 tests. Strict server source and test
+TypeScript, API-types and TypeScript-SDK typechecks, the docs Astro check (11 files,
+zero diagnostics), targeted ESLint, Prettier and diff/whitespace checks are green.
+
+This correction prevents a new admission after an already-applied command loses its
+reply. It complements, but does not replace, harness cancellation fences for work
+already executing. No shared workspace build/deploy, harness/native/Fleet/Family-B,
+environment, customer or foreign pnpm action was performed.

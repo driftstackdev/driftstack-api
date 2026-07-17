@@ -6,7 +6,10 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentIntent } from '@driftstack/api-types';
 import { IntentResultSchema } from '@driftstack/api-types';
-import { intentResultToCustomer } from '../../src/services/agent-intent-result.js';
+import {
+  intentReplayMayDuplicateEffect,
+  intentResultToCustomer,
+} from '../../src/services/agent-intent-result.js';
 import type { ParsedIntentResult } from '../../src/services/harness-control-codec.js';
 import { HARNESS_ERROR_CODES } from '../../src/schemas/harness-control-protocol.js';
 
@@ -204,24 +207,34 @@ describe('intentResultToCustomer — failure reasons', () => {
     expect(r.reason).toContain('Bearer [redacted]');
   });
 
-  it('doc-132 §5.3 — intent_webdriver_failed is specialized by intent kind (actionable "why"), other codes are not', () => {
-    // interact → element-not-found guidance
+  it('doc-132 §5.3 — intent_webdriver_failed is specialized by intent kind without claiming a consequential command did not land', () => {
+    // An interact response can be lost after the page applied the command.
     const interactR = intentResultToCustomer(
       { kind: 'interact', action: 'tap', selector: '#go' },
       fail('intent_webdriver_failed'),
     );
     if (interactR.kind !== 'failure') throw new Error('narrow');
-    expect(interactR.reason).toContain('target element');
-    expect(interactR.reason).toContain('try a broader selector');
+    expect(interactR.reason).toContain('may have taken effect');
+    expect(interactR.reason).toContain('inspect the current page');
+    expect(interactR.reason).not.toContain('try a broader selector');
 
-    // navigate → page-load guidance (distinct from interact)
+    // Navigation can commit before its URL readback/result is lost too.
     const navigateR = intentResultToCustomer(
       { kind: 'navigate', url: 'https://x' },
       fail('intent_webdriver_failed'),
     );
     if (navigateR.kind !== 'failure') throw new Error('narrow');
-    expect(navigateR.reason).toContain("couldn't load the page");
-    expect(navigateR.reason).not.toBe(interactR.reason);
+    expect(navigateR.reason).toContain('may have taken effect');
+    expect(navigateR.diagnosis).toEqual({ category: 'unknown', retryable: false });
+
+    // Read-only capture retains its narrower retryable guidance.
+    const captureR = intentResultToCustomer(
+      { kind: 'capture', capture: 'screenshot' },
+      fail('intent_webdriver_failed'),
+    );
+    if (captureR.kind !== 'failure') throw new Error('narrow');
+    expect(captureR.reason).toContain("couldn't capture the page");
+    expect(captureR.diagnosis).toEqual({ category: 'capture_failed', retryable: true });
 
     // wait → condition-never-met guidance
     const waitR = intentResultToCustomer(
@@ -249,15 +262,40 @@ describe('intentResultToCustomer — failure reasons', () => {
     expect(paramR.reason).toBe('a required parameter was missing');
   });
 
+  it('classifies every mutating or pacing intent as outcome-unknown after a WebDriver response failure', () => {
+    const intents: AgentIntent[] = [
+      { kind: 'navigate', url: 'https://id.example.test/oauth/callback?code=once' },
+      { kind: 'interact', action: 'tap', selector: '#buy' },
+      { kind: 'interact', action: 'type', selector: '#email', value: 'a@b.test' },
+      { kind: 'interact', action: 'press', value: 'ENTER' },
+      { kind: 'interact', action: 'scroll', value: 'down' },
+      { kind: 'scroll', direction: 'down', amount_px: 500 },
+      { kind: 'behavioral_pause', reading_word_count: 120 },
+      { kind: 'behavioral_pause', duration_ms: 1_000 },
+    ];
+
+    for (const caseIntent of intents) {
+      expect(intentReplayMayDuplicateEffect(caseIntent)).toBe(true);
+      const result = intentResultToCustomer(caseIntent, fail('intent_webdriver_failed'));
+      if (result.kind !== 'failure') throw new Error('narrow');
+      expect(result.diagnosis?.retryable).toBe(false);
+      expect(result.diagnosis?.category).toBe('unknown');
+      expect(result.reason).toContain('may have taken effect');
+    }
+
+    expect(intentReplayMayDuplicateEffect({ kind: 'capture', capture: 'screenshot' })).toBe(false);
+    expect(intentReplayMayDuplicateEffect({ kind: 'wait', condition: 'idle' })).toBe(false);
+  });
+
   it('doc-132 §5.3 slice 2 — every failure carries a structured diagnosis {category, retryable} consistent with the prose reason', () => {
     const cases: Array<[AgentIntent, Parameters<typeof fail>[0], string, boolean]> = [
       [
         { kind: 'interact', action: 'tap', selector: '#a' },
         'intent_webdriver_failed',
-        'element_not_found',
-        true,
+        'unknown',
+        false,
       ],
-      [{ kind: 'navigate', url: 'https://x' }, 'intent_webdriver_failed', 'page_load_failed', true],
+      [{ kind: 'navigate', url: 'https://x' }, 'intent_webdriver_failed', 'unknown', false],
       [
         { kind: 'wait', condition: 'selector_visible', selector: '.r' },
         'intent_webdriver_failed',
@@ -270,15 +308,22 @@ describe('intentResultToCustomer — failure reasons', () => {
         'capture_failed',
         true,
       ],
-      [{ kind: 'scroll', direction: 'down' }, 'intent_webdriver_failed', 'scroll_failed', true],
-      [{ kind: 'behavioral_pause' }, 'intent_webdriver_failed', 'unknown', true],
+      [{ kind: 'scroll', direction: 'down' }, 'intent_webdriver_failed', 'unknown', false],
+      [{ kind: 'behavioral_pause' }, 'intent_webdriver_failed', 'unknown', false],
       [
         { kind: 'navigate', url: 'https://x' },
         'intent_session_not_established',
         'session_error',
         true,
       ],
-      [{ kind: 'navigate', url: 'https://x' }, 'intent_dispatch_error', 'session_error', true],
+      [{ kind: 'navigate', url: 'https://x' }, 'intent_dispatch_error', 'unknown', false],
+      [
+        { kind: 'interact', action: 'tap', selector: '#buy' },
+        'intent_dispatch_error',
+        'unknown',
+        false,
+      ],
+      [{ kind: 'capture', capture: 'screenshot' }, 'intent_dispatch_error', 'session_error', true],
       [{ kind: 'navigate', url: 'https://x' }, 'intent_deadline_exceeded', 'session_error', false],
       [
         { kind: 'navigate', url: 'https://x' },

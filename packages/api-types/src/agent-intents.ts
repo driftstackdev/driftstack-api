@@ -105,8 +105,9 @@ export type FailureDiagnosisCategory = z.infer<typeof FailureDiagnosisCategorySc
 
 export const FailureDiagnosisSchema = z.object({
   category: FailureDiagnosisCategorySchema,
-  /** True when re-running the same step may succeed (transient/timing causes);
-   *  false when the request must change first (invalid params, over-cap result). */
+  /** True only when automatically replaying the same step is considered safe.
+   *  False means never auto-replay: the request may need correction, or the
+   *  prior action's outcome may be unknown and require state inspection. */
   retryable: z.boolean(),
 });
 export type FailureDiagnosis = z.infer<typeof FailureDiagnosisSchema>;

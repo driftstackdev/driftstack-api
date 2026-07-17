@@ -268,9 +268,11 @@ export interface AgentUsage {
 
 /** doc-132 §5.3 — machine-readable failure diagnosis. `reason` is the
  *  human-facing copy; `diagnosis` is the structured companion an automation can
- *  branch on without string-matching prose. `retryable: true` = re-running the
- *  same step may succeed (transient/timing cause); false = the request must
- *  change first. Optional: older servers omit it. */
+ *  branch on without string-matching prose. `retryable: true` means automatic
+ *  replay of the same step is considered safe; false means never auto-replay.
+ *  A false result can require a corrected request, or it can mean the prior
+ *  action's outcome is unknown and current state must be inspected. Optional:
+ *  older servers omit it. */
 export interface AgentFailureDiagnosis {
   category:
     | 'element_not_found'

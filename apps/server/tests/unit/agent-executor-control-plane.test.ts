@@ -282,7 +282,7 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
   }
 
   it('retries a RETRYABLE failure and succeeds on a later attempt → overall success', async () => {
-    // Fail (webdriver → element_not_found, retryable) on attempts 0-1, succeed on attempt 2.
+    // Read-only capture failure remains retryable; attempts 0-1 fail, then succeed.
     const { got, dispatcher } = mockDispatcher((d, i) =>
       i < 2 ? failResult(d.intentId, 'intent_webdriver_failed') : okResult(d.intentId),
     );
@@ -292,9 +292,7 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       retryDelayMs: 400,
       sleep,
     });
-    const res = await exec.execute(
-      planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
-    );
+    const res = await exec.execute(planArgs([{ kind: 'capture', capture: 'screenshot' }]));
     expect(res.ok).toBe(true);
     expect(res.results).toHaveLength(1);
     expect(res.results[0]!.kind).toBe('success');
@@ -318,7 +316,7 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       },
     });
     const res = await exec.execute({
-      ...planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
+      ...planArgs([{ kind: 'capture', capture: 'screenshot' }]),
       shouldContinue: () => active,
     });
 
@@ -336,9 +334,7 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       retryDelayMs: 0,
       sleep,
     });
-    const res = await exec.execute(
-      planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
-    );
+    const res = await exec.execute(planArgs([{ kind: 'capture', capture: 'screenshot' }]));
     expect(res.ok).toBe(false);
     expect(res.results[0]!.kind).toBe('failure');
     expect(got).toHaveLength(3); // 1 + 2 retries
@@ -363,16 +359,14 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       failResult(d.intentId, 'intent_webdriver_failed'),
     );
     const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { maxRetries: 0 });
-    const res = await exec.execute(
-      planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
-    );
+    const res = await exec.execute(planArgs([{ kind: 'capture', capture: 'screenshot' }]));
     expect(res.ok).toBe(false);
     expect(got).toHaveLength(1);
   });
 
-  it('does NOT auto-retry a session_error on a side-effecting interact (dispatch timeout/drop may have already applied the tap → double-submit hazard)', async () => {
-    // intent_dispatch_error → diagnosis category session_error. For an interact
-    // (tap/type/press) this is the transmitted-but-unacked class: the action MAY
+  it('does NOT auto-retry an ambiguous dispatch result on a side-effecting interact', async () => {
+    // intent_dispatch_error conflates pre-send refusal with transmitted-but-unacked
+    // work. For an interact (tap/type/press), the action MAY
     // have executed, so a fresh-intentId retry would double-apply it.
     const { got, dispatcher } = mockDispatcher((d) =>
       failResult(d.intentId, 'intent_dispatch_error'),
@@ -424,12 +418,18 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
   });
 
   const ambiguousReplayIntents: Array<[AgentIntent, string]> = [
+    [
+      { kind: 'navigate', url: 'https://id.example.test/oauth/callback?code=consume-once' },
+      'navigation callback',
+    ],
+    [{ kind: 'interact', action: 'press', value: 'ENTER' }, 'keypress'],
+    [{ kind: 'interact', action: 'scroll' }, 'interact scroll'],
     [{ kind: 'scroll', direction: 'down', amount_px: 600 }, 'relative scroll'],
     [{ kind: 'behavioral_pause', reading_word_count: 120 }, 'reading pause with scroll-through'],
     [{ kind: 'behavioral_pause', duration_ms: 2_000 }, 'explicit dwell'],
   ];
   it.each(ambiguousReplayIntents)(
-    'does NOT auto-retry a session_error on %s (%s may already have changed movement/pacing)',
+    'does NOT auto-retry an ambiguous dispatch result on %s (%s may already have taken effect)',
     async (intent, _description) => {
       const { got, dispatcher } = mockDispatcher((d) =>
         failResult(d.intentId, 'intent_dispatch_error'),
@@ -444,6 +444,10 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       expect(res.ok).toBe(false);
       expect(got).toHaveLength(1);
       expect(calls).toHaveLength(0);
+      expect(res.results[0]?.kind).toBe('failure');
+      if (res.results[0]?.kind !== 'failure') throw new Error('narrow');
+      expect(res.results[0].diagnosis).toEqual({ category: 'unknown', retryable: false });
+      expect(res.results[0].reason).toContain('may have taken effect');
     },
   );
 
@@ -464,32 +468,45 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     expect(got).toHaveLength(2);
   });
 
-  it('a session_error on a NON-side-effecting kind (navigate) STILL retries — double-apply is harmless there', async () => {
-    // navigate to the same URL twice is idempotent, so the maybe-executed
-    // concern does not apply; keep the useful transient-recovery retry.
+  it('intent_session_not_established on navigation still retries patiently', async () => {
     let n = 0;
     const { got, dispatcher } = mockDispatcher((d) =>
-      n++ < 2
-        ? failResult(d.intentId, 'intent_dispatch_error')
+      n++ === 0
+        ? failResult(d.intentId, 'intent_session_not_established')
         : okResult(d.intentId, d.sessionId, { url: 'https://x' }),
     );
     const { sleep } = instantSleep();
-    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
-      maxRetries: 2,
-      retryDelayMs: 0,
-      sleep,
-    });
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { sleep });
     const res = await exec.execute(planArgs([{ kind: 'navigate', url: 'https://x' }]));
     expect(res.ok).toBe(true);
-    expect(got).toHaveLength(3); // retried through the transient dispatch errors
+    expect(got).toHaveLength(2);
   });
 
-  it('a persistent intent_dispatch_error (routing failure — no box to reach) fails FAST, never the 12s cold-start patient retry', async () => {
-    // Regression guard for the #7/#8 over-fire: the fleet dispatcher now emits
-    // intent_dispatch_error (NOT intent_session_not_established) for no-node /
-    // CP-down / node-disconnected. Those have no warming box, so even with the long
-    // patient budget available the executor must bound them by the SHORT maxRetries,
-    // not wait 8×1500ms for a warmup that will never come.
+  it.each(['session_paused', 'session_intent_in_flight'] as const)(
+    'pre-execution %s remains safely retryable',
+    async (errorCode) => {
+      let attempts = 0;
+      const { got, dispatcher } = mockDispatcher((dispatch) =>
+        attempts++ === 0
+          ? failResult(dispatch.intentId, errorCode)
+          : okResult(dispatch.intentId, dispatch.sessionId, { url: 'https://x' }),
+      );
+      const { sleep, calls } = instantSleep();
+      const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+        maxRetries: 2,
+        retryDelayMs: 25,
+        sleep,
+      });
+
+      const res = await exec.execute(planArgs([{ kind: 'navigate', url: 'https://x' }]));
+
+      expect(res.ok).toBe(true);
+      expect(got.map((dispatch) => dispatch.intentId)).toEqual(['int_1', 'int_2']);
+      expect(calls).toEqual([25]);
+    },
+  );
+
+  it('ambiguous intent_dispatch_error on navigation is single-shot even though the code also includes pre-send routing failures', async () => {
     const { got, dispatcher } = mockDispatcher((d) =>
       failResult(d.intentId, 'intent_dispatch_error'),
     );
@@ -503,36 +520,61 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     });
     const res = await exec.execute(planArgs([{ kind: 'navigate', url: 'https://x' }]));
     expect(res.ok).toBe(false);
-    expect(got).toHaveLength(3); // 1 + maxRetries(2), NOT 1 + 8 patient retries
+    expect(got).toHaveLength(1);
   });
 
-  it('a WEBDRIVER failure on an interact STILL retries — the atomic command errored WITHOUT tapping (proven not applied)', async () => {
-    let n = 0;
-    const { got, dispatcher } = mockDispatcher((d) =>
-      n++ < 1 ? failResult(d.intentId, 'intent_webdriver_failed') : okResult(d.intentId),
-    );
-    const { sleep } = instantSleep();
-    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
-      maxRetries: 2,
-      retryDelayMs: 0,
-      sleep,
-    });
-    const res = await exec.execute(
-      planArgs([{ kind: 'interact', action: 'tap', selector: '#go' }]),
-    );
-    expect(res.ok).toBe(true);
-    expect(got).toHaveLength(2); // element_not_found retried, then succeeded
-  });
+  const webdriverOutcomeUnknownIntents: Array<[AgentIntent, string]> = [
+    [
+      { kind: 'navigate', url: 'https://mail.example.test/unsubscribe?token=consume-once' },
+      'navigation',
+    ],
+    [{ kind: 'interact', action: 'tap', selector: '#buy' }, 'tap'],
+    [{ kind: 'interact', action: 'type', selector: '#email', value: 'a@b.test' }, 'type'],
+    [{ kind: 'interact', action: 'press', value: 'ENTER' }, 'keypress'],
+    [{ kind: 'interact', action: 'scroll' }, 'interact scroll'],
+    [{ kind: 'scroll', direction: 'down', amount_px: 600 }, 'top-level scroll'],
+    [{ kind: 'behavioral_pause', reading_word_count: 120 }, 'reading pause'],
+    [{ kind: 'behavioral_pause', duration_ms: 2_000 }, 'explicit pause'],
+  ];
+  it.each(webdriverOutcomeUnknownIntents)(
+    'does NOT replay %s after intent_webdriver_failed (%s may already have taken effect before confirmation failed)',
+    async (intent, _description) => {
+      let simulatedAppliedEffects = 0;
+      const { got, dispatcher } = mockDispatcher((dispatch) => {
+        // Model the producer boundary precisely: the action or pacing took effect,
+        // then its confirmation failed and collapsed to the coarse code.
+        simulatedAppliedEffects += 1;
+        return failResult(dispatch.intentId, 'intent_webdriver_failed');
+      });
+      const { sleep, calls } = instantSleep();
+      const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+        maxRetries: 2,
+        retryDelayMs: 0,
+        sleep,
+      });
 
-  it('retries only the FAILING step, not the whole plan — earlier successes are not re-dispatched', async () => {
-    // intent 0 (navigate) succeeds once; intent 1 (interact) fails-retryable twice then succeeds.
+      const res = await exec.execute(planArgs([intent]));
+
+      expect(res.ok).toBe(false);
+      expect(res.results).toHaveLength(1);
+      expect(res.results[0]?.kind).toBe('failure');
+      if (res.results[0]?.kind !== 'failure') throw new Error('narrow');
+      expect(res.results[0].diagnosis?.retryable).toBe(false);
+      expect(res.results[0].reason).toContain('may have taken effect');
+      expect(simulatedAppliedEffects).toBe(1);
+      expect(got.map((dispatch) => dispatch.intentId)).toEqual(['int_1']);
+      expect(calls).toEqual([]);
+    },
+  );
+
+  it('retries only the failing replay-safe step, not earlier successes', async () => {
+    // Intent 0 (navigate) succeeds once; read-only capture fails twice then succeeds.
     const { got, dispatcher } = mockDispatcher((d) => {
       if (d.intentName === 'navigate')
         return okResult(d.intentId, d.sessionId, { url: 'https://x' });
-      // `got` already includes this dispatch, so clickCount is 1-based: fail
-      // the first 3 clicks (counts 1-3), succeed on the 4th.
-      const clickCount = got.filter((g) => g.intentName === 'click').length;
-      return clickCount <= 3
+      // `got` already includes this dispatch, so captureCount is 1-based.
+      const captureCount = got.filter((g) => g.intentName === 'screenshot').length;
+      return captureCount <= 2
         ? failResult(d.intentId, 'intent_webdriver_failed')
         : okResult(d.intentId);
     });
@@ -545,12 +587,12 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     const res = await exec.execute(
       planArgs([
         { kind: 'navigate', url: 'https://x' },
-        { kind: 'interact', action: 'tap', selector: '#go' },
+        { kind: 'capture', capture: 'screenshot' },
       ]),
     );
     expect(res.ok).toBe(true);
     expect(got.filter((g) => g.intentName === 'navigate')).toHaveLength(1); // not re-run
-    expect(got.filter((g) => g.intentName === 'click')).toHaveLength(4); // 3 fails + 1 success
+    expect(got.filter((g) => g.intentName === 'screenshot')).toHaveLength(3); // 2 fails + success
   });
 
   // #139 go-live — the consequential-action confirmation gate must survive the

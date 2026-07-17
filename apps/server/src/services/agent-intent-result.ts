@@ -41,6 +41,23 @@ function safeResultText(value: string, maxLength: number): string {
   return redactText(bounded).slice(0, maxLength);
 }
 
+/**
+ * A navigation or browser mutation can commit before its result is lost. The
+ * harness and correlator intentionally use coarse failure codes that cannot
+ * distinguish that case from a pre-application failure, so replaying these
+ * intents with a fresh id could repeat navigation, an action, relative movement,
+ * or human pacing. Keep this shared with the executor so customer retry guidance
+ * and automatic replay can never disagree.
+ */
+export function intentReplayMayDuplicateEffect(intent: AgentIntent): boolean {
+  return (
+    intent.kind === 'navigate' ||
+    intent.kind === 'interact' ||
+    intent.kind === 'scroll' ||
+    intent.kind === 'behavioral_pause'
+  );
+}
+
 /** Map a decoded harness result + its originating intent → customer IntentResult. */
 export function intentResultToCustomer(
   intent: AgentIntent,
@@ -150,47 +167,46 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
     'the browser session is still processing another action — wait, then retry this action',
 };
 
-// doc-132 §5.3 auto-debug (deterministic slice) — `intent_webdriver_failed` is
-// the one error code whose generic base copy ("the browser failed to perform
-// this action") tells the customer nothing they can act on. But the intent KIND
-// pins the overwhelmingly-likely cause without any guessing about the harness
-// message content (which is A3-controlled and only appended verbatim below):
-// a webdriver failure on an `interact` is almost always a missing/hidden/not-
-// yet-loaded target element; on a `navigate` it's a page that wouldn't load;
-// on a `wait` the condition never became true; etc. Specialize the base copy by
-// kind so the customer gets an actionable "why + what to try" line, while the
-// appended harness message still names the exact selector/url. Only this code is
-// specialized — every other code's base copy is A3-locked / already actionable.
+// doc-132 §5.3 auto-debug (deterministic slice) — specialize the generic
+// WebDriver failure by intent kind. Mutating/pacing intents use the stronger
+// outcome-unknown copy below because a coarse failure does not prove that the
+// action or pacing failed before application. Read-only/replay-tolerant kinds
+// retain their narrower actionable guidance.
 const WEBDRIVER_FAILED_BY_KIND: Partial<Record<AgentIntent['kind'], string>> = {
-  interact:
-    "the browser couldn't act on the target element — it may be missing, hidden, or the page may still be loading; try a broader selector or wait for it to appear",
-  navigate:
-    "the browser couldn't load the page — the site may be down, blocking automated traffic, or the URL may be invalid",
   wait: 'the wait condition was never met — the expected state may not occur on this page',
-  scroll: "the browser couldn't scroll as requested",
   capture: "the browser couldn't capture the page",
 };
 
+const BROWSER_COMMAND_OUTCOME_UNKNOWN =
+  'the browser action or pacing may have taken effect even though its result was not confirmed — inspect the current page before deciding whether to try another action';
+
 // doc-132 §5.3 — the machine-readable companion to the prose `reason`. Same
 // deterministic inputs (error code + intent kind), so the two can never
-// disagree. `retryable` is the automation-facing hint: true when re-running the
-// SAME step may succeed (transient/timing causes — element not loaded yet,
-// flaky page load, session hiccup), false when the request itself must change
-// first (bad params, unsupported action, over-cap result).
+// disagree. `retryable` is the automation-facing hint: true only when replaying
+// the SAME step automatically is considered safe. False covers both requests
+// that must change (bad params, unsupported action, over-cap result) and
+// outcome-unknown actions whose current page state must be inspected first.
 const WEBDRIVER_CATEGORY_BY_KIND: Partial<Record<AgentIntent['kind'], FailureDiagnosisCategory>> = {
-  interact: 'element_not_found',
-  navigate: 'page_load_failed',
   wait: 'condition_not_met',
   capture: 'capture_failed',
-  scroll: 'scroll_failed',
 };
 
 function diagnose(intent: AgentIntent, code: HarnessErrorCode | undefined): FailureDiagnosis {
   switch (code) {
-    case 'intent_webdriver_failed':
-      return { category: WEBDRIVER_CATEGORY_BY_KIND[intent.kind] ?? 'unknown', retryable: true };
-    case 'intent_session_not_established':
+    case 'intent_webdriver_failed': {
+      const outcomeUnknown = intentReplayMayDuplicateEffect(intent);
+      return {
+        category: outcomeUnknown
+          ? 'unknown'
+          : (WEBDRIVER_CATEGORY_BY_KIND[intent.kind] ?? 'unknown'),
+        retryable: !outcomeUnknown,
+      };
+    }
     case 'intent_dispatch_error':
+      return intentReplayMayDuplicateEffect(intent)
+        ? { category: 'unknown', retryable: false }
+        : { category: 'session_error', retryable: true };
+    case 'intent_session_not_established':
     case 'session_paused':
     case 'session_intent_in_flight':
       return { category: 'session_error', retryable: true };
@@ -217,8 +233,12 @@ function failureReason(
   message: string | undefined,
 ): string {
   const base =
-    code === 'intent_webdriver_failed'
-      ? (WEBDRIVER_FAILED_BY_KIND[intent.kind] ?? ERROR_BASE.intent_webdriver_failed)
+    code === 'intent_webdriver_failed' || code === 'intent_dispatch_error'
+      ? intentReplayMayDuplicateEffect(intent)
+        ? BROWSER_COMMAND_OUTCOME_UNKNOWN
+        : code === 'intent_webdriver_failed'
+          ? (WEBDRIVER_FAILED_BY_KIND[intent.kind] ?? ERROR_BASE.intent_webdriver_failed)
+          : ERROR_BASE.intent_dispatch_error
       : code !== undefined
         ? ERROR_BASE[code]
         : 'the action failed';

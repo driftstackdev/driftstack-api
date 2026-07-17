@@ -211,4 +211,14 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/handback`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/livekit-token`/);
   });
+
+  it('defines retryable as safe automatic replay and preserves outcome-unknown false semantics', () => {
+    expect(body).toMatch(
+      /`retryable: true` means automatic\s*\n?\s*\*\s+replay of the same step is considered safe; false means never auto-replay\./,
+    );
+    expect(body).toMatch(
+      /prior\s*\n?\s*\*\s+action's outcome is unknown and current state must be inspected/,
+    );
+    expect(body).not.toMatch(/false = the request must\s*\n?\s*\*\s+change first/);
+  });
 });
