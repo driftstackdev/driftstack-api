@@ -1,19 +1,22 @@
-// Security regression: 24h simulator control credentials belong in the OS
-// credential store, never WebView localStorage or reload history.
+// Security regression: the expiring simulator control credential lives only in
+// the native process vault. WebView code receives a non-secret generation and
+// has no writable or generic-Keychain command.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const keychain = new Map<string, string>();
-let credentialStoreLocked = false;
-const invoke = vi.fn((command: string, args: { key: string; value?: string }): Promise<unknown> => {
-  if (credentialStoreLocked) return Promise.reject(new Error('credential store locked'));
-  if (command === 'secret_load') return Promise.resolve(keychain.get(args.key) ?? null);
-  if (command === 'secret_save') {
-    keychain.set(args.key, args.value ?? '');
-    return Promise.resolve(null);
+type NativeArgs = { sessionId?: string; generation?: number };
+const nativeVault = new Map<string, string>();
+
+function identity(args: NativeArgs): string {
+  return `${args.sessionId ?? ''}\u0000${args.generation ?? 0}`;
+}
+
+const invoke = vi.fn((command: string, args: NativeArgs): Promise<unknown> => {
+  if (command === 'simulator_control_key_load') {
+    return Promise.resolve(nativeVault.get(identity(args)) ?? null);
   }
-  if (command === 'secret_delete') {
-    keychain.delete(args.key);
+  if (command === 'simulator_control_key_delete') {
+    nativeVault.delete(identity(args));
     return Promise.resolve(null);
   }
   return Promise.reject(new Error(`unexpected command ${command}`));
@@ -24,13 +27,13 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 const {
   clearPersistedControlKey,
   loadProtectedControlKey,
-  migrateLegacyControlKeys,
-  persistControlKey,
   safeSimulatorSearch,
+  scrubLegacyControlKeys,
 } = await import('../../src/lib/simulator-control-key');
 
 class MemoryStorage implements Storage {
   readonly values = new Map<string, string>();
+  readonly reads: string[] = [];
   get length(): number {
     return this.values.size;
   }
@@ -38,6 +41,7 @@ class MemoryStorage implements Storage {
     this.values.clear();
   }
   getItem(key: string): string | null {
+    this.reads.push(key);
     return this.values.get(key) ?? null;
   }
   key(index: number): string | null {
@@ -53,147 +57,113 @@ class MemoryStorage implements Storage {
 
 let storage: MemoryStorage;
 
-describe('simulator control-key protected storage', () => {
+describe('simulator native process control-key bridge', () => {
   beforeEach(() => {
-    keychain.clear();
-    credentialStoreLocked = false;
+    nativeVault.clear();
     invoke.mockClear();
     storage = new MemoryStorage();
     vi.stubGlobal('localStorage', storage);
   });
 
-  it('persists and restores a session key only through its scoped credential-store item', async () => {
-    await persistControlKey('agt_safe-1', 'gck_secret');
-    expect(keychain.get('gui_control:agt_safe-1')).toBe('gck_secret');
-    expect(storage.length).toBe(0);
-    await expect(loadProtectedControlKey('agt_safe-1')).resolves.toBe('gck_secret');
-    expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(0);
-  });
+  it('loads only the exact session generation through the dedicated command', async () => {
+    nativeVault.set('agt_safe-1\u00007', 'gck_secret');
+    nativeVault.set('agt_safe-1\u00008', 'gck_successor');
 
-  it('does not re-save an identical key already cached by this Simulator process', async () => {
-    await persistControlKey('agt_repeat', 'gck_same');
-    invoke.mockClear();
+    await expect(loadProtectedControlKey('agt_safe-1', 7)).resolves.toBe('gck_secret');
+    await expect(loadProtectedControlKey('agt_safe-1', 8)).resolves.toBe('gck_successor');
+    await expect(loadProtectedControlKey('agt_other', 7)).resolves.toBe('');
 
-    await persistControlKey('agt_repeat', 'gck_same');
-
-    expect(invoke).not.toHaveBeenCalled();
-    expect(keychain.get('gui_control:agt_repeat')).toBe('gck_same');
-  });
-
-  it('single-flights simultaneous identical saves and orders a newer value last', async () => {
-    await Promise.all([
-      persistControlKey('agt_simultaneous', 'gck_first'),
-      persistControlKey('agt_simultaneous', 'gck_first'),
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      'simulator_control_key_load',
+      'simulator_control_key_load',
+      'simulator_control_key_load',
     ]);
-    expect(invoke.mock.calls.filter(([command]) => command === 'secret_save')).toHaveLength(1);
-
-    await Promise.all([
-      persistControlKey('agt_simultaneous', 'gck_second'),
-      persistControlKey('agt_simultaneous', 'gck_final'),
-    ]);
-    expect(keychain.get('gui_control:agt_simultaneous')).toBe('gck_final');
+    expect(invoke.mock.calls.some(([command]) => String(command).startsWith('secret_'))).toBe(
+      false,
+    );
   });
 
-  it('makes explicit clear win over an already-started save', async () => {
-    let releaseSave: (() => void) | undefined;
+  it('makes an old-generation delete unable to remove its successor', async () => {
+    nativeVault.set('agt_reused\u000011', 'gck_old');
+    nativeVault.set('agt_reused\u000012', 'gck_new');
+
+    await clearPersistedControlKey('agt_reused', 11);
+
+    await expect(loadProtectedControlKey('agt_reused', 11)).resolves.toBe('');
+    await expect(loadProtectedControlKey('agt_reused', 12)).resolves.toBe('gck_new');
+  });
+
+  it('serializes same-generation operations and recovers after a failed IPC turn', async () => {
+    nativeVault.set('agt_ordered\u00003', 'gck_ordered');
+    let releaseLoad: (() => void) | undefined;
     invoke.mockImplementationOnce(
-      (command: string, args: { key: string; value?: string }): Promise<unknown> => {
-        expect(command).toBe('secret_save');
-        return new Promise<void>((resolve) => {
-          releaseSave = () => {
-            keychain.set(args.key, args.value ?? '');
-            resolve();
-          };
-        });
-      },
+      (command: string, args: NativeArgs): Promise<unknown> =>
+        new Promise((resolve) => {
+          expect(command).toBe('simulator_control_key_load');
+          releaseLoad = () => resolve(nativeVault.get(identity(args)) ?? null);
+        }),
     );
 
-    const save = persistControlKey('agt_end_race', 'gck_racing');
-    await vi.waitFor(() => expect(releaseSave).toBeTypeOf('function'));
-    const clear = clearPersistedControlKey('agt_end_race');
-    releaseSave?.();
-    await Promise.all([save, clear]);
+    const load = loadProtectedControlKey('agt_ordered', 3);
+    await vi.waitFor(() => expect(releaseLoad).toBeTypeOf('function'));
+    const clear = clearPersistedControlKey('agt_ordered', 3);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    releaseLoad?.();
+    await expect(load).resolves.toBe('gck_ordered');
+    await clear;
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+      'simulator_control_key_load',
+      'simulator_control_key_delete',
+    ]);
 
-    expect(keychain.has('gui_control:agt_end_race')).toBe(false);
-    expect(invoke.mock.calls.map(([command]) => command)).toEqual(['secret_save', 'secret_delete']);
+    invoke.mockRejectedValueOnce(new Error('native unavailable'));
+    await expect(loadProtectedControlKey('agt_ordered', 3)).rejects.toThrow('native unavailable');
+    nativeVault.set('agt_ordered\u00003', 'gck_recovered');
+    await expect(loadProtectedControlKey('agt_ordered', 3)).resolves.toBe('gck_recovered');
   });
 
-  it('purges every legacy value but migrates only the active session', async () => {
+  it('fails closed after a native process restart', async () => {
+    nativeVault.set('agt_restart\u00005', 'gck_process_only');
+    await expect(loadProtectedControlKey('agt_restart', 5)).resolves.toBe('gck_process_only');
+
+    nativeVault.clear();
+    await expect(loadProtectedControlKey('agt_restart', 5)).resolves.toBe('');
+  });
+
+  it('scrubs every legacy plaintext entry without reading or importing its value', () => {
     storage.setItem('ds-gck-agt_first', 'gck_first');
-    storage.setItem('ds-gck-agt_second', 'gck_second');
     storage.setItem('ds-gck-../../invalid', 'gck_invalid');
     storage.setItem('unrelated-preference', 'keep');
 
-    const legacy = await migrateLegacyControlKeys('agt_second');
+    scrubLegacyControlKeys();
 
-    expect(legacy).toEqual(
-      new Map([
-        ['agt_first', 'gck_first'],
-        ['agt_second', 'gck_second'],
-      ]),
+    expect([...storage.values.entries()]).toEqual([['unrelated-preference', 'keep']]);
+    expect(storage.reads).toEqual([]);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsafe identities without native IPC', async () => {
+    await expect(loadProtectedControlKey('../../escape', 1)).resolves.toBe('');
+    await expect(loadProtectedControlKey('agt_safe', 0)).resolves.toBe('');
+    await expect(loadProtectedControlKey('agt_safe', Number.MAX_SAFE_INTEGER + 1)).resolves.toBe(
+      '',
     );
-    expect(keychain.has('gui_control:agt_first')).toBe(false);
-    expect(keychain.get('gui_control:agt_second')).toBe('gck_second');
-    expect([...storage.values.keys()]).toEqual(['unrelated-preference']);
-  });
-
-  it('prefers an existing protected value over stale legacy plaintext', async () => {
-    keychain.set('gui_control:agt_same', 'gck_current');
-    storage.setItem('ds-gck-agt_same', 'gck_stale');
-
-    await migrateLegacyControlKeys('agt_same');
-    await expect(loadProtectedControlKey('agt_same')).resolves.toBe('gck_current');
-
-    expect(keychain.get('gui_control:agt_same')).toBe('gck_current');
-    expect(storage.getItem('ds-gck-agt_same')).toBeNull();
-    expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(1);
-  });
-
-  it('a sessionless upgrade purges historical plaintext without creating stale Keychain entries', async () => {
-    storage.setItem('ds-gck-agt_expired_1', 'gck_expired_1');
-    storage.setItem('ds-gck-agt_expired_2', 'gck_expired_2');
-
-    const legacy = await migrateLegacyControlKeys('');
-
-    expect(legacy.size).toBe(2);
-    expect(storage.length).toBe(0);
-    expect(keychain.size).toBe(0);
+    await clearPersistedControlKey('agt_safe', -1);
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it('purges plaintext while Keychain is locked and returns only an in-memory launch fallback', async () => {
-    storage.setItem('ds-gck-agt_locked', 'gck_memory_only');
-    credentialStoreLocked = true;
-
-    const legacy = await migrateLegacyControlKeys('agt_locked');
-    await expect(loadProtectedControlKey('agt_locked')).rejects.toThrow('credential store locked');
-
-    expect(legacy.get('agt_locked')).toBe('gck_memory_only');
-    expect(storage.getItem('ds-gck-agt_locked')).toBeNull();
-    expect(keychain.size).toBe(0);
-    expect(invoke.mock.calls.filter(([command]) => command === 'secret_load')).toHaveLength(1);
-  });
-
-  it('deletes protected and stale legacy copies on explicit session end', async () => {
-    keychain.set('gui_control:agt_end', 'gck_end');
-    storage.setItem('ds-gck-agt_end', 'gck_stale');
-
-    await clearPersistedControlKey('agt_end');
-
-    expect(keychain.has('gui_control:agt_end')).toBe(false);
-    expect(storage.getItem('ds-gck-agt_end')).toBeNull();
-  });
-
-  it('rejects unsafe ids without invoking the credential store and scrubs all secret fields', async () => {
-    await persistControlKey('../../escape', 'gck_secret');
-    await clearPersistedControlKey('../../escape');
-    await expect(loadProtectedControlKey('../../escape')).resolves.toBe('');
-    expect(invoke).not.toHaveBeenCalled();
-
-    const safe = new URLSearchParams(safeSimulatorSearch('agt_safe'));
+  it('retains only safe non-secret routing and generation fields', () => {
+    const safe = new URLSearchParams(safeSimulatorSearch('agt_safe', 42));
     expect(safe.get('window')).toBe('simulator');
     expect(safe.get('session')).toBe('agt_safe');
+    expect(safe.get('cg')).toBe('42');
     expect(safe.has('token')).toBe(false);
     expect(safe.has('ck')).toBe(false);
+    expect(safe.has('cke')).toBe(false);
+
+    const unavailableNative = new URLSearchParams(safeSimulatorSearch('../../escape', 0));
+    expect(unavailableNative.toString()).toBe('window=simulator&cg=0');
+    const inApp = new URLSearchParams(safeSimulatorSearch('../../escape', null));
+    expect(inApp.toString()).toBe('window=simulator');
   });
 });

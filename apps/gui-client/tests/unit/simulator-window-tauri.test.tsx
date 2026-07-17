@@ -89,16 +89,20 @@ vi.mock('@tauri-apps/api/webviewWindow.js', () => ({
     destroy,
   }),
 }));
+let dsSessionListener: ((event: { payload: string }) => void) | null = null;
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: () => Promise.resolve(() => {}),
+  listen: (name: string, listener: (event: { payload: string }) => void) => {
+    if (name === 'ds-session') dsSessionListener = listener;
+    return Promise.resolve(() => {});
+  },
 }));
 
-const { SimulatorWindow, handleSimulatorCloseRequest } =
+const { SimulatorWindow, controlAuthBoundaryForQuery, handleSimulatorCloseRequest } =
   await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
-function renderSim(): void {
-  render(
+function renderSim(): ReturnType<typeof render> {
+  return render(
     <RecordingsProvider>
       <SimulatorWindow />
     </RecordingsProvider>,
@@ -127,6 +131,7 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
       key: (index: number): string | null => [...localStore.keys()][index] ?? null,
     });
     sessionMode = 'manual';
+    dsSessionListener = null;
     // Default: control fetch succeeds → CONFIRMED mode (seeded from sessionMode).
     getAgentSession.mockReset();
     getAgentSession.mockImplementation(() =>
@@ -171,24 +176,265 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     });
   });
 
-  it('scrubs the LiveKit/control secrets and persists the control key only in Keychain', async () => {
+  it('loads the exact native generation while exposing no control key to the WebView', async () => {
+    invoke.mockImplementation((command: string, args?: unknown) => {
+      if (command === 'simulator_control_key_load') {
+        expect(args).toEqual({ sessionId: 'agt_key', generation: 7 });
+        return Promise.resolve('gck_secret');
+      }
+      return Promise.resolve(undefined);
+    });
     window.history.pushState(
       {},
       '',
-      '/?window=simulator&ws=wss://lk&token=livekit-secret&session=agt_key&ck=gck_secret',
+      '/?window=simulator&ws=wss://lk&token=livekit-secret&session=agt_key&cg=7',
     );
     renderSim();
 
-    expect(window.location.search).toBe('?window=simulator&session=agt_key');
+    expect(window.location.search).toBe('?window=simulator&session=agt_key&cg=7');
     expect(window.location.href).not.toContain('livekit-secret');
     expect(window.location.href).not.toContain('gck_secret');
     await waitFor(() => {
-      expect(invokeArgs('secret_save')).toEqual({
-        key: 'gui_control:agt_key',
-        value: 'gck_secret',
+      expect(invokeArgs('simulator_control_key_load')).toEqual({
+        sessionId: 'agt_key',
+        generation: 7,
+      });
+      expect(getAgentSession).toHaveBeenCalledWith('agt_key', { controlKey: 'gck_secret' });
+    });
+    expect(invoke.mock.calls.some(([command]) => String(command).startsWith('secret_'))).toBe(
+      false,
+    );
+  });
+
+  it('keeps a malformed native generation fail-closed instead of using account auth', async () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=livekit-secret&session=agt_bad&cg=not-a-number',
+    );
+    const firstMount = renderSim();
+
+    await waitFor(() => {
+      expect(getAgentSession).toHaveBeenCalledWith('agt_bad', { controlKey: null });
+    });
+    expect(invoke.mock.calls.some(([command]) => command === 'simulator_control_key_load')).toBe(
+      false,
+    );
+    expect(window.location.search).toBe('?window=simulator&session=agt_bad&cg=0');
+
+    // The scrubbed URL itself remains fail-closed across a WebView reload. If
+    // cg=0 were removed, infoFromQuery would reinterpret this as the deliberate
+    // in-app path and could read the account credential.
+    firstMount.unmount();
+    getAgentSession.mockClear();
+    renderSim();
+    await waitFor(() => {
+      expect(getAgentSession).toHaveBeenCalledWith('agt_bad', { controlKey: null });
+    });
+    expect(getAgentSession.mock.calls.some(([, auth]) => auth === null)).toBe(false);
+  });
+
+  it('keeps a native marker with no accepted session fail-closed', async () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&cg=0');
+    renderSim();
+
+    await waitFor(() => {
+      expect(window.location.search).toBe('?window=simulator&cg=0');
+    });
+    expect(controlAuthBoundaryForQuery('', 0, '')).toEqual({
+      auth: { controlKey: null },
+      needsNativeLoad: false,
+    });
+    expect(controlAuthBoundaryForQuery('', null, '')).toEqual({
+      auth: null,
+      needsNativeLoad: false,
+    });
+    expect(getAgentSession).not.toHaveBeenCalled();
+    expect(invoke.mock.calls.some(([command]) => command === 'simulator_control_key_load')).toBe(
+      false,
+    );
+  });
+
+  it('never exposes session A native auth while session B native auth is loading', async () => {
+    let releaseB: (() => void) | undefined;
+    invoke.mockImplementation((command: string, args?: unknown) => {
+      if (command !== 'simulator_control_key_load') return Promise.resolve(undefined);
+      const generation = (args as { generation?: number } | undefined)?.generation;
+      if (generation === 1) return Promise.resolve('gck_session_a');
+      if (generation === 2) {
+        return new Promise<string>((resolve) => {
+          releaseB = () => resolve('gck_session_b');
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=a-token&session=agt_a&cg=1',
+    );
+    renderSim();
+    await waitFor(() => {
+      expect(getAgentSession).toHaveBeenCalledWith('agt_a', { controlKey: 'gck_session_a' });
+      expect(dsSessionListener).not.toBeNull();
+    });
+
+    dsSessionListener?.({
+      payload: btoa('?window=simulator&ws=wss://lk&token=b-token&session=agt_b&cg=2'),
+    });
+    await waitFor(() => {
+      expect(releaseB).toBeTypeOf('function');
+      expect(getAgentSession.mock.calls.some(([id]) => id === 'agt_b')).toBe(true);
+    });
+    const bLoadingAuth = getAgentSession.mock.calls
+      .filter(([id]) => id === 'agt_b')
+      .map(([, auth]) => auth);
+    expect(bLoadingAuth.some((auth) => auth === null)).toBe(false);
+    expect(
+      bLoadingAuth.some(
+        (auth) => (auth as { controlKey?: unknown } | null)?.controlKey === 'gck_session_a',
+      ),
+    ).toBe(false);
+    expect(
+      bLoadingAuth.some((auth) => (auth as { controlKey?: unknown } | null)?.controlKey === null),
+    ).toBe(true);
+
+    releaseB?.();
+    await waitFor(() => {
+      expect(getAgentSession).toHaveBeenCalledWith('agt_b', { controlKey: 'gck_session_b' });
+    });
+  });
+
+  it('never falls back to account auth when an in-app session switches to native auth', async () => {
+    let releaseNative: (() => void) | undefined;
+    invoke.mockImplementation((command: string) => {
+      if (command === 'simulator_control_key_load') {
+        return new Promise<string>((resolve) => {
+          releaseNative = () => resolve('gck_native_b');
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=a-token&session=agt_account',
+    );
+    renderSim();
+    await waitFor(() => {
+      expect(getAgentSession).toHaveBeenCalledWith('agt_account', null);
+      expect(dsSessionListener).not.toBeNull();
+    });
+
+    dsSessionListener?.({
+      payload: btoa('?window=simulator&ws=wss://lk&token=b-token&session=agt_native&cg=8'),
+    });
+    await waitFor(() => {
+      expect(releaseNative).toBeTypeOf('function');
+      expect(getAgentSession.mock.calls.some(([id]) => id === 'agt_native')).toBe(true);
+    });
+    const loadingCalls = getAgentSession.mock.calls.filter(([id]) => id === 'agt_native');
+    expect(loadingCalls.some(([, auth]) => auth === null)).toBe(false);
+    expect(
+      loadingCalls.some(
+        ([, auth]) => (auth as { controlKey?: unknown } | null)?.controlKey === null,
+      ),
+    ).toBe(true);
+
+    releaseNative?.();
+    await waitFor(() => {
+      expect(getAgentSession).toHaveBeenCalledWith('agt_native', { controlKey: 'gck_native_b' });
+    });
+  });
+
+  it('ignores a retired same-session generation load after its successor binds', async () => {
+    let releaseOld: (() => void) | undefined;
+    invoke.mockImplementation((command: string, args?: unknown) => {
+      if (command !== 'simulator_control_key_load') return Promise.resolve(undefined);
+      const generation = (args as { generation?: number } | undefined)?.generation;
+      if (generation === 1) {
+        return new Promise<string>((resolve) => {
+          releaseOld = () => resolve('gck_retired');
+        });
+      }
+      if (generation === 2) return Promise.resolve('gck_successor');
+      return Promise.resolve(undefined);
+    });
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=old-token&session=agt_same&cg=1',
+    );
+    renderSim();
+    await waitFor(() => {
+      expect(releaseOld).toBeTypeOf('function');
+      expect(dsSessionListener).not.toBeNull();
+    });
+
+    dsSessionListener?.({
+      payload: btoa('?window=simulator&ws=wss://lk&token=new-token&session=agt_same&cg=2'),
+    });
+    await waitFor(() => {
+      expect(getAgentSession).toHaveBeenCalledWith('agt_same', { controlKey: 'gck_successor' });
+    });
+    releaseOld?.();
+    await Promise.resolve();
+
+    expect(
+      getAgentSession.mock.calls.some(([, auth]) =>
+        Object.is((auth as { controlKey?: unknown } | null)?.controlKey, 'gck_retired'),
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps same-session generation 1 inert when it resolves before held generation 2', async () => {
+    let releaseOld: (() => void) | undefined;
+    let releaseSuccessor: (() => void) | undefined;
+    invoke.mockImplementation((command: string, args?: unknown) => {
+      if (command !== 'simulator_control_key_load') return Promise.resolve(undefined);
+      const generation = (args as { generation?: number } | undefined)?.generation;
+      if (generation === 1) {
+        return new Promise<string>((resolve) => {
+          releaseOld = () => resolve('gck_retired_first');
+        });
+      }
+      if (generation === 2) {
+        return new Promise<string>((resolve) => {
+          releaseSuccessor = () => resolve('gck_successor_held');
+        });
+      }
+      return Promise.resolve(undefined);
+    });
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=old-token&session=agt_reused&cg=1',
+    );
+    renderSim();
+    await waitFor(() => {
+      expect(releaseOld).toBeTypeOf('function');
+      expect(dsSessionListener).not.toBeNull();
+    });
+
+    dsSessionListener?.({
+      payload: btoa('?window=simulator&ws=wss://lk&token=new-token&session=agt_reused&cg=2'),
+    });
+    await waitFor(() => expect(releaseSuccessor).toBeTypeOf('function'));
+    releaseOld?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(
+      getAgentSession.mock.calls.some(
+        ([, auth]) => (auth as { controlKey?: unknown } | null)?.controlKey === 'gck_retired_first',
+      ),
+    ).toBe(false);
+
+    releaseSuccessor?.();
+    await waitFor(() => {
+      expect(getAgentSession).toHaveBeenCalledWith('agt_reused', {
+        controlKey: 'gck_successor_held',
       });
     });
-    expect(getAgentSession).toHaveBeenCalledWith('agt_key', { controlKey: 'gck_secret' });
   });
 
   it('sets the Dock tile with an empty profile name when the session has none (flag only)', async () => {

@@ -12,7 +12,7 @@
 
 import type { LiveKitInfo } from '@driftstack/sdk';
 import type { DriftstackClient } from './client';
-import { mintGuiControlKey } from './agent-session-control';
+import { mintGuiControlKey, type GuiControlCredential } from './agent-session-control';
 
 export interface OpenSimulatorArgs {
   sessionId: string;
@@ -31,13 +31,12 @@ export interface OpenSimulatorArgs {
    *  separate app's macOS Dock tile reflects the session's egress country
    *  (founder 2026-06-18). Omitted/null → no Dock-tile country badge. */
   countryCode?: string | null;
-  /** Per-session gui_control_key (24h TTL) so the SEPARATE Driftstack
+  /** Per-session gui_control_key plus its server-owned expiry so the SEPARATE Driftstack
    *  Simulator app can drive the control endpoints WITHOUT the main
    *  app's keychain (which it can't read). Handed off securely (see
-   *  below); omitted → the simulator falls back to the account API key
-   *  (which it generally can't read, so control degrades). This is NOT
-   *  the account API key. */
-  controlKey?: string;
+   *  below). Omitted means control is unavailable; the account API key is
+   *  never substituted into the simulator handoff. */
+  controlCredential?: GuiControlCredential;
   /** The PUBLIC API base URL (e.g. https://api.driftstack.dev). The SEPARATE
    *  Simulator app has its OWN (often empty) settings store → without this it
    *  falls back to localhost:3000 and every control call (mode / End-session /
@@ -64,7 +63,7 @@ export async function openSimulatorWindow({
   profileName,
   proxyLabel,
   countryCode,
-  controlKey,
+  controlCredential,
   baseUrl,
 }: OpenSimulatorArgs): Promise<OpenSimulatorResult> {
   // Tauri-only — guard so a browser preview doesn't throw on the dynamic import.
@@ -105,16 +104,19 @@ export async function openSimulatorWindow({
     // Session id — lets the simulator window attach recordings to the
     // session (night-arc I Record pill).
     session: sessionId,
-    // Per-session gui_control_key. Rust atomically writes this COMPLETE encoded
-    // query to a 0600 single-use handoff file; argv carries only sessionId. The
-    // Simulator consumes/unlinks the file before applying the internal query.
-    // Base64 is encoding, never process-list protection.
-    ck: controlKey ?? '',
     // PUBLIC API host for the separate app (its store may be empty → would
     // default to localhost:3000 and fail every control call). Non-secret;
     // SimulatorWindow persists it on mount. Empty → the app keeps its own store.
     base: baseUrl ?? '',
   });
+  if (controlCredential !== undefined) {
+    // Per-session gui_control_key + exact API expiry. Rust atomically consumes
+    // both from the complete 0600 single-use handoff, caps the expiry, and
+    // strips them before the WebView sees the internal query. Base64 is
+    // encoding, never process-list protection; argv carries only sessionId.
+    params.set('ck', controlCredential.key);
+    params.set('cke', String(Date.parse(controlCredential.expiresAt)));
+  }
 
   // Launch the SEPARATE "Driftstack Simulator" app (its own Dock icon, founder
   // 2026-06-18) — the ONLY path the simulator opens. The separate app can't read
@@ -171,7 +173,7 @@ export async function openSessionById(args: {
   }
   try {
     const info = await client.agentSessions.livekitToken(sessionId);
-    const controlKey =
+    const controlCredential =
       apiKey !== null && apiKey.length > 0
         ? ((await mintGuiControlKey(baseUrl, apiKey, sessionId)) ?? undefined)
         : undefined;
@@ -179,7 +181,7 @@ export async function openSessionById(args: {
       sessionId,
       info,
       baseUrl,
-      ...(controlKey !== undefined ? { controlKey } : {}),
+      ...(controlCredential !== undefined ? { controlCredential } : {}),
     });
   } catch (err) {
     // A closed/missing session 403s/404s on the token mint; any other failure

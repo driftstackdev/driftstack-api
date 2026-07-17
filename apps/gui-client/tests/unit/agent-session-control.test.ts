@@ -360,7 +360,7 @@ describe('agent-session-control transport', () => {
     expect(loadBaseUrl).toHaveBeenCalledOnce();
   });
 
-  it('falls back to the bearer when controlKey is null (in-app window)', async () => {
+  it('uses the bearer only when the entire ControlAuth value is null (deliberate in-app path)', async () => {
     mockFetch.mockResolvedValue(ok({ pair_mode_state: { kind: 'ai-driving' } }));
     await handbackSession('agt_1', 'client-9', null);
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -371,14 +371,41 @@ describe('agent-session-control transport', () => {
     expect(loadBaseUrl).not.toHaveBeenCalled();
   });
 
-  it('mintGuiControlKey GETs /:id/gui-control-key with the bearer + returns the plaintext', async () => {
-    mockFetch.mockResolvedValue(ok({ gui_control_key: 'gck_minted', minted: true }));
-    const key = await mintGuiControlKey('https://api.test', 'ds_test', 'agt_7');
-    expect(key).toBe('gck_minted');
+  it.each([{ controlKey: null }, { controlKey: '' }])(
+    'a non-null missing control credential fails closed without reading or sending the account key: %j',
+    async (auth) => {
+      await expect(getAgentSession('agt_1', auth)).rejects.toMatchObject({
+        kind: 'auth_missing',
+        status: 0,
+      });
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(loadSettings).not.toHaveBeenCalled();
+      expect(loadBaseUrl).not.toHaveBeenCalled();
+    },
+  );
+
+  it('mintGuiControlKey GETs /:id/gui-control-key and preserves the strict key + future API expiry', async () => {
+    const expiresAt = '2099-07-17T12:34:56.789Z';
+    const key = `gck_${'a'.repeat(32)}`;
+    mockFetch.mockResolvedValue(ok({ gui_control_key: key, expires_at: expiresAt, minted: true }));
+    const credential = await mintGuiControlKey('https://api.test', 'ds_test', 'agt_7');
+    expect(credential).toEqual({ key, expiresAt });
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://api.test/v1/agent-sessions/agt_7/gui-control-key');
     expect(init.method).toBe('GET');
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer ds_test');
+  });
+
+  it.each([
+    { gui_control_key: `gck_${'a'.repeat(32)}` },
+    { gui_control_key: 'gck_short', expires_at: '2099-07-17T12:34:56.789Z' },
+    { gui_control_key: `gck_${'0'.repeat(32)}`, expires_at: '2099-07-17T12:34:56.789Z' },
+    { gui_control_key: `gck_${'a'.repeat(32)}`, expires_at: 'not-a-date' },
+    { gui_control_key: `gck_${'a'.repeat(32)}`, expires_at: '2000-01-01T00:00:00.000Z' },
+    { gui_control_key: `gck_${'a'.repeat(32)}`, expires_at: '2099-07-17T12:34:56Z' },
+  ])('mintGuiControlKey rejects malformed or non-future credentials: %j', async (body) => {
+    mockFetch.mockResolvedValue(ok(body));
+    await expect(mintGuiControlKey('https://api.test', 'ds_test', 'agt_7')).resolves.toBeNull();
   });
 
   it('mintGuiControlKey returns null (never throws) on a non-2xx so the launch degrades gracefully', async () => {

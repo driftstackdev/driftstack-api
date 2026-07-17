@@ -41,7 +41,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('build.rs'))).toBe(true);
   });
 
-  it('Cargo.toml: driftstack-gui crate 0.0.1 MIT non-publish + lib triplet (staticlib/cdylib/rlib) + Tauri 2.0 + 4 plugins (shell + store + fs + V-243 updater + V-328 deep-link) + V-241 T3 #1 keyring-rs v3 (apple-native + windows-native + sync-secret-service) + custom-protocol default feature pinned', () => {
+  it('Cargo.toml: driftstack-gui crate 0.0.1 MIT non-publish + lib triplet (staticlib/cdylib/rlib) + Tauri 2.0 + plugins + zeroize process-memory control keys + V-241 keyring + custom-protocol pinned', () => {
     const body = read(T('Cargo.toml'));
     expect(body).toMatch(/^\[package\]$/m);
     expect(body).toMatch(/^name = "driftstack-gui"$/m);
@@ -76,6 +76,11 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/^tauri-plugin-deep-link = "2\.0"$/m);
     expect(body).toMatch(/^serde = \{ version = "1\.0", features = \["derive"\] \}$/m);
     expect(body).toMatch(/^serde_json = "1\.0"$/m);
+    expect(body).toMatch(
+      /Short-lived per-session simulator control credentials never need durable OS/,
+    );
+    expect(body).toMatch(/bounded process-memory copies zeroized on/);
+    expect(body).toMatch(/^zeroize = "1"$/m);
     expect(body).toMatch(/V-241 T3 #1 \(D-2026-05-06-01\): keyring-rs for cross-platform OS/);
     expect(body).toMatch(
       /^keyring = \{ version = "3", features = \["apple-native", "windows-native", "sync-secret-service"\] \}$/m,
@@ -111,7 +116,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('src/main.rs'))).toBe(true);
   });
 
-  it('src/lib.rs: V-241 T3 #1 keyring crate-doc framing + KEYRING_SERVICE=dev.driftstack.gui + KEYRING_USER=default + V-243 updater plugin + V-328 deep-link plugin + 4 commands (ping + secret_save + secret_load + secret_delete) + tests (keyring_user_prefix_is_stable + keyring_service_matches_tauri_bundle_id) pinned', () => {
+  it('src/lib.rs: durable API/proxy Keychain and bounded Simulator process-memory credentials remain separate', () => {
     const body = read(T('src/lib.rs'));
     expect(body).toMatch(/^\/\/! Driftstack GUI — Tauri backend library\.$/m);
     expect(body).toMatch(/^\/\/! {3}\* `ping` — health probe\.$/m);
@@ -121,7 +126,14 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/^\/\/! {5}cross-platform OS-keychain access for the API key\./m);
     expect(body).toMatch(/^\/\/! {5}uses macOS Keychain, Windows Credential Manager, or$/m);
     expect(body).toMatch(/^\/\/! {5}Linux Secret Service \/ KWallet via the `keyring` crate\.$/m);
+    expect(body).toMatch(
+      /^\/\/! {3}\* `simulator_control_key_\*` — bounded, zeroizing, process-memory-only$/m,
+    );
+    expect(body).toMatch(
+      /^\/\/! {5}storage for short-lived per-session Simulator control credentials\.$/m,
+    );
     expect(body).toMatch(/^use keyring::Entry;$/m);
+    expect(body).toMatch(/^use zeroize::\{Zeroize, Zeroizing\};$/m);
     expect(body).toMatch(/^const KEYRING_SERVICE: &str = "dev\.driftstack\.gui";$/m);
     expect(body).toMatch(/^const KEYRING_USER: &str = "default";$/m);
     expect(body).toMatch(/^#\[cfg_attr\(mobile, tauri::mobile_entry_point\)\]$/m);
@@ -141,27 +153,30 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/^\s+secret_save,$/m);
     expect(body).toMatch(/^\s+secret_load,$/m);
     expect(body).toMatch(/^\s+secret_delete,$/m);
+    expect(body).toMatch(/^\s+simulator_control_key_load,$/m);
+    expect(body).toMatch(/^\s+simulator_control_key_delete,$/m);
+    expect(body).not.toMatch(/^\s+simulator_control_key_store,$/m);
     expect(body).toMatch(/\.expect\("error while running tauri application"\);/);
     expect(body).toMatch(/^#\[tauri::command\]$/m);
     expect(body).toMatch(/^fn ping\(\) -> &'static str \{$/m);
     expect(body).toMatch(/^\s+"pong"$/m);
-    expect(body).toMatch(/^fn secret_save\($/m);
+    expect(body).toMatch(/^fn secret_save\(/m);
     expect(body).toMatch(
-      /fn secret_save\([\s\S]*?window: tauri::WebviewWindow,[\s\S]*?main_session: tauri::State<'_, MainSession>,[\s\S]*?ensure_secret_command\(&window, &main_session, &key\)\?;/,
+      /fn secret_save\([\s\S]*?window: tauri::WebviewWindow,[\s\S]*?ensure_secret_command\(&window, &key\)\?;/,
     );
     expect(body).toMatch(/let user = format!\("\{KEYRING_USER\}:\{key\}"\);/);
     expect(body).toMatch(
       /let entry = Entry::new\(KEYRING_SERVICE, &user\)\.map_err\(\|e\| e\.to_string\(\)\)\?;/,
     );
     expect(body).toMatch(/entry\.set_password\(&value\)\.map_err\(\|e\| e\.to_string\(\)\)\?;/);
-    expect(body).toMatch(/^fn secret_load\($/m);
+    expect(body).toMatch(/^fn secret_load\(/m);
     expect(body).toMatch(
-      /fn secret_load\([\s\S]*?window: tauri::WebviewWindow,[\s\S]*?main_session: tauri::State<'_, MainSession>,[\s\S]*?ensure_secret_command\(&window, &main_session, &key\)\?;/,
+      /fn secret_load\([\s\S]*?window: tauri::WebviewWindow,[\s\S]*?ensure_secret_command\(&window, &key\)\?;/,
     );
     expect(body).toMatch(/Err\(keyring::Error::NoEntry\) => Ok\(None\),/);
-    expect(body).toMatch(/^fn secret_delete\($/m);
+    expect(body).toMatch(/^fn secret_delete\(/m);
     expect(body).toMatch(
-      /fn secret_delete\([\s\S]*?window: tauri::WebviewWindow,[\s\S]*?main_session: tauri::State<'_, MainSession>,[\s\S]*?ensure_secret_command\(&window, &main_session, &key\)\?;/,
+      /fn secret_delete\([\s\S]*?window: tauri::WebviewWindow,[\s\S]*?ensure_secret_command\(&window, &key\)\?;/,
     );
     expect(body).toMatch(/Err\(keyring::Error::NoEntry\) => Ok\(\(\)\),/);
     expect(body).toMatch(/^#\[cfg\(test\)\]$/m);
@@ -173,7 +188,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('src/lib.rs'))).toBe(true);
   });
 
-  it('CRITICAL locally registered commands enforce bundle/window origin and per-session Keychain isolation', () => {
+  it('CRITICAL locally registered commands enforce main-Keychain vs exact Simulator process-memory origins', () => {
     const body = read(T('src/lib.rs'));
     const commandSource = (name: string): string => {
       const start = body.search(new RegExp(`(?:async )?fn ${name}\\(`));
@@ -187,17 +202,39 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(
       /fn is_main_gui_command_caller\([\s\S]*?app_identifier == MAIN_GUI_IDENTIFIER && window_label == "main"/,
     );
+    expect(body).toMatch(/fn is_valid_main_gui_secret_key\([\s\S]*?key == "api_key"/);
+    expect(body).toMatch(/fn is_valid_main_gui_secret_key\([\s\S]*?key == "proxy_vault_key"/);
+    expect(body).toMatch(/fn is_valid_main_gui_secret_key\([\s\S]*?strip_prefix\("api_key:"\)/);
     expect(body).toMatch(
-      /fn secret_command_caller_allowed\([\s\S]*?strip_prefix\("gui_control:"\)[\s\S]*?caller_session == Some\(requested_session\)/,
+      /fn is_valid_main_gui_secret_key\([\s\S]*?strip_prefix\("proxy_secret:"\)/,
+    );
+    const mainSecretValidator = body.slice(
+      body.indexOf('fn is_valid_main_gui_secret_key('),
+      body.indexOf('\n}\n', body.indexOf('fn is_valid_main_gui_secret_key(')) + 2,
+    );
+    expect(mainSecretValidator).not.toContain('gui_control');
+    expect(body).toMatch(
+      /fn secret_command_caller_allowed\([\s\S]*?is_main_gui_command_caller\(app_identifier, window_label\)[\s\S]*?is_valid_main_gui_secret_key\(key\)/,
     );
     expect(body).toMatch(
-      /fn ensure_secret_command\([\s\S]*?active_main_session\.as_deref\(\),[\s\S]*?Err\(COMMAND_ACCESS_DENIED\.to_string\(\)\)/,
+      /fn ensure_secret_command\([\s\S]*?secret_command_caller_allowed\(app_identifier, window\.label\(\), key\)[\s\S]*?Err\(COMMAND_ACCESS_DENIED\.to_string\(\)\)/,
     );
     for (const command of ['secret_save', 'secret_load', 'secret_delete']) {
       const source = commandSource(command);
       expect(source).toMatch(/window: tauri::WebviewWindow/);
+      expect(source).not.toMatch(/MainSession/);
+      expect(source).toMatch(/ensure_secret_command\(&window, &key\)\?;/);
+    }
+    for (const command of ['simulator_control_key_load', 'simulator_control_key_delete']) {
+      const source = commandSource(command);
+      expect(source).toMatch(/window: tauri::WebviewWindow/);
       expect(source).toMatch(/main_session: tauri::State<'_, MainSession>/);
-      expect(source).toMatch(/ensure_secret_command\(&window, &main_session, &key\)\?;/);
+      expect(source).toMatch(/control_keys: tauri::State<'_, SimulatorControlKeyStore>/);
+      expect(source).toMatch(/session_id: String/);
+      expect(source).toMatch(/generation: u64/);
+      expect(source).toMatch(
+        /ensure_simulator_control_key_command\(&window, &main_session, &session_id\)\?;/,
+      );
     }
     for (const command of ['launch_simulator', 'proxy_test', 'endpoint_resolve']) {
       const source = commandSource(command);
@@ -212,8 +249,155 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
       expect(source).toMatch(/window: tauri::WebviewWindow/);
       expect(source).toMatch(/ensure_simulator_command\(&window\)\?;/);
     }
-    expect(body).toMatch(/fn simulator_secret_access_is_exactly_its_active_control_key\(\)/);
+    expect(body).toMatch(/fn simulator_process_store_access_is_exactly_its_active_session\(\)/);
     expect(body).toMatch(/fn native_command_origins_separate_main_gui_and_simulator_windows\(\)/);
+  });
+
+  it('CRITICAL Simulator control keys are native-first, generation-bound, bounded, expiring, and zeroizing', () => {
+    const body = read(T('src/lib.rs'));
+    const production = body.slice(0, body.indexOf('\n#[cfg(test)]'));
+    const source = (startNeedle: string, endNeedle: string): string => {
+      const start = production.indexOf(startNeedle);
+      expect(start).toBeGreaterThanOrEqual(0);
+      const end = production.indexOf(endNeedle, start + startNeedle.length);
+      expect(end).toBeGreaterThan(start);
+      return production.slice(start, end);
+    };
+
+    expect(body).toMatch(/^const MAX_SIMULATOR_CONTROL_KEYS: usize = 32;$/m);
+    expect(body).toMatch(
+      /^const SIMULATOR_CONTROL_KEY_TTL: Duration = Duration::from_secs\(24 \* 60 \* 60\);$/m,
+    );
+    expect(body).toMatch(/^const MAX_WEBVIEW_SAFE_GENERATION: u64 = 9_007_199_254_740_991;$/m);
+    expect(body).toMatch(
+      /struct SimulatorControlKeyEntry \{[\s\S]*?window_label: String,[\s\S]*?session_id: String,[\s\S]*?generation: u64,[\s\S]*?value: Zeroizing<String>,[\s\S]*?expires_at: Instant,/,
+    );
+    expect(body).toMatch(/\.manage\(SimulatorControlKeyStore::default\(\)\)/);
+    expect(body).toMatch(
+      /struct SimulatorControlKeyShared \{[\s\S]*?state: std::sync::Mutex<SimulatorControlKeyState>,[\s\S]*?changed: std::sync::Condvar,/,
+    );
+    expect(body).toMatch(
+      /struct SimulatorControlKeyStore \{[\s\S]*?shared: std::sync::Arc<SimulatorControlKeyShared>,[\s\S]*?expiry_reaper: Option<std::thread::JoinHandle<\(\)>>,/,
+    );
+    expect(body).toMatch(
+      /impl Default for SimulatorControlKeyStore \{[\s\S]*?spawn\(move \|\| Self::run_expiry_reaper\(reaper_shared\)\)/,
+    );
+    expect(body).toMatch(
+      /impl Drop for SimulatorControlKeyStore \{[\s\S]*?state\.shutting_down = true;[\s\S]*?changed\.notify_all\(\);[\s\S]*?reaper\.join\(\)/,
+    );
+
+    const store = source(
+      'impl SimulatorControlKeyStore {',
+      '\n}\n\nstruct PreparedSimulatorPayload',
+    );
+    expect(store).toMatch(/fn wipe_entry\([\s\S]*?entry\.value\.zeroize\(\);/);
+    expect(store).toMatch(
+      /fn run_expiry_reaper\([\s\S]*?purge_expired\(&mut state\.entries, Instant::now\(\)\)[\s\S]*?map\(\|entry\| entry\.expires_at\)\.min\(\)[\s\S]*?wait_timeout\(state, wait\)/,
+    );
+    expect(store).toMatch(
+      /fn purge_expired\([\s\S]*?entries\[index\]\.expires_at <= now[\s\S]*?Self::wipe_entry\(entry\)/,
+    );
+    expect(store).toMatch(
+      /fn store_at\([\s\S]*?entry\.window_label == window_label[\s\S]*?Self::wipe_entry\(entry\)[\s\S]*?state\.next_generation = state[\s\S]*?\.checked_add\(1\)[\s\S]*?generation exhausted/,
+    );
+    // Wrap the incoming allocation before validation/locking so every early
+    // return zeroizes it, then move that Zeroizing value into the entry.
+    expect(store).toMatch(
+      /let value = Zeroizing::new\(value\);[\s\S]*?SimulatorControlKeyEntry \{[\s\S]*?\n\s*value,/,
+    );
+    expect(store).toMatch(/expires_at: now \+ ttl\.min\(SIMULATOR_CONTROL_KEY_TTL\)/);
+    expect(store).toMatch(
+      /while state\.entries\.len\(\) > MAX_SIMULATOR_CONTROL_KEYS \{[\s\S]*?pop_front\(\)[\s\S]*?Self::wipe_entry\(entry\)/,
+    );
+    expect(store).toMatch(
+      /fn load_at\([\s\S]*?entry\.window_label == window_label[\s\S]*?entry\.session_id == session_id[\s\S]*?entry\.generation == generation/,
+    );
+    expect(store).toMatch(
+      /\/\/ Successful reads refresh only LRU order, never the original expiry\.[\s\S]*?state\.entries\.push_back\(entry\)/,
+    );
+    expect(store).toMatch(
+      /fn delete\([\s\S]*?entry\.window_label == window_label[\s\S]*?entry\.session_id == session_id[\s\S]*?entry\.generation == generation[\s\S]*?Self::wipe_entry\(entry\)/,
+    );
+
+    const prepare = source(
+      'fn prepare_simulator_payload_at(',
+      '\n}\n\nfn prepare_simulator_payload(',
+    );
+    expect(prepare).toMatch(/"ck" =>/);
+    expect(prepare).toMatch(/"cke" =>/);
+    expect(prepare).toMatch(
+      /"cg" => return Err\("invalid simulator control generation"\.to_string\(\)\)/,
+    );
+    expect(prepare).toMatch(/if handoff_session != Some\(session_label\)/);
+    expect(prepare).toMatch(/if expires_ms <= wall_now_ms/);
+    expect(prepare).toMatch(/control_keys\.store_at\(/);
+    expect(prepare).toMatch(/sanitized\.push\(format!\("cg=\{generation\}"\)\)/);
+    expect(prepare.indexOf('control_keys.store_at(')).toBeLessThan(
+      prepare.indexOf('sanitized.push(format!("cg={generation}"))'),
+    );
+    expect(prepare).toMatch(/simulator credential sanitization failed/);
+    expect(production).not.toMatch(/fn simulator_control_key_store\(/);
+
+    expect(body).toMatch(/fn simulator_control_store_is_process_local_bounded_lru\(\)/);
+    expect(body).toMatch(
+      /fn simulator_control_store_replaces_expires_and_deletes_exact_session\(\)/,
+    );
+    expect(body).toMatch(
+      /fn simulator_control_store_reaps_idle_expiry_without_a_webview_access\(\)/,
+    );
+  });
+
+  it('CRITICAL protected handoff is owner-only transit and never exposes ck/cke to a WebView URL/event', () => {
+    const body = read(T('src/lib.rs'));
+    expect(body).toMatch(
+      /query \(LiveKit JWT \+ session control key\) is atomically written to a 0600[\s\S]*?single-use handoff file/,
+    );
+    expect(body).toMatch(/OpenOptions::new\(\)[\s\S]*?\.create_new\(true\)[\s\S]*?\.mode\(0o600\)/);
+    expect(body).toMatch(/options\.custom_flags\(libc::O_NOFOLLOW\)/);
+    expect(body).toMatch(
+      /\/\/ The open handle remains valid after unlink[\s\S]*?std::fs::remove_file\(&path\)/,
+    );
+    expect(body).toMatch(/metadata\.permissions\(\)\.mode\(\) & 0o077 != 0/);
+    expect(body).toMatch(/remove_sim_payload_if_identity/);
+    expect(body).toMatch(
+      /let identity = sim_payload_identity_or_cleanup\(&path, file\.metadata\(\)\)\?;/,
+    );
+    expect(body).toMatch(/fn sim_payload_metadata_failure_removes_owned_credential_file\(\)/);
+    const takeStart = body.indexOf('fn take_sim_payload(');
+    const takeEnd = body.indexOf('\n}\n\n/// Set the running app', takeStart);
+    expect(takeStart).toBeGreaterThanOrEqual(0);
+    expect(takeEnd).toBeGreaterThan(takeStart);
+    const takePayload = body.slice(takeStart, takeEnd);
+    expect(takePayload).toMatch(
+      /let opened_identity = sim_payload_identity_from_metadata\(&metadata\);[\s\S]*?remove_sim_payload_if_identity\(&path, opened_identity\)/,
+    );
+    expect(body).toMatch(
+      /fn simulator_launch_handoff\([\s\S]*?"--ds-label="[\s\S]*?"--ds-handoff="/,
+    );
+    expect(body).toMatch(
+      /fn simulator_open_args\([\s\S]*?--ds-label=\{session_label\}[\s\S]*?--ds-handoff=\{handoff_id\}/,
+    );
+    expect(body).toMatch(
+      /fn sim_payload_path\(session_label: &str, handoff_id: &str\)[\s\S]*?driftstack-sim-\{session_label\}-\{handoff_id\}\.handoff/,
+    );
+    expect(body).toMatch(
+      /fn write_sim_payload\([\s\S]*?new_sim_handoff_id\(\)[\s\S]*?options\.write\(true\)\.create_new\(true\)/,
+    );
+    expect(body).toMatch(/fn rapid_same_session_handoffs_have_independent_paths_and_consumers\(\)/);
+    expect(body).toMatch(/fn simulator_process_args_contain_only_non_secret_routing_ids\(\)/);
+    const singleInstance = body.slice(
+      body.indexOf('.plugin(tauri_plugin_single_instance::init'),
+      body.indexOf('.plugin(tauri_plugin_shell::init'),
+    );
+    expect(
+      singleInstance.indexOf('if app.config().identifier == "dev.driftstack.simulator"'),
+    ).toBeLessThan(singleInstance.indexOf('take_sim_payload('));
+    expect(body).toMatch(/prepared\.sanitized_b64/);
+    expect(body).toMatch(/prepared\.control_generation/);
+    expect(body).toMatch(/attach_control_key_cleanup\(/);
+    expect(body).toMatch(
+      /matches!\(event, tauri::WindowEvent::Destroyed\)[\s\S]*?SimulatorControlKeyStore[\s\S]*?\.delete\(/,
+    );
   });
 
   it('capabilities/default.json + updater-windows-linux.json: main permissions stay least-privilege and updater install/relaunch is Windows/Linux-only', () => {
@@ -261,10 +445,21 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(updaterCapability.platforms).not.toContain('macOS');
 
     const simulatorCapability = JSON.parse(read(T('capabilities/simulator-app.json'))) as {
+      description: string;
       permissions: Array<string | { identifier: string }>;
     };
     expect(simulatorCapability.permissions).not.toContain('updater:default');
     expect(simulatorCapability.permissions).not.toContain('process:default');
+    expect(simulatorCapability.description).toContain('owner-only 0600 single-use handoff file');
+    expect(simulatorCapability.description).toContain('unique `--ds-handoff` routing arguments');
+    expect(simulatorCapability.description).toContain('Each launch uses a distinct file path');
+    expect(simulatorCapability.description).toContain('bounded process-memory store first');
+    expect(simulatorCapability.description).toContain('only the non-secret `cg` generation');
+    expect(simulatorCapability.description).toContain('simulator_control_key_load');
+    expect(simulatorCapability.description).toContain('simulator_control_key_delete');
+    expect(simulatorCapability.description).toContain(
+      'generic `secret_save` / `secret_load` / `secret_delete` OS-Keychain commands deny the Simulator bundle',
+    );
 
     expect(body).toMatch(/"core:default"/);
     expect(body).toMatch(/"core:window:default"/);

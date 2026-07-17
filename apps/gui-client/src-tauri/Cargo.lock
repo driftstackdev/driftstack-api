@@ -882,6 +882,7 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-updater",
  "ureq",
+ "zeroize",
 ]
 
 [[package]]

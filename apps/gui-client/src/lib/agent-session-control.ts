@@ -27,6 +27,40 @@ import { loadBaseUrl, loadSettings } from './settings';
 
 export type SessionMode = 'ai' | 'manual' | 'pair';
 
+/** Short-lived, session-scoped credential returned by the control-key mint
+ * endpoint. The main GUI may carry this value only to the native simulator
+ * handoff; it is never an account credential or a fallback for one. */
+export interface GuiControlCredential {
+  key: string;
+  expiresAt: string;
+}
+
+const GUI_CONTROL_KEY_PATTERN = /^gck_[a-z2-7]{32}$/;
+const CANONICAL_ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+function guiControlCredentialFrom(body: {
+  gui_control_key?: unknown;
+  expires_at?: unknown;
+}): GuiControlCredential | null {
+  if (
+    typeof body.gui_control_key !== 'string' ||
+    !GUI_CONTROL_KEY_PATTERN.test(body.gui_control_key) ||
+    typeof body.expires_at !== 'string' ||
+    !CANONICAL_ISO_TIMESTAMP_PATTERN.test(body.expires_at)
+  ) {
+    return null;
+  }
+  const expiresAtMs = Date.parse(body.expires_at);
+  if (
+    !Number.isFinite(expiresAtMs) ||
+    new Date(expiresAtMs).toISOString() !== body.expires_at ||
+    expiresAtMs <= Date.now()
+  ) {
+    return null;
+  }
+  return { key: body.gui_control_key, expiresAt: body.expires_at };
+}
+
 export interface AgentSessionCapabilityReport {
   manual_input_available: boolean | null;
   streaming_state: 'provisioning' | 'live' | 'blank' | 'failed' | null;
@@ -43,13 +77,16 @@ export interface AgentSessionErrorEvent {
 
 /** Per-session control credential, threaded from the protected internal query
  *  through SimulatorWindow into each
- *  control call. `null` → use the account API key (in-app window).
+ *  control call. `null` → deliberately use the account API key (main in-app
+ *  caller only). A non-null auth with a null/empty key is fail-closed while a
+ *  native process-memory credential is pending or unavailable; it must never
+ *  fall through to the account key.
  *  `baseUrl` (founder 2026-06-23) — the PUBLIC API host handed off at launch.
  *  The SEPARATE Simulator app's settings store may be empty (→ loadSettings
  *  defaults to localhost:3000), so carrying the host HERE makes every control
  *  call target the right server with NO store-timing race. Omitted (in-app
  *  window) → fall back to the non-secret stored baseUrl. */
-export type ControlAuth = { controlKey: string; baseUrl?: string } | null;
+export type ControlAuth = { controlKey: string | null; baseUrl?: string } | null;
 
 /** The slice of agent-session state the simulator control panel reads. */
 export interface AgentSessionControlState {
@@ -183,15 +220,20 @@ async function authedResponse(
   // whole point — the separate app has no API key.
   let authHeaders: Record<string, string>;
   let rawBase: string;
-  if (auth !== null && auth.controlKey.length > 0) {
+  if (auth !== null) {
+    if (auth.controlKey === null || auth.controlKey.length === 0) {
+      throw new AgentSessionControlError(
+        'Session control credential unavailable',
+        0,
+        'auth_missing',
+      );
+    }
     authHeaders = { 'x-driftstack-gui-control-key': auth.controlKey };
     // The launch payload normally supplies the origin. Restored payloads may
     // omit it, in which case read only settings.json — never the account API
     // key's OS credential entry.
     rawBase =
-      typeof auth.baseUrl === 'string' && auth.baseUrl.length > 0
-        ? auth.baseUrl
-        : await loadBaseUrl();
+      auth.baseUrl !== undefined && auth.baseUrl.length > 0 ? auth.baseUrl : await loadBaseUrl();
   } else {
     // Bearer fallback is the only path that needs the account credential.
     const settings = await loadSettings();
@@ -199,10 +241,7 @@ async function authedResponse(
       throw new AgentSessionControlError('API key not configured', 0, 'auth_missing');
     }
     authHeaders = { Authorization: `Bearer ${settings.apiKey}` };
-    rawBase =
-      auth !== null && typeof auth.baseUrl === 'string' && auth.baseUrl.length > 0
-        ? auth.baseUrl
-        : settings.baseUrl;
+    rawBase = settings.baseUrl;
   }
   // Prefer the base URL handed off WITH the control credential (separate app —
   // its own store may be empty/localhost); fall back to the configured store
@@ -255,13 +294,15 @@ async function authedFetch(path: string, init: RequestInit, auth: ControlAuth): 
  *  Raw fetch with the explicit {baseUrl, apiKey} (the SimulatorWindow
  *  transport above can't be reused — this mint runs in the main app,
  *  not the keychain-less simulator, and is an ACCOUNT-authed call).
- *  Returns the plaintext key, or null on any failure (the caller
- *  degrades to the in-app window / API-key path). */
+ *  The server expiry travels with the key so native storage never invents or
+ *  refreshes its lifetime. Returns null on transport failure or any malformed,
+ *  non-canonical, or already-expired response; callers never substitute the
+ *  account API key into the simulator handoff. */
 export async function mintGuiControlKey(
   baseUrl: string,
   apiKey: string,
   sessionId: string,
-): Promise<string | null> {
+): Promise<GuiControlCredential | null> {
   if (apiKey.length === 0 || sessionId.length === 0) return null;
   try {
     const url = `${baseUrl.replace(/\/+$/, '')}/v1/agent-sessions/${encodeURIComponent(
@@ -275,10 +316,11 @@ export async function mintGuiControlKey(
       await disposeResponseBody(res);
       return null;
     }
-    const body = await readBoundedApiJson<{ gui_control_key?: unknown }>(res);
-    return typeof body.gui_control_key === 'string' && body.gui_control_key.length > 0
-      ? body.gui_control_key
-      : null;
+    const body = await readBoundedApiJson<{
+      gui_control_key?: unknown;
+      expires_at?: unknown;
+    }>(res);
+    return guiControlCredentialFrom(body);
   } catch {
     return null;
   }

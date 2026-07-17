@@ -74,6 +74,8 @@ describe('openSimulatorWindow — session handoff payload', () => {
     expect(q.get('profile')).toBe('Amsterdam Shopper');
     expect(q.get('proxy')).toBe('NL exit · proxy.example:1080');
     expect(q.get('session')).toBe('agt_abc');
+    expect(q.has('ck')).toBe(false);
+    expect(q.has('cke')).toBe(false);
     // The proxy exit country rides the payload → the separate app's Dock tile.
     expect(q.get('cc')).toBe('NL');
   });
@@ -88,12 +90,14 @@ describe('openSimulatorWindow — session handoff payload', () => {
     expect(launchedQuery().get('cc')).toBe('');
   });
 
-  it('hands the control key off once inside the protected launch payload', async () => {
+  it('hands the control key + exact API expiry off once inside the protected launch payload', async () => {
+    const key = `gck_${'a'.repeat(32)}`;
+    const expiresAt = '2099-07-17T12:34:56.789Z';
     await openSimulatorWindow({
       sessionId: 'agt_k',
       info,
       countryCode: 'US',
-      controlKey: 'gck_secret',
+      controlCredential: { key, expiresAt },
     });
     expect(invoke.mock.calls.filter(([command]) => command === 'launch_simulator')).toHaveLength(1);
     expect(invoke.mock.calls.some(([command]) => command.startsWith('sim_key'))).toBe(false);
@@ -101,10 +105,12 @@ describe('openSimulatorWindow — session handoff payload', () => {
     // passes only sessionLabel in argv. The WebView gets the token/key without a
     // second racing handoff.
     const q = launchedQuery();
-    expect(q.get('ck')).toBe('gck_secret');
+    expect(q.get('ck')).toBe(key);
+    expect(q.get('cke')).toBe(String(Date.parse(expiresAt)));
     const launchArgs = invoke.mock.calls.find(
       ([command]) => command === 'launch_simulator',
     )?.[1] as { payload: unknown; sessionLabel: unknown } | undefined;
+    expect(Object.keys(launchArgs ?? {}).sort()).toEqual(['payload', 'sessionLabel']);
     expect(typeof launchArgs?.payload).toBe('string');
     expect(launchArgs?.sessionLabel).toBe('agt_k');
   });
@@ -190,12 +196,15 @@ describe('openSessionById — session-open deep-link reopen', () => {
   });
 
   it('mints a token + opens the simulator for a live session', async () => {
-    // mintGuiControlKey raw-fetches GET …/gui-control-key — stub it to return a key.
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(
-        new Response(JSON.stringify({ gui_control_key: 'gck_dl' }), { status: 200 }),
-      );
+    // mintGuiControlKey raw-fetches GET …/gui-control-key — stub a strict key
+    // and its API-owned future expiry.
+    const key = `gck_${'b'.repeat(32)}`;
+    const expiresAt = '2099-07-17T12:34:56.789Z';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ gui_control_key: key, expires_at: expiresAt }), {
+        status: 200,
+      }),
+    );
     const res = await openSessionById({
       client: fakeClient(() => Promise.resolve(info)),
       baseUrl: 'https://api.driftstack.dev',
@@ -208,7 +217,8 @@ describe('openSessionById — session-open deep-link reopen', () => {
     expect(q.get('ws')).toBe('wss://lk.example');
     expect(q.get('token')).toBe('tok');
     // The minted control key rode the handoff so the separate app can drive control.
-    expect(q.get('ck')).toBe('gck_dl');
+    expect(q.get('ck')).toBe(key);
+    expect(q.get('cke')).toBe(String(Date.parse(expiresAt)));
     // The API host was handed off so control calls hit the real server.
     expect(q.get('base')).toBe('https://api.driftstack.dev');
     fetchSpy.mockRestore();

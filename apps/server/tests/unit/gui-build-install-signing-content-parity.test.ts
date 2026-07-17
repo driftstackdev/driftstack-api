@@ -629,12 +629,46 @@ describe('GUI local signing and install contract', () => {
     }
   });
 
-  it('documents stable signing as the Keychain fix without weakening secret storage', () => {
+  it('documents stable signing and the bounded gui_control process-memory exception without weakening durable secrets', () => {
     const body = read('apps/gui-client/PACKAGING.md');
+    const compact = body.replace(/\s+/g, ' ');
 
     expect(body).toMatch(/^## Local build \+ install without repeated Keychain prompts$/m);
     expect(body).toMatch(
-      /Never\s+work around a prompt by moving API, proxy, or per-session control keys/,
+      /Never work around those prompts by\s+moving an API key, proxy secret, signing key, or password/,
+    );
+    expect(compact).toContain('Short-lived per-session `gui_control` credentials');
+    expect(compact).toContain('owner-only `0600`, single-use handoff file');
+    expect(compact).toContain('ephemeral cross-process transport, not durable storage');
+    expect(compact).toContain('unique non-secret handoff identity and file path');
+    expect(compact).toContain(
+      'an older same-session opener or cleanup cannot consume its successor',
+    );
+    expect(compact).toContain(
+      'stores the credential in Rust process memory before any WebView URL or `ds-session` event is applied',
+    );
+    expect(compact).toContain(
+      'For control authorization, the internal URL/event contains only the non-secret monotonic `cg` generation',
+    );
+    expect(compact).toContain(
+      'the separate LiveKit join token follows its existing in-memory WebView handoff',
+    );
+    expect(compact).toContain('bound to the exact window, session, and generation');
+    expect(compact).toContain('holds at most 32 credentials');
+    expect(compact).toContain('additional 24-hour ceiling');
+    expect(compact).toContain('does not extend expiry on reads');
+    expect(compact).toContain(
+      'zeroizes native values on replacement, expiry, LRU eviction, explicit deletion, window destruction, and process teardown',
+    );
+    expect(compact).toContain('only dedicated native load/delete commands');
+    expect(compact).toContain(
+      "Generic Keychain save/load/delete commands remain restricted to the main GUI's bounded API/proxy namespaces",
+    );
+    expect(compact).toContain('Pre-existing `gui_control:*` Keychain');
+    expect(compact).toContain('neither reads, enumerates, nor deletes them');
+    expect(compact).toContain('Legacy browser entries are scrubbed rather than imported');
+    expect(compact).toContain(
+      'Frontend and API-response strings are managed-language copies and are not claimed to be deterministically zeroized',
     );
     expect(body).toContain("designated requirement is the executable's CDHash");
     expect(body).toContain('scripts/setup-local-gui-signing.sh');

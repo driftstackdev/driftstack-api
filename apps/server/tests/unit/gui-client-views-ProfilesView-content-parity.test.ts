@@ -373,6 +373,14 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).not.toMatch(/getPageState/);
     // The agent-session list entries carry the server `liveness` field through.
     expect(body).toMatch(/import \{ mintGuiControlKey \} from '\.\.\/lib\/agent-session-control';/);
+    // The main GUI preserves the server-owned control-key expiry and hands the
+    // key+expiry credential to native launch as one value. It never substitutes
+    // the account API key into the Simulator payload.
+    expect(body).toMatch(/const reopenControlCredential =/);
+    expect(body).toContain('{ controlCredential: reopenControlCredential }');
+    expect(body).toMatch(/const controlCredential =/);
+    expect(body).toContain('{ controlCredential }');
+    expect(body).not.toMatch(/\{ controlKey:/);
     expect(body).toContain('...(s.liveness !== undefined ? { liveness: s.liveness } : {})');
     // The driver branch keeps the live-list cross-check but now also EXCLUDES
     // terminal driver sessions (destroyed/errored) so a dead session lingering

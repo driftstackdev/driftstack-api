@@ -1701,7 +1701,7 @@ export function ProfilesView({
       // path. Without it, reopen-via-"Live view" left Take over / Hand back / End session
       // dead (401 auth_missing) in the separate app (audit #1, 2026-06-22).
       const reopenApiKey = settings.apiKey;
-      const reopenControlKey =
+      const reopenControlCredential =
         reopenApiKey !== null && reopenApiKey.length > 0
           ? ((await mintGuiControlKey(settings.baseUrl, reopenApiKey, agentSessionId)) ?? undefined)
           : undefined;
@@ -1719,7 +1719,9 @@ export function ProfilesView({
         // Hand off the API host so the separate app's control calls hit the real
         // server (its store may be empty → defaults to localhost) — founder 2026-06-23.
         baseUrl: settings.baseUrl,
-        ...(reopenControlKey !== undefined ? { controlKey: reopenControlKey } : {}),
+        ...(reopenControlCredential !== undefined
+          ? { controlCredential: reopenControlCredential }
+          : {}),
         ...(reopenProxy !== null
           ? { proxyLabel: `${reopenProxy.label} · ${reopenProxy.host}:${String(reopenProxy.port)}` }
           : {}),
@@ -2499,11 +2501,11 @@ export function ProfilesView({
         // Mint the per-session gui_control_key so the SEPARATE simulator
         // app (which can't read this app's keychain) can drive the
         // control endpoints. Best-effort: minting in the MAIN app with
-        // the account API key; a failure leaves controlKey undefined and
-        // the simulator falls back to the in-app/keychain path. The key
-        // is session-scoped + 24h-TTL — NOT the account API key.
+        // the account API key; a failure leaves control unavailable rather
+        // than handing the account credential to the simulator. The key and
+        // its API-owned expiry are session-scoped — NOT the account API key.
         const apiKey = settings.apiKey;
-        const controlKey =
+        const controlCredential =
           apiKey !== null && apiKey.length > 0
             ? ((await mintGuiControlKey(settings.baseUrl, apiKey, created.id)) ?? undefined)
             : undefined;
@@ -2522,7 +2524,7 @@ export function ProfilesView({
           // Hand off the API host so the separate app's control calls hit the real
           // server (its store may be empty → defaults to localhost) — founder 2026-06-23.
           baseUrl: settings.baseUrl,
-          ...(controlKey !== undefined ? { controlKey } : {}),
+          ...(controlCredential !== undefined ? { controlCredential } : {}),
           ...(launchProxy !== null
             ? {
                 proxyLabel: `${launchProxy.label} · ${launchProxy.host}:${String(launchProxy.port)}`,

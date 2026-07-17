@@ -15,7 +15,7 @@
 // Session join info (LiveKit ws_url + token) + the device label arrive via the
 // window URL query — the opener encodes them when creating the window.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
@@ -85,9 +85,8 @@ import { persistBaseUrl } from '../lib/settings';
 import {
   clearPersistedControlKey,
   loadProtectedControlKey,
-  migrateLegacyControlKeys,
-  persistControlKey,
   safeSimulatorSearch,
+  scrubLegacyControlKeys,
 } from '../lib/simulator-control-key';
 import { useTransientNotice } from '../lib/use-transient-notice';
 import { pasteClipboardToDevice } from '../lib/device-paste';
@@ -464,12 +463,10 @@ interface SessionQuery {
    *  Drives the macOS Dock-tile country badge (founder 2026-06-18). Empty
    *  string → no country (the Dock tile shows no badge). */
   countryCode: string;
-  /** Per-session gui_control_key carried in the query as the PRIMARY,
-   *  race-free control handoff. Rust consumes the owner-only single-use file,
-   *  then appends `ck=` only to this internal WebView URL. It is parsed into
-   *  memory synchronously and scrubbed from history before paint. Empty string
-   *  → no fresh key; restore the OS credential-store value if available. */
-  controlKey: string;
+  /** Non-secret generation for the Rust process-memory control-key entry.
+   *  `null` means this is the deliberate in-app/account-key path; `0` means a
+   *  malformed generation was supplied and control must remain fail-closed. */
+  controlGeneration: number | null;
   /** PUBLIC API base URL handed off at launch (`base=`). The SEPARATE Simulator
    *  app's own store may be empty → loadSettings() would default to
    *  localhost:3000 and every control call fails. SimulatorWindow persists this
@@ -478,12 +475,38 @@ interface SessionQuery {
   baseUrl: string;
 }
 
-/** Build the ControlAuth, attaching the handed-off API host so the separate
- *  app's control calls target the right server with no store-timing race
- *  (founder 2026-06-23). `controlKey===''` → null (in-app window / no key). */
-function controlAuthWith(controlKey: string, baseUrl: string): ControlAuth {
-  if (controlKey === '') return null;
+/** Build exact control auth. A native-generation path with no loaded key is a
+ *  fail-closed sentinel; only a query with no generation may use the deliberate
+ *  in-app account-key path. */
+function controlAuthWith(
+  controlKey: string,
+  baseUrl: string,
+  nativeCredentialExpected: boolean,
+): ControlAuth {
+  if (controlKey === '') {
+    return nativeCredentialExpected
+      ? baseUrl !== ''
+        ? { controlKey: null, baseUrl }
+        : { controlKey: null }
+      : null;
+  }
   return baseUrl !== '' ? { controlKey, baseUrl } : { controlKey };
+}
+
+/** Resolve the synchronous authorization boundary for a parsed query. Only an
+ * absent generation is the deliberate in-app/account-key path. Any explicit
+ * native marker stays fail-closed even when its session was absent or rejected. */
+export function controlAuthBoundaryForQuery(
+  sessionId: string,
+  controlGeneration: number | null,
+  baseUrl: string,
+):
+  | { auth: ControlAuth; needsNativeLoad: false }
+  | { auth: ControlAuth; needsNativeLoad: true; generation: number } {
+  if (controlGeneration === null) return { auth: null, needsNativeLoad: false };
+  const auth = controlAuthWith('', baseUrl, true);
+  if (sessionId === '' || controlGeneration <= 0) return { auth, needsNativeLoad: false };
+  return { auth, needsNativeLoad: true, generation: controlGeneration };
 }
 
 /** Parse the simulator session from a query string. Defaults to the window's
@@ -500,9 +523,19 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
   const sessionId = q.get('session') ?? '';
   // Proxy exit country (ISO alpha-2) for the macOS Dock tile (empty → no badge).
   const countryCode = q.get('cc') ?? '';
-  // Control key from the protected handoff query. The Rust layer consumed and
-  // unlinked the 0600 handoff file before creating/updating this WebView.
-  const controlKey = q.get('ck') ?? '';
+  // Rust consumes ck/cke from the protected 0600 handoff before creating or
+  // updating the WebView. JavaScript receives only a non-secret generation.
+  const rawControlGeneration = q.get('cg');
+  const parsedControlGeneration =
+    rawControlGeneration !== null && /^[1-9]\d*$/.test(rawControlGeneration)
+      ? Number(rawControlGeneration)
+      : 0;
+  const controlGeneration =
+    rawControlGeneration === null
+      ? null
+      : Number.isSafeInteger(parsedControlGeneration) && parsedControlGeneration > 0
+        ? parsedControlGeneration
+        : 0;
   // PUBLIC API host handed off at launch (see SessionQuery.baseUrl).
   const baseUrl = q.get('base') ?? '';
   if (ws_url === null || token === null || ws_url === '' || token === '') {
@@ -513,7 +546,7 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
       proxyLabel,
       sessionId,
       countryCode,
-      controlKey,
+      controlGeneration,
       baseUrl,
     };
   }
@@ -526,7 +559,7 @@ function infoFromQuery(search: string = window.location.search): SessionQuery {
     proxyLabel,
     sessionId,
     countryCode,
-    controlKey,
+    controlGeneration,
     baseUrl,
   };
 }
@@ -2634,17 +2667,25 @@ export function SimulatorWindow(): JSX.Element {
   // Room), and the listener below re-parses the payload exactly like the initial
   // location.search and updates this state.
   const [query, setQuery] = useState<SessionQuery>(() => infoFromQuery());
-  const { info, deviceName, profileName, proxyLabel, sessionId, countryCode, controlKey, baseUrl } =
-    query;
+  const {
+    info,
+    deviceName,
+    profileName,
+    proxyLabel,
+    sessionId,
+    countryCode,
+    controlGeneration,
+    baseUrl,
+  } = query;
   // Join tokens and control credentials are needed only for the synchronous
   // state initializer above. Remove them from the visible URL/history before
   // paint so crash reports, screenshots, reload history, and copied URLs retain
   // only non-secret routing data. A refresh intentionally requires a fresh
   // opener payload (or the protected per-session control credential).
   useLayoutEffect(() => {
-    const safeSearch = safeSimulatorSearch(sessionId);
+    const safeSearch = safeSimulatorSearch(sessionId, controlGeneration);
     if (window.location.search !== safeSearch) window.history.replaceState({}, '', safeSearch);
-  }, [sessionId]);
+  }, [sessionId, controlGeneration]);
   // Founder 2026-06-23 — the separate Simulator app starts with an empty settings
   // store (baseUrl → localhost:3000 default), so its control HTTP calls fail. The
   // launch hands off the real API host via `base=`; persist it so authedFetch
@@ -2654,65 +2695,75 @@ export function SimulatorWindow(): JSX.Element {
     if (baseUrl === '') return;
     void persistBaseUrl(baseUrl);
   }, [baseUrl]);
-  // Per-session control credential. The SEPARATE simulator app can't
-  // read the main app's keychain, so it authorizes the control
-  // endpoints with the per-session gui_control_key instead of the
-  // account API key. The protected handoff query is seeded synchronously so
-  // controlAuth exists on the first render. It is then saved to Keychain; a
-  // reopen with no fresh key restores only from Keychain. Legacy plaintext is
-  // purged before the first async credential-store read. null → use the API key
-  // (in-app window). Re-loaded when the session switches.
-  const [controlAuth, setControlAuth] = useState<ControlAuth>(() =>
-    controlAuthWith(controlKey, baseUrl),
+  // Per-session control credential. Rust already consumed and scrubbed the
+  // protected ck/cke handoff before this WebView saw the payload. A separate
+  // Simulator receives only cg and loads that exact window/session/generation
+  // from the native process vault. Until it resolves (or if it is stale), auth
+  // remains a non-null fail-closed sentinel and never falls back to an account
+  // API key. Only the deliberate in-app path (no cg) uses null/account auth.
+  const controlAuthBoundary = useMemo(
+    () => controlAuthBoundaryForQuery(sessionId, controlGeneration, baseUrl),
+    [sessionId, controlGeneration, baseUrl],
   );
-  // Never expose the prior session's credential during an in-place relaunch.
-  // Layout timing resets it before the switched session can receive input.
-  useLayoutEffect(() => {
-    setControlAuth(controlAuthWith(controlKey, baseUrl));
-  }, [sessionId, controlKey, baseUrl]);
+  const [loadedControlAuth, setLoadedControlAuth] = useState<{
+    sessionId: string;
+    generation: number;
+    baseUrl: string;
+    auth: ControlAuth;
+  } | null>(null);
+  // Expose loaded material only when its complete owner tuple matches this
+  // render. A stale async set may exist in state, but it is authority-inert.
+  const controlAuth =
+    controlAuthBoundary.needsNativeLoad &&
+    loadedControlAuth?.sessionId === sessionId &&
+    loadedControlAuth.generation === controlAuthBoundary.generation &&
+    loadedControlAuth.baseUrl === baseUrl
+      ? loadedControlAuth.auth
+      : controlAuthBoundary.auth;
   useEffect(() => {
     // A new room/session starts with a clean control-health slate — never carry
     // a latched controlUnreachable badge across a session switch.
     setControlUnreachable(false);
     let cancelled = false;
+    // Upgrades scrub historical WebView plaintext synchronously, but never read
+    // or import it and never enumerate old gui_control Keychain items.
+    scrubLegacyControlKeys();
     void (async () => {
-      // Purge every legacy plaintext key before awaiting Keychain. The returned
-      // map is an in-memory, current-launch fallback only when Keychain is locked.
-      // This deliberately runs even for a sessionless companion-app launch so
-      // upgrading/installing can scrub historical plaintext without waiting for
-      // the customer to start another session.
-      const legacy = await migrateLegacyControlKeys(sessionId);
-      if (cancelled) return;
-      if (sessionId === '') {
-        setControlAuth(null);
+      if (!controlAuthBoundary.needsNativeLoad) {
+        // Only an absent generation is the deliberate account-auth path. A
+        // missing/rejected session or malformed explicit marker stays sentinel.
         return;
       }
-      // Fresh protected-file handoff — persist it for a later reopen. Failure is
-      // intentionally memory-only; never create a plaintext fallback.
-      if (controlKey !== '') {
-        setControlAuth(controlAuthWith(controlKey, baseUrl));
-        await persistControlKey(sessionId, controlKey).catch(() => undefined);
-        return;
-      }
-      // REOPEN survival (founder 2026-06-23): a relaunched/reopened separate-app
-      // window arrives with NO fresh ck= and the single-use temp file already
-      // consumed → controlAuth would be null and every control HTTP call
-      // (mode / End-session / cookies) would fail, even though manual still works
-      // over LiveKit. Restore the per-session key persisted from a prior launch. A
-      // stale (>24h TTL) key just 401s, which now degrades to Manual rather than a
-      // blocking error.
+      const owner = {
+        sessionId,
+        baseUrl,
+        generation: controlAuthBoundary.generation,
+      };
       let stored = '';
       try {
-        stored = await loadProtectedControlKey(sessionId);
+        stored = await loadProtectedControlKey(sessionId, owner.generation);
       } catch {
-        stored = legacy.get(sessionId) ?? '';
+        stored = '';
       }
-      if (!cancelled) setControlAuth(controlAuthWith(stored, baseUrl));
+      if (!cancelled) {
+        const loaded = {
+          sessionId: owner.sessionId,
+          generation: owner.generation,
+          baseUrl: owner.baseUrl,
+          auth: controlAuthWith(stored, owner.baseUrl, true),
+        };
+        setLoadedControlAuth((current) => {
+          // Rust allocates generations monotonically for the process. A late
+          // older completion must not evict an already-loaded successor and
+          // strand that successor on its sentinel after its effect settled.
+          return current !== null && current.generation >= loaded.generation ? current : loaded;
+        });
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [sessionId, controlKey, baseUrl]);
+  }, [sessionId, controlGeneration, baseUrl, controlAuthBoundary]);
   // Relaunch session-switch listener (Tauri-only). The Rust side validated the
   // b64 payload before emitting; decode it the same way the initial launch does
   // (atob → query string) and re-parse. Immediately scrub the token/key from
@@ -2727,7 +2778,11 @@ export function SimulatorWindow(): JSX.Element {
           const search = atob(event.payload);
           const qs = search.startsWith('?') ? search : `?${search}`;
           const next = infoFromQuery(qs);
-          window.history.replaceState({}, '', safeSimulatorSearch(next.sessionId));
+          window.history.replaceState(
+            {},
+            '',
+            safeSimulatorSearch(next.sessionId, next.controlGeneration),
+          );
           setQuery(next);
         } catch {
           // Garbled payload — ignore; the current session keeps streaming.
@@ -6369,11 +6424,10 @@ export function SimulatorWindow(): JSX.Element {
     setEndArmed(false);
     const request = beginControlAction({ kind: 'end' });
     if (request === null) return;
-    // Start protected-credential deletion in parallel with the server request.
-    // Normal Keychain deletion finishes before destroy; a locked/prompting store
-    // is bounded so it can never make End unusable.
+    // Delete only this exact native window/session generation in parallel with
+    // the server request. An old async End can never delete a newer handoff.
     const credentialCleanup = Promise.race([
-      clearPersistedControlKey(request.sessionId).catch(() => undefined),
+      clearPersistedControlKey(request.sessionId, controlGeneration ?? 0).catch(() => undefined),
       new Promise<void>((resolve) => window.setTimeout(resolve, 750)),
     ]);
     void endAgentSession(request.sessionId, controlAuth)

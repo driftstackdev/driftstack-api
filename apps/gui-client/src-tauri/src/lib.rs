@@ -6,6 +6,8 @@
 //!     cross-platform OS-keychain access for the API key. Transparently
 //!     uses macOS Keychain, Windows Credential Manager, or
 //!     Linux Secret Service / KWallet via the `keyring` crate.
+//!   * `simulator_control_key_*` — bounded, zeroizing, process-memory-only
+//!     storage for short-lived per-session Simulator control credentials.
 //!
 //! Future phases will add:
 //!   * Local SQLite for session history + proxy presets,
@@ -14,9 +16,11 @@
 //!   * Live viewport (polling screenshots → WebRTC if scope allows).
 
 use keyring::Entry;
+use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
+use zeroize::{Zeroize, Zeroizing};
 
 /// Wall-clock ceiling on each blocking socket op in the SOCKS5 probe.
 /// Eight seconds is generous for a reachable proxy yet short enough
@@ -36,6 +40,9 @@ const MAIN_GUI_IDENTIFIER: &str = "dev.driftstack.gui";
 const SIMULATOR_IDENTIFIER: &str = "dev.driftstack.simulator";
 const COMMAND_ACCESS_DENIED: &str = "native command access denied";
 const MAX_SECRET_VALUE_BYTES: usize = 128 * 1024;
+const MAX_SIMULATOR_CONTROL_KEYS: usize = 32;
+const SIMULATOR_CONTROL_KEY_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const MAX_WEBVIEW_SAFE_GENERATION: u64 = 9_007_199_254_740_991;
 
 /// Stable username used for the per-user-account secret. The current
 /// design is single-account (one keyring entry per device); when
@@ -71,31 +78,28 @@ fn is_valid_main_gui_secret_key(key: &str) -> bool {
         || key
             .strip_prefix("proxy_secret:")
             .is_some_and(|suffix| safe_secret_suffix(suffix, 128))
-        || key
-            .strip_prefix("gui_control:")
-            .is_some_and(is_safe_session_label)
 }
 
-/// Pure authorization matrix used by the command adapters and unit tests.
-/// The main GUI may access only known secret namespaces. A Simulator WebView
-/// receives exactly one session control key and may access only that key—not
-/// the account API key, proxy credentials, or another live session's key.
-fn secret_command_caller_allowed(
+/// Pure authorization matrix for durable OS-keychain access. Only the main GUI
+/// may reach the account/proxy namespaces. Short-lived `gui_control` values are
+/// deliberately absent: Simulator WebViews use the bounded process store below,
+/// so rebuilt bundles never multiply Keychain authorization prompts for them.
+fn secret_command_caller_allowed(app_identifier: &str, window_label: &str, key: &str) -> bool {
+    is_main_gui_command_caller(app_identifier, window_label) && is_valid_main_gui_secret_key(key)
+}
+
+/// A Simulator process-memory credential is bound to the exact WebView/session
+/// pair. The config-created `main` window uses the native MainSession owner;
+/// dynamically-created windows carry the session in their `sim-<id>` label.
+fn simulator_control_key_caller_allowed(
     app_identifier: &str,
     window_label: &str,
     main_session: Option<&str>,
-    key: &str,
+    requested_session: &str,
 ) -> bool {
-    if is_main_gui_command_caller(app_identifier, window_label) {
-        return is_valid_main_gui_secret_key(key);
-    }
-    if !is_simulator_command_caller(app_identifier, window_label) {
-        return false;
-    }
-    let Some(requested_session) = key.strip_prefix("gui_control:") else {
-        return false;
-    };
-    if !is_safe_session_label(requested_session) {
+    if !is_safe_session_label(requested_session)
+        || !is_simulator_command_caller(app_identifier, window_label)
+    {
         return false;
     }
     let caller_session = if window_label == "main" {
@@ -124,15 +128,23 @@ fn ensure_simulator_command(window: &tauri::WebviewWindow) -> Result<(), String>
     }
 }
 
-fn ensure_secret_command(
-    window: &tauri::WebviewWindow,
-    main_session: &tauri::State<'_, MainSession>,
-    key: &str,
-) -> Result<(), String> {
+fn ensure_secret_command(window: &tauri::WebviewWindow, key: &str) -> Result<(), String> {
     use tauri::Manager as _;
     let app_identifier = &window.app_handle().config().identifier;
-    let active_main_session = if app_identifier == SIMULATOR_IDENTIFIER && window.label() == "main"
-    {
+    if secret_command_caller_allowed(app_identifier, window.label(), key) {
+        Ok(())
+    } else {
+        Err(COMMAND_ACCESS_DENIED.to_string())
+    }
+}
+
+fn ensure_simulator_control_key_command(
+    window: &tauri::WebviewWindow,
+    main_session: &tauri::State<'_, MainSession>,
+    session_id: &str,
+) -> Result<(), String> {
+    use tauri::Manager as _;
+    let active_main_session = if window.label() == "main" {
         main_session
             .0
             .lock()
@@ -141,11 +153,11 @@ fn ensure_secret_command(
     } else {
         None
     };
-    if secret_command_caller_allowed(
-        app_identifier,
+    if simulator_control_key_caller_allowed(
+        &window.app_handle().config().identifier,
         window.label(),
         active_main_session.as_deref(),
-        key,
+        session_id,
     ) {
         Ok(())
     } else {
@@ -230,27 +242,26 @@ pub fn run() {
         // duplicate.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             use tauri::Manager;
-            // argv carries ONLY the plain, non-secret session label. The full
-            // LiveKit/control payload is read-and-unlinked from an owner-only
-            // handoff file; base64 is encoding, not process-list protection.
-            let label = argv
-                .iter()
-                .find(|a| a.starts_with("--ds-label="))
-                .map(|a| a.trim_start_matches("--ds-label=").to_string())
-                .filter(|l| is_safe_session_label(l));
-            let b64 = label
-                .as_deref()
-                .and_then(|l| take_sim_payload(l).ok().flatten())
-                .filter(|p| is_valid_b64_payload(p));
-
             // MULTI-WINDOW simulator (founder 2026-06-23: "can't open multiple iPhones at
             // once, only 1 window opens"). A 2nd launch opens a NEW iPhone window for the
             // new session instead of re-pointing the single window; re-opening a session
             // focuses its existing window. The main GUI (different identifier, never
             // launched with --ds-label) keeps the focus-the-existing-window behaviour.
             if app.config().identifier == "dev.driftstack.simulator" {
-                match (b64.as_deref(), label.as_deref()) {
-                    (Some(payload), Some(lbl)) => open_or_focus_sim_window(app, lbl, payload),
+                // Simulator argv carries ONLY the plain, non-secret session
+                // label and unique handoff id. Parse/take only under this
+                // bundle identity: main-GUI argv must never consume its file.
+                let launch = simulator_launch_handoff(&argv);
+                let b64 = launch
+                    .as_ref()
+                    .and_then(|(label, handoff_id)| {
+                        take_sim_payload(label, handoff_id).ok().flatten()
+                    })
+                    .filter(|payload| is_valid_b64_payload(payload));
+                match (b64.as_deref(), launch.as_ref()) {
+                    (Some(payload), Some((label, _))) => {
+                        open_or_focus_sim_window(app, label, payload)
+                    }
                     _ => {
                         if let Some(win) = app.webview_windows().values().next() {
                             let _ = win.unminimize();
@@ -300,6 +311,10 @@ pub fn run() {
         // Multi-window simulator (founder 2026-06-23): tracks which session the
         // config-created `main` window holds, so a re-open focuses it vs. duplicating.
         .manage(MainSession(std::sync::Mutex::new(None)))
+        // Short-lived gui_control credentials intentionally stay inside the
+        // Simulator process. This bounded zeroizing store survives a WebView
+        // reload, but never an app restart or retained OS Keychain/disk storage.
+        .manage(SimulatorControlKeyStore::default())
         // W434 (founder W232 item b) — macOS WKWebView blank-until-redraw on the
         // Overlay-titlebar window: the packaged release `.app` mounts + polls the
         // backend but the webview never composites (blank window) until a redraw
@@ -311,33 +326,72 @@ pub fn run() {
         .setup(|app| {
             use tauri::Manager;
             // Stage 2 (separate Simulator app): on FIRST launch argv carries only
-            // `--ds-label=<non-secret id>`. Consume the complete payload from the
-            // owner-only handoff file before applying it to the internal WebView.
+            // `--ds-label=<non-secret id>` plus a unique non-secret handoff id.
+            // Consume the complete payload from that owner-only file before
+            // applying it to the internal WebView.
             // Validation still precedes eval interpolation; malformed/oversized
             // payloads fail closed and the file has already been unlinked.
-            let initial_label = (app.config().identifier == SIMULATOR_IDENTIFIER)
-                .then(|| {
-                    std::env::args()
-                        .find(|a| a.starts_with("--ds-label="))
-                        .map(|a| a.trim_start_matches("--ds-label=").to_string())
-                        .filter(|l| is_safe_session_label(l))
-                })
+            let initial_launch = (app.config().identifier == SIMULATOR_IDENTIFIER)
+                .then(|| simulator_launch_handoff(&std::env::args().collect::<Vec<_>>()))
                 .flatten();
+            let initial_label = initial_launch.as_ref().map(|(label, _)| label.clone());
             // Establish native command authority before the payload can start
             // the React tree. The config-created `main` Simulator window may
-            // access only this exact session's `gui_control:*` Keychain item.
+            // load only this exact session's native process-memory credential.
             if let Some(label) = &initial_label {
                 if let Ok(mut current) = app.state::<MainSession>().0.lock() {
                     *current = Some(label.clone());
                 }
             }
-            if let Some(b64) = initial_label
-                .as_deref()
-                .and_then(|l| take_sim_payload(l).ok().flatten())
-                .filter(|p| is_valid_b64_payload(p))
-            {
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.eval(format!("window.location.search = atob('{b64}')"));
+            if let Some((label, handoff_id)) = initial_launch.as_ref() {
+                if let Some(b64) = take_sim_payload(label, handoff_id)
+                    .ok()
+                    .flatten()
+                    .filter(|payload| is_valid_b64_payload(payload))
+                {
+                    match prepare_simulator_payload(
+                        &app.state::<SimulatorControlKeyStore>(),
+                        "main",
+                        label,
+                        &b64,
+                    ) {
+                        Ok(prepared) => {
+                            if let Some(win) = app.get_webview_window("main") {
+                                // Register destruction cleanup before the
+                                // credential-bearing generation can reach the
+                                // WebView; an immediate close cannot strand it.
+                                attach_control_key_cleanup(
+                                    app.handle().clone(),
+                                    &win,
+                                    label,
+                                    prepared.control_generation,
+                                );
+                                match win.eval(format!(
+                                    "window.location.search = atob('{}')",
+                                    prepared.sanitized_b64
+                                )) {
+                                    Ok(()) => {}
+                                    Err(error) => {
+                                        let _ = app.state::<SimulatorControlKeyStore>().delete(
+                                            "main",
+                                            label,
+                                            prepared.control_generation,
+                                        );
+                                        eprintln!(
+                                            "[simulator] failed to apply initial handoff: {error}"
+                                        );
+                                    }
+                                }
+                            } else {
+                                let _ = app.state::<SimulatorControlKeyStore>().delete(
+                                    "main",
+                                    label,
+                                    prepared.control_generation,
+                                );
+                            }
+                        }
+                        Err(error) => eprintln!("[simulator] rejected initial handoff: {error}"),
+                    }
                 }
             }
             #[cfg(target_os = "macos")]
@@ -380,6 +434,8 @@ pub fn run() {
             secret_save,
             secret_load,
             secret_delete,
+            simulator_control_key_load,
+            simulator_control_key_delete,
             proxy_test,
             proxy_exit_probe,
             endpoint_resolve,
@@ -415,10 +471,469 @@ fn is_safe_session_label(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-')
 }
 
+fn is_safe_handoff_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+}
+
+/// Require exactly one validated session label and one unique handoff id. The
+/// pair is non-secret and safe in argv; the credential-bearing payload is not.
+fn simulator_launch_handoff(args: &[String]) -> Option<(String, String)> {
+    fn exact_arg(args: &[String], prefix: &str, validate: impl Fn(&str) -> bool) -> Option<String> {
+        let mut values = args.iter().filter_map(|arg| arg.strip_prefix(prefix));
+        let value = values.next()?;
+        if values.next().is_some() || !validate(value) {
+            return None;
+        }
+        Some(value.to_string())
+    }
+
+    Some((
+        exact_arg(args, "--ds-label=", is_safe_session_label)?,
+        exact_arg(args, "--ds-handoff=", is_safe_handoff_id)?,
+    ))
+}
+
 /// The session label held by the simulator app's config-created `main` window (the FIRST
 /// session). Lets the single-instance handler FOCUS `main` rather than open a duplicate
 /// window when that same session is re-opened (multi-window, founder 2026-06-23).
 struct MainSession(std::sync::Mutex<Option<String>>);
+
+fn is_valid_simulator_control_key(value: &str) -> bool {
+    value.strip_prefix("gck_").is_some_and(|body| {
+        body.len() == 32
+            && body
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || matches!(byte, b'2'..=b'7'))
+    })
+}
+
+struct SimulatorControlKeyEntry {
+    window_label: String,
+    session_id: String,
+    generation: u64,
+    value: Zeroizing<String>,
+    expires_at: Instant,
+}
+
+#[derive(Default)]
+struct SimulatorControlKeyState {
+    entries: VecDeque<SimulatorControlKeyEntry>,
+    next_generation: u64,
+    shutting_down: bool,
+}
+
+impl Drop for SimulatorControlKeyState {
+    fn drop(&mut self) {
+        // `Zeroizing<String>` already clears on drop; explicitly drain and
+        // clear here as a load-bearing process-teardown invariant rather than
+        // depending on a future container refactor to preserve drop order.
+        while let Some(mut entry) = self.entries.pop_front() {
+            entry.value.zeroize();
+        }
+    }
+}
+
+#[derive(Default)]
+struct SimulatorControlKeyShared {
+    state: std::sync::Mutex<SimulatorControlKeyState>,
+    changed: std::sync::Condvar,
+}
+
+struct SimulatorControlKeyStore {
+    shared: std::sync::Arc<SimulatorControlKeyShared>,
+    expiry_reaper: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Default for SimulatorControlKeyStore {
+    fn default() -> Self {
+        let shared = std::sync::Arc::new(SimulatorControlKeyShared::default());
+        let reaper_shared = std::sync::Arc::clone(&shared);
+        let expiry_reaper = std::thread::Builder::new()
+            .name("simulator-control-key-expiry".to_string())
+            .spawn(move || Self::run_expiry_reaper(reaper_shared))
+            .expect("failed to start simulator control credential expiry owner");
+        Self {
+            shared,
+            expiry_reaper: Some(expiry_reaper),
+        }
+    }
+}
+
+impl Drop for SimulatorControlKeyStore {
+    fn drop(&mut self) {
+        // One process-scoped owner is bounded independently of the number of
+        // credentials. Wake it so process teardown never waits for a 24h TTL.
+        let mut state = self
+            .shared
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.shutting_down = true;
+        drop(state);
+        self.shared.changed.notify_all();
+        if let Some(reaper) = self.expiry_reaper.take() {
+            let _ = reaper.join();
+        }
+    }
+}
+
+impl SimulatorControlKeyStore {
+    fn wipe_entry(mut entry: SimulatorControlKeyEntry) {
+        entry.value.zeroize();
+    }
+
+    fn purge_expired(entries: &mut VecDeque<SimulatorControlKeyEntry>, now: Instant) -> bool {
+        let original_len = entries.len();
+        let mut index = 0;
+        while index < entries.len() {
+            if entries[index].expires_at <= now {
+                if let Some(entry) = entries.remove(index) {
+                    Self::wipe_entry(entry);
+                }
+            } else {
+                index += 1;
+            }
+        }
+        entries.len() != original_len
+    }
+
+    fn run_expiry_reaper(shared: std::sync::Arc<SimulatorControlKeyShared>) {
+        let mut state = match shared.state.lock() {
+            Ok(state) => state,
+            Err(_) => return,
+        };
+        loop {
+            if state.shutting_down {
+                return;
+            }
+            if Self::purge_expired(&mut state.entries, Instant::now()) {
+                // Wake deterministic test/native observers after the secret
+                // allocation has been cleared, without involving a WebView.
+                shared.changed.notify_all();
+            }
+            let next_expiry = state.entries.iter().map(|entry| entry.expires_at).min();
+            state = match next_expiry {
+                Some(expires_at) => {
+                    let wait = expires_at.saturating_duration_since(Instant::now());
+                    match shared.changed.wait_timeout(state, wait) {
+                        Ok((state, _)) => state,
+                        Err(_) => return,
+                    }
+                }
+                None => match shared.changed.wait(state) {
+                    Ok(state) => state,
+                    Err(_) => return,
+                },
+            };
+        }
+    }
+
+    fn store_at(
+        &self,
+        window_label: &str,
+        session_id: &str,
+        value: String,
+        now: Instant,
+        ttl: Duration,
+    ) -> Result<u64, String> {
+        // Wrap immediately so every early return (validation, lock failure, or
+        // generation exhaustion) clears the provided credential allocation.
+        let value = Zeroizing::new(value);
+        if (window_label != "main" && window_label != format!("sim-{session_id}"))
+            || !is_safe_session_label(session_id)
+            || !is_valid_simulator_control_key(&value)
+        {
+            return Err("invalid simulator control credential".to_string());
+        }
+        if ttl.is_zero() {
+            return Err("expired simulator control credential".to_string());
+        }
+        let mut state = self
+            .shared
+            .state
+            .lock()
+            .map_err(|_| "simulator control credential store unavailable".to_string())?;
+        Self::purge_expired(&mut state.entries, now);
+        if let Some(index) = state
+            .entries
+            .iter()
+            .position(|entry| entry.window_label == window_label)
+        {
+            if let Some(entry) = state.entries.remove(index) {
+                Self::wipe_entry(entry);
+            }
+        }
+        state.next_generation = state
+            .next_generation
+            .checked_add(1)
+            .filter(|generation| *generation <= MAX_WEBVIEW_SAFE_GENERATION)
+            .ok_or_else(|| "simulator control credential generation exhausted".to_string())?;
+        let generation = state.next_generation;
+        state.entries.push_back(SimulatorControlKeyEntry {
+            window_label: window_label.to_string(),
+            session_id: session_id.to_string(),
+            generation,
+            value,
+            expires_at: now + ttl.min(SIMULATOR_CONTROL_KEY_TTL),
+        });
+        while state.entries.len() > MAX_SIMULATOR_CONTROL_KEYS {
+            if let Some(entry) = state.entries.pop_front() {
+                Self::wipe_entry(entry);
+            }
+        }
+        drop(state);
+        self.shared.changed.notify_all();
+        Ok(generation)
+    }
+
+    fn load_at(
+        &self,
+        window_label: &str,
+        session_id: &str,
+        generation: u64,
+        now: Instant,
+    ) -> Result<Option<String>, String> {
+        if !is_safe_session_label(session_id) || generation == 0 {
+            return Ok(None);
+        }
+        let mut state = self
+            .shared
+            .state
+            .lock()
+            .map_err(|_| "simulator control credential store unavailable".to_string())?;
+        let expired = Self::purge_expired(&mut state.entries, now);
+        let Some(index) = state.entries.iter().position(|entry| {
+            entry.window_label == window_label
+                && entry.session_id == session_id
+                && entry.generation == generation
+        }) else {
+            drop(state);
+            if expired {
+                self.shared.changed.notify_all();
+            }
+            return Ok(None);
+        };
+        let entry = state
+            .entries
+            .remove(index)
+            .ok_or_else(|| "simulator control credential store unavailable".to_string())?;
+        let value = entry.value.as_str().to_string();
+        // Successful reads refresh only LRU order, never the original expiry.
+        state.entries.push_back(entry);
+        drop(state);
+        if expired {
+            self.shared.changed.notify_all();
+        }
+        Ok(Some(value))
+    }
+
+    fn delete(&self, window_label: &str, session_id: &str, generation: u64) -> Result<(), String> {
+        if !is_safe_session_label(session_id) || generation == 0 {
+            return Ok(());
+        }
+        let mut state = self
+            .shared
+            .state
+            .lock()
+            .map_err(|_| "simulator control credential store unavailable".to_string())?;
+        let mut removed = false;
+        if let Some(index) = state.entries.iter().position(|entry| {
+            entry.window_label == window_label
+                && entry.session_id == session_id
+                && entry.generation == generation
+        }) {
+            if let Some(entry) = state.entries.remove(index) {
+                Self::wipe_entry(entry);
+                removed = true;
+            }
+        }
+        drop(state);
+        if removed {
+            self.shared.changed.notify_all();
+        }
+        Ok(())
+    }
+
+    /// A handoff without a control credential is an explicit replacement, not
+    /// permission to retain an earlier generation invisibly. This internal
+    /// native-only reset is intentionally not exposed as a WebView command.
+    fn clear_window(&self, window_label: &str) -> Result<(), String> {
+        let mut state = self
+            .shared
+            .state
+            .lock()
+            .map_err(|_| "simulator control credential store unavailable".to_string())?;
+        let mut index = 0;
+        let mut removed = false;
+        while index < state.entries.len() {
+            if state.entries[index].window_label == window_label {
+                if let Some(entry) = state.entries.remove(index) {
+                    Self::wipe_entry(entry);
+                    removed = true;
+                }
+            } else {
+                index += 1;
+            }
+        }
+        drop(state);
+        if removed {
+            self.shared.changed.notify_all();
+        }
+        Ok(())
+    }
+
+    fn load(
+        &self,
+        window_label: &str,
+        session_id: &str,
+        generation: u64,
+    ) -> Result<Option<String>, String> {
+        self.load_at(window_label, session_id, generation, Instant::now())
+    }
+}
+
+struct PreparedSimulatorPayload {
+    sanitized_b64: String,
+    control_generation: u64,
+}
+
+/// Consume the control credential before any payload reaches a WebView. The
+/// owner-only handoff file remains the short cross-process transport, but the
+/// internal URL/event carries only a non-secret generation. Duplicate or
+/// mismatched owner fields fail closed instead of selecting one arbitrarily.
+fn prepare_simulator_payload_at(
+    control_keys: &SimulatorControlKeyStore,
+    window_label: &str,
+    session_label: &str,
+    b64: &str,
+    wall_now_ms: u128,
+    monotonic_now: Instant,
+) -> Result<PreparedSimulatorPayload, String> {
+    use base64::Engine as _;
+    if !is_valid_b64_payload(b64) || !is_safe_session_label(session_label) {
+        return Err("invalid simulator handoff".to_string());
+    }
+    let query = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .map(Zeroizing::new)
+        .ok_or_else(|| "invalid simulator handoff".to_string())?;
+    if query.is_empty() || query.chars().any(char::is_control) {
+        return Err("invalid simulator handoff".to_string());
+    }
+
+    let mut sanitized: Vec<String> = Vec::new();
+    let mut handoff_session: Option<&str> = None;
+    let mut control_key: Option<&str> = None;
+    let mut control_expires_ms: Option<u128> = None;
+    let mut control_expiry_seen = false;
+    for component in query.split('&') {
+        let (name, value) = component.split_once('=').unwrap_or((component, ""));
+        // URLSearchParams decodes percent escapes in names. Reject encoded or
+        // otherwise irregular names here so `%63k` cannot smuggle a credential
+        // field past the native scrub and make it visible to the WebView.
+        if name.is_empty()
+            || name.len() > 32
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        {
+            return Err("invalid simulator handoff field".to_string());
+        }
+        match name {
+            "session" => {
+                if handoff_session.replace(value).is_some() {
+                    return Err("duplicate simulator session handoff".to_string());
+                }
+                sanitized.push(component.to_string());
+            }
+            "ck" => {
+                if control_key.replace(value).is_some() {
+                    return Err("duplicate simulator control credential".to_string());
+                }
+            }
+            "cke" => {
+                if control_expiry_seen {
+                    return Err("duplicate simulator control expiry".to_string());
+                }
+                control_expiry_seen = true;
+                control_expires_ms = value.parse::<u128>().ok();
+                if control_expires_ms.is_none() {
+                    return Err("invalid simulator control expiry".to_string());
+                }
+            }
+            // A caller cannot choose its own native generation.
+            "cg" => return Err("invalid simulator control generation".to_string()),
+            _ => sanitized.push(component.to_string()),
+        }
+    }
+    if handoff_session != Some(session_label) {
+        return Err("simulator handoff session mismatch".to_string());
+    }
+
+    let generation = match (control_key, control_expires_ms) {
+        (None, None) => {
+            control_keys.clear_window(window_label)?;
+            0
+        }
+        (Some(value), Some(expires_ms)) => {
+            if value.is_empty() {
+                return Err("invalid simulator control credential".to_string());
+            }
+            if expires_ms <= wall_now_ms {
+                return Err("expired simulator control credential".to_string());
+            }
+            let remaining_ms = (expires_ms - wall_now_ms).min(u128::from(u64::MAX)) as u64;
+            control_keys.store_at(
+                window_label,
+                session_label,
+                value.to_string(),
+                monotonic_now,
+                Duration::from_millis(remaining_ms),
+            )?
+        }
+        _ => return Err("incomplete simulator control credential".to_string()),
+    };
+    sanitized.push(format!("cg={generation}"));
+    let sanitized_query = sanitized.join("&");
+    if sanitized.iter().any(|component| {
+        matches!(
+            component.split_once('=').map(|(name, _)| name),
+            Some("ck") | Some("cke")
+        )
+    }) {
+        return Err("simulator credential sanitization failed".to_string());
+    }
+    Ok(PreparedSimulatorPayload {
+        sanitized_b64: base64::engine::general_purpose::STANDARD.encode(sanitized_query),
+        control_generation: generation,
+    })
+}
+
+fn prepare_simulator_payload(
+    control_keys: &SimulatorControlKeyStore,
+    window_label: &str,
+    session_label: &str,
+    b64: &str,
+) -> Result<PreparedSimulatorPayload, String> {
+    let wall_now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    prepare_simulator_payload_at(
+        control_keys,
+        window_label,
+        session_label,
+        b64,
+        wall_now_ms,
+        Instant::now(),
+    )
+}
 
 /// Multi-window simulator: open a NEW per-session iPhone window for `label`, or focus the
 /// existing one (`main` for the first session, else `sim-<label>`). The b64 query was consumed
@@ -447,8 +962,29 @@ fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
             // (re-runs on a changed token) handle the in-place reconnect.
             // Emitting an unchanged token is a safe no-op (effect deps don't
             // change). Mirrors the `dev.driftstack.gui` main-window emit above.
+            let prepared = match prepare_simulator_payload(
+                &app.state::<SimulatorControlKeyStore>(),
+                "main",
+                label,
+                b64,
+            ) {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    eprintln!("[simulator] rejected session handoff: {error}");
+                    return;
+                }
+            };
             use tauri::Emitter;
-            let _ = win.emit("ds-session", b64);
+            attach_control_key_cleanup(app.clone(), &win, label, prepared.control_generation);
+            if let Err(error) = win.emit("ds-session", &prepared.sanitized_b64) {
+                let _ = app.state::<SimulatorControlKeyStore>().delete(
+                    "main",
+                    label,
+                    prepared.control_generation,
+                );
+                eprintln!("[simulator] failed to apply session handoff: {error}");
+                return;
+            }
             let _ = win.unminimize();
             let _ = win.set_focus();
             return;
@@ -469,14 +1005,47 @@ fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
         // fresh payload to the existing per-session window so an expired-token
         // window can actually recover via "relaunch the profile" instead of
         // only being brought to the front with its stream still dead.
+        let prepared = match prepare_simulator_payload(
+            &app.state::<SimulatorControlKeyStore>(),
+            &win_label,
+            label,
+            b64,
+        ) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                eprintln!("[simulator] rejected session handoff: {error}");
+                return;
+            }
+        };
         use tauri::Emitter;
-        let _ = win.emit("ds-session", b64);
+        attach_control_key_cleanup(app.clone(), &win, label, prepared.control_generation);
+        if let Err(error) = win.emit("ds-session", &prepared.sanitized_b64) {
+            let _ = app.state::<SimulatorControlKeyStore>().delete(
+                &win_label,
+                label,
+                prepared.control_generation,
+            );
+            eprintln!("[simulator] failed to apply session handoff: {error}");
+            return;
+        }
         let _ = win.unminimize();
         let _ = win.set_focus();
         return;
     }
+    let prepared = match prepare_simulator_payload(
+        &app.state::<SimulatorControlKeyStore>(),
+        &win_label,
+        label,
+        b64,
+    ) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            eprintln!("[simulator] rejected session handoff: {error}");
+            return;
+        }
+    };
     let query = base64::engine::general_purpose::STANDARD
-        .decode(b64)
+        .decode(&prepared.sanitized_b64)
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .unwrap_or_else(|| "window=simulator".to_string());
@@ -498,9 +1067,45 @@ fn open_or_focus_sim_window(app: &tauri::AppHandle, label: &str, b64: &str) {
     .position(120.0 + off, 120.0 + off)
     .build()
     {
-        Ok(win) => attach_quit_when_last_window_closes(app.clone(), &win),
-        Err(e) => eprintln!("[simulator] failed to open session window {win_label}: {e}"),
+        Ok(win) => {
+            attach_control_key_cleanup(app.clone(), &win, label, prepared.control_generation);
+            attach_quit_when_last_window_closes(app.clone(), &win);
+        }
+        Err(e) => {
+            let _ = app.state::<SimulatorControlKeyStore>().delete(
+                &win_label,
+                label,
+                prepared.control_generation,
+            );
+            eprintln!("[simulator] failed to open session window {win_label}: {e}");
+        }
     }
+}
+
+/// Register one exact-generation destroy hook per handoff. Old hooks become
+/// inert after replacement because deletion matches window+session+generation;
+/// the newest hook zeroizes the live entry when that WebView is destroyed.
+fn attach_control_key_cleanup(
+    app: tauri::AppHandle,
+    win: &tauri::WebviewWindow,
+    session_id: &str,
+    generation: u64,
+) {
+    if generation == 0 {
+        return;
+    }
+    use tauri::Manager as _;
+    let window_label = win.label().to_string();
+    let session_id = session_id.to_string();
+    win.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            let _ = app.state::<SimulatorControlKeyStore>().delete(
+                &window_label,
+                &session_id,
+                generation,
+            );
+        }
+    });
 }
 
 /// Quit the simulator process when the LAST window closes (founder 2026-06-23 multi-window:
@@ -534,8 +1139,9 @@ fn ping() -> &'static str {
 /// Launch the separate "Driftstack Simulator" app. The complete base64 session
 /// query (LiveKit JWT + session control key) is atomically written to a 0600
 /// single-use handoff file. argv carries only the validated non-secret session
-/// label; the Simulator reads and unlinks the payload before creating/updating
-/// its WebView. Base64 must never be treated as process-list protection.
+/// label and a unique non-secret handoff id; the Simulator reads and unlinks
+/// that exact file before creating/updating its WebView. Base64 must never be
+/// treated as process-list protection.
 #[tauri::command]
 fn launch_simulator(
     window: tauri::WebviewWindow,
@@ -555,23 +1161,24 @@ fn launch_simulator(
         if !std::path::Path::new(app_path).exists() {
             return Err("Driftstack Simulator.app is not installed".to_string());
         }
-        let handoff_identity = write_sim_payload(&session_label, &payload)?;
-        // `--ds-label` is the only argument: it is the non-secret per-session
-        // window key. The single-instance/startup path consumes the file.
+        let handoff = write_sim_payload(&session_label, &payload)?;
+        // Both arguments are non-secret. The unique handoff id prevents two
+        // rapid launches for the same session from replacing each other's file.
         let spawn = std::process::Command::new("open")
-            .args(simulator_open_args(app_path, &session_label))
+            .args(simulator_open_args(app_path, &session_label, &handoff.id))
             .spawn()
             .map_err(|e| e.to_string());
         if let Err(error) = spawn {
-            remove_sim_payload_if_identity(&sim_payload_path(&session_label), handoff_identity);
+            remove_sim_payload_if_identity(&handoff.path, handoff.identity);
             return Err(error);
         }
         // If `open` spawned but the target never consumed the handoff, bound the
         // plaintext lifetime. A successful take unlinks earlier; this is a no-op.
-        let cleanup_path = sim_payload_path(&session_label);
+        let cleanup_path = handoff.path;
+        let cleanup_identity = handoff.identity;
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(60));
-            remove_sim_payload_if_identity(&cleanup_path, handoff_identity);
+            remove_sim_payload_if_identity(&cleanup_path, cleanup_identity);
         });
         Ok(())
     }
@@ -582,21 +1189,39 @@ fn launch_simulator(
     }
 }
 
-fn simulator_open_args(app_path: &str, session_label: &str) -> Vec<String> {
+fn simulator_open_args(app_path: &str, session_label: &str, handoff_id: &str) -> Vec<String> {
     vec![
         "-n".to_string(),
         "-a".to_string(),
         app_path.to_string(),
         "--args".to_string(),
         format!("--ds-label={session_label}"),
+        format!("--ds-handoff={handoff_id}"),
     ]
 }
 
-/// Deterministic path for the validated session label. The writer uses a
-/// create-new temporary sibling + atomic rename, so a pre-existing symlink at
-/// the public path is replaced rather than followed.
-fn sim_payload_path(session_label: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("driftstack-sim-{session_label}.handoff"))
+/// Every launch gets a distinct path. A same-session successor therefore never
+/// replaces the file an older process has opened or is about to clean up.
+fn sim_payload_path(session_label: &str, handoff_id: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "driftstack-sim-{session_label}-{handoff_id}.handoff"
+    ))
+}
+
+static SIM_HANDOFF_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn new_sim_handoff_id() -> Result<String, String> {
+    use std::sync::atomic::Ordering;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
+    let counter = SIM_HANDOFF_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let id = format!("{:x}-{nanos:x}-{counter:x}", std::process::id());
+    if !is_safe_handoff_id(&id) {
+        return Err("invalid simulator handoff id".to_string());
+    }
+    Ok(id)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -611,22 +1236,42 @@ struct SimPayloadIdentity {
     modified: Option<std::time::SystemTime>,
 }
 
-fn sim_payload_identity(path: &std::path::Path) -> Result<SimPayloadIdentity, String> {
-    let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+fn sim_payload_identity_from_metadata(metadata: &std::fs::Metadata) -> SimPayloadIdentity {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt as _;
-        Ok(SimPayloadIdentity {
+        SimPayloadIdentity {
             device: metadata.dev(),
             inode: metadata.ino(),
-        })
+        }
     }
     #[cfg(not(unix))]
     {
-        Ok(SimPayloadIdentity {
+        SimPayloadIdentity {
             len: metadata.len(),
             modified: metadata.modified().ok(),
-        })
+        }
+    }
+}
+
+fn sim_payload_identity(path: &std::path::Path) -> Result<SimPayloadIdentity, String> {
+    let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    Ok(sim_payload_identity_from_metadata(&metadata))
+}
+
+fn sim_payload_identity_or_cleanup(
+    path: &std::path::Path,
+    metadata: std::io::Result<std::fs::Metadata>,
+) -> Result<SimPayloadIdentity, String> {
+    match metadata {
+        Ok(metadata) => Ok(sim_payload_identity_from_metadata(&metadata)),
+        Err(error) => {
+            // This create_new path belongs only to this launch. Without an
+            // identity no later cleanup owner can be installed, so remove the
+            // credential-bearing file before returning the fstat failure.
+            let _ = std::fs::remove_file(path);
+            Err(error.to_string())
+        }
     }
 }
 
@@ -639,53 +1284,50 @@ fn remove_sim_payload_if_identity(path: &std::path::Path, expected: SimPayloadId
     }
 }
 
-fn write_sim_payload(session_label: &str, payload: &str) -> Result<SimPayloadIdentity, String> {
+struct SimPayloadHandoff {
+    id: String,
+    path: std::path::PathBuf,
+    identity: SimPayloadIdentity,
+}
+
+fn write_sim_payload(session_label: &str, payload: &str) -> Result<SimPayloadHandoff, String> {
     if !is_safe_session_label(session_label) || !is_valid_b64_payload(payload) {
         return Err("invalid simulator handoff".to_string());
     }
-    let path = sim_payload_path(session_label);
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_nanos();
-    let tmp = std::env::temp_dir().join(format!(
-        ".driftstack-sim-{session_label}-{}-{nonce}.tmp",
-        std::process::id()
-    ));
+    let handoff_id = new_sim_handoff_id()?;
+    let path = sim_payload_path(session_label, &handoff_id);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
     #[cfg(unix)]
     {
-        use std::io::Write as _;
         use std::os::unix::fs::OpenOptionsExt as _;
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&tmp)
-            .map_err(|e| e.to_string())?;
-        if let Err(error) = f.write_all(payload.as_bytes()).and_then(|()| f.sync_all()) {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(error.to_string());
-        }
+        options.mode(0o600);
     }
-    #[cfg(not(unix))]
+    let mut file = options.open(&path).map_err(|error| error.to_string())?;
+    use std::io::Write as _;
+    if let Err(error) = file
+        .write_all(payload.as_bytes())
+        .and_then(|()| file.sync_all())
     {
-        std::fs::write(&tmp, payload.as_bytes()).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&path);
+        return Err(error.to_string());
     }
-    std::fs::rename(&tmp, &path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        e.to_string()
-    })?;
-    sim_payload_identity(&path)
+    let identity = sim_payload_identity_or_cleanup(&path, file.metadata())?;
+    Ok(SimPayloadHandoff {
+        id: handoff_id,
+        path,
+        identity,
+    })
 }
 
 /// Open without following symlinks, unlink immediately, then perform a bounded
 /// read of the complete session payload. The writer is 0600; reject broader
 /// Unix permissions and non-regular files before any content reaches a WebView.
-fn take_sim_payload(session_label: &str) -> Result<Option<String>, String> {
-    if !is_safe_session_label(session_label) {
+fn take_sim_payload(session_label: &str, handoff_id: &str) -> Result<Option<String>, String> {
+    if !is_safe_session_label(session_label) || !is_safe_handoff_id(handoff_id) {
         return Ok(None);
     }
-    let path = sim_payload_path(session_label);
+    let path = sim_payload_path(session_label, handoff_id);
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -696,15 +1338,17 @@ fn take_sim_payload(session_label: &str) -> Result<Option<String>, String> {
     let file = match options.open(&path) {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => {
-            // Consume a corrupt/symlink handoff rather than retrying it forever.
-            let _ = std::fs::remove_file(&path);
-            return Err(e.to_string());
-        }
+        // The failing open did not establish an identity. Leave the path
+        // untouched: a same-session writer may already have replaced the
+        // corrupt/symlink generation with a valid successor.
+        Err(e) => return Err(e.to_string()),
     };
-    // The open handle remains valid after unlink and is now immune to path swaps.
-    let _ = std::fs::remove_file(&path);
     let metadata = file.metadata().map_err(|e| e.to_string())?;
+    let opened_identity = sim_payload_identity_from_metadata(&metadata);
+    // The open handle remains valid after unlink and is immune to path swaps.
+    // Delete only the exact unique path generation we opened. A rapid same-
+    // session successor necessarily has a different handoff id/path.
+    remove_sim_payload_if_identity(&path, opened_identity);
     if !metadata.is_file() {
         return Err("simulator handoff is not a regular file".to_string());
     }
@@ -964,8 +1608,37 @@ fn render_flag_icon(
     NSImage::imageWithSize_flipped_drawingHandler(NSSize::new(SIDE, SIDE), false, &handler)
 }
 
-/// Save an authorized API/proxy/session secret to the OS keychain under its
-/// validated key name. Returns `Ok(())` on success, `Err(message)` on
+/// Load only the calling Simulator WebView's exact-session in-process key.
+/// A process restart intentionally returns `None`; the main GUI must provide a
+/// fresh protected launch handoff instead of resurrecting a durable credential.
+#[tauri::command]
+fn simulator_control_key_load(
+    window: tauri::WebviewWindow,
+    main_session: tauri::State<'_, MainSession>,
+    control_keys: tauri::State<'_, SimulatorControlKeyStore>,
+    session_id: String,
+    generation: u64,
+) -> Result<Option<String>, String> {
+    ensure_simulator_control_key_command(&window, &main_session, &session_id)?;
+    control_keys.load(window.label(), &session_id, generation)
+}
+
+/// Explicit session end zeroizes only the matching native generation. A stale
+/// WebView cleanup cannot delete a newer reconnect credential.
+#[tauri::command]
+fn simulator_control_key_delete(
+    window: tauri::WebviewWindow,
+    main_session: tauri::State<'_, MainSession>,
+    control_keys: tauri::State<'_, SimulatorControlKeyStore>,
+    session_id: String,
+    generation: u64,
+) -> Result<(), String> {
+    ensure_simulator_control_key_command(&window, &main_session, &session_id)?;
+    control_keys.delete(window.label(), &session_id, generation)
+}
+
+/// Save an authorized API/proxy secret to the OS keychain under its validated
+/// key name. Returns `Ok(())` on success, `Err(message)` on
 /// failure. Errors include OS-keychain access denial (user dismissed
 /// the prompt on macOS, or LinuxSecret-Service is locked).
 ///
@@ -973,13 +1646,8 @@ fn render_flag_icon(
 /// the same service identifier; each gets a separate keychain entry. The
 /// caller's bundle/window role constrains which namespaces are reachable.
 #[tauri::command]
-fn secret_save(
-    window: tauri::WebviewWindow,
-    main_session: tauri::State<'_, MainSession>,
-    key: String,
-    value: String,
-) -> Result<(), String> {
-    ensure_secret_command(&window, &main_session, &key)?;
+fn secret_save(window: tauri::WebviewWindow, key: String, value: String) -> Result<(), String> {
+    ensure_secret_command(&window, &key)?;
     if value.is_empty() || value.len() > MAX_SECRET_VALUE_BYTES {
         return Err("invalid secret value".to_string());
     }
@@ -995,12 +1663,8 @@ fn secret_save(
 /// `Ok(None)` is the expected first-run state — the wizard sets the
 /// API key at signup, so until that lands the entry doesn't exist.
 #[tauri::command]
-fn secret_load(
-    window: tauri::WebviewWindow,
-    main_session: tauri::State<'_, MainSession>,
-    key: String,
-) -> Result<Option<String>, String> {
-    ensure_secret_command(&window, &main_session, &key)?;
+fn secret_load(window: tauri::WebviewWindow, key: String) -> Result<Option<String>, String> {
+    ensure_secret_command(&window, &key)?;
     let user = format!("{KEYRING_USER}:{key}");
     let entry = Entry::new(KEYRING_SERVICE, &user).map_err(|e| e.to_string())?;
     match entry.get_password() {
@@ -1014,12 +1678,8 @@ fn secret_load(
 /// existed or not (idempotent — Settings logout flow shouldn't fail
 /// if the entry was already removed).
 #[tauri::command]
-fn secret_delete(
-    window: tauri::WebviewWindow,
-    main_session: tauri::State<'_, MainSession>,
-    key: String,
-) -> Result<(), String> {
-    ensure_secret_command(&window, &main_session, &key)?;
+fn secret_delete(window: tauri::WebviewWindow, key: String) -> Result<(), String> {
+    ensure_secret_command(&window, &key)?;
     let user = format!("{KEYRING_USER}:{key}");
     let entry = match Entry::new(KEYRING_SERVICE, &user) {
         Ok(e) => e,
@@ -1475,12 +2135,10 @@ mod tests {
             "api_key:api.driftstack.dev",
             "api_key:localhost_3000",
             "proxy_secret:550e8400-e29b-41d4-a716-446655440000",
-            "gui_control:agt_550e8400-e29b-41d4-a716-446655440000",
         ] {
             assert!(secret_command_caller_allowed(
                 MAIN_GUI_IDENTIFIER,
                 "main",
-                None,
                 key
             ));
         }
@@ -1488,67 +2146,558 @@ mod tests {
             "",
             "api_key:",
             "proxy_secret:../../api_key",
+            "gui_control:agt_550e8400-e29b-41d4-a716-446655440000",
             "gui_control:agt/other",
             "arbitrary",
         ] {
             assert!(!secret_command_caller_allowed(
                 MAIN_GUI_IDENTIFIER,
                 "main",
-                None,
                 key
             ));
         }
         assert!(!secret_command_caller_allowed(
             MAIN_GUI_IDENTIFIER,
             "main",
-            None,
             &format!("api_key:{}", "a".repeat(321)),
         ));
     }
 
     #[test]
-    fn simulator_secret_access_is_exactly_its_active_control_key() {
+    fn simulator_process_store_access_is_exactly_its_active_session() {
         let session = "agt_550e8400-e29b-41d4-a716-446655440000";
-        let key = format!("gui_control:{session}");
-
-        assert!(secret_command_caller_allowed(
+        assert!(simulator_control_key_caller_allowed(
             SIMULATOR_IDENTIFIER,
             "main",
             Some(session),
-            &key,
+            session,
         ));
-        assert!(secret_command_caller_allowed(
+        assert!(simulator_control_key_caller_allowed(
             SIMULATOR_IDENTIFIER,
             &format!("sim-{session}"),
             None,
-            &key,
+            session,
         ));
-        for denied in [
-            "api_key",
-            "api_key:api.driftstack.dev",
-            "proxy_vault_key",
-            "proxy_secret:550e8400-e29b-41d4-a716-446655440000",
-            "gui_control:agt_another-session",
-        ] {
-            assert!(!secret_command_caller_allowed(
+        for denied_session in ["agt_another-session", "../../api_key", ""] {
+            assert!(!simulator_control_key_caller_allowed(
                 SIMULATOR_IDENTIFIER,
                 "main",
                 Some(session),
-                denied,
+                denied_session,
             ));
         }
-        assert!(!secret_command_caller_allowed(
+        assert!(!simulator_control_key_caller_allowed(
             SIMULATOR_IDENTIFIER,
             "main",
             None,
-            &key,
+            session,
         ));
-        assert!(!secret_command_caller_allowed(
+        assert!(!simulator_control_key_caller_allowed(
             MAIN_GUI_IDENTIFIER,
             &format!("sim-{session}"),
             Some(session),
-            &key,
+            session,
         ));
+        // No Simulator window or main-GUI namespace can route a control key
+        // back through durable OS Keychain commands.
+        assert!(!secret_command_caller_allowed(
+            SIMULATOR_IDENTIFIER,
+            "main",
+            &format!("gui_control:{session}"),
+        ));
+        assert!(!secret_command_caller_allowed(
+            MAIN_GUI_IDENTIFIER,
+            "main",
+            &format!("gui_control:{session}"),
+        ));
+    }
+
+    fn test_control_key(fill: char) -> String {
+        format!("gck_{}", fill.to_string().repeat(32))
+    }
+
+    fn encode_simulator_query(query: &str) -> String {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD.encode(query)
+    }
+
+    fn decode_prepared_query(payload: &PreparedSimulatorPayload) -> String {
+        use base64::Engine as _;
+        String::from_utf8(
+            base64::engine::general_purpose::STANDARD
+                .decode(&payload.sanitized_b64)
+                .expect("prepared base64"),
+        )
+        .expect("prepared UTF-8")
+    }
+
+    #[test]
+    fn simulator_control_store_is_process_local_bounded_lru() {
+        let now = Instant::now();
+        let store = SimulatorControlKeyStore::default();
+        let mut generations = Vec::new();
+        for index in 0..MAX_SIMULATOR_CONTROL_KEYS {
+            let session = format!("agt_{index}");
+            generations.push(
+                store
+                    .store_at(
+                        &format!("sim-{session}"),
+                        &session,
+                        test_control_key('a'),
+                        now,
+                        Duration::from_secs(60),
+                    )
+                    .expect("store"),
+            );
+        }
+        // Read session zero to make it most-recently used, then force one
+        // eviction. Session one is now the LRU and must disappear.
+        assert!(store
+            .load_at("sim-agt_0", "agt_0", generations[0], now)
+            .unwrap()
+            .is_some());
+        let new_generation = store
+            .store_at(
+                "sim-agt_new",
+                "agt_new",
+                test_control_key('b'),
+                now,
+                Duration::from_secs(60),
+            )
+            .expect("store new");
+        assert_eq!(
+            store
+                .load_at("sim-agt_1", "agt_1", generations[1], now)
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            store
+                .load_at("sim-agt_0", "agt_0", generations[0], now)
+                .unwrap(),
+            Some(test_control_key('a'))
+        );
+        assert_eq!(
+            store
+                .load_at("sim-agt_new", "agt_new", new_generation, now)
+                .unwrap(),
+            Some(test_control_key('b'))
+        );
+
+        // A fresh store models a process restart and never resurrects keys.
+        assert_eq!(
+            SimulatorControlKeyStore::default()
+                .load_at("sim-agt_0", "agt_0", generations[0], now)
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn simulator_control_store_replaces_expires_and_deletes_exact_session() {
+        let now = Instant::now();
+        let store = SimulatorControlKeyStore::default();
+        let first_generation = store
+            .store_at(
+                "main",
+                "agt_exact",
+                test_control_key('a'),
+                now,
+                Duration::from_secs(30),
+            )
+            .expect("store old");
+        let second_generation = store
+            .store_at(
+                "main",
+                "agt_exact",
+                test_control_key('b'),
+                now,
+                Duration::from_secs(30),
+            )
+            .expect("replace");
+        assert_eq!(
+            store
+                .load_at("main", "agt_exact", second_generation, now)
+                .unwrap(),
+            Some(test_control_key('b'))
+        );
+        assert_eq!(
+            store
+                .load_at("main", "agt_exact", first_generation, now)
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            store
+                .load_at(
+                    "main",
+                    "agt_exact",
+                    second_generation,
+                    now + Duration::from_secs(31),
+                )
+                .unwrap(),
+            None
+        );
+
+        let delete_generation = store
+            .store_at(
+                "main",
+                "agt_exact",
+                test_control_key('c'),
+                now,
+                Duration::from_secs(30),
+            )
+            .expect("store for delete");
+        store
+            .delete("main", "agt_exact", delete_generation)
+            .expect("delete");
+        assert_eq!(
+            store
+                .load_at("main", "agt_exact", delete_generation, now)
+                .unwrap(),
+            None
+        );
+
+        assert!(store
+            .store_at(
+                "main",
+                "agt_bad",
+                "not-a-control-key".to_string(),
+                now,
+                Duration::from_secs(30),
+            )
+            .is_err());
+
+        let exhausted = SimulatorControlKeyStore::default();
+        exhausted.shared.state.lock().unwrap().next_generation = MAX_WEBVIEW_SAFE_GENERATION;
+        assert!(exhausted
+            .store_at(
+                "main",
+                "agt_exact",
+                test_control_key('a'),
+                now,
+                Duration::from_secs(30),
+            )
+            .is_err());
+        assert!(exhausted.shared.state.lock().unwrap().entries.is_empty());
+    }
+
+    #[test]
+    fn simulator_control_store_reaps_idle_expiry_without_a_webview_access() {
+        let store = SimulatorControlKeyStore::default();
+        store
+            .store_at(
+                "main",
+                "agt_idle",
+                test_control_key('a'),
+                Instant::now(),
+                Duration::from_millis(5),
+            )
+            .expect("store");
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut state = store.shared.state.lock().unwrap();
+        while !state.entries.is_empty() {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            assert!(!remaining.is_zero(), "expiry owner did not reap idle key");
+            let (next, result) = store.shared.changed.wait_timeout(state, remaining).unwrap();
+            state = next;
+            assert!(
+                !result.timed_out() || state.entries.is_empty(),
+                "expiry owner did not reap idle key"
+            );
+        }
+    }
+
+    #[test]
+    fn simulator_payload_moves_control_key_into_exact_native_generation() {
+        let wall_now_ms = 1_000_000_u128;
+        let monotonic_now = Instant::now();
+        let session = "agt_exact";
+        let key = test_control_key('a');
+        let input = encode_simulator_query(&format!(
+            "window=simulator&session={session}&ws=wss%3A%2F%2Flive.example&token=secret-token&ck={key}&cke={}&base=https%3A%2F%2Fapi.driftstack.dev",
+            wall_now_ms + 30_000
+        ));
+        let store = SimulatorControlKeyStore::default();
+
+        let prepared = prepare_simulator_payload_at(
+            &store,
+            "main",
+            session,
+            &input,
+            wall_now_ms,
+            monotonic_now,
+        )
+        .expect("prepare");
+        assert!(prepared.control_generation > 0);
+        let query = decode_prepared_query(&prepared);
+        let fields: Vec<&str> = query.split('&').collect();
+        assert!(!fields.iter().any(|field| {
+            matches!(
+                field.split_once('=').map(|(name, _)| name),
+                Some("ck") | Some("cke")
+            )
+        }));
+        assert!(!query.contains(&key));
+        assert!(fields
+            .iter()
+            .any(|field| *field == format!("cg={}", prepared.control_generation)));
+        assert!(query.contains("token=secret-token"));
+        assert_eq!(
+            store
+                .load_at("main", session, prepared.control_generation, monotonic_now,)
+                .unwrap(),
+            Some(key)
+        );
+        assert_eq!(
+            store
+                .load_at(
+                    "sim-agt_exact",
+                    session,
+                    prepared.control_generation,
+                    monotonic_now,
+                )
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            store
+                .load_at(
+                    "main",
+                    "agt_other",
+                    prepared.control_generation,
+                    monotonic_now,
+                )
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn simulator_payload_caps_api_expiry_at_twenty_four_hours() {
+        let wall_now_ms = 10_000_u128;
+        let monotonic_now = Instant::now();
+        let session = "agt_expiry";
+        let key = test_control_key('b');
+        let input = encode_simulator_query(&format!(
+            "window=simulator&session={session}&ck={key}&cke={}",
+            wall_now_ms + (48 * 60 * 60 * 1_000)
+        ));
+        let store = SimulatorControlKeyStore::default();
+        let prepared = prepare_simulator_payload_at(
+            &store,
+            &format!("sim-{session}"),
+            session,
+            &input,
+            wall_now_ms,
+            monotonic_now,
+        )
+        .expect("prepare");
+
+        assert_eq!(
+            store
+                .load_at(
+                    &format!("sim-{session}"),
+                    session,
+                    prepared.control_generation,
+                    monotonic_now + SIMULATOR_CONTROL_KEY_TTL - Duration::from_millis(1),
+                )
+                .unwrap(),
+            Some(key)
+        );
+        assert_eq!(
+            store
+                .load_at(
+                    &format!("sim-{session}"),
+                    session,
+                    prepared.control_generation,
+                    monotonic_now + SIMULATOR_CONTROL_KEY_TTL,
+                )
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn simulator_payload_generation_prevents_stale_load_or_delete() {
+        let wall_now_ms = 50_000_u128;
+        let monotonic_now = Instant::now();
+        let session = "agt_reconnect";
+        let store = SimulatorControlKeyStore::default();
+        let prepare = |key: &str, now_ms: u128, now: Instant| {
+            prepare_simulator_payload_at(
+                &store,
+                "main",
+                session,
+                &encode_simulator_query(&format!(
+                    "window=simulator&session={session}&ck={key}&cke={}",
+                    now_ms + 60_000
+                )),
+                now_ms,
+                now,
+            )
+            .expect("prepare")
+        };
+        let old = prepare(&test_control_key('a'), wall_now_ms, monotonic_now);
+        let current = prepare(
+            &test_control_key('b'),
+            wall_now_ms + 1,
+            monotonic_now + Duration::from_millis(1),
+        );
+        assert_ne!(old.control_generation, current.control_generation);
+        assert_eq!(
+            store
+                .load_at(
+                    "main",
+                    session,
+                    old.control_generation,
+                    monotonic_now + Duration::from_millis(2),
+                )
+                .unwrap(),
+            None
+        );
+        store
+            .delete("main", session, old.control_generation)
+            .expect("stale delete");
+        assert_eq!(
+            store
+                .load_at(
+                    "main",
+                    session,
+                    current.control_generation,
+                    monotonic_now + Duration::from_millis(2),
+                )
+                .unwrap(),
+            Some(test_control_key('b'))
+        );
+        store
+            .delete("main", session, current.control_generation)
+            .expect("current delete");
+        assert_eq!(
+            store
+                .load_at(
+                    "main",
+                    session,
+                    current.control_generation,
+                    monotonic_now + Duration::from_millis(2),
+                )
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn simulator_payload_rejects_ambiguous_or_invalid_control_fields() {
+        let wall_now_ms = 100_000_u128;
+        let monotonic_now = Instant::now();
+        let session = "agt_exact";
+        let key = test_control_key('a');
+        let cases = [
+            format!(
+                "window=simulator&session=agt_other&ck={key}&cke={}",
+                wall_now_ms + 1_000
+            ),
+            format!(
+                "window=simulator&session={session}&session={session}&ck={key}&cke={}",
+                wall_now_ms + 1_000
+            ),
+            format!(
+                "window=simulator&session={session}&ck={key}&ck={key}&cke={}",
+                wall_now_ms + 1_000
+            ),
+            format!(
+                "window=simulator&session={session}&ck={key}&cke={}&cke={}",
+                wall_now_ms + 1_000,
+                wall_now_ms + 1_000
+            ),
+            format!("window=simulator&session={session}&ck={key}"),
+            format!(
+                "window=simulator&session={session}&cke={}",
+                wall_now_ms + 1_000
+            ),
+            format!(
+                "window=simulator&session={session}&ck=invalid&cke={}",
+                wall_now_ms + 1_000
+            ),
+            format!("window=simulator&session={session}&ck={key}&cke={wall_now_ms}"),
+            format!(
+                "window=simulator&session={session}&ck={key}&cke={}&cg=7",
+                wall_now_ms + 1_000
+            ),
+            // URLSearchParams would decode `%63k` to `ck`; native must reject
+            // the irregular name instead of forwarding the secret field.
+            format!(
+                "window=simulator&session={session}&%63k={key}&cke={}",
+                wall_now_ms + 1_000
+            ),
+        ];
+        for query in cases {
+            let store = SimulatorControlKeyStore::default();
+            assert!(
+                prepare_simulator_payload_at(
+                    &store,
+                    "main",
+                    session,
+                    &encode_simulator_query(&query),
+                    wall_now_ms,
+                    monotonic_now,
+                )
+                .is_err(),
+                "accepted invalid handoff: {query}"
+            );
+            assert_eq!(store.shared.state.lock().unwrap().entries.len(), 0);
+        }
+
+        let mismatched_window = encode_simulator_query(&format!(
+            "window=simulator&session={session}&ck={key}&cke={}",
+            wall_now_ms + 1_000
+        ));
+        assert!(prepare_simulator_payload_at(
+            &SimulatorControlKeyStore::default(),
+            "sim-agt_other",
+            session,
+            &mismatched_window,
+            wall_now_ms,
+            monotonic_now,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn simulator_payload_without_control_key_exposes_only_zero_generation() {
+        let store = SimulatorControlKeyStore::default();
+        let now = Instant::now();
+        let previous_generation = store
+            .store_at(
+                "main",
+                "agt_legacy",
+                test_control_key('a'),
+                now,
+                Duration::from_secs(60),
+            )
+            .expect("previous credential");
+        let prepared = prepare_simulator_payload_at(
+            &store,
+            "main",
+            "agt_legacy",
+            &encode_simulator_query("window=simulator&session=agt_legacy&token=t"),
+            1_000,
+            now,
+        )
+        .expect("legacy handoff");
+        assert_eq!(prepared.control_generation, 0);
+        assert_eq!(
+            decode_prepared_query(&prepared),
+            "window=simulator&session=agt_legacy&token=t&cg=0"
+        );
+        assert_eq!(
+            store
+                .load_at("main", "agt_legacy", previous_generation, now)
+                .unwrap(),
+            None
+        );
+        assert!(store.shared.state.lock().unwrap().entries.is_empty());
     }
 
     #[test]
@@ -1602,11 +2751,11 @@ mod tests {
     fn sim_payload_path_stays_in_temp_dir_for_normal_ids() {
         // The canonical agent-session id (`agt_<uuid>`) maps to a clean
         // file name directly under the temp dir.
-        let p = sim_payload_path("agt_00000000-0000-4000-8000-000000000001");
+        let p = sim_payload_path("agt_00000000-0000-4000-8000-000000000001", "abc123-1");
         assert_eq!(p.parent(), Some(std::env::temp_dir().as_path()));
         assert_eq!(
             p.file_name().and_then(|n| n.to_str()),
-            Some("driftstack-sim-agt_00000000-0000-4000-8000-000000000001.handoff"),
+            Some("driftstack-sim-agt_00000000-0000-4000-8000-000000000001-abc123-1.handoff"),
         );
     }
 
@@ -1616,60 +2765,101 @@ mod tests {
         assert!(!is_safe_session_label("agt_x/y"));
         assert!(!is_safe_session_label("agt_x\\y"));
         assert!(!is_safe_session_label(""));
+        assert!(is_safe_handoff_id("abc123-1"));
+        assert!(!is_safe_handoff_id("../../handoff"));
+        assert!(!is_safe_handoff_id("not_hex"));
     }
 
     #[test]
     fn sim_payload_write_then_take_round_trips_and_unlinks() {
-        // Use a unique id so parallel test runs don't collide.
-        let id = format!("test-roundtrip-{}", std::process::id());
+        let session = format!("test-roundtrip-{}", std::process::id());
         let payload = "d2luZG93PXNpbXVsYXRvcg==";
-        let _ = std::fs::remove_file(sim_payload_path(&id));
-        write_sim_payload(&id, payload).expect("write");
+        let handoff = write_sim_payload(&session, payload).expect("write");
         // First take returns the complete payload and unlinks.
-        let got = take_sim_payload(&id).expect("take");
+        let got = take_sim_payload(&session, &handoff.id).expect("take");
         assert_eq!(got.as_deref(), Some(payload));
         // Second take finds no file → None (single-use).
-        let again = take_sim_payload(&id).expect("take again");
+        let again = take_sim_payload(&session, &handoff.id).expect("take again");
         assert_eq!(again, None);
     }
 
     #[test]
-    fn stale_cleanup_never_deletes_a_newer_handoff_generation() {
-        let id = format!("test-generation-{}", std::process::id());
-        let path = sim_payload_path(&id);
-        let _ = std::fs::remove_file(&path);
-        let old = write_sim_payload(&id, "b2xk").expect("old write");
-        let new = write_sim_payload(&id, "bmV3").expect("new write");
-        assert_ne!(old, new);
+    fn rapid_same_session_handoffs_have_independent_paths_and_consumers() {
+        let session = format!("test-take-generation-{}", std::process::id());
+        let old_payload = "b2xk";
+        let new_payload = "bmV3ZXItc3VjY2Vzc29y";
+        let old = write_sim_payload(&session, old_payload).expect("old write");
+        let new = write_sim_payload(&session, new_payload).expect("successor write");
+        assert_ne!(old.id, new.id);
+        assert_ne!(old.path, new.path);
 
-        remove_sim_payload_if_identity(&path, old);
-        assert!(path.exists());
+        let opened = take_sim_payload(&session, &old.id).expect("take old");
+        assert_eq!(opened.as_deref(), Some(old_payload));
+        assert!(!old.path.exists());
+        assert!(new.path.exists(), "old reader deleted successor handoff");
         assert_eq!(
-            take_sim_payload(&id).expect("take").as_deref(),
+            take_sim_payload(&session, &new.id)
+                .expect("take successor")
+                .as_deref(),
+            Some(new_payload)
+        );
+        assert!(!new.path.exists());
+    }
+
+    #[test]
+    fn stale_cleanup_never_deletes_a_newer_handoff_generation() {
+        let session = format!("test-generation-{}", std::process::id());
+        let old = write_sim_payload(&session, "b2xk").expect("old write");
+        let new = write_sim_payload(&session, "bmV3").expect("new write");
+
+        remove_sim_payload_if_identity(&old.path, old.identity);
+        assert!(!old.path.exists());
+        assert!(new.path.exists());
+        assert_eq!(
+            take_sim_payload(&session, &new.id)
+                .expect("take")
+                .as_deref(),
             Some("bmV3")
         );
+    }
+
+    #[test]
+    fn sim_payload_metadata_failure_removes_owned_credential_file() {
+        let session = format!("test-metadata-failure-{}", std::process::id());
+        let path = sim_payload_path(&session, "abc123-5");
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, "d2luZG93PXNpbXVsYXRvcg==").expect("fixture");
+        let error = sim_payload_identity_or_cleanup(
+            &path,
+            Err(std::io::Error::other("deterministic fstat failure")),
+        )
+        .expect_err("metadata failure");
+        assert!(error.contains("deterministic fstat failure"));
+        assert!(!path.exists());
     }
 
     #[cfg(unix)]
     #[test]
     fn sim_payload_write_uses_owner_only_0600_mode() {
         use std::os::unix::fs::PermissionsExt as _;
-        let id = format!("test-perms-{}", std::process::id());
-        let path = sim_payload_path(&id);
-        let _ = std::fs::remove_file(&path);
-        write_sim_payload(&id, "YWJjMTIz").expect("write");
-        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        let session = format!("test-perms-{}", std::process::id());
+        let handoff = write_sim_payload(&session, "YWJjMTIz").expect("write");
+        let mode = std::fs::metadata(&handoff.path)
+            .unwrap()
+            .permissions()
+            .mode();
         // Low 9 bits = rwx for owner/group/other; expect 0600.
         assert_eq!(mode & 0o777, 0o600);
-        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&handoff.path);
     }
 
     #[cfg(unix)]
     #[test]
-    fn sim_payload_take_rejects_and_removes_a_symlink() {
+    fn sim_payload_take_rejects_symlink_without_unlinking_unknown_generation() {
         use std::os::unix::fs::symlink;
-        let id = format!("test-symlink-{}", std::process::id());
-        let path = sim_payload_path(&id);
+        let session = format!("test-symlink-{}", std::process::id());
+        let handoff_id = "abc123-1";
+        let path = sim_payload_path(&session, handoff_id);
         let target =
             std::env::temp_dir().join(format!(".driftstack-sim-target-{}", std::process::id()));
         let _ = std::fs::remove_file(&path);
@@ -1677,9 +2867,12 @@ mod tests {
         std::fs::write(&target, "d2luZG93PXNpbXVsYXRvcg==").expect("target");
         symlink(&target, &path).expect("symlink");
 
-        assert!(take_sim_payload(&id).is_err());
-        assert!(!path.exists());
+        assert!(take_sim_payload(&session, handoff_id).is_err());
+        // A failed open has no trusted generation identity, so it must not
+        // broadly unlink a path that a same-session writer could replace.
+        assert!(path.symlink_metadata().is_ok());
         assert!(target.exists());
+        let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(target);
     }
 
@@ -1687,30 +2880,33 @@ mod tests {
     #[test]
     fn sim_payload_take_rejects_non_owner_permissions() {
         use std::os::unix::fs::PermissionsExt as _;
-        let id = format!("test-open-perms-{}", std::process::id());
-        let path = sim_payload_path(&id);
+        let session = format!("test-open-perms-{}", std::process::id());
+        let handoff_id = "abc123-2";
+        let path = sim_payload_path(&session, handoff_id);
         let _ = std::fs::remove_file(&path);
         std::fs::write(&path, "d2luZG93PXNpbXVsYXRvcg==").expect("write");
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))
             .expect("permissions");
 
-        assert!(take_sim_payload(&id).is_err());
+        assert!(take_sim_payload(&session, handoff_id).is_err());
         assert!(!path.exists());
     }
 
     #[test]
     fn sim_payload_take_missing_is_none_not_error() {
-        let id = format!("test-missing-{}", std::process::id());
-        let _ = std::fs::remove_file(sim_payload_path(&id));
+        let session = format!("test-missing-{}", std::process::id());
+        let handoff_id = "abc123-3";
+        let _ = std::fs::remove_file(sim_payload_path(&session, handoff_id));
         // No file written → Ok(None), never Err.
-        assert_eq!(take_sim_payload(&id).expect("take"), None);
+        assert_eq!(take_sim_payload(&session, handoff_id).expect("take"), None);
     }
 
     #[test]
-    fn simulator_process_args_contain_only_the_non_secret_label() {
+    fn simulator_process_args_contain_only_non_secret_routing_ids() {
         let args = simulator_open_args(
             "/Applications/Driftstack Simulator.app",
             "agt_00000000-0000-4000-8000-000000000001",
+            "abc123-4",
         );
         assert_eq!(
             args,
@@ -1720,10 +2916,38 @@ mod tests {
                 "/Applications/Driftstack Simulator.app",
                 "--args",
                 "--ds-label=agt_00000000-0000-4000-8000-000000000001",
+                "--ds-handoff=abc123-4",
             ],
         );
         assert!(!args.iter().any(|arg| arg.contains("token=")));
         assert!(!args.iter().any(|arg| arg.contains("ck=")));
+        assert_eq!(
+            simulator_launch_handoff(&args),
+            Some((
+                "agt_00000000-0000-4000-8000-000000000001".to_string(),
+                "abc123-4".to_string(),
+            ))
+        );
+
+        for malformed in [
+            vec!["--ds-label=agt_1".to_string()],
+            vec![
+                "--ds-label=agt_1".to_string(),
+                "--ds-handoff=../../secret".to_string(),
+            ],
+            vec![
+                "--ds-label=agt_1".to_string(),
+                "--ds-label=agt_2".to_string(),
+                "--ds-handoff=abc123".to_string(),
+            ],
+            vec![
+                "--ds-label=agt_1".to_string(),
+                "--ds-handoff=abc123".to_string(),
+                "--ds-handoff=def456".to_string(),
+            ],
+        ] {
+            assert_eq!(simulator_launch_handoff(&malformed), None);
+        }
     }
 
     #[test]

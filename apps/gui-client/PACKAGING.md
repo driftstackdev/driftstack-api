@@ -98,14 +98,41 @@ right-click → Open → Open bypasses the warning for local QA.
 
 ## Local build + install without repeated Keychain prompts
 
-The main GUI and Simulator read protected credentials from macOS Keychain. Never
-work around a prompt by moving API, proxy, or per-session control keys into a file,
-environment variable, Tauri store, or browser storage.
+The main GUI keeps long-lived API and proxy credentials in macOS Keychain, and
+local signing keeps its private key there too. Never work around those prompts by
+moving an API key, proxy secret, signing key, or password into an environment
+variable, Tauri store, browser storage, or durable plaintext file.
+
+Short-lived per-session `gui_control` credentials follow a deliberately different
+contract. The API supplies the credential with its expiry. The main GUI may carry
+that response to the separate Simulator through the existing owner-only `0600`,
+single-use handoff file; this is ephemeral cross-process transport, not durable
+storage. Each launch gets a unique non-secret handoff identity and file path, so an
+older same-session opener or cleanup cannot consume its successor. The Simulator
+opens without following symlinks, unlinks the exact handoff before reading it,
+validates the session/key/expiry, and stores the credential in Rust process memory
+before any WebView URL or `ds-session` event is applied. For control authorization,
+the internal URL/event contains only the non-secret monotonic `cg` generation,
+never the control key or expiry; the separate LiveKit join token follows its
+existing in-memory WebView handoff.
+
+The native store is bound to the exact window, session, and generation; holds at
+most 32 credentials; preserves the API expiry with an additional 24-hour ceiling;
+does not extend expiry on reads; and zeroizes native values on replacement, expiry,
+LRU eviction, explicit deletion, window destruction, and process teardown. The
+Simulator exposes only dedicated native load/delete commands for an exact active
+generation. Generic Keychain save/load/delete commands remain restricted to the
+main GUI's bounded API/proxy namespaces. Pre-existing `gui_control:*` Keychain
+items are inert: the app neither reads, enumerates, nor deletes them, avoiding a
+migration-time authorization prompt. Legacy browser entries are scrubbed rather
+than imported. Frontend and API-response strings are managed-language copies and
+are not claimed to be deterministically zeroized.
 
 An ad-hoc signature (`codesign --sign -`) has no stable signer identity. Its
 designated requirement is the executable's CDHash, which changes on every rebuild;
-Keychain therefore treats every rebuilt main and Simulator app as new code and asks
-again. The canonical installer refuses that unsafe and annoying state.
+Keychain therefore treats every rebuilt caller of the remaining durable secrets
+and the signing identity as new code and can ask again. The canonical installer
+refuses that unsafe and annoying state.
 
 For local-only development on a Mac without an Apple signing certificate, run once:
 

@@ -53,6 +53,10 @@ tauri-plugin-deep-link = "2.0"
 tauri-plugin-single-instance = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+# Short-lived per-session simulator control credentials never need durable OS
+# keychain persistence. Keep their bounded process-memory copies zeroized on
+# replacement, eviction, expiry, explicit deletion, and process teardown.
+zeroize = "1"
 # V-241 T3 #1 (D-2026-05-06-01): keyring-rs for cross-platform OS
 # keychain access. macOS Keychain / Windows Credential Manager / Linux
 # Secret Service or KWallet — handled transparently per-platform.
