@@ -29309,3 +29309,34 @@ while capture is disabled may leave the congestion latch fail-closed until recon
 No shared workspace build/deploy, native build/sign/install/relaunch, harness/Fleet/
 Family-B activation, environment/customer/secret mutation or foreign pnpm action was
 performed.
+
+---
+
+## V-701 — Agent-turn receipt identity cannot depend on credential material
+
+**Date:** 2026-07-17
+
+The generic receipt hash helper previously advertised an optional explicit BYOK key
+and converted it into a secret-derived fingerprint. Although the production route
+did not pass that option, a future caller could have made credential rotation change
+the logical-turn digest, reject an otherwise valid replay, and expose a durable
+credential-equality branch.
+
+The credential parameter and secret hashing are removed. Receipt identity is now
+limited to the exact session, semantic user message, and ordered consequential-action
+approvals. The serialized `explicit_byok_fingerprint:null` member remains as a fixed
+compatibility sentinel: deleting it would change every current digest and the
+authenticated context used by durable receipt encryption. The canonical compatibility
+digest is pinned, and the incompatible field-deletion digest is explicitly rejected
+pending any future guarded data migration.
+
+Deterministic proof covers absent, original, and rotated legacy credential properties
+producing the same digest; session, message, and approval-order changes producing
+different digests; and unchanged reservation, overlap, terminal replay, route,
+plaintext-cache, encrypted-repository, and persistence contracts. The affected matrix
+passes four files with 154/154 tests and one database-gated file with two tests honestly
+skipped. Strict server source and test TypeScript, targeted ESLint, Prettier, and
+diff/whitespace checks are green.
+
+No route, repository, schema, migration, OpenAPI, SDK, shared build/deploy, native,
+Fleet/Family-B, environment, customer, secret, or foreign pnpm path was changed.

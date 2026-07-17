@@ -13,38 +13,58 @@ const base = {
 };
 
 describe('agent-turn idempotency receipts', () => {
-  it('binds the digest to session, body, approvals, and an irreversible explicit-BYOK fingerprint', () => {
+  it('binds only semantic turn fields while preserving the legacy-null canonical digest', () => {
     const key = 'sk-ant-secret-never-persist-me';
-    const digest = hashAgentTurnRequest({
+    const semanticTurn = {
       agentSessionId: base.agentSessionId,
       userMessage: 'submit the form',
       approveConsequentialActions: [{ category: 'purchase', matched_text: 'buy now' }],
-      explicitByokApiKey: key,
-    });
+    };
+    const digest = hashAgentTurnRequest(semanticTurn);
     expect(digest).toMatch(/^[0-9a-f]{64}$/);
-    expect(digest).not.toContain(key);
-    expect(
-      hashAgentTurnRequest({
-        agentSessionId: base.agentSessionId,
-        userMessage: 'submit the form',
-        approveConsequentialActions: [{ category: 'purchase', matched_text: 'buy now' }],
-        explicitByokApiKey: key,
-      }),
-    ).toBe(digest);
-    expect(
-      hashAgentTurnRequest({
-        agentSessionId: base.agentSessionId,
-        userMessage: 'submit the form',
-        approveConsequentialActions: [{ category: 'purchase', matched_text: 'buy now' }],
-        explicitByokApiKey: `${key}-different`,
-      }),
-    ).not.toBe(digest);
+    expect(digest).toBe('82a956d2d258d91f90ef09023efddae7aa8170b9509bf3e2c07ce19004273259');
+    // The field-deletion digest requires a guarded data/AAD migration. It must
+    // never replace the compatibility digest as a cleanup shortcut.
+    expect(digest).not.toBe('715b1e13d68518f4c4d11494c76ee13a3022d6c452f002ad8a4ab052ff0e92a6');
+
+    type HashArgs = Parameters<typeof hashAgentTurnRequest>[0];
+    type CredentialInputWasRemoved = 'explicitByokApiKey' extends keyof HashArgs ? never : true;
+    const credentialInputWasRemoved: CredentialInputWasRemoved = true;
+    expect(credentialInputWasRemoved).toBe(true);
+
+    // Structural JavaScript/TypeScript callers can still carry unrelated legacy
+    // properties. They are ignored rather than becoming a secret equality oracle.
+    const originalLegacyPayload = { ...semanticTurn, explicitByokApiKey: key };
+    const rotatedLegacyPayload = { ...semanticTurn, explicitByokApiKey: `${key}-rotated` };
+    expect(hashAgentTurnRequest(originalLegacyPayload)).toBe(digest);
+    expect(hashAgentTurnRequest(rotatedLegacyPayload)).toBe(digest);
+
     expect(
       hashAgentTurnRequest({
         agentSessionId: `${base.agentSessionId}-different`,
         userMessage: 'submit the form',
       }),
     ).not.toBe(digest);
+    expect(
+      hashAgentTurnRequest({ ...semanticTurn, userMessage: 'submit a different form' }),
+    ).not.toBe(digest);
+    expect(
+      hashAgentTurnRequest({
+        ...semanticTurn,
+        approveConsequentialActions: [
+          { category: 'purchase', matched_text: 'buy now' },
+          { category: 'external-side-effect', matched_text: 'send it' },
+        ],
+      }),
+    ).not.toBe(
+      hashAgentTurnRequest({
+        ...semanticTurn,
+        approveConsequentialActions: [
+          { category: 'external-side-effect', matched_text: 'send it' },
+          { category: 'purchase', matched_text: 'buy now' },
+        ],
+      }),
+    );
   });
 
   it('reserves once, reports overlap, and replays the exact completed terminal body', async () => {

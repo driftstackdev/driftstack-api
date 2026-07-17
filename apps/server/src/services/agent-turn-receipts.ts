@@ -41,22 +41,19 @@ export function hashAgentTurnRequest(args: {
     category: string;
     matched_text: string;
   }>;
-  explicitByokApiKey?: string;
 }): string {
-  // Bind explicit BYOK overrides without ever persisting their plaintext. A
-  // stored account/session key is deliberately excluded: a later config
-  // rotation must not invalidate replay of an already-completed turn.
-  const explicitByokFingerprint =
-    args.explicitByokApiKey === undefined
-      ? null
-      : createHash('sha256').update(args.explicitByokApiKey, 'utf8').digest('hex');
   return createHash('sha256')
     .update(
       JSON.stringify({
         agent_session_id: args.agentSessionId,
         user_message: args.userMessage,
         approve_consequential_actions: args.approveConsequentialActions ?? null,
-        explicit_byok_fingerprint: explicitByokFingerprint,
+        // Compatibility sentinel: this key historically admitted a secret-derived
+        // fingerprint. Credentials are not logical-turn identity, but removing the
+        // key would change every existing headerless digest and the authenticated
+        // encryption context of durable receipts. Keep the canonical null bytes;
+        // never accept or derive credential material here again.
+        explicit_byok_fingerprint: null,
       }),
       'utf8',
     )
