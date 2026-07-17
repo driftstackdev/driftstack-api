@@ -1,9 +1,8 @@
 // Behavioural coverage for the admin Cost page —
 // apps/admin-panel/src/pages/cost.astro. Focused on the config-load path,
-// where the operator reads the rate card + per-tier thresholds. Pins the
-// 2-decimal threshold formatting (a $15.50 cap must render "$15.50", not the
-// pre-fix "$15.5") so it stays consistent with the cents() helper used
-// everywhere else on the page. Loads the built dist page + runs the inline
+// where the operator reads the rate card + per-tier thresholds. Pins strict
+// response decoding and 2-decimal accounting-unit formatting so malformed
+// success payloads can never look like measured zero cost. Loads the built dist page + runs the inline
 // script in jsdom against a mock fetch.
 //
 // NOTE: the admin Cost page reads its bearer from localStorage key
@@ -89,6 +88,98 @@ function json(obj: unknown, status = 200): Response {
   });
 }
 
+const ACCOUNT_A = '11111111-2222-4333-8444-555555555555';
+const ACCOUNT_B = '22222222-3333-4444-8555-666666666666';
+const NOW = new Date();
+const CURRENT_CYCLE = `${NOW.getUTCFullYear().toString().padStart(4, '0')}-${(NOW.getUTCMonth() + 1)
+  .toString()
+  .padStart(2, '0')}`;
+
+function validConfig(): Record<string, unknown> {
+  return {
+    rates: {
+      computeCentsPerMinute: 0.5,
+      storageCentsPerGbMonth: 2,
+      egressCentsPerGb: 1,
+      emailCentsPerSend: 0.1,
+      llmCentsPer1kInputTokens: 0.05,
+      llmCentsPer1kOutputTokens: 0.25,
+    },
+    tierThresholds: {
+      api_builder: { softCents: 1550, hardCents: 5000 },
+    },
+  };
+}
+
+function accountRow(id: string): Record<string, unknown> {
+  return {
+    id: `acc_${id}`,
+    email: `${id.slice(0, 8)}@example.test`,
+    name: null,
+    tier: 'api_builder',
+    status: 'active',
+    created_at: '2026-07-01T12:00:00.000Z',
+    updated_at: '2026-07-01T12:00:00.000Z',
+  };
+}
+
+function accountsPage(ids: string[]): Record<string, unknown> {
+  return { data: ids.map(accountRow), has_more: false, next_cursor: null };
+}
+
+interface CostSummaryFixture {
+  account_id: string;
+  billing_cycle: string;
+  tier: string;
+  breakdown: {
+    computeCents: number;
+    storageCents: number;
+    egressCents: number;
+    emailCents: number;
+    llmCents: number;
+    totalCents: number;
+    thresholdState: 'under-soft' | 'between-soft-and-hard' | 'over-hard';
+  };
+  thresholds: { softCents: number; hardCents: number };
+}
+
+function costSummary(
+  accountId: string,
+  opts: {
+    cycle?: string;
+    computeCents?: number;
+    softCents?: number;
+    hardCents?: number;
+    thresholdState?: 'under-soft' | 'between-soft-and-hard' | 'over-hard';
+  } = {},
+): CostSummaryFixture {
+  const computeCents = opts.computeCents ?? 0;
+  const softCents = opts.softCents ?? 3000;
+  const hardCents = opts.hardCents ?? 5000;
+  const thresholdState =
+    opts.thresholdState ??
+    (computeCents >= hardCents
+      ? 'over-hard'
+      : computeCents >= softCents
+        ? 'between-soft-and-hard'
+        : 'under-soft');
+  return {
+    account_id: accountId,
+    billing_cycle: opts.cycle ?? CURRENT_CYCLE,
+    tier: 'api_builder',
+    breakdown: {
+      computeCents,
+      storageCents: 0,
+      egressCents: 0,
+      emailCents: 0,
+      llmCents: 0,
+      totalCents: computeCents,
+      thresholdState,
+    },
+    thresholds: { softCents, hardCents },
+  };
+}
+
 async function flush(times = 8): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
@@ -140,7 +231,7 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     let clearCalls = 0;
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
-      route: () => json({ rates: {}, tierThresholds: {} }),
+      route: () => json(validConfig()),
       beforeEval: (target) => {
         target.setTimeout = (() => 1) as typeof target.setTimeout;
         target.clearTimeout = (() => {
@@ -207,13 +298,13 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     const rateCard = text(window, '[data-field="rate-card"]');
     expect(rateCard).toContain('0.5');
     expect(rateCard).toContain('cents / minute');
-    // Thresholds render at 2 decimals — the fix: 1550c → "$15.50" (not "$15.5"),
-    // 5000c → "$50.00", consistent with the page's cents() helper.
+    // Thresholds render at 2 decimals without falsely presenting the
+    // internal accounting estimate as customer-facing currency.
     const thresholds = text(window, '[data-field="tier-thresholds"]');
     expect(thresholds).toContain('api_builder');
-    expect(thresholds).toContain('soft $15.50');
-    expect(thresholds).toContain('hard $50.00');
-    expect(thresholds).not.toContain('$15.5 ');
+    expect(thresholds).toContain('soft 15.50 accounting units');
+    expect(thresholds).toContain('hard 50.00 accounting units');
+    expect(thresholds).not.toContain('$');
     expect(
       fetchCalls.find((call) => /\/v1\/admin\/cost\/config$/.test(call.url))?.init?.signal,
     ).toBeTruthy();
@@ -256,6 +347,29 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(banner).not.toMatch(/\/v1\/|500|db\.internal|secret=abc/);
   });
 
+  it('malformed 200 config fails closed instead of enabling controls or rendering zero values', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: () => json({}),
+    });
+    win = window;
+    await flush();
+
+    expect(text(window, '[data-banner]')).toContain('Could not load cost configuration');
+    expect(text(window, '[data-field="rate-card"]')).not.toMatch(/0(?:\.00)?/);
+    expect(window.document.querySelector('[data-field="rate-card"] .animate-pulse')).toBeNull();
+    expect(
+      (window.document.querySelector('input[name="account_id"]') as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (window.document.querySelector('[data-button="export-top-csv"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
   it('CRITICAL config endpoint error: Rate Card / Tier Thresholds tiles clear out of the perpetual loading-skeleton animation instead of pulsing forever (audit waefer6wu)', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
@@ -293,103 +407,231 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
       route: (call) => {
-        if (/\/v1\/admin\/cost\/accounts\/test123/.test(call.url)) {
-          return json({
-            account_id: 'test123',
-            billing_cycle: '2026-05',
-            tier: 'api_builder',
-            breakdown: {
-              computeCents: 1000,
-              storageCents: 500,
-              egressCents: 200,
-              emailCents: 100,
-              llmCents: 300,
-              totalCents: 2100,
+        if (call.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_A}`)) {
+          return json(
+            costSummary(ACCOUNT_A, {
+              computeCents: 2100,
+              softCents: 1550,
+              hardCents: 5000,
               thresholdState: 'between-soft-and-hard',
-            },
-            thresholds: { softCents: 1550, hardCents: 5000 },
-          });
+            }),
+          );
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
     await flush();
     const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
     const input = form.querySelector('input[name="account_id"]') as HTMLInputElement;
-    input.value = 'acc_test123';
+    input.value = `acc_${ACCOUNT_A}`;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
     // The acc_ prefix is stripped before hitting the cost endpoint.
-    expect(fetchCalls.some((c) => /\/v1\/admin\/cost\/accounts\/test123/.test(c.url))).toBe(true);
+    expect(fetchCalls.some((c) => c.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_A}`))).toBe(
+      true,
+    );
     const result = text(window, '[data-field="account-result"]');
-    expect(result).toContain('$21.00'); // totalCents 2100
+    expect(result).toContain('21.00 accounting units');
+    expect(result).toContain('compute only');
+    expect(result).toContain('Unmeasured');
     expect(result).toContain('between-soft-and-hard'); // threshold state badge
-    expect(result).toContain('$15.50'); // soft warn 1550c
-    expect(result).toContain('$50.00'); // hard cap 5000c
+    expect(result).toContain('15.50 accounting units');
+    expect(result).toContain('50.00 accounting units');
+  });
+
+  it('rejects malformed account ids and impossible billing cycles before any cost request', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: () => json(validConfig()),
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+    const accountInput = form.querySelector('input[name="account_id"]') as HTMLInputElement;
+    const cycleInput = form.querySelector('input[name="billing_cycle"]') as HTMLInputElement;
+
+    accountInput.value = 'acc_not-a-uuid';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(text(window, '[data-banner]')).toContain('acc_<uuid>');
+
+    accountInput.value = `acc_${ACCOUNT_A}`;
+    cycleInput.value = '2026-13';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(text(window, '[data-banner]')).toContain('YYYY-MM');
+    expect(fetchCalls.filter((call) => call.url.includes('/v1/admin/cost/accounts/'))).toHaveLength(
+      0,
+    );
+  });
+
+  it.each([
+    [
+      'wrong account identity',
+      {
+        ...costSummary(ACCOUNT_A, { computeCents: 2100 }),
+        account_id: ACCOUNT_B,
+      },
+    ],
+    [
+      'wrong billing cycle',
+      {
+        ...costSummary(ACCOUNT_A, { computeCents: 2100 }),
+        billing_cycle: '2026-06',
+      },
+    ],
+    [
+      'inconsistent component sum',
+      {
+        ...costSummary(ACCOUNT_A, { computeCents: 2100 }),
+        breakdown: {
+          ...costSummary(ACCOUNT_A, { computeCents: 2100 }).breakdown,
+          totalCents: 2099,
+        },
+      },
+    ],
+    [
+      'inconsistent threshold state',
+      {
+        ...costSummary(ACCOUNT_A, { computeCents: 2100 }),
+        breakdown: {
+          ...costSummary(ACCOUNT_A, { computeCents: 2100 }).breakdown,
+          thresholdState: 'over-hard' as const,
+        },
+      },
+    ],
+    [
+      'non-compute placeholder reported as measured',
+      {
+        ...costSummary(ACCOUNT_A, { computeCents: 2100 }),
+        breakdown: {
+          ...costSummary(ACCOUNT_A, { computeCents: 2100 }).breakdown,
+          storageCents: 1,
+          totalCents: 2101,
+        },
+      },
+    ],
+  ])(
+    'malformed 200 account summary (%s) is unavailable, never a plausible total',
+    async (_name, payload) => {
+      const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+        adminToken: 'admtok',
+        route: (call) =>
+          call.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_A}`)
+            ? json(payload)
+            : json(validConfig()),
+      });
+      win = window;
+      await flush();
+      const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+      (form.querySelector('input[name="account_id"]') as HTMLInputElement).value =
+        `acc_${ACCOUNT_A}`;
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+      await flush();
+
+      expect(text(window, '[data-banner]')).toContain('Could not load account cost');
+      expect(text(window, '[data-field="account-result"]')).toContain(
+        'Could not load the current account cost',
+      );
+      expect(text(window, '[data-field="account-result"]')).not.toContain('21.00 accounting units');
+    },
+  );
+
+  it('clears a stale account error banner after a later strictly valid account result', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (call.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_A}`)) {
+          return json({ detail: 'temporary' }, 503);
+        }
+        if (call.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_B}`)) {
+          return json(costSummary(ACCOUNT_B));
+        }
+        return json(validConfig());
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+    const input = form.querySelector('input[name="account_id"]') as HTMLInputElement;
+    input.value = `acc_${ACCOUNT_A}`;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(text(window, '[data-banner]')).toContain('temporarily unavailable');
+
+    input.value = `acc_${ACCOUNT_B}`;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(text(window, '[data-banner]')).toBe('');
+    expect(window.document.querySelector('[data-banner]')?.classList.contains('hidden')).toBe(true);
+    expect(text(window, '[data-field="account-result"]')).toContain(ACCOUNT_B);
   });
 
   it('account query failure uses staff-safe copy without account id/status/body leakage', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
       route: (call) => {
-        if (/\/v1\/admin\/cost\/accounts\/private-account/.test(call.url)) {
+        if (call.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_A}`)) {
           return json({ detail: 'driver token=secret at node.internal' }, 503);
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
     await flush();
     const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
-    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value =
-      'acc_private-account';
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = `acc_${ACCOUNT_A}`;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
     const banner = text(window, '[data-banner]');
     expect(banner).toContain('admin service is temporarily unavailable');
-    expect(banner).not.toMatch(/private-account|503|node\.internal|token=secret|\/v1\//);
+    expect(banner).not.toMatch(/503|node\.internal|token=secret|\/v1\//);
   });
 
   it('revokes a previous customer breakdown immediately and never leaves it visible after the next query fails', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
       route: (call) => {
-        if (/\/v1\/admin\/cost\/accounts\/first-account/.test(call.url)) {
-          return json({
-            account_id: 'first-account',
-            billing_cycle: '2026-07',
-            tier: 'api_builder',
-            breakdown: { totalCents: 4321, thresholdState: 'under-soft' },
-            thresholds: { softCents: 10000, hardCents: 20000 },
-          });
+        if (call.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_A}`)) {
+          return json(
+            costSummary(ACCOUNT_A, {
+              cycle: '2026-07',
+              computeCents: 4321,
+              softCents: 10000,
+              hardCents: 20000,
+            }),
+          );
         }
-        if (/\/v1\/admin\/cost\/accounts\/second-account/.test(call.url)) {
+        if (call.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_B}`)) {
           return json({ detail: 'private upstream failure' }, 503);
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
     await flush();
     const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
     const input = form.querySelector('input[name="account_id"]') as HTMLInputElement;
-    input.value = 'acc_first-account';
+    input.value = `acc_${ACCOUNT_A}`;
+    (form.querySelector('input[name="billing_cycle"]') as HTMLInputElement).value = '2026-07';
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
-    expect(text(window, '[data-field="account-result"]')).toContain('first-account');
-    expect(text(window, '[data-field="account-result"]')).toContain('$43.21');
+    expect(text(window, '[data-field="account-result"]')).toContain(ACCOUNT_A);
+    expect(text(window, '[data-field="account-result"]')).toContain('43.21 accounting units');
 
-    input.value = 'acc_second-account';
+    input.value = `acc_${ACCOUNT_B}`;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     expect(text(window, '[data-field="account-result"]')).toContain(
       'Loading the current account cost',
     );
-    expect(text(window, '[data-field="account-result"]')).not.toContain('first-account');
+    expect(text(window, '[data-field="account-result"]')).not.toContain(ACCOUNT_A);
     await flush();
     const result = text(window, '[data-field="account-result"]');
     expect(result).toContain('Could not load the current account cost');
-    expect(result).not.toMatch(/first-account|\$43\.21|second-account|503|private upstream/);
+    expect(result).not.toMatch(/43\.21|503|private upstream/);
+    expect(result).not.toContain(ACCOUNT_A);
+    expect(result).not.toContain(ACCOUNT_B);
   });
 
   it('account query 404 + account DOES exist (admin-accounts lookup is 200): "exists but no usage" — distinct from "not found" (audit waefer6wu)', async () => {
@@ -399,16 +641,16 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
         if (/\/v1\/admin\/cost\/accounts\//.test(call.url)) return json({ detail: 'none' }, 404);
         // The existence-check call (GET /v1/admin/accounts/:id) finds a
         // real account.
-        if (/\/v1\/admin\/accounts\/acc_real123/.test(call.url)) {
-          return json({ id: 'acc_real123', status: 'active' });
+        if (call.url.includes(`/v1/admin/accounts/acc_${ACCOUNT_A}`)) {
+          return json({ id: `acc_${ACCOUNT_A}`, status: 'active' });
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
     await flush();
     const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
-    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_real123';
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = `acc_${ACCOUNT_A}`;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
     expect(text(window, '[data-banner]')).toContain('Account exists but has no usage');
@@ -421,14 +663,14 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
       route: (call) => {
         if (/\/v1\/admin\/cost\/accounts\//.test(call.url)) return json({ detail: 'none' }, 404);
         // The existence-check call also 404s — the id is simply wrong.
-        if (/\/v1\/admin\/accounts\/acc_typo99/.test(call.url)) return json({}, 404);
-        return json({ rates: {}, tierThresholds: {} });
+        if (call.url.includes(`/v1/admin/accounts/acc_${ACCOUNT_B}`)) return json({}, 404);
+        return json(validConfig());
       },
     });
     win = window;
     await flush();
     const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
-    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_typo99';
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = `acc_${ACCOUNT_B}`;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
     expect(text(window, '[data-banner]')).toContain('not found');
@@ -440,16 +682,16 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
       adminToken: 'admtok',
       route: (call) => {
         if (/\/v1\/admin\/cost\/accounts\//.test(call.url)) return json({}, 404);
-        if (/\/v1\/admin\/accounts\/acc_uncertain/.test(call.url)) {
+        if (call.url.includes(`/v1/admin/accounts/acc_${ACCOUNT_B}`)) {
           return json({ detail: 'database host db.internal:5432' }, 503);
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
     await flush();
     const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
-    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_uncertain';
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = `acc_${ACCOUNT_B}`;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
     const banner = text(window, '[data-banner]');
@@ -462,21 +704,22 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
       adminToken: 'admtok',
       route: (call) => {
         if (/\/v1\/admin\/accounts\?/.test(call.url)) {
-          return json({ data: [{ id: 'acc_a1' }] });
+          return json(accountsPage([ACCOUNT_A]));
         }
         if (/\/v1\/admin\/cost\/overview\?/.test(call.url)) {
           return json({
             summaries: [
-              {
-                account_id: 'a1',
-                tier: 'api_builder',
-                breakdown: { totalCents: 2100, thresholdState: 'between-soft-and-hard' },
-                thresholds: { softCents: 1550, hardCents: 5000 },
-              },
+              costSummary(ACCOUNT_A, {
+                cycle: CURRENT_CYCLE,
+                computeCents: 2100,
+                softCents: 1550,
+                hardCents: 5000,
+                thresholdState: 'between-soft-and-hard',
+              }),
             ],
           });
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
@@ -485,15 +728,105 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     btn.dispatchEvent(new window.Event('click', { bubbles: true }));
     await flush();
     const top = text(window, '[data-field="top-result"]');
-    expect(top).toContain('a1');
+    expect(top).toContain(ACCOUNT_A);
     expect(top).toContain('api_builder');
-    expect(top).toContain('$21.00');
-    expect(top).toContain('$15.50');
-    expect(top).toContain('$50.00');
+    expect(top).toContain('21.00 accounting units');
+    expect(top).toContain('15.50 accounting units');
+    expect(top).toContain('50.00 accounting units');
+    expect(top).toContain('compute only');
     expect(
       (window.document.querySelector('[data-button="export-top-csv"]') as HTMLButtonElement)
         .disabled,
     ).toBe(false);
+  });
+
+  it('malformed 200 newest-account page is unavailable rather than an honest empty result', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => (/\/v1\/admin\/accounts\?/.test(call.url) ? json({}) : json(validConfig())),
+    });
+    win = window;
+    await flush();
+    const refresh = window.document.querySelector(
+      '[data-button="refresh-top"]',
+    ) as HTMLButtonElement;
+    const exportCsv = window.document.querySelector(
+      '[data-button="export-top-csv"]',
+    ) as HTMLButtonElement;
+    refresh.click();
+    await flush();
+
+    expect(text(window, '[data-field="top-result"]')).toContain('Could not load top accounts');
+    expect(text(window, '[data-field="top-result"]')).not.toMatch(/page is empty|No measured/);
+    expect(exportCsv.disabled).toBe(true);
+  });
+
+  it('rejects out-of-order newest-account rows before requesting an overview', async () => {
+    const outOfOrder = accountsPage([ACCOUNT_A, ACCOUNT_B]);
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) =>
+        /\/v1\/admin\/accounts\?/.test(call.url) ? json(outOfOrder) : json(validConfig()),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(text(window, '[data-field="top-result"]')).toContain('Could not load top accounts');
+    expect(
+      fetchCalls.filter((call) => /\/v1\/admin\/cost\/overview\?/.test(call.url)),
+    ).toHaveLength(0);
+  });
+
+  it('rejects ascending overview summaries and keeps CSV unavailable', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/accounts\?/.test(call.url)) {
+          return json(accountsPage([ACCOUNT_B, ACCOUNT_A]));
+        }
+        if (/\/v1\/admin\/cost\/overview\?/.test(call.url)) {
+          return json({
+            summaries: [
+              costSummary(ACCOUNT_A, { computeCents: 1000 }),
+              costSummary(ACCOUNT_B, { computeCents: 2000 }),
+            ],
+          });
+        }
+        return json(validConfig());
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(text(window, '[data-field="top-result"]')).toContain('Could not load top accounts');
+    expect(text(window, '[data-field="top-result"]')).not.toContain(ACCOUNT_A);
+    expect(
+      (window.document.querySelector('[data-button="export-top-csv"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it('labels an empty newest-account page honestly and never enables CSV', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) =>
+        /\/v1\/admin\/accounts\?/.test(call.url) ? json(accountsPage([])) : json(validConfig()),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(text(window, '[data-field="top-result"]')).toContain('newest-account page is empty');
+    expect(text(window, '[data-field="top-result"]')).not.toMatch(/platform-wide|zero cost/i);
+    expect(
+      (window.document.querySelector('[data-button="export-top-csv"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it('revokes CSV authority while refreshing and keeps export disabled when the current top-accounts read fails', async () => {
@@ -504,22 +837,22 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
         if (/\/v1\/admin\/accounts\?/.test(call.url)) {
           accountsReads += 1;
           return accountsReads === 1
-            ? json({ data: [{ id: 'acc_a1' }] })
+            ? json(accountsPage([ACCOUNT_A]))
             : json({ detail: 'new failure' }, 503);
         }
         if (/\/v1\/admin\/cost\/overview\?/.test(call.url)) {
           return json({
             summaries: [
-              {
-                account_id: 'a1',
-                tier: 'api_builder',
-                breakdown: { totalCents: 2100, thresholdState: 'under-soft' },
-                thresholds: { softCents: 3000, hardCents: 5000 },
-              },
+              costSummary(ACCOUNT_A, {
+                cycle: CURRENT_CYCLE,
+                computeCents: 2100,
+                softCents: 3000,
+                hardCents: 5000,
+              }),
             ],
           });
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
@@ -533,7 +866,7 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     refresh.click();
     await flush();
     expect(exportCsv.disabled).toBe(false);
-    expect(text(window, '[data-field="top-result"]')).toContain('a1');
+    expect(text(window, '[data-field="top-result"]')).toContain(ACCOUNT_A);
 
     refresh.click();
     expect(exportCsv.disabled).toBe(true);
@@ -543,7 +876,7 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(text(window, '[data-field="top-result"]')).toContain(
       'admin service is temporarily unavailable',
     );
-    expect(text(window, '[data-field="top-result"]')).not.toContain('a1');
+    expect(text(window, '[data-field="top-result"]')).not.toContain(ACCOUNT_A);
   });
 
   it('top-accounts failures use staff-safe copy without raw endpoint/status/body text', async () => {
@@ -553,7 +886,7 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
         if (/\/v1\/admin\/accounts\?/.test(call.url)) {
           return json({ detail: 'redis://user:secret@cache.internal' }, 503);
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
@@ -570,9 +903,11 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
       route: (call) => {
-        if (/\/v1\/admin\/accounts\?/.test(call.url)) return json({ data: [{ id: 'acc_a1' }] });
+        if (/\/v1\/admin\/accounts\?/.test(call.url)) {
+          return json(accountsPage([ACCOUNT_A]));
+        }
         if (/\/v1\/admin\/cost\/overview\?/.test(call.url)) return json({ detail: 'slow' }, 429);
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
@@ -595,9 +930,9 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
       route: async (call) => {
         if (/\/v1\/admin\/accounts\?/.test(call.url)) {
           await accountsGate;
-          return json({ data: [] });
+          return json(accountsPage([]));
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
@@ -625,17 +960,17 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       adminToken: 'admtok',
       route: async (call) => {
-        if (/\/v1\/admin\/cost\/accounts\/test123/.test(call.url)) {
+        if (call.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_A}`)) {
           await queryGate;
-          return json({ breakdown: {}, thresholds: {} });
+          return json(costSummary(ACCOUNT_A, { cycle: CURRENT_CYCLE }));
         }
-        return json({ rates: {}, tierThresholds: {} });
+        return json(validConfig());
       },
     });
     win = window;
     await flush();
     const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
-    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_test123';
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = `acc_${ACCOUNT_A}`;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush(2);
@@ -644,7 +979,7 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     expect(btn.disabled).toBe(true);
     expect(btn.textContent?.trim()).toBe('Querying…');
     expect(
-      fetchCalls.filter((call) => /\/v1\/admin\/cost\/accounts\/test123/.test(call.url)),
+      fetchCalls.filter((call) => call.url.includes(`/v1/admin/cost/accounts/${ACCOUNT_A}`)),
     ).toHaveLength(1);
     releaseQuery?.();
     await flush();

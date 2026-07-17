@@ -28,10 +28,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Cost</h1>
      <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-        Per-account cost estimate for the current billing cycle. Numbers
-        come from <code class="font-mono text-xs">/v1/admin/cost/*</code>;
-        config tile shows the wired rate card so operators can sanity-check
-        the deploy before trusting the dollar numbers.
+        Compute-only operational estimate for the current UTC billing cycle.
+        Compute comes from lifecycle-derived session minutes. Storage, egress,
+        email, and LLM fields are not measured by this surface today; their wire
+        values are placeholders and must not be read as zero actual cost. The
+        config tiles show the deployed accounting rate card and thresholds.
       </p>
     </header>
 
@@ -81,7 +82,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
           </svg>
         </span>
-        Per-account breakdown
+        Per-account compute estimate
       </h2>
       <form
         data-form="account-query"
@@ -129,7 +130,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </section>
 
-    <!-- Top accounts by cost -->
+    <!-- Highest measured compute among the newest account page -->
     <section class="mb-6">
       <div class="flex items-end justify-between gap-3">
         <div>
@@ -139,15 +140,15 @@ const apiBaseUrl = resolveApiBaseUrl();
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
               </svg>
             </span>
-            Top accounts by cost
+            Highest compute estimates among newest 50 accounts
           </h2>
           <p class="mt-1 text-sm text-tk-ink-3">
-            Top by total cents among the most recent
+            Ranked by the compute-only measured total among the most recent
             <code class="font-mono text-xs">limit=50</code> accounts (by
-            creation order) — not the platform-wide top spenders. Fetches that
+            creation order) — not the platform-wide highest-cost accounts. Fetches that
             page then asks <code class="font-mono text-xs">/v1/admin/cost/overview</code>
-            to sort it by total cost desc. Accounts outside that page are not
-            included; use the per-account breakdown above for a specific account.
+            to sort it by measured total desc. Accounts outside that page are not
+            included. Storage, egress, email, and LLM remain unmeasured here.
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -207,6 +208,43 @@ const apiBaseUrl = resolveApiBaseUrl();
   const refreshTopBtn = root.querySelector('[data-button="refresh-top"]');
   const exportCsvBtn = root.querySelector('[data-button="export-top-csv"]');
   const COST_REQUEST_TIMEOUT_MS = 15_000;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const PUBLIC_ACCOUNT_ID_RE = /^acc_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  const BILLING_CYCLE_RE = /^[1-9]\d{3}-(?:0[1-9]|1[0-2])$/;
+  const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+  const RATE_KEYS = [
+    'computeCentsPerMinute',
+    'storageCentsPerGbMonth',
+    'egressCentsPerGb',
+    'emailCentsPerSend',
+    'llmCentsPer1kInputTokens',
+    'llmCentsPer1kOutputTokens',
+  ];
+  const COST_BREAKDOWN_KEYS = [
+    'computeCents',
+    'storageCents',
+    'egressCents',
+    'emailCents',
+    'llmCents',
+    'totalCents',
+    'thresholdState',
+  ];
+  const ACCOUNT_TIERS = new Set([
+    'free',
+    'solo_manual',
+    'team_manual',
+    'agency_manual',
+    'api_starter',
+    'api_builder',
+    'api_scale',
+    'enterprise',
+  ]);
+  const ACCOUNT_STATUSES = new Set(['active', 'suspended', 'deleted']);
+  const THRESHOLD_STATES = new Set([
+    'under-soft',
+    'between-soft-and-hard',
+    'over-hard',
+  ]);
   let costDataAvailable = false;
   let topAccountsAvailable = false;
   let topAccountsLoading = false;
@@ -216,6 +254,12 @@ const apiBaseUrl = resolveApiBaseUrl();
     if (!banner) return;
     banner.textContent = msg;
     banner.classList.remove('hidden');
+  }
+
+  function clearBanner() {
+    if (!banner) return;
+    banner.textContent = '';
+    banner.classList.add('hidden');
   }
 
   function adminToken() {
@@ -256,6 +300,221 @@ const apiBaseUrl = resolveApiBaseUrl();
     return String(s ?? '').replace(/[&<>"']/g, (c) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
     );
+  }
+
+  function invalidPayload() {
+    throw new Error('invalid cost response');
+  }
+
+  function isRecord(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function hasExactKeys(value, expected) {
+    if (!isRecord(value)) return false;
+    const actual = Object.keys(value).sort();
+    const wanted = [...expected].sort();
+    return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
+  }
+
+  function isNonNegativeFinite(value) {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  }
+
+  function isNonNegativeInteger(value) {
+    return Number.isInteger(value) && value >= 0;
+  }
+
+  function isIsoTimestamp(value) {
+    return (
+      typeof value === 'string' &&
+      ISO_TIMESTAMP_RE.test(value) &&
+      Number.isFinite(Date.parse(value)) &&
+      new Date(value).toISOString() === value
+    );
+  }
+
+  function currentBillingCycle() {
+    const now = new Date();
+    return `${now.getUTCFullYear().toString().padStart(4, '0')}-${(now.getUTCMonth() + 1)
+      .toString()
+      .padStart(2, '0')}`;
+  }
+
+  function normalizeAccountInput(value) {
+    const trimmed = String(value ?? '').trim();
+    const bare = trimmed.startsWith('acc_') ? trimmed.slice(4) : trimmed;
+    return UUID_RE.test(bare) ? bare.toLowerCase() : null;
+  }
+
+  function parseThresholds(value) {
+    if (!hasExactKeys(value, ['softCents', 'hardCents'])) invalidPayload();
+    if (!isNonNegativeInteger(value.softCents) || !isNonNegativeInteger(value.hardCents)) {
+      invalidPayload();
+    }
+    if (value.hardCents <= value.softCents) invalidPayload();
+    return value;
+  }
+
+  function parseBreakdown(value, thresholds) {
+    if (!hasExactKeys(value, COST_BREAKDOWN_KEYS)) invalidPayload();
+    for (const key of COST_BREAKDOWN_KEYS.slice(0, 6)) {
+      if (!isNonNegativeInteger(value[key])) invalidPayload();
+    }
+    if (!THRESHOLD_STATES.has(value.thresholdState)) invalidPayload();
+    const componentTotal =
+      value.computeCents +
+      value.storageCents +
+      value.egressCents +
+      value.emailCents +
+      value.llmCents;
+    if (value.totalCents !== componentTotal) invalidPayload();
+    if (
+      value.storageCents !== 0 ||
+      value.egressCents !== 0 ||
+      value.emailCents !== 0 ||
+      value.llmCents !== 0
+    ) {
+      invalidPayload();
+    }
+    const expectedState =
+      value.totalCents >= thresholds.hardCents
+        ? 'over-hard'
+        : value.totalCents >= thresholds.softCents
+          ? 'between-soft-and-hard'
+          : 'under-soft';
+    if (value.thresholdState !== expectedState) invalidPayload();
+    return value;
+  }
+
+  function parseConfigPayload(value) {
+    if (!hasExactKeys(value, ['rates', 'tierThresholds'])) invalidPayload();
+    if (!hasExactKeys(value.rates, RATE_KEYS)) invalidPayload();
+    for (const key of RATE_KEYS) {
+      if (!isNonNegativeFinite(value.rates[key])) invalidPayload();
+    }
+    if (!isRecord(value.tierThresholds)) invalidPayload();
+    const tierEntries = Object.entries(value.tierThresholds);
+    if (tierEntries.length === 0) invalidPayload();
+    for (const [tier, thresholds] of tierEntries) {
+      if (!ACCOUNT_TIERS.has(tier)) invalidPayload();
+      parseThresholds(thresholds);
+    }
+    return value;
+  }
+
+  function parseCostSummary(value, expectedAccountId, expectedCycle) {
+    if (
+      !hasExactKeys(value, ['account_id', 'billing_cycle', 'breakdown', 'tier', 'thresholds'])
+    ) {
+      invalidPayload();
+    }
+    if (value.account_id !== expectedAccountId || !UUID_RE.test(value.account_id)) {
+      invalidPayload();
+    }
+    if (value.billing_cycle !== expectedCycle || !BILLING_CYCLE_RE.test(value.billing_cycle)) {
+      invalidPayload();
+    }
+    if (!ACCOUNT_TIERS.has(value.tier)) invalidPayload();
+    const thresholds = parseThresholds(value.thresholds);
+    parseBreakdown(value.breakdown, thresholds);
+    return value;
+  }
+
+  function parseAccountsPage(value) {
+    if (!hasExactKeys(value, ['data', 'has_more', 'next_cursor'])) invalidPayload();
+    if (!Array.isArray(value.data) || value.data.length > 50) invalidPayload();
+    if (typeof value.has_more !== 'boolean') invalidPayload();
+    const ids = [];
+    const seen = new Set();
+    let priorCreatedAt = null;
+    let priorId = null;
+    for (const row of value.data) {
+      if (
+        !hasExactKeys(row, [
+          'id',
+          'email',
+          'name',
+          'tier',
+          'status',
+          'created_at',
+          'updated_at',
+        ])
+      ) {
+        invalidPayload();
+      }
+      const match = typeof row.id === 'string' ? PUBLIC_ACCOUNT_ID_RE.exec(row.id) : null;
+      const id = match?.[1]?.toLowerCase();
+      if (
+        !id ||
+        row.id !== `acc_${id}` ||
+        seen.has(id) ||
+        typeof row.email !== 'string' ||
+        row.email.length === 0 ||
+        !(row.name === null || typeof row.name === 'string') ||
+        !ACCOUNT_TIERS.has(row.tier) ||
+        !ACCOUNT_STATUSES.has(row.status) ||
+        !isIsoTimestamp(row.created_at) ||
+        !isIsoTimestamp(row.updated_at)
+      ) {
+        invalidPayload();
+      }
+      if (
+        priorCreatedAt !== null &&
+        (row.created_at > priorCreatedAt ||
+          (row.created_at === priorCreatedAt && priorId !== null && row.id >= priorId))
+      ) {
+        invalidPayload();
+      }
+      seen.add(id);
+      ids.push(id);
+      priorCreatedAt = row.created_at;
+      priorId = row.id;
+    }
+    if (value.has_more) {
+      if (ids.length === 0 || typeof value.next_cursor !== 'string') invalidPayload();
+      const cursorMatch = PUBLIC_ACCOUNT_ID_RE.exec(value.next_cursor);
+      if (
+        !cursorMatch?.[1] ||
+        value.next_cursor !== `acc_${cursorMatch[1].toLowerCase()}` ||
+        value.next_cursor !== `acc_${ids[ids.length - 1]}`
+      ) {
+        invalidPayload();
+      }
+    } else if (value.next_cursor !== null) {
+      invalidPayload();
+    }
+    return ids;
+  }
+
+  function parseOverviewPayload(value, requestedIds, expectedCycle) {
+    if (!hasExactKeys(value, ['summaries']) || !Array.isArray(value.summaries)) {
+      invalidPayload();
+    }
+    const requested = new Set(requestedIds);
+    if (value.summaries.length > requested.size) invalidPayload();
+    const seen = new Set();
+    let priorTotal = Number.POSITIVE_INFINITY;
+    for (const summary of value.summaries) {
+      const accountId = isRecord(summary) ? summary.account_id : null;
+      if (
+        typeof accountId !== 'string' ||
+        accountId !== accountId.toLowerCase() ||
+        !requested.has(accountId) ||
+        seen.has(accountId)
+      ) {
+        invalidPayload();
+      }
+      parseCostSummary(summary, accountId, expectedCycle);
+      if (summary.breakdown.totalCents > priorTotal) invalidPayload();
+      priorTotal = summary.breakdown.totalCents;
+      seen.add(accountId);
+    }
+    return value.summaries;
+  }
+
+  function accountingAmount(cents) {
+    return (cents / 100).toFixed(2) + ' accounting units';
   }
 
   function syncAccountQueryAuthority(reason) {
@@ -328,66 +587,27 @@ const apiBaseUrl = resolveApiBaseUrl();
     rateCard.innerHTML = entries
       .map(
         ([label, key, unit]) =>
-          `<div class="flex justify-between gap-4"><dt class="text-tk-ink-2">${escapeHtml(label)}</dt><dd class="font-mono text-xs text-tk-ink">${escapeHtml(String(rates[key] ?? '—'))} <span class="text-tk-ink-3">${escapeHtml(unit)}</span></dd></div>`,
+          `<div class="flex justify-between gap-4"><dt class="text-tk-ink-2">${escapeHtml(label)}</dt><dd class="font-mono text-xs text-tk-ink">${escapeHtml(String(rates[key]))} <span class="text-tk-ink-3">${escapeHtml(unit)}</span></dd></div>`,
       )
       .join('');
   }
 
   function renderTierThresholds(tiers) {
     if (!tierThresholds) return;
-    const rows = Object.entries(tiers ?? {}).map(
-      // GET /v1/admin/cost/config returns `{ softCents, hardCents }`
-      // per AlertThresholds in lib/cost-estimator.ts. Reading
-      // `softWarningCents` / `hardCapCents` (a previous field-name
-      // guess) silently rendered every tier as "$0.00".
+    const rows = Object.entries(tiers).map(
       ([tier, t]) =>
-        `<div class="flex justify-between gap-4"><dt class="text-tk-ink-2">${escapeHtml(tier)}</dt><dd class="font-mono text-xs text-tk-ink">soft $${((t.softCents ?? 0) / 100).toFixed(2)} · hard $${((t.hardCents ?? 0) / 100).toFixed(2)}</dd></div>`,
+        `<div class="flex justify-between gap-4"><dt class="text-tk-ink-2">${escapeHtml(tier)}</dt><dd class="font-mono text-xs text-tk-ink">soft ${escapeHtml(accountingAmount(t.softCents))} · hard ${escapeHtml(accountingAmount(t.hardCents))}</dd></div>`,
     );
     tierThresholds.innerHTML =
-      rows.length > 0
-        ? rows.join('')
-        : '<div class="text-tk-ink-3">No tier thresholds configured.</div>';
+      rows.join('') +
+      '<p class="pt-2 text-xs text-tk-ink-3">Only explicitly configured tiers are shown; no threshold is inferred for an omitted tier.</p>';
   }
 
-  function renderAccountSummary(body) {
+  function renderAccountSummary(summary) {
     if (!accountResult) return;
-    const cents = (n) => '$' + (Number(n ?? 0) / 100).toFixed(2);
-    // GET /v1/admin/cost/accounts/:id returns CostMonitoringAccountSummary
-    // (cost-monitoring.ts):
-    //   { account_id, billing_cycle, breakdown: CostBreakdown,
-    //     tier, thresholds: { softCents, hardCents } }
-    // where breakdown carries computeCents / storageCents / egressCents /
-    // emailCents / llmCents / totalCents / thresholdState.
-    // Previous reads used camelCase + a non-existent `estimated` /
-    // `softWarningCents` / `hardCapCents` / root-level `thresholdState`
-    // shape, silently rendering every value as "$0.00" or "—".
-    const breakdown = body.breakdown ?? body.estimated ?? {};
-    const thresholds = body.thresholds ?? {};
-    // Sub-processor row sums email (Postmark) + LLM (Anthropic) costs,
-    // matching what CostBreakdown carries. The old `subprocessorCents`
-    // field never existed on the wire.
-    const subprocessorCents =
-      Number(breakdown.emailCents ?? 0) + Number(breakdown.llmCents ?? 0);
+    const breakdown = summary.breakdown;
+    const thresholds = summary.thresholds;
     accountResult.classList.remove('hidden');
-    // 2026-05-22 — visual breakdown. Per-dimension horizontal bars
-    // sized by share of total + threshold-state coloring. Pure HTML/
-    // CSS — no chart lib dependency. Bars sized by inline width
-    // percentage; minimum 4% so a $0.01 dimension still renders a
-    // visible sliver.
-    const total = Math.max(1, Number(breakdown.totalCents ?? 0));
-    function bar(label, value) {
-      const v = Number(value ?? 0);
-      const pct = Math.max(4, Math.round((v / total) * 100));
-      return (
-        '<div class="flex items-center gap-3 text-xs">' +
-        `<span class="w-24 shrink-0 text-tk-ink-2">${escapeHtml(label)}</span>` +
-        '<div class="flex-1 h-4 rounded-full bg-tk-hover overflow-hidden">' +
-        `<div class="h-full bg-tk-accent/70" style="width: ${pct.toString()}%"></div>` +
-        '</div>' +
-        `<span class="font-mono w-20 text-right text-tk-ink">${cents(v)}</span>` +
-        '</div>'
-      );
-    }
     const STATE_BADGE = {
       'under-soft': 'bg-emerald-100 text-emerald-800',
       'between-soft-and-hard': 'bg-amber-100 text-amber-800',
@@ -397,18 +617,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       STATE_BADGE[breakdown.thresholdState] || 'bg-tk-hover text-tk-ink-2';
     accountResult.innerHTML =
       '<div class="space-y-4">' +
-      `<p class="font-mono text-xs text-tk-ink-3">account_id: ${escapeHtml(body.account_id ?? body.accountId ?? '—')} · cycle: ${escapeHtml(body.billing_cycle ?? body.billingCycle ?? '—')} · tier: ${escapeHtml(body.tier ?? '—')}</p>` +
+      `<p class="font-mono text-xs text-tk-ink-3">account_id: ${escapeHtml(summary.account_id)} · cycle: ${escapeHtml(summary.billing_cycle)} · tier: ${escapeHtml(summary.tier)}</p>` +
       '<div class="flex items-baseline justify-between">' +
-      `<p class="text-2xl font-semibold text-tk-ink">${cents(breakdown.totalCents)}</p>` +
-      `<span class="inline-flex items-center rounded-full ${stateClass} px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide">${escapeHtml(breakdown.thresholdState ?? '—')}</span>` +
+      `<div><p class="text-xs uppercase tracking-wide text-tk-ink-3">Measured total · compute only</p><p class="text-2xl font-semibold text-tk-ink">${escapeHtml(accountingAmount(breakdown.totalCents))}</p></div>` +
+      `<span class="inline-flex items-center rounded-full ${stateClass} px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide">${escapeHtml(breakdown.thresholdState)}</span>` +
       '</div>' +
-      '<div class="space-y-2">' +
-      bar('Compute', breakdown.computeCents) +
-      bar('Storage', breakdown.storageCents) +
-      bar('Egress', breakdown.egressCents) +
-      bar('Sub-processor', subprocessorCents) +
-      '</div>' +
-      `<p class="text-xs text-tk-ink-3">Soft warn ${cents(thresholds.softCents)} · hard cap ${cents(thresholds.hardCents)}</p>` +
+      '<dl class="grid gap-2 text-xs sm:grid-cols-2">' +
+      `<div class="rounded-md bg-tk-hover px-3 py-2"><dt class="text-tk-ink-3">Compute</dt><dd class="font-mono text-tk-ink">${escapeHtml(accountingAmount(breakdown.computeCents))}</dd></div>` +
+      '<div class="rounded-md bg-tk-hover px-3 py-2"><dt class="text-tk-ink-3">Storage</dt><dd class="font-medium text-tk-ink-2">Unmeasured</dd></div>' +
+      '<div class="rounded-md bg-tk-hover px-3 py-2"><dt class="text-tk-ink-3">Egress</dt><dd class="font-medium text-tk-ink-2">Unmeasured</dd></div>' +
+      '<div class="rounded-md bg-tk-hover px-3 py-2"><dt class="text-tk-ink-3">Email + LLM</dt><dd class="font-medium text-tk-ink-2">Unmeasured</dd></div>' +
+      '</dl>' +
+      `<p class="text-xs text-tk-ink-3">Compute-only threshold: soft ${escapeHtml(accountingAmount(thresholds.softCents))} · hard ${escapeHtml(accountingAmount(thresholds.hardCents))}. Placeholder zero fields are not evidence of zero actual cost.</p>` +
       '</div>';
   }
 
@@ -439,15 +659,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         return false;
       }
       const body = await res.json();
-      renderRateCard(body.rates ?? {});
-      // GET /v1/admin/cost/config returns `{ rates, tierThresholds }`
-      // per CostMonitoringService.getConfig(). Reading `body.tiers`
-      // (the previous field-name guess) always resolved to undefined,
-      // so the "No tier thresholds configured" empty-state rendered
-      // every time — masking the actual per-tier table from
-      // admin/ops visibility. Same field-drift class as the
-      // softWarningCents → softCents fix.
-      renderTierThresholds(body.tierThresholds ?? body.tiers ?? {});
+      const config = parseConfigPayload(body);
+      renderRateCard(config.rates);
+      renderTierThresholds(config.tierThresholds);
+      clearBanner();
       return true;
     } catch (err) {
       const msg = requestErrorMessage(err, 'Could not load cost configuration. Try again.');
@@ -459,34 +674,30 @@ const apiBaseUrl = resolveApiBaseUrl();
 
   function renderTopAccounts(rows) {
     if (!topResult) return;
-    const cents = (n) => '$' + (Number(n ?? 0) / 100).toFixed(2);
-    if (!Array.isArray(rows) || rows.length === 0) {
+    if (rows.length === 0) {
       topAccountsAvailable = false;
       syncTopAuthority();
-      topResult.innerHTML = '<p class="text-sm text-tk-ink-3">No accounts with usage in the current cycle.</p>';
+      topResult.innerHTML =
+        '<p class="text-sm text-tk-ink-3">No measured compute usage among the newest 50 accounts in the current cycle. Accounts outside that page were not evaluated.</p>';
       return;
     }
     const top = rows.slice(0, 10);
-    // Same field-rename invariant as renderAccountSummary above.
-    // Each row is a CostMonitoringAccountSummary; thresholds live
-    // under `thresholds.softCents` / `thresholds.hardCents` and the
-    // breakdown carries `thresholdState`.
     topResult.innerHTML =
       '<table class="w-full text-sm">' +
-      '<thead><tr class="text-left text-xs uppercase tracking-widest text-tk-ink-3"><th class="py-1">Account</th><th>Tier</th><th class="text-right">Total</th><th class="text-right">Soft warn</th><th class="text-right">Hard cap</th><th>State</th></tr></thead>' +
+      '<thead><tr class="text-left text-xs uppercase tracking-widest text-tk-ink-3"><th class="py-1">Account</th><th>Tier</th><th class="text-right">Measured total · compute only</th><th class="text-right">Soft threshold</th><th class="text-right">Hard threshold</th><th>State</th></tr></thead>' +
       '<tbody>' +
       top
         .map((r) => {
-          const breakdown = r.breakdown ?? r.estimated ?? {};
-          const thresholds = r.thresholds ?? {};
+          const breakdown = r.breakdown;
+          const thresholds = r.thresholds;
           return (
             `<tr class="border-t border-slate-100">` +
-            `<td class="py-2 font-mono text-xs">${escapeHtml(r.account_id ?? r.accountId ?? '—')}</td>` +
-            `<td class="text-xs">${escapeHtml(r.tier ?? '—')}</td>` +
-            `<td class="text-right font-mono text-xs">${cents(breakdown.totalCents)}</td>` +
-            `<td class="text-right font-mono text-xs">${cents(thresholds.softCents)}</td>` +
-            `<td class="text-right font-mono text-xs">${cents(thresholds.hardCents)}</td>` +
-            `<td class="text-xs">${escapeHtml(breakdown.thresholdState ?? '—')}</td>` +
+            `<td class="py-2 font-mono text-xs">${escapeHtml(r.account_id)}</td>` +
+            `<td class="text-xs">${escapeHtml(r.tier)}</td>` +
+            `<td class="text-right font-mono text-xs">${escapeHtml(accountingAmount(breakdown.totalCents))}</td>` +
+            `<td class="text-right font-mono text-xs">${escapeHtml(accountingAmount(thresholds.softCents))}</td>` +
+            `<td class="text-right font-mono text-xs">${escapeHtml(accountingAmount(thresholds.hardCents))}</td>` +
+            `<td class="text-xs">${escapeHtml(breakdown.thresholdState)}</td>` +
             `</tr>`
           );
         })
@@ -498,6 +709,8 @@ const apiBaseUrl = resolveApiBaseUrl();
 
   async function loadTopAccounts() {
     if (!costDataAvailable || !topResult || topAccountsLoading) return;
+    const overviewCycle = currentBillingCycle();
+    clearBanner();
     topAccountsLoading = true;
     topAccountsAvailable = false;
     syncTopAuthority();
@@ -518,16 +731,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
       const accountsBody = await accountsRes.json();
-      const ids = (accountsBody.data ?? [])
-        .map((a) => (a.id ?? '').startsWith('acc_') ? (a.id ?? '').slice(4) : a.id)
-        .filter(Boolean);
+      const ids = parseAccountsPage(accountsBody);
       if (ids.length === 0) {
-        topResult.innerHTML = '<p class="text-sm text-tk-ink-3">No accounts found.</p>';
+        topResult.innerHTML =
+          '<p class="text-sm text-tk-ink-3">The newest-account page is empty. No account cost comparison was run.</p>';
         return;
       }
       // Step 2 — overview is already sorted by total cost desc.
       const overviewRes = await authedFetch(
-        '/v1/admin/cost/overview?account_ids=' + encodeURIComponent(ids.join(',')),
+        '/v1/admin/cost/overview?account_ids=' +
+          encodeURIComponent(ids.join(',')) +
+          '&billing_cycle=' +
+          encodeURIComponent(overviewCycle),
       );
       if (!overviewRes.ok) {
         const msg = responseErrorMessage(
@@ -538,7 +753,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
       const overviewBody = await overviewRes.json();
-      renderTopAccounts(overviewBody.summaries ?? []);
+      renderTopAccounts(parseOverviewPayload(overviewBody, ids, overviewCycle));
     } catch (err) {
       const msg = requestErrorMessage(err, 'Could not load top accounts. Try again.');
       topResult.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(msg)}</p>`;
@@ -602,12 +817,20 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (!costDataAvailable || accountQueryLoading) return;
       const fd = new FormData(accountForm);
       const rawInput = String(fd.get('account_id') ?? '').trim();
-      // Strip the public 'acc_' prefix if present — the cost endpoint
-      // expects raw UUIDs (the operator typically pastes from the
-      // /accounts admin page which surfaces 'acc_<uuid>').
-      const accountId = rawInput.startsWith('acc_') ? rawInput.slice(4) : rawInput;
-      const billingCycle = String(fd.get('billing_cycle') ?? '').trim();
-      if (!accountId) return;
+      const accountId = normalizeAccountInput(rawInput);
+      const cycleInput = String(fd.get('billing_cycle') ?? '').trim();
+      clearBanner();
+      if (accountId === null) {
+        showBanner('Enter an account id as acc_<uuid> or a bare UUID.');
+        renderAccountUnavailable('No cost query was sent because the account id is invalid.');
+        return;
+      }
+      if (cycleInput && !BILLING_CYCLE_RE.test(cycleInput)) {
+        showBanner('Enter a real UTC billing cycle in YYYY-MM format.');
+        renderAccountUnavailable('No cost query was sent because the billing cycle is invalid.');
+        return;
+      }
+      const billingCycle = cycleInput || currentBillingCycle();
       accountQueryLoading = true;
       syncAccountQueryAuthority();
       accountForm.setAttribute('aria-busy', 'true');
@@ -616,9 +839,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       renderAccountUnavailable('Loading the current account cost…');
       try {
-        const qs = billingCycle ? `?billing_cycle=${encodeURIComponent(billingCycle)}` : '';
         const res = await authedFetch(
-          `/v1/admin/cost/accounts/${encodeURIComponent(accountId)}${qs}`,
+          `/v1/admin/cost/accounts/${encodeURIComponent(accountId)}?billing_cycle=${encodeURIComponent(billingCycle)}`,
         );
         if (res.status === 404) {
           // audit waefer6wu — GET /v1/admin/cost/accounts/:id 404s for TWO
@@ -666,7 +888,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           return;
         }
         const body = await res.json();
-        renderAccountSummary(body);
+        renderAccountSummary(parseCostSummary(body, accountId, billingCycle));
+        clearBanner();
       } catch (err) {
         const msg = requestErrorMessage(err, 'Could not load account cost. Try again.');
         showBanner(msg);

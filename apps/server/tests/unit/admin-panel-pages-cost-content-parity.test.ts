@@ -1,8 +1,8 @@
 // Drift guard for apps/admin-panel/src/pages/cost.astro. Pins the V-541
 // admin cost dashboard surface: V-541.B framing + V-100 internal_admin
-// scope + the 3-endpoint admin/cost surface + the softCents/hardCents
-// field-name contract (the off-by-naming bug that previously rendered
-// every tier as $0.00) + the cost-monitoring.ts response shape anchor.
+// scope + the 3-endpoint admin/cost surface + strict wire decoding and
+// compute-only measurement truth. Malformed 200s must never become a
+// plausible zero-cost dashboard or CSV.
 //
 // Complements the lighter admin-panel-pages-cost-field-name-parity test
 // which only pins the field-name bug. This file pins the load-bearing
@@ -53,7 +53,7 @@ describe('admin-panel pages/cost content parity', () => {
     expect(body).toMatch(/document\.querySelector\('\[data-page="admin-cost"\]'\)/);
   });
 
-  it("3-endpoint admin/cost surface pinned: /v1/admin/cost/config + /v1/admin/cost/accounts/:id + /v1/admin/cost/overview. Drift to dropping /overview would break the 'Top accounts by cost' table; drift to dropping /config would break the soft/hard threshold display; drift to dropping /accounts/:id would break the per-account lookup form", () => {
+  it('3-endpoint admin/cost surface is pinned', () => {
     expect(body).toMatch(/<code class="font-mono">\{apiBaseUrl\}\/v1\/admin\/cost\/config<\/code>/);
     expect(body).toMatch(
       /<code class="font-mono">\{apiBaseUrl\}\/v1\/admin\/cost\/accounts\/:id<\/code>/,
@@ -63,46 +63,63 @@ describe('admin-panel pages/cost content parity', () => {
     );
   });
 
-  it('AlertThresholds field-name contract: softCents + hardCents (lib/cost-estimator.ts naming). Drift to softWarningCents/hardCapCents would silently render every tier as $0.00 — the exact regression call-out that the in-code comment defends against. Load-bearing parity test (this is the bug the file-level comment specifically names)', () => {
-    expect(body).toMatch(
-      /\/\/ GET \/v1\/admin\/cost\/config returns ``softCents, hardCents``|\/\/ GET \/v1\/admin\/cost\/config returns `\{ softCents, hardCents \}`/,
-    );
-    expect(body).toMatch(
-      /\/\/ per AlertThresholds in lib\/cost-estimator\.ts\. Reading\s*\n?\s*\/\/ `softWarningCents` \/ `hardCapCents` \(a previous field-name\s*\n?\s*\/\/ guess\) silently rendered every tier as "\$0\.00"\./,
-    );
-    // Threshold dollars render at 2-decimal precision (.toFixed(2)) — the same
-    // currency-format standard as the cents() helper used everywhere else on
-    // the page; without it a $15.50 cap rendered as "$15.5".
-    expect(body).toMatch(/\(t\.softCents \?\? 0\) \/ 100\)\.toFixed\(2\)/);
-    expect(body).toMatch(/\(t\.hardCents \?\? 0\) \/ 100\)\.toFixed\(2\)/);
+  it('presents the current surface as a compute-only accounting estimate with explicit unmeasured dimensions', () => {
+    expect(body).toContain('Compute-only operational estimate for the current UTC billing cycle.');
+    expect(body).toContain('Storage, egress,');
+    expect(body).toContain('values are placeholders and must not be read as zero actual cost.');
+    expect(body).toContain('Measured total · compute only');
+    expect(body).toContain('Unmeasured');
+    expect(body).toContain("return (cents / 100).toFixed(2) + ' accounting units';");
+    expect(body).not.toMatch(/const cents =|\$\{?\(?\(?(?:breakdown|thresholds|t)\./);
   });
 
-  it("CostMonitoringAccountSummary shape framing pinned: 'GET /v1/admin/cost/accounts/:id returns CostMonitoringAccountSummary (cost-monitoring.ts): { account_id, billing_cycle, breakdown: CostBreakdown, tier, thresholds: { softCents, hardCents } }'. Drift to a different shape would silently break the per-account render (the field-references in renderAccountSummary depend on this exact projection)", () => {
-    expect(body).toMatch(
-      /\/\/ GET \/v1\/admin\/cost\/accounts\/:id returns CostMonitoringAccountSummary\s*\n?\s*\/\/ \(cost-monitoring\.ts\):\s*\n?\s*\/\/ {3}\{ account_id, billing_cycle, breakdown: CostBreakdown,\s*\n?\s*\/\/ {5}tier, thresholds: \{ softCents, hardCents \} \}/,
+  it('strictly decodes config, account summaries, account pages, and overview payloads before rendering', () => {
+    expect(body).toContain('function parseConfigPayload(value)');
+    expect(body).toContain('function parseCostSummary(value, expectedAccountId, expectedCycle)');
+    expect(body).toContain('function parseAccountsPage(value)');
+    expect(body).toContain('function parseOverviewPayload(value, requestedIds, expectedCycle)');
+    expect(body).toContain('const config = parseConfigPayload(body);');
+    expect(body).toContain(
+      'renderAccountSummary(parseCostSummary(body, accountId, billingCycle));',
     );
+    expect(body).toContain('const ids = parseAccountsPage(accountsBody);');
+    expect(body).toContain(
+      'renderTopAccounts(parseOverviewPayload(overviewBody, ids, overviewCycle));',
+    );
+    expect(body).toContain("throw new Error('invalid cost response');");
   });
 
-  it("'Top accounts by cost' framing pinned to the HONEST most-recent-50 copy: 'Top by total cents among the most recent limit=50 accounts (by creation order) — not the platform-wide top spenders. Fetches that page then asks /v1/admin/cost/overview to sort it by total cost desc.' — pinned so (a) the honesty caveat survives (the table ranks only the most-recent 50 accounts, NOT platform-wide top spenders; drift back to implying platform-wide ranking would mislead operators), (b) the server-already-sorts-desc contract survives (drift to client-side resort would mismatch the server ranking), and (c) the limit=50 cap survives (drift to dropping it would let operators trigger 10k-row dumps)", () => {
-    // Honesty caveat: ranks only the most-recent 50 (by creation order), explicitly
-    // NOT the platform-wide top spenders.
-    expect(body).toMatch(
-      /Top by total cents among the most recent\s*\n?\s*<code class="font-mono text-xs">limit=50<\/code> accounts \(by\s*\n?\s*creation order\) — not the platform-wide top spenders\./,
-    );
-    // Server-sorts-desc contract + the limit=50 page cap.
-    expect(body).toMatch(
-      /Fetches that\s*\n?\s*page then asks <code class="font-mono text-xs">\/v1\/admin\/cost\/overview<\/code>\s*\n?\s*to sort it by total cost desc\./,
-    );
-    expect(body).toMatch(
-      /Accounts outside that page are not\s*\n?\s*included; use the per-account breakdown above for a specific account\./,
-    );
-    expect(body).not.toMatch(/until a server-side cost-ranked endpoint\s*\n?\s*lands/i);
+  it('binds summaries to requested identity/cycle and validates totals, thresholds, and compute-only placeholders', () => {
+    expect(body).toContain('value.account_id !== expectedAccountId');
+    expect(body).toContain('value.billing_cycle !== expectedCycle');
+    expect(body).toContain('value.totalCents !== componentTotal');
+    expect(body).toContain('value.storageCents !== 0');
+    expect(body).toContain('value.emailCents !== 0');
+    expect(body).toContain('value.thresholdState !== expectedState');
+    expect(body).toContain('value.hardCents <= value.softCents');
   });
 
-  it("Cents-to-dollar helper inline pattern pinned: 'const cents = (n) => $ + (Number(n ?? 0) / 100).toFixed(2);'. Drift to dropping ?? 0 fallback would render NaN for null entries; drift to a different precision would break consistency with the rest of the admin panel's currency display", () => {
+  it('keeps the newest-50 scope honest and validates list/overview identity, uniqueness, cursor, and ordering', () => {
+    expect(body).toContain('Highest compute estimates among newest 50 accounts');
+    expect(body).toContain('not the platform-wide highest-cost accounts');
+    expect(body).toContain('Accounts outside that page are not');
+    expect(body).toContain("authedFetch('/v1/admin/accounts?limit=50')");
+    expect(body).toContain('seen.has(id)');
+    expect(body).toContain('row.created_at > priorCreatedAt');
+    expect(body).toContain('value.next_cursor !== `acc_${ids[ids.length - 1]}`');
+    expect(body).toContain('!requested.has(accountId)');
+    expect(body).toContain('seen.has(accountId)');
+    expect(body).toContain('summary.breakdown.totalCents > priorTotal');
+  });
+
+  it('clears stale global errors on a new operation and only grants CSV after a valid current table', () => {
+    expect(body).toContain('function clearBanner()');
+    expect(body).toMatch(/async function loadTopAccounts\(\)[\s\S]*?clearBanner\(\);/);
     expect(body).toMatch(
-      /const cents = \(n\) => '\$' \+ \(Number\(n \?\? 0\) \/ 100\)\.toFixed\(2\);/,
+      /renderAccountSummary\(parseCostSummary\(body, accountId, billingCycle\)\);\s*clearBanner\(\);/,
     );
+    expect(body).toContain('topAccountsAvailable = true;');
+    expect(body).toContain('if (!topAccountsAvailable) return;');
   });
 
   it('read controls and programmatic handlers require live cost authority, while CSV additionally requires a successful current top table', () => {

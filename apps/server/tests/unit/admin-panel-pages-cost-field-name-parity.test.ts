@@ -1,11 +1,13 @@
 // Drift-guard for apps/admin-panel/src/pages/cost.astro field-name
-// reads. Slices 79 + 80 + 81 fixed FOUR field-name drift bugs on
-// this page (all silently rendering "$0.00" or empty-states):
+// reads. Slices 79 + 80 + 81 fixed field-name drift bugs on this page;
+// the current contract is stricter: every success payload is decoded
+// before rendering, with no rolling legacy fallback that can turn a
+// malformed response into a plausible zero-cost result.
 //
 //   - tier-thresholds loop: t.softWarningCents → t.softCents
 //   - tier-thresholds loop: t.hardCapCents    → t.hardCents
-//   - config loader:        body.tiers        → body.tierThresholds
-//   - account-summary:      body.estimated    → body.breakdown
+//   - config loader:        tiers             → tierThresholds
+//   - account-summary:      estimated         → breakdown
 //   - account-summary:      body.softWarningCents → body.thresholds.softCents
 //   - account-summary:      body.hardCapCents  → body.thresholds.hardCents
 //   - account-summary:      body.thresholdState → body.breakdown.thresholdState
@@ -35,55 +37,56 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('admin-panel /cost field-name parity (drift-guard for slices 79/80/81)', () => {
+describe('admin-panel /cost strict field-name parity', () => {
   it('cost.astro file exists at the canonical path', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('tier-thresholds loop reads t.softCents + t.hardCents (NOT the legacy softWarningCents/hardCapCents)', () => {
+  it('threshold rendering consumes only the validated softCents + hardCents fields', () => {
     const body = read(PAGE);
-    expect(body).toMatch(/t\.softCents \?\? 0/);
-    expect(body).toMatch(/t\.hardCents \?\? 0/);
-    // Drift-guards on the wrong names.
-    expect(body).not.toMatch(/t\.softWarningCents/);
-    expect(body).not.toMatch(/t\.hardCapCents/);
+    expect(body).toContain("hasExactKeys(value, ['softCents', 'hardCents'])");
+    expect(body).toContain('accountingAmount(t.softCents)');
+    expect(body).toContain('accountingAmount(t.hardCents)');
+    expect(body).not.toMatch(/softWarningCents|hardCapCents/);
+    expect(body).not.toMatch(/t\.(?:softCents|hardCents)\s*\?\?/);
   });
 
-  it('loadConfig reads body.tierThresholds (NOT the legacy body.tiers)', () => {
+  it('config loader requires exact rates + tierThresholds and has no legacy tiers fallback', () => {
     const body = read(PAGE);
-    // Allow `body.tierThresholds ?? body.tiers ?? {}` defensive
-    // fallback (kept for rolling-deploy safety); the load-bearing
-    // bit is that tierThresholds is read first.
-    expect(body).toMatch(/renderTierThresholds\(body\.tierThresholds/);
+    expect(body).toContain("hasExactKeys(value, ['rates', 'tierThresholds'])");
+    expect(body).toContain('const config = parseConfigPayload(body);');
+    expect(body).toContain('renderTierThresholds(config.tierThresholds);');
+    expect(body).not.toMatch(/body\.tiers|config\.tiers/);
   });
 
-  it('renderAccountSummary reads body.breakdown + body.thresholds (NOT body.estimated / body.softWarningCents / body.hardCapCents at the root)', () => {
+  it('account summary requires exact canonical root and nested breakdown fields', () => {
     const body = read(PAGE);
-    // Account-summary destructures breakdown + thresholds at the top
-    // of the function.
-    expect(body).toMatch(/const breakdown = body\.breakdown \?\? body\.estimated \?\? \{\};/);
-    expect(body).toMatch(/const thresholds = body\.thresholds \?\? \{\};/);
-    // Drift-guards: the broken root-level reads MUST NOT come back.
-    expect(body).not.toMatch(/cents\(body\.softWarningCents\)/);
-    expect(body).not.toMatch(/cents\(body\.hardCapCents\)/);
-    expect(body).not.toMatch(/escapeHtml\(body\.thresholdState/);
-    // Sub-processor row sums email + LLM (no fictional subprocessorCents field).
-    expect(body).toMatch(/breakdown\.emailCents \?\? 0\) \+ Number\(breakdown\.llmCents \?\? 0/);
-    expect(body).not.toMatch(/body\.estimated[^.]*\.subprocessorCents/);
+    expect(body).toContain(
+      "hasExactKeys(value, ['account_id', 'billing_cycle', 'breakdown', 'tier', 'thresholds'])",
+    );
+    expect(body).toContain('hasExactKeys(value, COST_BREAKDOWN_KEYS)');
+    expect(body).toContain('const breakdown = summary.breakdown;');
+    expect(body).toContain('const thresholds = summary.thresholds;');
+    expect(body).not.toMatch(/\.estimated|subprocessorCents|softWarningCents|hardCapCents/);
+    expect(body).not.toMatch(/body\.(?:accountId|billingCycle|thresholdState)/);
   });
 
-  it('renderTopAccounts table reads r.breakdown.thresholdState + r.thresholds.{softCents,hardCents} (NOT root-level wrong fields)', () => {
+  it('overview rows use the same validated canonical summary shape with no per-row fallbacks', () => {
     const body = read(PAGE);
-    // Per-row destructure of breakdown + thresholds inside the map.
-    expect(body).toMatch(/const breakdown = r\.breakdown \?\? r\.estimated \?\? \{\};/);
-    expect(body).toMatch(/const thresholds = r\.thresholds \?\? \{\};/);
-    // Pin the corrected reads on the table cells.
-    expect(body).toMatch(/cents\(thresholds\.softCents\)/);
-    expect(body).toMatch(/cents\(thresholds\.hardCents\)/);
-    expect(body).toMatch(/breakdown\.thresholdState/);
-    // Drift-guards.
-    expect(body).not.toMatch(/cents\(r\.softWarningCents\)/);
-    expect(body).not.toMatch(/cents\(r\.hardCapCents\)/);
-    expect(body).not.toMatch(/escapeHtml\(r\.thresholdState/);
+    expect(body).toContain('parseCostSummary(summary, accountId, expectedCycle);');
+    expect(body).toContain('const breakdown = r.breakdown;');
+    expect(body).toContain('const thresholds = r.thresholds;');
+    expect(body).toContain('accountingAmount(thresholds.softCents)');
+    expect(body).toContain('accountingAmount(thresholds.hardCents)');
+    expect(body).toContain('escapeHtml(breakdown.thresholdState)');
+    expect(body).not.toMatch(/r\.(?:estimated|softWarningCents|hardCapCents|thresholdState)/);
+  });
+
+  it('forbids nullish/default fallbacks on every wire-value read', () => {
+    const body = read(PAGE);
+    expect(body).not.toMatch(
+      /\b(?:body|config|summary|breakdown|thresholds|rates|tiers|r|t)\.[A-Za-z_]+\s*\?\?/,
+    );
+    expect(body).not.toMatch(/Number\([^)]*\?\?\s*0/);
   });
 });
