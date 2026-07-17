@@ -149,15 +149,15 @@ client.account.me();
 
 ## Python
 
-**Status:** pre-1.0. The SDK is built, tested, and wheel-buildable. Pin an exact source commit for reproducible deployments.
+**Status:** published on PyPI, pre-1.0, and classified Alpha. Use requirements constraints or a lockfile for reproducible deployments.
 
 **Install:**
 
 ```bash
-pip install "driftstack-sdk @ git+https://github.com/driftstackdev/driftstack-api.git@<commit>#subdirectory=packages/sdk-python"
+pip install driftstack-sdk
 ```
 
-Replace `<commit>` with an exact full commit SHA. The distribution name is `driftstack-sdk`; the import name is `driftstack`.
+The distribution name is `driftstack-sdk`; the import name is `driftstack`. Pin a compatible release in your requirements or generated lockfile before production deployment.
 
 **Requirements:** Python 3.10+.
 
@@ -211,12 +211,12 @@ Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydan
 
 ## Go
 
-**Status:** pre-1.0. Builds and tests pass, and examples compile. Pin an exact commit or Go pseudo-version for reproducible deployments.
+**Status:** published as a tagged pre-1.0 module. Commit `go.mod` and `go.sum` for reproducible deployments.
 
 **Install:**
 
 ```bash
-go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<commit>
+go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest
 ```
 
 **Requirements:** Go 1.22+ (the toolchain floor declared in `go.mod`).

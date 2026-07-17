@@ -67,7 +67,7 @@ pip install driftstack-sdk
 go get github.com/driftstackdev/driftstack-api/packages/sdk-go
 ```
 
-> The TypeScript SDK is published on npm today. The Python and Go SDKs are alpha and may install from a checkout until the first registry tag.
+> All three SDKs are published pre-1.0: TypeScript on npm, Python on PyPI, and Go as a tagged module. Keep your package-manager lockfile, Python constraints, or `go.sum` under version control for reproducible installs.
 
 ## 3. Run your first session
 

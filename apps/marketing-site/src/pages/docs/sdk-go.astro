@@ -28,13 +28,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </p>
 
     <h2>1. Install</h2>
-    <pre><code>{`go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<exact-commit>`}</code></pre>
+    <pre><code>{`go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest`}</code></pre>
 
     <p>
-      The Go SDK is alpha; pin an exact commit or Go pseudo-version rather
-      than a floating tag. Go ≥ 1.22 is supported. The module has zero non-stdlib runtime
-      dependencies (it speaks raw JSON over <code>net/http</code>); no
-      transitive bloat.
+      The Go SDK is published as a tagged pre-1.0 module. Commit the resulting
+      <code>go.mod</code> and <code>go.sum</code> for reproducible deployments.
+      Go ≥ 1.22 is supported. The module has zero non-stdlib runtime dependencies
+      (it speaks raw JSON over <code>net/http</code>); no transitive bloat.
     </p>
 
     <h2>2. Construct the client</h2>

@@ -2,12 +2,12 @@
 
 Stealth iPhone Safari automation, called from Go. Single-package, zero non-stdlib runtime dependencies, context-aware throughout.
 
-> **Status:** pre-1.0. The package builds, tests pass, and examples compile. Pin an exact commit or Go pseudo-version for reproducible deployments.
+> **Status:** published as a tagged pre-1.0 module. Commit `go.mod` and `go.sum` for reproducible deployments.
 
 ## Install
 
 ```bash
-go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<commit>
+go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest
 ```
 
 Requires Go 1.22+ (the module's `go.mod` declares `go 1.22`; uses `errors.As`, `context.Cancel*`, and the `slices` package).

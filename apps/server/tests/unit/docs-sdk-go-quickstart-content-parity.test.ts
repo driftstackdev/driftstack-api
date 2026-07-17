@@ -1,5 +1,5 @@
 // Drift guard for apps/docs/src/pages/sdk/go-quickstart.md. Pins
-// the Go 1.21+ contract, the alpha-pin-to-sha caveat, the
+// the Go 1.22+ contract, tagged pre-1.0 install guidance, the
 // driftstack.New + Close() lifecycle, and the WithBaseURL +
 // WithHTTPClient option pattern.
 
@@ -33,14 +33,17 @@ describe('docs sdk/go-quickstart content parity', () => {
     expect(body).not.toMatch(/Go 1\.21\+/);
   });
 
-  it('pre-1.0 exact-pin guidance is current and contains no future tag promise', () => {
-    expect(body).toMatch(/The Go SDK is pre-1\.0\. Replace `<commit>` with an exact commit SHA/);
-    expect(body).toMatch(/production builds remain reproducible/);
-    expect(body).not.toMatch(/first tagged release|lands/i);
+  it('tagged pre-1.0 install and go.mod/go.sum reproducibility are current', () => {
+    expect(body).toMatch(/The Go SDK is published as a tagged pre-1\.0 module\./);
+    expect(body).toMatch(
+      /Commit the resulting\s*\n?>?\s*`go\.mod` and `go\.sum` so production builds remain reproducible/,
+    );
+    expect(body).not.toMatch(/<commit>|pseudo-version|first tagged release|lands/i);
   });
 
   it("install command + canonical import path pinned: `go get github.com/driftstackdev/driftstack-api/packages/sdk-go` + the `driftstack` import alias. Drift would silently break customers' module imports", () => {
     expect(body).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
+    expect(body).toMatch(/@latest/);
     expect(body).toMatch(
       /driftstack "github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go"/,
     );

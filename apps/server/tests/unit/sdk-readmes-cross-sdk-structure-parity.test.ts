@@ -41,11 +41,13 @@ describe('W814 cross-SDK README structure parity', () => {
   it('CRITICAL each SDK README has current pre-1.0 status and reproducible-install guidance without future publication promises.', () => {
     expect(read(TS)).toMatch(/> \*\*Status:\*\* pre-1\.0\. Stable surface for the API contract/);
     expect(read(PY)).toMatch(
-      /> \*\*Status:\*\* pre-1\.0\. The SDK is built, tested, and wheel-buildable\. Install from a pinned source commit/,
+      /> \*\*Status:\*\* published on PyPI, pre-1\.0, and classified Alpha\. Use requirements constraints or a lockfile for reproducible deployments\./,
     );
     expect(read(GO)).toMatch(
-      /> \*\*Status:\*\* pre-1\.0\. The package builds, tests pass, and examples compile\. Pin an exact commit or Go pseudo-version/,
+      /> \*\*Status:\*\* published as a tagged pre-1\.0 module\. Commit `go\.mod` and `go\.sum` for reproducible deployments\./,
     );
+    expect(read(PY)).not.toMatch(/source commit|PyPI tag pending/i);
+    expect(read(GO)).not.toMatch(/pseudo-version|first tag pending/i);
   });
 
   // ─── Cross-SDK 6-section required set ─────────────────────────
@@ -70,15 +72,13 @@ describe('W814 cross-SDK README structure parity', () => {
 
   // ─── Install commands (each SDK's package manager) ────────────
 
-  it('CRITICAL each SDK README has a working current install command; source-only SDKs require an exact commit.', () => {
+  it('CRITICAL each SDK README has its working current registry install command.', () => {
     expect(read(TS)).toMatch(/npm install @driftstack\/sdk/);
     expect(read(TS)).toMatch(/pnpm add @driftstack\/sdk/);
     expect(read(TS)).toMatch(/yarn add @driftstack\/sdk/);
-    expect(read(PY)).toMatch(
-      /pip install "driftstack-sdk @ git\+https:[^\n]+@<commit>#subdirectory=packages\/sdk-python"/,
-    );
+    expect(read(PY)).toMatch(/^pip install driftstack-sdk$/m);
     expect(read(GO)).toMatch(
-      /go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@<commit>/,
+      /^go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@latest$/m,
     );
   });
 

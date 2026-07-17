@@ -165,15 +165,16 @@ describe('W778 docs /sdk/installation content parity', () => {
     );
   });
 
-  it('CRITICAL Python source install and distribution-name vs import-name framing pinned.', () => {
+  it('CRITICAL Python PyPI pre-1.0 install, reproducibility, and distribution/import names pinned.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
       /The distribution name is `driftstack-sdk`; the import name is `driftstack`\./,
     );
-    expect(p).toMatch(
-      /pip install "driftstack-sdk @ git\+https:[^\n]+@<commit>#subdirectory=packages\/sdk-python"/,
-    );
+    expect(p).toMatch(/\*\*Status:\*\* published on PyPI, pre-1\.0, and classified Alpha\./);
+    expect(p).toMatch(/^pip install driftstack-sdk$/m);
+    expect(p).toMatch(/Use requirements constraints or a lockfile for reproducible deployments/);
+    expect(p).not.toMatch(/@<commit>#subdirectory=packages\/sdk-python|source commit/);
   });
 
   it('CRITICAL Python 3.10+ + sync+async dual-client framing pinned. Driftstack (sync) + AsyncDriftstack (async) with context-manager idiom matches the V-452 SDK idioms.', () => {
@@ -229,10 +230,13 @@ describe('W778 docs /sdk/installation content parity', () => {
     );
   });
 
-  it("CRITICAL Go install path pinned — go get github.com/driftstackdev/driftstack-api/packages/sdk-go. Drift would break SDK adopters' go.mod resolution.", () => {
+  it('CRITICAL tagged Go install and go.mod/go.sum reproducibility are pinned.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
+    expect(p).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@latest/);
+    expect(p).toMatch(/\*\*Status:\*\* published as a tagged pre-1\.0 module\./);
+    expect(p).toMatch(/Commit `go\.mod` and `go\.sum` for reproducible deployments/);
+    expect(p).not.toMatch(/@<commit>|pseudo-version|first tag pending/i);
   });
 
   it('CRITICAL Go driftstack.New + defer client.Close() framing pinned. The constructor + cleanup idiom is the canonical Go-SDK resource-management.', () => {

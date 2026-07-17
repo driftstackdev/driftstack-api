@@ -34,6 +34,13 @@ function read(p: string): string {
 describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content parity', () => {
   const body = read(LIB);
 
+  it('SEO promises inline capture outputs, not a customer recordings API', () => {
+    expect(body).toMatch(
+      /description="Use the Driftstack TypeScript SDK to start browser sessions and capture screenshots, DOM snapshots, or PDFs inline — with full type-safety\."/,
+    );
+    expect(body).not.toMatch(/pull recordings|recordings API/i);
+  });
+
   it("V-703 + V-680 framing pinned: 'TypeScript SDK quickstart. Companion to the curl quickstart. Pitched at teams that already have a Node/Bun/Deno service and want a typed surface instead of hand-rolling fetch calls. Posture matches V-680: code samples runnable verbatim once a key is in hand.' — pinned so the V-703 + V-680 anchors + real curl companion + verbatim-runnable posture all survive without advertising an unpublished CLI", () => {
     expect(body).toMatch(
       /\/\/ V-703 — TypeScript SDK quickstart\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\s*\n?\s*\/\/ \(raw HTTP \/ curl\)\. Pitched at teams that already have a Node\/Bun\/Deno service/,

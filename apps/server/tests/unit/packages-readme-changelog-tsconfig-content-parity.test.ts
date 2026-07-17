@@ -87,16 +87,19 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(existsSync(P('sdk-typescript/README.md'))).toBe(true);
   });
 
-  it('sdk-go/README.md: pre-1.0 + pinned source install + zero-non-stdlib runtime deps + context-aware throughout + Go 1.22+ + lifecycle/resources pinned', () => {
+  it('sdk-go/README.md: tagged pre-1.0 registry install + go.sum reproducibility + runtime/lifecycle/resources pinned', () => {
     const body = read(P('sdk-go/README.md'));
     expect(body).toMatch(/^# Driftstack Go SDK$/m);
     expect(body).toMatch(
       /Stealth iPhone Safari automation, called from Go\. Single-package, zero non-stdlib runtime dependencies, context-aware throughout\./,
     );
-    expect(body).toMatch(/\*\*Status:\*\* pre-1\.0\. The package builds, tests pass/);
     expect(body).toMatch(
-      /^go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@<commit>$/m,
+      /\*\*Status:\*\* published as a tagged pre-1\.0 module\. Commit `go\.mod` and `go\.sum` for reproducible deployments\./,
     );
+    expect(body).toMatch(
+      /^go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@latest$/m,
+    );
+    expect(body).not.toMatch(/@<commit>|pseudo-version|first tag pending/i);
     expect(body).toMatch(/Requires Go 1\.22\+/);
     expect(body).toMatch(/^## Quickstart$/m);
     expect(body).toMatch(
@@ -124,16 +127,17 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(existsSync(P('sdk-go/README.md'))).toBe(true);
   });
 
-  it('sdk-python/README.md: pre-1.0 pinned source install + driftstack-sdk distribution / driftstack import + Python 3.10+ + sync/async resource surface pinned', () => {
+  it('sdk-python/README.md: PyPI pre-1.0 install + lockfile reproducibility + dist/import + sync/async resources pinned', () => {
     const body = read(P('sdk-python/README.md'));
     expect(body).toMatch(/^# Driftstack Python SDK$/m);
     expect(body).toMatch(
       /Stealth iPhone Safari automation, called from Python\. Sync \(`Driftstack`\) and async \(`AsyncDriftstack`\) clients in one package/,
     );
-    expect(body).toMatch(/\*\*Status:\*\* pre-1\.0\. The SDK is built, tested/);
     expect(body).toMatch(
-      /pip install "driftstack-sdk @ git\+https:\/\/github\.com\/driftstackdev\/driftstack-api\.git@<commit>#subdirectory=packages\/sdk-python"/,
+      /\*\*Status:\*\* published on PyPI, pre-1\.0, and classified Alpha\. Use requirements constraints or a lockfile for reproducible deployments\./,
     );
+    expect(body).toMatch(/^pip install driftstack-sdk$/m);
+    expect(body).not.toMatch(/@<commit>#subdirectory=packages\/sdk-python|PyPI tag pending/i);
     expect(body).toMatch(
       /The distribution name is `driftstack-sdk`; the import name is `driftstack`\./,
     );

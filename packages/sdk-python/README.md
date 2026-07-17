@@ -2,15 +2,15 @@
 
 Stealth iPhone Safari automation, called from Python. Sync (`Driftstack`) and async (`AsyncDriftstack`) clients in one package, sharing the same typed resources, error hierarchy, and retry policy.
 
-> **Status:** pre-1.0. The SDK is built, tested, and wheel-buildable. Install from a pinned source commit for reproducible deployments.
+> **Status:** published on PyPI, pre-1.0, and classified Alpha. Use requirements constraints or a lockfile for reproducible deployments.
 
 ## Install
 
 ```bash
-pip install "driftstack-sdk @ git+https://github.com/driftstackdev/driftstack-api.git@<commit>#subdirectory=packages/sdk-python"
+pip install driftstack-sdk
 ```
 
-Replace `<commit>` with an exact full commit SHA. The distribution name is `driftstack-sdk`; the import name is `driftstack`.
+The distribution name is `driftstack-sdk`; the import name is `driftstack`. Pin a compatible release in your requirements or generated lockfile before production deployment.
 
 Requires Python 3.10+.
 

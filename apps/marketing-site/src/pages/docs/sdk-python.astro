@@ -7,7 +7,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // the browser leg.
 ---
 
-<BaseLayout title="Python SDK quickstart — Driftstack" description="Use the Driftstack Python SDK to start browser sessions, stream events, and pull recordings from sync or async Python.">
+<BaseLayout title="Python SDK quickstart — Driftstack" description="Use the Driftstack Python SDK to start browser sessions and capture screenshots, DOM snapshots, or PDFs inline from sync or async Python.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Python SDK quickstart</h1>
 
@@ -28,14 +28,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </p>
 
     <h2>1. Install</h2>
-    <pre><code>{`git clone https://github.com/driftstackdev/driftstack-api.git
-cd driftstack-api
-git checkout <exact-commit>
-python -m pip install ./packages/sdk-python`}</code></pre>
+    <pre><code>{`python -m pip install driftstack-sdk`}</code></pre>
 
     <p>
-      The Python SDK is currently an alpha source distribution, so pin the
-      checkout to an exact commit. Python ≥ 3.10 is supported. The package ships type stubs;
+      The Python SDK is published on PyPI and remains pre-1.0 with an Alpha
+      classifier. Pin a compatible version in your requirements or lockfile for
+      reproducible deployments. Python ≥ 3.10 is supported. The package ships type stubs;
       <code>mypy --strict</code> works against the public surface
       without further config.
     </p>

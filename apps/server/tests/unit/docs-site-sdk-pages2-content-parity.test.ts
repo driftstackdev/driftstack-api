@@ -15,7 +15,7 @@ function read(p: string): string {
 }
 
 describe('W602 apps/docs/sdk close-out pages content parity', () => {
-  it('installation.md: OpenAPI 3.1 source + published TS and exact-pinned pre-1.0 Python/Go installation + resource catalogues pinned', () => {
+  it('installation.md: OpenAPI 3.1 source + all three published pre-1.0 installs + reproducibility + resource catalogues pinned', () => {
     const body = read(INSTALL);
     expect(body).toMatch(/^title: SDK installation$/m);
     expect(body).toMatch(/^# SDK installation$/m);
@@ -45,9 +45,9 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(/client\.auditLog\.export\(\); \/\/ GDPR Article 20 JSON/);
     expect(body).toMatch(/\*\*Errors:\*\* every error extends `DriftstackError`\./);
     expect(body).toMatch(/^## Python$/m);
-    expect(body).toMatch(
-      /\*\*Status:\*\* pre-1\.0\. The SDK is built, tested, and wheel-buildable\./,
-    );
+    expect(body).toMatch(/\*\*Status:\*\* published on PyPI, pre-1\.0, and classified Alpha\./);
+    expect(body).toMatch(/^pip install driftstack-sdk$/m);
+    expect(body).toMatch(/Use requirements constraints or a lockfile for reproducible deployments/);
     expect(body).toMatch(
       /The distribution name is `driftstack-sdk`; the import name is `driftstack`\./,
     );
@@ -59,6 +59,12 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(
       /\*\*Requirements:\*\* Go 1\.22\+ \(the toolchain floor declared in `go\.mod`\)\./,
     );
+    expect(body).toMatch(/\*\*Status:\*\* published as a tagged pre-1\.0 module\./);
+    expect(body).toMatch(
+      /go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@latest/,
+    );
+    expect(body).toMatch(/Commit `go\.mod` and `go\.sum` for reproducible deployments/);
+    expect(body).not.toMatch(/@<commit>|PyPI tag pending|first tag pending/i);
     expect(body).toMatch(
       /The Go SDK is single-package, has zero non-stdlib runtime dependencies, and is context-aware throughout\./,
     );

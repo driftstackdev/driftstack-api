@@ -58,20 +58,26 @@ describe('W362.A /docs/sdk-python parity', () => {
     expect(body).toContain('from driftstack.errors import RateLimitError, ValidationError');
   });
 
-  it('alpha source install + Python ≥ 3.10 + httpx-pooled + type-stubs are pinned', () => {
-    expect(body).toContain('git clone https://github.com/driftstackdev/driftstack-api.git');
-    expect(body).toContain('git checkout <exact-commit>');
-    expect(body).toContain('python -m pip install ./packages/sdk-python');
-    expect(body).toContain('alpha source distribution');
+  it('PyPI pre-1.0 install + reproducibility + Python ≥ 3.10 + httpx/type stubs are pinned', () => {
+    expect(body).toContain('python -m pip install driftstack-sdk');
+    expect(body).toMatch(/published on PyPI and remains pre-1\.0 with an Alpha\s+classifier/);
+    expect(body).toMatch(
+      /Pin a compatible version in your requirements or lockfile for\s+reproducible deployments/,
+    );
     expect(body).toMatch(/Python ≥ 3\.10 is supported/);
     expect(body).toMatch(/internally pooled\s+via <code>httpx<\/code>/);
     expect(body).toMatch(/ships type stubs/);
     expect(body).toMatch(/<code>mypy --strict<\/code>/);
     // The package actually ships a py.typed marker.
     expect(existsSync(PY_TYPED)).toBe(true);
-    expect(body).not.toMatch(
-      /pip install driftstack-sdk|poetry add driftstack-sdk|uv add driftstack-sdk/,
+    expect(body).not.toMatch(/git checkout <exact-commit>|pip install \.\/packages\/sdk-python/);
+  });
+
+  it('SEO describes inline capture outputs without inventing a recordings API', () => {
+    expect(body).toMatch(
+      /description="Use the Driftstack Python SDK to start browser sessions and capture screenshots, DOM snapshots, or PDFs inline from sync or async Python\."/,
     );
+    expect(body).not.toMatch(/pull recordings|recordings API/i);
   });
 
   it('session ids prefixed ses_ pinned', () => {

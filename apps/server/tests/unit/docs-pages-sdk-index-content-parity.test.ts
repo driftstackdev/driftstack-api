@@ -44,12 +44,13 @@ describe('W775 docs /sdk index content parity', () => {
     expect(p).toMatch(/go get github\.com\/driftstackdev\/\.\.\./);
   });
 
-  it('CRITICAL Status badges pinned — TS published-pre-1.0, Python alpha-PyPI-pending, Go alpha-first-tag-pending. Drift would mismatch sdk-versioning policy + customer expectations.', () => {
+  it('CRITICAL status badges pin all three published pre-1.0 packages without pending-registry fiction.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Status: published, pre-1\.0/);
-    expect(p).toMatch(/Status: alpha; PyPI tag pending/);
-    expect(p).toMatch(/Status: alpha; first tag pending/);
+    expect(p).toMatch(/Status: published on PyPI; pre-1\.0 Alpha/);
+    expect(p).toMatch(/Status: published tagged module; pre-1\.0/);
+    expect(p).not.toMatch(/PyPI tag pending|first tag pending|source install|source module/);
   });
 
   it("CRITICAL 'Get started' 2-link set pinned — /sdk/installation/ + /quickstart/. Drift to dropping either link would force new customers to hunt for getting-started content.", () => {

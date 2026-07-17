@@ -39,14 +39,17 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     );
   });
 
-  it('alpha module path is pinned to an exact revision with the Go floor and dependency posture', () => {
+  it('tagged pre-1.0 module install is pinned with reproducibility, Go floor, and dependency posture', () => {
     expect(body).toMatch(
-      /go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@<exact-commit>/,
+      /go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@latest/,
     );
-    expect(body).toContain('The Go SDK is alpha; pin an exact commit or Go pseudo-version');
-    expect(body).not.toContain('@latest');
+    expect(body).toContain('The Go SDK is published as a tagged pre-1.0 module');
     expect(body).toMatch(
-      /Go ≥ 1\.22 is supported\. The module has zero non-stdlib runtime\s*\n?\s*dependencies \(it speaks raw JSON over <code>net\/http<\/code>\); no\s*\n?\s*transitive bloat\./,
+      /Commit the resulting\s*\n?\s*<code>go\.mod<\/code> and <code>go\.sum<\/code> for reproducible deployments/,
+    );
+    expect(body).not.toMatch(/@<exact-commit>|first tag pending/i);
+    expect(body).toMatch(
+      /Go ≥ 1\.22 is supported\. The module has zero non-stdlib runtime\s*\n?\s*dependencies\s*\n?\s*\(it speaks raw JSON over <code>net\/http<\/code>\); no\s*\n?\s*transitive bloat\./,
     );
   });
 

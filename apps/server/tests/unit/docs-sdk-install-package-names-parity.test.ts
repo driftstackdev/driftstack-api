@@ -34,14 +34,16 @@ describe('sdk/installation.md ↔ actual published package identities', () => {
     expect(DOC, `installation.md import example must use ${name}`).toContain(`from '${name}'`);
   });
 
-  it('Python: documents the real dist name in a pinned repository-source install', () => {
+  it('Python: documents the real published dist name in the PyPI install command', () => {
     const py = read('packages/sdk-python/pyproject.toml');
     const m = py.match(/^name\s*=\s*"([^"]+)"/m);
     const distName = m?.[1];
     expect(distName, 'pyproject.toml must declare a name').toBeTruthy();
+    expect(DOC).toContain(`pip install ${distName as string}`);
     expect(DOC).toContain(
-      `pip install "${distName as string} @ git+https://github.com/driftstackdev/driftstack-api.git@<commit>#subdirectory=packages/sdk-python"`,
+      'Use requirements constraints or a lockfile for reproducible deployments',
     );
+    expect(DOC).not.toContain('@<commit>#subdirectory=packages/sdk-python');
   });
 
   it('Go: documents the real module path from go.mod', () => {
@@ -49,7 +51,8 @@ describe('sdk/installation.md ↔ actual published package identities', () => {
     const modPath = mod?.[1];
     expect(modPath, 'go.mod must declare a module path').toBeTruthy();
     expect(DOC, `installation.md must document go get ${modPath}`).toContain(
-      `go get ${modPath as string}`,
+      `go get ${modPath as string}@latest`,
     );
+    expect(DOC).toContain('Commit `go.mod` and `go.sum` for reproducible deployments');
   });
 });

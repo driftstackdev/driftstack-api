@@ -54,6 +54,13 @@ describe('W361.A /docs/sdk-typescript parity', () => {
     expect(read(SDK_INDEX)).toMatch(/export\s+\{[^}]*Driftstack[^}]*\}/);
   });
 
+  it('SEO describes inline capture outputs without inventing a recordings API', () => {
+    expect(body).toMatch(
+      /description="Use the Driftstack TypeScript SDK to start browser sessions and capture screenshots, DOM snapshots, or PDFs inline — with full type-safety\."/,
+    );
+    expect(body).not.toMatch(/pull recordings|recordings API/i);
+  });
+
   it('session lifecycle status set in the doc matches SessionStatusSchema', () => {
     for (const s of statuses) {
       expect(body).toMatch(new RegExp(`<code>${s}<\\/code>`));

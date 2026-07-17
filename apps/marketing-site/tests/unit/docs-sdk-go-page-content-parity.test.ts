@@ -95,12 +95,13 @@ describe('W364.A /docs/sdk-go parity', () => {
     expect(body).toMatch(/errors\.Is\(err, driftstack\.ErrConflict\)/);
   });
 
-  it('Go ≥ 1.22 supported claim pinned', () => {
-    expect(body).toContain(
-      'go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<exact-commit>',
+  it('tagged pre-1.0 Go install, reproducibility, and Go ≥ 1.22 are pinned', () => {
+    expect(body).toContain('go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest');
+    expect(body).toContain('The Go SDK is published as a tagged pre-1.0 module');
+    expect(body).toMatch(
+      /Commit the resulting\s+<code>go\.mod<\/code> and <code>go\.sum<\/code> for reproducible deployments/,
     );
-    expect(body).toContain('The Go SDK is alpha; pin an exact commit or Go pseudo-version');
-    expect(body).not.toContain('@latest');
+    expect(body).not.toMatch(/@<exact-commit>|first tag pending/i);
     expect(body).toMatch(/Go ≥ 1\.22 is supported/);
     // go.mod actually requires >=1.22.
     if (existsSync(GO_GO_MOD)) {

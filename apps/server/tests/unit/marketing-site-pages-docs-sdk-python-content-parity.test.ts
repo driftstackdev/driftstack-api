@@ -5,7 +5,7 @@
 // design.
 //
 //   • V-704 doc-comment framing + V-703 companion.
-//   • Alpha source install pinned to an exact repository commit.
+//   • Published PyPI pre-1.0 install with lockfile/constraint guidance.
 //   • Python ≥ 3.10 + mypy --strict ready.
 //   • Construct: Driftstack(api_key=os.environ[...]) + base_url override.
 //   • Reuse client across process (httpx-pooled + thread/asyncio-safe).
@@ -39,14 +39,20 @@ describe('W511.C apps/marketing-site/src/pages/docs/sdk-python.astro content par
     );
   });
 
-  it('alpha source distribution install is pinned to an exact revision', () => {
-    expect(body).toContain('git clone https://github.com/driftstackdev/driftstack-api.git');
-    expect(body).toContain('git checkout <exact-commit>');
-    expect(body).toContain('python -m pip install ./packages/sdk-python');
-    expect(body).toContain('alpha source distribution');
-    expect(body).not.toMatch(
-      /pip install driftstack-sdk|poetry add driftstack-sdk|uv add driftstack-sdk/,
+  it('published PyPI pre-1.0 install and reproducibility guidance are pinned', () => {
+    expect(body).toContain('python -m pip install driftstack-sdk');
+    expect(body).toMatch(/published on PyPI and remains pre-1\.0 with an Alpha\s*\n?\s*classifier/);
+    expect(body).toMatch(
+      /Pin a compatible version in your requirements or lockfile for\s*\n?\s*reproducible deployments/,
     );
+    expect(body).not.toMatch(/git checkout <exact-commit>|pip install \.\/packages\/sdk-python/);
+  });
+
+  it('SEO promises inline capture outputs, not a customer recordings API', () => {
+    expect(body).toMatch(
+      /description="Use the Driftstack Python SDK to start browser sessions and capture screenshots, DOM snapshots, or PDFs inline from sync or async Python\."/,
+    );
+    expect(body).not.toMatch(/pull recordings|recordings API/i);
   });
 
   it("Python ≥ 3.10 + mypy --strict + type-stubs commitment pinned: 'Python ≥ 3.10 is supported. The package ships type stubs; mypy --strict works against the public surface without further config.' — pinned so the 3.10-minimum + mypy-strict commitments survive (drift to a different Python floor would create marketing↔setup.cfg divergence; drift to dropping mypy --strict would let typed users question type completeness)", () => {

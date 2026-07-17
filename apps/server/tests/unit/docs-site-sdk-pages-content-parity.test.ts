@@ -45,15 +45,15 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
       );
     });
 
-    it('Python card — source-install command + current pre-1.0 status, with no registry promise.', () => {
+    it('Python card — published PyPI command + current pre-1.0 Alpha status.', () => {
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Python<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">driftstack-sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">pip install …#subdirectory=packages\/sdk-python<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: source install; pre-1\.0<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Python<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">driftstack-sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">pip install driftstack-sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published on PyPI; pre-1\.0 Alpha<\/p>/,
       );
     });
 
-    it('Go card — source-module command + current pre-1.0 status, with no future tag promise.', () => {
+    it('Go card — tagged-module command + current pre-1.0 status.', () => {
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Go<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">sdk-go<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">go get github\.com\/driftstackdev\/\.\.\.<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: source module; pre-1\.0<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">Go<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-tk-ink">sdk-go<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-tk-ink-2">go get github\.com\/driftstackdev\/\.\.\.@latest<\/p>\s*\n\s*<p class="mt-3 text-xs text-tk-ink-3">Status: published tagged module; pre-1\.0<\/p>/,
       );
     });
 
@@ -119,7 +119,7 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(existsSync(PY)).toBe(true);
   });
 
-  it('go-quickstart.md: Go 1.22+, exact source pin, ctx + client.Close lifecycle pinned', () => {
+  it('go-quickstart.md: Go 1.22+, tagged module reproducibility, ctx + client.Close lifecycle pinned', () => {
     const body = read(GO);
     expect(body).toMatch(/^title: Go quickstart$/m);
     expect(body).toMatch(/^# Go quickstart$/m);
@@ -127,8 +127,12 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(body).toMatch(/- Go 1\.22\+ \(the SDK uses generic constraints \+ `slices` package\)\./);
     expect(body).not.toMatch(/- Go 1\.21\+/);
     expect(body).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
-    expect(body).toMatch(/> The Go SDK is pre-1\.0\. Replace `<commit>` with an exact commit SHA/);
-    expect(body).toMatch(/production builds remain reproducible/);
+    expect(body).toMatch(/> The Go SDK is published as a tagged pre-1\.0 module\./);
+    expect(body).toMatch(
+      /Commit the resulting\s*\n?>?\s*`go\.mod` and `go\.sum` so production builds remain reproducible/,
+    );
+    expect(body).toMatch(/@latest/);
+    expect(body).not.toMatch(/<commit>|pseudo-version|first tag pending/i);
     expect(body).toMatch(
       /driftstack "github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go"/,
     );
