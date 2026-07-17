@@ -69,9 +69,9 @@ describe('POST /v1/sessions', () => {
     expect(events[0]?.type).toBe('created');
   });
 
-  it('429 ConcurrencyLimit when free-tier already at limit', async () => {
-    fx = await buildTestApp({ tier: 'free' });
-    await createSession(fx); // free tier limit = 1
+  it('429 ConcurrencyLimit when an API-enabled single-session tier is already at limit', async () => {
+    fx = await buildTestApp({ tier: 'solo_manual' });
+    await createSession(fx); // Solo Manual limit = 1
 
     const res = await fx.app.inject({
       method: 'POST',
