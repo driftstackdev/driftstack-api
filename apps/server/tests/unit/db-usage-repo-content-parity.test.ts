@@ -1,20 +1,24 @@
 // W442.B — drift guard for apps/server/src/db/usage-repo.ts.
-// UsageRepo with period totals + V-170 daily-bucket aggregation.
+// UsageRepo with period totals + V-170 daily-bucket aggregation. Session
+// minutes come from durable lifecycle intervals rather than the optional
+// usage_records ledger, so customer/admin usage is truthful without a writer.
 // Drift here either drops the AT TIME ZONE 'UTC' clause on
 // date_trunc (server-local time-zone leaks into the response and
 // fights the API "UTC YYYY-MM-DD" contract) or replaces gte/lt with
 // gte/lte (period-end double-counting at the boundary).
 //
-//   • totalsForPeriod: SUM grouped by record_type; half-open window
-//     [periodStart, periodEnd) via gte/lt; coalesce(sum,0)::int.
+//   • Action rows: SUM grouped by record_type; half-open window
+//     [periodStart, periodEnd) via gte/lt; lifecycle + decomposer rows excluded.
+//   • Session minutes: real non-reserving direct sessions plus assigned,
+//     unlinked agent sessions. Intervals clip to one injected clock/window;
+//     terminal rows fall back to updated_at when their terminal stamp is null.
+//   • Floor applies after seconds are summed, never once per session.
 //   • dailyBucketsForRange: date_trunc('day', recordedAt AT TIME
 //     ZONE 'UTC') matches API "UTC YYYY-MM-DD" contract; GROUP BY
 //     truncated-day + recordType; sorted byDate ascending.
 //   • Same half-open [from, to) window via gte/lt.
-//   • v2-#4 Q.1.e — ne(recordType, INTERNAL_RECORD_TYPES[0]) filters
-//     server-internal `agent_decomposer` (+ Arc 1 sub-slice 6.4
-//     `agent_decomposer_bundled`) telemetry from customer-facing
-//     aggregations.
+//   • SQL and JS both reject legacy session-minute ledger rows and the
+//     server-internal agent_decomposer / agent_decomposer_bundled telemetry.
 //
 // 2026-05-20 — REWRITTEN to use DISCRETE small pins instead of one
 // 20-`\s*\n?\s*`-chain regex. The prior style was hitting catastrophic
@@ -53,10 +57,17 @@ describe('W442.B apps/server/src/db/usage-repo.ts content parity', () => {
     expect(body).toMatch(/import \{ usageRecords \} from '\.\/schema\.js';/);
   });
 
-  it('v2-#4 Q.1.e + Arc 1 sub-slice 6.4 — INTERNAL_RECORD_TYPES constant filters server-internal cost telemetry from customer-facing aggregations', () => {
+  it('record-source constants separate lifecycle session minutes from both internal decomposer ledgers', () => {
     expect(body).toMatch(
       /const INTERNAL_RECORD_TYPES = \['agent_decomposer', 'agent_decomposer_bundled'\] as const;/,
     );
+    expect(body).toMatch(/const LIFECYCLE_DERIVED_RECORD_TYPE = 'session_minute' as const;/);
+  });
+
+  it('constructor injects a deterministic clock while production defaults to a fresh Date', () => {
+    expect(body).toMatch(/private readonly database: Database,/);
+    expect(body).toMatch(/private readonly clock: \(\) => Date = \(\) => new Date\(\),/);
+    expect(body.match(/const asOf = this\.clock\(\);/g)).toHaveLength(2);
   });
 
   it('totalsForPeriod: 3-arg signature (accountId / periodStart / periodEnd) returning Promise<UsageTotals>', () => {
@@ -74,21 +85,45 @@ describe('W442.B apps/server/src/db/usage-repo.ts content parity', () => {
     );
   });
 
-  it('totalsForPeriod WHERE clause: half-open [periodStart, periodEnd) via gte/lt + accountId eq + v2-#4 ne(recordType, INTERNAL_RECORD_TYPES[0])', () => {
+  it('totalsForPeriod action WHERE is half-open and excludes lifecycle minutes plus both decomposer types', () => {
     expect(body).toMatch(/eq\(usageRecords\.accountId, accountId\),/);
     expect(body).toMatch(/gte\(usageRecords\.recordedAt, periodStart\),/);
     expect(body).toMatch(/lt\(usageRecords\.recordedAt, periodEnd\),/);
+    expect(body).toMatch(/ne\(usageRecords\.recordType, LIFECYCLE_DERIVED_RECORD_TYPE\),/);
     expect(body).toMatch(/ne\(usageRecords\.recordType, INTERNAL_RECORD_TYPES\[0\]\),/);
+    expect(body).toMatch(/ne\(usageRecords\.recordType, INTERNAL_RECORD_TYPES\[1\]\),/);
     expect(body).toMatch(/\.groupBy\(usageRecords\.recordType\);/);
   });
 
-  it('totalsForPeriod result aggregation: Partial<Record<UsageRecordType,number>> + defensive INTERNAL_RECORD_TYPES.includes() drop', () => {
+  it('totalsForPeriod result merges the lifecycle-derived minute count into action totals', () => {
     expect(body).toMatch(/const totals: Partial<Record<UsageRecordType, number>> = \{\};/);
     expect(body).toMatch(
-      /if \(\(INTERNAL_RECORD_TYPES as readonly string\[\]\)\.includes\(row\.recordType\)\) continue;/,
+      /row\.recordType === LIFECYCLE_DERIVED_RECORD_TYPE \|\|\s*\(INTERNAL_RECORD_TYPES as readonly string\[\]\)\.includes\(row\.recordType\)/,
     );
     expect(body).toMatch(/totals\[row\.recordType as UsageRecordType\] = row\.total;/);
+    expect(body).toMatch(/totals\.session_minute = lifecycleRows\[0\]\?\.total_minutes \?\? 0;/);
     expect(body).toMatch(/return \{ totals \};/);
+  });
+
+  it('period lifecycle source includes only real direct and assigned standalone agent sessions', () => {
+    expect(body).toMatch(/FROM sessions/);
+    expect(body).toMatch(/driver_session_id NOT LIKE 'reserving:%'/);
+    expect(body).toMatch(/FROM agent_sessions/);
+    expect(body).toMatch(/node_id IS NOT NULL/);
+    expect(body).toMatch(/driftstack_session_id IS NULL/);
+  });
+
+  it('terminal fallback and half-open clipping are explicit for direct and agent lifecycles', () => {
+    expect(body).toMatch(/WHEN status IN \('destroyed', 'errored'\) THEN updated_at/);
+    expect(body).toMatch(/WHEN status = 'closed' THEN updated_at/);
+    expect(body).toMatch(
+      /WHERE greatest\(started_at, \$\{periodStartIso\}::timestamptz\)\s*< least\(ended_at, \$\{periodEndIso\}::timestamptz, \$\{asOfIso\}::timestamptz\)/,
+    );
+  });
+
+  it('period minutes floor only after all clipped lifecycle seconds are summed', () => {
+    expect(body).toMatch(/SELECT floor\(\s*coalesce\(\s*sum\(\s*extract\(/);
+    expect(body).toMatch(/\) \/ 60\s*\)\s*::int AS total_minutes/);
   });
 
   it("dailyBucketsForRange framing pinned: GROUP BY (date_trunc('day', recorded_at), record_type) with existing (account_id, recorded_at) index; UTC-day truncation matches API contract", () => {
@@ -104,9 +139,15 @@ describe('W442.B apps/server/src/db/usage-repo.ts content parity', () => {
     );
   });
 
-  it('dailyBucketsForRange WHERE: same half-open [fromDate, toDate) + accountId eq + ne(recordType, INTERNAL_RECORD_TYPES[0])', () => {
+  it('dailyBucketsForRange action WHERE uses the same half-open window and three-source exclusion', () => {
     expect(body).toMatch(/gte\(usageRecords\.recordedAt, fromDate\),/);
     expect(body).toMatch(/lt\(usageRecords\.recordedAt, toDate\),/);
+    expect(
+      body.match(/ne\(usageRecords\.recordType, LIFECYCLE_DERIVED_RECORD_TYPE\),/g),
+    ).toHaveLength(2);
+    expect(body.match(/ne\(usageRecords\.recordType, INTERNAL_RECORD_TYPES\[1\]\),/g)).toHaveLength(
+      2,
+    );
   });
 
   it('dailyBucketsForRange GROUP BY: date_trunc expr + recordType', () => {
@@ -121,8 +162,17 @@ describe('W442.B apps/server/src/db/usage-repo.ts content parity', () => {
     );
     expect(body).toMatch(/byDate\.get\(row\.day\)/);
     expect(body).toMatch(/byDate\.set\(row\.day, bucket\);/);
+    expect(body).toMatch(/if \(row\.total_minutes <= 0\) continue;/);
+    expect(body).toMatch(/bucket\.session_minute = row\.total_minutes;/);
     expect(body).toMatch(/\.sort\(\(\[a\], \[b\]\) => a\.localeCompare\(b\)\)/);
     expect(body).toMatch(/\.map\(\(\[date, totals\]\) => \(\{ date, totals \}\)\);/);
+  });
+
+  it('daily lifecycle aggregation generates fixed 24-hour UTC days and floors after each day sum', () => {
+    expect(body).toMatch(/day_start_utc AT TIME ZONE 'UTC' AS day_start/);
+    expect(body).toMatch(/interval '24 hours'/);
+    expect(body).toMatch(/GROUP BY days\.day_start/);
+    expect(body).toMatch(/ORDER BY days\.day_start ASC/);
   });
 
   it('file exists at canonical path', () => {
