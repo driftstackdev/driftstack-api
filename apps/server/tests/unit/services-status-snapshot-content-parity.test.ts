@@ -49,24 +49,22 @@ describe('W410.A apps/server/src/services/status-snapshot.ts content parity', ()
     );
   });
 
-  it('Shape framing pinned: matches GET /v1/status/incidents wire shape; { data: Incident[] } envelope; fall-through consumer', () => {
-    expect(body).toMatch(
-      /Shape: matches the wire shape of GET \/v1\/status\/incidents — a\s*\n?\s*\/\/\s*`\{ data: Incident\[\] \}` envelope\. The status site is purely a\s*\n?\s*\/\/\s*fall-through consumer that doesn't care which source it came from\./,
-    );
+  it('Shape framing pins exact aggregates + truncation for live/fallback parity', () => {
+    expect(body).toMatch(/Shape: matches GET \/v1\/status\/incidents: bounded data plus exact/);
+    expect(body).toMatch(/total\/open\/outage aggregates and an explicit truncation bit/);
   });
 
   it("STATUS_SNAPSHOT_KEY exported constant = 'status/incidents-public.json'", () => {
     expect(body).toMatch(/export const STATUS_SNAPSHOT_KEY = 'status\/incidents-public\.json';/);
   });
 
-  it('Defaults: windowMs = 30 days + limit = 50 (matches public API)', () => {
-    expect(body).toMatch(
-      /\/\*\* Last-since window in ms; defaults to 30 days \(matches the public API\)\. \*\//,
-    );
+  it('Defaults: 90-day resolved history + all-time open truth; limit 50', () => {
+    expect(body).toMatch(/Resolved-history window; defaults to 90 days/);
+    expect(body).toMatch(/Open rows are all-time/);
     expect(body).toMatch(
       /\/\*\* Max incidents to include; defaults to 50 \(matches the public API\)\. \*\//,
     );
-    expect(body).toMatch(/this\.windowMs = config\.windowMs \?\? 30 \* 24 \* 60 \* 60 \* 1000;/);
+    expect(body).toMatch(/this\.windowMs = config\.windowMs \?\? 90 \* 24 \* 60 \* 60 \* 1000;/);
     expect(body).toMatch(/this\.limit = config\.limit \?\? 50;/);
     expect(body).toMatch(/this\.key = config\.key \?\? STATUS_SNAPSHOT_KEY;/);
   });
@@ -83,24 +81,24 @@ describe('W410.A apps/server/src/services/status-snapshot.ts content parity', ()
     expect(body).toMatch(/updated_at: row\.updatedAt\.toISOString\(\),/);
   });
 
-  it('processSnapshot: incidents.list scope=public + since window + limit; R2.putObject with json content-type; idempotent same-key overwrite', () => {
+  it('processSnapshot: exact publicFeed envelope + R2 same-key overwrite', () => {
     expect(body).toMatch(
       /\/\*\* Write one snapshot to R2\. Idempotent — same key, full overwrite\. \*\/\s*\n?\s*async processSnapshot\(now: Date\): Promise<\{ count: number; bytes: number \}> \{/,
     );
     expect(body).toMatch(/const since = new Date\(now\.getTime\(\) - this\.windowMs\);/);
-    expect(body).toMatch(
-      /const rows = await this\.incidents\.list\(\{\s*\n?\s*scope: 'public',\s*\n?\s*since,\s*\n?\s*limit: this\.limit,\s*\n?\s*\}\);/,
-    );
-    expect(body).toMatch(
-      /const body = JSON\.stringify\(\{\s*\n?\s*generated_at: now\.toISOString\(\),\s*\n?\s*data: rows\.map\(publicIncident\),\s*\n?\s*\}\);/,
-    );
+    expect(body).toContain('const feed = await this.incidents.publicFeed({');
+    expect(body).toContain('data: feed.rows.map(publicIncident)');
+    expect(body).toContain('total: feed.total');
+    expect(body).toContain('open_count: feed.openCount');
+    expect(body).toContain('open_outage_count: feed.openOutageCount');
+    expect(body).toContain('truncated: feed.truncated');
     expect(body).toMatch(
       /await this\.r2\.putObject\(\{\s*\n?\s*key: this\.key,\s*\n?\s*body: buffer,\s*\n?\s*contentType: 'application\/json; charset=utf-8',\s*\n?\s*\}\);/,
     );
   });
 
   it('processSnapshot: returns { count, bytes }; debug-log (optional chain) on success', () => {
-    expect(body).toMatch(/return \{ count: rows\.length, bytes: buffer\.byteLength \};/);
+    expect(body).toMatch(/return \{ count: feed\.rows\.length, bytes: buffer\.byteLength \};/);
     expect(body).toMatch(/this\.logger\.debug\?\.\(/);
     expect(body).toMatch(/'wrote status snapshot to R2',/);
   });

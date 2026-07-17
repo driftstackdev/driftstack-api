@@ -53,16 +53,17 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
     expect(body.match(/const STATUS_BADGE(?:\s*:[^=]+)?\s*=/g)).toHaveLength(1);
   });
 
-  it('V-338 POST /v1/admin/incidents + V-338b GET on mount wired against the route', () => {
+  it('V-338 idempotent PUT + lifecycle-partitioned GETs are wired against the route', () => {
     expect(existsSync(ROUTE)).toBe(true);
     expect(route).toContain("'/v1/admin/incidents'");
-    // V-338b — GET on mount with scope=all + limit=100.
+    // Lifecycle filtering is server-side before the cap; open_count is exact.
+    expect(body).toMatch(/apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&state=open&limit=100'/);
     expect(body).toMatch(
-      /boundedFetch\(\s*apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&limit=100'/,
+      /apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&state=resolved&limit=100'/,
     );
-    // V-338 — POST handler.
+    // The browser preallocates one public id and retries it with PUT.
     expect(body).toMatch(
-      /boundedFetch\(apiBaseUrl \+ '\/v1\/admin\/incidents',\s*\{\s*method: 'POST'/s,
+      /boundedFetch\(apiBaseUrl \+ '\/v1\/admin\/incidents\/' \+ encodeURIComponent\(attempt\.id\), \{\s*method: 'PUT'/s,
     );
   });
 
@@ -83,11 +84,11 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
     expect(body).toMatch(/Every action audit-logged/);
   });
 
-  it('V-295c propagation mechanism pinned: status.driftstack.dev within ~60s via Hetzner cron + R2', () => {
+  it('V-295c propagation mechanism pinned: Cloudflare Pages mirror via Hetzner poller + R2', () => {
     // Falsifiable claim — a future "Cloudflare-only push" or
     // "real-time SSE" refactor must update this copy first.
     expect(body).toMatch(
-      /Public incidents propagate to status\.driftstack\.dev \(CF Pages mirror\) within ~60s\s+via Hetzner cron \+ R2 \(V-295c\)/,
+      /Public incidents propagate to status\.driftstack\.dev through the Cloudflare Pages mirror\s+within about 60 seconds via the Hetzner poller and R2/,
     );
   });
 
@@ -113,30 +114,34 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
 
   it('incident creation is synchronous single-flight with accessible busy state', () => {
     expect(body).toMatch(/let postingIncident = false;/);
-    expect(body).toMatch(/if \(postingIncident \|\| incidentOutcomeUnknown\) return;/);
+    expect(body).toMatch(/if \(postingIncident \|\| createAttemptBlocked\) return;/);
     expect(body).toMatch(/postingIncident = true;/);
     expect(body).toMatch(/submit\.setAttribute\('aria-busy', 'true'\)/);
     expect(body).toMatch(/\.finally\(function \(\) \{\s*postingIncident = false;/);
   });
 
-  it('does not parse the unused accepted incident-create body', () => {
-    expect(body).toContain('The success body is unused; accepted status is the mutation');
-    const start = body.indexOf("boundedFetch(apiBaseUrl + '/v1/admin/incidents',");
-    const end = body.indexOf('.catch(async function (err)', start);
-    const acceptedPath = body.slice(start, end);
-    expect(acceptedPath).not.toContain('return r.json();');
+  it('accepts only an exact created/replayed body for the frozen request', () => {
+    expect(body).toContain('function parseWriteSuccess(status, value, attempt)');
+    expect(body).toContain('function isIncidentUpdate(value)');
+    expect(body).toContain('!isIncidentUpdate(value.updates[0])');
+    expect(body).not.toContain('value.incident.status !== attempt.body.status');
+    expect(body).toContain('value.updates[0].status !== attempt.body.status');
+    expect(body).toContain(
+      "const expectedOutcome = status === 201 ? 'created' : status === 200 ? 'replayed' : null;",
+    );
+    expect(body).toContain('value.incident.id !== attempt.id');
+    expect(body).toContain('value.incident.started_at !== attempt.body.started_at');
+    expect(body).toContain('value.updates[0].message !== attempt.body.description');
   });
 
-  it('reconciles ambiguous incident creation before the operator can repost', () => {
-    expect(body).toContain('let latestIncidentItems = [];');
-    expect(body).toContain('let incidentOutcomeUnknown = false;');
-    expect(body).toContain('let incidentOutcomeReason =');
-    expect(body).toContain('latestIncidentItems.some(function (incident)');
-    expect(body).toContain("incidentOutcomeReason = 'posted'");
-    expect(body).toContain("incidentOutcomeReason = 'unverified'");
-    expect(body).toContain('Already posted');
-    expect(body).toContain('Verify before retrying');
-    expect(body).toMatch(/const refreshed = await fetchAndRender\(\)/);
+  it('retries ambiguous creation with one stable id and exact frozen body', () => {
+    expect(body).toContain('let createAttempt = null;');
+    expect(body).toContain("id: 'inc_' + window.crypto.randomUUID()");
+    expect(body).toContain('started_at: new Date().toISOString()');
+    expect(body).toContain('body: JSON.stringify(attempt.body)');
+    expect(body).toContain('Retry same request');
+    expect(body).toContain('Retries reuse the same incident id and frozen payload.');
+    expect(body).not.toContain('latestIncidentItems.some');
   });
 
   it('CSS class on `Public on status page` checkbox is `checked` by default (status-page-default-public)', () => {

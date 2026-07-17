@@ -35,10 +35,10 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
 
   it('V-338 + V-338b frame an inert incident shell that becomes authoritative only after a successful live read', () => {
     expect(body).toMatch(
-      /\/\/ V-338 — incident form is now wired to POST \/v1\/admin\/incidents\.\s*\/\/ SSG renders an inert unavailable list; the inline script replaces it\s*\/\/ only after a successful live read and also handles the create form\./,
+      /\/\/ V-338 — incident form uses client-owned-id PUT \/v1\/admin\/incidents\/:id\.\s*\/\/ SSG renders an inert unavailable list; the inline script replaces it\s*\/\/ only after a successful live read and also handles the create form\./,
     );
     expect(body).toMatch(
-      /\/\/ V-338 — wires the new-incident form to POST \/v1\/admin\/incidents\.\s*\/\/ V-338b — also fetches \/v1\/admin\/incidents on mount \+ replaces\s*\/\/ the unavailable list shell with live data\./,
+      /\/\/ V-338 — wires the new-incident form to idempotent PUT \/v1\/admin\/incidents\/:id\.\s*\/\/ V-338b — also fetches \/v1\/admin\/incidents on mount \+ replaces\s*\/\/ the unavailable list shell with live data\./,
     );
   });
 
@@ -74,42 +74,44 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
     );
   });
 
-  it("Submit payload: title + description + severity + status:'investigating' (hardcoded — UI doesn't let operators pick initial status, since 'identified' or 'monitoring' would be incorrect at create-time) + affected_components + public bool — pinned so the create endpoint always gets 'investigating' as the initial status (drift to letting operators pick would allow incidents to start in a state that doesn't match reality)", () => {
-    expect(body).toMatch(
-      /body: JSON\.stringify\(\{\s*\n?\s*title: title,\s*\n?\s*description: description,\s*\n?\s*severity: severity,\s*\n?\s*status: 'investigating',\s*\n?\s*affected_components: affected_components,\s*\n?\s*public: isPublic,\s*\n?\s*\}\),/,
-    );
+  it('freezes the complete create payload once and retries it byte-for-byte', () => {
+    expect(body).toContain("id: 'inc_' + window.crypto.randomUUID()");
+    expect(body).toContain("status: 'investigating'");
+    expect(body).toContain('affected_components: affected_components');
+    expect(body).toContain("public: fd.get('public') === 'on'");
+    expect(body).toContain('started_at: new Date().toISOString()');
+    expect(body).toContain('body: JSON.stringify(attempt.body)');
   });
 
-  it('Open vs resolved split happens only inside the live rebuild path', () => {
-    expect(body).toMatch(
-      /const open = items\.filter\(function \(i\) \{\s*return i\.status !== 'resolved';\s*\}\);\s*const resolved = items\.filter\(function \(i\) \{\s*return i\.status === 'resolved';/,
-    );
+  it('Open vs resolved partition is authoritative server state, validated before rebuild', () => {
+    expect(body).toContain('state=open&limit=100');
+    expect(body).toContain('state=resolved&limit=100');
+    expect(body).toContain('function parseListPage(value)');
+    expect(body).toContain('rebuild(openPage.data, resolvedPage.data');
     expect(body).not.toMatch(/MOCK_INCIDENTS/);
   });
 
   it('Static and unavailable states are neutral; only a successful zero-row rebuild may claim all systems operational', () => {
     expect(body).toMatch(/Live incident state unavailable until loaded\./);
     expect(body).toMatch(
-      /if \(open\.length === 0\) \{\s*html \+=\s*'<div class="dashboard-card text-center text-sm text-tk-ink-3">No open incidents\. All systems operational\.<\/div>';/,
+      /if \(metadata\.openTotal === 0\) \{\s*html \+=\s*'<div class="dashboard-card text-center text-sm text-tk-ink-3">No open incidents\. All systems operational\.<\/div>';/,
     );
   });
 
-  it("rebuild() open-list render: checks open.length === 0 → renders the 'No open incidents. All systems operational.' card + sets data-open-count text; non-empty → maps to openLi rows — pinned so the live-replacement path matches the SSG path's empty-state copy + count-tracking", () => {
-    expect(body).toMatch(
-      /if \(open\.length === 0\) \{\s*\n?\s*html \+=\s*\n?\s*'<div class="dashboard-card text-center text-sm text-tk-ink-3">No open incidents\. All systems operational\.<\/div>';\s*\n?\s*\} else \{\s*\n?\s*html \+= '<ul class="space-y-3">' \+ open\.map\(openLi\)\.join\(''\) \+ '<\/ul>';\s*\n?\s*\}/,
-    );
+  it('rebuild uses exact aggregate count and discloses bounded-row truncation', () => {
+    expect(body).toContain('openCountEl.textContent = String(metadata.openTotal)');
+    expect(body).toContain('if (metadata.openTruncated)');
+    expect(body).toContain("' of ' +");
+    expect(body).toContain('Use the API cursor to review the remainder.');
   });
 
   it('fetchAndRender uses the shared deadline and keeps signed-out/failure states distinct from verified health', () => {
-    expect(body).toMatch(
-      /boundedFetch\(\s*apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&limit=100',\s*\{ headers: \{ authorization: 'Bearer ' \+ token \} \},\s*controller,/,
-    );
+    expect(body).toMatch(/apiBaseUrl \+ '\/v1\/admin\/incidents\?scope=all&state=open&limit=100'/);
     expect(body).toMatch(
       /if \(!token\) \{\s*renderUnavailable\('Sign in to load live incident state\.'\);\s*showBanner\('Sign in with a staff admin account to see live data\.'\);/,
     );
-    expect(body).toMatch(
-      /latestIncidentItems = body && Array\.isArray\(body\.data\) \? body\.data : \[\];\s*rebuild\(latestIncidentItems\);\s*hideBanner\(\);/,
-    );
+    expect(body).toContain('const openPage = parseListPage(bodies[0]);');
+    expect(body).toContain('const resolvedPage = parseListPage(bodies[1]);');
     expect(body).toMatch(
       /\.catch\(function \(err\) \{[\s\S]*?renderUnavailable\('Could not load live incident state\. Retry before judging health\.'\);\s*var msg = requestErrorMessage\(err, 'network error'\);/,
     );

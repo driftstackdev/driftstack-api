@@ -29,10 +29,19 @@ function makeRow(overrides: Partial<IncidentRow> = {}): IncidentRow {
 function makeFixture(rows: IncidentRow[]): {
   svc: StatusSnapshotService;
   putCalls: Array<{ key: string; body: Buffer; contentType?: string }>;
-  listSpy: ReturnType<typeof vi.fn>;
+  publicFeedSpy: ReturnType<typeof vi.fn>;
 } {
-  const listSpy = vi.fn<IncidentsService['list']>(() => Promise.resolve(rows));
-  const incidents = { list: listSpy } as unknown as IncidentsService;
+  const publicFeedSpy = vi.fn<IncidentsService['publicFeed']>(() =>
+    Promise.resolve({
+      rows,
+      total: rows.length,
+      openCount: rows.filter((row) => row.status !== 'resolved').length,
+      openOutageCount: rows.filter((row) => row.status !== 'resolved' && row.severity === 'outage')
+        .length,
+      truncated: false,
+    }),
+  );
+  const incidents = { publicFeed: publicFeedSpy } as unknown as IncidentsService;
   const putCalls: Array<{ key: string; body: Buffer; contentType?: string }> = [];
   const r2 = {
     putObject: (args: { key: string; body: Buffer; contentType?: string }) => {
@@ -51,7 +60,7 @@ function makeFixture(rows: IncidentRow[]): {
   return {
     svc: new StatusSnapshotService(incidents, r2, logger),
     putCalls,
-    listSpy,
+    publicFeedSpy,
   };
 }
 
@@ -71,30 +80,44 @@ describe('V-553.B-6 StatusSnapshotService — processSnapshot', () => {
     const body = JSON.parse((putCalls[0]?.body as Buffer).toString('utf-8')) as {
       generated_at: string;
       data: Array<{ id: string; severity: string }>;
+      total: number;
+      open_count: number;
+      open_outage_count: number;
+      truncated: boolean;
     };
     expect(body.generated_at).toBe('2026-05-11T16:00:00.000Z');
     expect(body.data).toHaveLength(1);
     expect(body.data[0]?.id).toBe('inc_abc-123');
     expect(body.data[0]?.severity).toBe('minor');
+    expect(body.total).toBe(1);
+    expect(body.open_count).toBe(1);
+    expect(body.open_outage_count).toBe(0);
+    expect(body.truncated).toBe(false);
   });
 
-  it('passes the configured window + limit to incidents.list', async () => {
-    const { svc, listSpy } = makeFixture([]);
+  it('passes the configured resolved-history window + limit to incidents.publicFeed', async () => {
+    const { svc, publicFeedSpy } = makeFixture([]);
     const now = new Date('2026-05-11T16:00:00Z');
     await svc.processSnapshot(now);
-    expect(listSpy).toHaveBeenCalledTimes(1);
-    const call = listSpy.mock.calls[0]?.[0] as
-      { scope: string; limit: number; since: Date } | undefined;
-    expect(call?.scope).toBe('public');
+    expect(publicFeedSpy).toHaveBeenCalledTimes(1);
+    const call = publicFeedSpy.mock.calls[0]?.[0] as { limit: number; since: Date } | undefined;
     expect(call?.limit).toBe(50);
-    // Default window: 30 days back.
-    const expectedSince = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    // One snapshot backs both the 30-day overview and 90-day history.
+    const expectedSince = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
     expect(call?.since.toISOString()).toBe(expectedSince.toISOString());
   });
 
   it('honours custom windowMs + limit + key', async () => {
-    const listSpy = vi.fn<IncidentsService['list']>(() => Promise.resolve([]));
-    const incidents = { list: listSpy } as unknown as IncidentsService;
+    const publicFeedSpy = vi.fn<IncidentsService['publicFeed']>(() =>
+      Promise.resolve({
+        rows: [],
+        total: 0,
+        openCount: 0,
+        openOutageCount: 0,
+        truncated: false,
+      }),
+    );
+    const incidents = { publicFeed: publicFeedSpy } as unknown as IncidentsService;
     const putCalls: Array<{ key: string }> = [];
     const r2 = {
       putObject: (args: { key: string }) => {
@@ -110,10 +133,12 @@ describe('V-553.B-6 StatusSnapshotService — processSnapshot', () => {
     });
     const now = new Date('2026-05-11T16:00:00Z');
     await svc.processSnapshot(now);
-    expect(listSpy.mock.calls[0]?.[0]?.limit).toBe(5);
+    expect(publicFeedSpy.mock.calls[0]?.[0]?.limit).toBe(5);
     expect(putCalls[0]?.key).toBe('custom/key.json');
     const expectedSince = new Date(now.getTime() - 60 * 60 * 1000);
-    expect(listSpy.mock.calls[0]?.[0]?.since?.toISOString()).toBe(expectedSince.toISOString());
+    expect(publicFeedSpy.mock.calls[0]?.[0]?.since?.toISOString()).toBe(
+      expectedSince.toISOString(),
+    );
   });
 
   it('returns count + bytes of the snapshot written', async () => {
@@ -124,8 +149,16 @@ describe('V-553.B-6 StatusSnapshotService — processSnapshot', () => {
   });
 
   it('skips an overlapping writer, then publishes the newer snapshot on the next tick', async () => {
-    const listSpy = vi.fn<IncidentsService['list']>(() => Promise.resolve([makeRow()]));
-    const incidents = { list: listSpy } as unknown as IncidentsService;
+    const publicFeedSpy = vi.fn<IncidentsService['publicFeed']>(() =>
+      Promise.resolve({
+        rows: [makeRow()],
+        total: 1,
+        openCount: 1,
+        openOutageCount: 0,
+        truncated: false,
+      }),
+    );
+    const incidents = { publicFeed: publicFeedSpy } as unknown as IncidentsService;
     let releaseFirstPut!: () => void;
     const firstPutPending = new Promise<void>((resolvePut) => {
       releaseFirstPut = resolvePut;
@@ -152,7 +185,7 @@ describe('V-553.B-6 StatusSnapshotService — processSnapshot', () => {
     await vi.waitFor(() => expect(putCount).toBe(1));
     const overlap = await svc.processSnapshot(newer);
     expect(overlap).toEqual({ count: 0, bytes: 0 });
-    expect(listSpy).toHaveBeenCalledTimes(1);
+    expect(publicFeedSpy).toHaveBeenCalledTimes(1);
     expect(putCount).toBe(1);
     expect(publishedAt).toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
@@ -163,14 +196,22 @@ describe('V-553.B-6 StatusSnapshotService — processSnapshot', () => {
 
     const retry = await svc.processSnapshot(newer);
     expect(retry.count).toBe(1);
-    expect(listSpy).toHaveBeenCalledTimes(2);
+    expect(publicFeedSpy).toHaveBeenCalledTimes(2);
     expect(putCount).toBe(2);
     expect(publishedAt).toBe(newer.toISOString());
   });
 
   it('releases the single-flight guard after a failed R2 write', async () => {
-    const listSpy = vi.fn<IncidentsService['list']>(() => Promise.resolve([makeRow()]));
-    const incidents = { list: listSpy } as unknown as IncidentsService;
+    const publicFeedSpy = vi.fn<IncidentsService['publicFeed']>(() =>
+      Promise.resolve({
+        rows: [makeRow()],
+        total: 1,
+        openCount: 1,
+        openOutageCount: 0,
+        truncated: false,
+      }),
+    );
+    const incidents = { publicFeed: publicFeedSpy } as unknown as IncidentsService;
     const putObject = vi.fn<R2['putObject']>();
     putObject.mockRejectedValueOnce(new Error('synthetic R2 failure')).mockResolvedValueOnce();
     const r2 = { putObject } as unknown as R2;
@@ -182,7 +223,7 @@ describe('V-553.B-6 StatusSnapshotService — processSnapshot', () => {
     );
     const retry = await svc.processSnapshot(new Date('2026-05-11T16:01:00Z'));
     expect(retry.count).toBe(1);
-    expect(listSpy).toHaveBeenCalledTimes(2);
+    expect(publicFeedSpy).toHaveBeenCalledTimes(2);
     expect(putObject).toHaveBeenCalledTimes(2);
   });
 

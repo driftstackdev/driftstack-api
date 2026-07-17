@@ -8,7 +8,7 @@
 // Also pinned:
 //   • The new-incident form's Severity dropdown lists exactly
 //     {minor, major, outage} = IncidentSeveritySchema.
-//   • POST /v1/admin/incidents is the registered server route.
+//   • PUT /v1/admin/incidents/:id is the idempotent server route.
 //   • The SSG shell is inert/unavailable; only fetched live rows
 //     are split by status into open / resolved sections.
 //   • Form fields: title (required), description (required),
@@ -69,19 +69,24 @@ describe('W353.C admin /incidents list page parity', () => {
     expect(body).toMatch(/<option value="major" selected/);
   });
 
-  it('POST /v1/admin/incidents is the registered server route', () => {
+  it('PUT /v1/admin/incidents/:id is the registered idempotent server route', () => {
     const route = read(ROUTE);
-    expect(body).toMatch(/POST\s*\/v1\/admin\/incidents|'\/v1\/admin\/incidents'/);
-    expect(route).toContain("'/v1/admin/incidents'");
+    expect(body).toContain('PUT /v1/admin/incidents/:id');
+    expect(body).toContain("method: 'PUT'");
+    expect(route).toContain("'/v1/admin/incidents/:id'");
   });
 
-  it('splits only fetched live incidents into open + resolved sections', () => {
-    expect(body).toMatch(
-      /const open = items\.filter\(function \(i\) \{\s*return i\.status !== 'resolved';/,
+  it('renders only validated server-partitioned open + resolved pages', () => {
+    expect(body).toContain('function parseListPage(value)');
+    expect(body).toContain('state=open&limit=100');
+    expect(body).toContain('state=resolved&limit=100');
+    expect(body).toContain(
+      "openPage.data.some(function (incident) { return incident.status === 'resolved'; })",
     );
-    expect(body).toMatch(
-      /const resolved = items\.filter\(function \(i\) \{\s*return i\.status === 'resolved';/,
+    expect(body).toContain(
+      "resolvedPage.data.some(function (incident) { return incident.status !== 'resolved'; })",
     );
+    expect(body).toContain('rebuild(openPage.data, resolvedPage.data');
     expect(body).toContain('Live incident state unavailable until loaded.');
     expect(body).not.toContain('MOCK_INCIDENTS');
   });

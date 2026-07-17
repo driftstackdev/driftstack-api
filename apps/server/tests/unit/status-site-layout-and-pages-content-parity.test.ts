@@ -43,8 +43,9 @@ function hasStatusMetadataBoundary(source: string): boolean {
 
 function hasSafeStatusFetchBoundary(source: string): boolean {
   return (
-    /fetchWithDeadline\(`\$\{API_BASE\}\/v1\/status\/incidents`, \{/.test(source) &&
-    /fetchWithDeadline\(R2_FALLBACK_URL, \{/.test(source) &&
+    /load\(`\$\{API_BASE\}\/v1\/status\/incidents`, parseIncidentFeed\)/.test(source) &&
+    /load\(`\$\{API_BASE\}\/v1\/status`, parseLiveStatus\)/.test(source) &&
+    /load\(R2_FALLBACK_URL, parseSnapshot\)/.test(source) &&
     /throw new Error\('status-feed-unavailable'\);/.test(source) &&
     !/throw new Error\(`API \$\{/.test(source)
   );
@@ -132,9 +133,8 @@ describe('W790 status-site src content parity bundle', () => {
       /const R2_FALLBACK_URL =\s*\n\s+import\.meta\.env\.PUBLIC_STATUS_R2_URL \?\?\s*\n\s+'https:\/\/r2-public\.driftstack\.dev\/status\/incidents-public\.json';/,
     );
     expect(p).toMatch(/V-295c2: `<r2-public-base>\/status\/incidents-public\.json`/);
-    expect(p).toMatch(
-      /The page\s*\n?\/\/ tries the live API first and falls back to the snapshot if the API\s*\n?\/\/ is unreachable\./,
-    );
+    expect(p).toMatch(/combines live readiness \+ incident truth/);
+    expect(p).toMatch(/snapshot-only data never proves\s*\n\/\/ an operational all-clear/);
   });
 
   it('CRITICAL index 3-severity badge map pinned — minor (amber) / major (orange) / outage (red). Drift to a different color taxonomy would mismatch dashboard incident-severity convention.', () => {
@@ -167,8 +167,11 @@ describe('W790 status-site src content parity bundle', () => {
     const p = read(PAGE_INDEX);
 
     expect(hasSafeStatusFetchBoundary(p)).toBe(true);
-    expect(p).toMatch(/return \{ source: 'live', body: await res\.json\(\) \};/);
-    expect(p).toMatch(/return \{ source: 'snapshot', body: await r2\.json\(\) \};/);
+    expect(p).toContain('load(`${API_BASE}/v1/status/incidents`, parseIncidentFeed)');
+    expect(p).toContain('load(`${API_BASE}/v1/status`, parseLiveStatus)');
+    expect(p).toContain('const snapshot = await load(R2_FALLBACK_URL, parseSnapshot)');
+    expect(p).toMatch(/value\.open_count > value\.total/);
+    expect(p).toMatch(/value\.open_outage_count > value\.open_count/);
 
     const rawDiagnosticMutant = p.replace(
       "throw new Error('status-feed-unavailable');",
@@ -178,12 +181,15 @@ describe('W790 status-site src content parity bundle', () => {
     expect(hasSafeStatusFetchBoundary(rawDiagnosticMutant)).toBe(false);
   });
 
-  it("CRITICAL 60s-stale-snapshot framing pinned. The 'API temporarily unreachable; showing the last cached snapshot (≤60s old)' wording matches V-295c2 poller cadence — explains why customers may see stale data during outages.", () => {
+  it('CRITICAL snapshot age is validated and disclosed without a false cadence ceiling.', () => {
     const p = read(PAGE_INDEX);
 
-    expect(p).toMatch(
-      /' · API temporarily unreachable; showing the last cached snapshot \(≤60s old\)\.'/,
+    expect(p).toContain(
+      "if (!isIso(value.generated_at)) throw new Error('invalid snapshot timestamp');",
     );
+    expect(p).toContain('formatSnapshotAge(generatedAt)');
+    expect(p).toContain('Current component health is unavailable; all-clear is withheld.');
+    expect(p).not.toContain('≤60s old');
   });
 
   it("CRITICAL V-295e SSE realtime-updates + 60s safety-net poll framing pinned. The 'V-295e — real-time SSE updates' anchor + 'Periodic 60s refetch is kept as a safety net for clients that lose the SSE connection' explains the dual-poll-and-SSE strategy.", () => {
@@ -286,19 +292,17 @@ describe('W790 status-site src content parity bundle', () => {
     const p = read(PAGE_HIST);
 
     expect(p).toMatch(
-      /const res = await fetchWithDeadline\(`\$\{API_BASE\}\/v1\/status\/incidents\?window=90d`/,
+      /const res = await fetchWithDeadline\(`\$\{API_BASE\}\/v1\/status\/incidents\?window=90d&limit=100`/,
     );
   });
 
-  it("CRITICAL history group-by-month framing pinned. The 'Object.keys(byMonth).sort().reverse()' newest-first ordering + 'No incidents in the last 90 days. Cleanest 90-day window since the service went live.' empty-state matches the trust-evaluation framing.", () => {
+  it('CRITICAL history group-by-month + validated exact empty state are pinned.', () => {
     const p = read(PAGE_HIST);
 
     expect(p).toMatch(/function groupByMonth\(incidents\) \{/);
     expect(p).toMatch(/const month = new Date\(inc\.started_at\)\.toISOString\(\)\.slice\(0, 7\);/);
     expect(p).toMatch(/Object\.keys\(byMonth\)\s*\n\s+\.sort\(\)\s*\n\s+\.reverse\(\)/);
-    expect(p).toMatch(
-      /No incidents in the last 90 days\. Cleanest 90-day window since the\s*\n\s+service went live\./,
-    );
+    expect(p).toMatch(/No open incidents and no resolved incidents in the last 90 days\./);
   });
 
   it('Wave 1119 / Slice 1119.4 B4 — month-grouping presentation polish: humanized month label (humanizeMonth + MONTH_LABELS lookup, e.g. "May 2026" not "2026-05"); per-month incident-count chip (pluralizeIncidents — singular handled); render as <details> blocks with the newest month open-by-default + older months collapsed (so 90 days does not dump as one wall of cards); group-open chevron rotates via Tailwind group-open: utility.', () => {
@@ -320,15 +324,17 @@ describe('W790 status-site src content parity bundle', () => {
     expect(p).toMatch(/group-open:rotate-180/);
   });
 
-  it("CRITICAL history trust-evaluation-record framing pinned. The 'Resolved incidents stay listed indefinitely so customers evaluating reliability can see the full record. The live status page shows the last 30 days with an active/resolved split — this page is the complete record.' wording is the canonical 30-vs-90-day discrimination.", () => {
+  it('CRITICAL history truthfully distinguishes all-time open from 90-day resolved and discloses truncation.', () => {
     const p = read(PAGE_HIST);
 
     expect(p).toMatch(
-      /Resolved\s*\n\s+incidents stay listed indefinitely so customers evaluating reliability\s*\n\s+can see the full record\./,
+      /Resolved incidents started in the last 90 days, plus every incident that\s*\n\s+is still open regardless of age/,
     );
     expect(p).toMatch(
-      /<a href="\/" class="text-oxblood-700 underline">live status page<\/a> shows\s*\n\s+the last 30 days with an active\/resolved split — this page is the\s*\n\s+complete record\./,
+      /<a href="\/" class="text-oxblood-700 underline">live status page<\/a> shows\s*\n\s+every active incident plus the last 30 days of resolved history\./,
     );
+    expect(p).toMatch(/if \(feed\.truncated\)/);
+    expect(p).not.toMatch(/listed indefinitely|complete record/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

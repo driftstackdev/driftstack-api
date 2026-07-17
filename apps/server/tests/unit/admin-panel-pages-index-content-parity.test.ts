@@ -37,7 +37,7 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
       /\/\/ V-190 — progressive-enhancement against \/v1\/admin\/overview \+\s*\/\/ \/v1\/admin\/audit-log\?limit=5\. SSG renders an inert unavailable shell;\s*\/\/ an inline <script> fetches both endpoints and replaces the tile values\s*\/\/ \+ recent-activity list\.[\s\S]*?without presenting sample data as operational truth\./,
     );
     expect(body).toMatch(
-      /\/\/ 2026-06-03 — the 3rd health tile is now a REAL "Open incidents" count\s*\n?\s*\/\/ from \/v1\/admin\/incidents \(status != resolved\), replacing a prior mock\s*\n?\s*\/\/ tile \(no Postgres surface\) so the grid carries no fabricated number\./,
+      /\/\/ 2026-06-03 — the 3rd health tile is now a REAL "Open incidents" count\s*\n?\s*\/\/ from \/v1\/admin\/incidents\?state=open&limit=1 \(SQL-before-limit \+ exact\s*\n?\s*\/\/ open_count\), replacing a prior mock tile so the grid carries no fabricated number\./,
     );
   });
 

@@ -67,7 +67,10 @@ describe('W890 V-295a Incident lifecycle schemas cross-source invariant', () => 
     );
     expect(p).toMatch(/CreateIncidentRequestSchema[\s\S]+?severity: IncidentSeveritySchema,/);
     expect(p).toMatch(
-      /CreateIncidentRequestSchema[\s\S]+?status: IncidentStatusSchema\.optional\(\)/,
+      /CreateIncidentRequestSchema[\s\S]+?status: CreateIncidentStatusSchema\.optional\(\)/,
+    );
+    expect(p).toContain(
+      "export const CreateIncidentStatusSchema = z.enum(['investigating', 'identified', 'monitoring']);",
     );
   });
 

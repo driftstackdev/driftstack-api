@@ -8,8 +8,8 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 // fetch-error states without presenting sample data as operational truth.
 //
 // 2026-06-03 — the 3rd health tile is now a REAL "Open incidents" count
-// from /v1/admin/incidents (status != resolved), replacing a prior mock
-// tile (no Postgres surface) so the grid carries no fabricated number.
+// from /v1/admin/incidents?state=open&limit=1 (SQL-before-limit + exact
+// open_count), replacing a prior mock tile so the grid carries no fabricated number.
 
 // Accounts-by-tier distribution (server: /v1/admin/overview accounts.by_tier,
 // added 2026-06-02). Canonical AccountTier order + friendly labels — passed to
@@ -746,20 +746,41 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       const sessionsP = fetchSessionStats();
 
-      // Open incidents (2026-06-03) — REAL count of non-resolved incidents
-      // from /v1/admin/incidents (status !== 'resolved'), replacing the
-      // former mock leads tile. Tolerates both the {data:[...]} envelope
-      // and a bare array. Rides the 30s poll like the others.
+      // Open incidents — the server applies state=open before LIMIT and
+      // returns an exact aggregate. Never infer all-clear from a bounded row
+      // sample or a malformed 200 response.
       function fetchOpenIncidents() {
-        return authedFetch('/v1/admin/incidents')
+        return authedFetch('/v1/admin/incidents?state=open&limit=1')
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            const rows = Array.isArray(body) ? body : (body && body.data) || [];
-            const open = rows.filter((i) => i && i.status !== 'resolved').length;
-            setText('incidents-open', String(open));
+            if (
+              !body ||
+              typeof body !== 'object' ||
+              !Array.isArray(body.data) ||
+              body.data.length > 1 ||
+              body.data.some(
+                (incident) =>
+                  !incident ||
+                  !['investigating', 'identified', 'monitoring'].includes(incident.status),
+              ) ||
+              !Number.isInteger(body.total) ||
+              !Number.isInteger(body.open_count) ||
+              body.total < 0 ||
+              body.total < body.data.length ||
+              body.total !== body.open_count ||
+              typeof body.has_more !== 'boolean' ||
+              !(
+                body.next_cursor === null ||
+                (typeof body.next_cursor === 'string' && body.next_cursor.length > 0)
+              ) ||
+              body.has_more !== (body.next_cursor !== null)
+            ) {
+              throw new Error('invalid incident count response');
+            }
+            setText('incidents-open', String(body.open_count));
           })
           .catch((err) => {
             renderIncidentsUnavailable();

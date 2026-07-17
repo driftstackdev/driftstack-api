@@ -10,9 +10,9 @@
 // as the health probe. Each tick rewrites the same key (no history,
 // no per-tick proliferation).
 //
-// Shape: matches the wire shape of GET /v1/status/incidents — a
-// `{ data: Incident[] }` envelope. The status site is purely a
-// fall-through consumer that doesn't care which source it came from.
+// Shape: matches GET /v1/status/incidents: bounded data plus exact
+// total/open/outage aggregates and an explicit truncation bit. The status
+// site validates the same contract for live and fallback reads.
 
 import type { Incident } from '@driftstack/api-types';
 import type { Logger } from '../lib/logger.js';
@@ -22,7 +22,8 @@ import type { IncidentRow, IncidentsService } from './incidents.js';
 export const STATUS_SNAPSHOT_KEY = 'status/incidents-public.json';
 
 export interface StatusSnapshotConfig {
-  /** Last-since window in ms; defaults to 30 days (matches the public API). */
+  /** Resolved-history window; defaults to 90 days so the same snapshot can
+   *  back both the current-status and history pages. Open rows are all-time. */
   windowMs?: number;
   /** Max incidents to include; defaults to 50 (matches the public API). */
   limit?: number;
@@ -58,7 +59,7 @@ export class StatusSnapshotService {
     private readonly logger: Logger,
     config: StatusSnapshotConfig = {},
   ) {
-    this.windowMs = config.windowMs ?? 30 * 24 * 60 * 60 * 1000;
+    this.windowMs = config.windowMs ?? 90 * 24 * 60 * 60 * 1000;
     this.limit = config.limit ?? 50;
     this.key = config.key ?? STATUS_SNAPSHOT_KEY;
   }
@@ -80,14 +81,17 @@ export class StatusSnapshotService {
     this.running = true;
     try {
       const since = new Date(now.getTime() - this.windowMs);
-      const rows = await this.incidents.list({
-        scope: 'public',
+      const feed = await this.incidents.publicFeed({
         since,
         limit: this.limit,
       });
       const body = JSON.stringify({
         generated_at: now.toISOString(),
-        data: rows.map(publicIncident),
+        data: feed.rows.map(publicIncident),
+        total: feed.total,
+        open_count: feed.openCount,
+        open_outage_count: feed.openOutageCount,
+        truncated: feed.truncated,
       });
       const buffer = Buffer.from(body, 'utf-8');
       await this.r2.putObject({
@@ -96,10 +100,17 @@ export class StatusSnapshotService {
         contentType: 'application/json; charset=utf-8',
       });
       this.logger.debug?.(
-        { component: 'status-snapshot', count: rows.length, bytes: buffer.byteLength },
+        {
+          component: 'status-snapshot',
+          count: feed.rows.length,
+          open_count: feed.openCount,
+          open_outage_count: feed.openOutageCount,
+          truncated: feed.truncated,
+          bytes: buffer.byteLength,
+        },
         'wrote status snapshot to R2',
       );
-      return { count: rows.length, bytes: buffer.byteLength };
+      return { count: feed.rows.length, bytes: buffer.byteLength };
     } finally {
       this.running = false;
     }

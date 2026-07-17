@@ -92,16 +92,30 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
     expect(body).toMatch(/postedAt: Date;/);
   });
 
-  it('ListIncidentsOpts: scope public|all + since? + limit?', () => {
-    expect(body).toMatch(
-      /export interface ListIncidentsOpts \{\s*\n?\s*scope\?: 'public' \| 'all';\s*\n?\s*since\?: Date;\s*\n?\s*limit\?: number;\s*\n?\s*\}/,
-    );
+  it('ListIncidentsOpts supports lifecycle/severity predicates and composite keyset cursor', () => {
+    expect(body).toContain("scope?: 'public' | 'all';");
+    expect(body).toContain('since?: Date;');
+    expect(body).toContain('state?: IncidentListState;');
+    expect(body).toContain('severity?: IncidentSeverity;');
+    expect(body).toContain('cursor?: IncidentListCursor;');
+    expect(body).toContain('limit?: number;');
   });
 
-  it('IncidentsRepo: 6 methods (create/list/get/listUpdates/addUpdate/resolve) + V-295b findOpenAutoIncident', () => {
+  it('IncidentListPage carries snapshot-coherent all-time openCount', () => {
+    expect(body).toContain('openCount: number;');
+    expect(body).toContain('the same snapshot as rows and total');
+  });
+
+  it('IncidentsRepo exposes atomic create + exact listPage alongside lifecycle methods', () => {
     expect(body).toMatch(/export interface IncidentsRepo \{/);
-    expect(body).toMatch(/create\(input: CreateIncidentInput\): Promise<IncidentRow>;/);
+    expect(body).toContain('createWithInitialUpdate(');
+    expect(body).toContain('explicitId?: string,');
+    expect(body).toContain('): Promise<CreateIncidentWriteResult>;');
     expect(body).toMatch(/list\(opts: ListIncidentsOpts\): Promise<IncidentRow\[\]>;/);
+    expect(body).toMatch(/listPage\(opts: ListIncidentsOpts\): Promise<IncidentListPage>;/);
+    expect(body).toMatch(
+      /publicFeed\(args: \{ since: Date; limit: number \}\): Promise<PublicIncidentFeedRows>;/,
+    );
     expect(body).toMatch(
       /get\(id: string, opts\?: \{ publicOnly\?: boolean \}\): Promise<IncidentRow \| null>;/,
     );
@@ -132,13 +146,19 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
     );
   });
 
-  it('create: insert incident + synthetic initial update mirroring incident.status + description; fire onPublicCreated only when public; catch-swallow', () => {
-    expect(body).toMatch(/const incident = await this\.repo\.create\(input\);/);
+  it('create consumes the atomic incident+initial-update result and emits lifecycle after commit', () => {
+    expect(body).toMatch(/const result = await this\.repo\.createWithInitialUpdate\(input\);/);
+    expect(body).toContain("if (result.outcome !== 'created')");
     expect(body).toMatch(
-      /\/\/ Synthetic initial update mirroring the incident's first state\.\s*\n?\s*const update = await this\.repo\.addUpdate\(\{\s*\n?\s*incidentId: incident\.id,\s*\n?\s*message: input\.description,\s*\n?\s*status: incident\.status,\s*\n?\s*postedByAdminId: input\.createdByAdminId,\s*\n?\s*postedByAdminKeyId: input\.createdByAdminKeyId,\s*\n?\s*\}\);/,
+      /if \(result\.incident\.public && this\.lifecycle\.onPublicCreated\) \{[\s\S]*?void this\.lifecycle\.onPublicCreated\(result\.incident, result\.update\)\.catch/,
     );
+    expect(body).toContain('async createWithId(');
+    expect(body).toContain("result.outcome === 'mismatch'");
+  });
+
+  it('publicFeed delegates the consistency boundary to the repository', () => {
     expect(body).toMatch(
-      /if \(incident\.public && this\.lifecycle\.onPublicCreated\) \{[\s\S]*?void this\.lifecycle\.onPublicCreated\(incident, update\)\.catch\(\(\) => \{\s*\n?\s*\/\/ Notification failures must never roll back the incident write\./,
+      /async publicFeed\(args: \{ since: Date; limit: number \}\): Promise<PublicIncidentFeedRows> \{\s*return this\.repo\.publicFeed\(args\);\s*\}/,
     );
   });
 
@@ -160,11 +180,11 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
     );
   });
 
-  it('imports: IncidentSeverity + IncidentStatus from api-types + NotFoundError from errors-helpers', () => {
-    expect(body).toMatch(
-      /import type \{ IncidentSeverity, IncidentStatus \} from '@driftstack\/api-types';/,
+  it('imports lifecycle list/status types from api-types and conflict/not-found errors together', () => {
+    expect(body).toContain(
+      "import type { IncidentListState, IncidentSeverity, IncidentStatus } from '@driftstack/api-types';",
     );
-    expect(body).toMatch(/import \{ NotFoundError \} from '\.\.\/lib\/errors-helpers\.js';/);
+    expect(body).toContain("import { ConflictError, NotFoundError } from '../lib/errors.js';");
   });
 
   it('file exists at canonical path', () => {

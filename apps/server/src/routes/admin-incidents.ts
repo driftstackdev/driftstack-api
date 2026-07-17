@@ -1,6 +1,7 @@
 // V-295a — admin-only incident management endpoints.
 //
 //   POST   /v1/admin/incidents                  — create new incident
+//   PUT    /v1/admin/incidents/:id              — idempotent create/replay
 //   GET    /v1/admin/incidents                  — list (scope=all by default)
 //   GET    /v1/admin/incidents/:id              — detail (incident + updates)
 //   POST   /v1/admin/incidents/:id/updates      — append timeline update
@@ -9,7 +10,7 @@
 // Plus two public surfaces (V-295a + V-545.A) at /v1/status/incidents
 // for the status site to consume:
 //
-//   GET    /v1/status/incidents                 — list (public-only, 30d window)
+//   GET    /v1/status/incidents                 — all-time open + bounded resolved history
 //   GET    /v1/status/incidents/:id             — detail (incident + updates)
 //
 // Each mutation writes an admin_audit_log row in the same request
@@ -25,13 +26,19 @@ import {
 } from '@driftstack/api-types';
 import type { Incident, IncidentUpdate } from '@driftstack/api-types';
 import type { AdminAuditAction, AdminAuditService } from '../services/admin-audit.js';
-import type { IncidentRow, IncidentUpdateRow, IncidentsService } from '../services/incidents.js';
+import type {
+  IncidentListCursor,
+  IncidentRow,
+  IncidentUpdateRow,
+  IncidentsService,
+} from '../services/incidents.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
   const match = PUBLIC_ID_RE.exec(value);
@@ -39,6 +46,37 @@ function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
     throw new BadRequestError(`Invalid id format. Expected "${expectedPrefix}_<uuid>".`);
   }
   return match[1];
+}
+
+function encodeIncidentCursor(cursor: IncidentListCursor): string {
+  return Buffer.from(
+    JSON.stringify({ started_at: cursor.startedAt.toISOString(), id: cursor.id }),
+    'utf8',
+  ).toString('base64url');
+}
+
+function decodeIncidentCursor(value: string): IncidentListCursor {
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
+    if (decoded === null || typeof decoded !== 'object' || Array.isArray(decoded))
+      throw new Error();
+    const row = decoded as Record<string, unknown>;
+    if (
+      Object.keys(row).sort().join(',') !== 'id,started_at' ||
+      typeof row.started_at !== 'string' ||
+      typeof row.id !== 'string' ||
+      !UUID_RE.test(row.id)
+    ) {
+      throw new Error();
+    }
+    const startedAt = new Date(row.started_at);
+    if (!Number.isFinite(startedAt.getTime()) || startedAt.toISOString() !== row.started_at) {
+      throw new Error();
+    }
+    return { startedAt, id: row.id };
+  } catch {
+    throw new BadRequestError('Invalid incident cursor.');
+  }
 }
 
 function publicIncident(row: IncidentRow): Incident {
@@ -109,6 +147,7 @@ export function registerAdminIncidentsRoutes(
     targetResourceId: string | (() => string),
     inputPayload: Record<string, unknown>,
     perform: () => Promise<void>,
+    shouldRecordSuccess: () => boolean = () => true,
   ): Promise<void> {
     const ctx = request.account;
     if (!ctx) throw new Error('account context missing after requireAuth');
@@ -116,16 +155,18 @@ export function registerAdminIncidentsRoutes(
       typeof targetResourceId === 'function' ? targetResourceId() : targetResourceId;
     try {
       await perform();
-      await audit.record({
-        adminAccountId: ctx.account.id,
-        adminKeyId: ctx.apiKey.id,
-        action,
-        targetAccountId: null,
-        targetResourceId: resolveTargetResourceId(),
-        inputPayload,
-        result: 'success',
-        ipAddress: readClientIp(request),
-      });
+      if (shouldRecordSuccess()) {
+        await audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action,
+          targetAccountId: null,
+          targetResourceId: resolveTargetResourceId(),
+          inputPayload,
+          result: 'success',
+          ipAddress: readClientIp(request),
+        });
+      }
     } catch (err) {
       const code =
         err instanceof Error && err.name ? err.name.toLowerCase().replace(/error$/, '') : 'unknown';
@@ -186,18 +227,79 @@ export function registerAdminIncidentsRoutes(
     },
   );
 
+  // Idempotent operator create. The client owns one preallocated incident id
+  // for the lifetime of the form attempt; retries reuse it across timeouts,
+  // processes and deploys instead of title-matching a bounded list.
+  app.put<{ Params: { id: string } }>(
+    '/v1/admin/incidents/:id',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const id = uuidFromPrefixedId(request.params.id, 'inc');
+      const parsed = CreateIncidentRequestSchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      if (parsed.data.started_at === undefined) {
+        throw new BadRequestError('started_at is required for idempotent incident creation.');
+      }
+      let result: Awaited<ReturnType<IncidentsService['createWithId']>> | null = null;
+      await withAudit(
+        request,
+        'incident.created',
+        `inc_${id}`,
+        parsed.data,
+        async () => {
+          result = await incidentsService.createWithId(id, {
+            title: parsed.data.title,
+            description: parsed.data.description,
+            severity: parsed.data.severity,
+            status: parsed.data.status,
+            affectedComponents: parsed.data.affected_components ?? [],
+            public: parsed.data.public ?? true,
+            startedAt: new Date(parsed.data.started_at!),
+            createdByAdminId: ctx.account.id,
+            createdByAdminKeyId: ctx.apiKey.id,
+          });
+        },
+        () => result?.outcome === 'created',
+      );
+      if (!result) throw new Error('idempotent incident creation produced no result');
+      const written = result as Awaited<ReturnType<IncidentsService['createWithId']>>;
+      return reply.code(written.outcome === 'created' ? 201 : 200).send({
+        outcome: written.outcome,
+        incident: publicIncident(written.incident),
+        updates: [publicIncidentUpdate(written.update)],
+      });
+    },
+  );
+
   app.get(
     '/v1/admin/incidents',
     { preHandler: [app.requireScope('driftstack_internal_admin')] },
     async (request) => {
       const parsed = ListIncidentsQuerySchema.safeParse(request.query ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
-      const rows = await incidentsService.list({
-        scope: parsed.data.scope ?? 'all',
+      if (parsed.data.window !== undefined) {
+        throw new BadRequestError('window is only supported by the public incident feed.');
+      }
+      const scope = parsed.data.scope ?? 'all';
+      const state = parsed.data.state ?? 'all';
+      const page = await incidentsService.listPage({
+        scope,
         since: parsed.data.since ? new Date(parsed.data.since) : undefined,
+        state,
+        cursor: parsed.data.cursor ? decodeIncidentCursor(parsed.data.cursor) : undefined,
         limit: parsed.data.limit,
       });
-      return { data: rows.map(publicIncident) };
+      return {
+        data: page.rows.map(publicIncident),
+        total: page.total,
+        open_count: page.openCount,
+        has_more: page.nextCursor !== null,
+        next_cursor: page.nextCursor ? encodeIncidentCursor(page.nextCursor) : null,
+      };
     },
   );
 
@@ -320,7 +422,7 @@ export function registerAdminIncidentsRoutes(
 
   // ── PUBLIC GET /v1/status/incidents ────────────────────────────────────
   // The status page consumes this; no auth required, only public=true rows
-  // surfaced. Limited to the last 30 days by default.
+  // surfaced. Open incidents are all-time; resolved history defaults to 30d.
   app.get(
     '/v1/status/incidents',
     { preHandler: statusIncidentsListGate },
@@ -330,12 +432,14 @@ export function registerAdminIncidentsRoutes(
         scope: 'public',
       });
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      if (parsed.data.cursor !== undefined || parsed.data.state !== undefined) {
+        throw new BadRequestError('state and cursor are not supported by the public status feed.');
+      }
       const since =
         parsed.data.since !== undefined
           ? new Date(parsed.data.since)
-          : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const rows = await incidentsService.list({
-        scope: 'public',
+          : new Date(Date.now() - (parsed.data.window === '90d' ? 90 : 30) * 24 * 60 * 60 * 1000);
+      const feed = await incidentsService.publicFeed({
         since,
         limit: parsed.data.limit ?? 50,
       });
@@ -343,7 +447,13 @@ export function registerAdminIncidentsRoutes(
       // detail route. Status site polls every 30s for live updates;
       // CDN coalesces concurrent viewers onto one origin call.
       reply.header('cache-control', 'public, max-age=30');
-      return { data: rows.map(publicIncident) };
+      return {
+        data: feed.rows.map(publicIncident),
+        total: feed.total,
+        open_count: feed.openCount,
+        open_outage_count: feed.openOutageCount,
+        truncated: feed.truncated,
+      };
     },
   );
 

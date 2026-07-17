@@ -153,13 +153,15 @@ describe('W1042 routes/admin-incidents V-295a + V-281 cross-source invariant', (
 
   // ─── Public status route window ──────────────────────────────
 
-  it("CRITICAL public status-incidents 30-day default window — Date.now() - 30 * 24 * 60 * 60 * 1000 ms. The 30-day cap balances 'recent enough to be relevant' against 'small enough to not flood the public page'.", () => {
+  it('CRITICAL public status feed retains all-time open incidents and selects 30d/90d resolved history.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'));
     expect(p).toMatch(/The status page consumes this; no auth required, only public=true rows/);
-    expect(p).toMatch(/surfaced\. Limited to the last 30 days by default\./);
-    expect(p).toMatch(/new Date\(Date\.now\(\) - 30 \* 24 \* 60 \* 60 \* 1000\)/);
-    expect(p).toMatch(/scope: 'public',/);
+    expect(p).toMatch(/surfaced\. Open incidents are all-time; resolved history defaults to 30d\./);
+    expect(p).toMatch(/parsed\.data\.window === '90d' \? 90 : 30/);
+    expect(p).toMatch(/incidentsService\.publicFeed/);
     expect(p).toMatch(/limit: parsed\.data\.limit \?\? 50,/);
+    expect(p).toMatch(/open_count: feed\.openCount/);
+    expect(p).toMatch(/open_outage_count: feed\.openOutageCount/);
   });
 
   it('CRITICAL public status-incidents path — GET /v1/status/incidents (no auth, NO requireScope preHandler). The lack of any auth gate is what lets the public status page consume this. 2026-05-20 added a defense-in-depth IP-rate-limit preHandler (statusIncidentsListGate) — still no auth, but bounded against direct-API abuse bypassing the CDN.', () => {

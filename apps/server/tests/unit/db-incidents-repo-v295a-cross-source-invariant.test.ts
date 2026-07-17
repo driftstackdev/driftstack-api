@@ -63,13 +63,18 @@ describe('W999 db/incidents-repo V-295a cross-source invariant', () => {
 
   // ─── 7-method surface ────────────────────────────────────────
 
-  it('CRITICAL 7-method surface — create + findOpenAutoIncident + list + get + listUpdates + addUpdate + resolve. The 7-method IncidentsRepo contract covers V-295a incident lifecycle.', () => {
+  it('CRITICAL surface includes atomic create + exact listPage alongside lifecycle methods.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/incidents-repo.ts'));
-    expect(p).toMatch(/async create\(input: CreateIncidentInput\): Promise<IncidentRow> \{/);
+    expect(p).toMatch(/async createWithInitialUpdate\(/);
+    expect(p).toMatch(/Promise<CreateIncidentWriteResult> \{/);
     expect(p).toMatch(
       /async findOpenAutoIncident\(target: string\): Promise<IncidentRow \| null> \{/,
     );
     expect(p).toMatch(/async list\(opts: ListIncidentsOpts\): Promise<IncidentRow\[\]> \{/);
+    expect(p).toMatch(/async listPage\(opts: ListIncidentsOpts\): Promise<IncidentListPage> \{/);
+    expect(p).toMatch(
+      /async publicFeed\(args: \{ since: Date; limit: number \}\): Promise<PublicIncidentFeedRows> \{/,
+    );
     expect(p).toMatch(
       /async get\(id: string, opts\?: \{ publicOnly\?: boolean \}\): Promise<IncidentRow \| null> \{/,
     );
@@ -82,7 +87,9 @@ describe('W999 db/incidents-repo V-295a cross-source invariant', () => {
 
   it("CRITICAL create defaults — status ?? 'investigating' + autoProbeTarget ?? null + affectedComponents copied via spread. The 'investigating' default is the V-295a initial state.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/incidents-repo.ts'));
-    expect(p).toMatch(/status: input\.status \?\? 'investigating',/);
+    expect(p).toMatch(/const initialStatus = input\.status \?\? 'investigating';/);
+    expect(p).toMatch(/status: initialStatus,/);
+    expect(p).toMatch(/resolvedAt: initialStatus === 'resolved' \? new Date\(\) : null,/);
     expect(p).toMatch(/affectedComponents: \[\.\.\.input\.affectedComponents\],/);
     expect(p).toMatch(/autoProbeTarget: input\.autoProbeTarget \?\? null,/);
   });
@@ -100,15 +107,19 @@ describe('W999 db/incidents-repo V-295a cross-source invariant', () => {
 
   // ─── list 2-filter ───────────────────────────────────────────
 
-  it('CRITICAL list 2-filter — public scope (eq(public, true)) + since (gte(startedAt)) + default limit 100. The 100-limit default keeps large queries from accidentally returning every row.', () => {
+  it('CRITICAL listPage filters before limit and uses exact composite keyset pagination.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/incidents-repo.ts'));
     expect(p).toMatch(
-      /if \(opts\.scope === 'public'\) conditions\.push\(eq\(incidents\.public, true\)\);/,
+      /if \(opts\.scope === 'public'\) filters\.push\(eq\(incidents\.public, true\)\);/,
     );
     expect(p).toMatch(
-      /if \(opts\.since\) conditions\.push\(gte\(incidents\.startedAt, opts\.since\)\);/,
+      /if \(opts\.since\) filters\.push\(gte\(incidents\.startedAt, opts\.since\)\);/,
     );
-    expect(p).toMatch(/\.limit\(opts\.limit \?\? 100\);/);
+    expect(p).toMatch(/opts\.state === 'open'/);
+    expect(p).toMatch(/lt\(incidents\.startedAt, opts\.cursor\.startedAt\)/);
+    expect(p).toMatch(/lt\(incidents\.id, opts\.cursor\.id\)/);
+    expect(p).toMatch(/\.limit\(limit \+ 1\);/);
+    expect(p).toMatch(/\.select\(\{ value: count\(\) \}\)/);
   });
 
   // ─── get publicOnly opt-in ───────────────────────────────────

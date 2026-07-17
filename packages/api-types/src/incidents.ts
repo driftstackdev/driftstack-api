@@ -19,6 +19,11 @@ export const IncidentStatusSchema = z.enum([
 ]);
 export type IncidentStatus = z.infer<typeof IncidentStatusSchema>;
 
+/** A new incident must begin in an active lifecycle state. Resolution is a
+ * separate timeline transition so `resolved_at` and its final update cannot
+ * be omitted accidentally. */
+export const CreateIncidentStatusSchema = z.enum(['investigating', 'identified', 'monitoring']);
+
 // ───────────────────────────────────────────────────────────────────────────
 // Incident shape (public view)
 // ───────────────────────────────────────────────────────────────────────────
@@ -57,8 +62,8 @@ export const CreateIncidentRequestSchema = z.object({
    *  V-295c wires the markdown renderer. */
   description: z.string().min(1).max(5000),
   severity: IncidentSeveritySchema,
-  /** Initial status; defaults to 'investigating'. */
-  status: IncidentStatusSchema.optional(),
+  /** Initial active status; defaults to 'investigating'. */
+  status: CreateIncidentStatusSchema.optional(),
   /** Component slugs the incident affects. Free-form; status page
    *  recognises 'api', 'gui-distribution', 'stripe', 'marketing',
    *  'docs', 'status' but accepts any. */
@@ -85,6 +90,9 @@ export const ResolveIncidentRequestSchema = z.object({
 });
 export type ResolveIncidentRequest = z.infer<typeof ResolveIncidentRequestSchema>;
 
+export const IncidentListStateSchema = z.enum(['open', 'resolved', 'all']);
+export type IncidentListState = z.infer<typeof IncidentListStateSchema>;
+
 export const ListIncidentsQuerySchema = z.object({
   /** When 'public', returns only public=true incidents (status page).
    *  When 'all' (default for admin), returns everything. */
@@ -92,14 +100,45 @@ export const ListIncidentsQuerySchema = z.object({
   /** Filter to incidents started since this ISO-8601 timestamp.
    *  Status page typically uses last-30-days. */
   since: Iso8601Schema.optional(),
+  /** Apply the lifecycle predicate in SQL before the row limit. */
+  state: IncidentListStateSchema.optional(),
+  /** Opaque `(started_at,id)` keyset cursor returned by the previous page. */
+  cursor: z.string().min(1).max(512).optional(),
+  /** Public status convenience window. Open incidents are always all-time. */
+  window: z.enum(['30d', '90d']).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 export type ListIncidentsQuery = z.infer<typeof ListIncidentsQuerySchema>;
 
 export const ListIncidentsResponseSchema = z.object({
   data: z.array(IncidentSchema),
+  /** Exact count for the requested scope/state/since filter, before pagination. */
+  total: z.number().int().nonnegative(),
+  /** Exact all-time open count for the requested public/admin scope. */
+  open_count: z.number().int().nonnegative(),
+  has_more: z.boolean(),
+  next_cursor: z.string().nullable(),
 });
 export type ListIncidentsResponse = z.infer<typeof ListIncidentsResponseSchema>;
+
+/** Live public-status + R2 snapshot feed. Open rows are all-time and
+ * precede the bounded recent-resolved history. `truncated` is explicit
+ * because the two logical partitions cannot share one keyset cursor. */
+export const PublicIncidentFeedResponseSchema = z.object({
+  data: z.array(IncidentSchema),
+  total: z.number().int().nonnegative(),
+  open_count: z.number().int().nonnegative(),
+  open_outage_count: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+});
+export type PublicIncidentFeedResponse = z.infer<typeof PublicIncidentFeedResponseSchema>;
+
+export const PutIncidentResponseSchema = z.object({
+  outcome: z.enum(['created', 'replayed']),
+  incident: IncidentSchema,
+  updates: z.array(IncidentUpdateSchema).length(1),
+});
+export type PutIncidentResponse = z.infer<typeof PutIncidentResponseSchema>;
 
 export const IncidentDetailResponseSchema = z.object({
   incident: IncidentSchema,

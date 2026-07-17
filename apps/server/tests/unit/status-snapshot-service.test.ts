@@ -8,14 +8,14 @@
 //     (id prefixed with `inc_`, snake_case fields, ISO timestamps)
 //   - empty incident list still writes the snapshot (so a stale file
 //     never persists)
-//   - default window=30d + limit=50 forwarded to incidents.list
+//   - default resolved-history window=90d + limit=50 forwarded to publicFeed
 
 import { describe, expect, it } from 'vitest';
 import { STATUS_SNAPSHOT_KEY, StatusSnapshotService } from '../../src/services/status-snapshot.js';
 import type {
   IncidentRow,
   IncidentsService,
-  ListIncidentsOpts,
+  PublicIncidentFeedRows,
 } from '../../src/services/incidents.js';
 import type { R2 } from '../../src/lib/r2.js';
 import type { Logger } from '../../src/lib/logger.js';
@@ -42,13 +42,21 @@ function makeR2(): {
 
 function makeIncidents(rows: IncidentRow[]): {
   svc: IncidentsService;
-  calls: ListIncidentsOpts[];
+  calls: Array<{ since: Date; limit: number }>;
 } {
-  const calls: ListIncidentsOpts[] = [];
+  const calls: Array<{ since: Date; limit: number }> = [];
   const svc = {
-    list: (opts: ListIncidentsOpts) => {
+    publicFeed: (opts: { since: Date; limit: number }): Promise<PublicIncidentFeedRows> => {
       calls.push(opts);
-      return Promise.resolve(rows);
+      return Promise.resolve({
+        rows,
+        total: rows.length,
+        openCount: rows.filter((row) => row.status !== 'resolved').length,
+        openOutageCount: rows.filter(
+          (row) => row.status !== 'resolved' && row.severity === 'outage',
+        ).length,
+        truncated: false,
+      });
     },
   } as unknown as IncidentsService;
   return { svc, calls };
@@ -103,6 +111,7 @@ describe('V-553.B-27 StatusSnapshotService.processSnapshot — happy path', () =
       makeIncident({
         id: 'a2',
         title: 'second',
+        status: 'resolved',
         resolvedAt: new Date('2026-05-09T10:00:00Z'),
       }),
     ]);
@@ -110,6 +119,10 @@ describe('V-553.B-27 StatusSnapshotService.processSnapshot — happy path', () =
     await snapshot.processSnapshot(NOW);
     const body = JSON.parse(String(puts[0]?.body)) as {
       generated_at: string;
+      total: number;
+      open_count: number;
+      open_outage_count: number;
+      truncated: boolean;
       data: Array<{
         id: string;
         title: string;
@@ -123,6 +136,10 @@ describe('V-553.B-27 StatusSnapshotService.processSnapshot — happy path', () =
     expect(body.data[0]?.title).toBe('first');
     expect(body.data[1]?.resolved_at).toBe('2026-05-09T10:00:00.000Z');
     expect(body.data[0]?.affected_components).toEqual(['api']);
+    expect(body.total).toBe(2);
+    expect(body.open_count).toBe(1);
+    expect(body.open_outage_count).toBe(0);
+    expect(body.truncated).toBe(false);
   });
 
   it('writes the snapshot even when the incident list is empty (overwrites stale)', async () => {
@@ -138,15 +155,14 @@ describe('V-553.B-27 StatusSnapshotService.processSnapshot — happy path', () =
 });
 
 describe('V-553.B-27 StatusSnapshotService.processSnapshot — config forwarding', () => {
-  it('forwards default windowMs=30d + limit=50 + scope=public to incidents.list', async () => {
+  it('forwards default windowMs=90d + limit=50 to incidents.publicFeed', async () => {
     const { r2 } = makeR2();
     const { svc, calls } = makeIncidents([]);
     const snapshot = new StatusSnapshotService(svc, r2, makeLogger());
     await snapshot.processSnapshot(NOW);
-    expect(calls[0]?.scope).toBe('public');
     expect(calls[0]?.limit).toBe(50);
     const sinceMs = calls[0]?.since?.getTime() ?? 0;
-    expect(NOW.getTime() - sinceMs).toBe(30 * 24 * 60 * 60 * 1000);
+    expect(NOW.getTime() - sinceMs).toBe(90 * 24 * 60 * 60 * 1000);
   });
 
   it('honours custom windowMs + limit + key overrides', async () => {

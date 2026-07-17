@@ -55,11 +55,9 @@ describe('W354.B status-site /history parity', () => {
   });
 
   it('90-day window claim is consistent throughout the page copy', () => {
-    // The header, the body copy, and the empty-state all reference
-    // the same window. Drift here means a copy update missed one of
-    // them.
-    expect(body).toMatch(/last 90 days/);
-    expect(body).toMatch(/90-day window since the\s*service went live/);
+    expect(body).toMatch(/90-day resolved window/);
+    expect(body).toMatch(/Resolved incidents started in the last 90 days/);
+    expect(body).toMatch(/no resolved incidents in the last 90 days/);
   });
 
   it('SEVERITY_BADGE keys = IncidentSeveritySchema (no orphan colour entries)', () => {
@@ -107,12 +105,10 @@ describe('W354.B status-site /history parity', () => {
     expect(body).toMatch(/STATUS_BADGE\[inc\.status\]/);
   });
 
-  it('"no incidents" empty state hedges with "cleanest window" framing (not bare "no incidents")', () => {
-    // A bare "no incidents" claim could be misread if the page
-    // failed to load incidents at all; the hedged copy makes it
-    // clearer that this is a successful fetch result.
-    expect(body).toMatch(/No incidents in the last 90 days/);
-    expect(body).toMatch(/Cleanest 90-day window since the\s*service went live/);
+  it('validated empty state distinguishes open truth from the resolved window', () => {
+    expect(body).toMatch(/No open incidents and no resolved incidents in the last 90 days/);
+    expect(body).toContain('if (feed.total === 0)');
+    expect(body).toContain('parseIncidentFeed(await res.json())');
   });
 
   it('error fallback surface ("Could not load") never claims everything is fine', () => {

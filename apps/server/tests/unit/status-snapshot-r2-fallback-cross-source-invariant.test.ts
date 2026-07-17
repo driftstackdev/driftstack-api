@@ -79,16 +79,17 @@ describe('W920 V-295c2 status-snapshot R2 fallback cross-source invariant', () =
 
   // ─── { data: Incident[] } envelope shape ─────────────────────
 
-  it("CRITICAL shape framing — 'matches the wire shape of GET /v1/status/incidents — a { data: Incident[] } envelope. The status site is purely a fall-through consumer that doesn't care which source it came from'. The wire-shape-parity is what makes the fallback transparent to the frontend.", () => {
+  it('CRITICAL shape framing pins bounded data plus exact truth metadata.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/status-snapshot.ts'));
-    expect(p).toMatch(/Shape: matches the wire shape of GET \/v1\/status\/incidents — a/);
-    expect(p).toMatch(/`\{ data: Incident\[\] \}` envelope\. The status site is purely a/);
-    expect(p).toMatch(/fall-through consumer that doesn't care which source it came from/);
+    expect(p).toMatch(/Shape: matches GET \/v1\/status\/incidents: bounded data plus exact/);
+    expect(p).toMatch(/total\/open\/outage aggregates and an explicit truncation bit/);
   });
 
   it('CRITICAL processSnapshot writes envelope shape — data field maps rows via publicIncident. Mechanically verified via source pattern.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/status-snapshot.ts'));
-    expect(p).toMatch(/data: rows\.map\(publicIncident\)/);
+    expect(p).toMatch(/data: feed\.rows\.map\(publicIncident\)/);
+    expect(p).toMatch(/open_count: feed\.openCount/);
+    expect(p).toMatch(/open_outage_count: feed\.openOutageCount/);
   });
 
   // ─── STATUS_SNAPSHOT_KEY constant ────────────────────────────
@@ -101,10 +102,11 @@ describe('W920 V-295c2 status-snapshot R2 fallback cross-source invariant', () =
 
   // ─── 30-day window + 50-limit defaults ───────────────────────
 
-  it("CRITICAL windowMs default = 30 * 24 * 60 * 60 * 1000 (30 days; 'matches the public API'). The 30-day window is what aligns the R2 fallback retention with the live API's 30-day retention.", () => {
+  it('CRITICAL snapshot uses a 90-day resolved window while open rows remain all-time.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/status-snapshot.ts'));
-    expect(p).toMatch(/Last-since window in ms; defaults to 30 days \(matches the public API\)/);
-    expect(p).toMatch(/this\.windowMs = config\.windowMs \?\? 30 \* 24 \* 60 \* 60 \* 1000;/);
+    expect(p).toMatch(/Resolved-history window; defaults to 90 days/);
+    expect(p).toMatch(/Open rows are all-time/);
+    expect(p).toMatch(/this\.windowMs = config\.windowMs \?\? 90 \* 24 \* 60 \* 60 \* 1000;/);
   });
 
   it("CRITICAL limit default = 50 ('matches the public API'). The 50-incident cap matches /v1/status/incidents pagination — drift would let the R2 file outgrow public-API responses.", () => {

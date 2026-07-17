@@ -78,7 +78,9 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
     expect(body).toMatch(/async function withAudit\(/);
     expect(body).toMatch(/action: AdminAuditAction,/);
     expect(body).toMatch(/targetResourceId: string \| \(\(\) => string\),/);
-    expect(body).toMatch(/perform: \(\) => Promise<void>,\s*\n?\s*\): Promise<void> \{/);
+    expect(body).toMatch(/perform: \(\) => Promise<void>,/);
+    expect(body).toContain('shouldRecordSuccess: () => boolean = () => true');
+    expect(body).toContain('if (shouldRecordSuccess()) {');
     // The target id is resolved at record time so the create route can
     // log the real inc_<uuid> (known only after perform()).
     expect(body).toMatch(
@@ -110,12 +112,24 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
     );
   });
 
-  it("GET list: scope-only preHandler (no rate-limit); scope ?? 'all' default; since pass-through Date(); limit pass-through", () => {
+  it('idempotent PUT records incident.created success only for the winning mutation', () => {
+    expect(body).toContain("() => result?.outcome === 'created'");
+  });
+
+  it('GET list applies state before limit and returns exact aggregate + composite cursor metadata', () => {
     expect(body).toMatch(
       /app\.get\(\s*\n?\s*'\/v1\/admin\/incidents',\s*\n?\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},/,
     );
-    expect(body).toMatch(
-      /const rows = await incidentsService\.list\(\{\s*\n?\s*scope: parsed\.data\.scope \?\? 'all',\s*\n?\s*since: parsed\.data\.since \? new Date\(parsed\.data\.since\) : undefined,\s*\n?\s*limit: parsed\.data\.limit,\s*\n?\s*\}\);/,
+    expect(body).toContain("const scope = parsed.data.scope ?? 'all';");
+    expect(body).toContain("const state = parsed.data.state ?? 'all';");
+    expect(body).toContain('const page = await incidentsService.listPage({');
+    expect(body).toContain(
+      'cursor: parsed.data.cursor ? decodeIncidentCursor(parsed.data.cursor) : undefined',
+    );
+    expect(body).toContain('open_count: page.openCount');
+    expect(body).not.toMatch(/const openCount = \(\s*await incidentsService\.listPage/);
+    expect(body).toContain(
+      'next_cursor: page.nextCursor ? encodeIncidentCursor(page.nextCursor) : null',
     );
   });
 
@@ -160,19 +174,18 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
     );
   });
 
-  it("PUBLIC GET /v1/status/incidents: no-auth (only the IP-rate-limit preHandler gate); scope='public' forced coerce; 30-day default since; limit default 50", () => {
+  it('PUBLIC GET uses all-time open truth plus selectable bounded resolved history', () => {
     expect(body).toMatch(
-      /\/\/ The status page consumes this; no auth required, only public=true rows\s*\n?\s*\/\/ surfaced\. Limited to the last 30 days by default\./,
+      /\/\/ The status page consumes this; no auth required, only public=true rows\s*\n?\s*\/\/ surfaced\. Open incidents are all-time; resolved history defaults to 30d\./,
     );
     expect(body).toMatch(
       /app\.get\(\s*\n?\s*'\/v1\/status\/incidents',\s*\n?\s*\{ preHandler: statusIncidentsListGate \},\s*\n?\s*async \(request, reply\) => \{\s*\n?\s*const parsed = ListIncidentsQuerySchema\.safeParse\(\{\s*\n?\s*\.\.\.\(request\.query \?\? \{\}\),\s*\n?\s*scope: 'public',\s*\n?\s*\}\);/,
     );
-    expect(body).toMatch(
-      /const since =\s*\n?\s*parsed\.data\.since !== undefined\s*\n?\s*\? new Date\(parsed\.data\.since\)\s*\n?\s*: new Date\(Date\.now\(\) - 30 \* 24 \* 60 \* 60 \* 1000\);/,
-    );
-    expect(body).toMatch(
-      /const rows = await incidentsService\.list\(\{\s*\n?\s*scope: 'public',\s*\n?\s*since,\s*\n?\s*limit: parsed\.data\.limit \?\? 50,\s*\n?\s*\}\);/,
-    );
+    expect(body).toMatch(/parsed\.data\.window === '90d' \? 90 : 30/);
+    expect(body).toContain('const feed = await incidentsService.publicFeed({');
+    expect(body).toContain('open_count: feed.openCount');
+    expect(body).toContain('open_outage_count: feed.openOutageCount');
+    expect(body).toContain('truncated: feed.truncated');
   });
 
   it('Schemas from @driftstack/api-types: AddIncidentUpdate + CreateIncident + ListIncidents + ResolveIncident + Incident/IncidentUpdate types', () => {
@@ -189,9 +202,10 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
     expect(body).toMatch(
       /import type \{ AdminAuditAction, AdminAuditService \} from '\.\.\/services\/admin-audit\.js';/,
     );
-    expect(body).toMatch(
-      /import type \{ IncidentRow, IncidentUpdateRow, IncidentsService \} from '\.\.\/services\/incidents\.js';/,
-    );
+    expect(body).toContain('IncidentListCursor,');
+    expect(body).toContain('IncidentRow,');
+    expect(body).toContain('IncidentUpdateRow,');
+    expect(body).toContain('IncidentsService,');
     expect(body).toMatch(
       /import \{ BadRequestError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
     );

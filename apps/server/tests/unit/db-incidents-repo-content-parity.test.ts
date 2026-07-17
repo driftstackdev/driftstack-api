@@ -44,11 +44,12 @@ describe('W447.C apps/server/src/db/incidents-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ V-295a — Drizzle-backed IncidentsRepo\./);
   });
 
-  it('imports: and/desc/eq/gte/isNotNull/ne from drizzle-orm; 7 service types; NotFoundError from lib/errors-helpers; Database; incidentUpdates + incidents schemas', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, gte, isNotNull, ne \} from 'drizzle-orm';/);
-    expect(body).toMatch(
-      /import type \{\s*\n?\s*AddUpdateInput,\s*\n?\s*CreateIncidentInput,\s*\n?\s*IncidentRow,\s*\n?\s*IncidentUpdateRow,\s*\n?\s*IncidentsRepo,\s*\n?\s*ListIncidentsOpts,\s*\n?\s*ResolveIncidentInput,\s*\n?\s*\} from '\.\.\/services\/incidents\.js';/,
-    );
+  it('imports aggregate/keyset Drizzle operators and atomic incident result types', () => {
+    for (const name of ['and', 'count', 'desc', 'eq', 'gte', 'isNotNull', 'lt', 'ne', 'or']) {
+      expect(body).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+    expect(body).toContain('CreateIncidentWriteResult,');
+    expect(body).toContain('IncidentListPage,');
     expect(body).toMatch(/import \{ NotFoundError \} from '\.\.\/lib\/errors-helpers\.js';/);
     expect(body).toMatch(/import \{ incidentUpdates, incidents \} from '\.\/schema\.js';/);
   });
@@ -65,11 +66,14 @@ describe('W447.C apps/server/src/db/incidents-repo.ts content parity', () => {
     );
   });
 
-  it("create: 11-field values w/ default status 'investigating'; copies affectedComponents via spread [...input.affectedComponents]; autoProbeTarget null-coalesce; throws 'incidents insert returned no row'", () => {
-    expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*title: input\.title,\s*\n?\s*description: input\.description,\s*\n?\s*severity: input\.severity,\s*\n?\s*status: input\.status \?\? 'investigating',\s*\n?\s*affectedComponents: \[\.\.\.input\.affectedComponents\],\s*\n?\s*public: input\.public,\s*\n?\s*startedAt: input\.startedAt,\s*\n?\s*createdByAdminId: input\.createdByAdminId,\s*\n?\s*createdByAdminKeyId: input\.createdByAdminKeyId,\s*\n?\s*autoProbeTarget: input\.autoProbeTarget \?\? null,\s*\n?\s*\}\)/,
-    );
-    expect(body).toMatch(/if \(!row\) throw new Error\('incidents insert returned no row'\);/);
+  it('create is one transaction across incident + initial update with authoritative same-id replay', () => {
+    expect(body).toContain('async createWithInitialUpdate(');
+    expect(body).toContain('return this.database.db.transaction(async (tx) => {');
+    expect(body).toContain('onConflictDoNothing({ target: incidents.id })');
+    expect(body).toContain('.insert(incidentUpdates)');
+    expect(body).toContain('message: input.description');
+    expect(body).toContain("outcome: 'created'");
+    expect(body).toContain("outcome: matches ? 'replayed' : 'mismatch'");
   });
 
   it("findOpenAutoIncident: where and(eq(autoProbeTarget, target), ne(status, 'resolved'), isNotNull(autoProbeTarget)) + orderBy desc(startedAt) + limit 1 — most-recent OPEN auto-incident only", () => {
@@ -78,13 +82,37 @@ describe('W447.C apps/server/src/db/incidents-repo.ts content parity', () => {
     );
   });
 
-  it("list: scope==='public' → eq(public, true); since → gte(startedAt); orderBy desc(startedAt); limit default 100", () => {
-    expect(body).toMatch(
-      /if \(opts\.scope === 'public'\) conditions\.push\(eq\(incidents\.public, true\)\);\s*\n?\s*if \(opts\.since\) conditions\.push\(gte\(incidents\.startedAt, opts\.since\)\);/,
+  it('listPage applies lifecycle filters before limit, uses composite cursor, and returns exact total', () => {
+    expect(body).toContain(
+      "if (opts.scope === 'public') filters.push(eq(incidents.public, true));",
     );
-    expect(body).toMatch(
-      /\.orderBy\(desc\(incidents\.startedAt\)\)\s*\n?\s*\.limit\(opts\.limit \?\? 100\);/,
+    expect(body).toContain(
+      "if (opts.state === 'open') filters.push(ne(incidents.status, 'resolved'));",
     );
+    expect(body).toContain(
+      "if (opts.state === 'resolved') filters.push(eq(incidents.status, 'resolved'));",
+    );
+    expect(body).toContain('lt(incidents.startedAt, opts.cursor.startedAt)');
+    expect(body).toContain('lt(incidents.id, opts.cursor.id)');
+    expect(body).toContain('.orderBy(desc(incidents.startedAt), desc(incidents.id))');
+    expect(body).toContain('.select({ value: count() })');
+    expect(body).toContain('.limit(limit + 1)');
+    expect(body).toContain("const openFilters = [ne(incidents.status, 'resolved')];");
+    expect(body).toContain('openCount: openCountRow?.value ?? 0');
+    expect(body).toContain("isolationLevel: 'repeatable read'");
+    expect(body).toContain("accessMode: 'read only'");
+  });
+
+  it('public feed derives rows and every aggregate inside one repeatable-read snapshot', () => {
+    expect(body).toContain(
+      'async publicFeed(args: { since: Date; limit: number }): Promise<PublicIncidentFeedRows>',
+    );
+    expect(body).toContain("state: 'open'");
+    expect(body).toContain("severity: 'outage'");
+    expect(body).toContain("state: 'resolved'");
+    expect(body).toContain('openCount: openPage.total');
+    expect(body).toContain('openOutageCount: openOutagePage.total');
+    expect(body).toContain("{ isolationLevel: 'repeatable read', accessMode: 'read only' }");
   });
 
   it('get with publicOnly opt: pushes eq(public, true) — admin sees private; status page only sees public', () => {

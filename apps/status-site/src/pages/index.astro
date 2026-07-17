@@ -5,8 +5,9 @@ import StatusLayout from '../layouts/StatusLayout.astro';
 // build time via env. PUBLIC_API_BASE_URL is the live API origin;
 // PUBLIC_STATUS_R2_URL points at the public-readable R2 snapshot
 // (V-295c2: `<r2-public-base>/status/incidents-public.json`). The page
-// tries the live API first and falls back to the snapshot if the API
-// is unreachable.
+// combines live readiness + incident truth; when the live incident feed is
+// unavailable it can show the snapshot, but snapshot-only data never proves
+// an operational all-clear.
 const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.dev';
 const R2_FALLBACK_URL =
   import.meta.env.PUBLIC_STATUS_R2_URL ??
@@ -50,7 +51,7 @@ const R2_FALLBACK_URL =
         <circle cx="12" cy="12" r="9" />
         <path d="M12 7v5l3 2" />
       </svg>
-      Incidents — last 30 days
+      Incidents — all active + 30-day history
     </h2>
     <div id="incidents-list" class="space-y-3">
       {/* 2026-05-24 — skeleton row for hydrate-state polish; JS replaces
@@ -118,6 +119,152 @@ const R2_FALLBACK_URL =
     outage: 'Major outage in progress',
     unknown: 'Status currently unavailable',
   };
+  const INCIDENT_STATUSES = new Set(Object.keys(STATUS_BADGE));
+  const INCIDENT_SEVERITIES = new Set(Object.keys(SEVERITY_BADGE));
+
+  function isIso(value) {
+    if (typeof value !== 'string') return false;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) && date.toISOString() === value;
+  }
+
+  function isPublicIncident(value) {
+    return Boolean(
+      value &&
+        typeof value === 'object' &&
+        /^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+          value.id,
+        ) &&
+        typeof value.title === 'string' &&
+        typeof value.description === 'string' &&
+        INCIDENT_SEVERITIES.has(value.severity) &&
+        INCIDENT_STATUSES.has(value.status) &&
+        Array.isArray(value.affected_components) &&
+        value.affected_components.every((component) => typeof component === 'string') &&
+        value.public === true &&
+        isIso(value.started_at) &&
+        (value.resolved_at === null || isIso(value.resolved_at)) &&
+        isIso(value.created_at) &&
+        isIso(value.updated_at),
+    );
+  }
+
+  function parseIncidentFeed(value) {
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !Array.isArray(value.data) ||
+      !value.data.every(isPublicIncident) ||
+      !Number.isInteger(value.total) ||
+      value.total < value.data.length ||
+      !Number.isInteger(value.open_count) ||
+      value.open_count < 0 ||
+      value.open_count > value.total ||
+      !Number.isInteger(value.open_outage_count) ||
+      value.open_outage_count < 0 ||
+      value.open_outage_count > value.open_count ||
+      typeof value.truncated !== 'boolean' ||
+      value.truncated !== (value.data.length < value.total) ||
+      new Set(value.data.map((incident) => incident.id)).size !== value.data.length ||
+      (value.open_count > 0 && value.data.length === 0)
+    ) {
+      throw new Error('invalid status feed');
+    }
+    const visibleOpen = Math.min(value.open_count, value.data.length);
+    const visibleOpenRows = value.data.slice(0, visibleOpen);
+    const visibleOpenOutages = visibleOpenRows.filter(
+      (incident) => incident.severity === 'outage',
+    ).length;
+    if (
+      visibleOpenRows.some((incident) => incident.status === 'resolved') ||
+      value.data.slice(visibleOpen).some((incident) => incident.status !== 'resolved') ||
+      visibleOpenOutages > value.open_outage_count ||
+      (value.open_count <= value.data.length &&
+        visibleOpenOutages !== value.open_outage_count)
+    ) {
+      throw new Error('invalid status feed ordering');
+    }
+    return value;
+  }
+
+  function parseLiveStatus(value) {
+    const allowedStatuses = new Set(['operational', 'degraded', 'major_outage']);
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !allowedStatuses.has(value.overall_status) ||
+      !Array.isArray(value.components) ||
+      !value.components.every(
+        (component) =>
+          component &&
+          typeof component === 'object' &&
+          typeof component.name === 'string' &&
+          allowedStatuses.has(component.status) &&
+          isIso(component.last_checked_at),
+      ) ||
+      typeof value.incident_data_complete !== 'boolean' ||
+      (value.incident_data_complete
+        ? !Number.isInteger(value.open_incidents) || value.open_incidents < 0
+        : value.open_incidents !== null)
+    ) {
+      throw new Error('invalid live status response');
+    }
+    const statusRank = { operational: 0, degraded: 1, major_outage: 2 };
+    const worstComponentRank = value.components.reduce(
+      (worst, component) => Math.max(worst, statusRank[component.status]),
+      0,
+    );
+    if (
+      statusRank[value.overall_status] < worstComponentRank ||
+      (!value.incident_data_complete && value.overall_status === 'operational') ||
+      (value.incident_data_complete &&
+        value.open_incidents > 0 &&
+        value.overall_status === 'operational')
+    ) {
+      throw new Error('incoherent live status response');
+    }
+    return value;
+  }
+
+  function parseSnapshot(value) {
+    const feed = parseIncidentFeed(value);
+    if (!isIso(value.generated_at)) throw new Error('invalid snapshot timestamp');
+    return { feed, generatedAt: value.generated_at };
+  }
+
+  function incidentState(feed) {
+    return feed.open_outage_count > 0
+      ? 'outage'
+      : feed.open_count > 0
+        ? 'degraded'
+        : 'operational';
+  }
+
+  function combineLiveTruth(feed, liveStatus) {
+    const incidents = incidentState(feed);
+    if (!liveStatus) return incidents === 'operational' ? 'unknown' : incidents;
+    let readiness =
+      liveStatus.overall_status === 'major_outage' ? 'outage' : liveStatus.overall_status;
+    if (
+      !liveStatus.incident_data_complete ||
+      liveStatus.open_incidents !== feed.open_count
+    ) {
+      if (readiness === 'operational') readiness = 'unknown';
+    }
+    const rank = { operational: 0, unknown: 1, degraded: 2, outage: 3 };
+    return rank[readiness] >= rank[incidents] ? readiness : incidents;
+  }
+
+  function formatSnapshotAge(generatedAt) {
+    const seconds = Math.max(0, Math.floor((Date.now() - new Date(generatedAt).getTime()) / 1000));
+    if (seconds < 90) return `${seconds} second${seconds === 1 ? '' : 's'} old`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 90) return `${minutes} minute${minutes === 1 ? '' : 's'} old`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'} old`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? '' : 's'} old`;
+  }
 
   function fmtIso(iso) {
     return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
@@ -141,8 +288,11 @@ const R2_FALLBACK_URL =
     } else if (state === 'unknown') {
       summary.textContent =
         'The status feed is temporarily unavailable. Service may still be running normally.';
-    } else {
+    } else if (openCount > 0) {
       summary.textContent = `${openCount} active incident${openCount === 1 ? '' : 's'} below.`;
+    } else {
+      summary.textContent =
+        'A service component is reporting a problem; no active incident has been posted yet.';
     }
     card.dataset.state = state;
   }
@@ -150,10 +300,10 @@ const R2_FALLBACK_URL =
   // W563 — stamp the last successful refresh. Only called on a good
   // fetch (live or snapshot), so the time always reflects real data —
   // a failed poll leaves the previous stamp intact rather than lying.
-  function markUpdated() {
+  function markUpdated(at = new Date().toISOString()) {
     const el = document.getElementById('last-updated');
     if (!el) return;
-    el.textContent = 'Last updated ' + new Date().toISOString().slice(11, 19) + ' UTC';
+    el.textContent = 'Data timestamp ' + new Date(at).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
   }
 
   function renderIncident(inc) {
@@ -222,30 +372,41 @@ const R2_FALLBACK_URL =
   }
 
   async function fetchSource() {
-    // Primary: live API. Fallback: R2-mirrored snapshot. The snapshot
-    // is up to ~60s stale (V-295c2 poller cadence) but stays available
-    // when the API is unreachable.
-    try {
-      const res = await fetchWithDeadline(`${API_BASE}/v1/status/incidents`, {
+    async function load(url, parser) {
+      const response = await fetchWithDeadline(url, {
         headers: { accept: 'application/json' },
         cache: 'no-store',
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return { source: 'live', body: await res.json() };
-    } catch {
-      try {
-        const r2 = await fetchWithDeadline(R2_FALLBACK_URL, {
-          headers: { accept: 'application/json' },
-          cache: 'no-store',
-        });
-        if (!r2.ok) throw new Error(`R2 HTTP ${r2.status}`);
-        return { source: 'snapshot', body: await r2.json() };
-      } catch {
-        // Transport details belong in operator telemetry, not public copy.
-        // The caller renders an honest unknown state with a retry action.
-        throw new Error('status-feed-unavailable');
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return parser(await response.json());
     }
+
+    // Readiness and incident truth are independent public contracts. Fetch
+    // both: the page may show incident cards when readiness is unavailable,
+    // but it cannot promote that partial view to an all-clear.
+    const [incidentResult, statusResult] = await Promise.allSettled([
+      load(`${API_BASE}/v1/status/incidents`, parseIncidentFeed),
+      load(`${API_BASE}/v1/status`, parseLiveStatus),
+    ]);
+    let source = 'live';
+    let generatedAt = null;
+    let feed;
+    if (incidentResult.status === 'fulfilled') {
+      feed = incidentResult.value;
+    } else {
+      source = 'snapshot';
+      const snapshot = await load(R2_FALLBACK_URL, parseSnapshot).catch(() => {
+        throw new Error('status-feed-unavailable');
+      });
+      feed = snapshot.feed;
+      generatedAt = snapshot.generatedAt;
+    }
+    return {
+      source,
+      feed,
+      generatedAt,
+      liveStatus: statusResult.status === 'fulfilled' ? statusResult.value : null,
+    };
   }
 
   // Guards against an in-flight fetch overwriting a newer one's render.
@@ -265,9 +426,13 @@ const R2_FALLBACK_URL =
     if (!list) return;
     const fetchToken = ++latestFetchToken;
     try {
-      const { source, body } = await fetchSource();
+      const { source, feed, generatedAt, liveStatus } = await fetchSource();
       if (fetchToken !== latestFetchToken) return; // superseded by a newer call
-      const incidents = Array.isArray(body.data) ? body.data : [];
+      const homeCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const incidents = feed.data.filter(
+        (incident) =>
+          incident.status !== 'resolved' || new Date(incident.started_at).getTime() >= homeCutoff,
+      );
 
       // Hydrate updates for each open incident in parallel. Resolved
       // incidents are listed without updates inline (link out covered
@@ -276,9 +441,8 @@ const R2_FALLBACK_URL =
         incidents.map(async (inc) => {
           if (inc.updates) return inc;
           // No batched-with-updates list endpoint yet; client falls back
-          // to surface the description-only view. The detail endpoint is
-          // admin-auth only as of V-295a; opening to public-detail is a
-          // V-295c2 task.
+          // to surface the description-only view. The public detail endpoint
+          // remains available from each card for the full timeline.
           return { ...inc, updates: [] };
         }),
       );
@@ -286,28 +450,31 @@ const R2_FALLBACK_URL =
       const open = detailed.filter((i) => i.status !== 'resolved');
       const resolved = detailed.filter((i) => i.status === 'resolved');
 
-      const overall = open.some((i) => i.severity === 'outage')
-        ? 'outage'
-        : open.length > 0
-          ? 'degraded'
-          : 'operational';
-      renderOverall(overall, open.length);
+      const overall = combineLiveTruth(feed, liveStatus);
+      renderOverall(overall, feed.open_count);
 
-      // Surface the data source — when on the R2 snapshot we let
-      // visitors know the data may be slightly stale. Same place as
-      // the loading-state subtext so it's visible without scrolling.
-      if (source === 'snapshot') {
+      // Surface every partial-truth condition beside the headline. A cached
+      // incident feed can still show known problems, but never proves green.
+      const truthNotices = [];
+      if (source === 'snapshot' && generatedAt) {
+        truthNotices.push(`Incident feed is a cached snapshot (${formatSnapshotAge(generatedAt)}).`);
+      }
+      if (!liveStatus) {
+        truthNotices.push('Current component health is unavailable; all-clear is withheld.');
+      } else if (
+        !liveStatus.incident_data_complete ||
+        liveStatus.open_incidents !== feed.open_count
+      ) {
+        truthNotices.push('Live status could not confirm a coherent incident aggregate.');
+      }
+      if (truthNotices.length > 0) {
         const summary = document.getElementById('overall-summary');
-        if (summary) {
-          summary.textContent =
-            (summary.textContent ?? '') +
-            ' · API temporarily unreachable; showing the last cached snapshot (≤60s old).';
-        }
+        if (summary) summary.textContent = `${summary.textContent ?? ''} · ${truthNotices.join(' ')}`;
       }
 
-      // W563 — data is in hand (live or snapshot); stamp the refresh
-      // before any early return so the empty-state path is covered too.
-      markUpdated();
+      // W563 — stamp the source data time, not the browser's fetch time for
+      // cached snapshots, before any empty-state early return.
+      markUpdated(generatedAt ?? new Date().toISOString());
 
       if (detailed.length === 0) {
         list.innerHTML = `
@@ -330,6 +497,18 @@ const R2_FALLBACK_URL =
             Resolved
           </h3>
           <div class="space-y-3">${resolved.map(renderIncident).join('')}</div>
+        `);
+      }
+      if (feed.truncated || open.length < feed.open_count) {
+        sections.push(`
+          <p class="mt-4 rounded-md border border-surface-divider bg-surface-inset px-3 py-2 text-xs text-ink-muted">
+            Showing ${detailed.length} of ${feed.total} incidents from the bounded feed.
+            The active-incident count above is exact${
+              open.length < feed.open_count
+                ? `; ${feed.open_count - open.length} additional active incident${feed.open_count - open.length === 1 ? '' : 's'} are not shown in this card list`
+                : ''
+            }.
+          </p>
         `);
       }
       list.innerHTML = sections.join('');

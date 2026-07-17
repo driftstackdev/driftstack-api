@@ -110,16 +110,19 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
     );
   });
 
-  it('Route handler: Promise.all parallel runComponentCheck + body assembly + cache-control header + return body; recent_incidents wired via incidentsService.list when present', () => {
+  it('Route handler combines readiness with exact incident aggregates and fails closed on incident-read errors', () => {
     expect(body).toMatch(
       /app\.get\('\/v1\/status', async \(_request, reply\) => \{\s*\n?\s*const components = await Promise\.all\(opts\.readinessChecks\.map\(runComponentCheck\)\);/,
     );
     expect(body).toMatch(
-      /const recentIncidents: PublicIncidentSummary\[\] = \[\];\s*\n?\s*if \(opts\.incidentsService\) \{/,
+      /const recentIncidents: PublicIncidentSummary\[\] = \[\];[\s\S]*?let incidentDataComplete = opts\.incidentsService !== undefined;\s*\n?\s*if \(opts\.incidentsService\) \{/,
     );
-    expect(body).toMatch(
-      /const rows = await opts\.incidentsService\.list\(\{\s*\n?\s*scope: 'public',\s*\n?\s*since: new Date\(Date\.now\(\) - RECENT_INCIDENTS_WINDOW_MS\),\s*\n?\s*limit: RECENT_INCIDENTS_LIMIT,\s*\n?\s*\}\);/,
-    );
+    expect(body).toContain('const feed = await opts.incidentsService.publicFeed({');
+    expect(body).toContain('openIncidentCount = feed.openCount;');
+    expect(body).toContain('hasOpenOutage = feed.openOutageCount > 0;');
+    expect(body).toContain('incidentDataComplete = false;');
+    expect(body).toContain("if (hasOpenOutage) overallStatus = 'major_outage';");
+    expect(body).toContain('open_incidents: incidentDataComplete ? openIncidentCount : null');
     expect(body).toMatch(
       /reply\.header\('cache-control', `public, max-age=\$\{CACHE_MAX_AGE_SEC\.toString\(\)\}`\);/,
     );

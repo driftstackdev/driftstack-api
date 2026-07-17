@@ -16,8 +16,8 @@
 //   - get() — admin reads everything; status-page reads scope=public
 //     (verified by route handler before calling).
 
-import type { IncidentSeverity, IncidentStatus } from '@driftstack/api-types';
-import { NotFoundError } from '../lib/errors-helpers.js';
+import type { IncidentListState, IncidentSeverity, IncidentStatus } from '@driftstack/api-types';
+import { ConflictError, NotFoundError } from '../lib/errors.js';
 
 export interface IncidentRow {
   id: string;
@@ -89,12 +89,53 @@ export interface ResolveIncidentInput {
 export interface ListIncidentsOpts {
   scope?: 'public' | 'all';
   since?: Date;
+  state?: IncidentListState;
+  /** Internal aggregate filter; public/admin query schemas do not expose it. */
+  severity?: IncidentSeverity;
+  cursor?: IncidentListCursor;
   limit?: number;
 }
 
+export interface IncidentListCursor {
+  startedAt: Date;
+  id: string;
+}
+
+export interface IncidentListPage {
+  rows: IncidentRow[];
+  total: number;
+  /** Exact all-time open count for this page's visibility scope, read from
+   * the same snapshot as rows and total. */
+  openCount: number;
+  nextCursor: IncidentListCursor | null;
+}
+
+export interface PublicIncidentFeedRows {
+  rows: IncidentRow[];
+  total: number;
+  openCount: number;
+  openOutageCount: number;
+  truncated: boolean;
+}
+
+export interface CreateIncidentWriteResult {
+  outcome: 'created' | 'replayed' | 'mismatch';
+  incident: IncidentRow;
+  update: IncidentUpdateRow;
+}
+
 export interface IncidentsRepo {
-  create(input: CreateIncidentInput): Promise<IncidentRow>;
+  /** Atomically inserts the incident and its synthetic initial update.
+   * An explicit id makes the write safely replayable across processes. */
+  createWithInitialUpdate(
+    input: CreateIncidentInput,
+    explicitId?: string,
+  ): Promise<CreateIncidentWriteResult>;
   list(opts: ListIncidentsOpts): Promise<IncidentRow[]>;
+  listPage(opts: ListIncidentsOpts): Promise<IncidentListPage>;
+  /** Reads the prioritized public feed and every aggregate from one
+   * consistent repository snapshot. */
+  publicFeed(args: { since: Date; limit: number }): Promise<PublicIncidentFeedRows>;
   get(id: string, opts?: { publicOnly?: boolean }): Promise<IncidentRow | null>;
   listUpdates(incidentId: string): Promise<IncidentUpdateRow[]>;
   addUpdate(input: AddUpdateInput): Promise<IncidentUpdateRow>;
@@ -152,29 +193,59 @@ export class IncidentsService {
   async create(
     input: CreateIncidentInput,
   ): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }> {
-    const incident = await this.repo.create(input);
-    // Synthetic initial update mirroring the incident's first state.
-    const update = await this.repo.addUpdate({
-      incidentId: incident.id,
-      message: input.description,
-      status: incident.status,
-      postedByAdminId: input.createdByAdminId,
-      postedByAdminKeyId: input.createdByAdminKeyId,
-    });
-    if (incident.public && this.lifecycle.onPublicCreated) {
+    const result = await this.repo.createWithInitialUpdate(input);
+    if (result.outcome !== 'created') {
+      throw new Error('non-idempotent incident create returned a replay outcome');
+    }
+    if (result.incident.public && this.lifecycle.onPublicCreated) {
       // W427 — fire-and-forget: don't block the admin create on the outbound
       // Slack/webhook fan-out (AbortController-bounded but up to ~5s on a slow/
       // down channel). The fan-out is already error-isolated; awaiting it gave
       // no error-signal benefit and delayed prompt status-page incident creation.
-      void this.lifecycle.onPublicCreated(incident, update).catch(() => {
+      void this.lifecycle.onPublicCreated(result.incident, result.update).catch(() => {
         // Notification failures must never roll back the incident write.
       });
     }
-    return { incident, update };
+    return { incident: result.incident, update: result.update };
+  }
+
+  async createWithId(
+    id: string,
+    input: CreateIncidentInput,
+  ): Promise<{
+    outcome: 'created' | 'replayed';
+    incident: IncidentRow;
+    update: IncidentUpdateRow;
+  }> {
+    const result = await this.repo.createWithInitialUpdate(input, id);
+    if (result.outcome === 'mismatch') {
+      throw new ConflictError('Incident id was already used with a different create request.');
+    }
+    if (result.outcome === 'created' && result.incident.public && this.lifecycle.onPublicCreated) {
+      void this.lifecycle.onPublicCreated(result.incident, result.update).catch(() => {
+        // Notification failures must never roll back the incident write.
+      });
+    }
+    return {
+      outcome: result.outcome,
+      incident: result.incident,
+      update: result.update,
+    };
   }
 
   async list(opts: ListIncidentsOpts): Promise<IncidentRow[]> {
     return this.repo.list(opts);
+  }
+
+  async listPage(opts: ListIncidentsOpts): Promise<IncidentListPage> {
+    return this.repo.listPage(opts);
+  }
+
+  /** Compose the customer-facing feed without ever applying the history
+   * window to open incidents. Open rows consume the display budget first;
+   * exact totals make any truncation explicit to live and R2 consumers. */
+  async publicFeed(args: { since: Date; limit: number }): Promise<PublicIncidentFeedRows> {
+    return this.repo.publicFeed(args);
   }
 
   async get(

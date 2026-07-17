@@ -11,6 +11,7 @@
 // Each mutation writes an admin_audit_log row (V-281 dual-write).
 // Public endpoint surfaces only public=true incidents.
 
+import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
@@ -41,6 +42,14 @@ interface IncidentResp {
 interface CreateResponse {
   incident: IncidentResp;
   updates: { id: string; message: string; status: string }[];
+}
+
+interface IncidentListResponse {
+  data: IncidentResp[];
+  total: number;
+  open_count: number;
+  has_more: boolean;
+  next_cursor: string | null;
 }
 
 describe('POST /v1/admin/incidents', () => {
@@ -99,6 +108,22 @@ describe('POST /v1/admin/incidents', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('400 when a create attempts to skip the explicit resolution transition', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, ...auth(fx) },
+      payload: {
+        title: 'Already over',
+        description: 'Must be created active and then resolved with a final timeline update.',
+        severity: 'minor',
+        status: 'resolved',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('403 without driftstack_internal_admin scope', async () => {
     fx = await buildTestApp({ scopes: ['read', 'write'] });
     const res = await fx.app.inject({
@@ -128,6 +153,87 @@ describe('POST /v1/admin/incidents', () => {
   });
 });
 
+describe('PUT /v1/admin/incidents/:id', () => {
+  it('is an atomic, same-id replayable create and rejects body drift', async () => {
+    fx = await buildTestApp();
+    const incidentId = `inc_${randomUUID()}`;
+    const payload = {
+      title: 'Idempotent operator incident',
+      description: 'Created with one stable client-owned id.',
+      severity: 'major',
+      started_at: '2026-07-17T12:00:00.000Z',
+    };
+
+    const created = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/admin/incidents/${incidentId}`,
+      headers: { ...headers, ...auth(fx) },
+      payload,
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json<{ outcome: string; incident: IncidentResp }>().outcome).toBe('created');
+    expect(created.json<{ incident: IncidentResp }>().incident.id).toBe(incidentId);
+
+    const replay = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/admin/incidents/${incidentId}`,
+      headers: { ...headers, ...auth(fx) },
+      payload,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json<{ outcome: string; incident: IncidentResp }>().outcome).toBe('replayed');
+    expect(replay.json<{ incident: IncidentResp }>().incident.id).toBe(incidentId);
+
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/incidents/${incidentId}/resolve`,
+      headers: { ...headers, ...auth(fx) },
+      payload: { message: 'Resolved after the original create response was lost.' },
+    });
+    const replayAfterResolve = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/admin/incidents/${incidentId}`,
+      headers: { ...headers, ...auth(fx) },
+      payload,
+    });
+    expect(replayAfterResolve.statusCode).toBe(200);
+    const replayAfterResolveBody = replayAfterResolve.json<{
+      outcome: string;
+      incident: IncidentResp;
+      updates: Array<{ status: string }>;
+    }>();
+    expect(replayAfterResolveBody.outcome).toBe('replayed');
+    expect(replayAfterResolveBody.incident.status).toBe('resolved');
+    expect(replayAfterResolveBody.updates).toHaveLength(1);
+    expect(replayAfterResolveBody.updates[0]?.status).toBe('investigating');
+
+    const mismatch = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/admin/incidents/${incidentId}`,
+      headers: { ...headers, ...auth(fx) },
+      payload: { ...payload, description: 'A different request must not reuse this id.' },
+    });
+    expect(mismatch.statusCode).toBe(409);
+
+    const detail = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/incidents/${incidentId}`,
+      headers: auth(fx),
+    });
+    const persisted = detail.json<CreateResponse>();
+    expect(persisted.incident.description).toBe(payload.description);
+    expect(persisted.updates).toHaveLength(2);
+    expect(
+      persisted.updates.filter((update) => update.message === payload.description),
+    ).toHaveLength(1);
+    expect(
+      fx.adminAuditRepo
+        .getAll()
+        .filter((row) => row.action === 'incident.created' && row.result === 'success'),
+    ).toHaveLength(1);
+  });
+});
+
 describe('GET /v1/admin/incidents', () => {
   it('returns all incidents (default scope)', async () => {
     fx = await buildTestApp();
@@ -150,8 +256,80 @@ describe('GET /v1/admin/incidents', () => {
       headers: auth(fx),
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json<{ data: IncidentResp[] }>();
+    const body = res.json<IncidentListResponse>();
     expect(body.data).toHaveLength(2);
+    expect(body.total).toBe(2);
+    expect(body.open_count).toBe(2);
+    expect(body.has_more).toBe(false);
+    expect(body.next_cursor).toBeNull();
+  });
+
+  it('filters lifecycle state before pagination and returns a stable cursor', async () => {
+    fx = await buildTestApp();
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, ...auth(fx) },
+      payload: { title: 'older-open', description: 'x', severity: 'minor' },
+    });
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, ...auth(fx) },
+      payload: { title: 'newer-open', description: 'x', severity: 'minor' },
+    });
+    const firstId = first.json<CreateResponse>().incident.id;
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/incidents/${firstId}/resolve`,
+      headers: { ...headers, ...auth(fx) },
+      payload: { message: 'resolved' },
+    });
+
+    const open = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/incidents?state=open&limit=1',
+      headers: auth(fx),
+    });
+    expect(open.statusCode).toBe(200);
+    const openBody = open.json<IncidentListResponse>();
+    expect(openBody.data.map((row) => row.title)).toEqual(['newer-open']);
+    expect(openBody.total).toBe(1);
+    expect(openBody.open_count).toBe(1);
+    expect(openBody.has_more).toBe(false);
+
+    const futureWindow = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/incidents?state=open&since=${encodeURIComponent('2099-01-01T00:00:00.000Z')}`,
+      headers: auth(fx),
+    });
+    const futureWindowBody = futureWindow.json<IncidentListResponse>();
+    expect(futureWindowBody.data).toEqual([]);
+    expect(futureWindowBody.total).toBe(0);
+    expect(futureWindowBody.open_count).toBe(1);
+
+    const all = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/incidents?state=all&limit=1',
+      headers: auth(fx),
+    });
+    const allBody = all.json<IncidentListResponse>();
+    expect(allBody.total).toBe(2);
+    expect(allBody.open_count).toBe(1);
+    expect(allBody.has_more).toBe(true);
+    expect(allBody.next_cursor).not.toBeNull();
+
+    const next = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/incidents?state=all&limit=1&cursor=${encodeURIComponent(
+        allBody.next_cursor ?? '',
+      )}`,
+      headers: auth(fx),
+    });
+    const nextBody = next.json<IncidentListResponse>();
+    expect(nextBody.data).toHaveLength(1);
+    expect(nextBody.data[0]?.id).not.toBe(allBody.data[0]?.id);
+    expect(nextBody.total).toBe(2);
   });
 });
 
@@ -276,19 +454,36 @@ describe('GET /v1/status/incidents (public, no-auth)', () => {
     expect(body.data[0]?.title).toBe('public-x');
   });
 
-  it('limits to last 30 days by default', async () => {
+  it('keeps all-time open truth while windowing resolved history', async () => {
     fx = await buildTestApp();
     await fx.app.inject({
       method: 'POST',
       url: '/v1/admin/incidents',
       headers: { ...headers, ...auth(fx) },
       payload: {
-        title: 'old-incident',
+        title: 'old-open',
         description: 'x',
         severity: 'minor',
-        // 60 days ago — should be excluded by the public default-since.
+        // Open incidents are never hidden by the resolved-history window.
         started_at: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
       },
+    });
+    const oldResolved = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, ...auth(fx) },
+      payload: {
+        title: 'old-resolved',
+        description: 'x',
+        severity: 'minor',
+        started_at: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/incidents/${oldResolved.json<CreateResponse>().incident.id}/resolve`,
+      headers: { ...headers, ...auth(fx) },
+      payload: { message: 'resolved long ago' },
     });
     await fx.app.inject({
       method: 'POST',
@@ -298,9 +493,28 @@ describe('GET /v1/status/incidents (public, no-auth)', () => {
     });
 
     const res = await fx.app.inject({ method: 'GET', url: '/v1/status/incidents' });
-    const body = res.json<{ data: IncidentResp[] }>();
-    expect(body.data).toHaveLength(1);
-    expect(body.data[0]?.title).toBe('recent-incident');
+    const body = res.json<{
+      data: IncidentResp[];
+      total: number;
+      open_count: number;
+      open_outage_count: number;
+      truncated: boolean;
+    }>();
+    expect(body.data.map((row) => row.title)).toEqual(['recent-incident', 'old-open']);
+    expect(body.total).toBe(2);
+    expect(body.open_count).toBe(2);
+    expect(body.open_outage_count).toBe(0);
+    expect(body.truncated).toBe(false);
+
+    const history = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/status/incidents?window=90d',
+    });
+    expect(history.json<{ data: IncidentResp[] }>().data.map((row) => row.title)).toEqual([
+      'recent-incident',
+      'old-open',
+      'old-resolved',
+    ]);
   });
 
   it('does not require auth', async () => {

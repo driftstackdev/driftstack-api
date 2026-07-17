@@ -4,7 +4,7 @@
 // the runtime behaviour claims a customer evaluating reliability
 // can verify by reading the page source:
 //
-//   • V-295c2 R2 fallback URL pinned + "≤60s stale" framing
+//   • V-295c2 R2 fallback URL + validated generated-at age framing
 //     (PUBLIC_STATUS_R2_URL → incidents-public.json).
 //   • V-295e real-time SSE: EventSource against
 //     /v1/status/stream with incident.created + incident.resolved
@@ -38,14 +38,15 @@ function read(p: string): string {
 describe('W371.C status-site /index page content parity', () => {
   const body = read(PAGE);
 
-  it('V-295c2 R2 fallback URL pinned (incidents-public.json + "≤60s old" framing)', () => {
+  it('V-295c2 R2 fallback URL and honest generated-at age framing are pinned', () => {
     expect(body).toMatch(/PUBLIC_STATUS_R2_URL/);
     expect(body).toMatch(/r2-public\.driftstack\.dev\/status\/incidents-public\.json/);
     expect(body).toMatch(/V-295c2/);
-    // The stale-snapshot user-facing copy.
-    expect(body).toMatch(
-      /API temporarily unreachable; showing the last cached snapshot \(≤60s old\)\./,
+    expect(body).toContain(
+      "if (!isIso(value.generated_at)) throw new Error('invalid snapshot timestamp');",
     );
+    expect(body).toContain('formatSnapshotAge(generatedAt)');
+    expect(body).not.toContain('≤60s old');
   });
 
   it('V-295e real-time SSE: EventSource at /v1/status/stream with incident.created + incident.resolved listeners', () => {
@@ -103,23 +104,28 @@ describe('W371.C status-site /index page content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/status-site/src/pages/history.astro'))).toBe(true);
   });
 
-  it("cache: 'no-store' on both fetch + R2 fallback (always-fresh read)", () => {
-    // The fetch helper sets no-store on both branches — a future
-    // "let the browser cache" optimization here would silently
-    // stale the user's view post-incident.
+  it("cache: 'no-store' is centralized for live readiness, incidents, and R2", () => {
+    // Every branch goes through load(), whose one fetch policy is no-store.
     const occurrences = body.match(/cache: 'no-store'/g);
     expect(occurrences).not.toBeNull();
-    expect(occurrences!.length).toBeGreaterThanOrEqual(2);
+    expect(occurrences).toHaveLength(1);
+    expect(body).toContain('async function load(url, parser)');
   });
 
-  it('overall-state classification pinned: outage > degraded > operational (severity-first)', () => {
-    expect(body).toMatch(
-      /const overall = open\.some\(\(i\) => i\.severity === 'outage'\)\s*\n?\s*\?\s*'outage'\s*\n?\s*:\s*open\.length > 0\s*\n?\s*\?\s*'degraded'\s*\n?\s*:\s*'operational'/,
+  it('overall state combines strict live readiness with exact incident aggregates', () => {
+    expect(body).toContain('function parseLiveStatus(value)');
+    expect(body).toContain('function combineLiveTruth(feed, liveStatus)');
+    expect(body).toContain('load(`${API_BASE}/v1/status`, parseLiveStatus)');
+    expect(body).toContain('const overall = combineLiveTruth(feed, liveStatus);');
+    expect(body).toContain(
+      "if (!liveStatus) return incidents === 'operational' ? 'unknown' : incidents;",
     );
+    expect(body).toContain('statusRank[value.overall_status] < worstComponentRank');
+    expect(body).toContain('Current component health is unavailable; all-clear is withheld.');
   });
 
-  it('"Incidents — last 30 days" window framing pinned (companion to /history 90d)', () => {
-    expect(body).toMatch(/Incidents — last 30 days/);
+  it('all active + 30-day resolved window framing is explicit', () => {
+    expect(body).toMatch(/Incidents — all active \+ 30-day history/);
     expect(body).toMatch(/No incidents in the last 30 days\./);
   });
 

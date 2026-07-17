@@ -186,8 +186,13 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     // placeholder that hydrates to the live count. Guards against (a) the
     // mock tile coming back and (b) the data-field/wiring being dropped.
     expect(body).toMatch(/data-field="incidents-open">—</);
-    expect(body).toMatch(/authedFetch\('\/v1\/admin\/incidents'\)/);
-    expect(body).toContain("setText('incidents-open'");
+    expect(body).toMatch(/authedFetch\('\/v1\/admin\/incidents\?state=open&limit=1'\)/);
+    expect(body).toContain("setText('incidents-open', String(body.open_count))");
+    expect(body).toContain('body.total !== body.open_count');
+    expect(body).toContain('body.total < body.data.length');
+    expect(body).toContain(
+      "!['investigating', 'identified', 'monitoring'].includes(incident.status)",
+    );
     // The old mock tile + its caveat must be gone.
     expect(body).not.toContain('MOCK_LEADS.length');
     expect(body).not.toMatch(/mock — leads endpoint TBD/);

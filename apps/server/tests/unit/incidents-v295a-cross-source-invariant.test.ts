@@ -168,11 +168,16 @@ describe('W947 V-295a incidents cross-source invariant', () => {
 
   // ─── IncidentsRepo 7-method interface ────────────────────────
 
-  it('CRITICAL IncidentsRepo has 7 methods — create + list + get (with publicOnly opt) + listUpdates + addUpdate + resolve + findOpenAutoIncident. The 7-method repo separates write paths + V-295b findOpenAutoIncident from the rest.', () => {
+  it('CRITICAL IncidentsRepo has atomic create and exact paginated list primitives.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incidents.ts'));
     expect(p).toMatch(/export interface IncidentsRepo \{/);
-    expect(p).toMatch(/create\(input: CreateIncidentInput\): Promise<IncidentRow>;/);
+    expect(p).toMatch(/createWithInitialUpdate\(/);
+    expect(p).toMatch(/Promise<CreateIncidentWriteResult>;/);
     expect(p).toMatch(/list\(opts: ListIncidentsOpts\): Promise<IncidentRow\[\]>;/);
+    expect(p).toMatch(/listPage\(opts: ListIncidentsOpts\): Promise<IncidentListPage>;/);
+    expect(p).toMatch(
+      /publicFeed\(args: \{ since: Date; limit: number \}\): Promise<PublicIncidentFeedRows>;/,
+    );
     expect(p).toMatch(
       /get\(id: string, opts\?: \{ publicOnly\?: boolean \}\): Promise<IncidentRow \| null>;/,
     );
@@ -236,8 +241,8 @@ describe('W947 V-295a incidents cross-source invariant', () => {
 
   it('CRITICAL IncidentSeverity + IncidentStatus imported from @driftstack/api-types — single source of truth for incident enums.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incidents.ts'));
-    expect(p).toMatch(
-      /import type \{ IncidentSeverity, IncidentStatus \} from '@driftstack\/api-types';/,
+    expect(p).toContain(
+      "import type { IncidentListState, IncidentSeverity, IncidentStatus } from '@driftstack/api-types';",
     );
   });
 

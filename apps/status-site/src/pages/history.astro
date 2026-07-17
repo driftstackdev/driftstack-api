@@ -21,15 +21,14 @@ const R2_FALLBACK_URL =
   <section class="mb-8">
     <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">History</p>
     <h1 class="mt-2 text-3xl font-semibold tracking-tight text-ink-primary">
-      Incident history — last 90 days
+      Incident history — 90-day resolved window
     </h1>
     <p class="mt-3 max-w-prose text-sm text-ink-secondary">
-      Every incident posted in the last 90 days, newest first. Resolved
-      incidents stay listed indefinitely so customers evaluating reliability
-      can see the full record. The
+      Resolved incidents started in the last 90 days, plus every incident that
+      is still open regardless of age. Results are newest first and the page
+      says explicitly when the bounded public feed is truncated. The
       <a href="/" class="text-oxblood-700 underline">live status page</a> shows
-      the last 30 days with an active/resolved split — this page is the
-      complete record.
+      every active incident plus the last 30 days of resolved history.
     </p>
   </section>
 
@@ -51,7 +50,7 @@ const R2_FALLBACK_URL =
   <section class="text-xs text-ink-muted">
     <p>
       Source:
-      <code class="font-mono">{API_BASE}/v1/status/incidents?window=90d</code>.
+      <code class="font-mono">{API_BASE}/v1/status/incidents?window=90d&amp;limit=100</code>.
       Falls back to the R2 snapshot at
       <code class="font-mono">{R2_FALLBACK_URL}</code> if the API is unreachable.
       No cookies, no visitor tracking.
@@ -76,6 +75,73 @@ const R2_FALLBACK_URL =
     monitoring: ['bg-indigo-50', 'text-indigo-700'],
     resolved: ['bg-emerald-50', 'text-emerald-700'],
   };
+  const INCIDENT_STATUSES = new Set(Object.keys(STATUS_BADGE));
+  const INCIDENT_SEVERITIES = new Set(Object.keys(SEVERITY_BADGE));
+
+  function isIso(value) {
+    if (typeof value !== 'string') return false;
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) && date.toISOString() === value;
+  }
+
+  function isPublicIncident(value) {
+    return Boolean(
+      value &&
+        typeof value === 'object' &&
+        /^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+          value.id,
+        ) &&
+        typeof value.title === 'string' &&
+        typeof value.description === 'string' &&
+        INCIDENT_SEVERITIES.has(value.severity) &&
+        INCIDENT_STATUSES.has(value.status) &&
+        Array.isArray(value.affected_components) &&
+        value.affected_components.every((component) => typeof component === 'string') &&
+        value.public === true &&
+        isIso(value.started_at) &&
+        (value.resolved_at === null || isIso(value.resolved_at)) &&
+        isIso(value.created_at) &&
+        isIso(value.updated_at),
+    );
+  }
+
+  function parseIncidentFeed(value) {
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !Array.isArray(value.data) ||
+      !value.data.every(isPublicIncident) ||
+      !Number.isInteger(value.total) ||
+      value.total < value.data.length ||
+      !Number.isInteger(value.open_count) ||
+      value.open_count < 0 ||
+      value.open_count > value.total ||
+      !Number.isInteger(value.open_outage_count) ||
+      value.open_outage_count < 0 ||
+      value.open_outage_count > value.open_count ||
+      typeof value.truncated !== 'boolean' ||
+      value.truncated !== (value.data.length < value.total) ||
+      new Set(value.data.map((incident) => incident.id)).size !== value.data.length ||
+      (value.open_count > 0 && value.data.length === 0)
+    ) {
+      throw new Error('invalid incident history feed');
+    }
+    const visibleOpen = Math.min(value.open_count, value.data.length);
+    const visibleOpenRows = value.data.slice(0, visibleOpen);
+    const visibleOpenOutages = visibleOpenRows.filter(
+      (incident) => incident.severity === 'outage',
+    ).length;
+    if (
+      visibleOpenRows.some((incident) => incident.status === 'resolved') ||
+      value.data.slice(visibleOpen).some((incident) => incident.status !== 'resolved') ||
+      visibleOpenOutages > value.open_outage_count ||
+      (value.open_count <= value.data.length &&
+        visibleOpenOutages !== value.open_outage_count)
+    ) {
+      throw new Error('invalid incident history ordering');
+    }
+    return value;
+  }
 
   function fmtIso(iso) {
     return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
@@ -180,19 +246,19 @@ const R2_FALLBACK_URL =
 
   async function fetchHistory() {
     try {
-      const res = await fetchWithDeadline(`${API_BASE}/v1/status/incidents?window=90d`, {
+      const res = await fetchWithDeadline(`${API_BASE}/v1/status/incidents?window=90d&limit=100`, {
         headers: { accept: 'application/json' },
         cache: 'no-store',
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      return { source: 'live', feed: parseIncidentFeed(await res.json()) };
     } catch {
       const r2 = await fetchWithDeadline(R2_FALLBACK_URL, {
         headers: { accept: 'application/json' },
         cache: 'no-store',
       });
       if (!r2.ok) throw new Error(`R2 HTTP ${r2.status}`);
-      return await r2.json();
+      return { source: 'snapshot', feed: parseIncidentFeed(await r2.json()) };
     }
   }
 
@@ -200,14 +266,18 @@ const R2_FALLBACK_URL =
     const list = document.getElementById('history-list');
     if (!list) return;
     try {
-      const body = await fetchHistory();
-      const incidents = Array.isArray(body.data) ? body.data : [];
-      if (incidents.length === 0) {
+      const { source, feed } = await fetchHistory();
+      const incidents = feed.data;
+      if (feed.total === 0) {
         list.innerHTML = `
           <div class="rounded-lg border border-surface-divider bg-surface-raised p-5 text-sm text-ink-muted">
-            No incidents in the last 90 days. Cleanest 90-day window since the
-            service went live.
+            No open incidents and no resolved incidents in the last 90 days.
           </div>
+          ${
+            source === 'snapshot'
+              ? '<p class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">The live API is unavailable; this empty result comes from the most recent cached status snapshot.</p>'
+              : ''
+          }
         `;
         return;
       }
@@ -219,7 +289,7 @@ const R2_FALLBACK_URL =
       // month incident count so the customer can scan density at a
       // glance before expanding.
       const grouped = groupByMonth(incidents);
-      list.innerHTML = grouped
+      const groupsHtml = grouped
         .map(
           (g, i) => `
             <details ${i === 0 ? 'open' : ''} class="group rounded-lg border border-surface-divider bg-surface-raised">
@@ -237,6 +307,18 @@ const R2_FALLBACK_URL =
           `,
         )
         .join('');
+      const notices = [];
+      if (feed.truncated) {
+        notices.push(
+          `<p class="rounded-md border border-surface-divider bg-surface-inset px-3 py-2 text-xs text-ink-muted">Showing ${incidents.length} of ${feed.total} incidents. The exact open count is ${feed.open_count}; older resolved entries beyond this bounded feed are not shown.</p>`,
+        );
+      }
+      if (source === 'snapshot') {
+        notices.push(
+          '<p class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">The live API is unavailable; this is the most recent cached status snapshot.</p>',
+        );
+      }
+      list.innerHTML = groupsHtml + notices.join('');
     } catch {
       list.innerHTML = `
         <div class="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">

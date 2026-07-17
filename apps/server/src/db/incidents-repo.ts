@@ -1,13 +1,16 @@
 // V-295a — Drizzle-backed IncidentsRepo.
 
-import { and, desc, eq, gte, isNotNull, ne } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNotNull, lt, ne, or } from 'drizzle-orm';
 import type {
   AddUpdateInput,
+  CreateIncidentWriteResult,
   CreateIncidentInput,
+  IncidentListPage,
   IncidentRow,
   IncidentUpdateRow,
   IncidentsRepo,
   ListIncidentsOpts,
+  PublicIncidentFeedRows,
   ResolveIncidentInput,
 } from '../services/incidents.js';
 import { NotFoundError } from '../lib/errors-helpers.js';
@@ -48,27 +51,140 @@ function toUpdateRow(row: IncidentUpdateDbRow): IncidentUpdateRow {
   };
 }
 
+type IncidentReadDatabase = Pick<Database['db'], 'select'>;
+
+async function readListPage(
+  database: IncidentReadDatabase,
+  opts: ListIncidentsOpts,
+): Promise<IncidentListPage> {
+  const filters = [];
+  if (opts.scope === 'public') filters.push(eq(incidents.public, true));
+  if (opts.since) filters.push(gte(incidents.startedAt, opts.since));
+  if (opts.state === 'open') filters.push(ne(incidents.status, 'resolved'));
+  if (opts.state === 'resolved') filters.push(eq(incidents.status, 'resolved'));
+  if (opts.severity) filters.push(eq(incidents.severity, opts.severity));
+  const pageFilters = [...filters];
+  if (opts.cursor) {
+    pageFilters.push(
+      or(
+        lt(incidents.startedAt, opts.cursor.startedAt),
+        and(eq(incidents.startedAt, opts.cursor.startedAt), lt(incidents.id, opts.cursor.id)),
+      )!,
+    );
+  }
+  const where = pageFilters.length > 0 ? and(...pageFilters) : undefined;
+  const totalWhere = filters.length > 0 ? and(...filters) : undefined;
+  const openFilters = [ne(incidents.status, 'resolved')];
+  if (opts.scope === 'public') openFilters.push(eq(incidents.public, true));
+  const limit = opts.limit ?? 100;
+  const rows = await database
+    .select()
+    .from(incidents)
+    .where(where)
+    .orderBy(desc(incidents.startedAt), desc(incidents.id))
+    .limit(limit + 1);
+  const [totalRow] = await database.select({ value: count() }).from(incidents).where(totalWhere);
+  const [openCountRow] = await database
+    .select({ value: count() })
+    .from(incidents)
+    .where(and(...openFilters));
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const last = pageRows[pageRows.length - 1];
+  return {
+    rows: pageRows.map(toRow),
+    total: totalRow?.value ?? 0,
+    openCount: openCountRow?.value ?? 0,
+    nextCursor:
+      hasMore && last
+        ? {
+            startedAt: last.startedAt,
+            id: last.id,
+          }
+        : null,
+  };
+}
+
 export class DrizzleIncidentsRepo implements IncidentsRepo {
   constructor(private readonly database: Database) {}
 
-  async create(input: CreateIncidentInput): Promise<IncidentRow> {
-    const [row] = await this.database.db
-      .insert(incidents)
-      .values({
+  async createWithInitialUpdate(
+    input: CreateIncidentInput,
+    explicitId?: string,
+  ): Promise<CreateIncidentWriteResult> {
+    return this.database.db.transaction(async (tx) => {
+      const initialStatus = input.status ?? 'investigating';
+      const values = {
+        ...(explicitId !== undefined ? { id: explicitId } : {}),
         title: input.title,
         description: input.description,
         severity: input.severity,
-        status: input.status ?? 'investigating',
+        status: initialStatus,
         affectedComponents: [...input.affectedComponents],
         public: input.public,
         startedAt: input.startedAt,
+        resolvedAt: initialStatus === 'resolved' ? new Date() : null,
         createdByAdminId: input.createdByAdminId,
         createdByAdminKeyId: input.createdByAdminKeyId,
         autoProbeTarget: input.autoProbeTarget ?? null,
-      })
-      .returning();
-    if (!row) throw new Error('incidents insert returned no row');
-    return toRow(row);
+      };
+      const insert = tx.insert(incidents).values(values);
+      const inserted = explicitId
+        ? await insert.onConflictDoNothing({ target: incidents.id }).returning()
+        : await insert.returning();
+      const insertedRow = inserted[0];
+      if (insertedRow) {
+        const [updateRow] = await tx
+          .insert(incidentUpdates)
+          .values({
+            incidentId: insertedRow.id,
+            message: input.description,
+            status: insertedRow.status,
+            postedByAdminId: input.createdByAdminId,
+            postedByAdminKeyId: input.createdByAdminKeyId,
+          })
+          .returning();
+        if (!updateRow) throw new Error('incident initial update insert returned no row');
+        return {
+          outcome: 'created',
+          incident: toRow(insertedRow),
+          update: toUpdateRow(updateRow),
+        };
+      }
+
+      if (explicitId === undefined) throw new Error('incidents insert returned no row');
+      const [existing, initialUpdate] = await Promise.all([
+        tx.select().from(incidents).where(eq(incidents.id, explicitId)).limit(1),
+        tx
+          .select()
+          .from(incidentUpdates)
+          .where(eq(incidentUpdates.incidentId, explicitId))
+          .orderBy(incidentUpdates.postedAt, incidentUpdates.id)
+          .limit(1),
+      ]);
+      const existingRow = existing[0];
+      const existingInitialUpdate = initialUpdate[0];
+      if (!existingRow || !existingInitialUpdate) {
+        throw new Error('existing incident is missing its atomic initial update');
+      }
+      const matches =
+        existingRow.title === input.title &&
+        existingRow.description === input.description &&
+        existingRow.severity === input.severity &&
+        existingRow.public === input.public &&
+        existingRow.startedAt.getTime() === input.startedAt.getTime() &&
+        existingRow.createdByAdminId === input.createdByAdminId &&
+        existingRow.autoProbeTarget === (input.autoProbeTarget ?? null) &&
+        JSON.stringify(existingRow.affectedComponents) ===
+          JSON.stringify(input.affectedComponents) &&
+        existingInitialUpdate.message === input.description &&
+        existingInitialUpdate.status === initialStatus;
+      return {
+        outcome: matches ? 'replayed' : 'mismatch',
+        incident: toRow(existingRow),
+        update: toUpdateRow(existingInitialUpdate),
+      };
+    });
   }
 
   async findOpenAutoIncident(target: string): Promise<IncidentRow | null> {
@@ -88,17 +204,49 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
   }
 
   async list(opts: ListIncidentsOpts): Promise<IncidentRow[]> {
-    const conditions = [];
-    if (opts.scope === 'public') conditions.push(eq(incidents.public, true));
-    if (opts.since) conditions.push(gte(incidents.startedAt, opts.since));
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
-    const rows = await this.database.db
-      .select()
-      .from(incidents)
-      .where(where)
-      .orderBy(desc(incidents.startedAt))
-      .limit(opts.limit ?? 100);
-    return rows.map(toRow);
+    return (await this.listPage(opts)).rows;
+  }
+
+  async listPage(opts: ListIncidentsOpts): Promise<IncidentListPage> {
+    return this.database.db.transaction((tx) => readListPage(tx, opts), {
+      isolationLevel: 'repeatable read',
+      accessMode: 'read only',
+    });
+  }
+
+  async publicFeed(args: { since: Date; limit: number }): Promise<PublicIncidentFeedRows> {
+    return this.database.db.transaction(
+      async (tx) => {
+        const openPage = await readListPage(tx, {
+          scope: 'public',
+          state: 'open',
+          limit: args.limit,
+        });
+        const openOutagePage = await readListPage(tx, {
+          scope: 'public',
+          state: 'open',
+          severity: 'outage',
+          limit: 1,
+        });
+        const resolvedPage = await readListPage(tx, {
+          scope: 'public',
+          state: 'resolved',
+          since: args.since,
+          limit: args.limit,
+        });
+        const remaining = Math.max(0, args.limit - openPage.rows.length);
+        const rows = [...openPage.rows, ...resolvedPage.rows.slice(0, remaining)];
+        const total = openPage.total + resolvedPage.total;
+        return {
+          rows,
+          total,
+          openCount: openPage.total,
+          openOutageCount: openOutagePage.total,
+          truncated: rows.length < total,
+        };
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
   }
 
   async get(id: string, opts?: { publicOnly?: boolean }): Promise<IncidentRow | null> {

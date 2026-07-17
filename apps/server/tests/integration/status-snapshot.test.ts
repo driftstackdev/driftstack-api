@@ -63,6 +63,10 @@ const KEY = '00000000-0000-4000-8000-000000000bbb';
 
 interface SnapshotBody {
   generated_at: string;
+  total: number;
+  open_count: number;
+  open_outage_count: number;
+  truncated: boolean;
   data: { id: string; title: string; status: string; public: boolean }[];
 }
 
@@ -109,6 +113,10 @@ describe('StatusSnapshotService', () => {
     expect(body.data).toHaveLength(1);
     expect(body.data[0]!.title).toBe('public incident');
     expect(body.data[0]!.public).toBe(true);
+    expect(body.total).toBe(1);
+    expect(body.open_count).toBe(1);
+    expect(body.open_outage_count).toBe(0);
+    expect(body.truncated).toBe(false);
 
     // The public R2 snapshot is a public egress (the status-site CF Pages
     // frontend reads it during API outages), so publicIncident MUST omit
@@ -145,7 +153,7 @@ describe('StatusSnapshotService', () => {
     expect(r2.calls.every((c) => c.key === STATUS_SNAPSHOT_KEY)).toBe(true);
   });
 
-  it('respects the 30d default window — old incidents are excluded', async () => {
+  it('keeps all-time open incidents while applying the 90d window to resolved history', async () => {
     const repo = new InMemoryIncidentsRepo();
     const incidents = new IncidentsService(repo);
     const r2 = fakeR2();
@@ -153,7 +161,7 @@ describe('StatusSnapshotService', () => {
 
     const now = new Date('2026-05-07T00:00:00Z');
     await incidents.create({
-      title: 'old',
+      title: 'old-open',
       description: 'd',
       severity: 'minor',
       affectedComponents: [],
@@ -174,15 +182,15 @@ describe('StatusSnapshotService', () => {
     });
 
     const out = await service.processSnapshot(now);
-    expect(out.count).toBe(1);
+    expect(out.count).toBe(2);
 
     const body = JSON.parse(
       typeof r2.calls[0]!.body === 'string'
         ? r2.calls[0]!.body
         : Buffer.from(r2.calls[0]!.body).toString('utf-8'),
     ) as SnapshotBody;
-    expect(body.data).toHaveLength(1);
-    expect(body.data[0]!.title).toBe('recent');
+    expect(body.data.map((row) => row.title)).toEqual(['recent', 'old-open']);
+    expect(body.open_count).toBe(2);
   });
 
   it('uses a custom key + window when configured', async () => {

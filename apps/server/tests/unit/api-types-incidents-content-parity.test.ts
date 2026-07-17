@@ -76,12 +76,15 @@ describe('W434.A packages/api-types/src/incidents.ts content parity', () => {
   });
 
   it('CreateIncident: title 1..200 + markdown description 1..5000 (rendered plaintext until V-295c) + severity + optional status default investigating + affected_components<=20 strings 1..50 optional + public optional default true + optional backdate-able started_at', () => {
+    expect(body).toContain(
+      "export const CreateIncidentStatusSchema = z.enum(['investigating', 'identified', 'monitoring']);",
+    );
     expect(body).toMatch(/title: z\.string\(\)\.min\(1\)\.max\(200\),/);
     expect(body).toMatch(
       /\/\*\* Markdown body\. Rendered as plaintext on the status page until\s*\n?\s*\*\s*V-295c wires the markdown renderer\. \*\/\s*\n?\s*description: z\.string\(\)\.min\(1\)\.max\(5000\),/,
     );
     expect(body).toMatch(
-      /\/\*\* Initial status; defaults to 'investigating'\. \*\/\s*\n?\s*status: IncidentStatusSchema\.optional\(\),/,
+      /\/\*\* Initial active status; defaults to 'investigating'\. \*\/\s*\n?\s*status: CreateIncidentStatusSchema\.optional\(\),/,
     );
     expect(body).toMatch(
       /\/\*\* Component slugs the incident affects\. Free-form; status page\s*\n?\s*\*\s*recognises 'api', 'gui-distribution', 'stripe', 'marketing',\s*\n?\s*\*\s*'docs', 'status' but accepts any\. \*\/\s*\n?\s*affected_components: z\.array\(z\.string\(\)\.min\(1\)\.max\(50\)\)\.max\(20\)\.optional\(\),/,
@@ -115,10 +118,16 @@ describe('W434.A packages/api-types/src/incidents.ts content parity', () => {
     );
   });
 
-  it('ListIncidentsResponse: data array of IncidentSchema; IncidentDetailResponse: incident + updates[]', () => {
-    expect(body).toMatch(
-      /export const ListIncidentsResponseSchema = z\.object\(\{\s*\n?\s*data: z\.array\(IncidentSchema\),\s*\n?\s*\}\);/,
-    );
+  it('list/public-feed/idempotent-put responses carry exact truth metadata', () => {
+    expect(body).toContain('export const ListIncidentsResponseSchema = z.object({');
+    expect(body).toContain('data: z.array(IncidentSchema)');
+    expect(body).toContain('total: z.number().int().nonnegative()');
+    expect(body).toContain('open_count: z.number().int().nonnegative()');
+    expect(body).toContain('has_more: z.boolean()');
+    expect(body).toContain('next_cursor: z.string().nullable()');
+    expect(body).toContain('export const PublicIncidentFeedResponseSchema = z.object({');
+    expect(body).toContain('open_outage_count: z.number().int().nonnegative()');
+    expect(body).toContain("outcome: z.enum(['created', 'replayed'])");
     expect(body).toMatch(
       /export const IncidentDetailResponseSchema = z\.object\(\{\s*\n?\s*incident: IncidentSchema,\s*\n?\s*updates: z\.array\(IncidentUpdateSchema\),\s*\n?\s*\}\);/,
     );

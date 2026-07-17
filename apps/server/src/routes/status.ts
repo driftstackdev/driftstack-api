@@ -58,6 +58,10 @@ interface StatusResponse {
   overall_status: ComponentStatus;
   components: ComponentResult[];
   recent_incidents: readonly PublicIncidentSummary[];
+  /** Exact all-time count of currently open public incidents. */
+  open_incidents: number | null;
+  /** False means incident storage could not prove an all-clear. */
+  incident_data_complete: boolean;
 }
 
 function summarizeIncident(row: IncidentRow): PublicIncidentSummary {
@@ -101,9 +105,9 @@ function aggregateOverall(components: readonly ComponentResult[]): ComponentStat
 
 export interface StatusRoutesOptions {
   readinessChecks: readonly ReadinessCheck[];
-  /** Optional — when provided, /v1/status surfaces the last 5
-   *  public incidents from the last 30 days. When omitted (fresh
-   *  fixtures), `recent_incidents` is an empty array. */
+  /** Optional — when provided, /v1/status surfaces all-time open truth
+   *  plus bounded recent resolved history. When omitted (fresh fixtures),
+   *  `recent_incidents` is an empty array. */
   incidentsService?: IncidentsService;
 }
 
@@ -111,24 +115,37 @@ export function registerStatusRoutes(app: FastifyInstance, opts: StatusRoutesOpt
   app.get('/v1/status', async (_request, reply) => {
     const components = await Promise.all(opts.readinessChecks.map(runComponentCheck));
     const recentIncidents: PublicIncidentSummary[] = [];
+    let openIncidentCount = 0;
+    let hasOpenOutage = false;
+    // Optional injection exists for narrow fixtures only. Absence must fail
+    // closed in the public response rather than fabricating an all-clear.
+    let incidentDataComplete = opts.incidentsService !== undefined;
     if (opts.incidentsService) {
       try {
-        const rows = await opts.incidentsService.list({
-          scope: 'public',
+        const feed = await opts.incidentsService.publicFeed({
           since: new Date(Date.now() - RECENT_INCIDENTS_WINDOW_MS),
           limit: RECENT_INCIDENTS_LIMIT,
         });
-        for (const row of rows) recentIncidents.push(summarizeIncident(row));
+        openIncidentCount = feed.openCount;
+        hasOpenOutage = feed.openOutageCount > 0;
+        for (const row of feed.rows) recentIncidents.push(summarizeIncident(row));
       } catch {
-        // Fail-open — /v1/status stays available even if incidents
-        // service errors. Empty list is the same shape clients expect
-        // when there are simply no incidents.
+        // Keep the status endpoint available, but never convert an incident
+        // storage failure into an operational/all-clear claim.
+        incidentDataComplete = false;
       }
     }
+    let overallStatus = aggregateOverall(components);
+    if (hasOpenOutage) overallStatus = 'major_outage';
+    else if ((!incidentDataComplete || openIncidentCount > 0) && overallStatus === 'operational') {
+      overallStatus = 'degraded';
+    }
     const body: StatusResponse = {
-      overall_status: aggregateOverall(components),
+      overall_status: overallStatus,
       components,
       recent_incidents: recentIncidents,
+      open_incidents: incidentDataComplete ? openIncidentCount : null,
+      incident_data_complete: incidentDataComplete,
     };
     reply.header('cache-control', `public, max-age=${CACHE_MAX_AGE_SEC.toString()}`);
     return body;

@@ -42,10 +42,12 @@ describe('W368.C status-site /history page content parity', () => {
   const index = read(INDEX);
 
   it('90-day window framing pinned (vs home page 30-day active/resolved split)', () => {
-    expect(body).toMatch(/Incident history — last 90 days/);
-    expect(body).toMatch(/Every incident posted in the last 90 days, newest first/);
+    expect(body).toMatch(/Incident history — 90-day resolved window/);
     expect(body).toMatch(
-      /<a href="\/" class="text-oxblood-700 underline">live status page<\/a> shows\s+the last 30 days with an active\/resolved split/,
+      /Resolved incidents started in the last 90 days, plus every incident that\s+is still open regardless of age/,
+    );
+    expect(body).toMatch(
+      /<a href="\/" class="text-oxblood-700 underline">live status page<\/a> shows\s+every active incident plus the last 30 days of resolved history/,
     );
   });
 
@@ -77,11 +79,11 @@ describe('W368.C status-site /history page content parity', () => {
     expect(existsSync(INDEX)).toBe(true);
   });
 
-  it("'Resolved incidents stay listed indefinitely' trust-evaluation framing pinned", () => {
-    // Load-bearing reliability claim — customers reviewing the
-    // record before signing on must see the full history, not
-    // a sliding window that hides old incidents.
-    expect(body).toMatch(/Resolved\s+incidents stay listed indefinitely/);
+  it('bounded-history truth and explicit truncation are pinned', () => {
+    expect(body).toMatch(/the page\s+says explicitly when the bounded public feed is truncated/);
+    expect(body).toContain('if (feed.truncated)');
+    expect(body).toContain('Showing ${incidents.length} of ${feed.total} incidents.');
+    expect(body).not.toMatch(/listed indefinitely|complete record/);
   });
 
   it('V-657 intent comment pinned (historical record for trust-evaluation use)', () => {
