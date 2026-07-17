@@ -203,6 +203,32 @@ describe('auth cache — account-version invalidation', () => {
   });
 });
 
+describe('auth cache — live Free-tier entitlement', () => {
+  it('denies an already-cached ordinary key immediately after downgrade to Free', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const headers = { authorization: `Bearer ${fx.plaintext}` };
+
+    const warm = await fx.app.inject({ method: 'GET', url: '/v1/whoami', headers });
+    expect(warm.statusCode).toBe(200);
+    expect(await fx.authCache.get(sha256Hex(fx.plaintext))).not.toBeNull();
+
+    const account = await fx.authRepo.getAccount(fx.accountId);
+    expect(account).not.toBeNull();
+    fx.authRepo.upsertAccount({
+      ...account!,
+      tier: 'free',
+      updatedAt: new Date(),
+    });
+
+    const denied = await fx.app.inject({ method: 'GET', url: '/v1/whoami', headers });
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json<{ detail: string }>().detail).toContain('apiAccess');
+
+    const deniedAgain = await fx.app.inject({ method: 'GET', url: '/v1/whoami', headers });
+    expect(deniedAgain.statusCode).toBe(403);
+  });
+});
+
 describe('auth cache — graceful degradation', () => {
   it('Redis errors fall through to scrypt path; auth still works', async () => {
     // Build an app with a deliberately-broken cache that throws on every op.

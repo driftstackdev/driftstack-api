@@ -16,6 +16,22 @@ afterEach(async () => {
 const headers = { 'content-type': 'application/json' };
 
 describe('POST /v1/api-keys/:id/rotate', () => {
+  it('403s a Free ordinary key without creating a successor', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const before = (await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items;
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/api-keys/key_${fx.apiKeyId}/rotate`,
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toContain('apiAccess');
+    expect((await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items).toHaveLength(before.length);
+  });
+
   it('201 mints a new key + sets old key expires_at to ~24h from now', async () => {
     fx = await buildTestApp();
     const apiKeyId = fx.apiKeyId;

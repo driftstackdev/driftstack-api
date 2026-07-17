@@ -59,17 +59,20 @@ describe('POST /v1/api-keys', () => {
     expect(body.type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
 
-  it('returns ds_test_ prefix for free tier', async () => {
+  it('403s Free ordinary key creation without inserting a successor', async () => {
     fx = await buildTestApp({ tier: 'free' });
+    const before = (await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items;
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/api-keys',
       headers: auth(fx),
       payload: { name: 'free-key', scopes: ['read'] },
     });
-    expect(res.statusCode).toBe(201);
-    const body = res.json<{ plaintext: string }>();
-    expect(body.plaintext.startsWith('ds_test_')).toBe(true);
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ type: string; detail: string }>();
+    expect(body.type).toBe(PROBLEM_TYPES.Forbidden);
+    expect(body.detail).toContain('apiAccess');
+    expect((await fx.apiKeysRepo.listAllApiKeys({ limit: 100 })).items).toHaveLength(before.length);
   });
 
   it('409 when legal acceptances are pending (V-049 issuance block)', async () => {

@@ -98,6 +98,9 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(/const accountId = opts\.effectiveAccountId \?\? ctx\.account\.id;/);
     expect(body).toMatch(/const tier = opts\.effectiveTier \?\? ctx\.account\.tier;/);
     expect(body).toMatch(
+      /if \(input\.provenance !== 'cli_device'\) \{\s*\n?\s*requireTierFeature\(tier, 'apiAccess'\);\s*\n?\s*\}\s*\n?[\s\S]*?if \(this\.legalGate !== null\)/,
+    );
+    expect(body).toMatch(
       /if \(this\.legalGate !== null\) \{\s*\n?\s*const pending = await this\.legalGate\.required\(accountId\);\s*\n?\s*if \(pending\.length > 0\) \{\s*\n?\s*throw new LegalAcceptanceRequiredError\(/,
     );
     expect(body).toMatch(
@@ -121,6 +124,12 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(/const keyPrefix = keyPrefixFromPlaintext\(plaintext\);/);
     expect(body).toMatch(
       /action: 'api_key\.minted',\s*\n?\s*targetResourceId: `key_\$\{row\.id\}`,\s*\n?\s*payload: \{ name: input\.name, scopes: input\.scopes \},/,
+    );
+  });
+
+  it('rotate requires apiAccess on the effective tier before key generation or repository mutation', () => {
+    expect(body).toMatch(
+      /const accountId = opts\.effectiveAccountId \?\? ctx\.account\.id;\s*\n?\s*const tier = opts\.effectiveTier \?\? ctx\.account\.tier;\s*\n?[\s\S]*?requireTierFeature\(tier, 'apiAccess'\);\s*\n?\s*const env = tier === 'free' \? 'test' : 'live';/,
     );
   });
 
@@ -210,7 +219,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
       /import \{ BadRequestError, ForbiddenError, LegalAcceptanceRequiredError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
-      /import \{\s*\n?\s*NotFoundError,\s*\n?\s*hasScope,\s*\n?\s*requireScope as throwIfMissingScope,\s*\n?\s*\} from '\.\.\/lib\/errors-helpers\.js';/,
+      /import \{\s*\n?\s*NotFoundError,\s*\n?\s*hasScope,\s*\n?\s*requireScope as throwIfMissingScope,\s*\n?\s*requireTierFeature,\s*\n?\s*\} from '\.\.\/lib\/errors-helpers\.js';/,
     );
   });
 

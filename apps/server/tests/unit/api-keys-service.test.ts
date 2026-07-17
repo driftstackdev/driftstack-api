@@ -21,7 +21,7 @@ import {
 } from '../../src/services/api-keys.js';
 import type { AccountContext, AccountRow, ApiKeyRow } from '../../src/services/auth.js';
 import type { AuthCache } from '../../src/services/auth-cache.js';
-import { LegalAcceptanceRequiredError } from '../../src/lib/errors.js';
+import { ForbiddenError, LegalAcceptanceRequiredError } from '../../src/lib/errors.js';
 
 function makeAccount(overrides: Partial<AccountRow> = {}): AccountRow {
   return {
@@ -357,15 +357,40 @@ describe('V-553.B-20 ApiKeysService.create', () => {
     expect(calls[0]?.accountId).toBe('acc_1');
   });
 
-  it('mints a test key for free tier', async () => {
-    const { repo } = makeRepo();
+  it('rejects an ordinary Free-tier key before legal or repository side effects', async () => {
+    const { repo, state } = makeRepo();
+    let legalChecks = 0;
+    const legalGate: LegalAcceptanceGate = {
+      required: () => {
+        legalChecks += 1;
+        return Promise.resolve([]);
+      },
+    };
+    const svc = new ApiKeysService(repo, null, null, legalGate);
+
+    await expect(
+      svc.create(ctxWith(['account_owner'], { tier: 'free' }), {
+        name: 'mine',
+        scopes: ['read'],
+        expiresAt: null,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(legalChecks).toBe(0);
+    expect(state.rows).toHaveLength(0);
+  });
+
+  it('preserves Free desktop provisioning with a restricted ds_test_ device credential', async () => {
+    const { repo, state } = makeRepo();
     const svc = new ApiKeysService(repo);
     const result = await svc.create(ctxWith(['account_owner'], { tier: 'free' }), {
-      name: 'mine',
-      scopes: ['read'],
+      name: 'Desktop client',
+      scopes: ['account_owner'],
       expiresAt: null,
+      provenance: 'cli_device',
     });
     expect(result.plaintext).toMatch(/^ds_test_/);
+    expect(state.rows).toHaveLength(1);
+    expect(state.rows[0]?.provenance).toBe('cli_device');
   });
 
   it('honours effectiveAccountId + effectiveTier (V-326e6 team-scoped mint)', async () => {
@@ -453,6 +478,17 @@ describe('V-553.B-20 ApiKeysService.list', () => {
 });
 
 describe('V-553.B-20 ApiKeysService.rotate', () => {
+  it('rejects Free-tier rotation before generating or writing a successor', async () => {
+    const { repo, state } = makeRepo([makeKey({ id: 'k_old', accountId: 'acc_1' })]);
+    const svc = new ApiKeysService(repo);
+
+    await expect(
+      svc.rotate(ctxWith(['account_owner'], { tier: 'free' }), 'k_old'),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(state.rows).toHaveLength(1);
+    expect(state.expiresSet).toHaveLength(0);
+  });
+
   it('throws NotFound when the key does not exist', async () => {
     const { repo } = makeRepo();
     const svc = new ApiKeysService(repo);

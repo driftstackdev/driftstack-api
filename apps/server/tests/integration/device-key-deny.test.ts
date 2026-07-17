@@ -78,9 +78,9 @@ async function acceptAllLegal(f: TestAppFixture, sessionToken: string): Promise<
   }
 }
 
-/** Mint a REAL device key by walking initiate → bind (web session) →
- *  exchange, and a sibling ordinary account_owner key via POST
- *  /v1/api-keys. Returns both plaintexts + the web-session token. */
+/** Mint a REAL Free device key by walking initiate → bind (web session) →
+ *  exchange. The fixture's seeded paid ordinary account_owner key is the
+ *  non-device control; Free web sessions may not mint ordinary API keys. */
 async function setup(
   f: TestAppFixture,
 ): Promise<{ deviceKey: string; ordinaryKey: string; sessionToken: string }> {
@@ -113,18 +113,8 @@ async function setup(
   expect(ex.status).toBe('bound');
   const deviceKey = ex.api_key as string;
 
-  // A sibling ORDINARY account_owner key (minted via a web session, so
-  // provenance is null) — the control that must NOT be deny-gated.
-  const created = await f.app.inject({
-    method: 'POST',
-    url: '/v1/api-keys',
-    headers: { ...json, authorization: `Bearer ${token}` },
-    payload: { name: 'ordinary', scopes: ['account_owner'] },
-  });
-  expect(created.statusCode, `api-key mint failed: ${created.body}`).toBe(201);
-  const ordinaryKey = created.json<{ plaintext: string }>().plaintext;
-
-  return { deviceKey, ordinaryKey, sessionToken: token };
+  expect(deviceKey).toMatch(/^ds_test_/);
+  return { deviceKey, ordinaryKey: f.plaintext, sessionToken: token };
 }
 
 // Every deny template → a concrete, injectable request. Fastify resolves

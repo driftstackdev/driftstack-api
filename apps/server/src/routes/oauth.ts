@@ -30,6 +30,7 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from '../lib/errors.js';
+import { requireTierFeature } from '../lib/errors-helpers.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import { ipRateLimit, AUTH_IP_LIMITS } from '../middleware/ip-rate-limit.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
@@ -265,6 +266,11 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
       if (ctx.webSession === null) {
         throw new ForbiddenError('OAuth authorization requires an interactive dashboard session.');
       }
+      // OAuth is customer programmatic access. Free browser sessions remain
+      // valid for the dashboard/desktop, but cannot mint independently-lived
+      // third-party bearer authority. Gate before parsing or consuming the
+      // staged authorization so a later paid approval can still proceed.
+      requireTierFeature(ctx.account.tier, 'apiAccess');
       const body = parseOrThrow(ApproveAuthorizationBody, req.body);
       try {
         // SECURITY: bind the issued code to the AUTHENTICATED caller's account — never a

@@ -55,6 +55,7 @@ const CTX: AccountContext = {
     lastUsedAt: null,
     revokedAt: null,
     expiresAt: null,
+    provenance: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
   },
   rateLimitOverrides: {},
@@ -62,15 +63,26 @@ const CTX: AccountContext = {
   webSession: null,
 };
 
-function makeRepo(liveAuthority = true): AccountAuthRepo {
+function contextFor(
+  tier: AccountContext['account']['tier'],
+  provenance: string | null,
+): AccountContext {
+  return {
+    ...CTX,
+    account: { ...CTX.account, tier },
+    apiKey: { ...CTX.apiKey, provenance },
+  };
+}
+
+function makeRepo(liveAuthority = true, ctx: AccountContext = CTX): AccountAuthRepo {
   // Positive cache hits deliberately re-read the exact credential, account,
   // team grants, and rate policy. Missing/short tokens still fail before these
   // methods run; `liveAuthority=false` proves cached data alone cannot pass.
   return {
     findApiKeyByPrefix: (prefix: string) =>
-      Promise.resolve(liveAuthority && prefix === CTX.apiKey.keyPrefix ? CTX.apiKey : null),
+      Promise.resolve(liveAuthority && prefix === ctx.apiKey.keyPrefix ? ctx.apiKey : null),
     getAccount: (id: string) =>
-      Promise.resolve(liveAuthority && id === CTX.account.id ? CTX.account : null),
+      Promise.resolve(liveAuthority && id === ctx.account.id ? ctx.account : null),
     findTeamMemberships: () => Promise.resolve([]),
     findActiveRateLimitOverrides: () => Promise.resolve([]),
   } as unknown as AccountAuthRepo;
@@ -79,10 +91,10 @@ function makeRepo(liveAuthority = true): AccountAuthRepo {
 // Cache that returns CTX only for the valid token's sha (a fresh hit), null
 // for anything else. Only `get` is exercised on the hit fast path; the rest
 // are no-op stubs to satisfy the AuthCache interface.
-function makeHitCache(): AuthCache {
+function makeHitCache(ctx: AccountContext = CTX): AuthCache {
   const hitSha = sha256Hex(VALID_TOKEN);
   return {
-    get: (sha: string) => Promise.resolve(sha === hitSha ? CTX : null),
+    get: (sha: string) => Promise.resolve(sha === hitSha ? ctx : null),
     set: () => Promise.resolve(),
     invalidateKey: () => Promise.resolve(),
     invalidateAccount: () => Promise.resolve(),
@@ -184,6 +196,27 @@ describe('requireAuthEventSource — ds_token query fallback', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true, accountId: 'acc-1', scopes: ['read', 'write'] });
+    expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'ok' })).toBe(1);
+    await app.close();
+  });
+
+  it('403s a Free ordinary credential through the EventSource query path', async () => {
+    const metrics = makeRegistry();
+    const ctx = contextFor('free', null);
+    const app = await buildApp(metrics, makeHitCache(ctx), makeRepo(true, ctx));
+    const res = await app.inject({ method: 'GET', url: `/sse?ds_token=${VALID_TOKEN}` });
+    expect(res.statusCode).toBe(403);
+    expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'forbidden' })).toBe(1);
+    expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'ok' })).toBe(0);
+    await app.close();
+  });
+
+  it('keeps the provenance-bound Free desktop credential valid through EventSource auth', async () => {
+    const metrics = makeRegistry();
+    const ctx = contextFor('free', 'cli_device');
+    const app = await buildApp(metrics, makeHitCache(ctx), makeRepo(true, ctx));
+    const res = await app.inject({ method: 'GET', url: `/sse?ds_token=${VALID_TOKEN}` });
+    expect(res.statusCode).toBe(200);
     expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'ok' })).toBe(1);
     await app.close();
   });

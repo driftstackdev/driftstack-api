@@ -30,6 +30,21 @@ describe('auth pipeline (GET /v1/whoami)', () => {
     expect(body.scopes).toEqual(['read', 'write', 'account_owner', 'driftstack_internal_admin']);
   });
 
+  it('403s an ordinary API key when the current account tier is Free', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/whoami',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ type: string; detail: string }>();
+    expect(body.type).toBe(PROBLEM_TYPES.Forbidden);
+    expect(body.detail).toContain('apiAccess');
+    expect(body.detail).toContain('free');
+  });
+
   it('401 with no Authorization header', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({ method: 'GET', url: '/v1/whoami' });
@@ -178,15 +193,15 @@ describe('public routes', () => {
 describe('rate limit', () => {
   it('returns 429 with retry-after when bucket is exhausted', async () => {
     // Drain the bucket directly via the store to avoid scrypt-bound timing
-    // dependence on number of HTTP calls. Free tier has capacity 60 in the
+    // dependence on number of HTTP calls. Solo Manual has capacity 120 in the
     // 'global' bucket. The store key encodes (rl:<accountId>:global).
-    const fx = await buildTestApp({ tier: 'free' });
+    const fx = await buildTestApp({ tier: 'solo_manual' });
     try {
       const drained = await fx.rateLimitStore.consume({
         key: `rl:${fx.accountId}:global`,
-        capacity: 60,
-        refillPerSecond: 1,
-        cost: 60,
+        capacity: 120,
+        refillPerSecond: 2,
+        cost: 120,
         now: Date.now(),
       });
       expect(drained.allowed).toBe(true);
@@ -209,7 +224,7 @@ describe('rate limit', () => {
   });
 
   it('exposes x-ratelimit-remaining on successful authenticated requests', async () => {
-    const fx = await buildTestApp({ tier: 'free' });
+    const fx = await buildTestApp({ tier: 'solo_manual' });
     try {
       const res = await fx.app.inject({
         method: 'GET',
@@ -218,8 +233,8 @@ describe('rate limit', () => {
       });
       expect(res.statusCode).toBe(200);
       const remaining = Number(res.headers['x-ratelimit-remaining']);
-      expect(remaining).toBeGreaterThanOrEqual(58);
-      expect(remaining).toBeLessThan(60);
+      expect(remaining).toBeGreaterThanOrEqual(118);
+      expect(remaining).toBeLessThan(120);
     } finally {
       await fx.cleanup();
     }

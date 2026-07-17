@@ -19,6 +19,7 @@ import {
   RevokedKeyError,
   UnauthorizedError,
 } from '../lib/errors.js';
+import { requireTierFeature } from '../lib/errors-helpers.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 
@@ -118,6 +119,18 @@ function classifyAuthError(err: unknown): string {
 /** V-353e — default step-up freshness window per V-353a Q4 verdict. */
 export const DEFAULT_MFA_FRESHNESS_SECONDS = 15 * 60;
 
+/**
+ * Free accounts are an interactive desktop tier, not a customer API tier.
+ * Browser sessions remain valid, and the desktop's device-code flow uses a
+ * provenance-bound restricted credential. Every ordinary API key and OAuth
+ * bearer must satisfy the current account tier on every request, including a
+ * positive auth-cache hit.
+ */
+function requireProgrammaticApiAccess(ctx: AccountContext): void {
+  if (ctx.webSession !== null || ctx.apiKey.provenance === 'cli_device') return;
+  requireTierFeature(ctx.account.tier, 'apiAccess');
+}
+
 function authPlugin(
   app: FastifyInstance,
   opts: AuthPluginOptions,
@@ -138,6 +151,7 @@ function authPlugin(
         opts.negativeAuthCache ?? null,
         opts.oauthStore ?? null,
       );
+      requireProgrammaticApiAccess(ctx);
       request.account = ctx;
       try {
         opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: 'ok' });
@@ -188,6 +202,7 @@ function authPlugin(
         opts.negativeAuthCache ?? null,
         opts.oauthStore ?? null,
       );
+      requireProgrammaticApiAccess(ctx);
       request.account = ctx;
       try {
         opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: 'ok' });

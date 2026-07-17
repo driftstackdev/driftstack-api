@@ -1,14 +1,17 @@
 import { createHash } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { describe, expect, it } from 'vitest';
-import type { ApiKeyScope } from '@driftstack/api-types';
+import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 import { registerOAuthRoutes } from '../../src/routes/oauth.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 import { MemoryRateLimitStore } from '../../src/lib/memory-rate-limit-store.js';
 import { InMemoryOAuthStore, OAuthService } from '../../src/services/oauth.js';
 import type { AccountContext } from '../../src/services/auth.js';
 
-function accountContext(kind: 'api-key' | 'web-session'): AccountContext {
+function accountContext(
+  kind: 'api-key' | 'web-session',
+  tier: AccountTier = 'api_builder',
+): AccountContext {
   const now = new Date('2026-07-13T22:00:00.000Z');
   const scopes: ApiKeyScope[] = ['read', 'write', 'account_owner'];
   return {
@@ -16,7 +19,7 @@ function accountContext(kind: 'api-key' | 'web-session'): AccountContext {
       id: '00000000-0000-4000-8000-000000000001',
       email: 'customer@example.test',
       name: null,
-      tier: 'api_builder',
+      tier,
       status: 'active',
       timezone: null,
       avatarR2Key: null,
@@ -54,6 +57,7 @@ async function buildHarness(service: OAuthService): Promise<{
   app.decorate('requireAuth', (request) => {
     request.account = accountContext(
       request.headers['x-test-auth-kind'] === 'web-session' ? 'web-session' : 'api-key',
+      request.headers['x-test-tier'] === 'free' ? 'free' : 'api_builder',
     );
     return Promise.resolve();
   });
@@ -102,6 +106,15 @@ describe('OAuth dashboard consent boundary', () => {
       expect(malformedApiKeyAttempt.json<{ detail: string }>().detail).toBe(
         'OAuth authorization requires an interactive dashboard session.',
       );
+
+      const freeAttempt = await app.inject({
+        method: 'POST',
+        url: '/v1/oauth/authorize/complete',
+        headers: { 'x-test-auth-kind': 'web-session', 'x-test-tier': 'free' },
+        payload: { authorization_id: authorization.authorization_id },
+      });
+      expect(freeAttempt.statusCode).toBe(403);
+      expect(freeAttempt.json<{ detail: string }>().detail).toContain('apiAccess');
 
       const approval = await app.inject({
         method: 'POST',

@@ -67,6 +67,7 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     expect(body).toMatch(
       /import \{\s*BadRequestError,\s*ForbiddenError,\s*NotFoundError,\s*UnauthorizedError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
+    expect(body).toMatch(/import \{ requireTierFeature \} from '\.\.\/lib\/errors-helpers\.js';/);
   });
 
   it('RegisterClientBody: label 1..120 + redirect_uris array of URL min 1 max 10 + account_id uuid nullable optional', () => {
@@ -151,7 +152,7 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
       /app\.post\(\s*\n?\s*'\/v1\/oauth\/authorize\/complete',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
-      /if \(ctx\.webSession === null\) \{\s*\n?\s*throw new ForbiddenError\('OAuth authorization requires an interactive dashboard session\.'\);\s*\n?\s*\}\s*\n?\s*const body = parseOrThrow\(ApproveAuthorizationBody, req\.body\);/,
+      /if \(ctx\.webSession === null\) \{\s*\n?\s*throw new ForbiddenError\('OAuth authorization requires an interactive dashboard session\.'\);\s*\n?\s*\}[\s\S]*?requireTierFeature\(ctx\.account\.tier, 'apiAccess'\);\s*\n?\s*const body = parseOrThrow\(ApproveAuthorizationBody, req\.body\);/,
     );
     // SECURITY (cross-account-takeover guard): the approving account is derived from the
     // authenticated caller, NEVER the request body; the granted scope is the approver's own.

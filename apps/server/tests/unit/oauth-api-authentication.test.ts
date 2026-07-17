@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
+import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
+import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { ForbiddenError, InvalidKeyError } from '../../src/lib/errors.js';
+import authPlugin from '../../src/middleware/auth.js';
+import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 import { authenticate, type AccountRow } from '../../src/services/auth.js';
 import { InMemoryOAuthStore, OAuthService } from '../../src/services/oauth.js';
 import { InMemoryAuthRepo } from '../integration/_helpers/in-memory-auth-repo.js';
@@ -137,5 +141,37 @@ describe('OAuth access tokens in central API authentication', () => {
         store,
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('central API middleware rejects a Free OAuth bearer after valid token authentication', async () => {
+    const repo = new InMemoryAuthRepo();
+    repo.upsertAccount({ ...account(), tier: 'free' });
+    const store = new InMemoryOAuthStore();
+    const issued = await issueToken(store);
+    const app = Fastify({ logger: false });
+    registerErrorHandler(app);
+    await app.register(authPlugin, {
+      authRepo: repo,
+      authCache: null,
+      authCoalescer: null,
+      oauthStore: store,
+    });
+    app.get('/private', { preHandler: [app.requireAuth] }, () => ({ ok: true }));
+    await app.ready();
+
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/private',
+        headers: { authorization: `Bearer ${issued.accessToken}` },
+      });
+      expect(res.statusCode).toBe(403);
+      const body = res.json<{ type: string; detail: string }>();
+      expect(body.type).toBe(PROBLEM_TYPES.Forbidden);
+      expect(body.detail).toContain('apiAccess');
+      expect(body.detail).toContain('free');
+    } finally {
+      await app.close();
+    }
   });
 });

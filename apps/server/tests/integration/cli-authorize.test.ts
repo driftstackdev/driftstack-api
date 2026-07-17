@@ -195,7 +195,9 @@ describe('V-266 — full happy path: initiate → bind → exchange', () => {
     expect(exchange.statusCode).toBe(200);
     const body = exchange.json<ExchangeBoundResponse>();
     expect(body.status).toBe('bound');
-    expect(body.api_key).toMatch(/^ds_(live|test)_/);
+    // Newly verified accounts are Free. The customer API remains disabled,
+    // while this provenance-bound restricted desktop credential stays live.
+    expect(body.api_key).toMatch(/^ds_test_/);
     expect(body.account_id).toBe(accountId);
 
     // 4. The issued key actually authenticates against the API
@@ -205,6 +207,7 @@ describe('V-266 — full happy path: initiate → bind → exchange', () => {
       headers: { authorization: `Bearer ${body.api_key}` },
     });
     expect(me.statusCode).toBe(200);
+    expect(me.json<{ tier: string }>().tier).toBe('free');
   });
 });
 

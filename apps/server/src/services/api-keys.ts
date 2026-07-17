@@ -25,6 +25,7 @@ import {
   NotFoundError,
   hasScope,
   requireScope as throwIfMissingScope,
+  requireTierFeature,
 } from '../lib/errors-helpers.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 
@@ -277,6 +278,14 @@ export class ApiKeysService {
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const tier = opts.effectiveTier ?? ctx.account.tier;
 
+    // Free stays usable through the browser-authorized desktop flow, which
+    // mints a provenance-bound restricted device credential. Ordinary
+    // customer API keys require the effective account/workspace tier to carry
+    // API access. Gate before legal/repository/audit side effects.
+    if (input.provenance !== 'cli_device') {
+      requireTierFeature(tier, 'apiAccess');
+    }
+
     // Block issuance until the account has accepted all currently-required
     // legal documents. Production wiring supplies the gate; tests that
     // don't exercise the legal track pass null (skips the check). Per
@@ -394,6 +403,11 @@ export class ApiKeysService {
     // account. Route layer enforces 'admin' team role.
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const tier = opts.effectiveTier ?? ctx.account.tier;
+
+    // Rotation always produces an ordinary customer API key. A legacy key on
+    // a downgraded Free account remains revocable from the dashboard but may
+    // not be refreshed into new programmatic authority.
+    requireTierFeature(tier, 'apiAccess');
 
     const env = tier === 'free' ? 'test' : 'live';
     const gracePeriodMs = opts.gracePeriodMs ?? 24 * 60 * 60 * 1000;
