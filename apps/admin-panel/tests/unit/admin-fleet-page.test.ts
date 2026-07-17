@@ -78,6 +78,22 @@ function json(obj: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json' },
   });
 }
+const NODE_ONE_ID = '11111111-1111-4111-8111-111111111111';
+const NODE_TWO_ID = '22222222-2222-4222-8222-222222222222';
+function fleetNode(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: NODE_ONE_ID,
+    display_name: 'mac-001',
+    region: 'us',
+    hardware_class: 'mac-mini-m2',
+    registered_at: '2026-06-11T10:00:00Z',
+    last_seen_at: '2026-06-11T12:00:00Z',
+    has_livekit: true,
+    connected: true,
+    last_heartbeat: null,
+    ...overrides,
+  };
+}
 async function flush(times = 6): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
@@ -95,26 +111,14 @@ describe('admin fleet page — operator visibility', () => {
       route: () =>
         json({
           data: [
-            {
-              id: 'node-1',
-              display_name: 'mac-001',
-              region: 'eu',
-              hardware_class: 'mac-mini-m2',
-              registered_at: '2026-06-11T10:00:00Z',
-              last_seen_at: '2026-06-11T12:00:00Z',
-              has_livekit: true,
-              connected: true,
-            },
-            {
-              id: 'node-2',
+            fleetNode({ region: 'eu' }),
+            fleetNode({
+              id: NODE_TWO_ID,
               display_name: 'mac-002',
-              region: 'us',
-              hardware_class: 'mac-mini-m2',
-              registered_at: '2026-06-11T09:00:00Z',
               last_seen_at: null,
               has_livekit: false,
               connected: false,
-            },
+            }),
           ],
         }),
     });
@@ -151,6 +155,34 @@ describe('admin fleet page — operator visibility', () => {
     const text = window.document.body.textContent ?? '';
     expect(text).toContain('Could not load fleet nodes');
     // No node rows leaked in.
+    expect(text).not.toContain('mac-001');
+  });
+
+  it('rejects a malformed 200 page and nested heartbeat instead of publishing an empty or healthy fleet', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: () =>
+        json({
+          data: [
+            fleetNode({
+              last_heartbeat: {
+                beatAt: '2026-06-11T12:00:00Z',
+                cpuPercent: 'hot',
+                memoryPercent: 20,
+                activeSessionCount: 1,
+              },
+            }),
+          ],
+        }),
+    });
+    win = window;
+    await flush();
+
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('Could not load fleet nodes');
+    expect(text).toContain('network error');
+    expect(text).toContain('Live fleet state unavailable');
+    expect(text).not.toContain('No fleet nodes registered yet');
+    expect(text).not.toContain('Live · updated');
     expect(text).not.toContain('mac-001');
   });
 
@@ -245,15 +277,18 @@ describe('admin fleet page — operator visibility', () => {
         getCount += 1;
         return json({
           data: [
-            {
-              id: 'node-1',
-              display_name: 'mac-001',
-              region: 'us',
-              last_seen_at: '2026-06-11T12:00:00Z',
-              has_livekit: true,
-              connected: true,
-              last_heartbeat: getCount > 1 ? { drainState: 'draining' } : null,
-            },
+            fleetNode({
+              last_heartbeat:
+                getCount > 1
+                  ? {
+                      beatAt: '2026-06-11T12:00:00Z',
+                      cpuPercent: 10,
+                      memoryPercent: 20,
+                      activeSessionCount: 1,
+                      drainState: 'draining',
+                    }
+                  : null,
+            }),
           ],
         });
       },
@@ -281,6 +316,77 @@ describe('admin fleet page — operator visibility', () => {
     expect(text).toContain('Outcome unknown — verify, then reload');
     expect(text).toContain('Controls for this node are locked for this page');
     expect(text).toContain('do not send the command again blindly');
+  });
+
+  it('locks a node after a non-timeout transport failure and rejects a same-tick duplicate', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'POST') return Promise.reject(new TypeError('socket closed'));
+        return json({ data: [fleetNode()] });
+      },
+    });
+    win = window;
+    // @ts-expect-error — app modal helper is attached by AdminLayout at runtime
+    window.driftstackConfirm = () => Promise.resolve(true);
+    await flush();
+
+    const restart = window.document.querySelector<HTMLButtonElement>(
+      'button[data-control="restart"]',
+    );
+    restart?.click();
+    restart?.click();
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(window.document.querySelectorAll('button[data-control]')).toHaveLength(0);
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('connection failed before a definitive response arrived');
+    expect(text).toContain('Outcome unknown — verify, then reload');
+  });
+
+  it('keeps the exact-202 acceptance visible when its follow-up fleet refresh fails', async () => {
+    let getCount = 0;
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: (call) => {
+        if (call.init?.method === 'POST') return json({ accepted: true }, 202);
+        getCount += 1;
+        return getCount === 1 ? json({ data: [fleetNode()] }) : json({ detail: 'down' }, 500);
+      },
+    });
+    win = window;
+    // @ts-expect-error — app modal helper is attached by AdminLayout at runtime
+    window.driftstackConfirm = () => Promise.resolve(true);
+    await flush();
+
+    window.document.querySelector<HTMLButtonElement>('button[data-control="cordon"]')?.click();
+    await flush(12);
+
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('Cordon sent to ' + NODE_ONE_ID);
+    expect(text).toContain('Fleet state could not be refreshed');
+    expect(text).not.toContain('Cordon outcome is unknown');
+  });
+
+  it('locks a node when the command returns an unexpected successful status', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: (call) =>
+        call.init?.method === 'POST'
+          ? json({ accepted: true }, 200)
+          : json({ data: [fleetNode()] }),
+    });
+    win = window;
+    // @ts-expect-error — app modal helper is attached by AdminLayout at runtime
+    window.driftstackConfirm = () => Promise.resolve(true);
+    await flush();
+
+    window.document.querySelector<HTMLButtonElement>('button[data-control="drain"]')?.click();
+    await flush(12);
+
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(window.document.body.textContent).toContain(
+      'server returned an unexpected successful response',
+    );
+    expect(window.document.body.textContent).toContain('Outcome unknown — verify, then reload');
   });
 
   it('403 → access-denied banner (customer account, not staff admin)', async () => {

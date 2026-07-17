@@ -24,7 +24,8 @@ interface MockFetchCall {
 interface SetUpOpts {
   token?: string;
   storageDenied?: boolean;
-  route: (call: MockFetchCall) => Response;
+  pageUrl?: string;
+  route: (call: MockFetchCall) => Response | Promise<Response>;
 }
 
 function setUpDom(
@@ -43,7 +44,7 @@ function setUpDom(
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', () => {});
   const dom = new JSDOM(htmlNoScripts, {
-    url: PAGE_URL,
+    url: opts.pageUrl ?? PAGE_URL,
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     virtualConsole,
@@ -102,11 +103,15 @@ async function flush(times = 8): Promise<void> {
 }
 
 const SUCCESS_ENTRY = {
+  id: '00000000-0000-4000-8000-000000000001',
   admin_account_id: 'acc_adm1',
+  admin_key_id: 'key_admin1',
   target_account_id: 'acc_t1',
   target_resource_id: 'prof_x9',
+  input_payload: null,
+  ip_address: null,
   timestamp: '2026-05-20T10:00:00.000Z',
-  action: 'profile.force_delete',
+  action: 'session.destroyed_by_admin',
   result: 'success',
 };
 // Failures are audited as `error: <code>` by every admin route's catch block
@@ -114,11 +119,35 @@ const SUCCESS_ENTRY = {
 // client filter must therefore PREFIX-match — using a realistic value here is
 // what exercises the bug (an exact === 'error' filter would never match this).
 const ERROR_ENTRY = {
+  id: '00000000-0000-4000-8000-000000000002',
   admin_account_id: 'acc_adm2',
+  admin_key_id: 'key_admin2',
+  target_account_id: null,
+  target_resource_id: null,
+  input_payload: null,
+  ip_address: null,
   timestamp: '2026-05-21T08:30:00.000Z',
-  action: 'account.suspend',
+  action: 'account.suspended',
   result: 'error: forbidden',
 };
+
+const OLDER_ERROR_ENTRY = {
+  ...ERROR_ENTRY,
+  id: '00000000-0000-4000-8000-000000000003',
+  timestamp: '2026-05-19T08:30:00.000Z',
+  action: 'account.unsuspended',
+};
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 let win: JSDOM['window'] | undefined;
 afterEach(() => {
@@ -146,9 +175,9 @@ describe('admin-panel Audit Log (audit-log.astro) behaviour', () => {
     const refresh = window.document.querySelector('[data-live-refresh]') as HTMLButtonElement;
     expect(refresh.disabled).toBe(true);
 
-    const action = window.document.querySelector('[data-field="action"]') as HTMLInputElement;
-    action.value = 'account.suspend';
-    action.dispatchEvent(new window.Event('input', { bubbles: true }));
+    const action = window.document.querySelector('[data-field="action"]') as HTMLSelectElement;
+    action.value = 'account.suspended';
+    action.dispatchEvent(new window.Event('change', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 260));
     expect(fetchCalls).toHaveLength(0);
     expect(refresh.disabled).toBe(true);
@@ -157,18 +186,34 @@ describe('admin-panel Audit Log (audit-log.astro) behaviour', () => {
   it('renders a row with actor, action, target, result badge, and UTC timestamp', async () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
-      route: () => json({ data: [SUCCESS_ENTRY] }),
+      route: () => json({ data: [SUCCESS_ENTRY], next_cursor: null }),
     });
     win = window;
     await flush();
     const list = text(window, '[data-list="audit"]');
     expect(list).toContain('acc_adm1');
-    expect(list).toContain('profile.force_delete');
+    expect(list).toContain('session.destroyed_by_admin');
     expect(list).toContain('success');
     expect(list).toContain('acc_t1');
     expect(list).toContain('prof_x9');
     expect(list).toContain('2026-05-20 10:00:00 UTC');
     expect(fetchCalls[0]?.init?.signal).toBeTruthy();
+  });
+
+  it('offers exact schema-backed admin actions instead of a free-form substring field', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: () => json({ data: [], next_cursor: null }),
+    });
+    win = window;
+    await flush();
+    const action = window.document.querySelector('[data-field="action"]');
+    expect(action).toBeInstanceOf(window.HTMLSelectElement);
+    expect(window.document.querySelector('input[data-field="action"]')).toBeNull();
+    const values = [...(action as HTMLSelectElement).options].map((option) => option.value);
+    expect(values).toContain('account.tier_changed');
+    expect(values).toContain('session.destroyed_by_admin');
+    expect(values).not.toContain('account.suspend');
   });
 
   it('bounds and aborts superseded reads, defers fresh-SSO start, and pins timeout recovery', () => {
@@ -184,13 +229,81 @@ describe('admin-panel Audit Log (audit-log.astro) behaviour', () => {
   it('empty result: shows the no-entries message', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
-      route: () => json({ data: [] }),
+      route: () => json({ data: [], next_cursor: null }),
     });
     win = window;
     await flush();
     expect(text(window, '[data-list="audit"]')).toContain(
       'No audit entries match the current filter',
     );
+  });
+
+  it('never turns a malformed success body into an authoritative empty audit window', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: () => json({ next_cursor: null }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-list="audit"]')).toContain(
+      'Could not load live audit entries — nothing is shown as authoritative',
+    );
+    expect(text(window, '[data-list="audit"]')).not.toContain(
+      'No audit entries match the current filter',
+    );
+    expect(text(window, '[data-banner]')).toContain("Couldn't load audit log");
+  });
+
+  it.each([
+    ['missing required cursor', { data: [SUCCESS_ENTRY] }],
+    ['empty cursor', { data: [SUCCESS_ENTRY], next_cursor: '' }],
+    [
+      'malformed entry',
+      { data: [{ ...SUCCESS_ENTRY, id: '', timestamp: 'not-a-timestamp' }], next_cursor: null },
+    ],
+  ])('rejects a %s before committing an authoritative page', async (_label, body) => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: () => json(body),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-list="audit"]')).toContain(
+      'Could not load live audit entries — nothing is shown as authoritative',
+    );
+    expect(text(window, '[data-field="window-summary"]')).toBe('Loaded window unavailable.');
+  });
+
+  it('preserves the prior window and exact retry cursor after a malformed newest refresh', async () => {
+    let newestAttempts = 0;
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: ({ url }) => {
+        if (new URL(url).searchParams.get('cursor') === 'cursor-1') {
+          return json({ data: [OLDER_ERROR_ENTRY], next_cursor: null });
+        }
+        newestAttempts += 1;
+        if (newestAttempts === 1) {
+          return json({ data: [SUCCESS_ENTRY], next_cursor: 'cursor-1' });
+        }
+        return json({ data: [ERROR_ENTRY] });
+      },
+    });
+    win = window;
+    await flush();
+
+    (window.document.querySelector('[data-live-refresh]') as HTMLButtonElement).click();
+    await flush();
+    expect(text(window, '[data-list="audit"]')).toContain('session.destroyed_by_admin');
+    expect(text(window, '[data-list="audit"]')).not.toContain('account.suspended');
+    expect(text(window, '[data-banner]')).toContain(
+      'Existing rows and pagination state are unchanged',
+    );
+
+    (window.document.querySelector('[data-action="load-more"]') as HTMLButtonElement).click();
+    await flush();
+    expect(new URL(fetchCalls[2]!.url).searchParams.get('cursor')).toBe('cursor-1');
+    expect(text(window, '[data-list="audit"]')).toContain('account.unsuspended');
   });
 
   it('403: surfaces the admin-scope-required message', async () => {
@@ -216,24 +329,257 @@ describe('admin-panel Audit Log (audit-log.astro) behaviour', () => {
   });
 
   it('client-side result filter: selecting "error" hides the success rows', async () => {
-    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
-      route: () => json({ data: [SUCCESS_ENTRY, ERROR_ENTRY] }),
+      route: () => json({ data: [SUCCESS_ENTRY, ERROR_ENTRY], next_cursor: null }),
     });
     win = window;
     await flush();
     // Both rows present initially.
-    expect(text(window, '[data-list="audit"]')).toContain('profile.force_delete');
-    expect(text(window, '[data-list="audit"]')).toContain('account.suspend');
+    expect(text(window, '[data-list="audit"]')).toContain('session.destroyed_by_admin');
+    expect(text(window, '[data-list="audit"]')).toContain('account.suspended');
     // Filter to errors only (the result filter is applied client-side after fetch).
     const resultEl = window.document.querySelector('[data-field="result"]') as HTMLSelectElement;
     resultEl.value = 'error';
     resultEl.dispatchEvent(new window.Event('change', { bubbles: true }));
-    // change handler debounces 200ms before reloading.
-    await new Promise((r) => setTimeout(r, 260));
     await flush();
     const list = text(window, '[data-list="audit"]');
-    expect(list).toContain('account.suspend'); // the error row stays
-    expect(list).not.toContain('profile.force_delete'); // success row filtered out
+    expect(list).toContain('account.suspended'); // the error row stays
+    expect(list).not.toContain('session.destroyed_by_admin'); // success row filtered out
+    expect(fetchCalls).toHaveLength(1); // result is local over the loaded window
+  });
+
+  it('loads older pages, dedupes by id, and filters across the complete loaded window', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: ({ url }) => {
+        const cursor = new URL(url).searchParams.get('cursor');
+        if (cursor === 'cursor-1') {
+          return json({ data: [SUCCESS_ENTRY, OLDER_ERROR_ENTRY], next_cursor: null });
+        }
+        return json({ data: [SUCCESS_ENTRY], next_cursor: 'cursor-1' });
+      },
+    });
+    win = window;
+    await flush();
+
+    const resultEl = window.document.querySelector('[data-field="result"]') as HTMLSelectElement;
+    resultEl.value = 'error';
+    resultEl.dispatchEvent(new window.Event('change', { bubbles: true }));
+    expect(text(window, '[data-list="audit"]')).toContain(
+      'Older entries are available; load more to continue searching.',
+    );
+
+    const loadMore = window.document.querySelector(
+      '[data-action="load-more"]',
+    ) as HTMLButtonElement;
+    expect(loadMore.classList.contains('hidden')).toBe(false);
+    loadMore.click();
+    await flush();
+
+    expect(fetchCalls).toHaveLength(2);
+    expect(new URL(fetchCalls[1]!.url).searchParams.get('cursor')).toBe('cursor-1');
+    const list = text(window, '[data-list="audit"]');
+    expect(list).toContain('account.unsuspended');
+    expect(list).not.toContain('session.destroyed_by_admin');
+    expect(text(window, '[data-field="window-summary"]')).toContain(
+      'Loaded window: 2 audit entries; showing 1 matching',
+    );
+    expect(text(window, '[data-field="window-summary"]')).toContain(
+      'All available entries for these server filters are loaded.',
+    );
+    expect(
+      window.document.querySelector('[data-action="back-to-newest"]')?.classList.contains('hidden'),
+    ).toBe(false);
+
+    (window.document.querySelector('[data-action="back-to-newest"]') as HTMLButtonElement).click();
+    await flush();
+    expect(fetchCalls).toHaveLength(3);
+    expect(new URL(fetchCalls[2]!.url).searchParams.has('cursor')).toBe(false);
+    expect(
+      window.document.querySelector('[data-action="back-to-newest"]')?.classList.contains('hidden'),
+    ).toBe(true);
+  });
+
+  it('preserves rows and the cursor after an append failure, then permits an exact retry', async () => {
+    let appendAttempts = 0;
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: ({ url }) => {
+        if (new URL(url).searchParams.get('cursor') !== 'cursor-1') {
+          return json({ data: [SUCCESS_ENTRY], next_cursor: 'cursor-1' });
+        }
+        appendAttempts += 1;
+        if (appendAttempts === 1) return json({ detail: 'temporary' }, 500);
+        return json({ data: [OLDER_ERROR_ENTRY], next_cursor: null });
+      },
+    });
+    win = window;
+    await flush();
+    const loadMore = window.document.querySelector(
+      '[data-action="load-more"]',
+    ) as HTMLButtonElement;
+
+    loadMore.click();
+    await flush();
+    expect(text(window, '[data-list="audit"]')).toContain('session.destroyed_by_admin');
+    expect(text(window, '[data-banner]')).toContain(
+      'Existing rows and the retry cursor are unchanged',
+    );
+    expect(loadMore.disabled).toBe(false);
+
+    loadMore.click();
+    await flush();
+    expect(text(window, '[data-list="audit"]')).toContain('account.unsuspended');
+    expect(
+      fetchCalls.filter((call) => new URL(call.url).searchParams.get('cursor') === 'cursor-1'),
+    ).toHaveLength(2);
+  });
+
+  it('validates a malformed append before state commit and retries the same cursor', async () => {
+    let appendAttempts = 0;
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: ({ url }) => {
+        if (new URL(url).searchParams.get('cursor') !== 'cursor-1') {
+          return json({ data: [SUCCESS_ENTRY], next_cursor: 'cursor-1' });
+        }
+        appendAttempts += 1;
+        if (appendAttempts === 1) {
+          return json({ data: [{ ...OLDER_ERROR_ENTRY, id: null }], next_cursor: 'cursor-2' });
+        }
+        return json({ data: [OLDER_ERROR_ENTRY], next_cursor: null });
+      },
+    });
+    win = window;
+    await flush();
+    const loadMore = window.document.querySelector(
+      '[data-action="load-more"]',
+    ) as HTMLButtonElement;
+
+    loadMore.click();
+    await flush();
+    expect(text(window, '[data-list="audit"]')).toContain('session.destroyed_by_admin');
+    expect(text(window, '[data-list="audit"]')).not.toContain('account.unsuspended');
+    expect(text(window, '[data-banner]')).toContain(
+      'Existing rows and the retry cursor are unchanged',
+    );
+
+    loadMore.click();
+    await flush();
+    expect(text(window, '[data-list="audit"]')).toContain('account.unsuspended');
+    expect(
+      fetchCalls.filter((call) => new URL(call.url).searchParams.get('cursor') === 'cursor-1'),
+    ).toHaveLength(2);
+    expect(fetchCalls.some((call) => call.url.includes('cursor-2'))).toBe(false);
+  });
+
+  it('claims a changed server-filter scope before debounce and never mixes its old cursor', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: ({ url }) =>
+        new URL(url).searchParams.get('action') === 'account.suspended'
+          ? json({ data: [ERROR_ENTRY], next_cursor: null })
+          : json({ data: [SUCCESS_ENTRY], next_cursor: 'cursor-1' }),
+    });
+    win = window;
+    await flush();
+
+    const loadMore = window.document.querySelector(
+      '[data-action="load-more"]',
+    ) as HTMLButtonElement;
+    const action = window.document.querySelector('[data-field="action"]') as HTMLSelectElement;
+    action.value = 'account.suspended';
+    action.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+    expect(loadMore.classList.contains('hidden')).toBe(true);
+    const result = window.document.querySelector('[data-field="result"]') as HTMLSelectElement;
+    result.value = 'error';
+    result.dispatchEvent(new window.Event('change', { bubbles: true }));
+    expect(text(window, '[data-list="audit"]')).toContain('Loading live audit entries');
+    loadMore.click();
+    await flush(2);
+    expect(fetchCalls).toHaveLength(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
+    const filteredRequest = new URL(fetchCalls[1]!.url);
+    expect(filteredRequest.searchParams.get('action')).toBe('account.suspended');
+    expect(filteredRequest.searchParams.has('cursor')).toBe(false);
+    expect(text(window, '[data-list="audit"]')).toContain('account.suspended');
+    expect(text(window, '[data-list="audit"]')).not.toContain('session.destroyed_by_admin');
+  });
+
+  it('refuses a repeated server cursor after keeping unique returned rows', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: ({ url }) =>
+        new URL(url).searchParams.get('cursor') === 'cursor-1'
+          ? json({ data: [OLDER_ERROR_ENTRY], next_cursor: 'cursor-1' })
+          : json({ data: [SUCCESS_ENTRY], next_cursor: 'cursor-1' }),
+    });
+    win = window;
+    await flush();
+    const loadMore = window.document.querySelector(
+      '[data-action="load-more"]',
+    ) as HTMLButtonElement;
+    loadMore.click();
+    await flush();
+    expect(text(window, '[data-list="audit"]')).toContain('account.unsuspended');
+    expect(text(window, '[data-banner]')).toContain('repeated a pagination cursor');
+    expect(loadMore.disabled).toBe(true);
+  });
+
+  it('makes a late append inert when a server-side filter resets the list epoch', async () => {
+    const heldAppend = deferred<Response>();
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: ({ url }) => {
+        const parsed = new URL(url);
+        if (parsed.searchParams.get('cursor') === 'cursor-1') return heldAppend.promise;
+        if (parsed.searchParams.get('action') === 'account.suspended') {
+          return json({ data: [ERROR_ENTRY], next_cursor: null });
+        }
+        return json({ data: [SUCCESS_ENTRY], next_cursor: 'cursor-1' });
+      },
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-action="load-more"]') as HTMLButtonElement).click();
+    await flush(2);
+
+    const action = window.document.querySelector('[data-field="action"]') as HTMLSelectElement;
+    action.value = 'account.suspended';
+    action.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    await flush();
+    expect(fetchCalls).toHaveLength(3);
+    expect(text(window, '[data-list="audit"]')).toContain('account.suspended');
+
+    heldAppend.resolve(json({ data: [OLDER_ERROR_ENTRY], next_cursor: null }));
+    await flush();
+    const list = text(window, '[data-list="audit"]');
+    expect(list).toContain('account.suspended');
+    expect(list).not.toContain('account.unsuspended');
+    expect(list).not.toContain('session.destroyed_by_admin');
+  });
+
+  it('clearing a target deep-link resets to a cursor-free newest request', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      pageUrl: PAGE_URL + '?target_id=acc_target',
+      route: () => json({ data: [SUCCESS_ENTRY], next_cursor: null }),
+    });
+    win = window;
+    await flush();
+    expect(new URL(fetchCalls[0]!.url).searchParams.get('target_id')).toBe('acc_target');
+
+    (window.document.querySelector('[data-action="clear-target"]') as HTMLButtonElement).click();
+    await flush();
+    expect(fetchCalls).toHaveLength(2);
+    const resetUrl = new URL(fetchCalls[1]!.url);
+    expect(resetUrl.searchParams.has('target_id')).toBe(false);
+    expect(resetUrl.searchParams.has('cursor')).toBe(false);
   });
 });

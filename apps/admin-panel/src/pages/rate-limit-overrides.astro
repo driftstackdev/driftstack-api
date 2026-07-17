@@ -29,8 +29,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
           Per-account bucket overrides that supersede the tier defaults. Used
           for time-boxed capacity bumps during migrations + production
-          incidents. All overrides are auditable + auto-expire if a TTL is
-          set. To set a new override, open the per-account page (Accounts →
+          incidents. All overrides are auditable and expire within 30 days.
+          To set a new override, open the per-account page (Accounts →
           select account).
         </p>
       </div>
@@ -84,7 +84,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
         <h2 class="text-lg font-semibold tracking-tight text-tk-ink">No overrides</h2>
         <p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">
-          No active overrides match the current filter. New overrides default
+          No overrides match the current filter. New overrides default
           to a 14-day TTL via the per-account page.
         </p>
       </div>
@@ -96,9 +96,41 @@ const apiBaseUrl = resolveApiBaseUrl();
       </li>
     </ul>
 
+    <div class="mt-4 flex flex-wrap items-center gap-4">
+      <p class="text-xs text-tk-ink-3" data-field="summary"></p>
+      <button
+        type="button"
+        data-action="load-more"
+        disabled
+        aria-disabled="true"
+        aria-busy="false"
+        class="hidden text-xs font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+      >
+        Load more
+      </button>
+      <button
+        type="button"
+        data-action="back-to-newest"
+        disabled
+        aria-disabled="true"
+        class="hidden text-xs font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+      >
+        Back to newest / Refresh
+      </button>
+      <button
+        type="button"
+        data-action="recheck-clear"
+        disabled
+        aria-disabled="true"
+        class="hidden text-xs font-medium text-amber-800 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+      >
+        Recheck uncertain clear
+      </button>
+    </div>
+
     <p class="mt-8 text-xs text-tk-ink-3">
-      New overrides default to 14-day TTL. Permanent overrides allowed but
-      flagged in the weekly audit-log review. Bucket keys: <code class="font-mono">global</code>
+      Overrides require an expiry between 1 second and 30 days; the per-account
+      page defaults to 14 days. Bucket keys: <code class="font-mono">global</code>
       (whole API), <code class="font-mono">sessions:create</code> (session creation
       only), <code class="font-mono">agent_sessions:message</code> (agent-session
       messages only).
@@ -112,15 +144,59 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const list = root.querySelector('[data-list="overrides"]');
       const emptyRegion = root.querySelector('[data-region="empty"]');
+      const summary = root.querySelector('[data-field="summary"]');
       const accountIdEl = root.querySelector('[data-field="account-id"]');
       const includeExpiredEl = root.querySelector('[data-field="include-expired"]');
       const liveDot = root.querySelector('[data-live-dot]');
       const liveStatus = root.querySelector('[data-live-status]');
       const liveAge = root.querySelector('[data-live-age]');
       const refreshBtn = root.querySelector('[data-live-refresh]');
+      const loadMoreBtn = root.querySelector('[data-action="load-more"]');
+      const backToNewestBtn = root.querySelector('[data-action="back-to-newest"]');
+      const recheckClearBtn = root.querySelector('[data-action="recheck-clear"]');
       let token = null;
       const OVERRIDE_TIMEOUT_MS = 15_000;
+      const MAX_RECONCILE_PAGES = 100;
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+      const ACCOUNT_ID_RE = new RegExp('^acc_' + UUID_RE.source.slice(1, -1) + '$');
+      const OVERRIDE_ID_RE = new RegExp('^rlo_' + UUID_RE.source.slice(1, -1) + '$');
+      const KEY_ID_RE = new RegExp('^key_' + UUID_RE.source.slice(1, -1) + '$');
+      const BUCKET_KEYS = new Set(['global', 'sessions:create', 'agent_sessions:message']);
+      const OVERRIDE_FIELDS = [
+        'id',
+        'account_id',
+        'bucket_key',
+        'capacity',
+        'refill_per_second',
+        'reason',
+        'expires_at',
+        'set_by_key_id',
+        'created_at',
+        'updated_at',
+      ];
+      const BUCKET_LABEL = {
+        global: 'Global',
+        'sessions:create': 'Sessions: create',
+        'agent_sessions:message': 'Agent sessions: message',
+      };
+
       let loadController = null;
+      let loadedOverrides = [];
+      let nextCursor = null;
+      let refusedCursor = null;
+      const walkedCursors = new Set();
+      let listEpoch = 0;
+      let inFlight = 0;
+      let appendGeneration = 0;
+      let appendInFlight = false;
+      let firstPageBusy = false;
+      let expandedView = false;
+      let hasLoadedWindow = false;
+      let filterTransitionPending = false;
+      let activeMutation = null;
+      let debounce = 0;
+      let liveOwner = 0;
+      let lastFetch = Date.now();
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
         return window.driftstackFetchWithDeadline(url, init, OVERRIDE_TIMEOUT_MS, controller);
@@ -130,31 +206,23 @@ const apiBaseUrl = resolveApiBaseUrl();
         return window.driftstackRequestErrorMessage(err, fallback);
       }
 
-      const BUCKET_LABEL = {
-        global: 'Global',
-        'sessions:create': 'Sessions: create',
-        'agent_sessions:message': 'Agent sessions: message',
-      };
+      function responseContractError(message) {
+        const error = new Error(message);
+        error.staffSafe = true;
+        return error;
+      }
 
       function showBanner(text) {
         if (!banner) return;
         banner.textContent = text;
         banner.classList.remove('hidden');
       }
+
       function hideBanner() {
         if (!banner) return;
         banner.classList.add('hidden');
       }
-      function renderUnavailable(message) {
-        if (list) {
-          list.classList.remove('hidden');
-          list.innerHTML =
-            '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">' +
-            escapeHtml(message) +
-            '</li>';
-        }
-        if (emptyRegion) emptyRegion.classList.add('hidden');
-      }
+
       function escapeHtml(s) {
         return String(s).replace(
           /[&<>"']/g,
@@ -168,9 +236,90 @@ const apiBaseUrl = resolveApiBaseUrl();
             })[c],
         );
       }
+
+      function hasOwn(value, field) {
+        return Object.prototype.hasOwnProperty.call(value, field);
+      }
+
+      function isRecord(value) {
+        return value !== null && typeof value === 'object' && !Array.isArray(value);
+      }
+
+      function isIsoUtc(value) {
+        if (typeof value !== 'string') return false;
+        const parsed = Date.parse(value);
+        return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+      }
+
+      function isOverrideRow(value) {
+        if (
+          !isRecord(value) ||
+          Object.keys(value).length !== OVERRIDE_FIELDS.length ||
+          !OVERRIDE_FIELDS.every((field) => hasOwn(value, field))
+        ) {
+          return false;
+        }
+        return (
+          typeof value.id === 'string' &&
+          OVERRIDE_ID_RE.test(value.id) &&
+          typeof value.account_id === 'string' &&
+          ACCOUNT_ID_RE.test(value.account_id) &&
+          typeof value.bucket_key === 'string' &&
+          BUCKET_KEYS.has(value.bucket_key) &&
+          Number.isInteger(value.capacity) &&
+          value.capacity >= 1 &&
+          value.capacity <= 1_000_000 &&
+          typeof value.refill_per_second === 'number' &&
+          Number.isFinite(value.refill_per_second) &&
+          value.refill_per_second >= 0.01 &&
+          value.refill_per_second <= 100_000 &&
+          (value.reason === null ||
+            (typeof value.reason === 'string' && value.reason.length <= 500)) &&
+          isIsoUtc(value.expires_at) &&
+          typeof value.set_by_key_id === 'string' &&
+          KEY_ID_RE.test(value.set_by_key_id) &&
+          isIsoUtc(value.created_at) &&
+          isIsoUtc(value.updated_at)
+        );
+      }
+
+      // The page and every row are validated before any list or cursor state
+      // changes. Empty pages cannot advertise another cursor: that shape
+      // cannot make bounded progress and is therefore not authoritative.
+      function parseOverridePage(body, maxRows) {
+        const rowIds =
+          isRecord(body) && Array.isArray(body.data)
+            ? body.data.map((row) => (isRecord(row) ? row.id : null))
+            : [];
+        if (
+          !isRecord(body) ||
+          Object.keys(body).length !== 2 ||
+          !hasOwn(body, 'data') ||
+          !Array.isArray(body.data) ||
+          body.data.length > maxRows ||
+          !body.data.every(isOverrideRow) ||
+          new Set(rowIds).size !== rowIds.length ||
+          !hasOwn(body, 'next_cursor') ||
+          !(
+            body.next_cursor === null ||
+            (typeof body.next_cursor === 'string' && UUID_RE.test(body.next_cursor))
+          ) ||
+          (body.data.length === 0 && body.next_cursor !== null)
+        ) {
+          throw responseContractError('Invalid rate-limit override response');
+        }
+        return { rows: body.data, nextCursor: body.next_cursor };
+      }
+
       function fmtIso(iso) {
-        if (!iso) return 'permanent';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      function setDisabled(control, disabled) {
+        if (!control) return;
+        control.disabled = disabled;
+        if (disabled) control.setAttribute('aria-disabled', 'true');
+        else control.removeAttribute('aria-disabled');
       }
 
       function setLiveState(state, message) {
@@ -195,59 +344,70 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (liveAge) liveAge.classList.toggle('hidden', state !== 'ready');
       }
 
-      const clearsInFlight = new Set();
-      function clearOperationKey(accountId, bucketKey) {
-        return String(accountId) + '\u0000' + String(bucketKey);
-      }
-
-      function clearControlState(accountId, bucketKey) {
-        const pending = clearsInFlight.has(clearOperationKey(accountId, bucketKey));
+      function captureFilters() {
         return {
-          pending,
-          attrs: pending
-            ? ' disabled aria-disabled="true" aria-busy="true" title="Wait for the current override clear to finish."'
-            : '',
-          label: pending ? 'Clear pending…' : 'Clear now',
+          accountId: accountIdEl ? accountIdEl.value.trim() : '',
+          includeExpired: !!(includeExpiredEl && includeExpiredEl.checked),
         };
       }
 
-      function syncClearControls(accountId, bucketKey) {
-        const state = clearControlState(accountId, bucketKey);
-        root.querySelectorAll('[data-action="clear"]').forEach((control) => {
-          if (
-            control.getAttribute('data-account-id') !== String(accountId) ||
-            control.getAttribute('data-bucket-key') !== String(bucketKey)
-          ) {
-            return;
-          }
-          control.disabled = state.pending;
-          control.textContent = state.label;
-          if (state.pending) {
-            control.setAttribute('aria-disabled', 'true');
-            control.setAttribute('aria-busy', 'true');
-            control.title = 'Wait for the current override clear to finish.';
-          } else {
-            control.removeAttribute('aria-disabled');
-            control.removeAttribute('aria-busy');
-            control.removeAttribute('title');
-          }
-        });
+      function filterSignature(filters) {
+        return filters.accountId + '\u0000' + (filters.includeExpired ? '1' : '0');
+      }
+
+      function currentFilterSignature() {
+        return filterSignature(captureFilters());
+      }
+
+      function buildQuery(filters, requestedCursor, limit) {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        if (filters.accountId) params.set('account_id', filters.accountId);
+        if (filters.includeExpired) params.set('include_expired', 'true');
+        if (requestedCursor !== null) params.set('cursor', requestedCursor);
+        return params;
+      }
+
+      function mutationButtonState(row) {
+        if (!activeMutation) return { attrs: '', label: 'Clear now' };
+        const isTarget = activeMutation.rowId === row.id;
+        let label = 'Another clear pending…';
+        if (isTarget) {
+          label =
+            activeMutation.phase === 'confirming'
+              ? 'Confirming…'
+              : activeMutation.phase === 'clearing'
+                ? 'Clearing…'
+                : activeMutation.phase === 'uncertain'
+                  ? 'Outcome uncertain'
+                  : 'Rechecking…';
+        }
+        return {
+          attrs:
+            ' disabled aria-disabled="true" aria-busy="true" title="Wait for the current override clear to reach an authoritative outcome."',
+          label,
+        };
       }
 
       function rowHtml(o) {
         const bucketLabel = BUCKET_LABEL[o.bucket_key] || o.bucket_key;
-        const clearState = clearControlState(o.account_id, o.bucket_key);
+        const accountUuid = o.account_id.slice(4);
+        const clearState = mutationButtonState(o);
         const reasonFrag = o.reason
           ? '<p class="mt-3 text-sm text-tk-ink-2">' + escapeHtml(o.reason) + '</p>'
           : '';
         return (
-          '<li class="dashboard-card">' +
+          '<li class="dashboard-card" data-row-id="' +
+          escapeHtml(o.id) +
+          '">' +
           '<div class="flex items-start justify-between gap-6">' +
           '<div class="min-w-0">' +
           '<div class="flex items-center gap-3">' +
-          '<p class="font-mono text-[11px] text-tk-ink-3">' +
+          '<a class="font-mono text-[11px] text-tk-accent hover:underline" href="/accounts/' +
+          encodeURIComponent(accountUuid) +
+          '">' +
           escapeHtml(o.account_id) +
-          '</p>' +
+          '</a>' +
           '<span class="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-blue-700">' +
           escapeHtml(bucketLabel) +
           '</span></div>' +
@@ -264,7 +424,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           '</dd></div>' +
           '</dl></div>' +
           '<div class="flex shrink-0 flex-col gap-2">' +
-          '<button type="button" data-action="clear" data-account-id="' +
+          '<button type="button" data-action="clear" data-row-id="' +
+          escapeHtml(o.id) +
+          '" data-account-id="' +
           escapeHtml(o.account_id) +
           '" data-bucket-key="' +
           escapeHtml(o.bucket_key) +
@@ -277,25 +439,194 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
 
-      function buildQuery() {
-        const params = new URLSearchParams();
-        params.set('limit', '50');
-        if (accountIdEl && accountIdEl.value.trim())
-          params.set('account_id', accountIdEl.value.trim());
-        if (includeExpiredEl && includeExpiredEl.checked)
-          params.set('include_expired', 'true');
-        return params;
+      function mergeUniqueOverrides(existing, incoming) {
+        const seen = new Set();
+        const merged = [];
+        existing.concat(incoming).forEach((row) => {
+          if (seen.has(row.id)) return;
+          seen.add(row.id);
+          merged.push(row);
+        });
+        return merged;
       }
 
-      let inFlight = 0;
-      function load() {
-        if (!token) return Promise.resolve(false);
-        const myReq = ++inFlight;
-        const params = buildQuery();
+      function syncMutationControls() {
+        root.querySelectorAll('[data-action="clear"]').forEach((control) => {
+          const rowId = control.getAttribute('data-row-id');
+          const row = loadedOverrides.find((candidate) => candidate.id === rowId);
+          if (!row) return;
+          const state = mutationButtonState(row);
+          control.textContent = state.label;
+          control.disabled = !!activeMutation;
+          if (activeMutation) {
+            control.setAttribute('aria-disabled', 'true');
+            control.setAttribute('aria-busy', 'true');
+            control.title = 'Wait for the current override clear to reach an authoritative outcome.';
+          } else {
+            control.removeAttribute('aria-disabled');
+            control.removeAttribute('aria-busy');
+            control.removeAttribute('title');
+          }
+        });
+      }
+
+      function syncTransitionControls() {
+        const readBusy = loadController !== null;
+        const mutationBusy = activeMutation !== null;
+        const cursorRefused = nextCursor !== null && refusedCursor === nextCursor;
+        setDisabled(accountIdEl, mutationBusy);
+        setDisabled(includeExpiredEl, mutationBusy);
+        setDisabled(
+          refreshBtn,
+          !token || firstPageBusy || filterTransitionPending || mutationBusy,
+        );
+        if (loadMoreBtn) {
+          loadMoreBtn.classList.toggle('hidden', !nextCursor || cursorRefused);
+          setDisabled(
+            loadMoreBtn,
+            readBusy ||
+              appendInFlight ||
+              filterTransitionPending ||
+              mutationBusy ||
+              !nextCursor ||
+              cursorRefused,
+          );
+          loadMoreBtn.textContent = appendInFlight ? 'Loading…' : 'Load more';
+          loadMoreBtn.setAttribute('aria-busy', appendInFlight ? 'true' : 'false');
+        }
+        if (backToNewestBtn) {
+          backToNewestBtn.classList.toggle('hidden', !expandedView);
+          setDisabled(
+            backToNewestBtn,
+            readBusy || filterTransitionPending || mutationBusy || !expandedView,
+          );
+        }
+        if (recheckClearBtn) {
+          const canRecheck = !!activeMutation && activeMutation.phase === 'uncertain';
+          recheckClearBtn.classList.toggle('hidden', !canRecheck);
+          setDisabled(recheckClearBtn, !canRecheck);
+        }
+        syncMutationControls();
+      }
+
+      function renderOverrides(rows) {
+        if (rows.length === 0) {
+          if (list) {
+            list.classList.add('hidden');
+            list.innerHTML = '';
+          }
+          if (emptyRegion) emptyRegion.classList.remove('hidden');
+        } else {
+          if (list) {
+            list.classList.remove('hidden');
+            list.innerHTML = rows.map(rowHtml).join('');
+          }
+          if (emptyRegion) emptyRegion.classList.add('hidden');
+        }
+        if (summary) {
+          summary.textContent =
+            'Showing ' +
+            rows.length +
+            ' override' +
+            (rows.length === 1 ? '' : 's') +
+            (nextCursor
+              ? refusedCursor === nextCursor
+                ? ' — pagination stopped because the server repeated a cursor.'
+                : ' — more available.'
+              : '.');
+        }
+        syncTransitionControls();
+      }
+
+      function renderUnavailable(message) {
+        loadedOverrides = [];
+        nextCursor = null;
+        refusedCursor = null;
+        walkedCursors.clear();
+        expandedView = false;
+        hasLoadedWindow = false;
+        if (list) {
+          list.classList.remove('hidden');
+          list.innerHTML =
+            '<li class="rounded-lg border border-tk-border bg-tk-bg p-5 text-sm text-tk-ink-3">' +
+            escapeHtml(message) +
+            '</li>';
+        }
+        if (emptyRegion) emptyRegion.classList.add('hidden');
+        if (summary) summary.textContent = '';
+        syncTransitionControls();
+      }
+
+      function ownsRead(owner) {
+        return (
+          owner.requestId === inFlight &&
+          owner.epoch === listEpoch &&
+          owner.filterSignature === currentFilterSignature() &&
+          (!owner.append || owner.appendGeneration === appendGeneration)
+        );
+      }
+
+      function invalidateReadOwner() {
+        listEpoch += 1;
+        liveOwner += 1;
+        appendGeneration += 1;
+        appendInFlight = false;
+        firstPageBusy = false;
+        if (loadController) loadController.abort();
+        loadController = null;
+        root.removeAttribute('aria-busy');
+      }
+
+      function load(options) {
+        const append = !!(options && options.append);
+        if (
+          !token ||
+          activeMutation ||
+          (filterTransitionPending && !(options && options.filterTransition))
+        ) {
+          return Promise.resolve(false);
+        }
+        const requestedCursor = append ? nextCursor : null;
+        if (
+          append &&
+          (!requestedCursor ||
+            appendInFlight ||
+            refusedCursor === requestedCursor ||
+            filterTransitionPending)
+        ) {
+          return Promise.resolve(false);
+        }
+
+        const filters = captureFilters();
+        const signature = filterSignature(filters);
+        const epoch = append ? listEpoch : ++listEpoch;
+        let appendOwner = null;
+        if (append) {
+          appendOwner = ++appendGeneration;
+          appendInFlight = true;
+          // Preserve the exact retry cursor and pause polling even when the
+          // first attempt to load an older page fails.
+          expandedView = true;
+        } else {
+          appendGeneration += 1;
+          appendInFlight = false;
+          firstPageBusy = true;
+        }
+        const requestId = ++inFlight;
         if (loadController) loadController.abort();
         const controller = new AbortController();
         loadController = controller;
+        const owner = {
+          requestId,
+          epoch,
+          filterSignature: signature,
+          append,
+          appendGeneration: appendOwner,
+          requestedCursor,
+        };
         root.setAttribute('aria-busy', 'true');
+        syncTransitionControls();
+        const params = buildQuery(filters, requestedCursor, 50);
         return boundedFetch(
           apiBaseUrl + '/v1/admin/rate-limit-overrides?' + params.toString(),
           {
@@ -304,34 +635,60 @@ const apiBaseUrl = resolveApiBaseUrl();
           },
           controller,
         )
-          .then((r) => {
-            if (r.status === 403) return Promise.reject(new Error('forbidden'));
-            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          .then((response) => {
+            if (response.status === 403) return Promise.reject(new Error('forbidden'));
+            return response.ok
+              ? response.json()
+              : Promise.reject(new Error('HTTP ' + response.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return false;
-            const rows = body.data || [];
-            if (rows.length === 0) {
-              if (list) {
-                list.classList.add('hidden');
-                // Remove stale action nodes as well as hiding the list. A
-                // completed clear must not leave a re-enabled old button in DOM.
-                list.innerHTML = '';
+            if (!ownsRead(owner)) return false;
+            const page = parseOverridePage(body, 50);
+            if (append) {
+              if (page.rows.some((row) => loadedOverrides.some((loaded) => loaded.id === row.id))) {
+                throw responseContractError(
+                  'Invalid rate-limit override response: a row id was repeated across pages',
+                );
               }
-              if (emptyRegion) emptyRegion.classList.remove('hidden');
+              walkedCursors.add(requestedCursor);
+              const cycle =
+                page.nextCursor !== null && walkedCursors.has(page.nextCursor);
+              loadedOverrides = mergeUniqueOverrides(loadedOverrides, page.rows);
+              nextCursor = page.nextCursor;
+              refusedCursor = cycle ? page.nextCursor : null;
             } else {
-              if (list) {
-                list.classList.remove('hidden');
-                list.innerHTML = rows.map(rowHtml).join('');
-              }
-              if (emptyRegion) emptyRegion.classList.add('hidden');
+              walkedCursors.clear();
+              loadedOverrides = mergeUniqueOverrides([], page.rows);
+              nextCursor = page.nextCursor;
+              refusedCursor = null;
+              expandedView = false;
             }
+            hasLoadedWindow = true;
+            renderOverrides(loadedOverrides);
             hideBanner();
             return true;
           })
           .catch((err) => {
-            if (myReq !== inFlight) return false;
+            if (!ownsRead(owner)) return false;
             const msg = requestErrorMessage(err, 'network error');
+            if (append) {
+              renderOverrides(loadedOverrides);
+              showBanner(
+                "Couldn't load older overrides (" +
+                  msg +
+                  '). Existing rows and the retry cursor are unchanged.',
+              );
+              return false;
+            }
+            if (hasLoadedWindow) {
+              renderOverrides(loadedOverrides);
+              showBanner(
+                "Couldn't refresh overrides (" +
+                  msg +
+                  '). Existing rows and pagination state are unchanged.',
+              );
+              return false;
+            }
             renderUnavailable(
               'Could not load live overrides — nothing to act on. Resolve the error above and retry.',
             );
@@ -345,35 +702,192 @@ const apiBaseUrl = resolveApiBaseUrl();
             return false;
           })
           .finally(() => {
-            if (myReq === inFlight) {
+            if (append && appendOwner === appendGeneration) appendInFlight = false;
+            if (!append && ownsRead(owner)) firstPageBusy = false;
+            if (loadController === controller && ownsRead(owner)) {
               loadController = null;
               root.removeAttribute('aria-busy');
             }
+            if (ownsRead(owner)) filterTransitionPending = false;
+            syncTransitionControls();
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
             }
           });
       }
 
-      async function clear(prefixedAccountId, bucketKey, btn) {
-        if (!token) return;
-        const operationKey = clearOperationKey(prefixedAccountId, bucketKey);
-        if (clearsInFlight.has(operationKey)) return;
-        clearsInFlight.add(operationKey);
-        syncClearControls(prefixedAccountId, bucketKey);
-        if (btn) {
-          btn.disabled = true;
-          btn.setAttribute('aria-busy', 'true');
-          btn.textContent = 'Confirming…';
+      function applyReconciliationRows(mutation, rows, targetPresent) {
+        if (targetPresent) {
+          const authoritative = rows.find((row) => row.id === mutation.rowId);
+          if (authoritative) {
+            loadedOverrides = loadedOverrides.map((row) =>
+              row.id === mutation.rowId ? authoritative : row,
+            );
+          }
+        } else {
+          loadedOverrides = loadedOverrides.filter((row) => row.id !== mutation.rowId);
         }
+        rows
+          .filter(
+            (row) =>
+              row.id !== mutation.rowId &&
+              row.account_id === mutation.accountId &&
+              row.bucket_key === mutation.bucketKey,
+          )
+          .forEach((replacement) => {
+            loadedOverrides = [replacement].concat(
+              loadedOverrides.filter((row) => row.id !== replacement.id),
+            );
+          });
+        loadedOverrides = mergeUniqueOverrides([], loadedOverrides);
+        renderOverrides(loadedOverrides);
+      }
+
+      async function walkCapturedAccount(mutation) {
+        let cursor = null;
+        const seenCursors = new Set();
+        const rowsById = new Map();
+        for (let pageIndex = 0; pageIndex < MAX_RECONCILE_PAGES; pageIndex += 1) {
+          if (activeMutation !== mutation) {
+            return { kind: 'incomplete', rows: Array.from(rowsById.values()) };
+          }
+          const params = new URLSearchParams();
+          params.set('limit', '100');
+          params.set('account_id', mutation.accountId);
+          params.set('include_expired', 'true');
+          if (cursor !== null) params.set('cursor', cursor);
+          const response = await boundedFetch(
+            apiBaseUrl + '/v1/admin/rate-limit-overrides?' + params.toString(),
+            {
+              headers: { authorization: 'Bearer ' + token },
+              credentials: 'include',
+            },
+          );
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const page = parseOverridePage(await response.json(), 100);
+          if (page.rows.some((row) => row.account_id !== mutation.accountId)) {
+            throw responseContractError('Invalid account-scoped reconciliation response');
+          }
+          if (page.rows.some((row) => rowsById.has(row.id))) {
+            return { kind: 'duplicate', rows: Array.from(rowsById.values()) };
+          }
+          page.rows.forEach((row) => rowsById.set(row.id, row));
+          if (rowsById.has(mutation.rowId)) {
+            return { kind: 'present', rows: Array.from(rowsById.values()) };
+          }
+          if (page.nextCursor === null) {
+            return { kind: 'absent', rows: Array.from(rowsById.values()) };
+          }
+          if (page.nextCursor === cursor || seenCursors.has(page.nextCursor)) {
+            return { kind: 'cyclic', rows: Array.from(rowsById.values()) };
+          }
+          seenCursors.add(page.nextCursor);
+          cursor = page.nextCursor;
+        }
+        return { kind: 'incomplete', rows: Array.from(rowsById.values()) };
+      }
+
+      function setMutationPhase(mutation, phase) {
+        if (activeMutation !== mutation) return false;
+        mutation.phase = phase;
+        syncTransitionControls();
+        return true;
+      }
+
+      function releaseMutation(mutation) {
+        if (activeMutation !== mutation) return;
+        activeMutation = null;
+        syncTransitionControls();
+      }
+
+      async function reconcileUnknownClear(mutation) {
+        if (!setMutationPhase(mutation, 'reconciling')) return;
+        showBanner(
+          'Clear outcome is unknown. Checking every override for the captured account before allowing another mutation…',
+        );
         try {
-          const proceed = await window.driftstackConfirm(
+          const result = await walkCapturedAccount(mutation);
+          if (activeMutation !== mutation) return;
+          if (result.kind === 'present') {
+            applyReconciliationRows(mutation, result.rows, true);
+            releaseMutation(mutation);
+            showBanner(
+              'The exact original override row still exists after an authoritative account check. The clear did not commit; it is safe to retry.',
+            );
+            return;
+          }
+          if (result.kind === 'absent') {
+            applyReconciliationRows(mutation, result.rows, false);
+            releaseMutation(mutation);
+            showBanner(
+              'The exhaustive account check confirms the exact original override row is absent. The clear is committed. Any replacement with a different row id remains visible.',
+            );
+            return;
+          }
+          setMutationPhase(mutation, 'uncertain');
+          showBanner(
+            'Clear outcome remains unknown because the account check was cyclic, duplicated rows, or incomplete. Conflicting controls stay locked; use Recheck uncertain clear after the service recovers.',
+          );
+        } catch (err) {
+          if (activeMutation !== mutation) return;
+          setMutationPhase(mutation, 'uncertain');
+          showBanner(
+            'Clear outcome remains unknown because the account check failed (' +
+              requestErrorMessage(err, 'network error') +
+              '). Conflicting controls stay locked; use Recheck uncertain clear after the service recovers.',
+          );
+        }
+      }
+
+      async function authoritativeMutationError(response) {
+        const body = await response.json().catch(() => ({}));
+        const error = window.driftstackResponseError(response, body);
+        error.authoritativeMutationRejection = true;
+        return error;
+      }
+
+      function applyKnownRemoval(mutation) {
+        loadedOverrides = loadedOverrides.filter((row) => row.id !== mutation.rowId);
+        renderOverrides(loadedOverrides);
+      }
+
+      async function clear(rowId, prefixedAccountId, bucketKey) {
+        if (!token || activeMutation) return;
+        // Acquire before the confirmation promise so two same-tick clicks,
+        // filtering, pagination and refresh cannot create competing owners.
+        const mutation = {
+          rowId,
+          accountId: prefixedAccountId,
+          bucketKey,
+          phase: 'confirming',
+        };
+        activeMutation = mutation;
+        invalidateReadOwner();
+        syncTransitionControls();
+
+        let proceed = false;
+        try {
+          proceed = await window.driftstackConfirm(
             'Clear the ' + bucketKey + ' override for ' + prefixedAccountId + '?',
             { confirmLabel: 'Clear', destructive: true },
           );
-          if (!proceed) return;
-          if (btn) btn.textContent = 'Clearing…';
-          showBanner('Clearing override…');
+        } catch (err) {
+          releaseMutation(mutation);
+          showBanner(
+            "Couldn't open the clear confirmation (" +
+              requestErrorMessage(err, 'confirmation unavailable') +
+              '). No request was sent.',
+          );
+          return;
+        }
+        if (!proceed) {
+          releaseMutation(mutation);
+          return;
+        }
+
+        setMutationPhase(mutation, 'clearing');
+        showBanner('Clearing override…');
+        try {
           const response = await boundedFetch(
             apiBaseUrl +
               '/v1/admin/accounts/' +
@@ -386,100 +900,79 @@ const apiBaseUrl = resolveApiBaseUrl();
               credentials: 'include',
             },
           );
-          if (response.status !== 204 && !response.ok) {
-            throw new Error('HTTP ' + response.status);
+          if (response.status === 204) {
+            applyKnownRemoval(mutation);
+            releaseMutation(mutation);
+            showBanner('Override cleared. The exact row was removed from this window.');
+            return;
           }
-          showBanner('Override cleared. Refreshing…');
-          await load();
+          if (response.status === 404) {
+            applyKnownRemoval(mutation);
+            releaseMutation(mutation);
+            showBanner('Override was already absent. The exact stale row was removed from this window.');
+            return;
+          }
+          if (response.ok || response.status >= 500) {
+            await reconcileUnknownClear(mutation);
+            return;
+          }
+          throw await authoritativeMutationError(response);
         } catch (err) {
-          if (err && err.name === 'AbortError') {
-            const refreshed = await load();
-            const stillActionable = Array.from(
-              root.querySelectorAll('[data-action="clear"]'),
-            ).some(
-              (button) =>
-                button.getAttribute('data-account-id') === prefixedAccountId &&
-                button.getAttribute('data-bucket-key') === bucketKey,
+          if (err && err.authoritativeMutationRejection) {
+            releaseMutation(mutation);
+            showBanner(
+              "Couldn't clear (" + requestErrorMessage(err, 'request rejected') + '). No retry fence is needed.',
             );
-            if (refreshed && !stillActionable) {
-              showBanner(
-                'Override-clear outcome is unknown because the response timed out. Overrides were refreshed and the ' +
-                  bucketKey +
-                  ' override for ' +
-                  prefixedAccountId +
-                  ' is absent; clearing likely completed, so do not submit it again.',
-              );
-            } else if (refreshed) {
-              showBanner(
-                'Override-clear outcome is unknown because the response timed out. Overrides were refreshed and the override is still actionable; retry clearing if it must be removed.',
-              );
-            } else {
-              showBanner(
-                'Override-clear outcome is unknown because the response timed out, and overrides could not be refreshed. Verify the override before retrying.',
-              );
-            }
-          } else {
-            const msg = requestErrorMessage(err, 'network error');
-            showBanner("Couldn't clear (" + msg + ').');
+            return;
           }
-        } finally {
-          clearsInFlight.delete(operationKey);
-          syncClearControls(prefixedAccountId, bucketKey);
+          await reconcileUnknownClear(mutation);
         }
       }
 
-      root.addEventListener('click', (ev) => {
-        const target = ev.target;
-        if (!target || !target.closest) return;
-        const btn = target.closest('[data-action="clear"]');
-        if (!btn) return;
-        ev.preventDefault();
-        const accountId = btn.getAttribute('data-account-id');
-        const bucketKey = btn.getAttribute('data-bucket-key');
-        if (accountId && bucketKey) clear(accountId, bucketKey, btn);
-      });
-
-      let debounce = 0;
-      function scheduleLoad() {
+      function beginFilterTransition() {
+        if (!token || activeMutation) return;
         clearTimeout(debounce);
-        debounce = setTimeout(loadWithLive, 200);
+        filterTransitionPending = true;
+        invalidateReadOwner();
+        renderUnavailable('Loading overrides for the new filter…');
+        filterTransitionPending = true;
+        syncTransitionControls();
+        debounce = setTimeout(() => loadWithLive({ filterTransition: true }), 200);
       }
 
-      // 2026-05-22 — live auto-poll. Same pattern as 154ff9cf.
-      let lastFetch = Date.now();
-      function loadWithLive() {
-        setLiveState('loading');
-        if (refreshBtn) {
-          refreshBtn.disabled = true;
-          refreshBtn.setAttribute('aria-disabled', 'true');
-        }
-        const expectedReq = inFlight + 1;
-        const p = load();
-        if (p && typeof p.then === 'function') {
-          return p.then((loaded) => {
-            if (expectedReq !== inFlight) return loaded;
-            if (loaded) {
-              lastFetch = Date.now();
-              if (liveAge) liveAge.textContent = 'just now';
-              setLiveState('ready');
-            } else {
-              setLiveState('failed');
-            }
-            if (refreshBtn) {
-              refreshBtn.disabled = false;
-              refreshBtn.removeAttribute('aria-disabled');
-            }
-            return loaded;
-          });
-        } else {
-          setLiveState('failed');
-          if (refreshBtn) {
-            refreshBtn.disabled = false;
-            refreshBtn.removeAttribute('aria-disabled');
-          }
+      function loadWithLive(options) {
+        if (activeMutation) return Promise.resolve(false);
+        if (filterTransitionPending && !(options && options.filterTransition)) {
           return Promise.resolve(false);
         }
+        if (options && options.poll && expandedView) {
+          setLiveState('paused', 'Live refresh paused while viewing older overrides');
+          return Promise.resolve(false);
+        }
+        if (options && options.poll && loadController) return Promise.resolve(false);
+        const owner = ++liveOwner;
+        setLiveState('loading');
+        syncTransitionControls();
+        return load(options).then((loaded) => {
+          if (owner !== liveOwner) return loaded;
+          if (loaded) {
+            lastFetch = Date.now();
+            if (liveAge) liveAge.textContent = 'just now';
+            if (expandedView) {
+              setLiveState('paused', 'Live refresh paused while viewing older overrides');
+            } else {
+              setLiveState('ready');
+            }
+          } else if (expandedView) {
+            setLiveState('paused', 'Live refresh paused while viewing older overrides');
+          } else {
+            setLiveState('failed');
+          }
+          syncTransitionControls();
+          return loaded;
+        });
       }
+
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
@@ -487,6 +980,39 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
         return Math.floor(s / 3600).toString() + 'h ago';
       }
+
+      root.addEventListener('click', (ev) => {
+        const target = ev.target;
+        if (!target || !target.closest) return;
+        const action = target.closest('[data-action]');
+        if (!action) return;
+        const actionName = action.getAttribute('data-action');
+        if (actionName === 'clear') {
+          ev.preventDefault();
+          const rowId = action.getAttribute('data-row-id');
+          const accountId = action.getAttribute('data-account-id');
+          const bucketKey = action.getAttribute('data-bucket-key');
+          if (rowId && accountId && bucketKey) clear(rowId, accountId, bucketKey);
+          return;
+        }
+        if (actionName === 'load-more') {
+          ev.preventDefault();
+          if (!activeMutation) loadWithLive({ append: true });
+          return;
+        }
+        if (actionName === 'back-to-newest' || actionName === 'live-refresh') {
+          ev.preventDefault();
+          if (!activeMutation) loadWithLive({ reset: true });
+          return;
+        }
+        if (actionName === 'recheck-clear') {
+          ev.preventDefault();
+          if (activeMutation && activeMutation.phase === 'uncertain') {
+            reconcileUnknownClear(activeMutation);
+          }
+        }
+      });
+
       function start() {
         try {
           token = localStorage.getItem('ds_web_session_token');
@@ -504,15 +1030,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           refreshBtn.disabled = false;
           refreshBtn.removeAttribute('aria-disabled');
           refreshBtn.removeAttribute('title');
-          refreshBtn.addEventListener('click', loadWithLive);
+          refreshBtn.setAttribute('data-action', 'live-refresh');
         }
-        if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
-        if (includeExpiredEl) includeExpiredEl.addEventListener('change', scheduleLoad);
-        setInterval(loadWithLive, 30_000);
+        if (accountIdEl) accountIdEl.addEventListener('input', beginFilterTransition);
+        if (includeExpiredEl) includeExpiredEl.addEventListener('change', beginFilterTransition);
+        setInterval(() => loadWithLive({ poll: true }), 30_000);
         setInterval(() => {
           if (liveAge) liveAge.textContent = fmtAge(lastFetch);
         }, 5_000);
-        loadWithLive();
+        loadWithLive({ reset: true });
       }
 
       if (document.readyState === 'loading') {

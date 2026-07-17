@@ -62,7 +62,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         Manual revocation invalidates the key immediately + cascades to the
         auth cache. Customer's running sessions on that key continue until
         next token check; subsequent requests return 401. Audit row records
-        admin id + key id + reason.
+        admin id + key id + reason. The audit trail is staff-only; the reason
+        is not customer-visible.
       </p>
     </div>
 
@@ -103,10 +104,32 @@ const apiBaseUrl = resolveApiBaseUrl();
       </table>
     </div>
 
+    <div class="mt-4 flex items-center gap-4 text-sm">
+      <button
+        type="button"
+        data-action="load-more"
+        disabled
+        aria-disabled="true"
+        aria-busy="false"
+        class="hidden font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+      >
+        Load more
+      </button>
+      <button
+        type="button"
+        data-action="back-to-newest"
+        disabled
+        aria-disabled="true"
+        class="hidden font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+      >
+        Back to newest / Refresh
+      </button>
+    </div>
+
     <p class="mt-4 text-xs text-tk-ink-3" data-field="footnote">
       Revocation fires <code class="font-mono">POST /v1/admin/api-keys/:id/revoke</code> with
-      a required reason. The reason is stored on the audit row and surfaced
-      to the customer in their key list ("revoked by Driftstack: &lt;reason&gt;").
+      a required reason entered in the console. The reason is retained in the staff audit
+      trail only; it is not customer-visible.
     </p>
   </div>
 
@@ -123,9 +146,35 @@ const apiBaseUrl = resolveApiBaseUrl();
       const liveStatus = root.querySelector('[data-live-status]');
       const liveAge = root.querySelector('[data-live-age]');
       const refreshBtn = root.querySelector('[data-live-refresh]');
+      const loadMoreBtn = root.querySelector('[data-action="load-more"]');
+      const backToNewestBtn = root.querySelector('[data-action="back-to-newest"]');
       let token = null;
       const API_KEY_TIMEOUT_MS = 15_000;
       let loadController = null;
+      let loadedKeys = [];
+      let nextCursor = null;
+      let refusedCursor = null;
+      const requestedCursors = new Set();
+      let listEpoch = 0;
+      let appendInFlight = false;
+      let appendRequestId = 0;
+      let expandedView = false;
+      let loadedPageCount = 0;
+      let inFlight = 0;
+      let liveOwner = 0;
+      let firstPageBusy = false;
+      let debounce = 0;
+      let filterTransitionPending = false;
+      let lastFetch = Date.now();
+
+      // A request lease blocks list transitions only while the prompt/POST/
+      // immediate reconciliation is running. An uncertain lease is narrower:
+      // it keeps that exact key disabled until a later response actually
+      // contains the target and therefore proves its current status. Absence
+      // from a paginated or filtered slice is never treated as proof.
+      const revokesInFlight = new Set();
+      const uncertainRevocations = new Set();
+      const confirmedRevocations = new Map();
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
         return window.driftstackFetchWithDeadline(url, init, API_KEY_TIMEOUT_MS, controller);
@@ -143,6 +192,31 @@ const apiBaseUrl = resolveApiBaseUrl();
         driftstack_internal_admin: 'staff',
         gui_control: 'gui',
       };
+      const API_KEY_SCOPES = new Set([
+        'read',
+        'write',
+        'admin',
+        'account_owner',
+        'driftstack_internal_admin',
+        'gui_control',
+        'read:sessions',
+        'write:sessions',
+        'read:profiles',
+        'write:profiles',
+        'admin:profiles',
+        'read:webhooks',
+        'write:webhooks',
+        'admin:webhooks',
+        'read:api-keys',
+        'admin:api-keys',
+        'read:billing',
+        'admin:billing',
+        'read:audit',
+      ]);
+      const API_KEY_ID_RE =
+        /^key_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+      const ACCOUNT_ID_RE =
+        /^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
       function showBanner(text) {
         if (!banner) return;
@@ -170,15 +244,99 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
+      function isIsoTimestamp(value) {
+        if (typeof value !== 'string') return false;
+        const match =
+          /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(
+            value,
+          );
+        if (!match || !Number.isFinite(Date.parse(value))) return false;
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        const hour = Number(match[4]);
+        const minute = Number(match[5]);
+        const second = Number(match[6]);
+        const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
+        const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+        const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+        const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        return (
+          month >= 1 &&
+          month <= 12 &&
+          day >= 1 &&
+          day <= days[month - 1] &&
+          hour <= 23 &&
+          minute <= 59 &&
+          second <= 59 &&
+          offsetHour <= 23 &&
+          offsetMinute <= 59
+        );
+      }
 
-      function renderKeysUnavailable(message) {
-        if (tbody) {
-          tbody.innerHTML =
-            '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
-            escapeHtml(message) +
-            '</td></tr>';
+      function isIsoTimestampOrNull(value) {
+        return value === null || isIsoTimestamp(value);
+      }
+
+      function isApiKeyListRow(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        const requiredStrings = ['id', 'account_id', 'name', 'key_prefix'];
+        if (!requiredStrings.every((field) => typeof value[field] === 'string')) {
+          return false;
         }
-        if (footnote) footnote.textContent = '';
+        if (!API_KEY_ID_RE.test(value.id) || !ACCOUNT_ID_RE.test(value.account_id)) {
+          return false;
+        }
+        if (
+          value.account_email !== undefined &&
+          typeof value.account_email !== 'string'
+        ) {
+          return false;
+        }
+        if (
+          !Array.isArray(value.scopes) ||
+          !value.scopes.every((scope) => typeof scope === 'string' && API_KEY_SCOPES.has(scope))
+        ) {
+          return false;
+        }
+        return (
+          isIsoTimestampOrNull(value.last_used_at) &&
+          isIsoTimestampOrNull(value.revoked_at) &&
+          isIsoTimestampOrNull(value.expires_at) &&
+          isIsoTimestamp(value.created_at)
+        );
+      }
+
+      // Parse the complete page before list/cursor/lease state observes any
+      // part of it. A malformed member invalidates the whole response: it is
+      // never downgraded to an empty or terminal page.
+      function parseApiKeyListPage(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        if (!Array.isArray(value.data) || !value.data.every(isApiKeyListRow)) return null;
+        if (
+          value.next_cursor !== null &&
+          !(typeof value.next_cursor === 'string' && value.next_cursor.length > 0)
+        ) {
+          return null;
+        }
+        return { data: value.data, nextCursor: value.next_cursor };
+      }
+
+      // Precedence is intentional: a revoked key remains revoked even when
+      // its expires_at is also in the past. Only an otherwise-live key can be
+      // expired, and expired credentials are not actionable.
+      function keyStatus(k) {
+        if (k && k.revoked_at !== null && k.revoked_at !== undefined) return 'revoked';
+        const expiresAt = k && typeof k.expires_at === 'string' ? Date.parse(k.expires_at) : NaN;
+        if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) return 'expired';
+        return 'active';
+      }
+
+      function strongerStatus(left, right) {
+        const rank = { active: 1, expired: 2, revoked: 3 };
+        if (left === null) return right;
+        if (right === null) return left;
+        return rank[right] > rank[left] ? right : left;
       }
 
       function setLiveState(state, message) {
@@ -203,28 +361,40 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (liveAge) liveAge.classList.toggle('hidden', state !== 'ready');
       }
 
-      const revokesInFlight = new Set();
       function revokeControlState(id) {
-        const pending = revokesInFlight.has(String(id));
+        const keyId = String(id);
+        const pending = revokesInFlight.has(keyId);
+        const uncertain = uncertainRevocations.has(keyId);
+        const leased = pending || uncertain;
         return {
-          pending,
-          attrs: pending
-            ? ' disabled aria-disabled="true" aria-busy="true" title="Wait for the current revocation to finish."'
+          leased,
+          attrs: leased
+            ? ' disabled aria-disabled="true" aria-busy="true" title="' +
+              (uncertain
+                ? 'Revocation outcome is unverified; wait for an authoritative key-status read.'
+                : 'Wait for the current revocation to finish.') +
+              '"'
             : '',
-          label: pending ? 'Revocation pending…' : 'Revoke',
+          label: uncertain
+            ? 'Revocation status pending…'
+            : pending
+              ? 'Revocation pending…'
+              : 'Revoke',
         };
       }
 
       function syncRevokeControls(id) {
-        const state = revokeControlState(id);
         root.querySelectorAll('[data-action="revoke"]').forEach((control) => {
-          if (control.getAttribute('data-id') !== String(id)) return;
-          control.disabled = state.pending;
+          if (id !== undefined && control.getAttribute('data-id') !== String(id)) return;
+          const state = revokeControlState(control.getAttribute('data-id'));
+          control.disabled = state.leased;
           control.textContent = state.label;
-          if (state.pending) {
+          if (state.leased) {
             control.setAttribute('aria-disabled', 'true');
             control.setAttribute('aria-busy', 'true');
-            control.title = 'Wait for the current revocation to finish.';
+            control.title = uncertainRevocations.has(control.getAttribute('data-id'))
+              ? 'Revocation outcome is unverified; wait for an authoritative key-status read.'
+              : 'Wait for the current revocation to finish.';
           } else {
             control.removeAttribute('aria-disabled');
             control.removeAttribute('aria-busy');
@@ -233,9 +403,47 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
 
+      function setDisabled(control, disabled) {
+        if (!control) return;
+        control.disabled = disabled;
+        if (disabled) control.setAttribute('aria-disabled', 'true');
+        else control.removeAttribute('aria-disabled');
+      }
+
+      function syncTransitionControls() {
+        const readBusy = loadController !== null;
+        const mutationBusy = revokesInFlight.size > 0;
+        const cursorRefused = nextCursor !== null && refusedCursor === nextCursor;
+        if (loadMoreBtn) {
+          loadMoreBtn.classList.toggle('hidden', !nextCursor || cursorRefused);
+          setDisabled(
+            loadMoreBtn,
+            readBusy ||
+              appendInFlight ||
+              mutationBusy ||
+              filterTransitionPending ||
+              !nextCursor ||
+              cursorRefused,
+          );
+          loadMoreBtn.textContent = appendInFlight ? 'Loading…' : 'Load more';
+          loadMoreBtn.setAttribute('aria-busy', appendInFlight ? 'true' : 'false');
+        }
+        if (backToNewestBtn) {
+          backToNewestBtn.classList.toggle('hidden', !expandedView);
+          setDisabled(
+            backToNewestBtn,
+            readBusy || mutationBusy || filterTransitionPending || !expandedView,
+          );
+        }
+        setDisabled(accountIdEl, mutationBusy);
+        setDisabled(hideRevokedEl, mutationBusy);
+        setDisabled(refreshBtn, !token || firstPageBusy || mutationBusy);
+        syncRevokeControls();
+      }
+
       function rowHtml(k) {
-        const revoked = k.revoked_at !== null;
-        const opacityClass = revoked ? 'opacity-60' : '';
+        const status = keyStatus(k);
+        const opacityClass = status === 'active' ? '' : 'opacity-60';
         const scopeChips = (k.scopes || [])
           .map(
             (s) =>
@@ -244,21 +452,27 @@ const apiBaseUrl = resolveApiBaseUrl();
               '</span>',
           )
           .join(' ');
-        const statusBadge = revoked
-          ? '<span class="inline-flex rounded-full bg-tk-hover px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked</span>'
-          : '<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-emerald-700">active</span>';
+        const statusBadge =
+          status === 'revoked'
+            ? '<span class="inline-flex rounded-full bg-tk-hover px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked</span>'
+            : status === 'expired'
+              ? '<span class="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-700">expired</span>'
+              : '<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-emerald-700">active</span>';
         const revokeState = revokeControlState(k.id);
-        const actionCell = !revoked
-          ? '<button type="button" data-action="revoke" data-id="' +
-            escapeHtml(k.id) +
-            '"' +
-            revokeState.attrs +
-            ' class="text-sm font-medium text-red-700 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60">' +
-            revokeState.label +
-            '</button>'
-          : '';
+        const actionCell =
+          status === 'active'
+            ? '<button type="button" data-action="revoke" data-id="' +
+              escapeHtml(k.id) +
+              '"' +
+              revokeState.attrs +
+              ' class="text-sm font-medium text-red-700 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60">' +
+              revokeState.label +
+              '</button>'
+            : '';
         return (
-          '<tr class="hover:bg-tk-bg ' +
+          '<tr data-key-id="' +
+          escapeHtml(k.id) +
+          '" class="hover:bg-tk-bg ' +
           opacityClass +
           '">' +
           '<td class="px-4 py-3">' +
@@ -271,9 +485,6 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<p class="mt-0.5 font-mono text-[10px] text-tk-ink-3">' +
           escapeHtml(k.id) +
           '</p></td>' +
-          // Email primary (UUID secondary) when the server enriches the
-          // row, like the Accounts list — so the operator can tell whose
-          // key this is. Falls back to the bare UUID otherwise.
           '<td class="px-4 py-3">' +
           (k.account_email
             ? '<p class="text-xs text-tk-ink">' +
@@ -301,24 +512,171 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
 
-      function buildQuery() {
+      function applyConfirmedRevocation(k) {
+        if (!k || typeof k.id !== 'string') return k;
+        const confirmedAt = confirmedRevocations.get(k.id);
+        return confirmedAt ? { ...k, revoked_at: confirmedAt } : k;
+      }
+
+      function mergeUniqueKeys(existing, incoming) {
+        const seen = new Map();
+        const merged = [];
+        existing.concat(incoming).forEach((entry) => {
+          const key = applyConfirmedRevocation(entry);
+          const id = key && typeof key.id === 'string' ? key.id : '';
+          if (!id) return;
+          if (seen.has(id)) {
+            const position = seen.get(id);
+            const previous = merged[position];
+            const previousStatus = keyStatus(previous);
+            const incomingStatus = keyStatus(key);
+            const combined = { ...previous, ...key };
+            if (previousStatus === 'revoked' && incomingStatus !== 'revoked') {
+              combined.revoked_at = previous.revoked_at;
+            } else if (
+              previousStatus === 'expired' &&
+              incomingStatus === 'active' &&
+              previous.expires_at
+            ) {
+              combined.expires_at = previous.expires_at;
+            }
+            merged[position] = applyConfirmedRevocation(combined);
+            return;
+          }
+          seen.set(id, merged.length);
+          merged.push(key);
+        });
+        return merged;
+      }
+
+      function renderKeys(rows) {
+        if (tbody) {
+          tbody.innerHTML =
+            rows.length === 0
+              ? '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">No keys match the current filter.</td></tr>'
+              : rows.map(rowHtml).join('');
+        }
+        if (footnote) {
+          footnote.textContent =
+            'Showing ' +
+            rows.length +
+            ' key' +
+            (rows.length === 1 ? '' : 's') +
+            (nextCursor
+              ? refusedCursor === nextCursor
+                ? ' — pagination stopped.'
+                : ' — more available.'
+              : '.') +
+            ' Revoke requires a reason retained in the staff audit trail only.';
+        }
+        syncTransitionControls();
+      }
+
+      function renderKeysUnavailable(message) {
+        loadedKeys = [];
+        nextCursor = null;
+        refusedCursor = null;
+        requestedCursors.clear();
+        expandedView = false;
+        loadedPageCount = 0;
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
+            escapeHtml(message) +
+            '</td></tr>';
+        }
+        if (footnote) footnote.textContent = '';
+        syncTransitionControls();
+      }
+
+      function buildQuery(requestedCursor) {
         const params = new URLSearchParams();
         params.set('limit', '50');
         if (accountIdEl && accountIdEl.value.trim())
           params.set('account_id', accountIdEl.value.trim());
         if (hideRevokedEl && hideRevokedEl.checked) params.set('revoked', 'false');
+        if (requestedCursor !== null) params.set('cursor', requestedCursor);
         return params;
       }
 
-      let inFlight = 0;
-      function load() {
-        if (!token) return Promise.resolve(false);
+      function observedStatus(rows, id) {
+        let status = null;
+        rows.forEach((row) => {
+          if (!row || row.id !== id) return;
+          status = strongerStatus(status, keyStatus(row));
+        });
+        return status;
+      }
+
+      function resolveUncertainTargets(rows) {
+        const resolved = [];
+        uncertainRevocations.forEach((id) => {
+          const status = observedStatus(rows, id);
+          if (status === null) return;
+          uncertainRevocations.delete(id);
+          resolved.push({ id, status });
+        });
+        return resolved;
+      }
+
+      function showResolvedLease(resolved) {
+        if (resolved.length === 0) return false;
+        const result = resolved[resolved.length - 1];
+        if (result.status === 'revoked') {
+          showBanner(
+            'An authoritative key-list read now confirms ' +
+              result.id +
+              ' is revoked; do not submit another revocation.',
+          );
+        } else if (result.status === 'expired') {
+          showBanner(
+            'An authoritative key-list read now confirms ' +
+              result.id +
+              ' is expired and no longer revocable.',
+          );
+        } else {
+          showBanner(
+            'An authoritative key-list read now confirms ' +
+              result.id +
+              ' is active. Submit a new revocation only if it is still required.',
+          );
+        }
+        return true;
+      }
+
+      function emptyLoadResult(extra) {
+        return { loaded: false, observedRows: [], ...(extra || {}) };
+      }
+
+      function load(options) {
+        const append = !!(options && options.append);
+        const preserveOnError = !!(options && options.preserveOnError);
+        if (!token) return Promise.resolve(emptyLoadResult());
+        const requestedCursor = append ? nextCursor : null;
+        if (append && (!requestedCursor || appendInFlight || refusedCursor === requestedCursor)) {
+          return Promise.resolve(emptyLoadResult());
+        }
+
+        let appendOwner = null;
+        const epoch = append ? listEpoch : ++listEpoch;
+        if (append) {
+          appendOwner = ++appendRequestId;
+          appendInFlight = true;
+        } else {
+          // A first-page owner supersedes any held append immediately. The
+          // append's finally block is token-gated so it cannot clear a newer
+          // append's busy state when its ignored response eventually lands.
+          appendRequestId += 1;
+          appendInFlight = false;
+        }
+
         const myReq = ++inFlight;
-        const params = buildQuery();
         if (loadController) loadController.abort();
         const controller = new AbortController();
         loadController = controller;
         root.setAttribute('aria-busy', 'true');
+        syncTransitionControls();
+        const params = buildQuery(requestedCursor);
         return boundedFetch(
           apiBaseUrl + '/v1/admin/api-keys?' + params.toString(),
           {
@@ -332,33 +690,58 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return false;
-            const rows = body.data || [];
-            if (tbody) {
-              if (rows.length === 0) {
-                tbody.innerHTML =
-                  '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">No keys match the current filter.</td></tr>';
-              } else {
-                tbody.innerHTML = rows.map(rowHtml).join('');
-              }
+            if (myReq !== inFlight || epoch !== listEpoch) {
+              return emptyLoadResult({ stale: true });
             }
-            if (footnote) {
-              footnote.textContent =
-                'Showing ' +
-                rows.length +
-                ' key' +
-                (rows.length === 1 ? '' : 's') +
-                '. Revoke fires POST /v1/admin/api-keys/:id/revoke with a required reason.';
+            if (append && nextCursor !== requestedCursor) {
+              return emptyLoadResult({ stale: true });
             }
-            hideBanner();
-            return true;
+            const page = parseApiKeyListPage(body);
+            if (page === null) throw new Error('invalid API-key list response');
+            const incoming = page.data;
+            const returnedCursor = page.nextCursor;
+            const repeatedCursor =
+              append &&
+              returnedCursor !== null &&
+              (returnedCursor === requestedCursor || requestedCursors.has(returnedCursor));
+            if (append) requestedCursors.add(requestedCursor);
+            else requestedCursors.clear();
+
+            const resolved = resolveUncertainTargets(incoming);
+            loadedKeys = append
+              ? mergeUniqueKeys(loadedKeys, incoming)
+              : mergeUniqueKeys([], incoming);
+            nextCursor = returnedCursor;
+            refusedCursor = repeatedCursor ? returnedCursor : null;
+            expandedView = append;
+            loadedPageCount = append ? loadedPageCount + 1 : 1;
+            renderKeys(loadedKeys);
+            const resolvedLeaseShown = showResolvedLease(resolved);
+            if (!resolvedLeaseShown && repeatedCursor) {
+              showBanner(
+                'Pagination stopped because the server repeated a cursor. Unique rows from the response were kept, but that cursor will not be requested again.',
+              );
+            } else if (!resolvedLeaseShown) {
+              hideBanner();
+            }
+            return { loaded: true, observedRows: incoming, repeatedCursor };
           })
           .catch((err) => {
-            if (myReq !== inFlight) return false;
+            if (myReq !== inFlight || epoch !== listEpoch) {
+              return emptyLoadResult({ stale: true });
+            }
             const msg = requestErrorMessage(err, 'network error');
-            renderKeysUnavailable(
-              'Could not load API keys — nothing to act on. Resolve the error above and retry.',
-            );
+            if (append) {
+              showBanner(
+                "Couldn't load older API keys (" + msg + '). Existing rows and cursor are unchanged.',
+              );
+              return emptyLoadResult();
+            }
+            if (!preserveOnError) {
+              renderKeysUnavailable(
+                'Could not load API keys — nothing to act on. Resolve the error above and retry.',
+              );
+            }
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -366,33 +749,220 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load API keys (" + msg + ').');
             }
-            return false;
+            return emptyLoadResult();
           })
           .finally(() => {
-            if (myReq === inFlight) {
+            if (append && appendOwner === appendRequestId) appendInFlight = false;
+            if (myReq === inFlight && epoch === listEpoch) {
               loadController = null;
               root.removeAttribute('aria-busy');
             }
+            syncTransitionControls();
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
             }
           });
       }
 
+      function loadWithLive(options) {
+        const allowDuringRevoke = !!(options && options.allowDuringRevoke);
+        if (revokesInFlight.size > 0 && !allowDuringRevoke) {
+          return Promise.resolve(emptyLoadResult());
+        }
+        clearTimeout(debounce);
+        debounce = 0;
+        filterTransitionPending = false;
+        const owner = ++liveOwner;
+        firstPageBusy = true;
+        setLiveState('loading', options && options.loadingMessage);
+        syncTransitionControls();
+        return load({ preserveOnError: !!(options && options.preserveOnError) })
+          .then((result) => {
+            if (owner !== liveOwner) return result;
+            if (result.loaded) {
+              lastFetch = Date.now();
+              if (liveAge) liveAge.textContent = 'just now';
+              setLiveState('ready');
+            } else {
+              setLiveState('failed');
+            }
+            return result;
+          })
+          .finally(() => {
+            if (owner !== liveOwner) return;
+            firstPageBusy = false;
+            syncTransitionControls();
+          });
+      }
+
+      function showExpandedPause() {
+        if (!expandedView) return;
+        setLiveState('paused', 'Live refresh paused while viewing older API keys');
+      }
+
+      function loadOlder(options) {
+        const allowDuringRevoke = !!(options && options.allowDuringRevoke);
+        if (
+          !nextCursor ||
+          appendInFlight ||
+          filterTransitionPending ||
+          refusedCursor === nextCursor ||
+          (revokesInFlight.size > 0 && !allowDuringRevoke)
+        ) {
+          return Promise.resolve(emptyLoadResult());
+        }
+        const owner = ++liveOwner;
+        setLiveState('loading', (options && options.loadingMessage) || 'Loading older API keys');
+        const resultPromise = load({ append: true });
+        return resultPromise.then((result) => {
+          if (owner !== liveOwner) return result;
+          if (result.loaded || expandedView) showExpandedPause();
+          else setLiveState('ready', 'Live newest page retained');
+          return result;
+        });
+      }
+
+      async function reconcileTargetView(id, pageCount) {
+        let status = null;
+        const first = await loadWithLive({
+          allowDuringRevoke: true,
+          preserveOnError: true,
+          loadingMessage: 'Reconciling API key status',
+        });
+        if (!first.loaded) return { status: null, readSucceeded: false };
+        status = strongerStatus(status, observedStatus(first.observedRows, id));
+
+        // If the operator was viewing older pages, rebuild the same reachable
+        // depth using each newly-returned opaque cursor. This makes a target
+        // status on an older page authoritative without replaying stale cursor
+        // values from the previous list epoch.
+        const pagesToRead = Math.max(1, pageCount || 1);
+        for (let page = 1; page < pagesToRead && nextCursor; page += 1) {
+          const older = await loadOlder({
+            allowDuringRevoke: true,
+            loadingMessage: 'Reconciling older API key status',
+          });
+          if (!older.loaded) break;
+          status = strongerStatus(status, observedStatus(older.observedRows, id));
+        }
+        return { status, readSucceeded: true };
+      }
+
+      function patchKeyRevoked(id, revokedAt) {
+        confirmedRevocations.set(id, revokedAt);
+        loadedKeys = loadedKeys.map((key) =>
+          key && key.id === id ? { ...key, revoked_at: revokedAt } : key,
+        );
+        renderKeys(loadedKeys);
+      }
+
+      function unknownOutcomeError(message) {
+        const error = new Error(message);
+        error.revokeOutcomeUnknown = true;
+        return error;
+      }
+
+      async function acceptedRevoke(response, id) {
+        if (response.status >= 500) {
+          throw unknownOutcomeError('HTTP ' + response.status);
+        }
+        if (!response.ok) {
+          const error = new Error('HTTP ' + response.status);
+          error.revokeDefinitive = true;
+          throw error;
+        }
+        if (response.status !== 200) {
+          throw unknownOutcomeError('unexpected success status ' + response.status);
+        }
+        let body;
+        try {
+          body = await response.json();
+        } catch {
+          throw unknownOutcomeError('invalid success response');
+        }
+        if (!body || body.id !== id || !isIsoTimestamp(body.revoked_at)) {
+          throw unknownOutcomeError('invalid success response');
+        }
+        return { id: body.id, revoked_at: body.revoked_at };
+      }
+
+      function ambiguousOutcomeMessage(id, cause, reconciliation) {
+        const prefix =
+          'Revocation outcome is unknown (' + cause + '). ';
+        if (reconciliation.status === 'revoked') {
+          return (
+            prefix +
+            'An authoritative key-list read confirms ' +
+            id +
+            ' is revoked; do not submit another revocation.'
+          );
+        }
+        if (reconciliation.status === 'expired') {
+          return (
+            prefix +
+            'An authoritative key-list read confirms ' +
+            id +
+            ' is expired and no longer revocable.'
+          );
+        }
+        if (reconciliation.status === 'active') {
+          return (
+            prefix +
+            'An authoritative key-list read confirms ' +
+            id +
+            ' is active. Submit a new revocation only if it is still required.'
+          );
+        }
+        if (reconciliation.readSucceeded) {
+          return (
+            prefix +
+            'The refreshed list did not include ' +
+            id +
+            ', which does not prove revocation. Its status remains unverified; do not submit another revocation.'
+          );
+        }
+        return (
+          prefix +
+          'An authoritative status read could not be completed. The target remains disabled; do not submit another revocation.'
+        );
+      }
+
+      function ambiguousOutcomeCause(err) {
+        if (err && err.name === 'AbortError') return 'request timed out';
+        if (err && typeof err.message === 'string' && /^HTTP \d+$/.test(err.message)) {
+          return err.message;
+        }
+        if (err && err.message === 'invalid success response') return err.message;
+        if (err && typeof err.message === 'string' && /^unexpected success status /.test(err.message)) {
+          return err.message;
+        }
+        return 'transport failure';
+      }
+
       async function revoke(id, btn) {
-        if (!token || revokesInFlight.has(id)) return;
+        if (
+          !token ||
+          revokesInFlight.has(id) ||
+          uncertainRevocations.has(id) ||
+          keyStatus(loadedKeys.find((key) => key && key.id === id)) !== 'active'
+        ) {
+          return;
+        }
+        const pageCountAtStart = Math.max(1, loadedPageCount);
         revokesInFlight.add(id);
-        syncRevokeControls(id);
+        syncTransitionControls();
         if (btn) {
           btn.disabled = true;
           btn.setAttribute('aria-busy', 'true');
           btn.textContent = 'Reason…';
         }
+        let postStarted = false;
+        let confirmedAt = null;
         try {
           const reason = await window.driftstackPrompt(
-            'Reason for revoking ' + id + ' (required):',
+            'Reason for revoking ' + id + ' (required; staff audit only):',
             {
-              placeholder: 'e.g. suspected leak',
+              placeholder: 'e.g. suspected leak (staff audit only)',
               confirmLabel: 'Revoke',
             },
           );
@@ -402,6 +972,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
           if (btn) btn.textContent = 'Revoking…';
           showBanner('Revoking ' + id + '…');
+          postStarted = true;
           const response = await boundedFetch(
             apiBaseUrl + '/v1/admin/api-keys/' + encodeURIComponent(id) + '/revoke',
             {
@@ -414,34 +985,65 @@ const apiBaseUrl = resolveApiBaseUrl();
               body: JSON.stringify({ reason: reason.trim() }),
             },
           );
-          if (response.status !== 204 && !response.ok) {
-            throw new Error('HTTP ' + response.status);
-          }
-          showBanner('Revoked ' + id + '. Refreshing…');
-          await load();
+          const accepted = await acceptedRevoke(response, id);
+          confirmedAt = accepted.revoked_at;
+          // The validated mutation response is authoritative. Patch before
+          // releasing the lease; confirmedRevocations also prevents any
+          // already-held stale list response from resurrecting the action.
+          patchKeyRevoked(id, accepted.revoked_at);
+          showBanner('Revoked ' + id + '. Reconciling the key list…');
+          const reconciled = await reconcileTargetView(id, pageCountAtStart);
+          showBanner(
+            'Revoked ' +
+              id +
+              (reconciled.readSucceeded
+                ? '. The key list was reconciled.'
+                : '. The validated response was applied locally; live reconciliation failed.'),
+          );
         } catch (err) {
-          if (err && err.name === 'AbortError') {
-            const refreshed = await load();
+          if (confirmedAt !== null) {
+            showBanner('Revoked ' + id + '. The validated response was applied locally.');
+            return;
+          }
+          const outcomeUnknown = postStarted && !(err && err.revokeDefinitive);
+          if (outcomeUnknown) {
+            uncertainRevocations.add(id);
+            syncTransitionControls();
+            const reconciliation = await reconcileTargetView(id, pageCountAtStart);
+            if (reconciliation.status !== null) uncertainRevocations.delete(id);
+            syncTransitionControls();
             showBanner(
-              'Revocation outcome is unknown after the request timed out. ' +
-                (refreshed ? 'The key list was refreshed. ' : "We couldn't refresh the key list. ") +
-                'If ' +
-                id +
-                ' is gone or shows revoked, revocation completed; do not submit it again. If it still shows active, retry the revocation.',
+              ambiguousOutcomeMessage(
+                id,
+                ambiguousOutcomeCause(err),
+                reconciliation,
+              ),
             );
             return;
           }
-          const msg = requestErrorMessage(err, 'network error');
-          showBanner("Couldn't revoke (" + msg + ').');
+          showBanner("Couldn't revoke (" + requestErrorMessage(err, 'network error') + ').');
         } finally {
           revokesInFlight.delete(id);
-          syncRevokeControls(id);
+          syncTransitionControls();
+          if (revokesInFlight.size === 0 && filterTransitionPending) loadWithLive();
         }
       }
 
       root.addEventListener('click', (ev) => {
         const target = ev.target;
         if (!target || !target.closest) return;
+        const loadMore = target.closest('[data-action="load-more"]');
+        if (loadMore) {
+          ev.preventDefault();
+          loadOlder();
+          return;
+        }
+        const backToNewest = target.closest('[data-action="back-to-newest"]');
+        if (backToNewest) {
+          ev.preventDefault();
+          loadWithLive();
+          return;
+        }
         const btn = target.closest('[data-action="revoke"]');
         if (!btn) return;
         ev.preventDefault();
@@ -449,49 +1051,21 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (id) revoke(id, btn);
       });
 
-      let debounce = 0;
       function scheduleLoad() {
+        if (revokesInFlight.size > 0) return;
         clearTimeout(debounce);
-        debounce = setTimeout(loadWithLive, 200);
+        filterTransitionPending = true;
+        syncTransitionControls();
+        debounce = setTimeout(() => {
+          debounce = 0;
+          if (revokesInFlight.size > 0) return;
+          filterTransitionPending = false;
+          loadWithLive();
+        }, 200);
       }
       if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
       if (hideRevokedEl) hideRevokedEl.addEventListener('change', scheduleLoad);
 
-      // 2026-05-22 — live auto-poll. Same pattern as be9793f8.
-      let lastFetch = Date.now();
-      function loadWithLive() {
-        setLiveState('loading');
-        if (refreshBtn) {
-          refreshBtn.disabled = true;
-          refreshBtn.setAttribute('aria-disabled', 'true');
-        }
-        const expectedReq = inFlight + 1;
-        const p = load();
-        if (p && typeof p.then === 'function') {
-          return p.then((loaded) => {
-            if (expectedReq !== inFlight) return loaded;
-            if (loaded) {
-              lastFetch = Date.now();
-              if (liveAge) liveAge.textContent = 'just now';
-              setLiveState('ready');
-            } else {
-              setLiveState('failed');
-            }
-            if (refreshBtn) {
-              refreshBtn.disabled = false;
-              refreshBtn.removeAttribute('aria-disabled');
-            }
-            return loaded;
-          });
-        } else {
-          setLiveState('failed');
-          if (refreshBtn) {
-            refreshBtn.disabled = false;
-            refreshBtn.removeAttribute('aria-disabled');
-          }
-          return Promise.resolve(false);
-        }
-      }
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
@@ -499,6 +1073,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
         return Math.floor(s / 3600).toString() + 'h ago';
       }
+
       function start() {
         try {
           token = localStorage.getItem('ds_web_session_token');
@@ -513,12 +1088,26 @@ const apiBaseUrl = resolveApiBaseUrl();
           return;
         }
         if (refreshBtn) {
-          refreshBtn.disabled = false;
-          refreshBtn.removeAttribute('aria-disabled');
           refreshBtn.removeAttribute('title');
-          refreshBtn.addEventListener('click', loadWithLive);
+          refreshBtn.addEventListener('click', () => {
+            if (revokesInFlight.size === 0) loadWithLive();
+          });
         }
-        setInterval(loadWithLive, 30_000);
+        syncTransitionControls();
+        setInterval(() => {
+          if (expandedView) {
+            showExpandedPause();
+            return;
+          }
+          if (
+            revokesInFlight.size === 0 &&
+            !firstPageBusy &&
+            !appendInFlight &&
+            !filterTransitionPending
+          ) {
+            loadWithLive();
+          }
+        }, 30_000);
         setInterval(() => {
           if (liveAge) liveAge.textContent = fmtAge(lastFetch);
         }, 5_000);

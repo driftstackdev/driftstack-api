@@ -1,24 +1,5 @@
-// W363.C — drift guard for admin-panel /rate-limit-overrides
-// page content. V-194. Pinned:
-//
-//   • GET /v1/admin/rate-limit-overrides registered in
-//     admin-rate-limit-overrides.ts.
-//   • DELETE /v1/admin/accounts/:id/quota-override registered
-//     in admin-accounts.ts (the clear-now endpoint).
-//   • Bucket-key footnote lists the canonical enum 'global' +
-//     'sessions:create' + 'agent_sessions:message' (the old
-//     session_create / capture values were rejected by the server).
-//   • The live BUCKET_LABEL covers all canonical enum keys and the
-//     runtime row renderer indexes it with the server bucket_key.
-//   • 14-day default TTL claim pinned (operational expectation
-//     for time-boxed bumps).
-//   • "Permanent overrides allowed but flagged in weekly audit-
-//     log review" governance claim pinned.
-//   • Clear-now action wires to DELETE
-//     /v1/admin/accounts/:id/quota-override?bucket_key=<bucket>
-//     (NOT directly to /v1/admin/rate-limit-overrides/:id) —
-//     load-bearing API-shape distinction.
-//   • localStorage key ds_web_session_token.
+// Admin-panel source guard for the paginated rate-limit override list and
+// exact-row clear reconciliation contract.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,119 +12,137 @@ const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/rate-limit-overrides
 const LIST_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-rate-limit-overrides.ts');
 const ACCOUNTS_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-accounts.ts');
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
+function read(path: string): string {
+  return readFileSync(path, 'utf8');
 }
 
-function extractBucketLabel(src: string): string {
-  const m = /const\s+BUCKET_LABEL\s*=\s*\{([\s\S]*?)\};/.exec(src);
-  if (!m || !m[1]) throw new Error('BUCKET_LABEL not found');
-  return m[1].replace(/\s+/g, ' ').trim();
-}
-
-describe('W363.C admin-panel /rate-limit-overrides page content parity', () => {
+describe('admin /rate-limit-overrides source contract', () => {
   const body = read(PAGE);
   const listRoute = read(LIST_ROUTE);
   const accountsRoute = read(ACCOUNTS_ROUTE);
 
-  it('GET /v1/admin/rate-limit-overrides registered server-side', () => {
-    expect(existsSync(LIST_ROUTE)).toBe(true);
+  it('uses the registered list and clear routes with bearer authority', () => {
+    expect(existsSync(PAGE)).toBe(true);
     expect(listRoute).toContain("'/v1/admin/rate-limit-overrides'");
-    expect(body).toContain('/v1/admin/rate-limit-overrides?');
-  });
-
-  it('DELETE /v1/admin/accounts/:id/quota-override registered (the clear-now endpoint)', () => {
-    expect(existsSync(ACCOUNTS_ROUTE)).toBe(true);
     expect(accountsRoute).toContain("'/v1/admin/accounts/:id/quota-override'");
+    expect(body).toContain("'/v1/admin/rate-limit-overrides?'");
     expect(body).toMatch(
-      /\/v1\/admin\/accounts\/'\s*\+\s*encodeURIComponent\(prefixedAccountId\)\s*\+\s*'\/quota-override\?bucket_key=/,
+      /'\/v1\/admin\/accounts\/'\s*\+\s*encodeURIComponent\(prefixedAccountId\)[\s\S]*?'\/quota-override\?bucket_key='\s*\+\s*encodeURIComponent\(bucketKey\)/,
     );
-    // The clear-now sends method: DELETE.
-    expect(body).toMatch(/method: 'DELETE'/);
+    expect(body).toContain("method: 'DELETE'");
+    expect(body).toContain("authorization: 'Bearer ' + token");
+    expect(body).toContain("credentials: 'include'");
   });
 
-  it('clear-now uses a destructive composite-key lease with accessible busy feedback', () => {
-    expect(body).toMatch(/const clearsInFlight = new Set\(\);/);
-    expect(body).toMatch(/function clearOperationKey\(accountId, bucketKey\)/);
-    expect(body).toMatch(/String\(accountId\) \+ '\\u0000' \+ String\(bucketKey\)/);
-    expect(body).toMatch(/if \(clearsInFlight\.has\(operationKey\)\) return;/);
-    expect(body).toMatch(/\{ confirmLabel: 'Clear', destructive: true \}/);
-    expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\)/);
-    expect(body).toContain("btn.textContent = 'Confirming…'");
-    expect(body).toContain("btn.textContent = 'Clearing…'");
+  it('strictly validates the complete envelope and every canonical row before mutation', () => {
+    expect(body).toContain('Object.keys(body).length !== 2');
+    expect(body).toContain('Object.keys(value).length !== OVERRIDE_FIELDS.length');
+    expect(body).toContain('!OVERRIDE_FIELDS.every((field) => hasOwn(value, field))');
+    expect(body).toContain('!body.data.every(isOverrideRow)');
+    expect(body).toContain('new Set(rowIds).size !== rowIds.length');
+    expect(body).toContain('(body.data.length === 0 && body.next_cursor !== null)');
+    expect(body).toContain('OVERRIDE_ID_RE.test(value.id)');
+    expect(body).toContain('ACCOUNT_ID_RE.test(value.account_id)');
+    expect(body).toContain('KEY_ID_RE.test(value.set_by_key_id)');
+    expect(body).toContain('Number.isFinite(value.refill_per_second)');
+    expect(body).toContain('value.reason.length <= 500');
+    expect(body).toContain('isIsoUtc(value.expires_at)');
   });
 
-  it('re-rendered rows inherit and visibly explain a pending clear lease', () => {
-    expect(body).toMatch(/function clearControlState\(accountId, bucketKey\)/);
-    expect(body).toMatch(/clearsInFlight\.has\(clearOperationKey\(accountId, bucketKey\)\)/);
-    expect(body).toContain('Clear pending…');
-    expect(body).toContain('Wait for the current override clear to finish.');
-    expect(body).toMatch(/function syncClearControls\(accountId, bucketKey\)/);
+  it('owns pagination by epoch, filters, append generation, and exact requested cursor', () => {
+    expect(body).toMatch(/let listEpoch = 0;/);
+    expect(body).toMatch(/let appendGeneration = 0;/);
+    expect(body).toMatch(/owner\.requestId === inFlight/);
+    expect(body).toMatch(/owner\.epoch === listEpoch/);
+    expect(body).toMatch(/owner\.filterSignature === currentFilterSignature\(\)/);
+    expect(body).toMatch(/owner\.appendGeneration === appendGeneration/);
+    expect(body).not.toMatch(/nextCursor === owner\.requestedCursor/);
+    expect(body).toContain("params.set('cursor', requestedCursor)");
+    expect(body).toContain('walkedCursors.has(page.nextCursor)');
+    expect(body).toContain('a row id was repeated across pages');
+    expect(body).toContain('Existing rows and the retry cursor are unchanged.');
   });
 
-  it('bucket-key footnote lists the canonical enum (global + sessions:create + agent_sessions:message)', () => {
-    // The canonical SetQuotaOverrideRequestSchema bucket keys the
-    // override surface accepts. The prior footnote documented the
-    // (rejected) session_create / capture values, which always 400'd.
-    expect(body).toMatch(/<code class="font-mono">global<\/code>/);
-    expect(body).toMatch(/<code class="font-mono">sessions:create<\/code>/);
-    expect(body).toMatch(/<code class="font-mono">agent_sessions:message<\/code>/);
-    // Regression guard: the old rejected bucket names must not return.
-    expect(body).not.toMatch(/<code class="font-mono">session_create<\/code>/);
-    expect(body).not.toMatch(/<code class="font-mono">capture<\/code>/);
+  it('ships explicit Load more/newest controls and pauses polling while expanded', () => {
+    expect(body).toContain('data-action="load-more"');
+    expect(body).toContain('data-action="back-to-newest"');
+    expect(body).toContain('Back to newest / Refresh');
+    expect(body).toMatch(/options && options\.poll && expandedView/);
+    expect(body).toContain('Live refresh paused while viewing older overrides');
+    expect(body).toContain('loadWithLive({ append: true })');
+    expect(body).toContain('loadWithLive({ reset: true })');
+    expect(body).toContain('pagination stopped because the server repeated a cursor');
   });
 
-  it('live BUCKET_LABEL covers every canonical override key', () => {
-    const liveMap = extractBucketLabel(body);
-    expect(liveMap).toMatch(/global:\s*'Global'/);
-    expect(liveMap).toMatch(/'sessions:create':\s*'Sessions: create'/);
-    expect(liveMap).toMatch(/'agent_sessions:message':\s*'Agent sessions: message'/);
-    expect(body).toMatch(/BUCKET_LABEL\[o\.bucket_key\]\s*\|\|\s*o\.bucket_key/);
-  });
-
-  it('14-day default TTL claim pinned (operational expectation)', () => {
-    expect(body).toMatch(/New overrides default to 14-day TTL/);
-    // Also surfaced on the empty-state copy.
-    expect(body).toMatch(/New overrides default\s+to a 14-day TTL via the per-account page/);
-  });
-
-  it('"permanent overrides allowed but flagged in weekly audit-log review" pinned', () => {
+  it('retains an escaped canonical account-detail link on every row', () => {
+    expect(body).toContain('const accountUuid = o.account_id.slice(4)');
     expect(body).toMatch(
-      /Permanent overrides allowed but\s+flagged in the weekly audit-log review/,
+      /href="\/accounts\/' \+\s*encodeURIComponent\(accountUuid\)[\s\S]*?escapeHtml\(o\.account_id\)/,
     );
   });
 
-  it('clear-now confirm dialog cites the bucket + account id (admin-action transparency)', () => {
+  it('invalidates reads synchronously on filter transitions', () => {
     expect(body).toMatch(
-      /await window\.driftstackConfirm\(\s*'Clear the ' \+ bucketKey \+ ' override for ' \+ prefixedAccountId/,
+      /function beginFilterTransition\(\) \{[\s\S]*?filterTransitionPending = true;[\s\S]*?invalidateReadOwner\(\);[\s\S]*?renderUnavailable\('Loading overrides for the new filter…'\)/,
+    );
+    expect(body).toContain('setTimeout(() => loadWithLive({ filterTransition: true }), 200)');
+    expect(body).toContain("accountIdEl.addEventListener('input', beginFilterTransition)");
+    expect(body).toContain("includeExpiredEl.addEventListener('change', beginFilterTransition)");
+  });
+
+  it('acquires one synchronous clear lease before confirmation and locks every conflict', () => {
+    expect(body).toMatch(
+      /const mutation = \{[\s\S]*?phase: 'confirming',[\s\S]*?\};\s*activeMutation = mutation;\s*invalidateReadOwner\(\);\s*syncTransitionControls\(\);/,
+    );
+    expect(body).toContain("{ confirmLabel: 'Clear', destructive: true }");
+    expect(body).toMatch(/setDisabled\(accountIdEl, mutationBusy\)/);
+    expect(body).toMatch(/setDisabled\(includeExpiredEl, mutationBusy\)/);
+    expect(body).toContain("activeMutation.phase === 'uncertain'");
+    expect(body).toContain(
+      'Wait for the current override clear to reach an authoritative outcome.',
     );
   });
 
-  it('reconciles ambiguous clears against the refreshed account+bucket action', () => {
-    expect(body).toMatch(/err && err\.name === 'AbortError'/);
-    expect(body).toMatch(/const refreshed = await load\(\)/);
-    expect(body).toMatch(/root\.querySelectorAll\('\[data-action="clear"\]'\)/);
-    expect(body).toContain('clearing likely completed, so do not submit it again');
-    expect(body).toContain('Verify the override before retrying');
+  it('classifies only exact 204/404 as known and reconciles 5xx, transport, and unexpected 2xx', () => {
+    expect(body).toMatch(/if \(response\.status === 204\) \{/);
+    expect(body).toMatch(/if \(response\.status === 404\) \{/);
+    expect(body).toMatch(/if \(response\.ok \|\| response\.status >= 500\) \{/);
+    expect(body).toContain('await reconcileUnknownClear(mutation)');
+    expect(body).toContain('authoritativeMutationRejection = true');
+    expect(body).toContain('No retry fence is needed.');
   });
 
-  it('localStorage key ds_web_session_token (admin-panel convention)', () => {
-    expect(body).toContain("'ds_web_session_token'");
-    expect(body).toMatch(
-      /try\s*\{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch\s*\{\s*token = null;/,
-    );
+  it('walks the captured account unfiltered and proves the exact row id rather than a composite', () => {
+    expect(body).toContain("params.set('limit', '100')");
+    expect(body).toContain("params.set('account_id', mutation.accountId)");
+    expect(body).toContain("params.set('include_expired', 'true')");
+    expect(body).toContain('rowsById.has(mutation.rowId)');
+    expect(body).toContain("return { kind: 'duplicate'");
+    expect(body).toContain("return { kind: 'cyclic'");
+    expect(body).toContain("return { kind: 'incomplete'");
+    expect(body).toContain('loadedOverrides.filter((row) => row.id !== mutation.rowId)');
+    expect(body).toContain('replacement with a different row id remains visible');
+    expect(body).toContain('Recheck uncertain clear');
   });
 
-  it('filter wiring: account_id + include_expired query params', () => {
-    expect(body).toMatch(/params\.set\('account_id', accountIdEl\.value\.trim\(\)\)/);
-    expect(body).toMatch(
-      /if \(includeExpiredEl && includeExpiredEl\.checked\)\s*params\.set\('include_expired', 'true'\)/,
-    );
+  it('documents bounded non-null expiry truth and the complete bucket catalog', () => {
+    expect(body).toContain('All overrides are auditable and expire within 30 days.');
+    expect(body).toContain('Overrides require an expiry between 1 second and 30 days');
+    expect(body).not.toMatch(/Permanent overrides allowed/i);
+    expect(body).not.toContain("return 'permanent'");
+    expect(body).toContain('<code class="font-mono">global</code>');
+    expect(body).toContain('<code class="font-mono">sessions:create</code>');
+    expect(body).toContain('<code class="font-mono">agent_sessions:message</code>');
   });
 
-  it('does not restore fabricated SSR override rows', () => {
-    expect(body).not.toContain('MockOverride');
-    expect(body).not.toMatch(/const\s+MOCK_OVERRIDES\b/);
+  it('defers token authority until DOMContentLoaded and keeps the shell non-actionable', () => {
     expect(body).toContain('Live rate-limit overrides are unavailable until loaded.');
+    expect(body).toMatch(
+      /function start\(\) \{\s*try \{\s*token = localStorage\.getItem\('ds_web_session_token'\);\s*\} catch \{\s*token = null;/,
+    );
+    expect(body.slice(0, body.indexOf('function start()'))).not.toContain(
+      "localStorage.getItem('ds_web_session_token')",
+    );
+    expect(body).toContain("document.addEventListener('DOMContentLoaded', start)");
   });
 });

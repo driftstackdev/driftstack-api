@@ -5,9 +5,8 @@
 // breaks the force-destroy → POST endpoint contract (audit log
 // dual-write happens via JSON body, not query params).
 //
-//   • V-192 framing pinned + 'Force-destroy is the only mutation
-//     surfaced here; everything else (replay, view recording)
-//     flows through the per-account detail surface.'
+//   • V-192 framing pins force-destroy-only staff authority and no
+//     fictional replay/cloud-recording administration.
 //   • Inert first paint with no sample session or destructive control.
 //   • STATUS_BADGE 5-tone in the live renderer:
 //     creating (amber) / ready (emerald) / busy (blue) /
@@ -41,10 +40,12 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     );
   });
 
-  it("Page-purpose framing pinned: 'Live and recent customer sessions across all accounts. Force-destroy is the only mutation surfaced here; everything else (replay, view recording) flows through the per-account detail surface.' — pinned so the deferred-actions framing (this page does only destroy; per-account page does replay/recording) stays explicit", () => {
+  it('page-purpose framing pins force-destroy-only staff authority and local-only customer recordings', () => {
     expect(body).toMatch(
-      /Live and recent customer sessions across all accounts\. Force-destroy is\s*\n?\s*the only mutation surfaced here; everything else \(replay, view recording\)\s*\n?\s*flows through the per-account detail surface\./,
+      /Inspect and filter live and recent customer sessions across all accounts\.\s*\n?\s*Force-destroy is the only mutation surfaced here and the only staff mutation\s*\n?\s*available\. Session replay is not available in admin, and customer desktop\s*\n?\s*recordings stay on their device and never enter the admin API\./,
     );
+    expect(body).not.toContain('replay, view recording');
+    expect(body).not.toMatch(/replay.*per-account detail surface/i);
   });
 
   it('STATUS_BADGE 5-tone remains in the authoritative live-row renderer only', () => {
@@ -93,10 +94,75 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
       /const response = await boundedFetch\(\s*\n?\s*apiBaseUrl \+ '\/v1\/admin\/sessions\/' \+ encodeURIComponent\(id\) \+ '\/destroy',\s*\n?\s*\{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(body\),\s*\n?\s*\},\s*\n?\s*\);/,
     );
     expect(body).toMatch(/const SESSION_TIMEOUT_MS = 15_000;/);
-    expect(body).toMatch(/if \(!token \|\| destroysInFlight\.has\(id\)\) return;/);
+    expect(body).toMatch(/destroysInFlight\.size > 0/);
+    expect(body).toMatch(/uncertainDestroys\.has\(id\)/);
     expect(body).toMatch(/btn\.setAttribute\('aria-busy', 'true'\);/);
-    expect(body).toMatch(/if \(err && err\.name === 'AbortError'\) \{/);
-    expect(body).toMatch(/const refreshed = await load\(\);/);
+    expect(body).toMatch(/const capturedAccountId =/);
+    expect(body).toMatch(/acceptDestroyResponse\(response\);/);
+  });
+
+  it('cursor pagination owns one deduped loaded window and pauses polling when expanded', () => {
+    expect(body).toContain('data-action="load-more"');
+    expect(body).toContain('Back to newest / Refresh');
+    expect(body).toMatch(/let loadedSessions = \[\];/);
+    expect(body).toMatch(/let listEpoch = 0;/);
+    expect(body).toMatch(/let appendRequestId = 0;/);
+    expect(body).toMatch(/const requestedCursors = new Set\(\);/);
+    expect(body).toMatch(/function mergeUniqueSessions\(existing, incoming\)/);
+    expect(body).toMatch(/if \(myReq !== inFlight \|\| epoch !== listEpoch\)/);
+    expect(body).toMatch(
+      /returnedCursor === requestedCursor \|\| requestedCursors\.has\(returnedCursor\)/,
+    );
+    expect(body).toContain('Existing rows and cursor are unchanged.');
+    expect(body).toContain('Live refresh paused while viewing older sessions');
+  });
+
+  it('rejects malformed list and verification pages before authoritative inference', () => {
+    expect(body).toMatch(/function isSessionListRow\(value\)/);
+    expect(body).toMatch(
+      /const requiredStrings = \['id', 'account_id', 'api_key_id', 'archetype'\]/,
+    );
+    expect(body).toMatch(/SESSION_STATUSES\.has\(value\.status\)/);
+    expect(body).toMatch(/SESSION_PURPOSES\.has\(value\.purpose\)/);
+    expect(body).toMatch(/function isEgressCapabilitiesOrNull\(value\)/);
+    expect(body).toMatch(/isRecordOrNull\(value\.metadata\)/);
+    expect(body).toMatch(/isRecordOrNull\(value\.egress_capability_report\)/);
+    expect(body).toMatch(
+      /isIsoTimestamp\(value\.created_at\)[\s\S]*?isIsoTimestamp\(value\.updated_at\)[\s\S]*?isIsoTimestampOrNull\(value\.last_state_at\)[\s\S]*?isIsoTimestampOrNull\(value\.destroyed_at\)/,
+    );
+    expect(body).toMatch(/function parseSessionListPage\(value\)/);
+    expect(body).toMatch(
+      /!Array\.isArray\(value\.data\) \|\| !value\.data\.every\(isSessionListRow\)/,
+    );
+    expect(body).toMatch(
+      /const page = parseSessionListPage\(body\);\s*if \(page === null\) throw new Error\('invalid session-list response'\);\s*const incoming = page\.data;\s*const returnedCursor = page\.nextCursor;/,
+    );
+    expect(body).toMatch(
+      /const parsedPage = parseSessionListPage\(body\);\s*if \(parsedPage === null\) \{\s*return \{\s*readSucceeded: false,\s*status: null,\s*stop: 'invalid verification response'/,
+    );
+    expect(body).toMatch(
+      /const rows = parsedPage\.data;\s*const status = observedStatus\(rows, id\)/,
+    );
+    expect(body).not.toMatch(/Array\.isArray\(body\.data\) \? body\.data : \[\]/);
+  });
+
+  it('ambiguous timeout/5xx verification is captured-account scoped, unfiltered, bounded, and nonreplayable', () => {
+    expect(body).toMatch(/const DESTROY_RECONCILE_MAX_PAGES = 20;/);
+    expect(body).toMatch(/async function verifyDestroyOutcome\(id, capturedAccountId\)/);
+    expect(body).toMatch(/params\.set\('account_id', capturedAccountId\);/);
+    expect(body).toMatch(/for \(let page = 0; page < DESTROY_RECONCILE_MAX_PAGES; page \+= 1\)/);
+    expect(body).toMatch(/returnedCursor === cursor \|\| seenCursors\.has\(returnedCursor\)/);
+    expect(body).toContain('Only status destroyed proves completion');
+    expect(body).toContain('Absence does not prove completion.');
+    expect(body).toContain('The target remains disabled and unverified');
+  });
+
+  it('all accepted 2xx statuses commit before unused-body parsing while 5xx stays unknown', () => {
+    expect(body).toMatch(/if \(response\.status >= 200 && response\.status < 300\) return;/);
+    expect(body).toMatch(/if \(response\.status >= 500\) throw unknownDestroyError/);
+    expect(body).toMatch(
+      /acceptDestroyResponse\(response\);\s*committed = true;\s*uncertainDestroys\.delete\(id\);\s*patchSessionDestroyed\(id\);/,
+    );
   });
 
   it("5-col table header (Session/Account/Status/Started/<empty actions col>) + colspan=5 empty-state — pinned so the 5-column layout's empty-after-filter row spans full width (drift to colspan=4 would visually misalign + drift to a 4-col header without the actions col would leave force-destroy buttons floating)", () => {
@@ -105,13 +171,16 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     expect(body).toMatch(/<th class="px-4 py-3">Status<\/th>/);
     expect(body).toMatch(/<th class="px-4 py-3">Started<\/th>/);
     expect(body).toMatch(
-      /<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">No sessions match the current filter\.<\/td><\/tr>/,
+      /<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">No sessions match the current filter in the loaded window\.<\/td><\/tr>/,
     );
   });
 
-  it("Footnote dynamic copy: 'Showing N session(s). Force-destroy fires POST /v1/admin/sessions/:id/destroy with audit log.' (singular when length===1) — pinned so the audit-log mention stays adjacent to the count + the singular/plural grammar works for length=1 (drift to always-plural would render 'Showing 1 sessions')", () => {
+  it('footnote reports deduped loaded-window truth with singular/plural grammar and pagination state', () => {
     expect(body).toMatch(
-      /footnote\.textContent =\s*\n?\s*'Showing ' \+\s*\n?\s*rows\.length \+\s*\n?\s*' session' \+\s*\n?\s*\(rows\.length === 1 \? '' : 's'\) \+\s*\n?\s*'\. Force-destroy fires POST \/v1\/admin\/sessions\/:id\/destroy with audit log\.';/,
+      /footnote\.textContent =\s*\n?\s*'Showing ' \+\s*\n?\s*rows\.length \+\s*\n?\s*' session' \+\s*\n?\s*\(rows\.length === 1 \? '' : 's'\) \+\s*\n?\s*' in the loaded window' \+/,
+    );
+    expect(body).toContain(
+      'Force-destroy fires POST /v1/admin/sessions/:id/destroy with audit log.',
     );
   });
 
@@ -131,8 +200,8 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     expect(body).toContain(
       "'Could not load live sessions — nothing to act on. Resolve the error above and retry.'",
     );
-    expect(body).toMatch(/if \(loaded\) \{[\s\S]*?setLiveState\('ready'\);/);
-    expect(body).toMatch(/if \(expectedReq !== inFlight\) return loaded;/);
+    expect(body).toMatch(/if \(result\.loaded\) \{[\s\S]*?setLiveState\('ready'\);/);
+    expect(body).toMatch(/if \(owner !== liveOwner\) return result;/);
     expect(body).toMatch(/setLiveState\('failed', 'Sign in for live data'\);/);
   });
 

@@ -136,9 +136,21 @@ const apiBaseUrl = resolveApiBaseUrl();
       <button
         type="button"
         data-action="load-more"
-        class="hidden shrink-0 text-xs font-medium text-tk-accent hover:underline"
+        disabled
+        aria-disabled="true"
+        aria-busy="false"
+        class="hidden shrink-0 text-xs font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
       >
         Load more
+      </button>
+      <button
+        type="button"
+        data-action="back-to-newest"
+        disabled
+        aria-disabled="true"
+        class="hidden shrink-0 text-xs font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+      >
+        Back to newest / Refresh
       </button>
     </div>
   </div>
@@ -157,6 +169,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       const liveStatus = root.querySelector('[data-live-status]');
       const liveAge = root.querySelector('[data-live-age]');
       const refreshBtn = root.querySelector('[data-live-refresh]');
+      const loadMoreBtn = root.querySelector('[data-action="load-more"]');
+      const backToNewestBtn = root.querySelector('[data-action="back-to-newest"]');
       // audit waefer6wu — SSO-bridge race: this page's own <script> is
       // nested inside <AdminLayout>'s <slot/>, so it parses + runs BEFORE
       // AdminLayout's trailing <script> that reads the #token= hash from a
@@ -170,7 +184,20 @@ const apiBaseUrl = resolveApiBaseUrl();
       let token = null;
       const ACCOUNTS_TIMEOUT_MS = 15_000;
       let loadController = null;
-      let loadMoreInFlight = false;
+      let loadedAccounts = [];
+      let nextCursor = null;
+      let refusedCursor = null;
+      const requestedCursors = new Set();
+      let listEpoch = 0;
+      let appendInFlight = false;
+      let appendRequestId = 0;
+      let expandedView = false;
+      let inFlight = 0;
+      let liveOwner = 0;
+      let firstPageBusy = false;
+      let debounce = 0;
+      let filterTransitionPending = false;
+      let lastFetch = Date.now();
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
         return window.driftstackFetchWithDeadline(url, init, ACCOUNTS_TIMEOUT_MS, controller);
@@ -185,6 +212,19 @@ const apiBaseUrl = resolveApiBaseUrl();
         suspended: 'bg-amber-50 text-amber-700',
         deleted: 'bg-tk-hover text-tk-ink-2',
       };
+      const ACCOUNT_ID_RE =
+        /^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+      const ACCOUNT_STATUSES = new Set(['active', 'suspended', 'deleted']);
+      const ACCOUNT_TIERS = new Set([
+        'free',
+        'solo_manual',
+        'team_manual',
+        'agency_manual',
+        'api_starter',
+        'api_builder',
+        'api_scale',
+        'enterprise',
+      ]);
 
       function showBanner(text) {
         if (!banner) return;
@@ -213,6 +253,73 @@ const apiBaseUrl = resolveApiBaseUrl();
       function fmtIso(iso) {
         if (!iso) return '—';
         return new Date(iso).toISOString().slice(0, 10);
+      }
+
+      function isIsoTimestamp(value) {
+        if (typeof value !== 'string') return false;
+        const match =
+          /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(
+            value,
+          );
+        if (!match || !Number.isFinite(Date.parse(value))) return false;
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        const hour = Number(match[4]);
+        const minute = Number(match[5]);
+        const second = Number(match[6]);
+        const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
+        const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+        const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+        const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        return (
+          month >= 1 &&
+          month <= 12 &&
+          day >= 1 &&
+          day <= days[month - 1] &&
+          hour <= 23 &&
+          minute <= 59 &&
+          second <= 59 &&
+          offsetHour <= 23 &&
+          offsetMinute <= 59
+        );
+      }
+
+      function isAccountListRow(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        return (
+          typeof value.id === 'string' &&
+          ACCOUNT_ID_RE.test(value.id) &&
+          typeof value.email === 'string' &&
+          (value.name === null || typeof value.name === 'string') &&
+          typeof value.tier === 'string' &&
+          ACCOUNT_TIERS.has(value.tier) &&
+          typeof value.status === 'string' &&
+          ACCOUNT_STATUSES.has(value.status) &&
+          isIsoTimestamp(value.created_at) &&
+          isIsoTimestamp(value.updated_at)
+        );
+      }
+
+      // Parse the complete envelope and every row before list/cursor state
+      // observes any part of the response. has_more and next_cursor are one
+      // server invariant: either both advertise another page or neither does.
+      function parseAccountListPage(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        if (!Array.isArray(value.data) || !value.data.every(isAccountListRow)) return null;
+        if (typeof value.has_more !== 'boolean') return null;
+        if (
+          value.next_cursor !== null &&
+          !(typeof value.next_cursor === 'string' && ACCOUNT_ID_RE.test(value.next_cursor))
+        ) {
+          return null;
+        }
+        if (value.has_more !== (value.next_cursor !== null)) return null;
+        return {
+          data: value.data,
+          hasMore: value.has_more,
+          nextCursor: value.next_cursor,
+        };
       }
 
       function rowHtml(a) {
@@ -254,32 +361,89 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
 
-      // audit waefer6wu — the footnote advertised cursor pagination
-      // ("Pagination via cursor when count exceeds page size") that the UI
-      // never actually implemented: buildQuery() never sent `cursor`, and
-      // nothing ever read `body.next_cursor`, so once a (possibly filtered)
-      // list exceeded 50 rows, every row past the 50th was permanently
-      // unreachable with no indication more existed. The server already
-      // fully supports this (admin-accounts.ts accepts `cursor`, returns
-      // `has_more` + `next_cursor: acc_<uuid>`) — wire it client-side.
-      function buildQuery(cursor) {
+      function buildQuery(requestedCursor) {
         const params = new URLSearchParams();
         params.set('limit', '50');
         if (statusEl && statusEl.value) params.set('status', statusEl.value);
         if (tierEl && tierEl.value) params.set('tier', tierEl.value);
         if (searchEl && searchEl.value.trim())
           params.set('email_contains', searchEl.value.trim());
-        if (cursor) params.set('cursor', cursor);
+        if (requestedCursor !== null) params.set('cursor', requestedCursor);
         return params;
       }
 
-      const loadMoreBtn = root.querySelector('[data-action="load-more"]');
-      let loadedAccounts = [];
-      let nextCursor = null;
+      function setDisabled(control, disabled) {
+        if (!control) return;
+        control.disabled = disabled;
+        if (disabled) control.setAttribute('aria-disabled', 'true');
+        else control.removeAttribute('aria-disabled');
+      }
+
+      function syncTransitionControls() {
+        const readBusy = loadController !== null;
+        const cursorRefused = nextCursor !== null && refusedCursor === nextCursor;
+        if (loadMoreBtn) {
+          loadMoreBtn.classList.toggle('hidden', !nextCursor || cursorRefused);
+          setDisabled(
+            loadMoreBtn,
+            readBusy ||
+              appendInFlight ||
+              filterTransitionPending ||
+              !nextCursor ||
+              cursorRefused,
+          );
+          loadMoreBtn.textContent = appendInFlight ? 'Loading…' : 'Load more';
+          loadMoreBtn.setAttribute('aria-busy', appendInFlight ? 'true' : 'false');
+        }
+        if (backToNewestBtn) {
+          backToNewestBtn.classList.toggle('hidden', !expandedView);
+          setDisabled(backToNewestBtn, readBusy || filterTransitionPending || !expandedView);
+        }
+        setDisabled(refreshBtn, !token || firstPageBusy || filterTransitionPending);
+      }
+
+      // Keep the first occurrence of an account id. Page one is the newest
+      // authoritative occurrence, so an overlapping older page must not
+      // overwrite it with an older snapshot.
+      function mergeUniqueAccounts(existing, incoming) {
+        const seen = new Set();
+        const merged = [];
+        existing.concat(incoming).forEach((account) => {
+          if (seen.has(account.id)) return;
+          seen.add(account.id);
+          merged.push(account);
+        });
+        return merged;
+      }
+
+      function renderAccounts(rows) {
+        if (tbody) {
+          tbody.innerHTML =
+            rows.length === 0
+              ? '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">No accounts match the current filter.</td></tr>'
+              : rows.map(rowHtml).join('');
+        }
+        if (footnote) {
+          footnote.textContent =
+            'Showing ' +
+            rows.length +
+            ' account' +
+            (rows.length === 1 ? '' : 's') +
+            (nextCursor
+              ? refusedCursor === nextCursor
+                ? ' — pagination stopped.'
+                : ' — more available.'
+              : '.');
+        }
+        syncTransitionControls();
+      }
 
       function renderAccountsUnavailable(message) {
         loadedAccounts = [];
         nextCursor = null;
+        refusedCursor = null;
+        requestedCursors.clear();
+        expandedView = false;
         if (tbody) {
           tbody.innerHTML =
             '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
@@ -287,11 +451,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             '</td></tr>';
         }
         if (footnote) footnote.textContent = '';
-        if (loadMoreBtn) {
-          loadMoreBtn.classList.add('hidden');
-          loadMoreBtn.disabled = true;
-          loadMoreBtn.textContent = 'Load more';
-        }
+        syncTransitionControls();
       }
 
       function setLiveState(state, message) {
@@ -316,23 +476,38 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (liveAge) liveAge.classList.toggle('hidden', state !== 'ready');
       }
 
-      let inFlight = 0;
-      // append=true fetches the next cursor page and adds it to the
-      // currently-rendered rows (the "Load more" click path); the default
-      // (filter change / initial load / 30s live poll) always starts a
-      // fresh first page — auto-poll intentionally resets any "loaded more"
-      // state back to the canonical first 50 rather than trying to merge.
-      function load(opts) {
-        const append = !!(opts && opts.append);
-        if (!token) return Promise.resolve();
-        if (append && !nextCursor) return Promise.resolve();
+      function emptyLoadResult(extra) {
+        return { loaded: false, ...(extra || {}) };
+      }
+
+      function load(options) {
+        const append = !!(options && options.append);
+        if (!token) return Promise.resolve(emptyLoadResult());
+        const requestedCursor = append ? nextCursor : null;
+        if (append && (!requestedCursor || appendInFlight || refusedCursor === requestedCursor)) {
+          return Promise.resolve(emptyLoadResult());
+        }
+
+        let appendOwner = null;
+        const epoch = append ? listEpoch : ++listEpoch;
+        if (append) {
+          appendOwner = ++appendRequestId;
+          appendInFlight = true;
+        } else {
+          // A first-page owner supersedes any held append. Its response may
+          // still settle, but request id + epoch + exact cursor ownership make
+          // that response inert.
+          appendRequestId += 1;
+          appendInFlight = false;
+        }
+
         const myReq = ++inFlight;
-        const params = buildQuery(append ? nextCursor : undefined);
-        if (loadMoreBtn) loadMoreBtn.disabled = true;
         if (loadController) loadController.abort();
         const controller = new AbortController();
         loadController = controller;
         root.setAttribute('aria-busy', 'true');
+        syncTransitionControls();
+        const params = buildQuery(requestedCursor);
         return boundedFetch(
           apiBaseUrl + '/v1/admin/accounts?' + params.toString(),
           {
@@ -346,70 +521,125 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return false; // stale response, ignore
-            const accounts = body.data || [];
-            loadedAccounts = append ? loadedAccounts.concat(accounts) : accounts;
-            nextCursor = body.next_cursor || null;
-            if (tbody) {
-              if (loadedAccounts.length === 0) {
-                tbody.innerHTML =
-                  '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">No accounts match the current filter.</td></tr>';
-              } else {
-                tbody.innerHTML = loadedAccounts.map(rowHtml).join('');
-              }
+            if (myReq !== inFlight || epoch !== listEpoch) {
+              return emptyLoadResult({ stale: true });
             }
-            if (footnote) {
-              const more = body.has_more
-                ? ' — more available (' + (nextCursor ? 'click Load more' : 'refine filter') + ')'
-                : '';
-              footnote.textContent =
-                'Showing ' +
-                loadedAccounts.length +
-                ' account' +
-                (loadedAccounts.length === 1 ? '' : 's') +
-                more +
-                '.';
+            if (append && nextCursor !== requestedCursor) {
+              return emptyLoadResult({ stale: true });
             }
-            if (loadMoreBtn) {
-              loadMoreBtn.classList.toggle('hidden', !(body.has_more && nextCursor));
-              loadMoreBtn.disabled = false;
-              loadMoreBtn.textContent = 'Load more';
-            }
-            hideBanner();
-            return true;
-          })
-          .catch((err) => {
-            if (myReq !== inFlight) return;
-            const msg = requestErrorMessage(err, 'network error');
-            if (loadMoreBtn) loadMoreBtn.disabled = false;
-            if (!append) {
-              renderAccountsUnavailable('Could not load accounts. Resolve the error above and retry.');
-            }
-            if (msg === 'forbidden') {
+            const page = parseAccountListPage(body);
+            if (page === null) throw new Error('invalid accounts list response');
+            const returnedCursor = page.nextCursor;
+            const repeatedCursor =
+              append &&
+              returnedCursor !== null &&
+              (returnedCursor === requestedCursor || requestedCursors.has(returnedCursor));
+            if (append) requestedCursors.add(requestedCursor);
+            else requestedCursors.clear();
+
+            loadedAccounts = append
+              ? mergeUniqueAccounts(loadedAccounts, page.data)
+              : mergeUniqueAccounts([], page.data);
+            nextCursor = returnedCursor;
+            refusedCursor = repeatedCursor ? returnedCursor : null;
+            expandedView = append;
+            renderAccounts(loadedAccounts);
+            if (repeatedCursor) {
               showBanner(
-                'Access denied — admin scope required. You are signed in as a customer account.',
+                'Pagination stopped because the server repeated a cursor. Unique accounts from the response were kept, but that cursor will not be requested again.',
               );
             } else {
-              showBanner(
-                (append ? "Couldn't load more accounts (" : "Couldn't load accounts (") +
-                  msg +
-                  ').',
-              );
+              hideBanner();
             }
-            return false;
+            return { loaded: true, repeatedCursor };
+          })
+          .catch((err) => {
+            if (myReq !== inFlight || epoch !== listEpoch) {
+              return emptyLoadResult({ stale: true });
+            }
+            const msg = requestErrorMessage(err, 'network error');
+            if (append) {
+              showBanner(
+                "Couldn't load older accounts (" +
+                  msg +
+                  '). Existing rows and the retry cursor are unchanged.',
+              );
+            } else {
+              renderAccountsUnavailable('Could not load accounts. Resolve the error above and retry.');
+              if (msg === 'forbidden') {
+                showBanner(
+                  'Access denied — admin scope required. You are signed in as a customer account.',
+                );
+              } else {
+                showBanner("Couldn't load accounts (" + msg + ').');
+              }
+            }
+            return emptyLoadResult();
           })
           .finally(() => {
-            if (append) loadMoreInFlight = false;
-            if (myReq === inFlight) {
+            if (append && appendOwner === appendRequestId) appendInFlight = false;
+            if (myReq === inFlight && epoch === listEpoch) {
               loadController = null;
               root.removeAttribute('aria-busy');
             }
+            syncTransitionControls();
             // 2026-05-21 — AdminLayout opacity-gate signal (same pattern
             // as the customer-dashboard pages).
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
             }
           });
+      }
+
+      function loadWithLive() {
+        clearTimeout(debounce);
+        debounce = 0;
+        filterTransitionPending = false;
+        const owner = ++liveOwner;
+        firstPageBusy = true;
+        setLiveState('loading');
+        syncTransitionControls();
+        return load()
+          .then((result) => {
+            if (owner !== liveOwner) return result;
+            if (result.loaded) {
+              lastFetch = Date.now();
+              if (liveAge) liveAge.textContent = 'just now';
+              setLiveState('ready');
+            } else {
+              setLiveState('failed');
+            }
+            return result;
+          })
+          .finally(() => {
+            if (owner !== liveOwner) return;
+            firstPageBusy = false;
+            syncTransitionControls();
+          });
+      }
+
+      function showExpandedPause() {
+        if (!expandedView) return;
+        setLiveState('paused', 'Live refresh paused while viewing older accounts');
+      }
+
+      function loadOlder() {
+        if (
+          !nextCursor ||
+          appendInFlight ||
+          filterTransitionPending ||
+          refusedCursor === nextCursor
+        ) {
+          return Promise.resolve(emptyLoadResult());
+        }
+        const owner = ++liveOwner;
+        setLiveState('loading', 'Loading older accounts');
+        return load({ append: true }).then((result) => {
+          if (owner !== liveOwner) return result;
+          if (result.loaded || expandedView) showExpandedPause();
+          else setLiveState('ready', 'Live newest page retained');
+          return result;
+        });
       }
 
       // start() does the token-gated work: reading the token, deciding
@@ -434,15 +664,25 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
 
         if (refreshBtn) {
-          refreshBtn.disabled = false;
-          refreshBtn.removeAttribute('aria-disabled');
           refreshBtn.removeAttribute('title');
+          refreshBtn.addEventListener('click', loadWithLive);
         }
 
-        let debounce = 0;
         function scheduleLoad() {
           clearTimeout(debounce);
-          debounce = setTimeout(loadWithLive, 200);
+          // The invalidation is synchronous: an old-cursor append cannot start
+          // or commit during the input debounce with the new filter values.
+          filterTransitionPending = true;
+          listEpoch += 1;
+          liveOwner += 1;
+          appendRequestId += 1;
+          appendInFlight = false;
+          syncTransitionControls();
+          debounce = setTimeout(() => {
+            debounce = 0;
+            filterTransitionPending = false;
+            loadWithLive();
+          }, 200);
         }
 
         if (statusEl) statusEl.addEventListener('change', scheduleLoad);
@@ -451,15 +691,10 @@ const apiBaseUrl = resolveApiBaseUrl();
 
         if (loadMoreBtn) {
           loadMoreBtn.addEventListener('click', () => {
-            if (loadMoreInFlight) return;
-            loadMoreInFlight = true;
-            loadMoreBtn.textContent = 'Loading…';
-            loadMoreBtn.setAttribute('aria-busy', 'true');
-            load({ append: true }).finally(() => {
-              loadMoreBtn.removeAttribute('aria-busy');
-            });
+            loadOlder();
           });
         }
+        if (backToNewestBtn) backToNewestBtn.addEventListener('click', loadWithLive);
 
         // 2026-05-22 — "/" focuses the search (GitHub / Slack / Linear
         // convention). Skips if the user is already in an input /
@@ -476,47 +711,16 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
         });
 
-        // 2026-05-22 — 30s auto-poll for new sign-ups. Same pattern as
-        // the overview live feed (2c24750f). loadWithLive() wraps the
-        // existing load() to also flip the live-dot color + record
-        // lastFetch. Timer calls it directly (bypasses scheduleLoad's
-        // 200ms debounce which is for input typing only).
-        let lastFetch = Date.now();
-        function loadWithLive() {
-          setLiveState('loading');
-          if (refreshBtn) {
-            refreshBtn.disabled = true;
-            refreshBtn.setAttribute('aria-disabled', 'true');
+        // Poll only while the canonical newest page owns the view. Once an
+        // older page has been appended, Back to newest / Refresh is the sole
+        // explicit operation that may replace that expanded window.
+        setInterval(() => {
+          if (expandedView) {
+            showExpandedPause();
+            return;
           }
-          const expectedReq = inFlight + 1;
-          const p = load();
-          if (p && typeof p.then === 'function') {
-            return p.then((loaded) => {
-              if (expectedReq !== inFlight) return loaded;
-              if (loaded) {
-                lastFetch = Date.now();
-                if (liveAge) liveAge.textContent = 'just now';
-                setLiveState('ready');
-              } else {
-                setLiveState('failed');
-              }
-              if (refreshBtn) {
-                refreshBtn.disabled = false;
-                refreshBtn.removeAttribute('aria-disabled');
-              }
-              return loaded;
-            });
-          } else {
-            setLiveState('failed');
-            if (refreshBtn) {
-              refreshBtn.disabled = false;
-              refreshBtn.removeAttribute('aria-disabled');
-            }
-            return Promise.resolve(false);
-          }
-        }
-        if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
-        setInterval(loadWithLive, 30_000);
+          if (!firstPageBusy && !appendInFlight && !filterTransitionPending) loadWithLive();
+        }, 30_000);
         function fmtAge(ms) {
           const s = Math.floor((Date.now() - ms) / 1000);
           if (s < 5) return 'just now';
@@ -528,6 +732,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (liveAge) liveAge.textContent = fmtAge(lastFetch);
         }, 5_000);
 
+        syncTransitionControls();
         loadWithLive();
       }
 

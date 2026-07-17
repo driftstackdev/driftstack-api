@@ -1,23 +1,6 @@
-// W356.C — drift guard for /status-subscribers admin page. V-312
-// admin view of status-page email subscribers. This complements
-// W319.A's route-registration parity by pinning the page-content
-// claims that an ops engineer relies on when reading the screen.
-//
-// Pinned:
-//   • GET /v1/admin/status-subscribers + POST
-//     /v1/admin/status-subscribers/:id/force-unsubscribe both
-//     registered server-side.
-//   • Force-unsubscribe writes admin_audit_log via V-281 dual-write
-//     ↔ status_subscriber.force_unsubscribed action string.
-//   • 90-day tombstone purge claim ↔ retentionMs default in the
-//     status-subscribers service (V-295c3-tombstone).
-//   • Tombstoned row → email = null shape pinned (server returns
-//     null; the page displays "(purged — V-295c3-tombstone)").
-//   • limit=200 page-side fetch ↔ Zod max(200) on the route's
-//     ListQuerySchema (so a tighter clamp here would 400).
-//   • V-295c3-followup fan-out framing (confirmed-and-still-
-//     subscribed rows trigger fan-out on incident state changes)
-//     stays pinned — this is the load-bearing copy.
+// W356.C — cross-source drift guard for the status-subscribers admin
+// surface. It ties the page's offset/sentinel behavior and mutation
+// endpoints to the live route and service contracts.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -39,76 +22,112 @@ describe('W356.C /status-subscribers admin page parity', () => {
   const route = read(ROUTE);
   const service = read(SERVICE);
 
-  it('GET /v1/admin/status-subscribers + force-unsubscribe both registered server-side', () => {
+  it('wires list, force-subscribe, and force-unsubscribe to registered server routes', () => {
     expect(route).toContain("'/v1/admin/status-subscribers'");
+    expect(route).toContain("'/v1/admin/status-subscribers/force-subscribe'");
     expect(route).toContain("'/v1/admin/status-subscribers/:id/force-unsubscribe'");
-    // Both endpoints are also wired into the page.
-    expect(body).toContain('/v1/admin/status-subscribers?limit=200');
+    expect(body).toContain("'/v1/admin/status-subscribers?limit='");
+    expect(body).toContain("'/v1/admin/status-subscribers/force-subscribe'");
     expect(body).toMatch(
       /\/v1\/admin\/status-subscribers\/'\s*\+\s*encodeURIComponent\(id\)\s*\+\s*'\/force-unsubscribe/,
     );
   });
 
-  it('force-unsubscribe writes admin_audit_log via V-281 dual-write', () => {
-    expect(body).toMatch(/Force-unsubscribe writes admin_audit_log/);
-    expect(body).toMatch(/V-281 dual-write/);
-    expect(route).toContain("'status_subscriber.force_unsubscribed'");
+  it('uses a 51-row lookahead inside the route max and passes a non-negative offset', () => {
+    expect(body).toContain('const PAGE_SIZE = 50;');
+    expect(body).toContain('const PAGE_FETCH_LIMIT = PAGE_SIZE + 1;');
+    expect(body).toMatch(/'&offset='\s*\+\s*targetOffset/);
+    expect(route).toMatch(/limit:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(200\)/);
+    expect(route).toMatch(/offset:\s*z\.coerce\.number\(\)\.int\(\)\.min\(0\)/);
   });
 
-  it('90-day tombstone purge claim matches retentionMs default in the service', () => {
-    expect(body).toMatch(/90d post-unsubscribe via\s*V-295c3-tombstone purge cron/);
-    // The service's retentionMs default is the 90d constant.
+  it('matches the route data-only envelope without inventing cursor or total metadata', () => {
+    expect(route).toMatch(/return \{\s*\n?\s*data: rows\.map/);
+    expect(body).toContain('const fetchedRows = parseSubscriberPage(body);');
+    expect(body).toContain('const nextHasNext = fetchedRows.length > PAGE_SIZE;');
+    expect(body).toContain('renderedHasNext = nextHasNext;');
+    expect(body).not.toMatch(/body\.(?:has_more|next_cursor|total)/);
+  });
+
+  it('validates every route field, including the 51st sentinel, before committing page state', () => {
+    for (const field of ['id', 'email', 'confirmed_at', 'unsubscribed_at', 'created_at']) {
+      expect(route).toContain(`${field}:`);
+      expect(body).toContain(`'${field}'`);
+    }
+    expect(body).toContain('function isSubscriber(value)');
+    expect(body).toContain("value.id.startsWith('sub_')");
+    expect(body).toContain('UUID_RE.test(value.id.slice(4))');
+    expect(body).toContain('value.email.length <= 254');
+    expect(body).toContain('(value.email !== null || value.unsubscribed_at !== null)');
+    expect(body).toContain('function parseSubscriberPage(body)');
+    expect(body).toContain('body.data.length > PAGE_FETCH_LIMIT');
+    expect(body).toContain('!body.data.every(isSubscriber)');
+
+    const parse = body.indexOf('const fetchedRows = parseSubscriberPage(body);');
+    const slice = body.indexOf('const nextSubscribers = fetchedRows.slice(0, PAGE_SIZE);', parse);
+    const offsetCommit = body.indexOf('renderedOffset = targetOffset;', parse);
+    expect(parse).toBeGreaterThan(-1);
+    expect(slice).toBeGreaterThan(parse);
+    expect(offsetCommit).toBeGreaterThan(slice);
+  });
+
+  it('preserves the last trusted page and mutation latches on an invalid refresh', () => {
+    expect(body).toContain('let renderedSubscribers = [];');
+    expect(body).toContain('if (subscriberDataAvailable) {');
+    expect(body).toContain('requestedOffset = renderedOffset;');
+    expect(body).toContain('preserveRenderedPage = true;');
+    expect(body).toContain('The previous page and action status are unchanged; retry when ready.');
+    expect(body).toMatch(
+      /if \(preserveRenderedPage\) \{\s*renderPage\(renderedSubscribers, renderedOffset\);/,
+    );
+  });
+
+  it('force-unsubscribe retains the V-281 audit dual-write action and explicit confirmation', () => {
+    expect(body).toMatch(/Audit log dual-write happens\s*\n?\s*\/\/ server-side \(V-281 pattern\)/);
+    expect(route).toContain("'status_subscriber.force_unsubscribed'");
+    expect(body).toMatch(/Force-unsubscribe '\s*\+\s*\n?\s*email/);
+    expect(body).toContain(
+      'Writes admin_audit_log. Customer can re-subscribe via the public form.',
+    );
+  });
+
+  it('force-subscribe matches the canonical 201 response details and audit action', () => {
+    expect(route).toContain("'status_subscriber.force_subscribed'");
+    expect(route).toContain('return reply.code(201).send({');
+    expect(route).toContain('unsubscribe_link: row.unsubscribeLink');
+    expect(body).toContain("typeof body.id === 'string'");
+    expect(body).toContain("typeof body.email === 'string'");
+    expect(body).toContain("typeof body.unsubscribe_link === 'string'");
+  });
+
+  it('matches nullable email rows and displays a tombstone without an action', () => {
+    expect(route).toContain('email: row.email');
+    expect(body).toContain('const canForceUnsub = !sub.unsubscribed_at && sub.email;');
+    expect(body).toContain('(purged after retention period)');
+    expect(body).toContain('<span class="text-xs text-tk-ink-3">no action</span>');
+  });
+
+  it('keeps the 90-day retention statement aligned with the service default', () => {
+    expect(body).toMatch(/scheduled 90-day post-unsubscribe purge/);
     expect(service).toMatch(
       /retentionMs:\s*number\s*=\s*90\s*\*\s*24\s*\*\s*60\s*\*\s*60\s*\*\s*1000/,
     );
   });
 
-  it('tombstoned-row shape: email = null + "(purged — V-295c3-tombstone)" UI placeholder', () => {
-    expect(body).toMatch(/Tombstoned rows.*email\s*=\s*<code>null<\/code>/s);
-    expect(body).toContain('(purged — V-295c3-tombstone)');
-  });
-
-  it('page-side fetch limit=200 stays within the route Zod max', () => {
-    expect(body).toContain('?limit=200');
-    // ListQuerySchema enforces max(200) — page would 400 if it
-    // asked for more.
-    expect(route).toMatch(/limit:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(200\)/);
-  });
-
-  it('V-295c3-followup fan-out framing pinned (the load-bearing copy)', () => {
-    expect(body).toMatch(/Confirmed\s+subscribers receive emails when public incidents/);
-    expect(body).toMatch(/V-295c3-followup\s+fan-out/);
-    // Re-stated near the bottom as well.
+  it('preserves incident fan-out and audit behavior in operator-facing copy', () => {
+    expect(body).toMatch(
+      /Confirmed\s+subscribers receive emails when public incidents are posted or resolved/,
+    );
     expect(body).toMatch(
       /Confirmed-and-still-subscribed rows trigger fan-out emails on\s+public incident state changes/,
     );
+    expect(body).toMatch(/A forced\s+unsubscribe is also written to the admin audit log/);
   });
 
-  it('confirm-modal copy on force-unsubscribe pinned (admin-action transparency)', () => {
-    // The browser confirm() is the only barrier between an admin
-    // click and a row mutation; the copy must continue to spell out
-    // that admin_audit_log is written + that the customer can
-    // re-subscribe via the public form.
-    expect(body).toMatch(/Force-unsubscribe '\s*\+\s*\n?\s*email/);
-    expect(body).toMatch(/Writes admin_audit_log/);
-    expect(body).toMatch(/Customer can re-subscribe via the public form/);
-  });
-
-  it('admin token read from localStorage under ds_web_session_token key (SSO bridge convention)', () => {
-    // 2026-05-21 — switched from the legacy `driftstack_admin_token`
-    // key (never populated anywhere) to the canonical staff bearer
-    // the SSO bridge writes from app.driftstack.dev. Same key the
-    // rest of admin-panel uses; a rename without coordinated
-    // migration would silently lock every admin out of the page.
-    expect(body).toContain("'ds_web_session_token'");
-  });
-
-  it('three status-badge slots cover the schema row states (pending / confirmed / unsubscribed)', () => {
-    // V-295c3 row state machine: unconfirmed → confirmed → unsubscribed.
-    // The page renders all three; if a server-side enum flip drops
-    // one of these the rendered set silently shrinks.
-    expect(body).toMatch(/>pending</);
-    expect(body).toMatch(/>confirmed</);
+  it('uses the canonical staff bearer key and all lifecycle badge states', () => {
+    expect(body).toContain("localStorage.getItem('ds_web_session_token')");
+    expect(body).toMatch(/>pending<\//);
+    expect(body).toMatch(/>confirmed<\//);
     expect(body).toMatch(/unsubscribed '\s*\+/);
   });
 });

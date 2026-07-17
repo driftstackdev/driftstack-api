@@ -41,7 +41,9 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
   const route = read(ROUTE);
 
   it('GET /v1/admin/webhook-dlq + POST .../requeue both registered server-side', () => {
-    expect(body).toContain('/v1/admin/webhook-dlq?limit=50');
+    expect(body).toContain("params.set('limit', '50')");
+    expect(body).toContain("if (requestedCursor) params.set('cursor', requestedCursor)");
+    expect(body).toContain("'/v1/admin/webhook-dlq?' + params.toString()");
     expect(body).toMatch(/POST \/v1\/admin\/webhook-dlq\/:id\/requeue/);
     expect(existsSync(ROUTE)).toBe(true);
     expect(route).toContain("'/v1/admin/webhook-dlq'");
@@ -94,6 +96,97 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
   it('requeue button triggers POST + page wires to client requeue() handler', () => {
     expect(body).toMatch(/data-action="requeue"/);
     expect(body).toMatch(/function requeue\(id\)/);
+  });
+
+  it('walks the opaque cursor without losing, duplicating, or stale-appending operator rows', () => {
+    expect(body).toContain('data-action="load-more"');
+    expect(body).toContain('data-action="back-to-newest"');
+    expect(body).toMatch(/let loadedEntries = \[\];/);
+    expect(body).toMatch(/let nextCursor = null;/);
+    expect(body).toMatch(/let listEpoch = 0;/);
+    expect(body).toMatch(/let appendInFlight = false;/);
+    expect(body).toMatch(/let expandedView = false;/);
+    expect(body).toMatch(/function mergeUniqueEntries\(existing, incoming\)/);
+    expect(body).toMatch(/if \(!id \|\| seen\.has\(id\)\) return;/);
+    expect(body).toMatch(/const requestedCursor = append \? nextCursor : null;/);
+    expect(body).toMatch(/if \(append && \(!requestedCursor \|\| appendInFlight\)\)/);
+    expect(body).toMatch(/const epoch = append \? listEpoch : \+\+listEpoch;/);
+    expect(body).toMatch(/if \(myReq !== inFlight \|\| epoch !== listEpoch\) return false;/);
+    expect(body).toMatch(/if \(append && nextCursor !== requestedCursor\) return false;/);
+    expect(body).toMatch(
+      /const nextLoadedEntries = append\s*\? mergeUniqueEntries\(loadedEntries, page\.entries\)\s*: mergeUniqueEntries\(\[\], page\.entries\);/,
+    );
+    expect(body).toContain('loadedEntries = nextLoadedEntries;');
+  });
+
+  it('validates the complete route row and explicit cursor before any authoritative state commit', () => {
+    expect(body).toContain("import { WebhookEventTypeSchema } from '@driftstack/api-types';");
+    expect(body).toContain('const webhookEventTypes = WebhookEventTypeSchema.options;');
+    expect(body).toContain('define:vars={{ apiBaseUrl, webhookEventTypes }}');
+    expect(body).toContain('const allowedWebhookEventTypes = new Set(webhookEventTypes);');
+    expect(body).toContain('function isDelivery(value)');
+    for (const field of [
+      'id',
+      'webhook_id',
+      'event_id',
+      'event_type',
+      'status',
+      'attempts',
+      'next_attempt_at',
+      'last_response_status',
+      'last_response_excerpt',
+      'last_error',
+      'delivered_at',
+      'created_at',
+    ]) {
+      expect(body).toContain(`'${field}'`);
+    }
+    expect(body).toContain("value.id.startsWith('wdl_')");
+    expect(body).toContain("value.webhook_id.startsWith('whk_')");
+    expect(body).toContain('allowedWebhookEventTypes.has(value.event_type)');
+    expect(body).toContain("value.status === 'dlq'");
+    expect(body).toContain('Number.isInteger(value.attempts)');
+    expect(body).toContain('function parseDlqPage(body)');
+    expect(body).toContain("!hasOwn(body, 'data')");
+    expect(body).toContain('body.data.length > 50');
+    expect(body).toContain('!body.data.every(isDelivery)');
+    expect(body).toContain("!hasOwn(body, 'next_cursor')");
+    expect(body).toContain("typeof body.next_cursor === 'string' && body.next_cursor.length > 0");
+    expect(body).toContain("throw responseContractError('Invalid DLQ response')");
+    expect(body).toMatch(
+      /function responseContractError\(message\) \{\s*const error = new Error\(message\);\s*error\.staffSafe = true;/,
+    );
+
+    const parse = body.indexOf('const page = parseDlqPage(body);');
+    const rowsCommit = body.indexOf('loadedEntries = nextLoadedEntries;', parse);
+    const cursorCommit = body.indexOf('nextCursor = page.nextCursor;', parse);
+    expect(parse).toBeGreaterThan(-1);
+    expect(rowsCommit).toBeGreaterThan(parse);
+    expect(cursorCommit).toBeGreaterThan(parse);
+  });
+
+  it('keeps append failures retryable and pauses newest-page polling until an explicit reset', () => {
+    expect(body).toContain('Showing 0 entries — more available');
+    expect(body).toContain("(nextCursor ? ' — more available' : '')");
+    expect(body).toContain("Couldn't load older DLQ entries (");
+    expect(body).toContain('Existing rows are unchanged, and the retry cursor is unchanged.');
+    expect(body).toContain("Couldn't refresh DLQ (");
+    expect(body).toContain('Existing rows and pagination state are unchanged; retry when ready.');
+    expect(body).toMatch(/if \(append\) \{\s*appendInFlight = true;\s*expandedView = true;/);
+    expect(body).toMatch(/if \(hasLoadedWindow\) \{\s*renderEntries\(loadedEntries\);/);
+    expect(body).toMatch(/function loadOlder\(\)[\s\S]*?load\(\{ append: true \}\)/);
+    expect(body).toContain(
+      "setLiveState('paused', 'Live refresh paused while viewing older entries')",
+    );
+    expect(body).toMatch(
+      /setInterval\(\(\) => \{\s*if \(expandedView\) \{\s*showExpandedPause\(\);\s*return;/,
+    );
+    expect(body).toMatch(
+      /const backToNewest = target\.closest\('\[data-action="back-to-newest"\]'\);[\s\S]*?loadWithLive\(\);/,
+    );
+    expect(body).toMatch(
+      /loadMoreBtn\.disabled = readBusy \|\| appendInFlight \|\| mutationBusy \|\| !nextCursor;/,
+    );
   });
 
   it('CRITICAL discard confirm is destructive:true — without it the OK button auto-focuses and a stray Enter fires the irrecoverable hard-delete with no click required (audit waefer6wu)', () => {

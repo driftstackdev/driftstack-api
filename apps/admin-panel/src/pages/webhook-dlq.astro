@@ -1,5 +1,6 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
+import { WebhookEventTypeSchema } from '@driftstack/api-types';
 
 // V-189 — progressive-enhancement against /v1/admin/webhook-dlq. SSG
 // renders an inert unavailable shell; an inline <script> fetches the live
@@ -12,6 +13,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
+const webhookEventTypes = WebhookEventTypeSchema.options;
 ---
 
 <AdminLayout title="Webhook DLQ">
@@ -81,6 +83,22 @@ const apiBaseUrl = resolveApiBaseUrl();
           <strong class="font-medium text-red-700" data-field="summary">
           </strong>
         </p>
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            data-action="back-to-newest"
+            class="hidden text-sm font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
+          >
+            Back to newest / Refresh
+          </button>
+          <button
+            type="button"
+            data-action="load-more"
+            class="hidden text-sm font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
+          >
+            Load more
+          </button>
+        </div>
       </div>
 
       <ul class="space-y-3" data-list="dlq">
@@ -98,7 +116,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     </p>
   </div>
 
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, webhookEventTypes }}>
     (function () {
       const root = document.querySelector('[data-page="admin-dlq"]');
       if (!root) return;
@@ -111,9 +129,34 @@ const apiBaseUrl = resolveApiBaseUrl();
       const liveStatus = root.querySelector('[data-live-status]');
       const liveAge = root.querySelector('[data-live-age]');
       const refreshBtn = root.querySelector('[data-live-refresh]');
+      const loadMoreBtn = root.querySelector('[data-action="load-more"]');
+      const backToNewestBtn = root.querySelector('[data-action="back-to-newest"]');
       let token = null;
       const DLQ_TIMEOUT_MS = 15_000;
       let loadController = null;
+      let loadedEntries = [];
+      let nextCursor = null;
+      let listEpoch = 0;
+      let appendInFlight = false;
+      let expandedView = false;
+      let hasLoadedWindow = false;
+      const allowedWebhookEventTypes = new Set(webhookEventTypes);
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+      const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+      const DELIVERY_FIELDS = [
+        'id',
+        'webhook_id',
+        'event_id',
+        'event_type',
+        'status',
+        'attempts',
+        'next_attempt_at',
+        'last_response_status',
+        'last_response_excerpt',
+        'last_error',
+        'delivered_at',
+        'created_at',
+      ];
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
         return window.driftstackFetchWithDeadline(url, init, DLQ_TIMEOUT_MS, controller);
@@ -121,6 +164,12 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function requestErrorMessage(err, fallback) {
         return window.driftstackRequestErrorMessage(err, fallback);
+      }
+
+      function responseContractError(message) {
+        const error = new Error(message);
+        error.staffSafe = true;
+        return error;
       }
 
       function showBanner(text) {
@@ -150,6 +199,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       function setEntryBusy(id, action, busy, pendingLabel) {
         if (busy) pendingMutations.set(id, { action: action, label: pendingLabel });
         else pendingMutations.delete(id);
+        syncPaginationControls();
         if (!list) return;
         list.querySelectorAll('button[data-id]').forEach(function (button) {
           if (button.getAttribute('data-id') !== id) return;
@@ -178,6 +228,69 @@ const apiBaseUrl = resolveApiBaseUrl();
               "'": '&#39;',
             })[c],
         );
+      }
+
+      function isRecord(value) {
+        return value !== null && typeof value === 'object' && !Array.isArray(value);
+      }
+
+      function hasOwn(value, field) {
+        return Object.prototype.hasOwnProperty.call(value, field);
+      }
+
+      function isIsoUtc(value) {
+        if (typeof value !== 'string' || !ISO_UTC_RE.test(value)) return false;
+        const parsed = Date.parse(value);
+        return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+      }
+
+      function isNullableString(value) {
+        return value === null || typeof value === 'string';
+      }
+
+      function isDelivery(value) {
+        if (!isRecord(value) || !DELIVERY_FIELDS.every((field) => hasOwn(value, field))) {
+          return false;
+        }
+        return (
+          typeof value.id === 'string' &&
+          value.id.startsWith('wdl_') &&
+          UUID_RE.test(value.id.slice(4)) &&
+          typeof value.webhook_id === 'string' &&
+          value.webhook_id.startsWith('whk_') &&
+          UUID_RE.test(value.webhook_id.slice(4)) &&
+          typeof value.event_id === 'string' &&
+          UUID_RE.test(value.event_id) &&
+          typeof value.event_type === 'string' &&
+          allowedWebhookEventTypes.has(value.event_type) &&
+          value.status === 'dlq' &&
+          Number.isInteger(value.attempts) &&
+          value.attempts >= 0 &&
+          isIsoUtc(value.next_attempt_at) &&
+          (value.last_response_status === null || Number.isInteger(value.last_response_status)) &&
+          isNullableString(value.last_response_excerpt) &&
+          isNullableString(value.last_error) &&
+          (value.delivered_at === null || isIsoUtc(value.delivered_at)) &&
+          isIsoUtc(value.created_at)
+        );
+      }
+
+      function parseDlqPage(body) {
+        if (
+          !isRecord(body) ||
+          !hasOwn(body, 'data') ||
+          !Array.isArray(body.data) ||
+          body.data.length > 50 ||
+          !body.data.every(isDelivery) ||
+          !hasOwn(body, 'next_cursor') ||
+          !(
+            body.next_cursor === null ||
+            (typeof body.next_cursor === 'string' && body.next_cursor.length > 0)
+          )
+        ) {
+          throw responseContractError('Invalid DLQ response');
+        }
+        return { entries: body.data, nextCursor: body.next_cursor };
       }
 
       function ageStr(createdAt) {
@@ -257,24 +370,66 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
 
+      function mergeUniqueEntries(existing, incoming) {
+        const seen = new Set();
+        const merged = [];
+        existing.concat(incoming).forEach((entry) => {
+          const id = entry && typeof entry.id === 'string' ? entry.id : '';
+          if (!id || seen.has(id)) return;
+          seen.add(id);
+          merged.push(entry);
+        });
+        return merged;
+      }
+
+      function syncPaginationControls() {
+        const readBusy = loadController !== null;
+        const mutationBusy = pendingMutations.size > 0;
+        if (loadMoreBtn) {
+          loadMoreBtn.classList.toggle('hidden', !nextCursor);
+          loadMoreBtn.disabled = readBusy || appendInFlight || mutationBusy || !nextCursor;
+          loadMoreBtn.textContent = appendInFlight ? 'Loading…' : 'Load more';
+          loadMoreBtn.setAttribute('aria-busy', appendInFlight ? 'true' : 'false');
+        }
+        if (backToNewestBtn) {
+          backToNewestBtn.classList.toggle('hidden', !expandedView);
+          backToNewestBtn.disabled = readBusy || mutationBusy;
+        }
+      }
+
+      function showExpandedPause() {
+        if (!expandedView) return;
+        setLiveState('paused', 'Live refresh paused while viewing older entries');
+      }
+
       function renderEntries(entries) {
         if (entries.length === 0) {
           if (list) list.innerHTML = '';
-          if (summary) summary.textContent = '0 entries';
+          if (summary) summary.textContent = nextCursor ? 'Showing 0 entries — more available' : '0 entries';
           if (listRegion) listRegion.classList.add('hidden');
           if (emptyRegion) emptyRegion.classList.remove('hidden');
+          syncPaginationControls();
           return;
         }
         if (listRegion) listRegion.classList.remove('hidden');
         if (emptyRegion) emptyRegion.classList.add('hidden');
         if (summary) {
           summary.textContent =
-            entries.length + ' entr' + (entries.length === 1 ? 'y' : 'ies');
+            'Showing ' +
+            entries.length +
+            ' entr' +
+            (entries.length === 1 ? 'y' : 'ies') +
+            (nextCursor ? ' — more available' : '');
         }
         if (list) list.innerHTML = entries.map(rowHtml).join('');
+        syncPaginationControls();
       }
 
       function renderUnavailable(message) {
+        loadedEntries = [];
+        nextCursor = null;
+        expandedView = false;
+        hasLoadedWindow = false;
         if (emptyRegion) emptyRegion.classList.add('hidden');
         if (listRegion) listRegion.classList.remove('hidden');
         if (list) {
@@ -284,6 +439,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             '</li>';
         }
         if (summary) summary.textContent = '';
+        syncPaginationControls();
       }
 
       function setLiveState(state, message) {
@@ -309,15 +465,27 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       let inFlight = 0;
-      function load() {
+      function load(options) {
+        const append = !!(options && options.append);
         if (!token) return Promise.resolve(false);
+        const requestedCursor = append ? nextCursor : null;
+        if (append && (!requestedCursor || appendInFlight)) return Promise.resolve(false);
+        const epoch = append ? listEpoch : ++listEpoch;
+        if (append) {
+          appendInFlight = true;
+          expandedView = true;
+        }
         const myReq = ++inFlight;
         if (loadController) loadController.abort();
         const controller = new AbortController();
         loadController = controller;
         root.setAttribute('aria-busy', 'true');
+        syncPaginationControls();
+        const params = new URLSearchParams();
+        params.set('limit', '50');
+        if (requestedCursor) params.set('cursor', requestedCursor);
         return boundedFetch(
-          apiBaseUrl + '/v1/admin/webhook-dlq?limit=50',
+          apiBaseUrl + '/v1/admin/webhook-dlq?' + params.toString(),
           {
             headers: { authorization: 'Bearer ' + token },
             credentials: 'include',
@@ -329,14 +497,41 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return false;
-            renderEntries(body.data || []);
+            if (myReq !== inFlight || epoch !== listEpoch) return false;
+            if (append && nextCursor !== requestedCursor) return false;
+            const page = parseDlqPage(body);
+            const nextLoadedEntries = append
+              ? mergeUniqueEntries(loadedEntries, page.entries)
+              : mergeUniqueEntries([], page.entries);
+            loadedEntries = nextLoadedEntries;
+            nextCursor = page.nextCursor;
+            expandedView = append;
+            hasLoadedWindow = true;
+            renderEntries(loadedEntries);
             hideBanner();
             return true;
           })
           .catch((err) => {
-            if (myReq !== inFlight) return false;
+            if (myReq !== inFlight || epoch !== listEpoch) return false;
             const msg = requestErrorMessage(err, 'network error');
+            if (append) {
+              renderEntries(loadedEntries);
+              showBanner(
+                "Couldn't load older DLQ entries (" +
+                  msg +
+                  '). Existing rows are unchanged, and the retry cursor is unchanged.',
+              );
+              return false;
+            }
+            if (hasLoadedWindow) {
+              renderEntries(loadedEntries);
+              showBanner(
+                "Couldn't refresh DLQ (" +
+                  msg +
+                  '). Existing rows and pagination state are unchanged; retry when ready.',
+              );
+              return false;
+            }
             renderUnavailable(
               'Could not load the DLQ — nothing to act on. Resolve the error above and retry.',
             );
@@ -350,10 +545,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             return false;
           })
           .finally(() => {
-            if (myReq === inFlight) {
+            if (append) appendInFlight = false;
+            if (myReq === inFlight && epoch === listEpoch) {
               loadController = null;
               root.removeAttribute('aria-busy');
             }
+            syncPaginationControls();
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
             }
@@ -468,6 +665,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         root.addEventListener('click', (ev) => {
           const target = ev.target;
           if (!target || !target.closest) return;
+          const loadMore = target.closest('[data-action="load-more"]');
+          if (loadMore) {
+            ev.preventDefault();
+            loadOlder();
+            return;
+          }
+          const backToNewest = target.closest('[data-action="back-to-newest"]');
+          if (backToNewest) {
+            ev.preventDefault();
+            loadWithLive();
+            return;
+          }
           const requeueBtn = target.closest('[data-action="requeue"]');
           if (requeueBtn) {
             ev.preventDefault();
@@ -519,6 +728,24 @@ const apiBaseUrl = resolveApiBaseUrl();
           return Promise.resolve(false);
         }
       }
+      function loadOlder() {
+        if (!nextCursor || appendInFlight || pendingMutations.size > 0) {
+          return Promise.resolve(false);
+        }
+        const expectedReq = inFlight + 1;
+        setLiveState('loading', 'Loading older DLQ entries');
+        const p = load({ append: true });
+        if (!p || typeof p.then !== 'function') return Promise.resolve(false);
+        return p.then((loaded) => {
+          if (expectedReq !== inFlight) return loaded;
+          if (loaded || expandedView) {
+            showExpandedPause();
+          } else {
+            setLiveState('ready', 'Live newest page retained');
+          }
+          return loaded;
+        });
+      }
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
@@ -545,7 +772,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           refreshBtn.removeAttribute('title');
           refreshBtn.addEventListener('click', loadWithLive);
         }
-        setInterval(loadWithLive, 30_000);
+        syncPaginationControls();
+        setInterval(() => {
+          if (expandedView) {
+            showExpandedPause();
+            return;
+          }
+          loadWithLive();
+        }, 30_000);
         setInterval(() => {
           if (liveAge) liveAge.textContent = fmtAge(lastFetch);
         }, 5_000);

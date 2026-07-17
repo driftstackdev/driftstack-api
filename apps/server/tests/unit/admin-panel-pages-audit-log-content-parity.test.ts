@@ -10,16 +10,15 @@
 //     /v1/admin/audit-log. SSG renders the mock; an inline
 //     <script> reads ds_web_session_token from localStorage and
 //     replaces the table body with live entries. Filter bar is
-//     wired: action substring (server-side `action`), admin id
+//     wired: exact action enum value (server-side `action`), admin id
 //     (`admin_id`), result-only filter is client-side post-fetch
 //     since the endpoint doesn't accept a result filter today.'
 //   • Filter bar 3-field: action / admin-id / result (3-option
 //     select: any / success-only / errors-only).
-//   • Inflight counter pattern: ++inFlight + myReq !== inFlight
-//     stale-response guard.
-//   • Debounce 200ms via setTimeout on input/change.
-//   • Retention framing: '90 days hot in Postgres + R2 archive
-//     thereafter (ADR-006)'.
+//   • Request + list-epoch + requested-cursor stale-response guards.
+//   • Debounce 200ms for server filters; client result filtering is local.
+//   • Live-store framing: the console reads PostgreSQL rows and callers page
+//     the API for a complete live extract; no unwired archive promise.
 //   • 'Showing N entr(y|ies)' singular/plural footnote.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -60,10 +59,14 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
     expect(body).not.toMatch(/Filter by action, target account, or admin email/);
   });
 
-  it("Filter bar 3-field: data-field='action' (substring placeholder 'e.g. account.tier_changed') + data-field='admin-id' (placeholder 'acc_<uuid>') + data-field='result' 3-option select (Any result / Success only / Errors only) — pinned so the filter taxonomy stays in sync with the server endpoint's accepted params + the result-only client-side filter has all 3 states", () => {
+  it('Filter bar 3-field: shared exact-action select + admin-id input + result select', () => {
     expect(body).toMatch(
-      /data-field="action"[\s\S]*?aria-label="Filter audit log by action"[\s\S]*?placeholder="Filter by action \(e\.g\. account\.tier_changed\)…"/,
+      /<select\s+data-field="action"[\s\S]*?aria-label="Filter audit log by action"[\s\S]*?Any action \(exact match\)/,
     );
+    expect(body).toContain("import { AdminAuditActionSchema } from '@driftstack/api-types';");
+    expect(body).toContain('const adminAuditActions = AdminAuditActionSchema.options;');
+    expect(body).toContain('adminAuditActions.map((action) =>');
+    expect(body).not.toMatch(/action substring/i);
     expect(body).toMatch(
       /data-field="admin-id"[\s\S]*?aria-label="Filter audit log by admin id"[\s\S]*?placeholder="Admin id \(acc_<uuid>\)"/,
     );
@@ -72,56 +75,92 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
     expect(body).toMatch(/<option value="error">Errors only<\/option>/);
   });
 
-  it('In-flight stale-response guard returns false from superseded success/failure paths', () => {
+  it('request, epoch, and requested-cursor fences make stale appends inert', () => {
     expect(body).toMatch(/let inFlight = 0;/);
     expect(body).toMatch(/const myReq = \+\+inFlight;/);
-    expect(body).toMatch(/if \(myReq !== inFlight\) return false;/);
+    expect(body).toMatch(/let listEpoch = 0;/);
+    expect(body).toMatch(/const epoch = append \? listEpoch : \+\+listEpoch;/);
+    expect(body).toMatch(/if \(myReq !== inFlight \|\| epoch !== listEpoch\) return false;/);
+    expect(body).toMatch(/if \(append && nextCursor !== requestedCursor\) return false;/);
   });
 
-  it('Debounce 200ms routes filter refreshes through the truthful live-state wrapper', () => {
-    expect(body).toMatch(
-      /function scheduleLoad\(\) \{\s*\n?\s*clearTimeout\(debounce\);\s*\n?\s*debounce = setTimeout\(loadWithLive, 200\);\s*\n?\s*\}/,
+  it('requires every canonical row and an explicit null-or-nonempty cursor before commit', () => {
+    expect(body).toMatch(/!Array\.isArray\(body\.data\)/);
+    expect(body).toContain('!body.data.every(validAuditEntry)');
+    expect(body).toMatch(/body\.next_cursor === null \|\|/);
+    expect(body).toMatch(/typeof body\.next_cursor === 'string' && body\.next_cursor\.length > 0/);
+    expect(body).toContain('const page = parseAuditPage(body);');
+    expect(body.indexOf('const page = parseAuditPage(body);')).toBeLessThan(
+      body.indexOf('loadedEntries = nextLoadedEntries;'),
     );
-    expect(body).toMatch(/actionEl\.addEventListener\('input', scheduleLoad\)/);
-    expect(body).toMatch(/adminIdEl\.addEventListener\('input', scheduleLoad\)/);
-    expect(body).toMatch(/resultEl\.addEventListener\('change', scheduleLoad\)/);
+    expect(body).toContain("throw new Error('Invalid audit-log response');");
   });
 
-  it('Client-side result-filter: entries.filter on a startsWith(resultFilter) PREFIX match (not exact ===) — failures are audited as `error: <code>`, so an exact "error" match never hit them; stays client-side until the server endpoint adds a result query param', () => {
+  it('server filters synchronously claim/reset scope, then debounce only the cursor-free fetch', () => {
+    expect(body).toContain('function claimServerFilterScope()');
+    expect(body).toMatch(
+      /function scheduleLoad\(\) \{\s*clearTimeout\(debounce\);\s*claimServerFilterScope\(\);\s*debounce = setTimeout\(\(\) => \{\s*debounce = 0;\s*void loadWithLive\(\);\s*\}, 200\);\s*\}/,
+    );
+    expect(body).toMatch(/actionEl\.addEventListener\('change', scheduleLoad\)/);
+    expect(body).toMatch(/adminIdEl\.addEventListener\('input', scheduleLoad\)/);
+    expect(body).toMatch(/resultEl\.addEventListener\('change', renderLoadedWindow\)/);
+    expect(body).toContain('loadedServerFilterKey !== requestedFilterKey');
+    expect(body).toMatch(/if \(debounce !== 0\) \{[\s\S]*?return;/);
+  });
+
+  it('client-side result filtering prefix-matches across every accumulated page', () => {
+    expect(body).toMatch(
+      /function renderLoadedWindow\(\) \{[\s\S]*?if \(!hasLoadedWindow\) return;/,
+    );
     expect(body).toMatch(/const resultFilter = resultEl \? resultEl\.value : '';/);
     expect(body).toMatch(
-      /entries = entries\.filter\(\(e\) => String\(e\.result\)\.startsWith\(resultFilter\)\);/,
+      /loadedEntries\.filter\(\(e\) => String\(e\.result\)\.startsWith\(resultFilter\)/,
     );
+    expect(body).toMatch(/resultEl\.addEventListener\('change', renderLoadedWindow\)/);
   });
 
-  it("Retention framing pinned: '90 days hot in Postgres + R2 archive thereafter (ADR-006)' + footnote dynamic 'Showing N entr(y|ies)' (singular when length===1) — pinned so the retention contract + grammatical accuracy survive (drift to '90 days' without the R2-archive caveat would imply data is permanently lost, weakening the compliance posture)", () => {
+  it('pins live PostgreSQL/page-all truth without promising an unwired archive scheduler', () => {
     expect(body).toMatch(
-      /'Showing ' \+\s*\n?\s*entries\.length \+\s*\n?\s*' entr' \+\s*\n?\s*\(entries\.length === 1 \? 'y' : 'ies'\) \+\s*\n?\s*\(filteredPage \? ' \(of the 50 most-recent — filter is client-side\)' : ''\) \+\s*\n?\s*'\. Retention 90 days hot in Postgres \+ R2 archive thereafter \(ADR-006\)\.';/,
+      /'Showing ' \+\s*\n?\s*entries\.length \+\s*\n?\s*' entr' \+\s*\n?\s*\(entries\.length === 1 \? 'y' : 'ies'\) \+\s*\n?\s*' from a loaded window of ' \+\s*\n?\s*loadedEntries\.length \+\s*\n?\s*'\. This console reads live PostgreSQL audit rows; page the API for a complete live extract\.';/,
     );
     expect(body).toMatch(
-      /Retention 90 days hot in Postgres \+ R2 archive thereafter \(ADR-006\)\. The\s*\n?\s*read endpoint returns newest first and paginates by cursor\. For a complete\s*\n?\s*admin-side extract, pull every page from\s*\n?\s*<code class="font-mono">\/v1\/admin\/audit-log<\/code>/,
+      /This console reads the live PostgreSQL audit rows newest first and paginates\s*\n?\s*by cursor\. For a complete live admin-side extract, pull every page from\s*\n?\s*<code class="font-mono">\/v1\/admin\/audit-log<\/code>/,
     );
+    expect(body).not.toMatch(/R2 archive thereafter|90 days hot/i);
     expect(body).not.toMatch(/not yet|coming soon|roadmap|planned feature/i);
   });
 
-  it("Empty-filter-result branch: 'No audit entries match the current filter.' colspan=5 cell — pinned so the empty-after-filter state is visually distinct (centered + slate-500 muted) from the no-data-yet state and operators can tell their filter is the cause. The client-side result filter also qualifies its empty-state + count honestly (a filtered empty page over the 50-row window means 'none in the most-recent', NOT 'none exist').", () => {
-    expect(body).toMatch(
-      /class="px-4 py-8 text-center text-sm text-tk-ink-3">'\s*\+\s*\n?\s*\(filteredPage/,
+  it('empty filtered windows never imply global absence while an older cursor exists', () => {
+    expect(body).toContain('No audit entries match the current filter in the loaded window.');
+    expect(body).toContain(
+      ' entries in the loaded window. Older entries are available; load more to continue searching.',
     );
-    expect(body).toMatch(/No audit entries match the current filter\./);
-    expect(body).toMatch(
-      /No ' \+\s*\n?\s*resultFilter \+\s*\n?\s*' entries in the 50 most-recent — older entries are not loaded on this view\.'/,
-    );
+    expect(body).toContain(' entries in the loaded window. All available pages are loaded.');
   });
 
   it("Query construction: limit=50 + optional action + optional admin_id (server-side filter params only — result excluded since it's client-side) — pinned so the buildQuery helper matches the endpoint contract (drift to passing result as a query param would crowd the URL without effect)", () => {
     expect(body).toMatch(/params\.set\('limit', '50'\);/);
+    expect(body).toMatch(/if \(filters\.action\) params\.set\('action', filters\.action\);/);
+    expect(body).toMatch(/if \(filters\.adminId\) params\.set\('admin_id', filters\.adminId\);/);
+    expect(body).toMatch(/if \(filters\.targetId\) params\.set\('target_id', filters\.targetId\);/);
+    expect(body).toMatch(/if \(requestedCursor\) params\.set\('cursor', requestedCursor\);/);
+    expect(body).toContain('const params = buildQuery(requestedCursor, requestedFilters);');
+    expect(body).not.toMatch(/params\.set\('result'/);
+  });
+
+  it('dedupes ids, refuses cursor cycles, preserves append errors, and pauses polling', () => {
+    expect(body).toMatch(/function mergeUniqueEntries\(existing, incoming\)/);
+    expect(body).toMatch(/if \(seen\.has\(entry\.id\)\) return;/);
     expect(body).toMatch(
-      /if \(actionEl && actionEl\.value\.trim\(\)\) params\.set\('action', actionEl\.value\.trim\(\)\);/,
+      /returnedCursor === requestedCursor \|\| requestedCursors\.has\(returnedCursor\)/,
     );
+    expect(body).toContain('The server repeated a pagination cursor.');
+    expect(body).toContain('Existing rows and the retry cursor are unchanged.');
+    expect(body).toContain('Existing rows and pagination state are unchanged');
     expect(body).toMatch(
-      /if \(adminIdEl && adminIdEl\.value\.trim\(\)\) params\.set\('admin_id', adminIdEl\.value\.trim\(\)\);/,
+      /setInterval\(\(\) => \{\s*if \(debounce !== 0\) \{[\s\S]*?return;\s*\}\s*if \(expandedWindow\) \{[\s\S]*?return;\s*\}\s*void loadWithLive\(\);\s*\}, 30_000\);/,
     );
+    expect(body).toMatch(/resetLoadedWindow\(\);\s*void loadWithLive\(\);/);
   });
 
   it('Signed-out and failed loads render an explicit non-authoritative row and success alone turns freshness green', () => {

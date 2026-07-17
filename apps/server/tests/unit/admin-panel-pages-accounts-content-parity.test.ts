@@ -13,7 +13,7 @@
 //     api_scale / enterprise).
 //   • email_contains server-side filter (substring match).
 //   • encodeURIComponent on stripped id for /accounts/{id} href.
-//   • has_more pagination indicator surfacing.
+//   • strict, request-owned cursor pagination with expanded polling pause.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -82,17 +82,48 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
     );
   });
 
-  it("has_more pagination: real cursor pagination via a 'Load more' button (audit waefer6wu — the old footnote-only hint advertised pagination the UI never implemented, silently truncating at 50 rows) — pinned so operators see when there are more accounts AND can actually page through them, not just a passive hint", () => {
-    // 2026-06-30 — was a footnote-only " (more available — refine filter or
-    // paginate)" suffix with NO actual pagination. Now wires real cursor
-    // pagination off the server's existing has_more/next_cursor (no server
-    // change) with a visible Load-more button. The "more accounts exist"
-    // signal is preserved (footnote text), strengthened by an action.
+  it('strict cursor pagination exposes Load more plus an explicit newest reset', () => {
     expect(body).toContain('Load more');
+    expect(body).toContain('Back to newest / Refresh');
+    expect(body).toMatch(/data-action="back-to-newest"/);
     expect(body).toMatch(
-      /const more = body\.has_more\s*\n?\s*\? ' — more available \(' \+ \(nextCursor \? 'click Load more' : 'refine filter'\) \+ '\)'\s*\n?\s*: '';/,
+      /if \(requestedCursor !== null\) params\.set\('cursor', requestedCursor\);/,
     );
-    expect(body).toMatch(/nextCursor = body\.next_cursor \|\| null;/);
+  });
+
+  it('whole-page parser requires canonical rows plus has_more/next_cursor agreement', () => {
+    expect(body).toContain('function isAccountListRow(value)');
+    expect(body).toContain('function parseAccountListPage(value)');
+    expect(body).toMatch(/ACCOUNT_ID_RE\.test\(value\.id\)/);
+    expect(body).toMatch(/ACCOUNT_TIERS\.has\(value\.tier\)/);
+    expect(body).toMatch(/ACCOUNT_STATUSES\.has\(value\.status\)/);
+    expect(body).toMatch(/isIsoTimestamp\(value\.created_at\)/);
+    expect(body).toMatch(/isIsoTimestamp\(value\.updated_at\)/);
+    expect(body).toMatch(/value\.has_more !== \(value\.next_cursor !== null\)/);
+    expect(body).not.toContain('body.data || []');
+    expect(body).not.toContain('body.next_cursor || null');
+  });
+
+  it('append ownership, id dedupe, cursor-cycle refusal, and exact retry preservation stay explicit', () => {
+    expect(body).toMatch(/const requestedCursors = new Set\(\);/);
+    expect(body).toMatch(/let listEpoch = 0;/);
+    expect(body).toMatch(/append && nextCursor !== requestedCursor/);
+    expect(body).toMatch(/myReq !== inFlight \|\| epoch !== listEpoch/);
+    expect(body).toContain('function mergeUniqueAccounts(existing, incoming)');
+    expect(body).toMatch(
+      /returnedCursor === requestedCursor \|\| requestedCursors\.has\(returnedCursor\)/,
+    );
+    expect(body).toContain('Existing rows and the retry cursor are unchanged.');
+  });
+
+  it('filter invalidation is synchronous and the 30-second poll cannot replace expanded rows', () => {
+    expect(body).toMatch(
+      /filterTransitionPending = true;\s*listEpoch \+= 1;\s*liveOwner \+= 1;\s*appendRequestId \+= 1;\s*appendInFlight = false;/,
+    );
+    expect(body).toMatch(
+      /setInterval\(\(\) => \{\s*if \(expandedView\) \{\s*showExpandedPause\(\);\s*return;/,
+    );
+    expect(body).toContain('Live refresh paused while viewing older accounts');
   });
 
   it("Empty-filter-result branch: 'No accounts match the current filter.' colspan=6 cell — pinned so the 6-column table's empty-after-filter state spans full width and the cell count matches the header (Account/Tier/Status/Created/Last updated/Open = 6 columns; drift to colspan=5 would visually misalign)", () => {
@@ -111,13 +142,13 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
     expect(body).toContain('escapeHtml(a.id)');
   });
 
-  it('live fmtIso uses an empty-value fallback and date-only slice so absent activity does not crash the row', () => {
+  it('live fmtIso retains its defensive display fallback after strict wire parsing', () => {
     expect(body).toMatch(
       /function fmtIso\(iso\) \{\s*\n?\s*if \(!iso\) return '—';\s*\n?\s*return new Date\(iso\)\.toISOString\(\)\.slice\(0, 10\);\s*\n?\s*\}/,
     );
   });
 
-  it('failed/signed-out reads reapply unavailable rows and success alone turns the live indicator green', () => {
+  it('failed/signed-out reads reapply unavailable rows and parsed success alone turns live green', () => {
     expect(body).toContain('function renderAccountsUnavailable(message)');
     expect(body).toContain(
       "renderAccountsUnavailable('Sign in with a staff admin account to see accounts.')",
@@ -125,12 +156,12 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
     expect(body).toContain(
       "renderAccountsUnavailable('Could not load accounts. Resolve the error above and retry.')",
     );
-    expect(body).toMatch(/return true;\s*\n?\s*\}\)\s*\n?\s*\.catch/);
-    expect(body).toMatch(/return false;\s*\n?\s*\}\)\s*\n?\s*\.finally/);
+    expect(body).toMatch(/return \{ loaded: true, repeatedCursor \};\s*\n?\s*\}\)\s*\n?\s*\.catch/);
+    expect(body).toMatch(/return emptyLoadResult\(\);\s*\n?\s*\}\)\s*\n?\s*\.finally/);
     expect(body).toMatch(
-      /if \(loaded\) \{\s*\n?\s*lastFetch = Date\.now\(\);\s*\n?\s*if \(liveAge\) liveAge\.textContent = 'just now';\s*\n?\s*setLiveState\('ready'\);/,
+      /if \(result\.loaded\) \{\s*\n?\s*lastFetch = Date\.now\(\);\s*\n?\s*if \(liveAge\) liveAge\.textContent = 'just now';\s*\n?\s*setLiveState\('ready'\);/,
     );
-    expect(body).toMatch(/if \(expectedReq !== inFlight\) return loaded;/);
+    expect(body).toMatch(/if \(owner !== liveOwner\) return result;/);
   });
 
   it('file exists at canonical path', () => {

@@ -102,6 +102,38 @@ const apiBaseUrl = resolveApiBaseUrl();
       </ul>
     </div>
 
+    <nav
+      data-pagination
+      aria-label="Subscriber pages"
+      class="mt-4 flex items-center justify-between gap-4 text-sm"
+    >
+      <span data-page-status class="text-tk-ink-3" role="status" aria-live="polite">
+        Page unavailable
+      </span>
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          data-page-previous
+          disabled
+          aria-disabled="true"
+          title="Available after the live subscriber list loads."
+          class="text-tk-accent hover:underline disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          data-page-next
+          disabled
+          aria-disabled="true"
+          title="Available after the live subscriber list loads."
+          class="text-tk-accent hover:underline disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
+        >
+          Next
+        </button>
+      </div>
+    </nav>
+
     <p class="mt-6 text-xs text-tk-ink-3">
       Subscribers list paginated server-side (default 50 per page; <code>?limit=&amp;offset=</code>
       query params for paging). Confirmed-and-still-subscribed rows trigger fan-out emails on
@@ -124,15 +156,37 @@ const apiBaseUrl = resolveApiBaseUrl();
       const addEmail = addForm ? addForm.querySelector('#add-email') : null;
       const addSubmit = addForm ? addForm.querySelector('button[type="submit"]') : null;
       const addResult = root.querySelector('[data-add-result]');
+      const previousPageBtn = root.querySelector('[data-page-previous]');
+      const nextPageBtn = root.querySelector('[data-page-next]');
+      const pageStatus = root.querySelector('[data-page-status]');
       const SUBSCRIBER_TIMEOUT_MS = 15_000;
+      const PAGE_SIZE = 50;
+      const PAGE_FETCH_LIMIT = PAGE_SIZE + 1;
       let refreshController = null;
       let refreshGeneration = 0;
+      let refreshOwner = null;
+      let requestedOffset = 0;
+      let renderedOffset = 0;
+      let renderedHasNext = false;
+      let renderedSubscribers = [];
       const forceUnsubsInFlight = new Set();
       const uncertainForceUnsubs = new Set();
+      const committedForceUnsubs = new Set();
       let addInFlight = false;
       let addOutcomeUnknown = false;
+      let addCommitDetailsUnavailable = false;
       let subscriberDataAvailable = false;
       let lastFetch = null;
+      const SUBSCRIBER_FIELDS = [
+        'id',
+        'email',
+        'confirmed_at',
+        'unsubscribed_at',
+        'created_at',
+      ];
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+      const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
         return window.driftstackFetchWithDeadline(url, init, SUBSCRIBER_TIMEOUT_MS, controller);
@@ -140,6 +194,69 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function requestErrorMessage(err, fallback) {
         return window.driftstackRequestErrorMessage(err, fallback);
+      }
+
+      function responseContractError(message) {
+        const error = new Error(message);
+        error.staffSafe = true;
+        return error;
+      }
+
+      function isRecord(value) {
+        return value !== null && typeof value === 'object' && !Array.isArray(value);
+      }
+
+      function hasOwn(value, field) {
+        return Object.prototype.hasOwnProperty.call(value, field);
+      }
+
+      function isIsoUtc(value) {
+        if (typeof value !== 'string' || !ISO_UTC_RE.test(value)) return false;
+        const parsed = Date.parse(value);
+        return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+      }
+
+      function isSubscriber(value) {
+        if (!isRecord(value) || !SUBSCRIBER_FIELDS.every((field) => hasOwn(value, field))) {
+          return false;
+        }
+        const emailValid =
+          value.email === null ||
+          (typeof value.email === 'string' &&
+            value.email.length > 0 &&
+            value.email.length <= 254 &&
+            EMAIL_RE.test(value.email));
+        return (
+          typeof value.id === 'string' &&
+          value.id.startsWith('sub_') &&
+          UUID_RE.test(value.id.slice(4)) &&
+          emailValid &&
+          (value.confirmed_at === null || isIsoUtc(value.confirmed_at)) &&
+          (value.unsubscribed_at === null || isIsoUtc(value.unsubscribed_at)) &&
+          isIsoUtc(value.created_at) &&
+          (value.email !== null || value.unsubscribed_at !== null)
+        );
+      }
+
+      function parseSubscriberPage(body) {
+        if (
+          !isRecord(body) ||
+          !hasOwn(body, 'data') ||
+          !Array.isArray(body.data) ||
+          body.data.length > PAGE_FETCH_LIMIT ||
+          !body.data.every(isSubscriber)
+        ) {
+          throw responseContractError('Invalid subscriber list response');
+        }
+        return body.data;
+      }
+
+      function mutationOutcomeIsUnknown(err) {
+        if (err && err.name === 'AbortError') return true;
+        const explicitStatus = Number(err && err.httpStatus);
+        if (Number.isInteger(explicitStatus)) return explicitStatus >= 500;
+        const match = String((err && err.message) || '').match(/^HTTP\s+(\d{3})$/i);
+        return Boolean(match && Number(match[1]) >= 500);
       }
 
       function getToken() {
@@ -166,27 +283,52 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function setRefreshAuthority(available, reason) {
         if (!refreshBtn) return;
-        refreshBtn.disabled = !available;
-        refreshBtn.setAttribute('aria-disabled', available ? 'false' : 'true');
-        if (available) refreshBtn.removeAttribute('title');
+        const mutationBusy = forceUnsubsInFlight.size > 0 || addInFlight;
+        const enabled = available && !mutationBusy;
+        refreshBtn.disabled = !enabled;
+        refreshBtn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+        if (enabled) refreshBtn.removeAttribute('title');
+        else if (mutationBusy) refreshBtn.title = 'Wait for the current subscriber change to finish.';
         else refreshBtn.title = reason || 'Available after staff sign-in.';
       }
 
       function setAddAuthority(available, reason) {
         subscriberDataAvailable = available;
         const unavailableReason = reason || 'Available after the live subscriber list loads.';
+        const readBusy = refreshOwner !== null;
+        const disabled =
+          !available ||
+          readBusy ||
+          forceUnsubsInFlight.size > 0 ||
+          addInFlight ||
+          addOutcomeUnknown ||
+          addCommitDetailsUnavailable;
         if (addEmail) {
-          addEmail.disabled = !available;
-          addEmail.setAttribute('aria-disabled', available ? 'false' : 'true');
-          if (available) addEmail.removeAttribute('title');
-          else addEmail.title = unavailableReason;
+          addEmail.disabled = disabled;
+          addEmail.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+          if (addCommitDetailsUnavailable) {
+            addEmail.title = 'The previous add was committed; reload later before adding another subscriber.';
+          } else if (addOutcomeUnknown) {
+            addEmail.title = 'Reload later to verify the previous add-subscriber outcome.';
+          } else if (readBusy) {
+            addEmail.title = 'Loading the current subscriber page.';
+          } else if (!available) {
+            addEmail.title = unavailableReason;
+          } else if (addInFlight) {
+            addEmail.title = 'Wait for the current add-subscriber action to finish.';
+          } else {
+            addEmail.removeAttribute('title');
+          }
         }
         if (addSubmit) {
-          const disabled = !available || addInFlight || addOutcomeUnknown;
           addSubmit.disabled = disabled;
           addSubmit.setAttribute('aria-disabled', disabled ? 'true' : 'false');
-          if (addOutcomeUnknown) {
+          if (addCommitDetailsUnavailable) {
+            addSubmit.title = 'The previous add was committed; reload later to verify its details.';
+          } else if (addOutcomeUnknown) {
             addSubmit.title = 'Reload later to verify the previous add-subscriber outcome.';
+          } else if (readBusy) {
+            addSubmit.title = 'Loading the current subscriber page.';
           } else if (!available) {
             addSubmit.title = unavailableReason;
           } else if (addInFlight) {
@@ -195,9 +337,57 @@ const apiBaseUrl = resolveApiBaseUrl();
             addSubmit.removeAttribute('title');
           }
         }
+        syncPaginationControls();
+      }
+
+      function syncPaginationControls() {
+        const readBusy = refreshOwner !== null;
+        const mutationReconciling = forceUnsubsInFlight.size > 0 || addInFlight;
+        const controlsBusy = readBusy || mutationReconciling;
+        const canPrevious = subscriberDataAvailable && renderedOffset > 0 && !controlsBusy;
+        const canNext = subscriberDataAvailable && renderedHasNext && !controlsBusy;
+        if (pageStatus) {
+          pageStatus.textContent = subscriberDataAvailable
+            ? 'Page ' + (Math.floor(renderedOffset / PAGE_SIZE) + 1).toString()
+            : 'Page unavailable';
+        }
+        if (previousPageBtn) {
+          previousPageBtn.disabled = !canPrevious;
+          previousPageBtn.setAttribute('aria-disabled', canPrevious ? 'false' : 'true');
+          if (canPrevious) {
+            previousPageBtn.removeAttribute('title');
+          } else if (mutationReconciling) {
+            previousPageBtn.title = 'Paging is unavailable while a subscriber change is reconciled.';
+          } else if (readBusy) {
+            previousPageBtn.title = 'Loading the requested subscriber page.';
+          } else if (!subscriberDataAvailable) {
+            previousPageBtn.title = 'Available after the live subscriber list loads.';
+          } else {
+            previousPageBtn.title = 'Already on the first subscriber page.';
+          }
+        }
+        if (nextPageBtn) {
+          nextPageBtn.disabled = !canNext;
+          nextPageBtn.setAttribute('aria-disabled', canNext ? 'false' : 'true');
+          if (canNext) {
+            nextPageBtn.removeAttribute('title');
+          } else if (mutationReconciling) {
+            nextPageBtn.title = 'Paging is unavailable while a subscriber change is reconciled.';
+          } else if (readBusy) {
+            nextPageBtn.title = 'Loading the requested subscriber page.';
+          } else if (!subscriberDataAvailable) {
+            nextPageBtn.title = 'Available after the live subscriber list loads.';
+          } else {
+            nextPageBtn.title = 'No older subscriber page is available.';
+          }
+        }
       }
 
       function renderUnavailable(message) {
+        requestedOffset = 0;
+        renderedOffset = 0;
+        renderedHasNext = false;
+        renderedSubscribers = [];
         setAddAuthority(false, message);
         if (list) {
           list.innerHTML =
@@ -251,7 +441,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         const id = String(sub.id);
         const forceUnsubPending = forceUnsubsInFlight.has(id);
         const forceUnsubUnknown = uncertainForceUnsubs.has(id);
-        const forceUnsubDisabled = forceUnsubPending || forceUnsubUnknown;
+        const forceUnsubCommitted = committedForceUnsubs.has(id);
+        const forceUnsubDisabled =
+          forceUnsubPending || forceUnsubUnknown || forceUnsubCommitted;
         const action = canForceUnsub
           ? '<button type="button" data-force-unsub="' +
             escapeHtml(sub.id) +
@@ -262,12 +454,14 @@ const apiBaseUrl = resolveApiBaseUrl();
               ? ' disabled aria-disabled="true"' +
                 (forceUnsubPending
                   ? ' aria-busy="true" title="Wait for the current force-unsubscribe action to finish."'
-                  : ' title="Reload later to verify the previous force-unsubscribe outcome."')
+                  : forceUnsubCommitted
+                    ? ' title="The force-unsubscribe was accepted; reload later to verify the row."'
+                    : ' title="Reload later to verify the previous force-unsubscribe outcome."')
               : '') +
             ' class="text-sm text-rose-700 hover:underline disabled:cursor-not-allowed disabled:opacity-60">' +
             (forceUnsubPending
               ? 'Unsubscribe pending…'
-              : forceUnsubUnknown
+              : forceUnsubUnknown || forceUnsubCommitted
                 ? 'Check status'
                 : 'Force unsubscribe') +
             '</button>'
@@ -276,7 +470,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           ? escapeHtml(sub.email)
           : '<span class="font-mono text-xs text-tk-ink-3">(purged after retention period)</span>';
         return (
-          '<li data-subscriber-email="' +
+          '<li data-subscriber-id="' +
+          escapeHtml(id) +
+          '" data-subscriber-email="' +
           escapeHtml(sub.email ? String(sub.email).toLowerCase() : '') +
           '" class="px-6 py-4">' +
           '<div class="flex items-start justify-between gap-6">' +
@@ -300,11 +496,47 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
 
+      function disableRenderedActionsForRead() {
+        if (!list) return;
+        list.querySelectorAll('[data-force-unsub]').forEach(function (button) {
+          button.disabled = true;
+          button.setAttribute('aria-disabled', 'true');
+          button.title = 'Loading the current subscriber page.';
+        });
+      }
+
+      function renderPage(subs, offset) {
+        if (subs.length === 0) {
+          if (list) {
+            list.innerHTML =
+              '<li class="px-6 py-12 text-center">' +
+              '<div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">' +
+              '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+              '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />' +
+              '</svg></div>' +
+              (offset === 0
+                ? '<h2 class="text-base font-semibold tracking-tight text-tk-ink">No subscribers yet</h2>' +
+                  '<p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">When visitors subscribe to incident notifications on status.driftstack.dev, they appear here for support and compliance review.</p>'
+                : '<h2 class="text-base font-semibold tracking-tight text-tk-ink">No subscribers on this page</h2>' +
+                  '<p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">Use Previous to return to a newer subscriber page.</p>') +
+              '</li>';
+          }
+          return;
+        }
+        if (list) {
+          list.innerHTML = subs.map(row).join('');
+          wireForceUnsub();
+        }
+      }
+
       function refresh() {
+        let preserveRenderedPage = false;
         const token = getToken();
         if (!token) {
           refreshGeneration += 1;
-          if (refreshController) refreshController.abort();
+          if (refreshOwner) refreshOwner.controller.abort();
+          else if (refreshController) refreshController.abort();
+          refreshOwner = null;
           refreshController = null;
           root.removeAttribute('aria-busy');
           renderUnavailable('Sign in with a staff admin account to load subscribers.');
@@ -312,13 +544,24 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return Promise.resolve(false);
         }
-        if (refreshController) refreshController.abort();
+        if (refreshOwner) refreshOwner.controller.abort();
+        else if (refreshController) refreshController.abort();
+        const targetOffset = requestedOffset;
         const controller = new AbortController();
         const generation = ++refreshGeneration;
+        const owner = { generation: generation, controller: controller, offset: targetOffset };
+        refreshOwner = owner;
         refreshController = controller;
         root.setAttribute('aria-busy', 'true');
+        disableRenderedActionsForRead();
+        setAddAuthority(subscriberDataAvailable, 'Loading the current subscriber page.');
+        syncPaginationControls();
         return boundedFetch(
-          apiBaseUrl + '/v1/admin/status-subscribers?limit=200',
+          apiBaseUrl +
+            '/v1/admin/status-subscribers?limit=' +
+            PAGE_FETCH_LIMIT +
+            '&offset=' +
+            targetOffset,
           { headers: { authorization: 'Bearer ' + token } },
           controller,
         )
@@ -327,34 +570,41 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.json();
           })
           .then(function (body) {
-            if (generation !== refreshGeneration) return null;
-            const subs = body.data || [];
+            if (refreshOwner !== owner || generation !== refreshGeneration) return null;
+            const fetchedRows = parseSubscriberPage(body);
+            const nextSubscribers = fetchedRows.slice(0, PAGE_SIZE);
+            const nextHasNext = fetchedRows.length > PAGE_SIZE;
+            renderedSubscribers = nextSubscribers;
+            renderedOffset = targetOffset;
+            renderedHasNext = nextHasNext;
             setAddAuthority(true);
-            if (subs.length === 0) {
-              if (list)
-                list.innerHTML =
-                  '<li class="px-6 py-12 text-center">' +
-                  '<div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">' +
-                  '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-                  '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />' +
-                  '</svg></div>' +
-                  '<h2 class="text-base font-semibold tracking-tight text-tk-ink">No subscribers yet</h2>' +
-                  '<p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">When visitors subscribe to incident notifications on status.driftstack.dev, they appear here for support and compliance review.</p>' +
-                  '</li>';
-              return true;
-            }
-            if (list) {
-              list.innerHTML = subs.map(row).join('');
-              wireForceUnsub();
-            }
-            return true;
+            renderPage(renderedSubscribers, renderedOffset);
+            syncPaginationControls();
+            return {
+              generation: generation,
+              offset: targetOffset,
+              rows: renderedSubscribers,
+              fetchedRows: fetchedRows,
+              hasNext: renderedHasNext,
+            };
           })
           .catch(function (err) {
             // A poll/manual/post-mutation refresh intentionally aborts the
             // previous read. Its late rejection (or a response that had
             // already reached body parsing) must not overwrite the newer
             // list or publish a false timeout banner.
-            if (generation !== refreshGeneration) return null;
+            if (refreshOwner !== owner || generation !== refreshGeneration) return null;
+            if (subscriberDataAvailable) {
+              requestedOffset = renderedOffset;
+              preserveRenderedPage = true;
+              showBanner(
+                'Failed to refresh subscribers: ' +
+                  requestErrorMessage(err, 'network error') +
+                  '. The previous page and action status are unchanged; retry when ready.',
+                true,
+              );
+              return false;
+            }
             renderUnavailable('Could not load the current subscriber list. Refresh to try again.');
             showBanner(
               'Failed to load subscribers: ' +
@@ -364,9 +614,15 @@ const apiBaseUrl = resolveApiBaseUrl();
             return false;
           })
           .finally(function () {
-            if (generation === refreshGeneration) {
+            if (refreshOwner === owner && generation === refreshGeneration) {
+              refreshOwner = null;
               refreshController = null;
               root.removeAttribute('aria-busy');
+              if (preserveRenderedPage) {
+                renderPage(renderedSubscribers, renderedOffset);
+              }
+              setAddAuthority(subscriberDataAvailable);
+              syncPaginationControls();
               if (typeof window.dashboardHydrated === 'function') {
                 window.dashboardHydrated();
               }
@@ -378,7 +634,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         'pagehide',
         function () {
           refreshGeneration += 1;
-          if (refreshController) refreshController.abort();
+          if (refreshOwner) refreshOwner.controller.abort();
+          else if (refreshController) refreshController.abort();
+          refreshOwner = null;
           refreshController = null;
           root.removeAttribute('aria-busy');
         },
@@ -392,8 +650,20 @@ const apiBaseUrl = resolveApiBaseUrl();
           btn.addEventListener('click', async function () {
             const id = btn.getAttribute('data-force-unsub');
             const email = btn.getAttribute('data-email');
-            if (!id || uncertainForceUnsubs.has(id) || forceUnsubsInFlight.has(id)) return;
+            if (
+              !id ||
+              uncertainForceUnsubs.has(id) ||
+              committedForceUnsubs.has(id) ||
+              forceUnsubsInFlight.size > 0 ||
+              addInFlight ||
+              refreshOwner !== null
+            )
+              return;
+            const originOffset = renderedOffset;
             forceUnsubsInFlight.add(id);
+            setAddAuthority(subscriberDataAvailable);
+            setRefreshAuthority(false, 'Wait for the current subscriber change to finish.');
+            syncPaginationControls();
             const idleLabel = btn.textContent || 'Force unsubscribe';
             btn.disabled = true;
             btn.setAttribute('aria-busy', 'true');
@@ -422,24 +692,46 @@ const apiBaseUrl = resolveApiBaseUrl();
               // The response body is unused. Trust the accepted status so a
               // malformed body cannot make an operator repeat a completed
               // force-unsubscribe.
-              await refreshWithLive();
+              committedForceUnsubs.add(id);
+              requestedOffset = originOffset;
+              const reconciliation = await refreshWithLive();
+              const exactRow =
+                reconciliation &&
+                reconciliation.generation === refreshGeneration &&
+                reconciliation.offset === originOffset &&
+                Array.isArray(reconciliation.fetchedRows)
+                  ? reconciliation.fetchedRows.find(
+                      (subscriber) => String(subscriber.id) === id,
+                    )
+                  : null;
+              if (exactRow && exactRow.unsubscribed_at) committedForceUnsubs.delete(id);
             } catch (err) {
-              if (err && err.name === 'AbortError') {
+              if (mutationOutcomeIsUnknown(err)) {
                 uncertainForceUnsubs.add(id);
-                const refreshed = Boolean(await refreshWithLive());
-                const stillActive = Array.from(
-                  list ? list.querySelectorAll('[data-force-unsub]') : [],
-                ).some((action) => action.getAttribute('data-force-unsub') === id);
+                requestedOffset = originOffset;
+                const reconciliation = await refreshWithLive();
+                const refreshed =
+                  reconciliation &&
+                  reconciliation.generation === refreshGeneration &&
+                  reconciliation.offset === originOffset &&
+                  Array.isArray(reconciliation.fetchedRows);
+                const exactRow = refreshed
+                  ? reconciliation.fetchedRows.find((subscriber) => String(subscriber.id) === id)
+                  : null;
                 showBanner(
                   !refreshed
-                    ? 'Force-unsubscribe outcome is unknown after the request timed out, and the subscriber list could not be refreshed. Do not submit it again on this page; reload later to verify status first.'
-                    : stillActive
-                      ? 'Force-unsubscribe outcome is unknown after the request timed out. The refreshed list still shows ' +
+                    ? 'Force-unsubscribe outcome is unknown after the request timed out or returned a server error, and the subscriber list could not be refreshed. Do not submit it again on this page; reload later to verify status first.'
+                    : exactRow && exactRow.unsubscribed_at
+                      ? 'Force-unsubscribe outcome was verified after the request timed out or returned a server error. The exact subscriber row for ' +
                         email +
-                        ' active, but completion may be delayed. Do not submit it again on this page; reload later and retry only if it remains active.'
-                      : 'Force-unsubscribe outcome is unknown after the request timed out. The refreshed list no longer shows ' +
+                        ' is now unsubscribed, confirming completion. Do not submit it again.'
+                      : exactRow
+                        ? 'Force-unsubscribe outcome is unknown after the request timed out or returned a server error. The exact subscriber row for ' +
+                          email +
+                          ' is still active, but completion may be delayed. Do not submit it again on this page; reload later and retry only if that exact row remains active.'
+                        : 'Force-unsubscribe outcome is unverified after the request timed out or returned a server error. The exact subscriber row for ' +
                         email +
-                        ' active, so it likely completed. Do not submit it again.',
+                          ' is absent from the refreshed page slice. Absence from this slice is not evidence that the unsubscribe completed. Do not submit it again on this page; reload later to verify the exact row first.',
                   true,
                 );
                 return;
@@ -450,26 +742,46 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
             } finally {
               forceUnsubsInFlight.delete(id);
+              setAddAuthority(subscriberDataAvailable);
+              setRefreshAuthority(Boolean(getToken()), 'Available after staff sign-in.');
+              syncPaginationControls();
               const outcomeUnknown = uncertainForceUnsubs.has(id);
+              const outcomeCommitted = committedForceUnsubs.has(id);
               const current = Array.from(
                 list ? list.querySelectorAll('[data-force-unsub]') : [],
               ).find((action) => action.getAttribute('data-force-unsub') === id);
               if (current) {
-                current.disabled = outcomeUnknown;
+                const disabled = outcomeUnknown || outcomeCommitted;
+                current.disabled = disabled;
                 current.removeAttribute('aria-busy');
-                current.setAttribute('aria-disabled', outcomeUnknown ? 'true' : 'false');
-                if (!outcomeUnknown) current.removeAttribute('aria-disabled');
-                if (outcomeUnknown) {
+                current.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+                if (!disabled) current.removeAttribute('aria-disabled');
+                if (outcomeCommitted) {
                   current.title =
-                    'Reload later to verify the previous force-unsubscribe outcome.';
+                    'The force-unsubscribe was accepted; reload later to verify the row.';
+                } else if (outcomeUnknown) {
+                  current.title = 'Reload later to verify the previous force-unsubscribe outcome.';
                 } else {
                   current.removeAttribute('title');
                 }
-                current.textContent = outcomeUnknown ? 'Check status' : idleLabel;
+                current.textContent = disabled ? 'Check status' : idleLabel;
               }
             }
           });
         });
+      }
+
+      function validForceSubscribeResult(body) {
+        return Boolean(
+          body &&
+            typeof body === 'object' &&
+            typeof body.id === 'string' &&
+            body.id.length > 0 &&
+            typeof body.email === 'string' &&
+            body.email.length > 0 &&
+            typeof body.unsubscribe_link === 'string' &&
+            body.unsubscribe_link.length > 0,
+        );
       }
 
       // 2026-05-22 — admin force-subscribe form. POSTs the email +
@@ -477,9 +789,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       // staff can copy it for the customer. Refreshes the list on
       // success.
       if (addForm) {
-        addForm.addEventListener('submit', (ev) => {
+        addForm.addEventListener('submit', async (ev) => {
           ev.preventDefault();
-          if (!subscriberDataAvailable || addInFlight || addOutcomeUnknown) return;
+          if (
+            !subscriberDataAvailable ||
+            addInFlight ||
+            addOutcomeUnknown ||
+            addCommitDetailsUnavailable ||
+            forceUnsubsInFlight.size > 0 ||
+            refreshOwner !== null
+          )
+            return;
           const token = getToken();
           if (!token) {
             showBanner('Sign in with a staff admin account first.', true);
@@ -490,81 +810,134 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (!email) return;
           const submitBtn = addSubmit;
           addInFlight = true;
+          setRefreshAuthority(false, 'Wait for the current subscriber change to finish.');
+          syncPaginationControls();
           addForm.setAttribute('aria-busy', 'true');
           if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.textContent = 'Adding…';
           }
           if (addResult) addResult.classList.add('hidden');
-          boundedFetch(apiBaseUrl + '/v1/admin/status-subscribers/force-subscribe', {
-            method: 'POST',
-            headers: {
-              authorization: 'Bearer ' + token,
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify({ email: email }),
-          })
-            .then((r) =>
-              r.ok
-                ? r.json()
-                : r
-                    .json()
-                    .catch(() => ({}))
-                    .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-            )
-            .then((body) => {
-              if (addResult) {
-                addResult.classList.remove('hidden');
-                addResult.innerHTML =
-                  '<p class="font-medium text-emerald-700">Added ' +
-                  escapeHtml(body.email) +
-                  ' (' +
-                  escapeHtml(body.id) +
-                  ').</p>' +
-                  '<p class="mt-1 text-emerald-700">Unsubscribe link: <code class="font-mono">' +
-                  escapeHtml(body.unsubscribe_link) +
-                  '</code></p>';
-              }
+          let acceptedStatusCommitted = false;
+          try {
+            const response = await boundedFetch(
+              apiBaseUrl + '/v1/admin/status-subscribers/force-subscribe',
+              {
+                method: 'POST',
+                headers: {
+                  authorization: 'Bearer ' + token,
+                  'content-type': 'application/json',
+                },
+                body: JSON.stringify({ email: email }),
+              },
+            );
+            if (!response.ok) {
+              const errorBody = await response.json().catch(() => ({}));
+              const responseError = window.driftstackResponseError(response, errorBody);
+              responseError.httpStatus = response.status;
+              throw responseError;
+            }
+            // The accepted HTTP status is the commit latch. Set it before
+            // parsing so a malformed or shape-invalid 201 can never invite
+            // an operator to replay a force-subscribe that already committed.
+            acceptedStatusCommitted = true;
+            const body = await response.json().catch(() => null);
+            if (!validForceSubscribeResult(body)) {
+              addCommitDetailsUnavailable = true;
               if (emailEl && 'value' in emailEl) emailEl.value = '';
-              return refreshWithLive();
-            })
-            .catch(async (err) => {
-              if (err && err.name === 'AbortError') {
-                addOutcomeUnknown = true;
-                const refreshed = Boolean(await refreshWithLive());
-                const normalizedEmail = email.toLowerCase();
-                const appearsInList = Array.from(
-                  list ? list.querySelectorAll('[data-subscriber-email]') : [],
-                ).some(
-                  (item) => item.getAttribute('data-subscriber-email') === normalizedEmail,
-                );
-                showBanner(
-                  !refreshed
-                    ? 'Add-subscriber outcome is unknown after the request timed out, and the authoritative list could not be refreshed. Do not submit this address again on this page; reload later to verify it first.'
-                    : appearsInList
-                      ? 'Add-subscriber outcome is unknown after the request timed out. The authoritative list now contains ' +
-                        email +
-                        ', so the add likely completed, but the returned unsubscribe link cannot be recovered. Do not submit it again; the customer can unsubscribe from a notification email or staff can remove the row here.'
-                      : 'Add-subscriber outcome is unknown after the request timed out. The refreshed list does not show ' +
-                        email +
-                        ' yet, but completion may be delayed. Do not submit it again on this page; reload later and retry only if it remains absent.',
-                  true,
-                );
-                return;
-              }
+              requestedOffset = 0;
+              const refreshed = await refreshWithLive();
               showBanner(
-                'Add subscriber failed: ' + requestErrorMessage(err, 'network error'),
+                'Add subscriber committed, but result details are unavailable. ' +
+                  (refreshed && refreshed.offset === 0
+                    ? 'The first subscriber page was refreshed. '
+                    : 'The first subscriber page could not be refreshed. ') +
+                  'Do not submit ' +
+                  email +
+                  ' again; reload later to verify the row and obtain support if the unsubscribe link is needed.',
+                false,
+              );
+              return;
+            }
+            if (addResult) {
+              addResult.classList.remove('hidden');
+              addResult.innerHTML =
+                '<p class="font-medium text-emerald-700">Added ' +
+                escapeHtml(body.email) +
+                ' (' +
+                escapeHtml(body.id) +
+                ').</p>' +
+                '<p class="mt-1 text-emerald-700">Unsubscribe link: <code class="font-mono">' +
+                escapeHtml(body.unsubscribe_link) +
+                '</code></p>';
+            }
+            if (emailEl && 'value' in emailEl) emailEl.value = '';
+            requestedOffset = 0;
+            await refreshWithLive();
+          } catch (err) {
+            if (acceptedStatusCommitted) {
+              addCommitDetailsUnavailable = true;
+              if (emailEl && 'value' in emailEl) emailEl.value = '';
+              requestedOffset = 0;
+              await refreshWithLive();
+              showBanner(
+                'Add subscriber committed, but result details are unavailable. Do not submit ' +
+                  email +
+                  ' again; reload later to verify the first subscriber page.',
+                false,
+              );
+              return;
+            }
+            if (mutationOutcomeIsUnknown(err)) {
+              addOutcomeUnknown = true;
+              requestedOffset = 0;
+              const reconciliation = await refreshWithLive();
+              const firstPageLoaded =
+                reconciliation &&
+                reconciliation.generation === refreshGeneration &&
+                reconciliation.offset === 0 &&
+                Array.isArray(reconciliation.rows);
+              const normalizedEmail = email.toLowerCase();
+              const appearsOnFirstPage = firstPageLoaded
+                ? reconciliation.rows.some(
+                    (subscriber) =>
+                      typeof subscriber.email === 'string' &&
+                      !subscriber.unsubscribed_at &&
+                      subscriber.email.toLowerCase() === normalizedEmail,
+                  )
+                : false;
+              showBanner(
+                !firstPageLoaded
+                  ? 'Add-subscriber outcome is unknown after the request timed out or returned a server error, and the first subscriber page could not be refreshed. Do not submit this address again on this page; reload later to verify it first.'
+                  : appearsOnFirstPage
+                    ? 'Add-subscriber outcome is unknown after the request timed out or returned a server error. The first subscriber page now contains ' +
+                      email +
+                      ', so the add likely completed, but the returned unsubscribe link cannot be recovered. Do not submit it again; the customer can unsubscribe from a notification email or staff can remove the row here.'
+                    : 'Add-subscriber outcome is unverified after the request timed out or returned a server error. The first subscriber page does not contain ' +
+                      email +
+                      ', but absence from that page is not evidence that the add failed. Do not submit it again on this page; reload later to verify it first.',
                 true,
               );
-            })
-            .finally(() => {
-              addInFlight = false;
-              addForm.removeAttribute('aria-busy');
-              if (submitBtn) {
-                submitBtn.textContent = addOutcomeUnknown ? 'Check status' : 'Add subscriber';
-              }
-              setAddAuthority(subscriberDataAvailable);
-            });
+              return;
+            }
+            showBanner(
+              'Add subscriber failed: ' + requestErrorMessage(err, 'network error'),
+              true,
+            );
+          } finally {
+            addInFlight = false;
+            addForm.removeAttribute('aria-busy');
+            if (submitBtn) {
+              submitBtn.textContent = addCommitDetailsUnavailable
+                ? 'Added — verify'
+                : addOutcomeUnknown
+                  ? 'Check status'
+                  : 'Add subscriber';
+            }
+            setAddAuthority(subscriberDataAvailable);
+            setRefreshAuthority(Boolean(getToken()), 'Available after staff sign-in.');
+            syncPaginationControls();
+          }
         });
       }
 
@@ -580,7 +953,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           p.then(
             (loaded) => {
               if (generation !== refreshGeneration || loaded === null) return;
-              if (loaded === true) {
+              if (loaded && typeof loaded === 'object') {
                 lastFetch = Date.now();
                 setLiveState('success', 'Live');
               } else {
@@ -597,6 +970,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         return p;
       }
+      function requestPage(offset) {
+        if (
+          refreshOwner !== null ||
+          forceUnsubsInFlight.size > 0 ||
+          addInFlight ||
+          !subscriberDataAvailable
+        )
+          return;
+        requestedOffset = Math.max(0, offset);
+        syncPaginationControls();
+        refreshWithLive();
+      }
       function fmtAge(ms) {
         if (!ms) return '';
         const s = Math.floor((Date.now() - ms) / 1000);
@@ -606,8 +991,29 @@ const apiBaseUrl = resolveApiBaseUrl();
         return Math.floor(s / 3600).toString() + 'h ago';
       }
       function start() {
-        if (refreshBtn) refreshBtn.addEventListener('click', refreshWithLive);
-        setInterval(refreshWithLive, 30_000);
+        if (refreshBtn) {
+          refreshBtn.addEventListener('click', function () {
+            if (forceUnsubsInFlight.size > 0 || addInFlight) return;
+            refreshWithLive();
+          });
+        }
+        if (previousPageBtn) {
+          previousPageBtn.addEventListener('click', function () {
+            if (previousPageBtn.disabled || renderedOffset <= 0) return;
+            requestPage(renderedOffset - PAGE_SIZE);
+          });
+        }
+        if (nextPageBtn) {
+          nextPageBtn.addEventListener('click', function () {
+            if (nextPageBtn.disabled || !renderedHasNext) return;
+            requestPage(renderedOffset + PAGE_SIZE);
+          });
+        }
+        syncPaginationControls();
+        setInterval(function () {
+          if (forceUnsubsInFlight.size > 0 || addInFlight) return;
+          refreshWithLive();
+        }, 30_000);
         setInterval(() => {
           if (ageEl && lastFetch) ageEl.textContent = '· updated ' + fmtAge(lastFetch);
         }, 5_000);

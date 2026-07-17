@@ -33,9 +33,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         <h1 class="text-3xl font-semibold tracking-tight text-tk-ink">Sessions</h1>
       <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-          Live and recent customer sessions across all accounts. Force-destroy is
-          the only mutation surfaced here; everything else (replay, view recording)
-          flows through the per-account detail surface.
+          Inspect and filter live and recent customer sessions across all accounts.
+          Force-destroy is the only mutation surfaced here and the only staff mutation
+          available. Session replay is not available in admin, and customer desktop
+          recordings stay on their device and never enter the admin API.
         </p>
       </div>
       {/* 2026-05-22 — live auto-poll. Same pattern as 2d358ce7. */}
@@ -106,6 +107,28 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       </table>
     </div>
 
+    <div class="mt-4 flex items-center gap-4 text-sm">
+      <button
+        type="button"
+        data-action="load-more"
+        disabled
+        aria-disabled="true"
+        aria-busy="false"
+        class="hidden font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+      >
+        Load more
+      </button>
+      <button
+        type="button"
+        data-action="back-to-newest"
+        disabled
+        aria-disabled="true"
+        class="hidden font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+      >
+        Back to newest / Refresh
+      </button>
+    </div>
+
     <p class="mt-4 text-xs text-tk-ink-3" data-field="footnote">
     </p>
   </div>
@@ -123,10 +146,35 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       const liveStatus = root.querySelector('[data-live-status]');
       const liveAge = root.querySelector('[data-live-age]');
       const refreshBtn = root.querySelector('[data-live-refresh]');
+      const loadMoreBtn = root.querySelector('[data-action="load-more"]');
+      const backToNewestBtn = root.querySelector('[data-action="back-to-newest"]');
       let token = null;
       const SESSION_TIMEOUT_MS = 15_000;
+      const DESTROY_RECONCILE_MAX_PAGES = 20;
       let loadController = null;
+      let loadedSessions = [];
+      let nextCursor = null;
+      let refusedCursor = null;
+      const requestedCursors = new Set();
+      let listEpoch = 0;
+      let appendInFlight = false;
+      let appendRequestId = 0;
+      let expandedView = false;
+      let inFlight = 0;
+      let liveOwner = 0;
+      let firstPageBusy = false;
+      let debounce = 0;
+      let filterTransitionPending = false;
+      let lastFetch = Date.now();
+
+      // A single synchronous owner covers confirmation, the optional reason,
+      // POST, and immediate verification. The uncertain lease survives that
+      // owner when a timeout/5xx makes the mutation outcome unknowable: only
+      // an exact later row with status=destroyed may release it. A missing or
+      // still-active row is not replay permission in a paginated list.
       const destroysInFlight = new Set();
+      const uncertainDestroys = new Set();
+      const confirmedDestroys = new Set();
 
       function boundedFetch(url, init = {}, controller = new AbortController()) {
         return window.driftstackFetchWithDeadline(url, init, SESSION_TIMEOUT_MS, controller);
@@ -143,6 +191,13 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         destroyed: 'bg-tk-hover text-tk-ink-2',
         errored: 'bg-red-50 text-red-700',
       };
+      const SESSION_STATUSES = new Set(['creating', 'ready', 'busy', 'destroyed', 'errored']);
+      const SESSION_PURPOSES = new Set([
+        'production_customer',
+        'cumulative_rig_validation',
+        'test_domain_probe',
+      ]);
+      const QUIC_ROUTES = new Set(['proxy', 'direct', 'disabled']);
 
       function showBanner(text) {
         if (!banner) return;
@@ -170,6 +225,100 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
+
+      function isIsoTimestamp(value) {
+        if (typeof value !== 'string') return false;
+        const match =
+          /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(
+            value,
+          );
+        if (!match || !Number.isFinite(Date.parse(value))) return false;
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        const hour = Number(match[4]);
+        const minute = Number(match[5]);
+        const second = Number(match[6]);
+        const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
+        const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+        const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+        const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        return (
+          month >= 1 &&
+          month <= 12 &&
+          day >= 1 &&
+          day <= days[month - 1] &&
+          hour <= 23 &&
+          minute <= 59 &&
+          second <= 59 &&
+          offsetHour <= 23 &&
+          offsetMinute <= 59
+        );
+      }
+
+      function isIsoTimestampOrNull(value) {
+        return value === null || isIsoTimestamp(value);
+      }
+
+      function isRecordOrNull(value) {
+        return value === null || (typeof value === 'object' && !Array.isArray(value));
+      }
+
+      function isEgressCapabilitiesOrNull(value) {
+        if (value === null) return true;
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        return (
+          typeof value.udp_associate === 'boolean' &&
+          QUIC_ROUTES.has(value.quic_route) &&
+          typeof value.dns_remote_resolve === 'boolean' &&
+          Array.isArray(value.warnings) &&
+          value.warnings.every((warning) => typeof warning === 'string')
+        );
+      }
+
+      function isSessionListRow(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        const requiredStrings = ['id', 'account_id', 'api_key_id', 'archetype'];
+        if (!requiredStrings.every((field) => typeof value[field] === 'string')) return false;
+        if (
+          value.id.length === 0 ||
+          value.account_id.length === 0 ||
+          value.api_key_id.length === 0
+        ) {
+          return false;
+        }
+        if (value.account_email !== undefined && typeof value.account_email !== 'string') {
+          return false;
+        }
+        if (!SESSION_STATUSES.has(value.status) || !SESSION_PURPOSES.has(value.purpose)) {
+          return false;
+        }
+        if (value.label !== null && typeof value.label !== 'string') return false;
+        if (!isRecordOrNull(value.metadata)) return false;
+        if (!isEgressCapabilitiesOrNull(value.egress_capabilities)) return false;
+        if (!isRecordOrNull(value.egress_capability_report)) return false;
+        return (
+          isIsoTimestamp(value.created_at) &&
+          isIsoTimestamp(value.updated_at) &&
+          isIsoTimestampOrNull(value.last_state_at) &&
+          isIsoTimestampOrNull(value.destroyed_at)
+        );
+      }
+
+      // A page is authoritative only after its complete envelope and every
+      // row validate. Missing or malformed fields are never interpreted as
+      // an empty page, an exhausted cursor, or destroy verification evidence.
+      function parseSessionListPage(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        if (!Array.isArray(value.data) || !value.data.every(isSessionListRow)) return null;
+        if (
+          value.next_cursor !== null &&
+          !(typeof value.next_cursor === 'string' && value.next_cursor.length > 0)
+        ) {
+          return null;
+        }
+        return { data: value.data, nextCursor: value.next_cursor };
+      }
       // Friendly device label via the injected registry map; raw slug if unknown.
       function archetypeLabel(slug) {
         if (!slug) return '—';
@@ -177,6 +326,11 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       }
 
       function renderSessionsUnavailable(message) {
+        loadedSessions = [];
+        nextCursor = null;
+        refusedCursor = null;
+        requestedCursors.clear();
+        expandedView = false;
         if (tbody) {
           tbody.innerHTML =
             '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
@@ -184,6 +338,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             '</td></tr>';
         }
         if (footnote) footnote.textContent = '';
+        syncTransitionControls();
       }
 
       function setLiveState(state, message) {
@@ -209,32 +364,94 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       }
 
       function destroyControlState(id) {
-        const pending = destroysInFlight.has(String(id));
+        const sessionId = String(id);
+        const pending = destroysInFlight.has(sessionId);
+        const uncertain = uncertainDestroys.has(sessionId);
+        const anotherPending = destroysInFlight.size > 0 && !pending;
+        const disabled = pending || uncertain || anotherPending;
         return {
           pending,
-          attrs: pending
-            ? ' disabled aria-disabled="true" aria-busy="true" title="Wait for the current force-destroy action to finish."'
+          uncertain,
+          disabled,
+          attrs: disabled
+            ? ' disabled aria-disabled="true"' +
+              (pending || uncertain ? ' aria-busy="true"' : '') +
+              ' title="' +
+              (uncertain
+                ? 'Force-destroy outcome is unverified; wait for an exact destroyed session row.'
+                : pending
+                  ? 'Wait for the current force-destroy action to finish.'
+                  : 'Wait for the other force-destroy action to finish.') +
+              '"'
             : '',
-          label: pending ? 'Destroy pending…' : 'Force destroy',
+          label: uncertain
+            ? 'Destroy status pending…'
+            : pending
+              ? 'Destroy pending…'
+              : 'Force destroy',
         };
       }
 
       function syncDestroyControls(id) {
-        const state = destroyControlState(id);
         root.querySelectorAll('[data-action="destroy"]').forEach((control) => {
-          if (control.getAttribute('data-id') !== String(id)) return;
-          control.disabled = state.pending;
+          if (id !== undefined && control.getAttribute('data-id') !== String(id)) return;
+          const controlId = control.getAttribute('data-id');
+          const state = destroyControlState(controlId);
+          control.disabled = state.disabled;
           control.textContent = state.label;
-          if (state.pending) {
+          if (state.disabled) {
             control.setAttribute('aria-disabled', 'true');
-            control.setAttribute('aria-busy', 'true');
-            control.title = 'Wait for the current force-destroy action to finish.';
+            if (state.pending || state.uncertain) control.setAttribute('aria-busy', 'true');
+            else control.removeAttribute('aria-busy');
+            control.title = state.uncertain
+              ? 'Force-destroy outcome is unverified; wait for an exact destroyed session row.'
+              : state.pending
+                ? 'Wait for the current force-destroy action to finish.'
+                : 'Wait for the other force-destroy action to finish.';
           } else {
             control.removeAttribute('aria-disabled');
             control.removeAttribute('aria-busy');
             control.removeAttribute('title');
           }
         });
+      }
+
+      function setDisabled(control, disabled) {
+        if (!control) return;
+        control.disabled = disabled;
+        if (disabled) control.setAttribute('aria-disabled', 'true');
+        else control.removeAttribute('aria-disabled');
+      }
+
+      function syncTransitionControls() {
+        const readBusy = loadController !== null;
+        const mutationBusy = destroysInFlight.size > 0;
+        const cursorRefused = nextCursor !== null && refusedCursor === nextCursor;
+        if (loadMoreBtn) {
+          loadMoreBtn.classList.toggle('hidden', !nextCursor || cursorRefused);
+          setDisabled(
+            loadMoreBtn,
+            readBusy ||
+              appendInFlight ||
+              mutationBusy ||
+              filterTransitionPending ||
+              !nextCursor ||
+              cursorRefused,
+          );
+          loadMoreBtn.textContent = appendInFlight ? 'Loading…' : 'Load more';
+          loadMoreBtn.setAttribute('aria-busy', appendInFlight ? 'true' : 'false');
+        }
+        if (backToNewestBtn) {
+          backToNewestBtn.classList.toggle('hidden', !expandedView);
+          setDisabled(
+            backToNewestBtn,
+            readBusy || mutationBusy || filterTransitionPending || !expandedView,
+          );
+        }
+        setDisabled(statusEl, mutationBusy);
+        setDisabled(accountIdEl, mutationBusy);
+        setDisabled(refreshBtn, !token || firstPageBusy || mutationBusy);
+        syncDestroyControls();
       }
 
       function rowHtml(s) {
@@ -250,7 +467,9 @@ const ARCHETYPE_LABELS = Object.fromEntries(
               '</button>'
             : '';
         return (
-          '<tr class="hover:bg-tk-bg">' +
+          '<tr data-session-id="' +
+          escapeHtml(s.id) +
+          '" class="hover:bg-tk-bg">' +
           '<td class="px-4 py-3">' +
           '<p class="font-mono text-xs text-tk-ink">' +
           escapeHtml(s.id) +
@@ -308,24 +527,110 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         );
       }
 
-      function buildQuery() {
+      function applyConfirmedDestroy(session) {
+        if (!session || typeof session.id !== 'string' || !confirmedDestroys.has(session.id)) {
+          return session;
+        }
+        return { ...session, status: 'destroyed' };
+      }
+
+      function mergeUniqueSessions(existing, incoming) {
+        const seen = new Map();
+        const merged = [];
+        existing.concat(incoming).forEach((entry) => {
+          const session = applyConfirmedDestroy(entry);
+          const id = session && typeof session.id === 'string' ? session.id : '';
+          if (!id) return;
+          if (seen.has(id)) {
+            const position = seen.get(id);
+            merged[position] = applyConfirmedDestroy({ ...merged[position], ...session });
+            return;
+          }
+          seen.set(id, merged.length);
+          merged.push(session);
+        });
+        return merged;
+      }
+
+      function observedStatus(rows, id) {
+        const target = rows.find((row) => row && row.id === id);
+        return target && typeof target.status === 'string' ? target.status : null;
+      }
+
+      function resolveUncertainTargets(rows) {
+        const resolved = [];
+        uncertainDestroys.forEach((id) => {
+          if (observedStatus(rows, id) !== 'destroyed') return;
+          uncertainDestroys.delete(id);
+          confirmedDestroys.add(id);
+          resolved.push(id);
+        });
+        return resolved;
+      }
+
+      function renderSessions(rows) {
+        if (tbody) {
+          tbody.innerHTML =
+            rows.length === 0
+              ? '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">No sessions match the current filter in the loaded window.</td></tr>'
+              : rows.map(rowHtml).join('');
+        }
+        if (footnote) {
+          footnote.textContent =
+            'Showing ' +
+            rows.length +
+            ' session' +
+            (rows.length === 1 ? '' : 's') +
+            ' in the loaded window' +
+            (nextCursor
+              ? refusedCursor === nextCursor
+                ? ' — pagination stopped.'
+                : ' — more available.'
+              : '.') +
+            ' Force-destroy fires POST /v1/admin/sessions/:id/destroy with audit log.';
+        }
+        syncTransitionControls();
+      }
+
+      function buildQuery(requestedCursor) {
         const params = new URLSearchParams();
         params.set('limit', '50');
         if (statusEl && statusEl.value) params.set('status', statusEl.value);
         if (accountIdEl && accountIdEl.value.trim())
           params.set('account_id', accountIdEl.value.trim());
+        if (requestedCursor !== null) params.set('cursor', requestedCursor);
         return params;
       }
 
-      let inFlight = 0;
-      function load() {
-        if (!token) return Promise.resolve(false);
+      function emptyLoadResult(extra) {
+        return { loaded: false, observedRows: [], ...(extra || {}) };
+      }
+
+      function load(options) {
+        const append = !!(options && options.append);
+        const preserveOnError = !!(options && options.preserveOnError);
+        if (!token) return Promise.resolve(emptyLoadResult());
+        const requestedCursor = append ? nextCursor : null;
+        if (append && (!requestedCursor || appendInFlight || refusedCursor === requestedCursor)) {
+          return Promise.resolve(emptyLoadResult());
+        }
+
+        let appendOwner = null;
+        const epoch = append ? listEpoch : ++listEpoch;
+        if (append) {
+          appendOwner = ++appendRequestId;
+          appendInFlight = true;
+        } else {
+          appendRequestId += 1;
+          appendInFlight = false;
+        }
         const myReq = ++inFlight;
-        const params = buildQuery();
         if (loadController) loadController.abort();
         const controller = new AbortController();
         loadController = controller;
         root.setAttribute('aria-busy', 'true');
+        syncTransitionControls();
+        const params = buildQuery(requestedCursor);
         return boundedFetch(
           apiBaseUrl + '/v1/admin/sessions?' + params.toString(),
           {
@@ -339,33 +644,62 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return false;
-            const rows = body.data || [];
-            if (tbody) {
-              if (rows.length === 0) {
-                tbody.innerHTML =
-                  '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">No sessions match the current filter.</td></tr>';
-              } else {
-                tbody.innerHTML = rows.map(rowHtml).join('');
-              }
+            if (myReq !== inFlight || epoch !== listEpoch) {
+              return emptyLoadResult({ stale: true });
             }
-            if (footnote) {
-              footnote.textContent =
-                'Showing ' +
-                rows.length +
-                ' session' +
-                (rows.length === 1 ? '' : 's') +
-                '. Force-destroy fires POST /v1/admin/sessions/:id/destroy with audit log.';
+            if (append && nextCursor !== requestedCursor) {
+              return emptyLoadResult({ stale: true });
             }
-            hideBanner();
-            return true;
+            const page = parseSessionListPage(body);
+            if (page === null) throw new Error('invalid session-list response');
+            const incoming = page.data;
+            const returnedCursor = page.nextCursor;
+            const repeatedCursor =
+              append &&
+              returnedCursor !== null &&
+              (returnedCursor === requestedCursor || requestedCursors.has(returnedCursor));
+            if (append) requestedCursors.add(requestedCursor);
+            else requestedCursors.clear();
+
+            const resolved = resolveUncertainTargets(incoming);
+            loadedSessions = append
+              ? mergeUniqueSessions(loadedSessions, incoming)
+              : mergeUniqueSessions([], incoming);
+            nextCursor = returnedCursor;
+            refusedCursor = repeatedCursor ? returnedCursor : null;
+            expandedView = append;
+            renderSessions(loadedSessions);
+            if (resolved.length > 0) {
+              showBanner(
+                'An authoritative session-list read now confirms ' +
+                  resolved[resolved.length - 1] +
+                  ' is destroyed; do not submit another force-destroy.',
+              );
+            } else if (repeatedCursor) {
+              showBanner(
+                'Pagination stopped because the server repeated a cursor. Unique sessions from the response were kept, but that cursor will not be requested again.',
+              );
+            } else {
+              hideBanner();
+            }
+            return { loaded: true, observedRows: incoming, repeatedCursor };
           })
           .catch((err) => {
-            if (myReq !== inFlight) return false;
+            if (myReq !== inFlight || epoch !== listEpoch) {
+              return emptyLoadResult({ stale: true });
+            }
             const msg = requestErrorMessage(err, 'network error');
-            renderSessionsUnavailable(
-              'Could not load live sessions — nothing to act on. Resolve the error above and retry.',
-            );
+            if (append) {
+              showBanner(
+                "Couldn't load older sessions (" + msg + '). Existing rows and cursor are unchanged.',
+              );
+              return emptyLoadResult();
+            }
+            if (!preserveOnError) {
+              renderSessionsUnavailable(
+                'Could not load live sessions — nothing to act on. Resolve the error above and retry.',
+              );
+            }
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
@@ -373,38 +707,229 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             } else {
               showBanner("Couldn't load live sessions (" + msg + ').');
             }
-            return false;
+            return emptyLoadResult();
           })
           .finally(() => {
-            if (myReq === inFlight) {
+            if (append && appendOwner === appendRequestId) appendInFlight = false;
+            if (myReq === inFlight && epoch === listEpoch) {
               loadController = null;
               root.removeAttribute('aria-busy');
             }
+            syncTransitionControls();
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
             }
           });
       }
 
-      // 2026-05-22 — destroy button shows in-flight state to prevent
-      // double-clicks. The button is dynamically rendered so we grab
-      // a reference to the exact element clicked + restore it on
-      // success/error.
+      function loadWithLive(options) {
+        const allowDuringDestroy = !!(options && options.allowDuringDestroy);
+        if (destroysInFlight.size > 0 && !allowDuringDestroy) {
+          return Promise.resolve(emptyLoadResult());
+        }
+        clearTimeout(debounce);
+        debounce = 0;
+        filterTransitionPending = false;
+        const owner = ++liveOwner;
+        firstPageBusy = true;
+        setLiveState('loading', options && options.loadingMessage);
+        syncTransitionControls();
+        return load({ preserveOnError: !!(options && options.preserveOnError) })
+          .then((result) => {
+            if (owner !== liveOwner) return result;
+            if (result.loaded) {
+              lastFetch = Date.now();
+              if (liveAge) liveAge.textContent = 'just now';
+              setLiveState('ready');
+            } else {
+              setLiveState('failed');
+            }
+            return result;
+          })
+          .finally(() => {
+            if (owner !== liveOwner) return;
+            firstPageBusy = false;
+            syncTransitionControls();
+          });
+      }
+
+      function showExpandedPause() {
+        if (!expandedView) return;
+        setLiveState('paused', 'Live refresh paused while viewing older sessions');
+      }
+
+      function loadOlder() {
+        if (
+          !nextCursor ||
+          appendInFlight ||
+          filterTransitionPending ||
+          refusedCursor === nextCursor ||
+          destroysInFlight.size > 0
+        ) {
+          return Promise.resolve(emptyLoadResult());
+        }
+        const owner = ++liveOwner;
+        setLiveState('loading', 'Loading older sessions');
+        return load({ append: true }).then((result) => {
+          if (owner !== liveOwner) return result;
+          if (result.loaded || expandedView) showExpandedPause();
+          else setLiveState('ready', 'Live newest page retained');
+          return result;
+        });
+      }
+
+      function patchSessionDestroyed(id) {
+        confirmedDestroys.add(id);
+        loadedSessions = loadedSessions.map((session) =>
+          session && session.id === id ? { ...session, status: 'destroyed' } : session,
+        );
+        renderSessions(loadedSessions);
+      }
+
+      function unknownDestroyError(message) {
+        const error = new Error(message);
+        error.destroyOutcomeUnknown = true;
+        return error;
+      }
+
+      function acceptDestroyResponse(response) {
+        if (response.status >= 200 && response.status < 300) return;
+        if (response.status >= 500) throw unknownDestroyError('HTTP ' + response.status);
+        const error = new Error('HTTP ' + response.status);
+        error.destroyDefinitive = true;
+        throw error;
+      }
+
+      async function verifyDestroyOutcome(id, capturedAccountId) {
+        if (!capturedAccountId) {
+          return { readSucceeded: false, status: null, stop: 'missing captured account id' };
+        }
+        let cursor = null;
+        const seenCursors = new Set();
+        for (let page = 0; page < DESTROY_RECONCILE_MAX_PAGES; page += 1) {
+          const params = new URLSearchParams();
+          params.set('limit', '50');
+          params.set('account_id', capturedAccountId);
+          if (cursor !== null) params.set('cursor', cursor);
+          try {
+            const response = await boundedFetch(
+              apiBaseUrl + '/v1/admin/sessions?' + params.toString(),
+              {
+                headers: { authorization: 'Bearer ' + token },
+                credentials: 'include',
+              },
+            );
+            if (!response.ok) {
+              return {
+                readSucceeded: false,
+                status: null,
+                stop: 'verification HTTP ' + response.status,
+              };
+            }
+            const body = await response.json();
+            const parsedPage = parseSessionListPage(body);
+            if (parsedPage === null) {
+              return {
+                readSucceeded: false,
+                status: null,
+                stop: 'invalid verification response',
+              };
+            }
+            const rows = parsedPage.data;
+            const status = observedStatus(rows, id);
+            if (status !== null) {
+              return { readSucceeded: true, status, stop: 'exact target row' };
+            }
+            const returnedCursor = parsedPage.nextCursor;
+            if (returnedCursor === null) {
+              return { readSucceeded: true, status: null, stop: 'exhaustive absence' };
+            }
+            if (returnedCursor === cursor || seenCursors.has(returnedCursor)) {
+              return { readSucceeded: true, status: null, stop: 'cursor cycle' };
+            }
+            seenCursors.add(returnedCursor);
+            cursor = returnedCursor;
+          } catch (err) {
+            return {
+              readSucceeded: false,
+              status: null,
+              stop: requestErrorMessage(err, 'verification transport failure'),
+            };
+          }
+        }
+        return { readSucceeded: true, status: null, stop: 'defensive page cap' };
+      }
+
+      function ambiguousOutcomeCause(err) {
+        if (err && err.name === 'AbortError') return 'request timed out';
+        if (err && typeof err.message === 'string' && /^HTTP 5\d\d$/.test(err.message)) {
+          return err.message;
+        }
+        return 'transport failure';
+      }
+
+      function ambiguousOutcomeMessage(id, cause, verification) {
+        const prefix = 'Force-destroy outcome is unknown (' + cause + '). ';
+        if (verification.status === 'destroyed') {
+          return (
+            prefix +
+            'The exact account-scoped unfiltered row confirms ' +
+            id +
+            ' is destroyed; do not submit another force-destroy.'
+          );
+        }
+        if (verification.status !== null) {
+          return (
+            prefix +
+            'The exact account-scoped unfiltered row for ' +
+            id +
+            ' currently reports ' +
+            verification.status +
+            '. Only status destroyed proves completion; this result does not permit replay. The target remains disabled and unverified; do not submit another force-destroy.'
+          );
+        }
+        if (verification.readSucceeded) {
+          return (
+            prefix +
+            'The account-scoped unfiltered cursor walk ended with ' +
+            verification.stop +
+            ' and did not find the exact target. Absence does not prove completion. The target remains disabled and unverified; do not submit another force-destroy.'
+          );
+        }
+        return (
+          prefix +
+          'The account-scoped unfiltered verification walk could not complete (' +
+          verification.stop +
+          '). The target remains disabled and unverified; do not submit another force-destroy.'
+        );
+      }
+
+      // Force-destroy has one synchronous owner. A 2xx is the irreversible
+      // commit boundary and is accepted before any body parsing (the payload
+      // is intentionally unused). Timeout/5xx/transport failures are verified
+      // with a separate account-scoped, status-unfiltered cursor walk.
       async function destroy(id, btn) {
-        if (!token || destroysInFlight.has(id)) return;
+        const targetSession = loadedSessions.find((session) => session && session.id === id);
+        if (
+          !token ||
+          destroysInFlight.size > 0 ||
+          uncertainDestroys.has(id) ||
+          !targetSession ||
+          targetSession.status === 'destroyed'
+        ) {
+          return;
+        }
+        const capturedAccountId =
+          typeof targetSession.account_id === 'string' ? targetSession.account_id : '';
         destroysInFlight.add(id);
-        syncDestroyControls(id);
+        syncTransitionControls();
         if (btn) {
           btn.disabled = true;
           btn.textContent = 'Confirming…';
           btn.setAttribute('aria-busy', 'true');
         }
-        // Force-destroy ends a live customer browser session immediately —
-        // gate it behind an explicit yes/no confirm first (destructive: true
-        // means a stray Enter can't fire it; the operator must click OK),
-        // matching every other destructive admin action (suspend / drain /
-        // restart). Without this, OK/Enter on the optional-reason prompt
-        // alone destroyed the session.
+        let postStarted = false;
+        let committed = false;
         try {
           const confirmed = await window.driftstackConfirm(
             'Force-destroy session ' + id + "? This ends the customer's live browser session immediately.",
@@ -421,6 +946,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           if (reason.trim()) body.reason = reason.trim();
           if (btn) btn.textContent = 'Destroying…';
           showBanner('Destroying ' + id + '…');
+          postStarted = true;
           const response = await boundedFetch(
             apiBaseUrl + '/v1/admin/sessions/' + encodeURIComponent(id) + '/destroy',
             {
@@ -433,47 +959,64 @@ const ARCHETYPE_LABELS = Object.fromEntries(
               body: JSON.stringify(body),
             },
           );
-          if (!response.ok) throw new Error('HTTP ' + response.status);
-          // The force-destroy response payload is unused. A successful status
-          // is the irreversible boundary; never let malformed response JSON
-          // turn a destroyed session into retry guidance.
+          acceptDestroyResponse(response);
+          committed = true;
+          uncertainDestroys.delete(id);
+          patchSessionDestroyed(id);
           showBanner('Destroyed ' + id + '. Refreshing…');
-          await load();
+          const refreshed = await loadWithLive({
+            allowDuringDestroy: true,
+            preserveOnError: true,
+            loadingMessage: 'Refreshing after force-destroy',
+          });
+          showBanner(
+            'Destroyed ' +
+              id +
+              (refreshed.loaded
+                ? '. The loaded session window was refreshed.'
+                : '. The accepted response was applied locally; live refresh failed.'),
+          );
         } catch (err) {
-          if (err && err.name === 'AbortError') {
-            const refreshed = await load();
-            const stillActionable = Array.from(
-              root.querySelectorAll('[data-action="destroy"]'),
-            ).some((button) => button.getAttribute('data-id') === id);
-            if (refreshed && !stillActionable) {
-              showBanner(
-                'Force-destroy outcome is unknown because the response timed out. Live sessions were refreshed and no destroy action remains for ' +
-                  id +
-                  '; it was likely destroyed, so do not submit the action again.',
-              );
-            } else if (refreshed) {
-              showBanner(
-                'Force-destroy outcome is unknown because the response timed out. Live sessions were refreshed and ' +
-                  id +
-                  ' is still actionable; retry force-destroy if the session must be ended.',
-              );
-            } else {
-              showBanner(
-                'Force-destroy outcome is unknown because the response timed out, and live sessions could not be refreshed. Verify the session before retrying.',
-              );
-            }
-          } else {
-            showBanner("Couldn't destroy (" + requestErrorMessage(err, 'network error') + ').');
+          if (committed) {
+            showBanner('Destroyed ' + id + '. The accepted response was applied locally.');
+            return;
           }
+          const outcomeUnknown = postStarted && !(err && err.destroyDefinitive);
+          if (outcomeUnknown) {
+            uncertainDestroys.add(id);
+            syncTransitionControls();
+            const verification = await verifyDestroyOutcome(id, capturedAccountId);
+            if (verification.status === 'destroyed') {
+              uncertainDestroys.delete(id);
+              patchSessionDestroyed(id);
+            }
+            syncTransitionControls();
+            showBanner(ambiguousOutcomeMessage(id, ambiguousOutcomeCause(err), verification));
+            return;
+          }
+          showBanner("Couldn't destroy (" + requestErrorMessage(err, 'network error') + ').');
         } finally {
           destroysInFlight.delete(id);
-          syncDestroyControls(id);
+          syncTransitionControls();
+          if (destroysInFlight.size === 0 && filterTransitionPending) loadWithLive();
         }
       }
 
       root.addEventListener('click', (ev) => {
         const target = ev.target;
         if (!target || !target.closest) return;
+        const loadMore = target.closest('[data-action="load-more"]');
+        if (loadMore) {
+          ev.preventDefault();
+          loadOlder();
+          return;
+        }
+        const backToNewest = target.closest('[data-action="back-to-newest"]');
+        if (backToNewest) {
+          ev.preventDefault();
+          loadWithLive();
+          return;
+        }
         const btn = target.closest('[data-action="destroy"]');
         if (!btn) return;
         ev.preventDefault();
@@ -481,51 +1024,24 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         if (id) destroy(id, btn);
       });
 
-      let debounce = 0;
       function scheduleLoad() {
+        if (destroysInFlight.size > 0) return;
         clearTimeout(debounce);
-        debounce = setTimeout(loadWithLive, 200);
+        filterTransitionPending = true;
+        syncTransitionControls();
+        debounce = setTimeout(() => {
+          debounce = 0;
+          if (destroysInFlight.size > 0) return;
+          filterTransitionPending = false;
+          loadWithLive();
+        }, 200);
       }
       if (statusEl) statusEl.addEventListener('change', scheduleLoad);
       if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
 
-      // 2026-05-22 — live auto-poll. Same pattern as 580b30a7 /
-      // 2d358ce7. Session-list reflects newly-spawned customer
-      // sessions + status transitions every 30s.
-      let lastFetch = Date.now();
-      function loadWithLive() {
-        setLiveState('loading');
-        if (refreshBtn) {
-          refreshBtn.disabled = true;
-          refreshBtn.setAttribute('aria-disabled', 'true');
-        }
-        const expectedReq = inFlight + 1;
-        const p = load();
-        if (p && typeof p.then === 'function') {
-          return p.then((loaded) => {
-            if (expectedReq !== inFlight) return loaded;
-            if (loaded) {
-              lastFetch = Date.now();
-              if (liveAge) liveAge.textContent = 'just now';
-              setLiveState('ready');
-            } else {
-              setLiveState('failed');
-            }
-            if (refreshBtn) {
-              refreshBtn.disabled = false;
-              refreshBtn.removeAttribute('aria-disabled');
-            }
-            return loaded;
-          });
-        } else {
-          setLiveState('failed');
-          if (refreshBtn) {
-            refreshBtn.disabled = false;
-            refreshBtn.removeAttribute('aria-disabled');
-          }
-          return Promise.resolve(false);
-        }
-      }
+      // 2026-05-22 — live auto-poll. Once older pages are appended the poll
+      // pauses so a first-page replacement cannot silently discard the loaded
+      // window. Back to newest / Refresh explicitly resumes it.
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
@@ -547,12 +1063,21 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           return;
         }
         if (refreshBtn) {
-          refreshBtn.disabled = false;
-          refreshBtn.removeAttribute('aria-disabled');
           refreshBtn.removeAttribute('title');
-          refreshBtn.addEventListener('click', loadWithLive);
+          refreshBtn.addEventListener('click', () => {
+            if (destroysInFlight.size === 0) loadWithLive();
+          });
         }
-        setInterval(loadWithLive, 30_000);
+        syncTransitionControls();
+        setInterval(() => {
+          if (expandedView) {
+            showExpandedPause();
+            return;
+          }
+          if (destroysInFlight.size === 0 && !firstPageBusy && !filterTransitionPending) {
+            loadWithLive();
+          }
+        }, 30_000);
         setInterval(() => {
           if (liveAge) liveAge.textContent = fmtAge(lastFetch);
         }, 5_000);

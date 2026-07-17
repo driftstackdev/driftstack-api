@@ -1,21 +1,7 @@
-// W380.B — drift guard for admin-panel /status-subscribers.astro
-// page content. Existing admin-status-subscribers-page-parity +
-// status-subscribers-route-parity cover route shape; this guard
-// pins the load-bearing V-312 admin-surface claims:
-//
-//   • V-312 framing (admin view of status-page email subscribers).
-//   • V-295c3 fan-out + V-295c3-tombstone purge cron framing.
-//   • V-281 audit-log dual-write framing.
-//   • GET /v1/admin/status-subscribers?limit=200 inline.
-//   • POST /v1/admin/status-subscribers/{id}/force-unsubscribe.
-//   • 3 row states: confirmed (emerald) / pending (amber) /
-//     unsubscribed (slate).
-//   • Tombstoned-row display: "(purged — V-295c3-tombstone)".
-//   • localStorage driftstack_admin_token convention.
-//   • window.confirm() force-unsubscribe gate with V-281 explanation.
-//   • 50-default + ?limit=&offset= pagination framing in footer.
-//   • 90d tombstone purge cron framing.
-//   • Banner pattern: role="status" + error-state coloring.
+// W380.B — drift guard for the load-bearing admin /status-subscribers
+// contracts: offset paging with a one-row sentinel, exact-row mutation
+// reconciliation, accepted-status commit latches, tombstone rendering,
+// staff auth, and the shared bounded transport.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,131 +19,212 @@ function read(p: string): string {
 describe('W380.B admin-panel /status-subscribers.astro page content parity', () => {
   const body = read(PAGE);
 
-  it('uses AdminLayout title="Status-page subscribers"', () => {
-    expect(body).toMatch(/import AdminLayout from '\.\.\/layouts\/AdminLayout\.astro';/);
-    expect(body).toMatch(/<AdminLayout title="Status-page subscribers">/);
-  });
-
-  it('V-312 + V-295c3 + V-295c3-tombstone framing pinned in page comment', () => {
+  it('uses the canonical AdminLayout and V-312/V-295c3/V-281 framing', () => {
+    expect(existsSync(PAGE)).toBe(true);
+    expect(body).toContain("import AdminLayout from '../layouts/AdminLayout.astro';");
+    expect(body).toContain('<AdminLayout title="Status-page subscribers">');
     expect(body).toMatch(/V-312 — admin view of status-page email subscribers/);
     expect(body).toMatch(/V-295c3 \+\s*\n?\s*\/\/\s*V-295c3-tombstone/);
     expect(body).toMatch(/V-281 pattern/);
-  });
-
-  it('hero subtitle pins V-295c3-followup fan-out + V-281 dual-write framing (customer-facing)', () => {
     expect(body).toMatch(
-      /Confirmed\s+subscribers receive emails when public incidents are posted or resolved \(V-295c3-followup\s+fan-out\)/,
-    );
-    expect(body).toMatch(/Force-unsubscribe writes admin_audit_log via V-281 dual-write/);
-  });
-
-  it('GET /v1/admin/status-subscribers?limit=200 endpoint pinned. 2026-05-21 — fetch URL prefixed by apiBaseUrl (admin.driftstack.dev is a static Pages origin; relative paths 404).', () => {
-    expect(body).toMatch(
-      /boundedFetch\(\s*apiBaseUrl \+ '\/v1\/admin\/status-subscribers\?limit=200'/,
-    );
-    expect(body).toMatch(/authorization: 'Bearer ' \+ token/);
-  });
-
-  it('POST /v1/admin/status-subscribers/{id}/force-unsubscribe endpoint pinned. 2026-05-21 — fetch URL prefixed by apiBaseUrl.', () => {
-    expect(body).toMatch(
-      /boundedFetch\(\s*apiBaseUrl \+ '\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe'/,
-    );
-    expect(body).toMatch(/method: 'POST'/);
-  });
-
-  it('localStorage ds_web_session_token convention. 2026-05-21 — switched from the legacy `driftstack_admin_token` key (never populated) to the canonical staff bearer the SSO bridge writes.', () => {
-    expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\)/);
-  });
-
-  it('3 subscriber row states pinned (confirmed=emerald / pending=amber / unsubscribed=slate)', () => {
-    expect(body).toMatch(
-      /<span class="rounded-full bg-emerald-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-emerald-700">confirmed<\/span>/,
-    );
-    expect(body).toMatch(
-      /<span class="rounded-full bg-amber-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-amber-700">pending<\/span>/,
-    );
-    expect(body).toMatch(
-      /'<span class="rounded-full bg-tk-hover px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">unsubscribed '/,
+      /Email addresses subscribed to status\.driftstack\.dev incident notifications\. Confirmed\s+subscribers receive emails when public incidents are posted or resolved\. A forced\s+unsubscribe is also written to the admin audit log\./,
     );
   });
 
-  it('tombstoned-row display: "(purged — V-295c3-tombstone)"', () => {
-    expect(body).toMatch(/\(purged — V-295c3-tombstone\)/);
-    expect(body).toMatch(/sub\.email\s*\?\s*escapeHtml\(sub\.email\)/);
+  it('uses a 51-row offset request, renders 50, and derives both paging directions from committed state', () => {
+    expect(body).toContain('const PAGE_SIZE = 50;');
+    expect(body).toContain('const PAGE_FETCH_LIMIT = PAGE_SIZE + 1;');
+    expect(body).toContain('let requestedOffset = 0;');
+    expect(body).toContain('let renderedOffset = 0;');
+    expect(body).toMatch(
+      /'\/v1\/admin\/status-subscribers\?limit='\s*\+\s*PAGE_FETCH_LIMIT\s*\+\s*'&offset='\s*\+\s*targetOffset/,
+    );
+    expect(body).toContain('const nextSubscribers = fetchedRows.slice(0, PAGE_SIZE);');
+    expect(body).toContain('const nextHasNext = fetchedRows.length > PAGE_SIZE;');
+    expect(body).toContain('renderedHasNext = nextHasNext;');
+    expect(body).toContain(
+      'const canPrevious = subscriberDataAvailable && renderedOffset > 0 && !controlsBusy;',
+    );
+    expect(body).toContain(
+      'const canNext = subscriberDataAvailable && renderedHasNext && !controlsBusy;',
+    );
+    expect(body).toContain('requestedOffset = Math.max(0, offset);');
+    expect(body).toContain('requestPage(renderedOffset - PAGE_SIZE);');
+    expect(body).toContain('requestPage(renderedOffset + PAGE_SIZE);');
   });
 
-  it('window.confirm force-unsubscribe gate with V-281 audit-log explanation', () => {
+  it('gives each read an offset-bearing generation owner and fences every commit/cleanup', () => {
+    expect(body).toContain(
+      'const owner = { generation: generation, controller: controller, offset: targetOffset };',
+    );
+    expect(body).toContain(
+      'if (refreshOwner !== owner || generation !== refreshGeneration) return null;',
+    );
+    expect(body).toContain('if (refreshOwner === owner && generation === refreshGeneration) {');
+    expect(body).toContain('const targetOffset = requestedOffset;');
+    expect(body).toContain('generation: generation,');
+    expect(body).toContain('const fetchedRows = parseSubscriberPage(body);');
+  });
+
+  it('parses all 51 complete subscriber rows before publishing offsets, controls, or list HTML', () => {
+    expect(body).toContain('const SUBSCRIBER_FIELDS = [');
+    for (const field of ['id', 'email', 'confirmed_at', 'unsubscribed_at', 'created_at']) {
+      expect(body).toContain(`'${field}'`);
+    }
+    expect(body).toContain('function isSubscriber(value)');
+    expect(body).toContain('SUBSCRIBER_FIELDS.every((field) => hasOwn(value, field))');
+    expect(body).toContain("value.id.startsWith('sub_')");
+    expect(body).toContain('EMAIL_RE.test(value.email)');
+    expect(body).toContain('isIsoUtc(value.created_at)');
+    expect(body).toContain('function parseSubscriberPage(body)');
+    expect(body).toContain('body.data.length > PAGE_FETCH_LIMIT');
+    expect(body).toContain('!body.data.every(isSubscriber)');
+    expect(body).toContain("throw responseContractError('Invalid subscriber list response')");
     expect(body).toMatch(
-      /Force-unsubscribe ' \+\s*\n?\s*email \+\s*\n?\s*'\? Writes admin_audit_log\. Customer can re-subscribe via the public form/,
+      /function responseContractError\(message\) \{\s*const error = new Error\(message\);\s*error\.staffSafe = true;/,
+    );
+
+    const parse = body.indexOf('const fetchedRows = parseSubscriberPage(body);');
+    expect(
+      body.indexOf('const nextSubscribers = fetchedRows.slice(0, PAGE_SIZE);', parse),
+    ).toBeGreaterThan(parse);
+    expect(body.indexOf('renderedSubscribers = nextSubscribers;', parse)).toBeGreaterThan(parse);
+    expect(body.indexOf('renderedOffset = targetOffset;', parse)).toBeGreaterThan(parse);
+  });
+
+  it('retains the prior page, exact retry offset, and mutation evidence on malformed refreshes', () => {
+    expect(body).toContain('let renderedSubscribers = [];');
+    expect(body).toContain('let preserveRenderedPage = false;');
+    expect(body).toMatch(
+      /if \(subscriberDataAvailable\) \{\s*requestedOffset = renderedOffset;\s*preserveRenderedPage = true;/,
+    );
+    expect(body).toContain('The previous page and action status are unchanged; retry when ready.');
+    expect(body).toMatch(
+      /if \(preserveRenderedPage\) \{\s*renderPage\(renderedSubscribers, renderedOffset\);/,
+    );
+    expect(body).toContain('committedForceUnsubs.has(id)');
+    expect(body).toContain('uncertainForceUnsubs.has(id)');
+  });
+
+  it('disables paging while reads or mutation reconciliation own the page', () => {
+    expect(body).toContain(
+      'const mutationReconciling = forceUnsubsInFlight.size > 0 || addInFlight;',
+    );
+    expect(body).toContain('const controlsBusy = readBusy || mutationReconciling;');
+    expect(body).toContain(
+      "previousPageBtn.title = 'Paging is unavailable while a subscriber change is reconciled.';",
+    );
+    expect(body).toContain(
+      "nextPageBtn.title = 'Paging is unavailable while a subscriber change is reconciled.';",
     );
   });
 
-  it('reconciles ambiguous force-unsubscribe and force-subscribe outcomes', () => {
-    expect(body).toMatch(/const uncertainForceUnsubs = new Set\(\)/);
-    expect(body).toMatch(/let addOutcomeUnknown = false/);
-    expect(body).toMatch(/uncertainForceUnsubs\.has\(id\)/);
-    expect(body).toMatch(/Force-unsubscribe outcome is unknown after the request timed out/);
-    expect(body).toMatch(/still shows ' \+/);
-    expect(body).toMatch(/no longer shows ' \+/);
+  it('keeps force-unsubscribe on its origin and reconciles ambiguous outcomes by exact id plus unsubscribed_at', () => {
+    expect(body).toContain('function mutationOutcomeIsUnknown(err)');
+    expect(body).toContain('return explicitStatus >= 500;');
+    expect(body).toContain('const originOffset = renderedOffset;');
     expect(body).toMatch(
-      /if \(!subscriberDataAvailable \|\| addInFlight \|\| addOutcomeUnknown\) return/,
+      /requestedOffset = originOffset;\s*\n?\s*const reconciliation = await refreshWithLive\(\)/,
     );
-    expect(body).toMatch(/Add-subscriber outcome is unknown after the request timed out/);
-    expect(body).toMatch(/returned unsubscribe link cannot be recovered/);
-    expect(body).toMatch(/const disabled = !available \|\| addInFlight \|\| addOutcomeUnknown/);
+    expect(body).toContain(
+      'reconciliation.fetchedRows.find((subscriber) => String(subscriber.id) === id)',
+    );
+    expect(body).toContain('exactRow && exactRow.unsubscribed_at');
+    expect(body).toContain(
+      'is absent from the refreshed page slice. Absence from this slice is not evidence',
+    );
+    expect(body).not.toContain('active, so it likely completed');
   });
 
-  it('treats accepted force-unsubscribe status as authoritative without parsing an unused body', () => {
+  it('treats accepted force-unsubscribe as body-independent and non-replayable', () => {
     expect(body).toContain('The response body is unused. Trust the accepted status');
     expect(body).not.toMatch(/force-unsubscribe[\s\S]{0,700}await response\.json\(\)/);
+    expect(body).toContain('const committedForceUnsubs = new Set();');
+    expect(body).toContain('committedForceUnsubs.add(id);');
+    expect(body).toContain('committedForceUnsubs.has(id)');
   });
 
-  it('re-rendered rows inherit and visibly explain pending or uncertain unsubscribe state', () => {
-    expect(body).toMatch(/const forceUnsubPending = forceUnsubsInFlight\.has\(id\)/);
-    expect(body).toMatch(/const forceUnsubDisabled = forceUnsubPending \|\| forceUnsubUnknown/);
-    expect(body).toContain('Unsubscribe pending…');
-    expect(body).toContain('Wait for the current force-unsubscribe action to finish.');
-    expect(body).toContain('Reload later to verify the previous force-unsubscribe outcome.');
-  });
-
-  it('50-default + ?limit=&offset= server-side pagination framing', () => {
+  it('latches an accepted force-subscribe before body parsing and validates all returned details', () => {
     expect(body).toMatch(
-      /Subscribers list paginated server-side \(default 50 per page; <code>\?limit=&amp;offset=<\/code>/,
+      /acceptedStatusCommitted = true;\s*\n?\s*const body = await response\.json\(\)\.catch\(\(\) => null\)/,
+    );
+    expect(body).toContain('function validForceSubscribeResult(body)');
+    expect(body).toContain("typeof body.unsubscribe_link === 'string'");
+    expect(body).toContain('addCommitDetailsUnavailable = true;');
+    expect(body).toContain('Add subscriber committed, but result details are unavailable.');
+    expect(body).toContain('requestedOffset = 0;');
+    expect(body).toMatch(
+      /addOutcomeUnknown \|\|\s*\n?\s*addCommitDetailsUnavailable \|\|\s*\n?\s*forceUnsubsInFlight\.size > 0 \|\|\s*\n?\s*refreshOwner !== null/,
     );
   });
 
-  it('90d tombstone purge cron framing pinned in footer', () => {
+  it('uses only active first-page email presence as positive ambiguous-add evidence', () => {
+    expect(body).toContain('responseError.httpStatus = response.status;');
+    expect(body).toContain('if (mutationOutcomeIsUnknown(err))');
+    expect(body).toContain('reconciliation.offset === 0');
+    expect(body).toContain('Array.isArray(reconciliation.rows)');
     expect(body).toMatch(
-      /Tombstoned rows \(90d post-unsubscribe via\s+V-295c3-tombstone purge cron\) appear with email = <code>null<\/code>/,
+      /typeof subscriber\.email === 'string' &&\s*\n?\s*!subscriber\.unsubscribed_at &&\s*\n?\s*subscriber\.email\.toLowerCase\(\) === normalizedEmail/,
+    );
+    expect(body).toContain('absence from that page is not evidence that the add failed');
+    expect(body).toContain('returned unsubscribe link cannot be recovered');
+  });
+
+  it('keeps manual and interval refreshes from superseding mutation reconciliation', () => {
+    expect(body).toContain(
+      "refreshBtn.title = 'Wait for the current subscriber change to finish.';",
+    );
+    expect(body).toMatch(
+      /refreshBtn\.addEventListener\('click',[\s\S]*?if \(forceUnsubsInFlight\.size > 0 \|\| addInFlight\) return;/,
+    );
+    expect(body).toMatch(
+      /setInterval\(function \(\) \{\s*if \(forceUnsubsInFlight\.size > 0 \|\| addInFlight\) return;\s*refreshWithLive\(\);/,
     );
   });
 
-  it('banner pattern: data-banner + role="status" + error-state class swap', () => {
-    expect(body).toMatch(/data-banner/);
-    expect(body).toMatch(/role="status"/);
-    expect(body).toMatch(/banner\.classList\.add\('border-red-200', 'bg-red-50', 'text-red-700'\)/);
+  it('keeps nullable-email tombstones as rows without a destructive action', () => {
+    expect(body).toContain('const canForceUnsub = !sub.unsubscribed_at && sub.email;');
+    expect(body).toContain('(purged after retention period)');
+    expect(body).toContain('<span class="text-xs text-tk-ink-3">no action</span>');
+    expect(body).toContain("'<li data-subscriber-id=\"' +");
+    expect(body).not.toMatch(/filter\([^\n]*sub\.email/);
   });
 
-  it('no-token + empty states: structured (headline + helper copy), matching the admin empty-state pattern', () => {
-    // No-token guard: structured empty state guiding the operator to SSO.
-    expect(body).toMatch(/Sign in with a staff admin account to load subscribers/);
-    expect(body).toMatch(/Available after staff sign-in/);
-    // Empty list: headline + helper copy (not a bare one-line <li>).
-    expect(body).toMatch(/No subscribers yet/);
-    expect(body).toMatch(
-      /When visitors subscribe to incident notifications on status\.driftstack\.dev, they appear here/,
-    );
-  });
-
-  it('escapeHtml + fmtIso helpers (XSS-safe inline rendering, ISO normalization)', () => {
+  it('renders all three lifecycle badges and preserves XSS-safe helpers', () => {
+    expect(body).toContain('>confirmed</span>');
+    expect(body).toContain('>pending</span>');
+    expect(body).toContain('>unsubscribed ');
     expect(body).toMatch(/function escapeHtml\(s\)/);
-    expect(body).toMatch(/function fmtIso\(iso\)/);
+    expect(body).toMatch(/\.replace\(\/\[&<>"'\]\/g/);
     expect(body).toMatch(
       /new Date\(iso\)\.toISOString\(\)\.replace\('T', ' '\)\.slice\(0, 16\) \+ ' UTC'/,
     );
   });
 
-  it('inline script is:inline (Astro convention for admin-panel pages). 2026-05-21 — define:vars={{ apiBaseUrl }} added so the inline script can prefix fetch() with the API origin.', () => {
+  it('preserves staff auth, API-origin prefixing, and the shared 15-second deadline', () => {
+    expect(body).toContain("localStorage.getItem('ds_web_session_token')");
+    expect(body).toContain("authorization: 'Bearer ' + token");
+    expect(body).toContain('const SUBSCRIBER_TIMEOUT_MS = 15_000;');
+    expect(body).toContain(
+      'window.driftstackFetchWithDeadline(url, init, SUBSCRIBER_TIMEOUT_MS, controller)',
+    );
+    expect(body).not.toMatch(/\bfetch\(/);
     expect(body).toMatch(/<script is:inline define:vars=\{\{ apiBaseUrl \}\}>/);
+  });
+
+  it('keeps neutral auth, empty, banner, and footer copy', () => {
+    expect(body).toContain('data-live-status>Waiting for live data</span>');
+    expect(body).toContain('Sign in with a staff admin account to load subscribers.');
+    expect(body).toContain('No subscribers yet');
+    expect(body).toContain(
+      'When visitors subscribe to incident notifications on status.driftstack.dev, they appear here',
+    );
+    expect(body).toMatch(/data-banner/);
+    expect(body).toMatch(/role="status"/);
+    expect(body).toContain("banner.classList.add('border-red-200', 'bg-red-50', 'text-red-700')");
+    expect(body).toMatch(
+      /Subscribers list paginated server-side \(default 50 per page; <code>\?limit=&amp;offset=<\/code>/,
+    );
+    expect(body).toMatch(/Tombstoned rows appear with email = <code>null<\/code> after/);
   });
 });

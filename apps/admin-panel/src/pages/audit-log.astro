@@ -1,16 +1,18 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
+import { AdminAuditActionSchema } from '@driftstack/api-types';
 
 // V-188 — progressive-enhancement against /v1/admin/audit-log. SSG
 // renders an inert shell; an inline <script> reads ds_web_session_token
 // from localStorage and replaces the table body with live entries.
-// Filter bar is wired: action substring (server-side `action`),
+// Filter bar is wired: exact action enum value (server-side `action`),
 // admin id (`admin_id`), result-only filter is client-side post-fetch
 // since the endpoint doesn't accept a result filter today. Banner
 // surfaces no-token / fetch-error / forbidden states.
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
+const adminAuditActions = AdminAuditActionSchema.options;
 ---
 
 <AdminLayout title="Audit log">
@@ -58,20 +60,16 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <!-- Filter bar -->
     <div class="mb-6 flex flex-wrap items-center gap-3">
-      <div class="relative">
-        <input
-          type="search"
+      <div>
+        <select
           data-field="action"
           aria-label="Filter audit log by action"
-          placeholder="Filter by action (e.g. account.tier_changed)…"
-          class="w-80 rounded-md border border-tk-border px-3 py-2 pr-12 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
-        />
-        <kbd
-          aria-hidden="true"
-          class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-tk-border bg-tk-bg px-1.5 py-0.5 font-mono text-[10px] text-tk-ink-3"
+          title="Exact action match; for example account.tier_changed"
+          class="w-80 rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
         >
-          /
-        </kbd>
+          <option value={''}>Any action (exact match)</option>
+          {adminAuditActions.map((action) => <option value={action}>{action}</option>)}
+        </select>
       </div>
       <input
         type="search"
@@ -125,15 +123,36 @@ const apiBaseUrl = resolveApiBaseUrl();
       </table>
     </div>
 
+    <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <p class="text-xs text-tk-ink-3" data-field="window-summary">
+        Loaded window unavailable until live data is fetched.
+      </p>
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          data-action="back-to-newest"
+          class="hidden text-sm font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
+        >
+          Back to newest / Refresh
+        </button>
+        <button
+          type="button"
+          data-action="load-more"
+          class="hidden text-sm font-medium text-tk-accent hover:underline disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
+        >
+          Load more
+        </button>
+      </div>
+    </div>
+
     <p class="mt-4 text-xs text-tk-ink-3" data-field="footnote">
-      Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006). The
-      read endpoint returns newest first and paginates by cursor. For a complete
-      admin-side extract, pull every page from
+      This console reads the live PostgreSQL audit rows newest first and paginates
+      by cursor. For a complete live admin-side extract, pull every page from
       <code class="font-mono">/v1/admin/audit-log</code>.
     </p>
   </div>
 
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, adminAuditActions }}>
     (function () {
       const root = document.querySelector('[data-page="admin-audit-log"]');
       if (!root) return;
@@ -147,9 +166,26 @@ const apiBaseUrl = resolveApiBaseUrl();
       const liveStatus = root.querySelector('[data-live-status]');
       const liveAge = root.querySelector('[data-live-age]');
       const refreshBtn = root.querySelector('[data-live-refresh]');
+      const windowSummary = root.querySelector('[data-field="window-summary"]');
+      const loadMoreBtn = root.querySelector('[data-action="load-more"]');
+      const backToNewestBtn = root.querySelector('[data-action="back-to-newest"]');
       let token = null;
       const AUDIT_REQUEST_TIMEOUT_MS = 15_000;
       let loadController = null;
+      let loadedEntries = [];
+      let nextCursor = null;
+      let hasLoadedWindow = false;
+      let loadedServerFilterKey = null;
+      let listEpoch = 0;
+      let appendInFlight = false;
+      let expandedWindow = false;
+      let refusedCursor = null;
+      const requestedCursors = new Set();
+      const allowedAuditActions = new Set(adminAuditActions);
+      const AUDIT_ENTRY_UUID_RE =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const ISO_WITH_OFFSET_RE =
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
       function boundedFetch(url, init, controller) {
         return window.driftstackFetchWithDeadline(
@@ -173,7 +209,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (adminIdEl instanceof HTMLInputElement && urlParams.get('admin_id')) {
         adminIdEl.value = urlParams.get('admin_id');
       }
-      if (actionEl instanceof HTMLInputElement && urlParams.get('action')) {
+      if (actionEl instanceof HTMLSelectElement && urlParams.get('action')) {
         actionEl.value = urlParams.get('action');
       }
       let targetIdFromUrl = urlParams.get('target_id') || '';
@@ -189,6 +225,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
       }
 
+      function captureServerFilters() {
+        return {
+          action: actionEl ? actionEl.value : '',
+          adminId: adminIdEl ? adminIdEl.value.trim() : '',
+          targetId: targetIdFromUrl,
+        };
+      }
+
+      function serverFilterKey(filters) {
+        return JSON.stringify([filters.action, filters.adminId, filters.targetId]);
+      }
+
       function showBanner(text) {
         if (!banner) return;
         banner.textContent = text;
@@ -200,6 +248,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       function renderUnavailable(message) {
+        loadedEntries = [];
+        nextCursor = null;
+        hasLoadedWindow = false;
+        loadedServerFilterKey = null;
+        expandedWindow = false;
+        appendInFlight = false;
+        refusedCursor = null;
+        requestedCursors.clear();
         if (tbody) {
           tbody.innerHTML =
             '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
@@ -209,6 +265,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         // Do not retain the SSG mock's count/retention copy when the rows are
         // unavailable. It makes fabricated events look like a live result set.
         if (footnote) footnote.textContent = '';
+        if (windowSummary) windowSummary.textContent = 'Loaded window unavailable.';
+        syncPaginationControls();
       }
 
       function escapeHtml(s) {
@@ -223,6 +281,58 @@ const apiBaseUrl = resolveApiBaseUrl();
               "'": '&#39;',
             })[c],
         );
+      }
+
+      function nullableString(value) {
+        return value === null || typeof value === 'string';
+      }
+
+      function validIsoTimestamp(value) {
+        return (
+          typeof value === 'string' &&
+          ISO_WITH_OFFSET_RE.test(value) &&
+          Number.isFinite(Date.parse(value))
+        );
+      }
+
+      function validAuditEntry(entry) {
+        return (
+          entry !== null &&
+          typeof entry === 'object' &&
+          !Array.isArray(entry) &&
+          typeof entry.id === 'string' &&
+          AUDIT_ENTRY_UUID_RE.test(entry.id) &&
+          typeof entry.admin_account_id === 'string' &&
+          typeof entry.admin_key_id === 'string' &&
+          typeof entry.action === 'string' &&
+          allowedAuditActions.has(entry.action) &&
+          nullableString(entry.target_account_id) &&
+          nullableString(entry.target_resource_id) &&
+          (entry.input_payload === null ||
+            (typeof entry.input_payload === 'object' &&
+              entry.input_payload !== null &&
+              !Array.isArray(entry.input_payload))) &&
+          typeof entry.result === 'string' &&
+          nullableString(entry.ip_address) &&
+          validIsoTimestamp(entry.timestamp)
+        );
+      }
+
+      function parseAuditPage(body) {
+        if (
+          body === null ||
+          typeof body !== 'object' ||
+          Array.isArray(body) ||
+          !Array.isArray(body.data) ||
+          !body.data.every(validAuditEntry) ||
+          !(
+            body.next_cursor === null ||
+            (typeof body.next_cursor === 'string' && body.next_cursor.length > 0)
+          )
+        ) {
+          throw new Error('Invalid audit-log response');
+        }
+        return { incoming: body.data, returnedCursor: body.next_cursor };
       }
 
       function fmtIso(iso) {
@@ -311,25 +421,151 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
 
-      function buildQuery() {
+      function mergeUniqueEntries(existing, incoming) {
+        const seen = new Set();
+        const merged = [];
+        existing.concat(incoming).forEach((entry) => {
+          if (seen.has(entry.id)) return;
+          seen.add(entry.id);
+          merged.push(entry);
+        });
+        return merged;
+      }
+
+      function syncPaginationControls() {
+        const readBusy = loadController !== null;
+        const cursorRefused = nextCursor !== null && refusedCursor === nextCursor;
+        if (loadMoreBtn) {
+          loadMoreBtn.classList.toggle('hidden', !nextCursor);
+          loadMoreBtn.disabled = readBusy || appendInFlight || !nextCursor || cursorRefused;
+          loadMoreBtn.textContent = appendInFlight ? 'Loading…' : 'Load more';
+          loadMoreBtn.setAttribute('aria-busy', appendInFlight ? 'true' : 'false');
+        }
+        if (backToNewestBtn) {
+          backToNewestBtn.classList.toggle('hidden', !expandedWindow);
+          backToNewestBtn.disabled = readBusy;
+        }
+      }
+
+      function renderLoadedWindow() {
+        // A local result-filter change must not replace a loading/error shell
+        // with a fabricated authoritative empty window.
+        if (!hasLoadedWindow) return;
+        const resultFilter = resultEl ? resultEl.value : '';
+        // Result is deliberately a client-side filter until the route accepts
+        // it. Apply it to every page accumulated in this explicit loaded
+        // window, never just to the latest response page.
+        const entries = resultFilter
+          ? loadedEntries.filter((e) => String(e.result).startsWith(resultFilter))
+          : loadedEntries;
+        if (tbody) {
+          if (entries.length === 0) {
+            let emptyMessage = 'No audit entries match the current filter in the loaded window.';
+            if (resultFilter && nextCursor) {
+              emptyMessage =
+                'No ' +
+                resultFilter +
+                ' entries in the loaded window. Older entries are available; load more to continue searching.';
+            } else if (resultFilter) {
+              emptyMessage =
+                'No ' + resultFilter + ' entries in the loaded window. All available pages are loaded.';
+            }
+            tbody.innerHTML =
+              '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
+              escapeHtml(emptyMessage) +
+              '</td></tr>';
+          } else {
+            tbody.innerHTML = entries.map(rowHtml).join('');
+          }
+        }
+        const availability = nextCursor
+          ? ' Older entries are available.'
+          : ' All available entries for these server filters are loaded.';
+        if (windowSummary) {
+          windowSummary.textContent =
+            'Loaded window: ' +
+            loadedEntries.length +
+            ' audit entr' +
+            (loadedEntries.length === 1 ? 'y' : 'ies') +
+            '; showing ' +
+            entries.length +
+            (resultFilter ? ' matching the client-side result filter.' : '.') +
+            availability;
+        }
+        if (footnote) {
+          footnote.textContent =
+            'Showing ' +
+            entries.length +
+            ' entr' +
+            (entries.length === 1 ? 'y' : 'ies') +
+            ' from a loaded window of ' +
+            loadedEntries.length +
+            '. This console reads live PostgreSQL audit rows; page the API for a complete live extract.';
+        }
+        syncPaginationControls();
+      }
+
+      function resetLoadedWindow() {
+        loadedEntries = [];
+        nextCursor = null;
+        hasLoadedWindow = false;
+        loadedServerFilterKey = null;
+        appendInFlight = false;
+        expandedWindow = false;
+        refusedCursor = null;
+        requestedCursors.clear();
+        if (tbody) {
+          tbody.innerHTML =
+            '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
+            'Loading live audit entries…' +
+            '</td></tr>';
+        }
+        if (windowSummary) windowSummary.textContent = 'Loading the newest audit window…';
+        if (footnote) footnote.textContent = '';
+        syncPaginationControls();
+      }
+
+      function buildQuery(requestedCursor, filters) {
         const params = new URLSearchParams();
         params.set('limit', '50');
-        if (actionEl && actionEl.value.trim()) params.set('action', actionEl.value.trim());
-        if (adminIdEl && adminIdEl.value.trim()) params.set('admin_id', adminIdEl.value.trim());
+        if (filters.action) params.set('action', filters.action);
+        if (filters.adminId) params.set('admin_id', filters.adminId);
         // target_id has no visible input; it's carried from the URL deep-link
         // (server filters by target_id — admin-audit-log.ts maybeUuidFromInput).
-        if (targetIdFromUrl) params.set('target_id', targetIdFromUrl);
+        if (filters.targetId) params.set('target_id', filters.targetId);
+        if (requestedCursor) params.set('cursor', requestedCursor);
         return params;
       }
 
       let inFlight = 0;
-      function load() {
+      function load(options) {
+        const append = !!(options && options.append);
         if (!token) return Promise.resolve(false);
+        const requestedFilters = captureServerFilters();
+        const requestedFilterKey = serverFilterKey(requestedFilters);
+        const requestedCursor = append ? nextCursor : null;
+        if (
+          append &&
+          (!requestedCursor ||
+            appendInFlight ||
+            loadController !== null ||
+            loadedServerFilterKey !== requestedFilterKey ||
+            refusedCursor === requestedCursor)
+        ) {
+          return Promise.resolve(false);
+        }
+        const epoch = append ? listEpoch : ++listEpoch;
+        if (append) {
+          appendInFlight = true;
+          expandedWindow = true;
+        }
         const myReq = ++inFlight;
-        const params = buildQuery();
+        const params = buildQuery(requestedCursor, requestedFilters);
         if (loadController) loadController.abort();
         const controller = new AbortController();
         loadController = controller;
+        root.setAttribute('aria-busy', 'true');
+        syncPaginationControls();
         return boundedFetch(
           apiBaseUrl + '/v1/admin/audit-log?' + params.toString(),
           {
@@ -343,53 +579,64 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
           })
           .then((body) => {
-            if (myReq !== inFlight) return false;
-            const fetched = body.data || [];
-            let entries = fetched;
-            const resultFilter = resultEl ? resultEl.value : '';
-            if (resultFilter) {
-              // Failures are audited as `error: <code>` (every admin route's
-              // catch block), so an exact === 'error' match never hit them and
-              // "Errors only" silently showed nothing. Prefix-match instead:
-              // 'success' matches the exact success result, 'error' matches
-              // every `error: <code>` variant.
-              entries = entries.filter((e) => String(e.result).startsWith(resultFilter));
+            if (myReq !== inFlight || epoch !== listEpoch) return false;
+            if (append && nextCursor !== requestedCursor) return false;
+            const page = parseAuditPage(body);
+            const incoming = page.incoming;
+            const returnedCursor = page.returnedCursor;
+            const nextLoadedEntries = append
+              ? mergeUniqueEntries(loadedEntries, incoming)
+              : mergeUniqueEntries([], incoming);
+            const repeatedCursor =
+              append &&
+              returnedCursor !== null &&
+              (returnedCursor === requestedCursor || requestedCursors.has(returnedCursor));
+
+            // The whole page is validated and all derived state is staged above.
+            // Commit the authoritative window only after no validation/render
+            // primitive can reject the response halfway through pagination state.
+            if (append) requestedCursors.add(requestedCursor);
+            loadedEntries = nextLoadedEntries;
+            nextCursor = returnedCursor;
+            refusedCursor = repeatedCursor ? returnedCursor : null;
+            hasLoadedWindow = true;
+            loadedServerFilterKey = requestedFilterKey;
+            if (!append) {
+              expandedWindow = false;
+              requestedCursors.clear();
             }
-            // The result filter is applied CLIENT-side over only the fetched
-            // page (server takes no `result` param), so an empty filtered view
-            // means "none in the 50 most-recent" — NOT "no such entries exist".
-            // Say so, or a forensic reviewer reads a false all-clear. (Only the
-            // page window is qualified; without a filter the count is exact.)
-            const filteredPage = resultFilter && fetched.length >= 50;
-            if (tbody) {
-              if (entries.length === 0) {
-                tbody.innerHTML =
-                  '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">' +
-                  (filteredPage
-                    ? 'No ' +
-                      resultFilter +
-                      ' entries in the 50 most-recent — older entries are not loaded on this view.'
-                    : 'No audit entries match the current filter.') +
-                  '</td></tr>';
-              } else {
-                tbody.innerHTML = entries.map(rowHtml).join('');
-              }
+            renderLoadedWindow();
+            if (repeatedCursor) {
+              showBanner(
+                'The server repeated a pagination cursor. Loading older entries stopped to prevent a loop; the loaded window is unchanged except for unique rows already returned.',
+              );
+            } else {
+              hideBanner();
             }
-            if (footnote) {
-              footnote.textContent =
-                'Showing ' +
-                entries.length +
-                ' entr' +
-                (entries.length === 1 ? 'y' : 'ies') +
-                (filteredPage ? ' (of the 50 most-recent — filter is client-side)' : '') +
-                '. Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006).';
-            }
-            hideBanner();
             return true;
           })
           .catch((err) => {
-            if (myReq !== inFlight) return false;
+            if (myReq !== inFlight || epoch !== listEpoch) return false;
+            if (append && nextCursor !== requestedCursor) return false;
             const msg = requestErrorMessage(err);
+            if (append) {
+              showBanner(
+                "Couldn't load older audit entries (" +
+                  msg +
+                  '). Existing rows and the retry cursor are unchanged.',
+              );
+              renderLoadedWindow();
+              return false;
+            }
+            if (hasLoadedWindow && loadedServerFilterKey === requestedFilterKey) {
+              showBanner(
+                "Couldn't refresh audit entries (" +
+                  msg +
+                  '). Existing rows and pagination state are unchanged; this loaded window may be stale.',
+              );
+              renderLoadedWindow();
+              return false;
+            }
             renderUnavailable(
               'Could not load live audit entries — nothing is shown as authoritative. Resolve the error above and retry.',
             );
@@ -403,8 +650,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             return false;
           })
           .finally(() => {
-            if (myReq !== inFlight) return;
-            loadController = null;
+            if (append && myReq === inFlight && epoch === listEpoch) appendInFlight = false;
+            if (myReq === inFlight && epoch === listEpoch) {
+              loadController = null;
+              root.removeAttribute('aria-busy');
+            }
+            syncPaginationControls();
             // 2026-05-21 — AdminLayout opacity-gate signal.
             if (typeof window.dashboardHydrated === 'function') {
               window.dashboardHydrated();
@@ -427,14 +678,35 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
 
       let debounce = 0;
-      function scheduleLoad() {
-        clearTimeout(debounce);
-        debounce = setTimeout(loadWithLive, 200);
+      function claimServerFilterScope() {
+        // Own the new server-filter scope synchronously. Debouncing only the
+        // cursor-free fetch prevents an old cursor from ever being paired with
+        // newly typed filter values during the 200ms input window.
+        listEpoch += 1;
+        inFlight += 1;
+        if (loadController) loadController.abort();
+        loadController = null;
+        root.removeAttribute('aria-busy');
+        resetLoadedWindow();
+        setLiveState('loading', 'Waiting to load changed filters');
+        if (refreshBtn) {
+          refreshBtn.disabled = true;
+          refreshBtn.setAttribute('aria-disabled', 'true');
+        }
       }
 
-      if (actionEl) actionEl.addEventListener('input', scheduleLoad);
+      function scheduleLoad() {
+        clearTimeout(debounce);
+        claimServerFilterScope();
+        debounce = setTimeout(() => {
+          debounce = 0;
+          void loadWithLive();
+        }, 200);
+      }
+
+      if (actionEl) actionEl.addEventListener('change', scheduleLoad);
       if (adminIdEl) adminIdEl.addEventListener('input', scheduleLoad);
-      if (resultEl) resultEl.addEventListener('change', scheduleLoad);
+      if (resultEl) resultEl.addEventListener('change', renderLoadedWindow);
 
       // Surface the scoped-target chip on load + let the operator clear it
       // (drops the target_id filter back to the global log without a reload).
@@ -442,9 +714,23 @@ const apiBaseUrl = resolveApiBaseUrl();
       const clearTargetBtn = root.querySelector('[data-action="clear-target"]');
       if (clearTargetBtn) {
         clearTargetBtn.addEventListener('click', () => {
+          clearTimeout(debounce);
+          debounce = 0;
           targetIdFromUrl = '';
           syncTargetChip();
-          loadWithLive();
+          claimServerFilterScope();
+          void loadWithLive();
+        });
+      }
+
+      if (loadMoreBtn) {
+        loadMoreBtn.addEventListener('click', () => {
+          void loadOlder();
+        });
+      }
+      if (backToNewestBtn) {
+        backToNewestBtn.addEventListener('click', () => {
+          void loadWithLive();
         });
       }
 
@@ -457,9 +743,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
         if (target instanceof HTMLElement && target.isContentEditable) return;
         ev.preventDefault();
-        if (actionEl instanceof HTMLInputElement) {
+        if (actionEl instanceof HTMLSelectElement) {
           actionEl.focus();
-          actionEl.select();
         }
       });
 
@@ -498,6 +783,36 @@ const apiBaseUrl = resolveApiBaseUrl();
           return Promise.resolve(false);
         }
       }
+      function loadOlder() {
+        if (
+          !nextCursor ||
+          appendInFlight ||
+          loadController !== null ||
+          refusedCursor === nextCursor
+        ) {
+          return Promise.resolve(false);
+        }
+        const expectedReq = inFlight + 1;
+        setLiveState('loading', 'Loading older audit entries');
+        if (refreshBtn) {
+          refreshBtn.disabled = true;
+          refreshBtn.setAttribute('aria-disabled', 'true');
+        }
+        const p = load({ append: true });
+        return p.then((ok) => {
+          if (expectedReq !== inFlight) return ok;
+          if (ok) {
+            setLiveState('loading', 'Live refresh paused while viewing older entries');
+          } else {
+            setLiveState('failed', 'Older entries failed · live refresh paused');
+          }
+          if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.removeAttribute('aria-disabled');
+          }
+          return ok;
+        });
+      }
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
@@ -509,13 +824,27 @@ const apiBaseUrl = resolveApiBaseUrl();
           refreshBtn.disabled = false;
           refreshBtn.removeAttribute('aria-disabled');
           refreshBtn.removeAttribute('title');
-          refreshBtn.addEventListener('click', loadWithLive);
+          refreshBtn.addEventListener('click', () => {
+            void loadWithLive();
+          });
         }
-        setInterval(loadWithLive, 30_000);
+        syncPaginationControls();
+        setInterval(() => {
+          if (debounce !== 0) {
+            setLiveState('loading', 'Waiting to load changed filters');
+            return;
+          }
+          if (expandedWindow) {
+            setLiveState('loading', 'Live refresh paused while viewing older entries');
+            return;
+          }
+          void loadWithLive();
+        }, 30_000);
         setInterval(() => {
           if (liveAge) liveAge.textContent = fmtAge(lastFetch);
         }, 5_000);
 
+        resetLoadedWindow();
         void loadWithLive();
       }
       if (document.readyState === 'loading') {

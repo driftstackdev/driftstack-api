@@ -103,6 +103,69 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
     expect(body).toMatch(/if \(id\) discard\(id\);/);
   });
 
+  it('cursor pagination is exact, single-flight, stale-safe, deduplicated, and explicitly resettable', () => {
+    expect(body).toContain('data-action="load-more"');
+    expect(body).toContain('data-action="back-to-newest"');
+    expect(body).toContain("params.set('limit', '50')");
+    expect(body).toContain("if (requestedCursor) params.set('cursor', requestedCursor)");
+    expect(body).toMatch(/function mergeUniqueEntries\(existing, incoming\)/);
+    expect(body).toMatch(/if \(!id \|\| seen\.has\(id\)\) return;/);
+    expect(body).toMatch(/if \(append && \(!requestedCursor \|\| appendInFlight\)\)/);
+    expect(body).toMatch(/const epoch = append \? listEpoch : \+\+listEpoch;/);
+    expect(body).toMatch(/if \(myReq !== inFlight \|\| epoch !== listEpoch\) return false;/);
+    expect(body).toMatch(/if \(append && nextCursor !== requestedCursor\) return false;/);
+    expect(body).toMatch(/function loadOlder\(\)[\s\S]*?load\(\{ append: true \}\)/);
+    expect(body).toMatch(
+      /const backToNewest = target\.closest\('\[data-action="back-to-newest"\]'\);[\s\S]*?loadWithLive\(\);/,
+    );
+  });
+
+  it('rejects malformed full pages before replacing rows or cursor authority', () => {
+    expect(body).toContain("import { WebhookEventTypeSchema } from '@driftstack/api-types';");
+    expect(body).toContain('const webhookEventTypes = WebhookEventTypeSchema.options;');
+    expect(body).toContain('function isDelivery(value)');
+    expect(body).toContain('DELIVERY_FIELDS.every((field) => hasOwn(value, field))');
+    expect(body).toContain("value.id.startsWith('wdl_')");
+    expect(body).toContain("value.webhook_id.startsWith('whk_')");
+    expect(body).toContain('allowedWebhookEventTypes.has(value.event_type)');
+    expect(body).toContain("value.status === 'dlq'");
+    expect(body).toContain('isIsoUtc(value.next_attempt_at)');
+    expect(body).toContain('isIsoUtc(value.created_at)');
+    expect(body).toContain('function parseDlqPage(body)');
+    expect(body).toContain("!hasOwn(body, 'data')");
+    expect(body).toContain('!body.data.every(isDelivery)');
+    expect(body).toContain("!hasOwn(body, 'next_cursor')");
+    expect(body).toContain("throw responseContractError('Invalid DLQ response')");
+    expect(body).toMatch(
+      /function responseContractError\(message\) \{\s*const error = new Error\(message\);\s*error\.staffSafe = true;/,
+    );
+
+    const parse = body.indexOf('const page = parseDlqPage(body);');
+    expect(parse).toBeGreaterThan(-1);
+    expect(body.indexOf('loadedEntries = nextLoadedEntries;', parse)).toBeGreaterThan(parse);
+    expect(body.indexOf('nextCursor = page.nextCursor;', parse)).toBeGreaterThan(parse);
+  });
+
+  it('expanded history has honest summary/error copy and pauses background replacement while mutations remain fenced', () => {
+    expect(body).toContain("(nextCursor ? ' — more available' : '')");
+    expect(body).toContain("Couldn't load older DLQ entries (");
+    expect(body).toContain('Existing rows are unchanged, and the retry cursor is unchanged.');
+    expect(body).toContain("Couldn't refresh DLQ (");
+    expect(body).toContain('Existing rows and pagination state are unchanged; retry when ready.');
+    expect(body).toMatch(/if \(append\) \{\s*appendInFlight = true;\s*expandedView = true;/);
+    expect(body).toMatch(/if \(hasLoadedWindow\) \{\s*renderEntries\(loadedEntries\);/);
+    expect(body).toContain(
+      "setLiveState('paused', 'Live refresh paused while viewing older entries')",
+    );
+    expect(body).toMatch(
+      /setInterval\(\(\) => \{\s*if \(expandedView\) \{\s*showExpandedPause\(\);\s*return;/,
+    );
+    expect(body).toMatch(
+      /loadMoreBtn\.disabled = readBusy \|\| appendInFlight \|\| mutationBusy \|\| !nextCursor;/,
+    );
+    expect(body).toMatch(/const pending = pendingMutations\.get\(d\.id\);/);
+  });
+
   it("DLQ row visual treatment: red-200 border + red-50 background + DLQ badge red-100/red-800 'DLQ · {attempts}× tried' + last_error block red-200 border on white bg — pinned so the visual urgency stays consistent (these rows demand operator attention; drift to amber/slate styling would underplay the criticality)", () => {
     expect(body).toMatch(/<li class="rounded-lg border border-red-200 bg-red-50 p-5">/);
     expect(body).toMatch(

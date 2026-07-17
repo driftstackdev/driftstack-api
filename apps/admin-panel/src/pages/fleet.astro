@@ -171,6 +171,88 @@ const apiBaseUrl = resolveApiBaseUrl();
             ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
         );
       }
+      function isRecord(value) {
+        return value !== null && typeof value === 'object' && !Array.isArray(value);
+      }
+      function isBoundedString(value, min, max) {
+        return typeof value === 'string' && value.length >= min && value.length <= max;
+      }
+      function isFiniteInRange(value, min, max) {
+        return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
+      }
+      function isNonnegativeInteger(value) {
+        return Number.isInteger(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
+      }
+      function isIsoTimestamp(value) {
+        return isBoundedString(value, 1, 64) && Number.isFinite(Date.parse(value));
+      }
+      function parseHeartbeat(value) {
+        if (value === null) return null;
+        if (
+          !isRecord(value) ||
+          !isIsoTimestamp(value.beatAt) ||
+          !isFiniteInRange(value.cpuPercent, 0, 100) ||
+          !isFiniteInRange(value.memoryPercent, 0, 100) ||
+          !isNonnegativeInteger(value.activeSessionCount)
+        ) {
+          throw new Error('Invalid live fleet response.');
+        }
+        if (
+          (value.maxConcurrent !== undefined && !isNonnegativeInteger(value.maxConcurrent)) ||
+          (value.uptimeSeconds !== undefined && !isFiniteInRange(value.uptimeSeconds, 0, Number.MAX_SAFE_INTEGER)) ||
+          (value.drainState !== undefined && value.drainState !== 'draining') ||
+          (value.thermalState !== undefined &&
+            !['nominal', 'fair', 'serious', 'critical'].includes(value.thermalState)) ||
+          (value.memoryPressureLevel !== undefined &&
+            !['normal', 'warn', 'critical'].includes(value.memoryPressureLevel)) ||
+          (value.busiestCorePercent !== undefined &&
+            !isFiniteInRange(value.busiestCorePercent, 0, 100)) ||
+          (value.diskFreePercent !== undefined &&
+            !isFiniteInRange(value.diskFreePercent, 0, 100)) ||
+          (value.harnessVersion !== undefined && !isBoundedString(value.harnessVersion, 0, 256))
+        ) {
+          throw new Error('Invalid live fleet response.');
+        }
+        if (value.sessionOutcomeCounts !== undefined) {
+          if (!isRecord(value.sessionOutcomeCounts)) throw new Error('Invalid live fleet response.');
+          const outcomes = Object.entries(value.sessionOutcomeCounts);
+          if (
+            outcomes.length > 256 ||
+            outcomes.some(
+              ([key, count]) => !isBoundedString(key, 1, 128) || !isNonnegativeInteger(count),
+            )
+          ) {
+            throw new Error('Invalid live fleet response.');
+          }
+        }
+        return value;
+      }
+      function parseFleetPage(value) {
+        if (!isRecord(value) || !Array.isArray(value.data) || value.data.length > 10_000) {
+          throw new Error('Invalid live fleet response.');
+        }
+        const seen = new Set();
+        return value.data.map((row) => {
+          if (
+            !isRecord(row) ||
+            !isBoundedString(row.id, 1, 256) ||
+            !isBoundedString(row.display_name, 1, 128) ||
+            !isBoundedString(row.region, 1, 64) ||
+            !isBoundedString(row.hardware_class, 1, 64) ||
+            !isIsoTimestamp(row.registered_at) ||
+            !(row.last_seen_at === null || isIsoTimestamp(row.last_seen_at)) ||
+            typeof row.has_livekit !== 'boolean' ||
+            !(row.connected === null || typeof row.connected === 'boolean') ||
+            !Object.prototype.hasOwnProperty.call(row, 'last_heartbeat')
+          ) {
+            throw new Error('Invalid live fleet response.');
+          }
+          if (seen.has(row.id)) throw new Error('Invalid live fleet response.');
+          seen.add(row.id);
+          parseHeartbeat(row.last_heartbeat);
+          return row;
+        });
+      }
       function fmtIso(iso) {
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
@@ -381,7 +463,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .then((body) => {
             if (generation !== loadGeneration) return;
-            const rows = body.data || [];
+            const rows = parseFleetPage(body);
             if (tbody) {
               if (rows.length === 0) {
                 tbody.innerHTML =
@@ -490,6 +572,21 @@ const apiBaseUrl = resolveApiBaseUrl();
         syncRefreshControl();
         let controls = [];
         const originalText = btn ? btn.textContent : '';
+        let commandStarted = false;
+        async function publishUnknownOutcome(detail) {
+          uncertainControlNodes.add(String(nodeId));
+          const refreshed = await load();
+          showBanner(
+            controlActionLabel(cmd) +
+              ' outcome is unknown because ' +
+              detail +
+              '. The node may already have accepted the command. ' +
+              (refreshed
+                ? 'Fleet state was refreshed, but it cannot prove whether an asynchronous command ran. '
+                : 'Fleet state could not be refreshed. ') +
+              'Controls for this node are locked for this page. Verify Health and Last seen before reloading; do not send the command again blindly.',
+          );
+        }
         try {
           const confirmFn = window.driftstackConfirm;
           // drain/restart end-or-finish in-flight sessions → destructive: focus Cancel +
@@ -515,6 +612,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             btn.textContent = controlPendingLabel(cmd);
             btn.setAttribute('aria-busy', 'true');
           }
+          commandStarted = true;
           const r = await boundedFetch(
             apiBaseUrl + '/v1/mac-nodes/' + encodeURIComponent(nodeId) + '/control',
             {
@@ -525,13 +623,16 @@ const apiBaseUrl = resolveApiBaseUrl();
             },
           );
           if (r.status === 202) {
+            const refreshed = await load();
             showBanner(
               controlActionLabel(cmd) +
                 ' sent to ' +
                 nodeId +
-                ' — the node applies it asynchronously (watch Health / Last seen).',
+                ' — the node accepted it asynchronously. ' +
+                (refreshed
+                  ? 'Fleet state was refreshed; watch Health / Last seen for the applied result.'
+                  : 'Fleet state could not be refreshed; verify Health / Last seen before another command.'),
             );
-            await load();
           } else if (r.status === 409) {
             showBanner('Cannot ' + cmd + ': node is not connected to the control plane.');
           } else if (r.status === 404) {
@@ -540,6 +641,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             showBanner('Cannot ' + cmd + ': staff admin scope required.');
           } else if (r.status === 503) {
             showBanner('Cannot ' + cmd + ': fleet control is not available on this server.');
+          } else if (r.status >= 500 || (r.status >= 200 && r.status < 300)) {
+            await publishUnknownOutcome(
+              r.status >= 500
+                ? 'the server returned an error after the request was sent'
+                : 'the server returned an unexpected successful response',
+            );
           } else {
             showBanner(
               'Cannot ' +
@@ -553,16 +660,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
           }
         } catch (err) {
-          if (err && err.name === 'AbortError') {
-            uncertainControlNodes.add(String(nodeId));
-            const refreshed = await load();
-            showBanner(
-              controlActionLabel(cmd) +
-                ' outcome is unknown because the response timed out. The node may already have accepted the command. ' +
-                (refreshed
-                  ? 'Fleet state was refreshed, but it cannot prove whether an asynchronous command ran. '
-                  : 'Fleet state could not be refreshed. ') +
-                'Controls for this node are locked for this page. Verify Health and Last seen before reloading; do not send the command again blindly.',
+          if (commandStarted) {
+            await publishUnknownOutcome(
+              err && err.name === 'AbortError'
+                ? 'the response timed out'
+                : 'the connection failed before a definitive response arrived',
             );
           } else {
             showBanner('Control request failed — ' + requestErrorMessage(err) + '.');

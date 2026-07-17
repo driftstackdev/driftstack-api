@@ -12,7 +12,8 @@
 //     status; neutral SSR contains no fabricated account rows.
 //   • Filter wiring: search → email_contains, status → status,
 //     tier → tier query params; limit hard-coded to 50.
-//   • Cursor-pagination claim "50 default" pinned.
+//   • Cursor pagination is strict, request-owned, cycle-safe, and pauses
+//     polling while an older expanded window is visible.
 //   • GET /v1/admin/accounts registered server-side + accepts
 //     these filters.
 //   • localStorage key ds_web_session_token.
@@ -81,11 +82,48 @@ describe('W359.C admin-panel /accounts list page content parity', () => {
     expect(body).toMatch(/params\.set\('email_contains', searchEl\.value\.trim\(\)\)/);
   });
 
-  it('cursor pagination exposes and consumes the server cursor', () => {
+  it('cursor pagination forwards the exact server cursor and exposes an explicit newest reset', () => {
     expect(body).toMatch(/params\.set\('limit', '50'\)/);
-    expect(body).toMatch(/if \(cursor\) params\.set\('cursor', cursor\)/);
-    expect(body).toMatch(/nextCursor = body\.next_cursor \|\| null/);
+    expect(body).toMatch(
+      /if \(requestedCursor !== null\) params\.set\('cursor', requestedCursor\)/,
+    );
     expect(body).toMatch(/load\(\{ append: true \}\)/);
+    expect(body).toContain('data-action="back-to-newest"');
+    expect(body).toContain('Back to newest / Refresh');
+  });
+
+  it('strictly parses the entire account envelope and every real row before state mutation', () => {
+    expect(body).toContain('function isAccountListRow(value)');
+    expect(body).toContain('function parseAccountListPage(value)');
+    expect(body).toMatch(
+      /!Array\.isArray\(value\.data\) \|\| !value\.data\.every\(isAccountListRow\)/,
+    );
+    expect(body).toMatch(/typeof value\.has_more !== 'boolean'/);
+    expect(body).toMatch(/ACCOUNT_ID_RE\.test\(value\.next_cursor\)/);
+    expect(body).toMatch(/value\.has_more !== \(value\.next_cursor !== null\)/);
+    expect(body).not.toContain('body.data || []');
+    expect(body).not.toContain('body.next_cursor || null');
+  });
+
+  it('binds append responses to the epoch and exact cursor, deduplicates ids, and refuses cursor cycles', () => {
+    expect(body).toMatch(/const epoch = append \? listEpoch : \+\+listEpoch/);
+    expect(body).toMatch(/myReq !== inFlight \|\| epoch !== listEpoch/);
+    expect(body).toMatch(/append && nextCursor !== requestedCursor/);
+    expect(body).toContain('function mergeUniqueAccounts(existing, incoming)');
+    expect(body).toMatch(
+      /returnedCursor === requestedCursor \|\| requestedCursors\.has\(returnedCursor\)/,
+    );
+    expect(body).toContain('Existing rows and the retry cursor are unchanged.');
+  });
+
+  it('invalidates pagination synchronously on filters and pauses polling while expanded', () => {
+    expect(body).toMatch(
+      /function scheduleLoad\(\) \{[\s\S]*?filterTransitionPending = true;[\s\S]*?listEpoch \+= 1;[\s\S]*?syncTransitionControls\(\);[\s\S]*?setTimeout/,
+    );
+    expect(body).toMatch(
+      /setInterval\(\(\) => \{\s*if \(expandedView\) \{\s*showExpandedPause\(\);\s*return;/,
+    );
+    expect(body).toContain('Live refresh paused while viewing older accounts');
   });
 
   it('GET /v1/admin/accounts registered server-side', () => {
