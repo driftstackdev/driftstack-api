@@ -12,6 +12,12 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/server/src/db/agent-sessions-repo.ts');
+const SCHEMA = resolve(REPO_ROOT, 'apps/server/src/db/schema.ts');
+const MIGRATION = resolve(
+  REPO_ROOT,
+  'apps/server/src/db/migrations/0107_agent_sessions_authority_revision.sql',
+);
+const JOURNAL = resolve(REPO_ROOT, 'apps/server/src/db/migrations/meta/_journal.json');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -177,5 +183,30 @@ describe('db/agent-sessions-repo content parity', () => {
     expect(body).toMatch(/notInArray\(agentSessions\.status, \['closed'\]\)/);
     expect(body).toMatch(/return \{ kind: 'closed', session:/);
     expect(body).toMatch(/return \{ kind: 'already_closed', session: existing \};/);
+  });
+
+  it('0107 centralizes a monotonic authority epoch in Postgres and the repo exposes only narrow reads plus revision-guarded writes', () => {
+    const schema = read(SCHEMA);
+    const migration = read(MIGRATION);
+    const journal = read(JOURNAL);
+    expect(schema).toMatch(
+      /authorityRevision: bigint\('authority_revision', \{ mode: 'number' \}\)\.notNull\(\)\.default\(0\)/,
+    );
+    expect(schema).toMatch(/agent_sessions_authority_revision_nonnegative/);
+    expect(migration).toMatch(/ADD COLUMN "authority_revision" bigint NOT NULL DEFAULT 0/);
+    expect(migration).toMatch(/OLD\."status" IS DISTINCT FROM NEW\."status"/);
+    expect(migration).toMatch(/OLD\."mode" IS DISTINCT FROM NEW\."mode"/);
+    expect(migration).toMatch(/OLD\."pair_mode_state" IS DISTINCT FROM NEW\."pair_mode_state"/);
+    expect(migration).toMatch(/NEW\."authority_revision" := OLD\."authority_revision" \+ 1/);
+    expect(migration).toMatch(/BEFORE UPDATE ON "agent_sessions"/);
+    expect(journal).toContain('"tag": "0107_agent_sessions_authority_revision"');
+
+    expect(body).toMatch(/async getAuthoritySnapshot\(/);
+    expect(body).toMatch(/revision: agentSessions\.authorityRevision/);
+    expect(body).toMatch(/async appendTranscriptIfAuthorityRevision\(/);
+    expect(body).toMatch(/async closeWithReasonIfAuthorityRevision\(/);
+    expect(
+      (body.match(/eq\(agentSessions\.authorityRevision, expectedRevision\)/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(3);
   });
 });

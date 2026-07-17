@@ -750,6 +750,13 @@
       "when": 1784018906000,
       "tag": "0106_oauth_provider_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1784296800000,
+      "tag": "0107_agent_sessions_authority_revision",
+      "breakpoints": true
     }
   ]
 }

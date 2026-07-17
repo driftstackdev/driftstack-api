@@ -225,4 +225,27 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/if \(bytesRead > MAX_ANTHROPIC_RESPONSE_BYTES\) \{/);
     expect(body).toMatch(/return JSON\.parse\(bodyText\) as unknown;/);
   });
+
+  it('every provider attempt and retry backoff is fenced by the admitted control authority', () => {
+    expect(body).toMatch(/private async callWithRetry\(/);
+    expect(body).toMatch(/shouldContinue: DecomposeArgs\['shouldContinue'\]/);
+    expect(body).toMatch(/await requireAgentDecomposerContinuation\(shouldContinue\);/);
+    expect(
+      (body.match(/requireAgentDecomposerContinuation\(shouldContinue\)/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(body).toMatch(
+      /this\.callWithRetry\(body, args\.byokAnthropicApiKey, args\.shouldContinue\)/,
+    );
+  });
+
+  it('validated usage survives strict plan and answer codec failures without raw content', () => {
+    expect(body).toMatch(/const envelope = requireAnthropicEnvelope\(json\);/);
+    expect(
+      (body.match(/throw new AgentDecomposerSettledError\(/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(body).toMatch(
+      /const \{ inputTokens, outputTokens, tokensConsumed \} = parseAnthropicUsage/,
+    );
+    expect(body).toMatch(/error instanceof Error \? error\.message/);
+  });
 });

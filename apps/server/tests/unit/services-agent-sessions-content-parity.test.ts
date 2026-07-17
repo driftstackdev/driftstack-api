@@ -24,10 +24,13 @@ describe('services/agent-sessions content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("AI-A module-level framing pinned: 'agent-sessions persistence interface (no SQL migration; that follow-up Tier-2 slice lands once the founder reviews the storage shape). The interface + in-memory impl unblock the chat-UI consumers (AI-C dashboard slice) and the executor (AI-B2) so they can wire against a stable contract before the persistent layer lands.' — pinned so the AI-A anchor + the cross-slice unblocking rationale stay documented", () => {
+  it('AI-A framing names both durable implementations and keeps the authority epoch internal', () => {
     expect(body).toMatch(
-      /\/\/ AI-A — agent-sessions persistence interface \(no SQL migration; that\s*\n?\s*\/\/ follow-up Tier-2 slice lands once the founder reviews the storage\s*\n?\s*\/\/ shape\)\. The interface \+ in-memory impl unblock the chat-UI consumers\s*\n?\s*\/\/ \(AI-C dashboard slice\) and the executor \(AI-B2\) so they can wire\s*\n?\s*\/\/ against a stable contract before the persistent layer lands\./,
+      /\/\/ AI-A — agent-sessions persistence contract shared by the production\s*\n?\s*\/\/ Drizzle\/PostgreSQL repository and the in-memory test\/dev implementation\./,
     );
+    expect(body).toMatch(/migration 0107 adds its internal monotonic authority epoch/);
+    expect(body).toMatch(/public API\/SDK resource shapes remain unchanged/);
+    expect(body).not.toMatch(/no SQL migration|persistent layer lands/);
   });
 
   it("Design SOT pointer pinned: 'docs/internal/ai-chat-agent-layer-design.md (in-repo) + Wave 1119+ founder verdict moving AI-CHAT from v1.1 → v1.0 launch arc (per the V-361 framing comment in agent-decomposer.ts).' — pinned so the design-doc location + the v1.1→v1.0 promotion verdict + the V-361 cross-reference all survive", () => {
@@ -146,6 +149,18 @@ describe('services/agent-sessions content parity', () => {
     );
     expect(body).toMatch(/setGuiControlKeyIfActive\(args: \{/);
     expect(body).toMatch(/setModeIfActive\(/);
+  });
+
+  it('internal authority snapshots and guarded publication/close primitives are revision-bound without widening the public record', () => {
+    expect(body).toMatch(/export interface AgentSessionAuthoritySnapshot \{/);
+    expect(body).toMatch(/revision: number;/);
+    expect(body).toMatch(/getAuthoritySnapshot\(id: string\)/);
+    expect(body).toMatch(/appendTranscriptIfAuthorityRevision\(/);
+    expect(body).toMatch(/closeWithReasonIfAuthorityRevision\(/);
+    expect(body).toMatch(/private authorityRevisions = new Map<string, number>\(\);/);
+    expect(body).toMatch(/this\.authorityRevisions\.set\(id, 0\);/);
+    expect(body).toMatch(/this\.authorityRevisions\.get\(id\) !== expectedRevision/);
+    expect(body).not.toMatch(/export interface AgentSessionRecord \{[\s\S]*authorityRevision:/);
   });
 
   it("InMemoryAgentSessionsRepo framing pinned: 'In-memory implementation for tests + dev mode. Production wires the Drizzle-backed repo (AI-A.c follow-up). The two share this exact interface so the executor + dashboard chat UI never have to know which backend they're talking to.' + 'Thread-safety: the repo is intended for single-threaded use (Node's single event loop suffices for the API server). Concurrent calls to debitTokens on the same id are serialized by the JS event loop.' — pinned so the dual-backend interface + the Node-event-loop thread-safety rationale stay documented", () => {

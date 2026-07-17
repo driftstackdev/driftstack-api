@@ -72,10 +72,10 @@ describe('services/agent-runtime content parity', () => {
   it('per-account AI turn fairness is positive, defaults to three, and manual mode bypasses only the account slot', () => {
     expect(body).toMatch(/maxConcurrentTurnsPerAccount\?: number;/);
     expect(body).toMatch(/const limit = deps\.maxConcurrentTurnsPerAccount \?\? 3;/);
-    expect(body).toMatch(/const consumesAccountSlot = session\.mode !== 'manual';/);
+    expect(body).toMatch(/const consumesAccountSlot = admission\.kind === 'ai-control';/);
     expect(body).toMatch(/currentForAccount >= this\.maxConcurrentTurnsPerAccount/);
     expect(body).toMatch(/this\.activeTurnAccountCounts\.delete\(session\.accountId\)/);
-    expect(body).toMatch(/return await this\.runExclusiveTurn\(args, session\);/);
+    expect(body).toMatch(/return await this\.runExclusiveTurn\(args, session, admission\);/);
   });
 
   it("v2-#4 Q.1.e AgentDecomposerUsageRecorder framing pinned: 'per-turn usage recorder. AgentRuntime calls this after every decomposer.decompose() that returns a usage block. Bootstrap wires this to a usage_records writer when the Drizzle dependency direction is permitted. When unwired, AgentRuntime silently skips recording — the dashboard usage page only reflects what we successfully persisted, so a missing wire shows as missing cost data rather than a synthesized zero.' — pinned so the optional-recorder + silent-skip-when-unwired + no-synthesized-zero contract all stay documented", () => {
@@ -116,9 +116,9 @@ describe('services/agent-runtime content parity', () => {
     );
   });
 
-  it("Session-closed short-circuit pinned: 'Closed/paused sessions return a short-circuit result. The caller (route handler) maps this to a 409 Conflict — the chat UI prompts the customer to start a new agent session.' + returns { kind: 'session-closed', reason: session.closedReason ?? `session ${session.status}`, session }. Drift to allowing turns on non-active sessions would let customers continue interacting with a closed-status session", () => {
+  it('Session-closed short-circuit preserves the paused-versus-closed lifecycle distinction', () => {
     expect(body).toMatch(
-      /if \(session\.status !== 'active'\) \{\s*\n?\s*\/\/ Closed\/paused sessions return a short-circuit result\. The\s*\n?\s*\/\/ caller \(route handler\) maps this to a 409 Conflict — the\s*\n?\s*\/\/ chat UI prompts the customer to start a new agent session\./,
+      /if \(session\.status !== 'active'\) \{\s*\n?\s*\/\/ Closed\/paused sessions return a short-circuit result\. The\s*\n?\s*\/\/ caller \(route handler\) maps this to a 409 Conflict — the\s*\n?\s*\/\/ chat UI distinguishes resuming a pause from replacing a closed row\./,
     );
     expect(body).toMatch(
       /return \{\s*\n?\s*kind: 'session-closed',\s*\n?\s*reason: session\.closedReason \?\? `session \$\{session\.status\}`,\s*\n?\s*session,\s*\n?\s*\};/,
@@ -130,7 +130,7 @@ describe('services/agent-runtime content parity', () => {
       /\/\/ Arc 2 sub-slice 8\.6 \(v2-#8\) — manual mode pass-through\. Record\s*\n?\s*\/\/ the customer's user_message as actor='operator' on the transcript\s*\n?\s*\/\/ \(no decompose \/ executor \/ token debit; the gui-client drives\s*\n?\s*\/\/ intents directly via the gui_control plane\)\. Returns a distinct\s*\n?\s*\/\/ result kind so the route maps to a 200 'logged' response\./,
     );
     expect(body).toMatch(
-      /if \(session\.mode === 'manual'\) \{\s*\n?\s*const operatorEntry = \{\s*\n?\s*at,\s*\n?\s*role: 'operator' as const,\s*\n?\s*body: args\.userMessage,\s*\n?\s*\};/,
+      /if \(admission\.kind === 'manual-transcript'\) \{[\s\S]*const operatorEntry = \{\s*\n?\s*at,\s*\n?\s*role: 'operator' as const,\s*\n?\s*body: args\.userMessage,\s*\n?\s*\};/,
     );
     expect(body).toMatch(/return \{ kind: 'logged-manual', session: updated \};/);
   });
@@ -155,13 +155,37 @@ describe('services/agent-runtime content parity', () => {
 
   it('completed upstream usage is recorded before the durable active fence; every later mutation and executor suffix is lifecycle-gated', () => {
     const usageRecorder = body.indexOf('if (this.deps.usageRecorder !== undefined');
-    const activeFence = body.indexOf('const activeAfterDecompose = await this.deps.sessions.get');
+    const activeFence = body.indexOf(
+      'if (!(await this.authorityStillCurrent(session.id, admission)))',
+      usageRecorder,
+    );
     const activeDebit = body.indexOf('const debited = await this.debitTokensIfActive', activeFence);
     expect(usageRecorder).toBeGreaterThan(-1);
     expect(activeFence).toBeGreaterThan(usageRecorder);
     expect(activeDebit).toBeGreaterThan(activeFence);
-    expect(body).toMatch(/appendTranscriptIfActive\(/);
-    expect(body).toMatch(/shouldContinue: \(\) => this\.sessionIsActive\(session\.id\)/);
-    expect(body).toMatch(/const authoritative = await this\.deps\.sessions\.get\(session\.id\)/);
+    expect(body).toMatch(/appendTranscriptIfAuthorityRevision\(/);
+    expect(body).toMatch(/shouldContinue: authorityMayContinue/);
+    expect(body).toMatch(/closeWithReasonIfAuthorityRevision\(/);
+  });
+
+  it('control authority is revision-bound, non-decrypting, fail-closed, and re-elects the local owner after its awaited admission read', () => {
+    expect(body).toMatch(/export interface AgentControlAuthoritySnapshot \{/);
+    expect(body).toMatch(/revision: number;/);
+    expect(body).toMatch(/getAuthoritySnapshot\(sessionId\)/);
+    expect(body).toMatch(/catch \{[\s\S]*return false;[\s\S]*\}/);
+    expect(body).toMatch(/admission\.authority\.revision/);
+    expect(body).toMatch(/kind: 'ai-control-unavailable';/);
+    expect(body).toMatch(/AgentDecomposerContinuationDeniedError/);
+    expect(
+      (body.match(/this\.activeTurnSessionIds\.has\(args\.agentSessionId\)/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('settled provider work is accounted before codec errors or optional read-back publication', () => {
+    expect(body).toMatch(/err instanceof AgentDecomposerSettledError/);
+    expect(body).toMatch(/error instanceof AgentDecomposerSettledError/);
+    expect(body).toMatch(/latestReadbackEvidence/);
+    expect(body).toMatch(/The provider has settled\. Account that work exactly once/);
+    expect(body).toMatch(/settled spend is already recorded above/);
   });
 });

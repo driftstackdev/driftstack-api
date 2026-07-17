@@ -320,7 +320,27 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       shouldContinue: () => active,
     });
 
-    expect(res).toEqual({ results: [], ok: false });
+    expect(res).toMatchObject({ ok: false, authorityLost: true });
+    expect(res.results).toHaveLength(1);
+    expect(res.results[0]?.kind).toBe('failure');
+    expect(got).toHaveLength(1);
+  });
+
+  it('retains a settled result but dispatches no suffix when authority is lost after the reply', async () => {
+    const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
+    const checks = [true, true, false];
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const res = await exec.execute({
+      ...planArgs([
+        { kind: 'navigate', url: 'https://example.com' },
+        { kind: 'capture', capture: 'screenshot' },
+      ]),
+      shouldContinue: () => checks.shift() ?? false,
+    });
+
+    expect(res).toMatchObject({ ok: false, authorityLost: true });
+    expect(res.results).toHaveLength(1);
+    expect(res.results[0]?.kind).toBe('success');
     expect(got).toHaveLength(1);
   });
 
@@ -679,6 +699,23 @@ describe('ControlPlaneAgentExecutor — #140 observe() + extractPageText (read-a
     const { dispatcher } = mockDispatcher((d) => failResult(d.intentId, 'result_too_large'));
     const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
     expect(await exec.observe('agt_1')).toBeNull();
+  });
+
+  it('observe() mints and dispatches nothing when authority is already unavailable', async () => {
+    const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    expect(await exec.observe('agt_1', () => false)).toBeNull();
+    expect(got).toHaveLength(0);
+  });
+
+  it('observe() drops a settled page source when authority changes during dispatch', async () => {
+    const { got, dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, { source: 'secret page content' }),
+    );
+    const checks = [true, true, false];
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    expect(await exec.observe('agt_1', () => checks.shift() ?? false)).toBeNull();
+    expect(got).toHaveLength(1);
   });
 
   it('observe() times out on a hung box → null, NOT the full 30s dispatch budget (plan already succeeded)', async () => {

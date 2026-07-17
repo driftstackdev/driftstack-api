@@ -109,7 +109,7 @@ describe('services/agent-decomposer content parity', () => {
     );
   });
 
-  it("DecomposeArgs 6-field shape pinned: task + archetype + history + credentials? + budgetTokensRemaining + byokAnthropicApiKey?. + stateless framing 'The service is stateless across calls; callers thread the transcript explicitly so the agent has full multi-turn context without the service holding session state.' — pinned so the stateless contract + 6-field shape stay documented (drift to a stateful service would couple per-session lifecycle to the singleton service)", () => {
+  it('DecomposeArgs carries the stateless turn inputs plus a fail-closed continuation fence', () => {
     expect(body).toMatch(/export interface DecomposeArgs \{/);
     expect(body).toMatch(/task: string;/);
     expect(body).toMatch(/archetype: string;/);
@@ -117,6 +117,7 @@ describe('services/agent-decomposer content parity', () => {
     expect(body).toMatch(/credentials\?: CredentialBag;/);
     expect(body).toMatch(/budgetTokensRemaining: number;/);
     expect(body).toMatch(/byokAnthropicApiKey\?: string;/);
+    expect(body).toMatch(/shouldContinue\?: \(\) => boolean \| Promise<boolean>;/);
     expect(body).toMatch(
       /\*\s+Per-call decomposer input\. The service is stateless across calls;\s*\n?\s*\*\s+callers thread the transcript explicitly so the agent has full\s*\n?\s*\*\s+multi-turn context without the service holding session state\./,
     );
@@ -139,6 +140,24 @@ describe('services/agent-decomposer content parity', () => {
     expect(body).toMatch(/decompose\(args: DecomposeArgs\): Promise<DecomposeResult>;/);
     expect(body).toMatch(
       /\*\s+MUST never throw on AUP violations or token-budget exhaustion\s*\n?\s*\*\s+— those surface as DecomposeResult discriminants instead\. Only\s*\n?\s*\*\s+non-recoverable errors \(Anthropic upstream 5xx after retries,\s*\n?\s*\*\s+credential decryption failure\) escape as exceptions\./,
+    );
+  });
+
+  it('continuation denial has one typed sentinel shared by decompose and read-back calls', () => {
+    expect(body).toMatch(/export class AgentDecomposerContinuationDeniedError extends Error/);
+    expect(body).toMatch(/export async function requireAgentDecomposerContinuation\(/);
+    expect(body).toMatch(/if \(check === undefined\) return;/);
+    expect(body).toMatch(/throw new AgentDecomposerContinuationDeniedError\(\);/);
+    expect(body).toMatch(/export interface AnswerArgs \{[\s\S]*shouldContinue\?:/);
+  });
+
+  it('strict-codec failures retain only validated provider accounting evidence', () => {
+    expect(body).toMatch(/export class AgentDecomposerSettledError extends Error/);
+    expect(body).toMatch(/readonly tokensConsumed: number;/);
+    expect(body).toMatch(/readonly usage: DecomposeUsage;/);
+    expect(body).toMatch(/this\.name = 'AgentDecomposerSettledError';/);
+    expect(body).not.toMatch(
+      /AgentDecomposerSettledError[\s\S]{0,500}(apiKey|credential|responseBody)/,
     );
   });
 });

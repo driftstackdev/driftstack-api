@@ -25,14 +25,16 @@
 //     a refuse would silently mask the bug).
 
 import { CLAUDE_MODELS, DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
-import type {
-  AgentDecomposer,
-  AgentIntent,
-  AnswerArgs,
-  AnswerResult,
-  DecomposeArgs,
-  DecomposeResult,
-  DecomposeUsage,
+import {
+  AgentDecomposerSettledError,
+  requireAgentDecomposerContinuation,
+  type AgentDecomposer,
+  type AgentIntent,
+  type AnswerArgs,
+  type AnswerResult,
+  type DecomposeArgs,
+  type DecomposeResult,
+  type DecomposeUsage,
 } from './agent-decomposer.js';
 import { selectorImpliesSensitiveInput } from './agent-sensitive-input.js';
 import { AUP_REFUSAL_PATTERNS } from './agent-decomposer-deterministic.js';
@@ -254,7 +256,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
     });
 
     // 5. Call Anthropic with single retry on 5xx.
-    const response = await this.callWithRetry(body, args.byokAnthropicApiKey);
+    const response = await this.callWithRetry(body, args.byokAnthropicApiKey, args.shouldContinue);
 
     // 6. Parse the response. Token accounting comes from the API's
     //    usage block — input + output combined, since the customer
@@ -296,14 +298,21 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
         },
       ],
     });
-    const response = await this.callWithRetry(body, args.byokAnthropicApiKey);
+    const response = await this.callWithRetry(body, args.byokAnthropicApiKey, args.shouldContinue);
     return parseAnswerResponse(response, model);
   }
 
-  private async callWithRetry(body: string, apiKey: string): Promise<unknown> {
+  private async callWithRetry(
+    body: string,
+    apiKey: string,
+    shouldContinue: DecomposeArgs['shouldContinue'] | AnswerArgs['shouldContinue'],
+  ): Promise<unknown> {
     let attempt = 0;
     // Single retry on 5xx; let 4xx + post-retry 5xx escape as exceptions.
     while (true) {
+      // This is the last asynchronous boundary before each provider attempt.
+      // It runs for the initial call and every loop entered after backoff.
+      await requireAgentDecomposerContinuation(shouldContinue);
       let res: Response;
       // Per-attempt timeout: a hung upstream aborts here rather than hanging
       // the turn forever. The abort surfaces as a network error in the catch
@@ -335,6 +344,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
         if (attempt < MAX_RETRIES_5XX) {
           attempt++;
           await sleep(this.retryBackoffMs);
+          await requireAgentDecomposerContinuation(shouldContinue);
           continue;
         }
         throw networkErr;
@@ -355,6 +365,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES_5XX) {
         attempt++;
         await sleep(this.retryBackoffMs);
+        await requireAgentDecomposerContinuation(shouldContinue);
         continue;
       }
 
@@ -398,14 +409,17 @@ function buildMessages(args: DecomposeArgs): AgentRequestMessage[] {
   return messages;
 }
 
-function extractAnthropicText(
-  json: unknown,
-  missingTextMessage: string,
-): { envelope: Record<string, unknown>; text: string } {
+function requireAnthropicEnvelope(json: unknown): Record<string, unknown> {
   if (typeof json !== 'object' || json === null || Array.isArray(json)) {
     throw new Error('Anthropic response envelope was not a JSON object');
   }
-  const envelope = json as Record<string, unknown>;
+  return json as Record<string, unknown>;
+}
+
+function extractAnthropicText(
+  envelope: Record<string, unknown>,
+  missingTextMessage: string,
+): string {
   if (!Array.isArray(envelope.content)) {
     throw new Error('Anthropic response content was not an array');
   }
@@ -417,7 +431,7 @@ function extractAnthropicText(
       typeof (candidate as Record<string, unknown>).text === 'string',
   );
   if (textBlock === undefined) throw new Error(missingTextMessage);
-  return { envelope, text: textBlock.text };
+  return textBlock.text;
 }
 
 function parseAnthropicUsage(envelope: Record<string, unknown>): {
@@ -447,75 +461,82 @@ function parseAnthropicUsage(envelope: Record<string, unknown>): {
 }
 
 function parseAnthropicResponse(json: unknown, model: AgentModel): DecomposeResult {
-  const { envelope, text } = extractAnthropicText(
-    json,
-    'Anthropic response missing text content block',
-  );
-  // Strip code fences if the model emitted them despite the instruction.
-  const raw = text
-    .trim()
-    .replace(/^```(?:json)?\s*/, '')
-    .replace(/\s*```$/, '');
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('Anthropic response was not valid JSON');
-  }
-
-  if (typeof parsed !== 'object' || parsed === null) {
-    throw new Error('Anthropic response was not a JSON object');
-  }
-  const obj = parsed as Record<string, unknown>;
-  const kind = obj.kind;
-
+  const envelope = requireAnthropicEnvelope(json);
   const { inputTokens, outputTokens, tokensConsumed } = parseAnthropicUsage(envelope);
   const usage = makeClaudeUsage(inputTokens, outputTokens, model);
+  try {
+    const text = extractAnthropicText(envelope, 'Anthropic response missing text content block');
+    // Strip code fences if the model emitted them despite the instruction.
+    const raw = text
+      .trim()
+      .replace(/^```(?:json)?\s*/, '')
+      .replace(/\s*```$/, '');
 
-  if (kind === 'plan') {
-    const intents = parseIntents(obj.intents);
-    // A plan with ZERO runnable intents (the model emitted none, or parseIntents
-    // dropped them all as unmappable — the #139 "responds without steps" class):
-    // surface a CLARIFY instead of an empty plan. An empty plan-executed renders as
-    // a bare "Plan" heading with no steps ("the agent did nothing", and it still
-    // bills the decompose call), so ask the customer to rephrase into a concrete step.
-    if (intents.length === 0) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error('Anthropic response was not valid JSON');
+    }
+
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('Anthropic response was not a JSON object');
+    }
+    const obj = parsed as Record<string, unknown>;
+    const kind = obj.kind;
+
+    if (kind === 'plan') {
+      const intents = parseIntents(obj.intents);
+      // A plan with ZERO runnable intents (the model emitted none, or parseIntents
+      // dropped them all as unmappable — the #139 "responds without steps" class):
+      // surface a CLARIFY instead of an empty plan. An empty plan-executed renders as
+      // a bare "Plan" heading with no steps ("the agent did nothing", and it still
+      // bills the decompose call), so ask the customer to rephrase into a concrete step.
+      if (intents.length === 0) {
+        return {
+          kind: 'clarify',
+          clarifyingQuestion:
+            'I couldn’t turn that into browser actions to run. Try rephrasing it as a ' +
+            'concrete step — e.g. “go to example.com and take a screenshot.”',
+          tokensConsumed,
+          usage,
+        };
+      }
+      return { kind: 'plan', intents, tokensConsumed, usage };
+    }
+    if (kind === 'clarify') {
+      if (typeof obj.clarifyingQuestion !== 'string') {
+        throw new Error('Anthropic clarify response missing clarifyingQuestion');
+      }
+      assertStringWithinLimit(
+        obj.clarifyingQuestion,
+        'clarifyingQuestion',
+        MAX_AGENT_CUSTOMER_COPY_CHARS,
+      );
       return {
         kind: 'clarify',
-        clarifyingQuestion:
-          'I couldn’t turn that into browser actions to run. Try rephrasing it as a ' +
-          'concrete step — e.g. “go to example.com and take a screenshot.”',
+        clarifyingQuestion: obj.clarifyingQuestion,
         tokensConsumed,
         usage,
       };
     }
-    return { kind: 'plan', intents, tokensConsumed, usage };
-  }
-  if (kind === 'clarify') {
-    if (typeof obj.clarifyingQuestion !== 'string') {
-      throw new Error('Anthropic clarify response missing clarifyingQuestion');
+    if (kind === 'refuse') {
+      if (typeof obj.refuseReason !== 'string') {
+        throw new Error('Anthropic refuse response missing refuseReason');
+      }
+      assertStringWithinLimit(obj.refuseReason, 'refuseReason', MAX_AGENT_CUSTOMER_COPY_CHARS);
+      return { kind: 'refuse', refuseReason: obj.refuseReason, tokensConsumed, usage };
     }
-    assertStringWithinLimit(
-      obj.clarifyingQuestion,
-      'clarifyingQuestion',
-      MAX_AGENT_CUSTOMER_COPY_CHARS,
+    throw new Error('Anthropic response has unknown result kind');
+  } catch (error) {
+    throw new AgentDecomposerSettledError(
+      error instanceof Error ? error.message : 'Anthropic response content was invalid',
+      {
+        tokensConsumed,
+        usage,
+      },
     );
-    return {
-      kind: 'clarify',
-      clarifyingQuestion: obj.clarifyingQuestion,
-      tokensConsumed,
-      usage,
-    };
   }
-  if (kind === 'refuse') {
-    if (typeof obj.refuseReason !== 'string') {
-      throw new Error('Anthropic refuse response missing refuseReason');
-    }
-    assertStringWithinLimit(obj.refuseReason, 'refuseReason', MAX_AGENT_CUSTOMER_COPY_CHARS);
-    return { kind: 'refuse', refuseReason: obj.refuseReason, tokensConsumed, usage };
-  }
-  throw new Error(`Anthropic response has unknown kind: ${String(kind)}`);
 }
 
 /**
@@ -525,33 +546,38 @@ function parseAnthropicResponse(json: unknown, model: AgentModel): DecomposeResu
  * the plan result rather than surfacing an empty reply).
  */
 function parseAnswerResponse(json: unknown, model: AgentModel): AnswerResult {
-  const { envelope, text } = extractAnthropicText(
-    json,
-    'Anthropic answer response missing text content block',
-  );
-  const raw = text
-    .trim()
-    .replace(/^```(?:json)?\s*/, '')
-    .replace(/\s*```$/, '');
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('Anthropic answer response was not valid JSON');
-  }
-  if (typeof parsed !== 'object' || parsed === null) {
-    throw new Error('Anthropic answer response was not a JSON object');
-  }
-  const obj = parsed as Record<string, unknown>;
-  if (typeof obj.answer !== 'string' || obj.answer.trim() === '') {
-    throw new Error('Anthropic answer response missing answer string');
-  }
+  const envelope = requireAnthropicEnvelope(json);
   const { inputTokens, outputTokens, tokensConsumed } = parseAnthropicUsage(envelope);
-  return {
-    answer: obj.answer,
-    tokensConsumed,
-    usage: makeClaudeUsage(inputTokens, outputTokens, model),
-  };
+  const usage = makeClaudeUsage(inputTokens, outputTokens, model);
+  try {
+    const text = extractAnthropicText(
+      envelope,
+      'Anthropic answer response missing text content block',
+    );
+    const raw = text
+      .trim()
+      .replace(/^```(?:json)?\s*/, '')
+      .replace(/\s*```$/, '');
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error('Anthropic answer response was not valid JSON');
+    }
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('Anthropic answer response was not a JSON object');
+    }
+    const obj = parsed as Record<string, unknown>;
+    if (typeof obj.answer !== 'string' || obj.answer.trim() === '') {
+      throw new Error('Anthropic answer response missing answer string');
+    }
+    return { answer: obj.answer, tokensConsumed, usage };
+  } catch (error) {
+    throw new AgentDecomposerSettledError(
+      error instanceof Error ? error.message : 'Anthropic answer response content was invalid',
+      { tokensConsumed, usage },
+    );
+  }
 }
 
 /**

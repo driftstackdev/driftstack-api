@@ -54,11 +54,12 @@ describe('services/agent-executor content parity', () => {
     expect(body).toMatch(/category: ConsequentialActionCategory;/);
   });
 
-  it('ExecutorRunResult 3-field shape pinned: results (ReadonlyArray<IntentResult>) + ok (boolean) + awaitingConfirmation? (W443/W445 — halted awaiting human confirmation, distinct from a plain failure). Pinned so the results + ok + awaitingConfirmation shape stays documented', () => {
+  it('ExecutorRunResult retains settled partial results and explicitly reports authority loss', () => {
     expect(body).toMatch(/export interface ExecutorRunResult \{/);
     expect(body).toMatch(/results: ReadonlyArray<IntentResult>;/);
     expect(body).toMatch(/ok: boolean;/);
     expect(body).toMatch(/awaitingConfirmation\?: boolean;/);
+    expect(body).toMatch(/authorityLost\?: boolean;/);
   });
 
   it("ExecuteArgs sessionId + plan narrowing pinned: 'Refuse + clarify results are no-ops here — the caller (agent runtime) handles those before reaching the executor. The narrowing happens at the type level.' — pinned so the plan-only-narrowing (Extract<DecomposeResult, { kind: 'plan' }>) contract + caller-handles-refuse-clarify rationale stay documented", () => {
@@ -164,5 +165,14 @@ describe('services/agent-executor content parity', () => {
     // swipe stays a typed failure (no driver gesture); never-throw account guard.
     expect(body).toMatch(/swipe is not supported — use scroll \(no driver swipe gesture\)/);
     expect(body).toMatch(/executor missing account context/);
+  });
+
+  it('stub and real executors fence every intent before dispatch and retain settled work on post-dispatch revocation', () => {
+    expect(body).toMatch(/shouldContinue\?: \(\) => boolean \| Promise<boolean>;/);
+    expect(body).toMatch(/export async function executionMayContinue\(/);
+    expect(
+      (body.match(/await executionMayContinue\(args\.shouldContinue\)/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(body).toMatch(/return \{ results, ok: false, authorityLost: true \};/);
   });
 });

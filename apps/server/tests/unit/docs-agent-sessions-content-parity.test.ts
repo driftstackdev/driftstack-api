@@ -124,6 +124,24 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     expect(body).toMatch(/x-byok-anthropic-api-key/);
   });
 
+  it('documents fail-closed control changes and non-replayable settled partial work', () => {
+    expect(body).toMatch(/exactly one control lane/);
+    expect(body).toMatch(/ai_control_unavailable: true/);
+    expect(body).toMatch(/partial_results/);
+    expect(body).toMatch(/Do not replay those partial steps automatically/);
+    expect(body).toMatch(/manual transcript turn never reads or hashes the irrelevant/);
+    expect(body).toMatch(/BYOK header is deliberately outside receipt identity/);
+    expect(body).toMatch(/still replays the original terminal result/);
+    expect(body).toMatch(/message's admitted control epoch changes/);
+    expect(body).toMatch(/close or pause wins after model or\s*browser work has already settled/);
+    expect(body).toMatch(/resume a paused session, but\s*replace a closed one/);
+    expect(body).toMatch(/never as an\s*invitation to replay them in a replacement session/);
+    expect(body).toMatch(/posted 10-cent included-service accounting value/);
+    expect(body).toMatch(/not the upstream model's measured cost/);
+    expect(body).toMatch(/optional read-back model call is recorded separately/);
+    expect(body).toMatch(/not currently aggregated into this response field/);
+  });
+
   it('documents the heartbeat-timeout auto-handback (30s)', () => {
     expect(body).toMatch(/30s/);
     expect(body).toMatch(/heartbeat/i);

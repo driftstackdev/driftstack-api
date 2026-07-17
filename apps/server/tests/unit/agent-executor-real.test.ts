@@ -143,6 +143,7 @@ describe('AI-B2.b RealAgentExecutor — clean dispatch', () => {
     });
 
     expect(r.ok).toBe(false);
+    expect(r.authorityLost).toBe(true);
     expect(r.results).toHaveLength(1);
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(capture).not.toHaveBeenCalled();

@@ -212,6 +212,11 @@ export interface DecomposeArgs {
    * when unset. The DeterministicAgentDecomposer ignores it (no LLM call).
    */
   model?: AgentModel;
+  /** Internal control-authority fence. Provider-backed implementations must
+   * await it immediately before every external attempt (including retries
+   * after backoff). False/throw means the admitted turn no longer owns AI
+   * control and no new provider request may start. */
+  shouldContinue?: () => boolean | Promise<boolean>;
 }
 
 /**
@@ -233,6 +238,47 @@ export interface AnswerArgs {
   /** Claude model for this call (per-model cost rate); defaults to
    *  DEFAULT_AGENT_MODEL. */
   model?: AgentModel;
+  /** Same per-attempt authority fence as {@link DecomposeArgs.shouldContinue}. */
+  shouldContinue?: () => boolean | Promise<boolean>;
+}
+
+/** Internal sentinel used to preserve an authority revocation through the
+ * decomposer's ordinary transient-error classification. It contains no
+ * customer data, provider response, or credential detail. */
+export class AgentDecomposerContinuationDeniedError extends Error {
+  constructor() {
+    super('agent control authority is no longer current');
+    this.name = 'AgentDecomposerContinuationDeniedError';
+  }
+}
+
+/** A provider response consumed billable tokens but failed the strict content
+ * codec. Carry only validated accounting evidence—never raw provider content
+ * or credentials—so the runtime can meter/debit the settled call before
+ * preserving the ordinary fatal/transient error contract. */
+export class AgentDecomposerSettledError extends Error {
+  readonly tokensConsumed: number;
+  readonly usage: DecomposeUsage;
+
+  constructor(message: string, evidence: { tokensConsumed: number; usage: DecomposeUsage }) {
+    super(message);
+    this.name = 'AgentDecomposerSettledError';
+    this.tokensConsumed = evidence.tokensConsumed;
+    this.usage = evidence.usage;
+  }
+}
+
+/** Fail closed when an optional continuation check rejects or throws. */
+export async function requireAgentDecomposerContinuation(
+  check: DecomposeArgs['shouldContinue'] | AnswerArgs['shouldContinue'],
+): Promise<void> {
+  if (check === undefined) return;
+  try {
+    if (await check()) return;
+  } catch {
+    // A broken authority store must deny new provider work, not fail open.
+  }
+  throw new AgentDecomposerContinuationDeniedError();
 }
 
 export interface AnswerResult {

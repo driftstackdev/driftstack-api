@@ -2187,6 +2187,10 @@ export const agentSessions = pgTable(
     // Existing rows pick up mode='ai' from the CHECK default; SDK
     // surfaces the choice at create-time via mode='manual'|'ai'|'pair'.
     pairModeState: jsonb('pair_mode_state'),
+    // 0107 — internal monotonic authority epoch. The DB trigger increments it
+    // iff status/mode/pair_mode_state changes, including value-equivalent ABA
+    // cycles, while ordinary transcript/accounting writes keep it stable.
+    authorityRevision: bigint('authority_revision', { mode: 'number' }).notNull().default(0),
     // 0101 — latest ownership-validated harness errorEvent. The producer emits
     // it after the terminal sessionStatus, so it must outlive process restarts
     // and remain readable on a closed agent session.
@@ -2243,6 +2247,7 @@ export const agentSessions = pgTable(
     index('agent_sessions_profile_id_active_idx')
       .on(t.profileId)
       .where(sql`${t.status} = 'active'`),
+    check('agent_sessions_authority_revision_nonnegative', sql`${t.authorityRevision} >= 0`),
   ],
 );
 

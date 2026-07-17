@@ -29183,3 +29183,72 @@ This correction prevents a new admission after an already-applied command loses 
 reply. It complements, but does not replace, harness cancellation fences for work
 already executing. No shared workspace build/deploy, harness/native/Fleet/Family-B,
 environment, customer or foreign pnpm action was performed.
+
+---
+
+## V-699 — Agent turns retain one monotonic control-authority epoch
+
+**Date:** 2026-07-17
+
+An active row was previously treated as sufficient authority for AI work. A pair
+takeover, AI-to-manual change or value-equivalent AI→human→AI cycle could therefore
+let an older request continue provider retries, browser-plan suffixes, read-back or
+normal transcript/SSE publication under a successor controller. Route admission
+also resolved BYOK and bundled-provider state before establishing the exact control
+lane, and idempotency identity incorrectly risked binding replay to credential or
+control churn instead of the logical turn.
+
+PostgreSQL now owns an internal nonnegative `authority_revision`. A trigger advances
+it exactly when status, mode or pair state changes and overwrites attempted revision
+forgery on every other update. The in-memory implementation mirrors those semantics.
+A narrow read avoids transcript/credential decryption; transcript append and
+runtime-initiated close are compare-and-set against the admitted revision. This
+closes value-equivalent ABA and prevents a stale turn from publishing into, or
+closing, a human-controlled successor. Pair `NULL` remains the explicitly temporary
+legacy representation of AI-driving; every non-null pair value must be exactly
+`{kind:'ai-driving'}` or it fails closed.
+
+The message route now admits exactly `manual-transcript` or `ai-control` before
+credential, bundled-settings, spend, concurrency and provider work. Manual messages
+perform only the guarded operator append and never inspect an irrelevant BYOK
+header. AI authority is checked around provider preflight, every provider retry,
+executor attempts, observation/read-back and publication. Settled provider usage is
+recorded and active-only debited even when a strict result codec, control change,
+empty sanitized answer or transcript write prevents normal publication. A guarded
+append that commits immediately before authority changes may remain durable history,
+but its stale SSE is suppressed. Settled browser results are retained as redacted
+partial evidence on authority or lifecycle conflicts so callers cannot infer that a
+step is safe to repeat.
+
+`Idempotency-Key` identity is now exact session plus semantic message and ordered
+approvals. Completed terminals replay before current-authority lookup and survive
+close, mode transitions and explicit BYOK rotation without another provider/browser
+operation; changed semantic input still conflicts. Receipt completion happens once
+outside terminal construction, so a receipt-store rejection cannot replace a real
+turn with a fabricated second 500 terminal. A read-only production aggregate found
+zero legacy receipts (total 0, completed 0, unresolved 0), so no opaque historical
+hash migration is required. Closed terminal results evict route-owned plaintext BYOK
+before throwing, while paused/resumable results retain it. Terminal and authority
+409s preserve consumed usage and redact sensitive intent values; bundled public
+usage exposes the posted 10-cent included-service value rather than upstream model
+cost.
+
+The affected executable/static/docs union passes 17 files and 534/534 tests, with
+one database file and ten tests honestly skipped without a database URL. The same
+Drizzle concurrency file passes 10/10 against local PostgreSQL, including the real
+mode-transition-versus-guarded-append race. Strict server source and test TypeScript,
+targeted ESLint and diff/whitespace are green; formatting and exact-path hook replay
+are completed at the immutable source terminal.
+
+This is the API/repository authority boundary, not the full end-to-end control lease.
+A database check immediately before dispatch cannot atomically revoke an already
+admitted DataChannel/browser send; activation still requires a server-issued,
+participant/session/controller/revision-bound lease validated by the harness, plus
+the queued fail-closed GUI containment. Usage-row retry also lacks a durable
+operation id for commit-then-lost-ack deduplication; the read-back 6,000-token gate is
+a heuristic rather than a provider-enforced hard budget; the public per-response
+usage block does not yet aggregate the optional second read-back call; and
+strict-codec settlement currently records the narrow existing `refuse` result taxonomy. No shared workspace
+build/deploy, native build/sign/install/relaunch, harness/Fleet/Family-B activation,
+environment/customer/secret mutation, package publication or foreign pnpm action
+was performed.

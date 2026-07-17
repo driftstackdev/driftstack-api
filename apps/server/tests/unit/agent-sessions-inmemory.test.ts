@@ -148,6 +148,86 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect(await repo.get(created.id)).toEqual(closed);
   });
 
+  it('authority revision is monotonic only for semantic status/mode/pair changes and fences value-equivalent ABA writes', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    expect(await repo.getAuthoritySnapshot(created.id)).toEqual({
+      status: 'active',
+      mode: 'ai',
+      pairModeState: null,
+      revision: 0,
+    });
+
+    await repo.appendTranscriptIfAuthorityRevision(created.id, 0, {
+      at: 'r0',
+      role: 'user',
+      body: 'exact revision accepted',
+    });
+    await repo.debitTokensIfActive(created.id, 10);
+    await repo.setNodeId(created.id, 'node-a');
+    await repo.setGuiControlKeyIfActive({
+      id: created.id,
+      ciphertext: Buffer.from('ciphertext'),
+      expiresAt: null,
+    });
+    await repo.setMode(created.id, 'ai', null); // exact no-op
+    expect((await repo.getAuthoritySnapshot(created.id))?.revision).toBe(0);
+
+    await repo.setMode(created.id, 'manual', null);
+    expect((await repo.getAuthoritySnapshot(created.id))?.revision).toBe(1);
+    await repo.setMode(created.id, 'ai', null);
+    expect(await repo.getAuthoritySnapshot(created.id)).toEqual({
+      status: 'active',
+      mode: 'ai',
+      pairModeState: null,
+      revision: 2,
+    });
+
+    // The value tuple is back to its original shape, but the stale epoch can
+    // neither publish a transcript suffix nor close the human successor.
+    await expect(
+      repo.appendTranscriptIfAuthorityRevision(created.id, 0, {
+        at: 'stale',
+        role: 'agent',
+        body: 'must not land',
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repo.closeWithReasonIfAuthorityRevision(created.id, 0, 'stale-budget-close'),
+    ).resolves.toBeNull();
+
+    await expect(
+      repo.appendTranscriptIfAuthorityRevision(created.id, 2, {
+        at: 'r2',
+        role: 'agent',
+        body: 'current epoch accepted',
+      }),
+    ).resolves.toMatchObject({ status: 'active' });
+    const closed = await repo.closeWithReasonIfAuthorityRevision(
+      created.id,
+      2,
+      'current-owner-close',
+    );
+    expect(closed).toMatchObject({ status: 'closed', closedReason: 'current-owner-close' });
+    expect((await repo.getAuthoritySnapshot(created.id))?.revision).toBe(3);
+  });
+
+  it('every in-memory bulk terminal transition advances the same authority epoch exactly once', async () => {
+    let now = new Date('2026-07-17T00:00:00.000Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+    const nodeClosed = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    const orphaned = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    await repo.setNodeId(nodeClosed.id, 'node-a');
+    expect(await repo.closeActiveByNode('node-a', 'worker-disconnected')).toBe(1);
+    expect((await repo.getAuthoritySnapshot(nodeClosed.id))?.revision).toBe(1);
+
+    now = new Date('2026-07-17T01:00:00.000Z');
+    expect(await repo.reapOrphanedActiveBefore(now)).toBe(1);
+    expect((await repo.getAuthoritySnapshot(orphaned.id))?.revision).toBe(1);
+    expect(await repo.reapOrphanedActiveBefore(now)).toBe(0);
+    expect((await repo.getAuthoritySnapshot(orphaned.id))?.revision).toBe(1);
+  });
+
   it('debitTokens: subtracts from remaining + floors at 0 (no negative budget)', async () => {
     const repo = new InMemoryAgentSessionsRepo();
     const r0 = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 1000 });

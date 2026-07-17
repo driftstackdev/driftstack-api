@@ -30,7 +30,12 @@ import {
   type AccountTier,
   type ApiKeyScope,
 } from '@driftstack/api-types';
-import type { AgentRuntime } from '../services/agent-runtime.js';
+import {
+  agentTurnAdmissionForSession,
+  agentTurnAdmissionMatchesSnapshot,
+  type AgentTurnAdmission,
+  type AgentRuntime,
+} from '../services/agent-runtime.js';
 import { consequentialSignature } from '../services/agent-executor.js';
 import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import {
@@ -4090,21 +4095,170 @@ export function registerAgentSessionsRoutes(
     );
   }
 
-  const executeAgentMessage = async (req: FastifyRequest<{ Params: { id: string } }>) => {
+  const resolveAgentMessageAdmission = async (
+    agentSessionId: string,
+    pre: AgentSessionRecord,
+  ): Promise<AgentTurnAdmission> => {
+    const authority = await sessions.getAuthoritySnapshot(agentSessionId);
+    const admission = authority === null ? null : agentTurnAdmissionForSession(authority);
+    if (admission !== null) return admission;
+    if (pre.status !== 'active' || (authority !== null && authority.status !== 'active')) {
+      const latest = (await sessions.get(agentSessionId)) ?? pre;
+      throw new ConflictError(
+        `Agent session is ${latest.status} (${latest.closedReason ?? `session ${latest.status}`}). Start a new agent session.`,
+      );
+    }
+    throw new ConflictError(
+      'AI control is unavailable for the session’s current manual, pair, or transition state.',
+      { ai_control_unavailable: true, phase: 'admission' },
+    );
+  };
+
+  const assertAgentMessageAdmissionCurrent = async (
+    agentSessionId: string,
+    admission: AgentTurnAdmission,
+  ): Promise<void> => {
+    const confirmedAuthority = await sessions.getAuthoritySnapshot(agentSessionId);
+    if (
+      confirmedAuthority === null ||
+      !agentTurnAdmissionMatchesSnapshot(admission, confirmedAuthority)
+    ) {
+      throw new ConflictError(
+        'The session control state changed while this message was being admitted.',
+        { ai_control_unavailable: true, phase: 'admission' },
+      );
+    }
+  };
+
+  const executeAgentMessage = async (
+    req: FastifyRequest<{ Params: { id: string } }>,
+    pre: AgentSessionRecord,
+    admission: AgentTurnAdmission,
+  ) => {
     const parsed = RunTurnRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
-    // Cross-account guard before runtime.runTurn — the runtime
-    // throws on unknown ids, but we want 403/404 distinction over
-    // "not found" generic.
-    const pre = await sessions.get(req.params.id);
-    if (pre === null) {
-      throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
-    }
-    if (req.guiControlKeyAuthorized !== true) {
-      const ctx = requireCtx(req);
-      if (!callerCanAccessAgentSession(ctx, pre.accountId)) {
-        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+    // The handler captured this exact monotonic authority epoch before receipt
+    // hashing. Reconfirm after the receipt/storage await and before touching
+    // any credential, spend, concurrency, or provider dependency.
+    await assertAgentMessageAdmissionCurrent(req.params.id, admission);
+    const settleProviderPreflight = async <T>(operation: () => Promise<T>): Promise<T> => {
+      await assertAgentMessageAdmissionCurrent(req.params.id, admission);
+      let value: T;
+      try {
+        value = await operation();
+      } catch (error) {
+        // A stale controller's settings/storage failure must not override the
+        // authority-conflict contract if the lane changed while it settled.
+        await assertAgentMessageAdmissionCurrent(req.params.id, admission);
+        throw error;
       }
+      await assertAgentMessageAdmissionCurrent(req.params.id, admission);
+      return value;
+    };
+    const publicUsage = (
+      usage: DecomposeUsage | undefined,
+      source?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none',
+    ):
+      | {
+          decomposer_kind: 'claude' | 'deterministic';
+          anthropic_input_tokens?: number;
+          anthropic_output_tokens?: number;
+          cost_usd_cents?: number;
+          model?: string;
+        }
+      | undefined => {
+      if (!usage) return undefined;
+      return {
+        decomposer_kind: usage.decomposerKind,
+        ...(usage.anthropicInputTokens !== undefined
+          ? { anthropic_input_tokens: usage.anthropicInputTokens }
+          : {}),
+        ...(usage.anthropicOutputTokens !== undefined
+          ? { anthropic_output_tokens: usage.anthropicOutputTokens }
+          : {}),
+        ...(source === 'bundled'
+          ? { cost_usd_cents: 10 }
+          : usage.costUsdCents !== undefined
+            ? { cost_usd_cents: usage.costUsdCents }
+            : {}),
+        ...(usage.model !== undefined ? { model: usage.model } : {}),
+      };
+    };
+    const settledWorkExtensions = (
+      result: {
+        usage?: DecomposeUsage;
+        tokensConsumed?: number;
+        executor?: { results: ReadonlyArray<Parameters<typeof publicIntentResult>[0]> };
+      },
+      source?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none',
+    ) => {
+      const usage = publicUsage(result.usage, source);
+      return {
+        ...(result.tokensConsumed !== undefined ? { tokens_consumed: result.tokensConsumed } : {}),
+        ...(usage !== undefined ? { usage } : {}),
+        ...(result.executor !== undefined
+          ? { partial_results: result.executor.results.map(publicIntentResult) }
+          : {}),
+      };
+    };
+    const terminalConflictMessage = (
+      result: Extract<Awaited<ReturnType<AgentRuntime['runTurn']>>, { kind: 'session-closed' }>,
+      hasSettledWork: boolean,
+    ): string => {
+      const lifecycle = `Agent session is ${result.session.status} (${result.reason}).`;
+      if (result.session.status === 'paused') {
+        return hasSettledWork
+          ? `${lifecycle} Inspect partial results before resuming; do not replay settled steps automatically.`
+          : `${lifecycle} Resume this agent session before sending another message.`;
+      }
+      return hasSettledWork
+        ? `${lifecycle} Inspect partial results and do not replay them automatically in a new session.`
+        : `${lifecycle} Start a new agent session.`;
+    };
+
+    // Manual messages are transcript-only. Resolve and execute this lane before
+    // reading BYOK headers/cache, bundled settings/spend, concurrency slots, or
+    // provider configuration: none of those resources authorize a human log.
+    if (admission.kind === 'manual-transcript') {
+      const result = await runtime.runTurn({
+        agentSessionId: req.params.id,
+        userMessage: parsed.data.user_message,
+        admission,
+      });
+      if (result.kind === 'turn-in-progress') {
+        throw new ConflictError(
+          'Another turn is already running for this agent session. Retry after it completes.',
+        );
+      }
+      if (result.kind === 'session-closed') {
+        if (result.session.status === 'closed') byokKeyCache?.delete(req.params.id);
+        const hasSettledWork =
+          result.usage !== undefined ||
+          result.tokensConsumed !== undefined ||
+          result.executor !== undefined;
+        throw new ConflictError(
+          terminalConflictMessage(result, hasSettledWork),
+          settledWorkExtensions(result),
+        );
+      }
+      if (result.kind === 'ai-control-unavailable') {
+        throw new ConflictError(
+          'The session control state changed before the manual message could be recorded.',
+          { ai_control_unavailable: true, phase: result.phase },
+        );
+      }
+      if (result.kind !== 'logged-manual') {
+        throw new Error(`runtime invariant: manual admission returned ${result.kind}`);
+      }
+      return {
+        kind: result.kind,
+        session: publicAgentSession(
+          result.session,
+          undefined,
+          sessionLivenessStore,
+          sessionCapabilityReportStore,
+        ),
+      };
     }
     // Account attribution for the BYOK / bundled-LLM resolution chain
     // and cost telemetry: the session's owning account. Identical to
@@ -4169,7 +4323,9 @@ export function registerAgentSessionsRoutes(
       bundledLlmService !== undefined &&
       deploymentFallbackKey !== undefined
     ) {
-      const settings = await bundledLlmService.findSettings(turnAccountId);
+      const settings = await settleProviderPreflight(() =>
+        bundledLlmService.findSettings(turnAccountId),
+      );
       if (settings !== null && !settings.consent) {
         // Arc 1 sub-slice 6.8 (v2-#6) — flag for the post-resolution
         // gate. Deployment HAS bundled-LLM, customer just hasn't
@@ -4191,11 +4347,14 @@ export function registerAgentSessionsRoutes(
         // supplying a BYOK key (per-request header or stored), or
         // waiting for next calendar month.
         const now = new Date();
-        const spent = await bundledLlmService.sumMonthlySpendCents({
-          accountId: turnAccountId,
-          now,
-        });
+        const spent = await settleProviderPreflight(() =>
+          bundledLlmService.sumMonthlySpendCents({
+            accountId: turnAccountId,
+            now,
+          }),
+        );
         if (spent >= settings.monthlyCapUsdCents) {
+          await assertAgentMessageAdmissionCurrent(req.params.id, admission);
           // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — error counter.
           try {
             metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'budget_exhausted' });
@@ -4217,6 +4376,7 @@ export function registerAgentSessionsRoutes(
         // overshoot past the cap is bounded by `limit`, not unbounded.
         if (bundledTurnConcurrency !== undefined) {
           if (!bundledTurnConcurrency.tryAcquire(turnAccountId)) {
+            await assertAgentMessageAdmissionCurrent(req.params.id, admission);
             try {
               metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, {
                 kind: 'concurrency_limit',
@@ -4273,6 +4433,7 @@ export function registerAgentSessionsRoutes(
       // so gating would surface a false alarm to customers whose
       // turn would have succeeded with a deterministic plan output.
       if (resolvedByokKey === undefined && agentDecomposerKind === 'claude') {
+        await assertAgentMessageAdmissionCurrent(req.params.id, admission);
         // Arc 1 sub-slice 6.8 (v2-#6) — surface the typed consent-
         // required error when bundled-LLM is wired but the customer
         // hasn't opted in. Without this branch the customer would get
@@ -4298,9 +4459,11 @@ export function registerAgentSessionsRoutes(
               ),
             )
           : undefined;
+      await assertAgentMessageAdmissionCurrent(req.params.id, admission);
       const result = await runtime.runTurn({
         agentSessionId: req.params.id,
         userMessage: parsed.data.user_message,
+        admission,
         ...(resolvedByokKey !== undefined ? { byokApiKey: resolvedByokKey } : {}),
         ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
         keySource,
@@ -4316,9 +4479,32 @@ export function registerAgentSessionsRoutes(
           `This account already has ${result.current.toString()} AI turns running; the current limit is ${result.limit.toString()}. Retry after one finishes.`,
         );
       }
-      if (result.kind === 'session-closed') {
+      if (result.kind === 'ai-control-unavailable') {
+        const usage = publicUsage(result.usage, keySource);
         throw new ConflictError(
-          `Agent session is ${result.session.status} (${result.reason}). Start a new agent session.`,
+          'AI control changed while this turn was running. No later model or browser work was started; inspect any settled partial results before taking a new action.',
+          {
+            ai_control_unavailable: true,
+            phase: result.phase,
+            ...(result.tokensConsumed !== undefined
+              ? { tokens_consumed: result.tokensConsumed }
+              : {}),
+            ...(usage !== undefined ? { usage } : {}),
+            ...(result.executor !== undefined
+              ? { partial_results: result.executor.results.map(publicIntentResult) }
+              : {}),
+          },
+        );
+      }
+      if (result.kind === 'session-closed') {
+        if (result.session.status === 'closed') byokKeyCache?.delete(req.params.id);
+        const hasSettledWork =
+          result.usage !== undefined ||
+          result.tokensConsumed !== undefined ||
+          result.executor !== undefined;
+        throw new ConflictError(
+          terminalConflictMessage(result, hasSettledWork),
+          settledWorkExtensions(result, keySource),
         );
       }
       // Q.1.c — if this turn closed the session (e.g. the runtime's
@@ -4345,36 +4531,6 @@ export function registerAgentSessionsRoutes(
           ),
         };
       }
-      // 2026-05-22 — V-666.AI cost telemetry per turn. The decomposer
-      // already attaches a `usage` block (input/output tokens + cost
-      // cents + model id) for Claude-backed runs; deterministic
-      // decomposers leave it undefined. Surface the block on every
-      // response shape so the customer-dashboard chat UI can render
-      // a per-turn "$0.0023 · 145 tokens" badge. Undefined-safe: the
-      // SDK + UI render '—' when usage is absent.
-      function publicUsage(u: DecomposeUsage | undefined):
-        | {
-            decomposer_kind: 'claude' | 'deterministic';
-            anthropic_input_tokens?: number;
-            anthropic_output_tokens?: number;
-            cost_usd_cents?: number;
-            model?: string;
-          }
-        | undefined {
-        if (!u) return undefined;
-        return {
-          decomposer_kind: u.decomposerKind,
-          ...(u.anthropicInputTokens !== undefined
-            ? { anthropic_input_tokens: u.anthropicInputTokens }
-            : {}),
-          ...(u.anthropicOutputTokens !== undefined
-            ? { anthropic_output_tokens: u.anthropicOutputTokens }
-            : {}),
-          ...(u.costUsdCents !== undefined ? { cost_usd_cents: u.costUsdCents } : {}),
-          ...(u.model !== undefined ? { model: u.model } : {}),
-        };
-      }
-
       if (result.kind === 'plan-executed') {
         // Narrow the decomposer to the plan variant — TS can't infer
         // it across the runTurn discriminant without a manual branch.
@@ -4382,7 +4538,7 @@ export function registerAgentSessionsRoutes(
         if (plan.kind !== 'plan') {
           throw new Error('runtime invariant: plan-executed without plan decomposer');
         }
-        const usage = publicUsage(plan.usage);
+        const usage = publicUsage(plan.usage, keySource);
         return {
           kind: result.kind,
           session: publicAgentSession(
@@ -4398,7 +4554,7 @@ export function registerAgentSessionsRoutes(
         };
       }
       if (result.kind === 'clarify') {
-        const usage = publicUsage(result.decomposer.usage);
+        const usage = publicUsage(result.decomposer.usage, keySource);
         return {
           kind: result.kind,
           session: publicAgentSession(
@@ -4412,7 +4568,7 @@ export function registerAgentSessionsRoutes(
         };
       }
       // refuse
-      const usage = publicUsage(result.decomposer.usage);
+      const usage = publicUsage(result.decomposer.usage, keySource);
       return {
         kind: result.kind,
         session: publicAgentSession(
@@ -4464,8 +4620,10 @@ export function registerAgentSessionsRoutes(
         fieldErrors: {},
       });
     }
+
     if (idempotency.kind === 'absent') {
-      return { status: 200, body: await executeAgentMessage(req) };
+      const admission = await resolveAgentMessageAdmission(req.params.id, pre);
+      return { status: 200, body: await executeAgentMessage(req, pre, admission) };
     }
     if (agentTurnReceipts === undefined) {
       throw new FeatureUnavailableError(
@@ -4473,18 +4631,12 @@ export function registerAgentSessionsRoutes(
       );
     }
 
-    const rawHeaderByokKey = req.headers['x-byok-anthropic-api-key'];
-    const explicitByokApiKey =
-      typeof rawHeaderByokKey === 'string' && rawHeaderByokKey.length > 0
-        ? rawHeaderByokKey
-        : undefined;
     const requestHash = hashAgentTurnRequest({
       agentSessionId: req.params.id,
       userMessage: parsed.data.user_message,
       ...(parsed.data.approve_consequential_actions !== undefined
         ? { approveConsequentialActions: parsed.data.approve_consequential_actions }
         : {}),
-      ...(explicitByokApiKey !== undefined ? { explicitByokApiKey } : {}),
     });
     const receiptArgs = {
       accountId: pre.accountId,
@@ -4509,11 +4661,14 @@ export function registerAgentSessionsRoutes(
       return reservation.terminal;
     }
 
+    let terminal: AgentMessageTerminal;
     try {
-      const body = await executeAgentMessage(req);
-      const terminal = { status: 200, body };
-      await agentTurnReceipts.complete({ ...receiptArgs, terminal });
-      return terminal;
+      // New reservations resolve the exact active epoch before any credential,
+      // spend, or provider access. Existing receipts replay first, independent
+      // of current authority or a transient authority-store read failure.
+      const admission = await resolveAgentMessageAdmission(req.params.id, pre);
+      const body = await executeAgentMessage(req, pre, admission);
+      terminal = { status: 200, body };
     } catch (error) {
       // Persist typed failures too. If browser work finished and a later
       // database/debit step failed, retrying must replay the same terminal
@@ -4522,10 +4677,17 @@ export function registerAgentSessionsRoutes(
         error instanceof ApiError
           ? error
           : new InternalError('An unexpected error occurred.', error);
-      const terminal = { status: apiError.status, body: apiError.toProblem(req.id) };
-      await agentTurnReceipts.complete({ ...receiptArgs, terminal });
-      return { ...terminal, error };
+      terminal = { status: apiError.status, body: apiError.toProblem(req.id), error };
     }
+    // Complete exactly once. If storage rejects or its acknowledgement is
+    // lost, propagate that persistence failure and leave the reservation
+    // in-progress (or already committed) rather than fabricating a second,
+    // contradictory 500 terminal for browser work that actually succeeded.
+    await agentTurnReceipts.complete({
+      ...receiptArgs,
+      terminal: { status: terminal.status, body: terminal.body },
+    });
+    return terminal;
   };
 
   const reportAgentMessageError = (

@@ -16,6 +16,7 @@ import type {
   ProxyProbeResult,
 } from '../../src/services/proxy-connectivity-probe.js';
 import { hashAgentTurnRequest } from '../../src/services/agent-turn-receipts.js';
+import { AgentRuntime } from '../../src/services/agent-runtime.js';
 
 describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)', () => {
   let fx: TestAppFixture;
@@ -1078,6 +1079,74 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(read.json<{ transcript_length: number }>().transcript_length).toBe(2);
   });
 
+  it('receipt completion rejection never fabricates a second terminal for successful browser work', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const receipts = fx.agentTurnReceiptsRepo!;
+    const complete = vi
+      .spyOn(receipts, 'complete')
+      .mockRejectedValueOnce(new Error('receipt storage unavailable before commit'));
+    const request = {
+      method: 'POST' as const,
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'completion-rejected',
+      },
+      payload: { user_message: 'open https://example.com and capture' },
+    };
+
+    const first = await fx.app.inject(request);
+    const retry = await fx.app.inject(request);
+
+    expect(first.statusCode).toBe(500);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(retry.statusCode).toBe(409);
+    expect(retry.json()).toMatchObject({ idempotency_status: 'in_progress' });
+    expect((await fx.agentSessionsRepo?.get(id))?.transcript).toHaveLength(2);
+  });
+
+  it('lost receipt completion acknowledgement replays the already-committed success', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const receipts = fx.agentTurnReceiptsRepo!;
+    const realComplete = receipts.complete.bind(receipts);
+    const complete = vi.spyOn(receipts, 'complete').mockImplementationOnce(async (args) => {
+      await realComplete(args);
+      throw new Error('receipt commit acknowledgement lost');
+    });
+    const request = {
+      method: 'POST' as const,
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'completion-ack-lost',
+      },
+      payload: { user_message: 'open https://example.com and capture' },
+    };
+
+    const first = await fx.app.inject(request);
+    const replay = await fx.app.inject(request);
+
+    expect(first.statusCode).toBe(500);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({ kind: 'plan-executed', ok: true });
+    expect((await fx.agentSessionsRepo?.get(id))?.transcript).toHaveLength(2);
+  });
+
   it('message Idempotency-Key rejects body/session reuse and an unresolved in-progress receipt without dispatch', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const createSession = async (): Promise<string> => {
@@ -1757,6 +1826,464 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(read.json<{ transcript_length: number }>().transcript_length).toBe(1);
+  });
+
+  it('manual transcript admission performs zero bundled-key/settings/spend work', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 1_000 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual', token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const settings = vi.spyOn(fx.bundledLlmRepo, 'findSettings');
+    const spend = vi.spyOn(fx.bundledLlmRepo, 'sumMonthlySpendCents');
+
+    const msg = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'operator note only' },
+    });
+
+    expect(msg.statusCode).toBe(200);
+    expect(msg.json<{ kind: string }>().kind).toBe('logged-manual');
+    expect(settings).not.toHaveBeenCalled();
+    expect(spend).not.toHaveBeenCalled();
+    expect(fx.bundledTurnConcurrency.current(fx.accountId)).toBe(0);
+  });
+
+  it('keyed manual replay ignores changing BYOK headers and performs zero provider preflight', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 1_000 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual', token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const settings = vi.spyOn(fx.bundledLlmRepo, 'findSettings');
+    const spend = vi.spyOn(fx.bundledLlmRepo, 'sumMonthlySpendCents');
+    const request = (byok: string) =>
+      fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${id}/message`,
+        headers: {
+          authorization: `Bearer ${fx.plaintext}`,
+          'idempotency-key': 'manual-note-1',
+          'x-byok-anthropic-api-key': byok,
+        },
+        payload: { user_message: 'operator note only' },
+      });
+
+    const first = await request('sk-ant-must-be-ignored-a');
+    await fx.agentSessionsRepo?.setModeIfActive(id, 'ai', null);
+    const replay = await request('sk-ant-must-be-ignored-b');
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json<{ kind: string }>().kind).toBe('logged-manual');
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+    expect(settings).not.toHaveBeenCalled();
+    expect(spend).not.toHaveBeenCalled();
+    expect(fx.bundledTurnConcurrency.current(fx.accountId)).toBe(0);
+    expect((await fx.agentSessionsRepo?.get(id))?.transcript).toHaveLength(1);
+  });
+
+  it('keyed AI terminal replays after close even when its explicit BYOK header changes', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'ai', token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const request = (byok: string) =>
+      fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${id}/message`,
+        headers: {
+          authorization: `Bearer ${fx.plaintext}`,
+          'idempotency-key': 'ai-turn-before-close',
+          'x-byok-anthropic-api-key': byok,
+        },
+        payload: { user_message: 'open https://example.com and capture' },
+      });
+
+    const first = await request('sk-ant-original-credential');
+    expect(first.statusCode).toBe(200);
+    const close = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(close.statusCode).toBe(204);
+    const replay = await request('sk-ant-rotated-credential');
+
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+    expect((await fx.agentSessionsRepo?.get(id))?.transcript).toHaveLength(2);
+  });
+
+  it('bundled turns expose the posted flat price instead of upstream model cost', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 1_000 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+
+    const response = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'open https://example.com and capture' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      kind: 'plan-executed',
+      usage: { decomposer_kind: 'deterministic', cost_usd_cents: 10 },
+    });
+  });
+
+  it('maps post-provider authority loss to an honest redacted 409 with settled usage and partial results', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const session = await fx.agentSessionsRepo?.get(id);
+    if (session === null || session === undefined) throw new Error('agent session expected');
+    const runTurn = vi.spyOn(AgentRuntime.prototype, 'runTurn').mockResolvedValue({
+      kind: 'ai-control-unavailable',
+      phase: 'execution',
+      session,
+      tokensConsumed: 73,
+      usage: {
+        decomposerKind: 'claude',
+        anthropicInputTokens: 50,
+        anthropicOutputTokens: 23,
+        costUsdCents: 2,
+        model: 'claude-opus-4-8',
+      },
+      executor: {
+        ok: false,
+        authorityLost: true,
+        results: [
+          {
+            kind: 'failure',
+            intent: {
+              kind: 'interact',
+              action: 'type',
+              selector: '#password',
+              value: 'must-never-leave-the-server',
+            },
+            reason: 'authority changed after dispatch settled',
+          },
+        ],
+      },
+    });
+
+    const response = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'type the credential' },
+    });
+    runTurn.mockRestore();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      ai_control_unavailable: true,
+      phase: 'execution',
+      tokens_consumed: 73,
+      usage: {
+        decomposer_kind: 'claude',
+        anthropic_input_tokens: 50,
+        anthropic_output_tokens: 23,
+        cost_usd_cents: 2,
+      },
+      partial_results: [
+        {
+          kind: 'failure',
+          intent: {
+            kind: 'interact',
+            action: 'type',
+            selector: '#password',
+            sensitive: true,
+          },
+        },
+      ],
+    });
+    expect(response.body).not.toContain('must-never-leave-the-server');
+  });
+
+  it('persists and replays redacted settled work when close wins after browser execution', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 1_000 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const active = await fx.agentSessionsRepo?.get(id);
+    if (active === null || active === undefined) throw new Error('agent session expected');
+    const sensitiveIntent = {
+      kind: 'interact' as const,
+      action: 'type' as const,
+      selector: '#password',
+      value: 'terminal-only-secret',
+      sensitive: true,
+    };
+    const runTurn = vi.spyOn(AgentRuntime.prototype, 'runTurn').mockResolvedValue({
+      kind: 'session-closed',
+      reason: 'customer-closed',
+      session: { ...active, status: 'closed', closedReason: 'customer-closed' },
+      tokensConsumed: 73,
+      usage: {
+        decomposerKind: 'claude',
+        anthropicInputTokens: 50,
+        anthropicOutputTokens: 23,
+        costUsdCents: 2,
+        model: 'claude-opus-4-8',
+      },
+      executor: {
+        ok: true,
+        results: [{ kind: 'success', intent: sensitiveIntent, summary: 'typed' }],
+      },
+    });
+    const request = {
+      method: 'POST' as const,
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'closed-after-execution',
+      },
+      payload: { user_message: 'type the credential' },
+    };
+
+    const first = await fx.app.inject(request);
+    const replay = await fx.app.inject(request);
+
+    expect(first.statusCode).toBe(409);
+    expect(first.json()).toMatchObject({
+      tokens_consumed: 73,
+      usage: {
+        decomposer_kind: 'claude',
+        anthropic_input_tokens: 50,
+        anthropic_output_tokens: 23,
+        cost_usd_cents: 10,
+      },
+      partial_results: [
+        {
+          kind: 'success',
+          intent: {
+            kind: 'interact',
+            action: 'type',
+            selector: '#password',
+            sensitive: true,
+          },
+        },
+      ],
+    });
+    expect(first.body).not.toContain('terminal-only-secret');
+    expect(first.json<{ usage: { cost_usd_cents: number } }>().usage.cost_usd_cents).not.toBe(2);
+    expect(replay.statusCode).toBe(409);
+    expect(replay.json()).toEqual(first.json());
+    expect(runTurn).toHaveBeenCalledTimes(1);
+    runTurn.mockRestore();
+  });
+
+  it('pair human authority rejects before bundled settings/spend/provider work', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 1_000 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair', token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    await fx.agentSessionsRepo?.setPairModeState(id, {
+      kind: 'human-driving',
+      clientId: 'client-a',
+      sinceAt: '2026-07-17T00:00:00Z',
+    });
+    const settings = vi.spyOn(fx.bundledLlmRepo, 'findSettings');
+    const spend = vi.spyOn(fx.bundledLlmRepo, 'sumMonthlySpendCents');
+
+    const msg = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'AI must not run this' },
+    });
+
+    expect(msg.statusCode).toBe(409);
+    expect(msg.json<{ ai_control_unavailable: boolean }>().ai_control_unavailable).toBe(true);
+    expect(settings).not.toHaveBeenCalled();
+    expect(spend).not.toHaveBeenCalled();
+    expect((await fx.agentSessionsRepo?.get(id))?.transcript).toEqual([]);
+  });
+
+  it('route-admitted AI authority cannot survive a value-equivalent AI→manual→AI ABA before runtime/provider work', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 1_000 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'ai', token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const repo = fx.agentSessionsRepo!;
+    const realSnapshot = repo.getAuthoritySnapshot.bind(repo);
+    let snapshotReads = 0;
+    vi.spyOn(repo, 'getAuthoritySnapshot').mockImplementation(async (sessionId) => {
+      const snapshot = await realSnapshot(sessionId);
+      snapshotReads += 1;
+      if (sessionId === id && snapshotReads === 1) {
+        await repo.setModeIfActive(id, 'manual', null);
+        await repo.setModeIfActive(id, 'ai', null);
+      }
+      return snapshot;
+    });
+    const settings = vi.spyOn(fx.bundledLlmRepo, 'findSettings');
+    const spend = vi.spyOn(fx.bundledLlmRepo, 'sumMonthlySpendCents');
+
+    const msg = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'must not reach the provider' },
+    });
+
+    expect(msg.statusCode).toBe(409);
+    expect(msg.json<{ ai_control_unavailable: boolean; phase: string }>()).toMatchObject({
+      ai_control_unavailable: true,
+      phase: 'admission',
+    });
+    expect(snapshotReads).toBeGreaterThanOrEqual(2);
+    expect(settings).not.toHaveBeenCalled();
+    expect(spend).not.toHaveBeenCalled();
+    expect((await realSnapshot(id))?.revision).toBe(2);
+    expect((await repo.get(id))?.transcript).toEqual([]);
+  });
+
+  it('authority loss while provider settings settle wins over later budget/provider errors', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 0 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'ai', token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const repo = fx.agentSessionsRepo!;
+    const realSettings = fx.bundledLlmRepo.findSettings.bind(fx.bundledLlmRepo);
+    vi.spyOn(fx.bundledLlmRepo, 'findSettings').mockImplementation(async (accountId) => {
+      const settings = await realSettings(accountId);
+      await repo.setModeIfActive(id, 'manual', null);
+      await repo.setModeIfActive(id, 'ai', null);
+      return settings;
+    });
+    const spend = vi.spyOn(fx.bundledLlmRepo, 'sumMonthlySpendCents');
+
+    const response = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'must stop after settings settle' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      ai_control_unavailable: true,
+      phase: 'admission',
+    });
+    expect(spend).not.toHaveBeenCalled();
+    expect((await repo.getAuthoritySnapshot(id))?.revision).toBe(2);
+    expect((await repo.get(id))?.transcript).toEqual([]);
+  });
+
+  it('provider preflight rechecks authority before the next spend dependency', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 1_000 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'ai', token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const repo = fx.agentSessionsRepo!;
+    const realSnapshot = repo.getAuthoritySnapshot.bind(repo);
+    const realSettings = fx.bundledLlmRepo.findSettings.bind(fx.bundledLlmRepo);
+    let settingsSettled = false;
+    let postSettingsAuthorityReads = 0;
+    vi.spyOn(fx.bundledLlmRepo, 'findSettings').mockImplementation(async (accountId) => {
+      const settings = await realSettings(accountId);
+      settingsSettled = true;
+      return settings;
+    });
+    vi.spyOn(repo, 'getAuthoritySnapshot').mockImplementation(async (sessionId) => {
+      if (settingsSettled) {
+        postSettingsAuthorityReads += 1;
+        if (postSettingsAuthorityReads === 2) {
+          await repo.setModeIfActive(id, 'manual', null);
+          await repo.setModeIfActive(id, 'ai', null);
+        }
+      }
+      return realSnapshot(sessionId);
+    });
+    const spend = vi.spyOn(fx.bundledLlmRepo, 'sumMonthlySpendCents');
+
+    const response = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'must stop before spend lookup' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      ai_control_unavailable: true,
+      phase: 'admission',
+    });
+    expect(postSettingsAuthorityReads).toBe(2);
+    expect(spend).not.toHaveBeenCalled();
+    expect((await realSnapshot(id))?.revision).toBe(2);
+    expect((await repo.get(id))?.transcript).toEqual([]);
   });
 
   it("v2-#8 sub-slice 8.5 SDK mode parameter — POST body { mode: 'manual' } persists; GET echoes it back", async () => {

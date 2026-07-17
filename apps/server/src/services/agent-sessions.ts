@@ -1,25 +1,16 @@
-// AI-A — agent-sessions persistence interface (no SQL migration; that
-// follow-up Tier-2 slice lands once the founder reviews the storage
-// shape). The interface + in-memory impl unblock the chat-UI consumers
-// (AI-C dashboard slice) and the executor (AI-B2) so they can wire
-// against a stable contract before the persistent layer lands.
+// AI-A — agent-sessions persistence contract shared by the production
+// Drizzle/PostgreSQL repository and the in-memory test/dev implementation.
+// Both chat-UI consumers (AI-C) and the executor (AI-B2) depend on this one
+// interface; migration 0107 adds its internal monotonic authority epoch
+// without widening the public AgentSession record.
 //
 // Design source of truth: `docs/internal/ai-chat-agent-layer-design.md`
 // (in-repo) + Wave 1119+ founder verdict moving AI-CHAT from v1.1 → v1.0
 // launch arc (per the V-361 framing comment in agent-decomposer.ts).
 //
-// Scope of this slice:
-//   - AgentSession record shape (id + accountId + driftstackSessionId? +
-//     status + transcript + tokenBudgetTotal + tokenBudgetRemaining +
-//     createdAt + updatedAt).
-//   - AgentSessionsRepo interface (create / get / appendTranscript /
-//     debitTokens / closeWithReason).
-//   - InMemoryAgentSessionsRepo for tests + dev mode.
-//
-// Out of scope (follow-up slices):
-//   - SQL migration + Drizzle schema (AI-A.b — Tier 2 review needed).
-//   - DrizzleAgentSessionsRepo backed by Postgres (AI-A.c).
-//   - Cross-account ACL on shared-team agent-sessions (V-326e* style).
+// The authority epoch is intentionally internal: callers capture it through a
+// narrow non-decrypting snapshot and use revision-guarded transcript/close
+// writes, while public API/SDK resource shapes remain unchanged.
 
 import { isDeepStrictEqual } from 'node:util';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
@@ -155,6 +146,19 @@ export interface AgentSessionRecord {
   updatedAt: Date;
 }
 
+/**
+ * Internal, non-decrypting control-authority view. `revision` is monotonic and
+ * changes exactly when status, mode, or pair-mode state changes, so an AI turn
+ * cannot mistake a value-equivalent A→B→A transition for uninterrupted
+ * authority. It is deliberately absent from the public session projection.
+ */
+export interface AgentSessionAuthoritySnapshot {
+  status: AgentSessionStatus;
+  mode: AgentSessionMode;
+  pairModeState: unknown;
+  revision: number;
+}
+
 export interface CreateAgentSessionArgs {
   accountId: string;
   tokenBudgetTotal: number;
@@ -238,6 +242,8 @@ export interface AgentSessionsRepo {
     cap: number,
   ): Promise<AgentSessionRecord | null>;
   get(id: string): Promise<AgentSessionRecord | null>;
+  /** Read only the control-authority columns; never decrypt the transcript. */
+  getAuthoritySnapshot(id: string): Promise<AgentSessionAuthoritySnapshot | null>;
   listByAccount(
     accountId: string,
     opts?: { limit?: number },
@@ -256,12 +262,27 @@ export interface AgentSessionsRepo {
   /** Append only while the row is still active. Missing/terminal rows return
    * null so a close winner remains immutable and callers can suppress SSE. */
   appendTranscriptIfActive(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord | null>;
+  /**
+   * Append only when the row is active and still has the exact authority
+   * revision admitted for this turn. A mismatch is a safe null result.
+   */
+  appendTranscriptIfAuthorityRevision(
+    id: string,
+    expectedRevision: number,
+    entry: TranscriptEntry,
+  ): Promise<AgentSessionRecord | null>;
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord>;
   /** Debit only while the row is still active. Missing/terminal rows return
    * null instead of mutating accounting after close. */
   debitTokensIfActive(id: string, tokens: number): Promise<AgentSessionRecord | null>;
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord>;
   closeWithReasonOutcome(id: string, reason: string): Promise<CloseAgentSessionResult>;
+  /** Close an active row only while the admitted authority revision still owns it. */
+  closeWithReasonIfAuthorityRevision(
+    id: string,
+    expectedRevision: number,
+    reason: string,
+  ): Promise<AgentSessionRecord | null>;
 
   /** Atomically persist a harness error only when the reporting node is still
    * the session owner. Closed sessions are allowed because errorEvent follows
@@ -433,6 +454,7 @@ export interface AgentSessionsRepo {
  */
 export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
   private records = new Map<string, AgentSessionRecord>();
+  private authorityRevisions = new Map<string, number>();
   private counter = 0;
 
   constructor(private readonly clock: () => Date = () => new Date()) {}
@@ -469,6 +491,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       updatedAt: now,
     };
     this.records.set(id, rec);
+    this.authorityRevisions.set(id, 0);
     return Promise.resolve(rec);
   }
 
@@ -517,6 +540,18 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
 
   get(id: string): Promise<AgentSessionRecord | null> {
     return Promise.resolve(this.records.get(id) ?? null);
+  }
+
+  getAuthoritySnapshot(id: string): Promise<AgentSessionAuthoritySnapshot | null> {
+    const rec = this.records.get(id);
+    const revision = this.authorityRevisions.get(id);
+    if (rec === undefined || revision === undefined) return Promise.resolve(null);
+    return Promise.resolve({
+      status: rec.status,
+      mode: rec.mode,
+      pairModeState: rec.pairModeState,
+      revision,
+    });
   }
 
   countActive(accountId: string): Promise<number> {
@@ -612,6 +647,28 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     return Promise.resolve(updated);
   }
 
+  appendTranscriptIfAuthorityRevision(
+    id: string,
+    expectedRevision: number,
+    entry: TranscriptEntry,
+  ): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    if (
+      rec === undefined ||
+      rec.status !== 'active' ||
+      this.authorityRevisions.get(id) !== expectedRevision
+    ) {
+      return Promise.resolve(null);
+    }
+    const updated: AgentSessionRecord = {
+      ...rec,
+      transcript: [...rec.transcript, entry],
+      updatedAt: this.clock(),
+    };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord> {
     const rec = this.records.get(id);
     if (!rec) return Promise.reject(new Error(`AgentSession ${id} not found`));
@@ -695,6 +752,9 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);
+    if (!isDeepStrictEqual(rec.pairModeState, state)) {
+      this.authorityRevisions.set(id, (this.authorityRevisions.get(id) ?? 0) + 1);
+    }
     return Promise.resolve(updated);
   }
 
@@ -718,6 +778,9 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);
+    if (!isDeepStrictEqual(rec.pairModeState, nextState)) {
+      this.authorityRevisions.set(id, (this.authorityRevisions.get(id) ?? 0) + 1);
+    }
     return Promise.resolve(updated);
   }
 
@@ -731,6 +794,9 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);
+    if (rec.mode !== mode || !isDeepStrictEqual(rec.pairModeState, pairModeState)) {
+      this.authorityRevisions.set(id, (this.authorityRevisions.get(id) ?? 0) + 1);
+    }
     return Promise.resolve(updated);
   }
 
@@ -748,6 +814,9 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);
+    if (rec.mode !== mode || !isDeepStrictEqual(rec.pairModeState, pairModeState)) {
+      this.authorityRevisions.set(id, (this.authorityRevisions.get(id) ?? 0) + 1);
+    }
     return Promise.resolve(updated);
   }
 
@@ -779,7 +848,34 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       updatedAt: now,
     };
     this.records.set(id, updated);
+    this.authorityRevisions.set(id, (this.authorityRevisions.get(id) ?? 0) + 1);
     return Promise.resolve({ kind: 'closed', session: updated });
+  }
+
+  closeWithReasonIfAuthorityRevision(
+    id: string,
+    expectedRevision: number,
+    reason: string,
+  ): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    if (
+      rec === undefined ||
+      rec.status !== 'active' ||
+      this.authorityRevisions.get(id) !== expectedRevision
+    ) {
+      return Promise.resolve(null);
+    }
+    const now = this.clock();
+    const updated: AgentSessionRecord = {
+      ...rec,
+      status: 'closed',
+      closedReason: reason,
+      closedAt: now,
+      updatedAt: now,
+    };
+    this.records.set(id, updated);
+    this.authorityRevisions.set(id, expectedRevision + 1);
+    return Promise.resolve(updated);
   }
 
   reapOrphanedActiveBefore(cutoff: Date): Promise<number> {
@@ -796,6 +892,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
         closedAt: rec.closedAt ?? now,
         updatedAt: now,
       });
+      this.authorityRevisions.set(id, (this.authorityRevisions.get(id) ?? 0) + 1);
       closed += 1;
     }
     return Promise.resolve(closed);
@@ -827,6 +924,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
         closedAt: rec.closedAt ?? now,
         updatedAt: now,
       });
+      this.authorityRevisions.set(id, (this.authorityRevisions.get(id) ?? 0) + 1);
       closed += 1;
     }
     return Promise.resolve(closed);
@@ -857,6 +955,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
         closedAt: rec.closedAt ?? now,
         updatedAt: now,
       });
+      this.authorityRevisions.set(id, (this.authorityRevisions.get(id) ?? 0) + 1);
       closed += 1;
     }
     return Promise.resolve(closed);

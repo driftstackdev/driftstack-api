@@ -22,7 +22,11 @@ import {
   __TEST_ONLY__,
 } from '../../src/services/agent-decomposer-claude.js';
 import { classifyConsequentialAction } from '../../src/services/agent-consequential-action.js';
-import type { DecomposeArgs } from '../../src/services/agent-decomposer.js';
+import {
+  AgentDecomposerContinuationDeniedError,
+  AgentDecomposerSettledError,
+  type DecomposeArgs,
+} from '../../src/services/agent-decomposer.js';
 
 function defaultArgs(overrides: Partial<DecomposeArgs> = {}): DecomposeArgs {
   return {
@@ -696,6 +700,36 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
   });
 
   describe('retry + error handling', () => {
+    it('starts zero provider requests when authority is unavailable before the first attempt', async () => {
+      const { fetch, calls } = sequenceFetch([]);
+      const dec = new ClaudeAgentDecomposer({ fetch, retryBackoffMs: 0 });
+      await expect(
+        dec.decompose(defaultArgs({ shouldContinue: () => false })),
+      ).rejects.toBeInstanceOf(AgentDecomposerContinuationDeniedError);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('starts no second provider request when authority is revoked during retry backoff', async () => {
+      const { fetch, calls } = sequenceFetch([
+        errorResponse(503),
+        jsonResponse({ kind: 'clarify', clarifyingQuestion: 'must not run' }),
+      ]);
+      let current = true;
+      const dec = new ClaudeAgentDecomposer({ fetch, retryBackoffMs: 0 });
+      await expect(
+        dec.decompose(
+          defaultArgs({
+            shouldContinue: () => {
+              const allowed = current;
+              current = false;
+              return allowed;
+            },
+          }),
+        ),
+      ).rejects.toBeInstanceOf(AgentDecomposerContinuationDeniedError);
+      expect(calls).toHaveLength(1);
+    });
+
     it('5xx → single retry → success', async () => {
       const { fetch, calls } = sequenceFetch([
         errorResponse(503),
@@ -835,7 +869,12 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
     }
 
     it('missing text content block → throws', async () => {
-      const { fetch } = sequenceFetch([jsonRaw({ content: [{ type: 'tool_use' }], usage: {} })]);
+      const { fetch } = sequenceFetch([
+        jsonRaw({
+          content: [{ type: 'tool_use' }],
+          usage: { input_tokens: 120, output_tokens: 80 },
+        }),
+      ]);
       const dec = new ClaudeAgentDecomposer({ fetch });
       await expect(dec.decompose(defaultArgs())).rejects.toThrow(/missing text content/);
     });
@@ -884,7 +923,7 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       const { fetch } = sequenceFetch([
         jsonRaw({
           content: [{ type: 'text', text: 'I will not output JSON.' }],
-          usage: {},
+          usage: { input_tokens: 120, output_tokens: 80 },
         }),
       ]);
       const dec = new ClaudeAgentDecomposer({ fetch });
@@ -894,7 +933,18 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
     it('unknown kind → throws', async () => {
       const { fetch } = sequenceFetch([jsonResponse({ kind: 'mystery', data: 1 })]);
       const dec = new ClaudeAgentDecomposer({ fetch });
-      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/unknown kind: mystery/);
+      const error = await dec.decompose(defaultArgs()).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(AgentDecomposerSettledError);
+      expect(error).toMatchObject({
+        message: 'Anthropic response has unknown result kind',
+        tokensConsumed: 200,
+        usage: {
+          decomposerKind: 'claude',
+          anthropicInputTokens: 120,
+          anthropicOutputTokens: 80,
+        },
+      });
+      expect(String(error)).not.toContain('mystery');
     });
 
     it('plan with non-array intents → throws', async () => {
@@ -1015,6 +1065,15 @@ describe('AI-B1.b ClaudeAgentDecomposer — #140 answerFromObservation (read-and
     byokAnthropicApiKey: 'sk-ant-test-fake-key',
   };
 
+  it('starts no answer provider request when control authority is unavailable', async () => {
+    const { fetch, calls } = sequenceFetch([]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    await expect(
+      dec.answerFromObservation({ ...answerArgs, shouldContinue: () => false }),
+    ).rejects.toBeInstanceOf(AgentDecomposerContinuationDeniedError);
+    expect(calls).toHaveLength(0);
+  });
+
   it('answers from the observation → { answer } + tokensConsumed from usage', async () => {
     const { fetch, calls } = sequenceFetch([
       jsonResponse({ kind: 'answer', answer: 'Your IP address is 203.0.113.7.' }),
@@ -1039,7 +1098,17 @@ describe('AI-B1.b ClaudeAgentDecomposer — #140 answerFromObservation (read-and
   it('blank answer throws → runtime falls back to the plan result, no empty reply', async () => {
     const { fetch } = sequenceFetch([jsonResponse({ kind: 'answer', answer: '   ' })]);
     const dec = new ClaudeAgentDecomposer({ fetch });
-    await expect(dec.answerFromObservation(answerArgs)).rejects.toThrow(/missing answer string/);
+    const error = await dec.answerFromObservation(answerArgs).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(AgentDecomposerSettledError);
+    expect(error).toMatchObject({
+      message: expect.stringMatching(/missing answer string/),
+      tokensConsumed: 200,
+      usage: {
+        decomposerKind: 'claude',
+        anthropicInputTokens: 120,
+        anthropicOutputTokens: 80,
+      },
+    });
   });
 
   it('rejects invalid usage on the read-back path instead of emitting a bad debit', async () => {

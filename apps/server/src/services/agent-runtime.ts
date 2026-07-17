@@ -11,15 +11,24 @@
 // a real backend. Each can be swapped (Deterministic→Claude;
 // Stub→Wired; InMemory→Drizzle) without changing the runtime.
 
+import { isDeepStrictEqual } from 'node:util';
 import type {
   AgentDecomposer,
   DecomposeResult,
   DecomposeUsage,
   TranscriptEntry,
 } from './agent-decomposer.js';
+import {
+  AgentDecomposerContinuationDeniedError,
+  AgentDecomposerSettledError,
+} from './agent-decomposer.js';
 import type { AgentExecutor, ExecutorRunResult } from './agent-executor.js';
 import { runResultToTranscriptEntry, sanitizeTranscriptText } from './agent-executor.js';
-import type { AgentSessionRecord, AgentSessionsRepo } from './agent-sessions.js';
+import type {
+  AgentSessionAuthoritySnapshot,
+  AgentSessionRecord,
+  AgentSessionsRepo,
+} from './agent-sessions.js';
 import type { AgentSessionEventBus } from './agent-session-event-bus.js';
 import { METRIC_NAMES } from './metrics-registry.js';
 import { screenTaskForRefusal, type RefusalPattern } from './task-refusal.js';
@@ -60,6 +69,84 @@ export interface RunTurnArgs {
    * to signatures via `consequentialSignature`.
    */
   approvedConsequentialActions?: ReadonlySet<string>;
+  /** Route-admitted control lane. Production captures this before any
+   * credential, budget, or provider work so a mode change cannot reinterpret
+   * the same request. Direct/test callers may omit it; the runtime then admits
+   * exactly the current durable lane itself. */
+  admission?: AgentTurnAdmission;
+}
+
+export interface AgentControlAuthoritySnapshot {
+  status: 'active';
+  mode: 'manual' | 'ai' | 'pair';
+  pairModeState: null | { kind: 'ai-driving' };
+  revision: number;
+}
+
+export type AgentTurnAdmission =
+  | { kind: 'manual-transcript'; authority: AgentControlAuthoritySnapshot }
+  | { kind: 'ai-control'; authority: AgentControlAuthoritySnapshot };
+
+function isExactAiDrivingState(value: unknown): value is { kind: 'ai-driving' } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    (value as { kind?: unknown }).kind === 'ai-driving'
+  );
+}
+
+/** Strict executable AI-authority predicate shared by route admission and all
+ * runtime continuation fences. Pair NULL is temporarily accepted because it
+ * is the persisted pre-normalization representation of `ai-driving`. */
+export function agentSessionHasCurrentAiAuthority(
+  session: Pick<AgentSessionRecord, 'status' | 'mode' | 'pairModeState'>,
+): boolean {
+  if (session.status !== 'active') return false;
+  if (session.mode === 'ai') return session.pairModeState === null;
+  if (session.mode !== 'pair') return false;
+  return session.pairModeState === null || isExactAiDrivingState(session.pairModeState);
+}
+
+/** Resolve one active row to exactly one admitted lane. Human-controlled,
+ * pending, queued, and malformed pair states deliberately return null. */
+export function agentTurnAdmissionForSession(
+  session: AgentSessionAuthoritySnapshot,
+): AgentTurnAdmission | null {
+  if (session.status === 'active' && session.mode === 'manual' && session.pairModeState === null) {
+    return {
+      kind: 'manual-transcript',
+      authority: {
+        status: 'active',
+        mode: 'manual',
+        pairModeState: null,
+        revision: session.revision,
+      },
+    };
+  }
+  if (!agentSessionHasCurrentAiAuthority(session)) return null;
+  return {
+    kind: 'ai-control',
+    authority: {
+      status: 'active',
+      mode: session.mode,
+      pairModeState: session.pairModeState === null ? null : { kind: 'ai-driving' },
+      revision: session.revision,
+    },
+  };
+}
+
+export function agentTurnAdmissionMatchesSnapshot(
+  admission: AgentTurnAdmission,
+  session: AgentSessionAuthoritySnapshot,
+): boolean {
+  const current = agentTurnAdmissionForSession(session);
+  return (
+    current !== null &&
+    current.kind === admission.kind &&
+    isDeepStrictEqual(current.authority, admission.authority)
+  );
 }
 
 export type RunTurnResult =
@@ -83,6 +170,11 @@ export type RunTurnResult =
       kind: 'session-closed';
       reason: string;
       session: AgentSessionRecord;
+      /** Work that settled before the terminal lifecycle winner. Preserve it
+       * so callers never infer that a browser action was safe to repeat. */
+      usage?: DecomposeUsage;
+      tokensConsumed?: number;
+      executor?: ExecutorRunResult;
     }
   | {
       /** A turn is already decomposing/executing for this exact session. The
@@ -98,6 +190,25 @@ export type RunTurnResult =
       current: number;
       limit: number;
       session: AgentSessionRecord;
+    }
+  | {
+      /** The row remains active, but this request no longer owns the control
+       * lane it was admitted under. No later model/browser work or normal
+       * transcript publication is allowed. */
+      kind: 'ai-control-unavailable';
+      phase:
+        | 'admission'
+        | 'message-publication'
+        | 'decompose'
+        | 'execution'
+        | 'plan-publication'
+        | 'observation'
+        | 'readback'
+        | 'finalize';
+      session: AgentSessionRecord;
+      usage?: DecomposeUsage;
+      tokensConsumed?: number;
+      executor?: ExecutorRunResult;
     }
   | {
       // Arc 2 sub-slice 8.6 (v2-#8) — manual mode pass-through.
@@ -308,21 +419,59 @@ export class AgentRuntime {
     return (await this.deps.sessions.get(sessionId))?.status === 'active';
   }
 
-  private async appendTranscriptIfActive(
+  private async authorityStillCurrent(
     sessionId: string,
+    admission: AgentTurnAdmission,
+  ): Promise<boolean> {
+    try {
+      const current = await this.deps.sessions.getAuthoritySnapshot(sessionId);
+      return current !== null && agentTurnAdmissionMatchesSnapshot(admission, current);
+    } catch {
+      // Authority storage is a safety dependency. A read failure must stop new
+      // provider/browser work instead of silently treating the lane as valid.
+      return false;
+    }
+  }
+
+  private async interruptedTurnResult(
+    sessionId: string,
+    fallback: AgentSessionRecord,
+    phase: Extract<RunTurnResult, { kind: 'ai-control-unavailable' }>['phase'],
+    evidence: Pick<
+      Extract<RunTurnResult, { kind: 'ai-control-unavailable' }>,
+      'usage' | 'tokensConsumed' | 'executor'
+    > = {},
+  ): Promise<
+    | Extract<RunTurnResult, { kind: 'session-closed' }>
+    | Extract<RunTurnResult, { kind: 'ai-control-unavailable' }>
+  > {
+    let current: AgentSessionRecord;
+    try {
+      current = (await this.deps.sessions.get(sessionId)) ?? fallback;
+    } catch {
+      current = fallback;
+    }
+    if (current.status !== 'active') {
+      return {
+        kind: 'session-closed',
+        reason: current.closedReason ?? `session ${current.status}`,
+        session: current,
+        ...evidence,
+      };
+    }
+    return { kind: 'ai-control-unavailable', phase, session: current, ...evidence };
+  }
+
+  private async appendTranscriptIfAuthorityRevision(
+    sessionId: string,
+    admission: AgentTurnAdmission,
     entry: TranscriptEntry,
   ): Promise<AgentSessionRecord | null> {
-    // The typed production repos implement the atomic active-only primitive.
-    // Keep a checked compatibility path for older hand-built test/dev adapters
-    // that predate it: the second get prevents an already-terminal append, but
-    // is not represented as a distributed-race guarantee. Production Drizzle
-    // never reaches this fallback.
-    const activeOnly = (
-      this.deps.sessions as Partial<Pick<AgentSessionsRepo, 'appendTranscriptIfActive'>>
-    ).appendTranscriptIfActive;
-    if (activeOnly !== undefined) return activeOnly.call(this.deps.sessions, sessionId, entry);
-    if (!(await this.sessionIsActive(sessionId))) return null;
-    return this.deps.sessions.appendTranscript(sessionId, entry);
+    return this.deps.sessions.appendTranscriptIfAuthorityRevision(
+      sessionId,
+      admission.authority.revision,
+      entry,
+    );
   }
 
   private async debitTokensIfActive(
@@ -335,18 +484,6 @@ export class AgentRuntime {
     if (activeOnly !== undefined) return activeOnly.call(this.deps.sessions, sessionId, tokens);
     if (!(await this.sessionIsActive(sessionId))) return null;
     return this.deps.sessions.debitTokens(sessionId, tokens);
-  }
-
-  private async closedTurnResult(
-    sessionId: string,
-    fallback: AgentSessionRecord,
-  ): Promise<Extract<RunTurnResult, { kind: 'session-closed' }>> {
-    const current = (await this.deps.sessions.get(sessionId)) ?? fallback;
-    return {
-      kind: 'session-closed',
-      reason: current.closedReason ?? `session ${current.status}`,
-      session: current,
-    };
   }
 
   /**
@@ -425,6 +562,31 @@ export class AgentRuntime {
       return { kind: 'turn-in-progress', session };
     }
 
+    if (session.status !== 'active') {
+      return {
+        kind: 'session-closed',
+        reason: session.closedReason ?? `session ${session.status}`,
+        session,
+      };
+    }
+    const authority = await this.deps.sessions.getAuthoritySnapshot(args.agentSessionId);
+    const currentAdmission = authority === null ? null : agentTurnAdmissionForSession(authority);
+    const admission = args.admission ?? currentAdmission;
+    if (
+      admission === null ||
+      currentAdmission === null ||
+      admission.kind !== currentAdmission.kind ||
+      !isDeepStrictEqual(admission.authority, currentAdmission.authority)
+    ) {
+      return { kind: 'ai-control-unavailable', phase: 'admission', session };
+    }
+    // The narrow authority read above is an await. Re-elect the per-session
+    // owner after it: two requests can both pass the earlier fast-path check,
+    // but only the first continuation may synchronously add the id below.
+    if (this.activeTurnSessionIds.has(args.agentSessionId)) {
+      return { kind: 'turn-in-progress', session };
+    }
+
     // Bound one owner's aggregate AI work across DISTINCT sessions. The
     // per-session set above prevents stale same-session queues; this account
     // counter prevents alternate session ids / BYOK keys from fanning out into
@@ -433,7 +595,7 @@ export class AgentRuntime {
     // observe a stale count on Node's event loop. Manual mode only appends one
     // transcript entry and never decomposes or dispatches, so it bypasses the
     // expensive-work slot while retaining the per-session lock.
-    const consumesAccountSlot = session.mode !== 'manual';
+    const consumesAccountSlot = admission.kind === 'ai-control';
     const currentForAccount = this.activeTurnAccountCounts.get(session.accountId) ?? 0;
     if (consumesAccountSlot && currentForAccount >= this.maxConcurrentTurnsPerAccount) {
       return {
@@ -452,7 +614,7 @@ export class AgentRuntime {
       // Use the SAME session snapshot that decided slot ownership. Re-fetching
       // here would let a concurrent manual→AI mode change bypass the account
       // slot after the earlier manual-mode check.
-      return await this.runExclusiveTurn(args, session);
+      return await this.runExclusiveTurn(args, session, admission);
     } finally {
       // Covers success, controlled result variants, decomposer failures, and
       // executor/repository throws. A failed turn can never strand the session.
@@ -468,12 +630,13 @@ export class AgentRuntime {
   private async runExclusiveTurn(
     args: RunTurnArgs,
     session: AgentSessionRecord,
+    admission: AgentTurnAdmission,
   ): Promise<RunTurnResult> {
     const at = (args.now ?? new Date()).toISOString();
     if (session.status !== 'active') {
       // Closed/paused sessions return a short-circuit result. The
       // caller (route handler) maps this to a 409 Conflict — the
-      // chat UI prompts the customer to start a new agent session.
+      // chat UI distinguishes resuming a pause from replacing a closed row.
       return {
         kind: 'session-closed',
         reason: session.closedReason ?? `session ${session.status}`,
@@ -488,23 +651,34 @@ export class AgentRuntime {
     // the 2,048-token plan response, capped executor summaries/intents, and the
     // 512-token read-back answer. Same-session turn serialization above makes
     // this preflight exact in the current singleton runtime.
-    const entryReserve = session.mode === 'manual' ? 1 : 3;
+    const entryReserve = admission.kind === 'manual-transcript' ? 1 : 3;
     const messageEntryBytes = Buffer.byteLength(
       JSON.stringify({
         at,
-        role: session.mode === 'manual' ? 'operator' : 'user',
+        role: admission.kind === 'manual-transcript' ? 'operator' : 'user',
         body: args.userMessage,
       }),
       'utf8',
     );
     const serializedBytes = Buffer.byteLength(JSON.stringify(session.transcript), 'utf8');
     const byteReserve =
-      messageEntryBytes + (session.mode === 'manual' ? 0 : AGENT_TURN_OUTPUT_RESERVE_BYTES);
+      messageEntryBytes +
+      (admission.kind === 'manual-transcript' ? 0 : AGENT_TURN_OUTPUT_RESERVE_BYTES);
     if (
       session.transcript.length + entryReserve > AGENT_TRANSCRIPT_MAX_ENTRIES ||
       serializedBytes + byteReserve > AGENT_TRANSCRIPT_MAX_SERIALIZED_BYTES
     ) {
-      const closed = await this.deps.sessions.closeWithReason(session.id, 'transcript-limit');
+      if (!(await this.authorityStillCurrent(session.id, admission))) {
+        return this.interruptedTurnResult(session.id, session, 'message-publication');
+      }
+      const closed = await this.deps.sessions.closeWithReasonIfAuthorityRevision(
+        session.id,
+        admission.authority.revision,
+        'transcript-limit',
+      );
+      if (closed === null) {
+        return this.interruptedTurnResult(session.id, session, 'message-publication');
+      }
       return { kind: 'session-closed', reason: 'transcript-limit', session: closed };
     }
 
@@ -513,14 +687,26 @@ export class AgentRuntime {
     // (no decompose / executor / token debit; the gui-client drives
     // intents directly via the gui_control plane). Returns a distinct
     // result kind so the route maps to a 200 'logged' response.
-    if (session.mode === 'manual') {
+    if (admission.kind === 'manual-transcript') {
+      if (!(await this.authorityStillCurrent(session.id, admission))) {
+        return this.interruptedTurnResult(session.id, session, 'message-publication');
+      }
       const operatorEntry = {
         at,
         role: 'operator' as const,
         body: args.userMessage,
       };
-      const updated = await this.appendTranscriptIfActive(session.id, operatorEntry);
-      if (updated === null) return this.closedTurnResult(session.id, session);
+      const updated = await this.appendTranscriptIfAuthorityRevision(
+        session.id,
+        admission,
+        operatorEntry,
+      );
+      if (updated === null) {
+        return this.interruptedTurnResult(session.id, session, 'message-publication');
+      }
+      if (!(await this.authorityStillCurrent(session.id, admission))) {
+        return this.interruptedTurnResult(session.id, updated, 'message-publication');
+      }
       this.deps.eventBus?.publish({
         agentSessionId: session.id,
         index: updated.transcript.length - 1,
@@ -536,11 +722,23 @@ export class AgentRuntime {
       role: 'user' as const,
       body: args.userMessage,
     };
+    if (!(await this.authorityStillCurrent(session.id, admission))) {
+      return this.interruptedTurnResult(session.id, session, 'message-publication');
+    }
     // Use the append's row-locked return as the exact history snapshot for this
     // turn. A separate get can observe a later concurrent append, mis-attribute
     // the SSE index, and bind an approval to the wrong user turn.
-    const sessionWithUser = await this.appendTranscriptIfActive(session.id, userEntry);
-    if (sessionWithUser === null) return this.closedTurnResult(session.id, session);
+    const sessionWithUser = await this.appendTranscriptIfAuthorityRevision(
+      session.id,
+      admission,
+      userEntry,
+    );
+    if (sessionWithUser === null) {
+      return this.interruptedTurnResult(session.id, session, 'message-publication');
+    }
+    if (!(await this.authorityStillCurrent(session.id, admission))) {
+      return this.interruptedTurnResult(session.id, sessionWithUser, 'message-publication');
+    }
     // Arc 2 sub-slice 8.3 (v2-#8) — publish the user-turn entry to
     // the SSE event bus. Index = length-1 of the post-append
     // transcript so subscribers can resume via Last-Event-ID.
@@ -579,6 +777,7 @@ export class AgentRuntime {
     // forward caller-supplied preapprovals into a fresh decomposition.
     const verifiedConsequentialApprovals =
       resumePlan !== null ? args.approvedConsequentialActions : undefined;
+    const authorityMayContinue = () => this.authorityStillCurrent(session.id, admission);
     let decomposed: DecomposeResult;
     if (resumePlan !== null) {
       decomposed = resumePlan;
@@ -613,8 +812,55 @@ export class AgentRuntime {
           // Anthropic call + the per-model cost-to-serve rate.
           model: sessionWithUser.model,
           ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
+          shouldContinue: authorityMayContinue,
         });
       } catch (err) {
+        if (err instanceof AgentDecomposerContinuationDeniedError) {
+          return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose');
+        }
+        if (err instanceof AgentDecomposerSettledError) {
+          // The strict result codec rejected the provider content, but the
+          // envelope carried validated usage. Preserve real spend/budget
+          // accounting before surfacing the fatal protocol error (or an
+          // authority conflict if the admitted controller changed meanwhile).
+          if (this.deps.usageRecorder !== undefined) {
+            await this.recordUsageRowWithRetry(
+              this.deps.usageRecorder,
+              {
+                accountId: session.accountId,
+                driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+                agentSessionId: session.id,
+                decomposeResultKind: 'refuse',
+                usage: err.usage,
+                tokensConsumed: err.tokensConsumed,
+                now: args.now ?? new Date(),
+                ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+              },
+              { accountId: session.accountId, agentSessionId: session.id, label: 'decompose' },
+            );
+          }
+          if (err.tokensConsumed > 0) {
+            try {
+              await this.debitTokensIfActive(session.id, err.tokensConsumed);
+            } catch {
+              /* debit best-effort — settled spend is already recorded above */
+            }
+          }
+          if (!(await this.authorityStillCurrent(session.id, admission))) {
+            return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose', {
+              usage: err.usage,
+              ...(err.tokensConsumed > 0 ? { tokensConsumed: err.tokensConsumed } : {}),
+            });
+          }
+          throw err;
+        }
+        // A provider can settle with a fatal protocol/credential error after
+        // the admitted controller has already been replaced. Authority loss
+        // wins that race: the successor must see the typed 409 contract, not
+        // an unrelated 5xx from work owned by the stale controller.
+        if (!(await this.authorityStillCurrent(session.id, admission))) {
+          return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose');
+        }
         if (classifyDecomposerError(err) === 'fatal') {
           throw err;
         }
@@ -674,19 +920,44 @@ export class AgentRuntime {
     // flight, so account for the upstream call above, then re-read the durable
     // lifecycle before ANY debit, result append, SSE or browser execution.
     // Every later mutation is independently active-only as a second fence.
-    const activeAfterDecompose = await this.deps.sessions.get(session.id);
-    if (activeAfterDecompose === null || activeAfterDecompose.status !== 'active') {
-      return this.closedTurnResult(session.id, activeAfterDecompose ?? sessionWithUser);
+    if (!(await this.authorityStillCurrent(session.id, admission))) {
+      // The provider response is already consumed. Preserve its usage record
+      // above and debit it while the row remains active, but do not publish a
+      // model result or begin browser work under a superseded control lane.
+      if (decomposed.tokensConsumed > 0) {
+        try {
+          await this.debitTokensIfActive(session.id, decomposed.tokensConsumed);
+        } catch {
+          // Accounting failure is observable through its storage alerting, but
+          // cannot let stale-controller work replace the required authority 409.
+        }
+      }
+      return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose', {
+        ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+        ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+      });
     }
 
     // Always debit the decomposer's tokens (even on refuse — the input was
     // processed), but never mutate accounting after a terminal winner.
     // Budget-exhausted refusals charge 0 per the AgentDecomposer contract.
-    let postDebitSession = activeAfterDecompose;
+    let postDebitSession = sessionWithUser;
     if (decomposed.tokensConsumed > 0) {
       const debited = await this.debitTokensIfActive(session.id, decomposed.tokensConsumed);
-      if (debited === null) return this.closedTurnResult(session.id, activeAfterDecompose);
+      if (debited === null) {
+        return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose', {
+          ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+          tokensConsumed: decomposed.tokensConsumed,
+        });
+      }
       postDebitSession = debited;
+    }
+
+    if (!(await this.authorityStillCurrent(session.id, admission))) {
+      return this.interruptedTurnResult(session.id, postDebitSession, 'decompose', {
+        ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+        ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+      });
     }
 
     // Q.3 — atomic session close on budget exhaustion. Two paths trip:
@@ -704,11 +975,23 @@ export class AgentRuntime {
       decomposed.refuseReason === 'token budget exhausted; start a new session';
     const debitZeroedBudget = postDebitSession.tokenBudgetRemaining === 0;
     if (isBudgetExhaustedRefusal || debitZeroedBudget) {
-      const closed = await this.deps.sessions.closeWithReason(session.id, 'budget-exhausted');
+      const closed = await this.deps.sessions.closeWithReasonIfAuthorityRevision(
+        session.id,
+        admission.authority.revision,
+        'budget-exhausted',
+      );
+      if (closed === null) {
+        return this.interruptedTurnResult(session.id, postDebitSession, 'decompose', {
+          ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+          ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        });
+      }
       return {
         kind: 'session-closed',
         reason: closed.closedReason ?? 'budget-exhausted',
         session: closed,
+        ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+        ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
       };
     }
 
@@ -718,8 +1001,23 @@ export class AgentRuntime {
         role: 'agent' as const,
         body: `refused: ${decomposed.refuseReason}`,
       };
-      const updated = await this.appendTranscriptIfActive(session.id, refuseEntry);
-      if (updated === null) return this.closedTurnResult(session.id, postDebitSession);
+      const updated = await this.appendTranscriptIfAuthorityRevision(
+        session.id,
+        admission,
+        refuseEntry,
+      );
+      if (updated === null) {
+        return this.interruptedTurnResult(session.id, postDebitSession, 'plan-publication', {
+          ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+          ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        });
+      }
+      if (!(await this.authorityStillCurrent(session.id, admission))) {
+        return this.interruptedTurnResult(session.id, updated, 'plan-publication', {
+          ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+          ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        });
+      }
       this.deps.eventBus?.publish({
         agentSessionId: session.id,
         index: updated.transcript.length - 1,
@@ -734,8 +1032,23 @@ export class AgentRuntime {
         role: 'agent' as const,
         body: `clarify: ${decomposed.clarifyingQuestion}`,
       };
-      const updated = await this.appendTranscriptIfActive(session.id, clarifyEntry);
-      if (updated === null) return this.closedTurnResult(session.id, postDebitSession);
+      const updated = await this.appendTranscriptIfAuthorityRevision(
+        session.id,
+        admission,
+        clarifyEntry,
+      );
+      if (updated === null) {
+        return this.interruptedTurnResult(session.id, postDebitSession, 'plan-publication', {
+          ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+          ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        });
+      }
+      if (!(await this.authorityStillCurrent(session.id, admission))) {
+        return this.interruptedTurnResult(session.id, updated, 'plan-publication', {
+          ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+          ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        });
+      }
       this.deps.eventBus?.publish({
         agentSessionId: session.id,
         index: updated.transcript.length - 1,
@@ -762,11 +1075,22 @@ export class AgentRuntime {
       // owning node; the legacy driver-path executor keeps using `sessionId`.
       agentSessionId: session.id,
       plan: decomposed,
-      shouldContinue: () => this.sessionIsActive(session.id),
+      shouldContinue: authorityMayContinue,
       ...(verifiedConsequentialApprovals !== undefined
         ? { approvedConsequentialActions: verifiedConsequentialApprovals }
         : {}),
     });
+
+    if (
+      executorResult.authorityLost === true ||
+      !(await this.authorityStillCurrent(session.id, admission))
+    ) {
+      return this.interruptedTurnResult(session.id, postDebitSession, 'execution', {
+        ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+        ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        executor: executorResult,
+      });
+    }
 
     // Q.5.c — persist the plan's structured intents on the
     // transcript entry so recipes can assemble a non-empty
@@ -789,8 +1113,25 @@ export class AgentRuntime {
       intents: decomposed.intents,
       ...(resumeFromIntentIndex !== undefined ? { resumeFromIntentIndex } : {}),
     };
-    const updated = await this.appendTranscriptIfActive(session.id, planEntry);
-    if (updated === null) return this.closedTurnResult(session.id, postDebitSession);
+    const updated = await this.appendTranscriptIfAuthorityRevision(
+      session.id,
+      admission,
+      planEntry,
+    );
+    if (updated === null) {
+      return this.interruptedTurnResult(session.id, postDebitSession, 'plan-publication', {
+        ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+        ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        executor: executorResult,
+      });
+    }
+    if (!(await this.authorityStillCurrent(session.id, admission))) {
+      return this.interruptedTurnResult(session.id, updated, 'plan-publication', {
+        ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+        ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        executor: executorResult,
+      });
+    }
     this.deps.eventBus?.publish({
       agentSessionId: session.id,
       index: updated.transcript.length - 1,
@@ -807,11 +1148,13 @@ export class AgentRuntime {
     // text is framed UNTRUSTED inside answerFromObservation and NEVER enters the
     // transcript — only the model's own answer does (correctly agent-framed).
     let sessionAfter = updated;
+    let latestReadbackEvidence:
+      { usage?: DecomposeUsage; tokensConsumed?: number; executor: ExecutorRunResult } | undefined;
     const observe = this.deps.executor.observe?.bind(this.deps.executor);
     const answerFromObservation = this.deps.decomposer.answerFromObservation?.bind(
       this.deps.decomposer,
     );
-    const mayReadBack = await this.sessionIsActive(session.id);
+    const mayReadBack = await this.authorityStillCurrent(session.id, admission);
     if (
       executorResult.ok &&
       mayReadBack &&
@@ -823,18 +1166,62 @@ export class AgentRuntime {
       READ_INTENT_RE.test(args.userMessage)
     ) {
       try {
-        const observation = await observe(session.id);
+        const observation = await observe(session.id, authorityMayContinue);
+        if (!(await this.authorityStillCurrent(session.id, admission))) {
+          return this.interruptedTurnResult(session.id, sessionAfter, 'observation', {
+            ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+            ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+            executor: executorResult,
+          });
+        }
         if (observation !== null && observation.trim().length > 0) {
-          if (!(await this.sessionIsActive(session.id))) {
-            return this.closedTurnResult(session.id, sessionAfter);
-          }
           const answer = await answerFromObservation({
             task: args.userMessage,
             observation,
             budgetTokensRemaining: sessionAfter.tokenBudgetRemaining,
             byokAnthropicApiKey: args.byokApiKey,
             model: sessionAfter.model,
+            shouldContinue: authorityMayContinue,
           });
+          latestReadbackEvidence = {
+            ...(answer.usage !== undefined ? { usage: answer.usage } : {}),
+            ...(answer.tokensConsumed > 0 ? { tokensConsumed: answer.tokensConsumed } : {}),
+            executor: executorResult,
+          };
+          // The provider has settled. Account that work exactly once whether
+          // the optional answer is published, sanitized to empty, fenced by a
+          // new controller, or suppressed by a transcript-storage failure.
+          if (this.deps.usageRecorder !== undefined && answer.usage !== undefined) {
+            await this.recordUsageRowWithRetry(
+              this.deps.usageRecorder,
+              {
+                accountId: session.accountId,
+                driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+                agentSessionId: session.id,
+                decomposeResultKind: 'plan',
+                usage: answer.usage,
+                tokensConsumed: answer.tokensConsumed,
+                now: args.now ?? new Date(),
+                ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+              },
+              { accountId: session.accountId, agentSessionId: session.id, label: 'readback' },
+            );
+          }
+          if (answer.tokensConsumed > 0) {
+            try {
+              const debited = await this.debitTokensIfActive(session.id, answer.tokensConsumed);
+              if (debited !== null) sessionAfter = debited;
+            } catch {
+              /* debit best-effort — the spend is already recorded above */
+            }
+          }
+          if (!(await this.authorityStillCurrent(session.id, admission))) {
+            return this.interruptedTurnResult(session.id, sessionAfter, 'readback', {
+              ...(answer.usage !== undefined ? { usage: answer.usage } : {}),
+              ...(answer.tokensConsumed > 0 ? { tokensConsumed: answer.tokensConsumed } : {}),
+              executor: executorResult,
+            });
+          }
           // The observed page text is UNTRUSTED and the answer is a MODEL PARAPHRASE
           // of it, so sanitize before it lands as history the next turn reads: strip
           // C0/C1 control chars (no forged transcript lines — the answer becomes a
@@ -842,63 +1229,103 @@ export class AgentRuntime {
           // the sibling executor-summary path uses (post-ship audit finding).
           const answerBody = sanitizeTranscriptText(answer.answer);
           if (answerBody.length > 0) {
-            // Ordering matters (post-ship audit): APPEND FIRST — the customer must
-            // SEE the answer before we bill it. If the append throws (rare DB error)
-            // the outer catch makes the read-back a no-op → no charge for an unseen
-            // answer. Only after it's durably stored do we RECORD the spend (soft-cap
-            // input) + DEBIT the budget, EACH best-effort so neither skips the other.
+            // Publish before exposing the answer, but always account for provider
+            // work that already settled. A DB throw suppresses the optional
+            // read-back response; it cannot erase real upstream spend from the
+            // monthly soft-cap or token budget.
             const answerEntry = { at, role: 'agent' as const, body: answerBody };
-            const appendedAnswer = await this.appendTranscriptIfActive(session.id, answerEntry);
+            const appendedAnswer = await this.appendTranscriptIfAuthorityRevision(
+              session.id,
+              admission,
+              answerEntry,
+            );
             if (appendedAnswer === null) {
-              return this.closedTurnResult(session.id, sessionAfter);
+              // The model answer was consumed even though the revision guard
+              // correctly suppressed its publication. Settlement was already
+              // accounted above; expose nothing under the successor controller.
+              return this.interruptedTurnResult(session.id, sessionAfter, 'readback', {
+                ...(answer.usage !== undefined ? { usage: answer.usage } : {}),
+                ...(answer.tokensConsumed > 0 ? { tokensConsumed: answer.tokensConsumed } : {}),
+                executor: executorResult,
+              });
             }
             sessionAfter = appendedAnswer;
+            if (!(await this.authorityStillCurrent(session.id, admission))) {
+              return this.interruptedTurnResult(session.id, sessionAfter, 'readback', {
+                ...(answer.usage !== undefined ? { usage: answer.usage } : {}),
+                ...(answer.tokensConsumed > 0 ? { tokensConsumed: answer.tokensConsumed } : {}),
+                executor: executorResult,
+              });
+            }
             this.deps.eventBus?.publish({
               agentSessionId: session.id,
               index: sessionAfter.transcript.length - 1,
               entry: answerEntry,
             });
-            if (this.deps.usageRecorder !== undefined && answer.usage !== undefined) {
-              // Same retry + loud-log discipline as the decompose row (audit #9):
-              // this read-back row is ALSO a real bundled-LLM cost that feeds the
-              // monthly soft-cap, so a silent single-shot drop would undercount the
-              // cap with no alert. recordUsageRowWithRetry never throws.
-              await this.recordUsageRowWithRetry(
-                this.deps.usageRecorder,
-                {
-                  accountId: session.accountId,
-                  driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
-                  agentSessionId: session.id,
-                  decomposeResultKind: 'plan',
-                  usage: answer.usage,
-                  tokensConsumed: answer.tokensConsumed,
-                  now: args.now ?? new Date(),
-                  ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
-                },
-                { accountId: session.accountId, agentSessionId: session.id, label: 'readback' },
-              );
-            }
-            if (answer.tokensConsumed > 0) {
-              try {
-                const debited = await this.debitTokensIfActive(session.id, answer.tokensConsumed);
-                if (debited === null) return this.closedTurnResult(session.id, sessionAfter);
-                sessionAfter = debited;
-              } catch {
-                /* debit best-effort — the spend is already recorded above */
-              }
-            }
           }
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof AgentDecomposerContinuationDeniedError) {
+          return this.interruptedTurnResult(session.id, sessionAfter, 'readback', {
+            ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+            ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+            executor: executorResult,
+          });
+        }
+        if (error instanceof AgentDecomposerSettledError) {
+          latestReadbackEvidence = {
+            usage: error.usage,
+            ...(error.tokensConsumed > 0 ? { tokensConsumed: error.tokensConsumed } : {}),
+            executor: executorResult,
+          };
+          if (this.deps.usageRecorder !== undefined) {
+            await this.recordUsageRowWithRetry(
+              this.deps.usageRecorder,
+              {
+                accountId: session.accountId,
+                driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+                agentSessionId: session.id,
+                decomposeResultKind: 'plan',
+                usage: error.usage,
+                tokensConsumed: error.tokensConsumed,
+                now: args.now ?? new Date(),
+                ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+              },
+              { accountId: session.accountId, agentSessionId: session.id, label: 'readback' },
+            );
+          }
+          if (error.tokensConsumed > 0) {
+            try {
+              const debited = await this.debitTokensIfActive(session.id, error.tokensConsumed);
+              if (debited !== null) sessionAfter = debited;
+            } catch {
+              /* debit best-effort — settled spend is already recorded above */
+            }
+          }
+          if (!(await this.authorityStillCurrent(session.id, admission))) {
+            return this.interruptedTurnResult(session.id, sessionAfter, 'readback', {
+              usage: error.usage,
+              ...(error.tokensConsumed > 0 ? { tokensConsumed: error.tokensConsumed } : {}),
+              executor: executorResult,
+            });
+          }
+        }
         // Read-back is additive — never fail the turn on it.
       }
     }
 
-    const authoritative = await this.deps.sessions.get(session.id);
-    if (authoritative === null || authoritative.status !== 'active') {
-      return this.closedTurnResult(session.id, authoritative ?? sessionAfter);
+    if (!(await this.authorityStillCurrent(session.id, admission))) {
+      return this.interruptedTurnResult(
+        session.id,
+        sessionAfter,
+        'finalize',
+        latestReadbackEvidence ?? {
+          ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+          ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+          executor: executorResult,
+        },
+      );
     }
-    sessionAfter = authoritative;
 
     return {
       kind: 'plan-executed',
@@ -941,7 +1368,7 @@ export function classifyDecomposerError(err: unknown): 'transient' | 'fatal' {
   if (/Anthropic API 4\d\d/.test(msg)) return 'fatal';
   // Malformed Anthropic response → fatal
   if (
-    /missing text content|not valid JSON|not a JSON object|response (?:envelope|content|usage|field .+ exceeded \d+ characters)|unknown kind:|intents (?:was not an array|exceeded \d+ entries)|missing clarifyingQuestion|missing refuseReason|response body exceeded \d+ bytes/i.test(
+    /missing text content|not valid JSON|not a JSON object|response (?:envelope|content|usage|field .+ exceeded \d+ characters)|unknown result kind|intents (?:was not an array|exceeded \d+ entries)|missing clarifyingQuestion|missing refuseReason|response body exceeded \d+ bytes/i.test(
       msg,
     )
   ) {

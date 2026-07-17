@@ -57,6 +57,36 @@ beforeAll(async () => {
   await admin.unsafe(
     `CREATE TABLE "${TEST_SCHEMA}".agent_sessions (LIKE public.agent_sessions INCLUDING ALL)`,
   );
+  // LIKE INCLUDING ALL does not copy triggers. Install the exact 0107 trigger
+  // in this isolated schema so the real-Postgres tests exercise the production
+  // authority epoch rather than a test-only repository approximation. The
+  // IF-NOT-EXISTS column keeps this runnable against a pre-migration local DB;
+  // CI's migrated public template already contributes the same column.
+  await admin.unsafe(`
+    ALTER TABLE "${TEST_SCHEMA}".agent_sessions
+      ADD COLUMN IF NOT EXISTS authority_revision bigint NOT NULL DEFAULT 0
+  `);
+  await admin.unsafe(`
+    CREATE FUNCTION "${TEST_SCHEMA}".agent_sessions_bump_authority_revision()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+      IF OLD.status IS DISTINCT FROM NEW.status
+         OR OLD.mode IS DISTINCT FROM NEW.mode
+         OR OLD.pair_mode_state IS DISTINCT FROM NEW.pair_mode_state THEN
+        NEW.authority_revision := OLD.authority_revision + 1;
+      ELSE
+        NEW.authority_revision := OLD.authority_revision;
+      END IF;
+      RETURN NEW;
+    END;
+    $$;
+    CREATE TRIGGER agent_sessions_authority_revision_trigger
+    BEFORE UPDATE ON "${TEST_SCHEMA}".agent_sessions
+    FOR EACH ROW
+    EXECUTE FUNCTION "${TEST_SCHEMA}".agent_sessions_bump_authority_revision();
+  `);
   // max: 5 so concurrent transactions get distinct connections — the
   // FOR-UPDATE row lock, not connection serialisation, is what's exercised.
   client = postgres(DB_URL, {
@@ -229,6 +259,103 @@ describe.skipIf(!RUN_DB_TESTS)(
         repo.compareAndSetPairModeState(session.id, human, { kind: 'ai-driving' }),
       ).resolves.toBeNull();
       expect(await repo.get(session.id)).toMatchObject({ mode: 'manual', pairModeState: null });
+    });
+
+    it('authority epoch closes real PostgreSQL value-ABA, guarded-publication, and stale-close races', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-authority-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+      expect(await repo.getAuthoritySnapshot(session.id)).toEqual({
+        status: 'active',
+        mode: 'ai',
+        pairModeState: null,
+        revision: 0,
+      });
+
+      let releaseTransition!: () => void;
+      const transitionBlocker = new Promise<void>((resolve) => {
+        releaseTransition = resolve;
+      });
+      let markTransitionLocked!: () => void;
+      const transitionLocked = new Promise<void>((resolve) => {
+        markTransitionLocked = resolve;
+      });
+      const transition = client.begin(async (tx) => {
+        await tx`
+          UPDATE agent_sessions
+             SET mode = 'manual', pair_mode_state = NULL, updated_at = now()
+           WHERE id = ${session.id}
+        `;
+        markTransitionLocked();
+        await transitionBlocker;
+      });
+
+      await transitionLocked;
+      const staleAppend = repo.appendTranscriptIfAuthorityRevision(session.id, 0, {
+        at: 'stale',
+        role: 'agent',
+        body: 'must lose after the transition lock commits',
+      });
+      releaseTransition();
+      await transition;
+      await expect(staleAppend).resolves.toBeNull();
+      expect((await repo.getAuthoritySnapshot(session.id))?.revision).toBe(1);
+
+      // Return the visible tuple to its original value. The old revision still
+      // cannot append or close: this is the concrete A→B→A regression.
+      await client`
+        UPDATE agent_sessions
+           SET mode = 'ai', pair_mode_state = NULL, updated_at = now()
+         WHERE id = ${session.id}
+      `;
+      expect(await repo.getAuthoritySnapshot(session.id)).toEqual({
+        status: 'active',
+        mode: 'ai',
+        pairModeState: null,
+        revision: 2,
+      });
+      await expect(
+        repo.appendTranscriptIfAuthorityRevision(session.id, 0, {
+          at: 'aba-stale',
+          role: 'agent',
+          body: 'must not land',
+        }),
+      ).resolves.toBeNull();
+      await expect(
+        repo.closeWithReasonIfAuthorityRevision(session.id, 0, 'stale-close'),
+      ).resolves.toBeNull();
+
+      // Unrelated and semantic no-op writes preserve the epoch; even a direct
+      // attempt to forge the internal revision is overwritten by the trigger.
+      await repo.debitTokensIfActive(session.id, 10);
+      await repo.setNodeId(session.id, 'node-a');
+      await repo.setMode(session.id, 'ai', null);
+      await client`
+        UPDATE agent_sessions SET authority_revision = 999 WHERE id = ${session.id}
+      `;
+      expect((await repo.getAuthoritySnapshot(session.id))?.revision).toBe(2);
+
+      const appended = await repo.appendTranscriptIfAuthorityRevision(session.id, 2, {
+        at: 'current',
+        role: 'agent',
+        body: 'current owner lands',
+      });
+      expect(appended?.transcript.map((entry) => entry.body)).toEqual(['current owner lands']);
+      const closed = await repo.closeWithReasonIfAuthorityRevision(
+        session.id,
+        2,
+        'current-owner-close',
+      );
+      expect(closed).toMatchObject({ status: 'closed', closedReason: 'current-owner-close' });
+      expect((await repo.getAuthoritySnapshot(session.id))?.revision).toBe(3);
     });
 
     // Audit fix 2026-07-01 — closeWithReason TOCTOU race. Before the fix it was

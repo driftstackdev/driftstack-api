@@ -5,11 +5,13 @@
 // session-closed (short-circuit on non-active sessions). Token
 // debit + transcript-append side effects verified.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   AGENT_TRANSCRIPT_MAX_ENTRIES,
   AGENT_TRANSCRIPT_MAX_SERIALIZED_BYTES,
   AgentRuntime,
+  agentSessionHasCurrentAiAuthority,
+  agentTurnAdmissionForSession,
   classifyDecomposerError,
 } from '../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../src/services/agent-decomposer-deterministic.js';
@@ -23,7 +25,11 @@ import {
   AgentSessionEventBus,
   type AgentSessionTranscriptEvent,
 } from '../../src/services/agent-session-event-bus.js';
-import type { AgentIntent, DecomposeArgs } from '../../src/services/agent-decomposer.js';
+import {
+  AgentDecomposerSettledError,
+  type AgentIntent,
+  type DecomposeArgs,
+} from '../../src/services/agent-decomposer.js';
 
 function fixedNow(iso: string): Date {
   return new Date(iso);
@@ -43,6 +49,132 @@ async function makeRuntime() {
   });
   return { runtime, sessions, seedId: seed.id };
 }
+
+describe('AgentRuntime control-authority admission', () => {
+  const active = {
+    status: 'active' as const,
+    mode: 'ai' as const,
+    pairModeState: null,
+  };
+
+  it('admits only exact AI authority while preserving legacy pair NULL compatibility', () => {
+    expect(agentSessionHasCurrentAiAuthority(active)).toBe(true);
+    expect(
+      agentSessionHasCurrentAiAuthority({ ...active, mode: 'pair', pairModeState: null }),
+    ).toBe(true);
+    expect(
+      agentSessionHasCurrentAiAuthority({
+        ...active,
+        mode: 'pair',
+        pairModeState: { kind: 'ai-driving' },
+      }),
+    ).toBe(true);
+
+    for (const candidate of [
+      { ...active, mode: 'manual' as const },
+      { ...active, mode: 'ai' as const, pairModeState: { kind: 'ai-driving' } },
+      {
+        ...active,
+        mode: 'pair' as const,
+        pairModeState: { kind: 'ai-driving', unexpected: true },
+      },
+      {
+        ...active,
+        mode: 'pair' as const,
+        pairModeState: {
+          kind: 'takeover-pending',
+          requestedByClientId: 'client-a',
+          requestedAt: '2026-07-17T00:00:00Z',
+        },
+      },
+      {
+        ...active,
+        mode: 'pair' as const,
+        pairModeState: {
+          kind: 'human-driving',
+          clientId: 'client-a',
+          sinceAt: '2026-07-17T00:00:00Z',
+        },
+      },
+      { ...active, status: 'paused' as const },
+      { ...active, status: 'closed' as const },
+    ]) {
+      expect(agentSessionHasCurrentAiAuthority(candidate)).toBe(false);
+    }
+  });
+
+  it('does not reinterpret a manual-admitted request as AI after a mode change', async () => {
+    let decomposeCalls = 0;
+    const sessions = new InMemoryAgentSessionsRepo();
+    const session = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 10_000,
+      mode: 'manual',
+    });
+    const authority = await sessions.getAuthoritySnapshot(session.id);
+    if (authority === null) throw new Error('authority snapshot expected');
+    const admission = agentTurnAdmissionForSession(authority);
+    if (admission?.kind !== 'manual-transcript') throw new Error('manual admission expected');
+    await sessions.setMode(session.id, 'ai', null);
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () => {
+          decomposeCalls += 1;
+          return Promise.resolve({
+            kind: 'clarify' as const,
+            clarifyingQuestion: '?',
+            tokensConsumed: 1,
+          });
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const result = await runtime.runTurn({
+      agentSessionId: session.id,
+      userMessage: 'must stay a manual note',
+      admission,
+    });
+    expect(result.kind).toBe('ai-control-unavailable');
+    expect(decomposeCalls).toBe(0);
+    expect((await sessions.get(session.id))?.transcript).toEqual([]);
+  });
+
+  it('does not reinterpret an AI-admitted request as a manual transcript after takeover', async () => {
+    let decomposeCalls = 0;
+    const sessions = new InMemoryAgentSessionsRepo();
+    const session = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 10_000 });
+    const authority = await sessions.getAuthoritySnapshot(session.id);
+    if (authority === null) throw new Error('authority snapshot expected');
+    const admission = agentTurnAdmissionForSession(authority);
+    if (admission?.kind !== 'ai-control') throw new Error('AI admission expected');
+    await sessions.setMode(session.id, 'manual', null);
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () => {
+          decomposeCalls += 1;
+          return Promise.resolve({
+            kind: 'clarify' as const,
+            clarifyingQuestion: '?',
+            tokensConsumed: 1,
+          });
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const result = await runtime.runTurn({
+      agentSessionId: session.id,
+      userMessage: 'must not become an operator note',
+      admission,
+    });
+    expect(result.kind).toBe('ai-control-unavailable');
+    expect(decomposeCalls).toBe(0);
+    expect((await sessions.get(session.id))?.transcript).toEqual([]);
+  });
+});
 
 describe('AI-COMPOSE AgentRuntime.runTurn', () => {
   it('plan path: decompose → execute → transcript has user turn + agent run-result. Q.5.c: the agent turn ALSO carries the structured plan.intents on the optional `intents` field so recipes can assemble a replayable intent_log without re-running the decomposer.', async () => {
@@ -226,6 +358,402 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     const body = final?.transcript[2]?.body ?? '';
     expect(body).not.toContain('\n'); // newline stripped — single line, no forged entry
     expect(body).toContain('Your IP is 203.0.113.7 (plan approved'); // collapsed to a space
+  });
+
+  it('#140 read-and-report: authority loss after the answer call records/debits usage but suppresses the answer', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const answerStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const base = new DeterministicAgentDecomposer();
+    const stub = new StubAgentExecutor();
+    const usageRows: unknown[] = [];
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: (args) => base.decompose(args),
+        answerFromObservation: async () => {
+          started();
+          await held;
+          return {
+            answer: 'Your IP is 203.0.113.7.',
+            tokensConsumed: 40,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 30,
+              anthropicOutputTokens: 10,
+              costUsdCents: 1,
+              model: 'claude-opus-4-8',
+            },
+          };
+        },
+      },
+      executor: {
+        execute: (args) => stub.execute(args),
+        observe: () => Promise.resolve('Your IP: 203.0.113.7'),
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const turn = runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+    await answerStarted;
+    const remainingBeforeAnswer = (await sessions.get(seed.id))?.tokenBudgetRemaining;
+    await sessions.setModeIfActive(seed.id, 'manual', null);
+    release();
+    const result = await turn;
+
+    expect(result).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'readback',
+      tokensConsumed: 40,
+    });
+    expect(usageRows).toHaveLength(2);
+    expect(usageRows.at(-1)).toMatchObject({ tokensConsumed: 40 });
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(
+      (remainingBeforeAnswer ?? 0) - 40,
+    );
+    expect((await sessions.get(seed.id))?.transcript).toHaveLength(2);
+  });
+
+  it('#140 read-and-report: malformed settled answer retains usage across authority ABA', async () => {
+    let rejectAnswer!: (error: Error) => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const base = new DeterministicAgentDecomposer();
+    const stub = new StubAgentExecutor();
+    const usageRows: unknown[] = [];
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: (args) => base.decompose(args),
+        answerFromObservation: () =>
+          new Promise<never>((_resolve, reject) => {
+            rejectAnswer = reject;
+            markStarted();
+          }),
+      },
+      executor: {
+        execute: (args) => stub.execute(args),
+        observe: () => Promise.resolve('Your IP: 203.0.113.7'),
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const turn = runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+    await started;
+    const remainingBeforeAnswer = (await sessions.get(seed.id))?.tokenBudgetRemaining;
+    await sessions.setModeIfActive(seed.id, 'manual', null);
+    await sessions.setModeIfActive(seed.id, 'ai', null);
+    rejectAnswer(
+      new AgentDecomposerSettledError('Anthropic answer response missing answer string', {
+        tokensConsumed: 40,
+        usage: {
+          decomposerKind: 'claude',
+          anthropicInputTokens: 30,
+          anthropicOutputTokens: 10,
+          costUsdCents: 1,
+          model: 'claude-opus-4-8',
+        },
+      }),
+    );
+    const result = await turn;
+
+    expect(result).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'readback',
+      tokensConsumed: 40,
+      usage: { anthropicInputTokens: 30, anthropicOutputTokens: 10 },
+    });
+    expect(usageRows).toHaveLength(2);
+    expect(usageRows.at(-1)).toMatchObject({ tokensConsumed: 40 });
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(
+      (remainingBeforeAnswer ?? 0) - 40,
+    );
+    expect((await sessions.get(seed.id))?.transcript).toHaveLength(2);
+  });
+
+  it('#140 read-and-report: guarded answer-append authority loss still records/debits usage without publication', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const base = new DeterministicAgentDecomposer();
+    const stub = new StubAgentExecutor();
+    const usageRows: unknown[] = [];
+    let remainingAfterSettlement: number | undefined;
+    const realAppend = sessions.appendTranscriptIfAuthorityRevision.bind(sessions);
+    vi.spyOn(sessions, 'appendTranscriptIfAuthorityRevision').mockImplementation(
+      async (sessionId, expectedRevision, entry) => {
+        if (entry.body === 'Your IP is 203.0.113.7.') {
+          remainingAfterSettlement = (await sessions.get(sessionId))?.tokenBudgetRemaining;
+          await sessions.setModeIfActive(sessionId, 'manual', null);
+        }
+        return realAppend(sessionId, expectedRevision, entry);
+      },
+    );
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: (args) => base.decompose(args),
+        answerFromObservation: () =>
+          Promise.resolve({
+            answer: 'Your IP is 203.0.113.7.',
+            tokensConsumed: 40,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 30,
+              anthropicOutputTokens: 10,
+              costUsdCents: 1,
+              model: 'claude-opus-4-8',
+            },
+          }),
+      },
+      executor: {
+        execute: (args) => stub.execute(args),
+        observe: () => Promise.resolve('Your IP: 203.0.113.7'),
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+
+    expect(result).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'readback',
+      tokensConsumed: 40,
+    });
+    expect(usageRows).toHaveLength(2);
+    expect(usageRows.at(-1)).toMatchObject({ tokensConsumed: 40 });
+    expect(remainingAfterSettlement).toBeDefined();
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(remainingAfterSettlement);
+    expect((await sessions.get(seed.id))?.transcript).toHaveLength(2);
+  });
+
+  it('#140 read-and-report: sanitized-empty settled answer is accounted exactly once without publication', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const base = new DeterministicAgentDecomposer();
+    const stub = new StubAgentExecutor();
+    const usageRows: unknown[] = [];
+    let remainingBeforeAnswer: number | undefined;
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: (args) => base.decompose(args),
+        answerFromObservation: async () => {
+          remainingBeforeAnswer = (await sessions.get(seed.id))?.tokenBudgetRemaining;
+          return {
+            answer: '\u0000\u0001',
+            tokensConsumed: 40,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 30,
+              anthropicOutputTokens: 10,
+              costUsdCents: 1,
+              model: 'claude-opus-4-8',
+            },
+          };
+        },
+      },
+      executor: {
+        execute: (args) => stub.execute(args),
+        observe: () => Promise.resolve('Your IP: 203.0.113.7'),
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+
+    expect(result.kind).toBe('plan-executed');
+    expect(usageRows).toHaveLength(2);
+    expect(usageRows.at(-1)).toMatchObject({ tokensConsumed: 40 });
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(
+      (remainingBeforeAnswer ?? 0) - 40,
+    );
+    expect((await sessions.get(seed.id))?.transcript).toHaveLength(2);
+  });
+
+  it('#140 read-and-report: finalize authority loss retains latest sanitized-empty answer evidence', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const base = new DeterministicAgentDecomposer();
+    const stub = new StubAgentExecutor();
+    const usageRows: unknown[] = [];
+    let answerSettled = false;
+    let postAnswerAuthorityReads = 0;
+    const realSnapshot = sessions.getAuthoritySnapshot.bind(sessions);
+    vi.spyOn(sessions, 'getAuthoritySnapshot').mockImplementation(async (sessionId) => {
+      if (answerSettled) {
+        postAnswerAuthorityReads += 1;
+        if (postAnswerAuthorityReads === 2) {
+          await sessions.setModeIfActive(sessionId, 'manual', null);
+          await sessions.setModeIfActive(sessionId, 'ai', null);
+        }
+      }
+      return realSnapshot(sessionId);
+    });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: (args) => base.decompose(args),
+        answerFromObservation: () => {
+          answerSettled = true;
+          return Promise.resolve({
+            answer: '\u0000\u0001',
+            tokensConsumed: 40,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 30,
+              anthropicOutputTokens: 10,
+              costUsdCents: 1,
+              model: 'claude-opus-4-8',
+            },
+          });
+        },
+      },
+      executor: {
+        execute: (args) => stub.execute(args),
+        observe: () => Promise.resolve('Your IP: 203.0.113.7'),
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+
+    expect(result).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'finalize',
+      tokensConsumed: 40,
+      usage: { anthropicInputTokens: 30, anthropicOutputTokens: 10 },
+    });
+    expect(postAnswerAuthorityReads).toBe(2);
+    expect(usageRows).toHaveLength(2);
+    expect((await sessions.get(seed.id))?.transcript).toHaveLength(2);
+  });
+
+  it('#140 read-and-report: answer-append throw is accounted exactly once and remains additive', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const base = new DeterministicAgentDecomposer();
+    const stub = new StubAgentExecutor();
+    const usageRows: unknown[] = [];
+    let remainingBeforeAnswer: number | undefined;
+    const realAppend = sessions.appendTranscriptIfAuthorityRevision.bind(sessions);
+    vi.spyOn(sessions, 'appendTranscriptIfAuthorityRevision').mockImplementation(
+      (sessionId, expectedRevision, entry) => {
+        if (entry.body === 'Your IP is 203.0.113.7.') {
+          return Promise.reject(new Error('answer transcript write failed'));
+        }
+        return realAppend(sessionId, expectedRevision, entry);
+      },
+    );
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: (args) => base.decompose(args),
+        answerFromObservation: async () => {
+          remainingBeforeAnswer = (await sessions.get(seed.id))?.tokenBudgetRemaining;
+          return {
+            answer: 'Your IP is 203.0.113.7.',
+            tokensConsumed: 40,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 30,
+              anthropicOutputTokens: 10,
+              costUsdCents: 1,
+              model: 'claude-opus-4-8',
+            },
+          };
+        },
+      },
+      executor: {
+        execute: (args) => stub.execute(args),
+        observe: () => Promise.resolve('Your IP: 203.0.113.7'),
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
+      byokApiKey: 'sk-ant-test-fake-key',
+    });
+
+    expect(result).toMatchObject({ kind: 'plan-executed' });
+    expect(usageRows).toHaveLength(2);
+    expect(usageRows.at(-1)).toMatchObject({ tokensConsumed: 40 });
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(
+      (remainingBeforeAnswer ?? 0) - 40,
+    );
+    expect((await sessions.get(seed.id))?.transcript).toHaveLength(2);
+    if (result.kind !== 'plan-executed') throw new Error('type narrow');
+    expect(result.session.tokenBudgetRemaining).toBe(
+      (await sessions.get(seed.id))?.tokenBudgetRemaining,
+    );
   });
 
   it('Q.5.c clarify + refuse turns do NOT carry an intents field (only plan-executed turns do)', async () => {
@@ -458,9 +986,10 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     const sessions = new InMemoryAgentSessionsRepo();
     const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
     const close = sessions.closeWithReason.bind(sessions);
-    sessions.closeWithReason = async (id, reason) => {
+    const guardedClose = sessions.closeWithReasonIfAuthorityRevision.bind(sessions);
+    sessions.closeWithReasonIfAuthorityRevision = async (id, revision, reason) => {
       if (reason === 'budget-exhausted') await close(id, 'customer-closed');
-      return close(id, reason);
+      return guardedClose(id, revision, reason);
     };
     const runtime = new AgentRuntime({
       decomposer: new DeterministicAgentDecomposer(),
@@ -478,6 +1007,51 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     if (result.kind !== 'session-closed') throw new Error('type narrow');
     expect(result.reason).toBe('customer-closed');
     expect(result.session.closedReason).toBe('customer-closed');
+  });
+
+  it('transcript-limit and budget-exhausted close attempts cannot close a human successor that wins between the fence and guarded write', async () => {
+    for (const closeReason of ['transcript-limit', 'budget-exhausted'] as const) {
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({
+        accountId: `acc_${closeReason}`,
+        tokenBudgetTotal: closeReason === 'budget-exhausted' ? 1 : 100_000,
+      });
+      if (closeReason === 'transcript-limit') {
+        for (let index = 0; index < AGENT_TRANSCRIPT_MAX_ENTRIES; index += 1) {
+          await sessions.appendTranscript(seed.id, {
+            at: `seed-${index}`,
+            role: 'operator',
+            body: 'seed',
+          });
+        }
+      }
+      const guardedClose = sessions.closeWithReasonIfAuthorityRevision.bind(sessions);
+      sessions.closeWithReasonIfAuthorityRevision = async (id, revision, reason) => {
+        if (reason === closeReason) await sessions.setModeIfActive(id, 'manual', null);
+        return guardedClose(id, revision, reason);
+      };
+      const runtime = new AgentRuntime({
+        decomposer: new DeterministicAgentDecomposer(),
+        executor: new StubAgentExecutor(),
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+
+      const result = await runtime.runTurn({
+        agentSessionId: seed.id,
+        userMessage: 'must not close the successor',
+      });
+      expect(result).toMatchObject({
+        kind: 'ai-control-unavailable',
+        phase: closeReason === 'transcript-limit' ? 'message-publication' : 'decompose',
+      });
+      expect(await sessions.get(seed.id)).toMatchObject({
+        status: 'active',
+        mode: 'manual',
+        pairModeState: null,
+        closedReason: null,
+      });
+    }
   });
 
   it("Q.3 debit-to-zero closes before browser execution and returns the terminal signal on the current turn. Uses a custom decomposer that reports tokensConsumed=budget so the close fires deterministically without coupling to the deterministic decomposer's 600-token overhead estimate.", async () => {
@@ -516,6 +1090,7 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(first.kind).toBe('session-closed');
     if (first.kind !== 'session-closed') throw new Error('type narrow');
     expect(first.reason).toBe('budget-exhausted');
+    expect(first.tokensConsumed).toBe(500);
     expect(executeCalls).toBe(0);
     // Session is now closed because the debit zeroed the budget.
     const afterFirst = await sessions.get(seed.id);
@@ -727,6 +1302,71 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       expect(final?.transcript[0]?.role).toBe('user');
     });
 
+    it('authority loss wins over a late fatal provider rejection', async () => {
+      let rejectProvider!: (error: Error) => void;
+      let markStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      const throwingDecomposer = {
+        decompose: () =>
+          new Promise<never>((_resolve, reject) => {
+            rejectProvider = reject;
+            markStarted();
+          }),
+      };
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+      const executor = new StubAgentExecutor();
+      const execute = vi.spyOn(executor, 'execute');
+      const usageRows: unknown[] = [];
+      const runtime = new AgentRuntime({
+        decomposer: throwingDecomposer,
+        executor,
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+        usageRecorder: {
+          record: (args) => {
+            usageRows.push(args);
+            return Promise.resolve();
+          },
+        },
+      });
+      const turn = runtime.runTurn({
+        agentSessionId: seed.id,
+        userMessage: 'open https://example.com',
+      });
+      await started;
+      await sessions.setModeIfActive(seed.id, 'manual', null);
+      await sessions.setModeIfActive(seed.id, 'ai', null);
+      rejectProvider(
+        new AgentDecomposerSettledError('Anthropic response has unknown result kind', {
+          tokensConsumed: 40,
+          usage: {
+            decomposerKind: 'claude',
+            anthropicInputTokens: 30,
+            anthropicOutputTokens: 10,
+            costUsdCents: 1,
+            model: 'claude-opus-4-8',
+          },
+        }),
+      );
+
+      await expect(turn).resolves.toMatchObject({
+        kind: 'ai-control-unavailable',
+        phase: 'decompose',
+        tokensConsumed: 40,
+      });
+      expect(execute).not.toHaveBeenCalled();
+      expect(usageRows).toHaveLength(1);
+      expect(usageRows[0]).toMatchObject({ tokensConsumed: 40 });
+      const final = await sessions.get(seed.id);
+      expect(final?.status).toBe('active');
+      expect(final?.tokenBudgetRemaining).toBe(99_960);
+      expect(final?.transcript).toHaveLength(1);
+      expect(final?.transcript[0]?.role).toBe('user');
+    });
+
     it('fatal error (malformed response) → re-throw', async () => {
       const throwingDecomposer = {
         decompose: (_args: DecomposeArgs) =>
@@ -746,6 +1386,48 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
           userMessage: 'open https://example.com',
         }),
       ).rejects.toThrow(/missing text content/);
+    });
+
+    it('fatal settled codec error records and debits validated provider usage before re-throw', async () => {
+      const settled = new AgentDecomposerSettledError(
+        'Anthropic response has unknown result kind',
+        {
+          tokensConsumed: 40,
+          usage: {
+            decomposerKind: 'claude',
+            anthropicInputTokens: 30,
+            anthropicOutputTokens: 10,
+            costUsdCents: 1,
+            model: 'claude-opus-4-8',
+          },
+        },
+      );
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+      const usageRows: unknown[] = [];
+      const runtime = new AgentRuntime({
+        decomposer: { decompose: () => Promise.reject(settled) },
+        executor: new StubAgentExecutor(),
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+        usageRecorder: {
+          record: (args) => {
+            usageRows.push(args);
+            return Promise.resolve();
+          },
+        },
+      });
+
+      await expect(
+        runtime.runTurn({
+          agentSessionId: seed.id,
+          userMessage: 'open https://example.com',
+        }),
+      ).rejects.toBe(settled);
+      expect(usageRows).toHaveLength(1);
+      expect(usageRows[0]).toMatchObject({ tokensConsumed: 40 });
+      expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(99_960);
+      expect((await sessions.get(seed.id))?.transcript).toHaveLength(1);
     });
   });
 });
@@ -795,7 +1477,7 @@ describe('Q.1.b classifyDecomposerError', () => {
   });
 
   it('malformed response (unknown kind) → fatal', () => {
-    expect(classifyDecomposerError(new Error('Anthropic response has unknown kind: mystery'))).toBe(
+    expect(classifyDecomposerError(new Error('Anthropic response has unknown result kind'))).toBe(
       'fatal',
     );
   });
@@ -1149,6 +1831,56 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
   });
 });
 
+describe('AgentRuntime guarded transcript publication', () => {
+  it('does not emit a stale plan SSE when authority changes after the guarded append commits', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const eventBus = new AgentSessionEventBus();
+    const events: AgentSessionTranscriptEvent[] = [];
+    eventBus.subscribe(seed.id, (event) => events.push(event));
+    const realAppend = sessions.appendTranscriptIfAuthorityRevision.bind(sessions);
+    let changedAfterCommittedPlan = false;
+    vi.spyOn(sessions, 'appendTranscriptIfAuthorityRevision').mockImplementation(
+      async (sessionId, expectedRevision, entry) => {
+        const appended = await realAppend(sessionId, expectedRevision, entry);
+        if (
+          appended !== null &&
+          entry.role === 'agent' &&
+          entry.intents !== undefined &&
+          !changedAfterCommittedPlan
+        ) {
+          changedAfterCommittedPlan = true;
+          await sessions.setModeIfActive(sessionId, 'manual', null);
+        }
+        return appended;
+      },
+    );
+    const runtime = new AgentRuntime({
+      decomposer: new DeterministicAgentDecomposer(),
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      eventBus,
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'open https://example.com and capture the page',
+    });
+
+    expect(changedAfterCommittedPlan).toBe(true);
+    expect(result).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'plan-publication',
+    });
+    expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual([
+      'user',
+      'agent',
+    ]);
+    expect(events.map((event) => event.entry.role)).toEqual(['user']);
+  });
+});
+
 describe('AgentRuntime.runTurn — per-session in-flight gate', () => {
   it('retains completed decompose usage but a close winner prevents debit, result append/SSE, and consequential dispatch', async () => {
     let releaseDecompose!: () => void;
@@ -1238,6 +1970,434 @@ describe('AgentRuntime.runTurn — per-session in-flight gate', () => {
     expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(10_000);
     expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual(['user']);
     expect(events.map((event) => event.entry.role)).toEqual(['user']);
+  });
+
+  it('retains settled model evidence when close wins inside the active-only debit', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 10_000 });
+    const realDebit = sessions.debitTokensIfActive.bind(sessions);
+    vi.spyOn(sessions, 'debitTokensIfActive').mockImplementationOnce(async (sessionId, tokens) => {
+      await sessions.closeWithReason(sessionId, 'customer-closed');
+      return realDebit(sessionId, tokens);
+    });
+    let executeCalls = 0;
+    const usageRows: unknown[] = [];
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () =>
+          Promise.resolve({
+            kind: 'plan' as const,
+            intents: [{ kind: 'navigate' as const, url: 'https://example.com' }],
+            tokensConsumed: 321,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 250,
+              anthropicOutputTokens: 71,
+              costUsdCents: 2,
+              model: 'claude-opus-4-8',
+            },
+          }),
+      },
+      executor: {
+        execute: () => {
+          executeCalls += 1;
+          return Promise.resolve({ results: [], ok: true });
+        },
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'open the page',
+    });
+
+    expect(result).toMatchObject({
+      kind: 'session-closed',
+      reason: 'customer-closed',
+      tokensConsumed: 321,
+      usage: { anthropicInputTokens: 250, anthropicOutputTokens: 71 },
+    });
+    expect(usageRows).toHaveLength(1);
+    expect(executeCalls).toBe(0);
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(10_000);
+    expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual(['user']);
+  });
+
+  it('retains settled browser results when close wins after execution', async () => {
+    let releaseExecution!: () => void;
+    const held = new Promise<void>((resolve) => {
+      releaseExecution = resolve;
+    });
+    let markStarted!: () => void;
+    const executionStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 10_000 });
+    const settledIntent = {
+      kind: 'interact' as const,
+      action: 'type' as const,
+      selector: '#password',
+      value: 'server-only-secret',
+      sensitive: true,
+    };
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () =>
+          Promise.resolve({
+            kind: 'plan' as const,
+            intents: [settledIntent],
+            tokensConsumed: 40,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 30,
+              anthropicOutputTokens: 10,
+              costUsdCents: 1,
+              model: 'claude-opus-4-8',
+            },
+          }),
+      },
+      executor: {
+        execute: async () => {
+          markStarted();
+          await held;
+          return {
+            ok: true,
+            results: [{ kind: 'success' as const, intent: settledIntent, summary: 'typed' }],
+          };
+        },
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const turn = runtime.runTurn({ agentSessionId: seed.id, userMessage: 'type my credential' });
+    await executionStarted;
+    await sessions.closeWithReason(seed.id, 'customer-closed');
+    releaseExecution();
+    const result = await turn;
+
+    expect(result).toMatchObject({
+      kind: 'session-closed',
+      reason: 'customer-closed',
+      tokensConsumed: 40,
+      usage: { anthropicInputTokens: 30, anthropicOutputTokens: 10 },
+      executor: {
+        ok: true,
+        results: [{ kind: 'success', intent: settledIntent, summary: 'typed' }],
+      },
+    });
+    expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual(['user']);
+  });
+
+  it('retains and debits completed model usage but starts no browser work after AI→manual revocation', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const modelStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 10_000 });
+    const usageRows: unknown[] = [];
+    let executeCalls = 0;
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: async () => {
+          started();
+          await held;
+          return {
+            kind: 'plan' as const,
+            intents: [{ kind: 'navigate' as const, url: 'https://example.com' }],
+            tokensConsumed: 321,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 250,
+              anthropicOutputTokens: 71,
+              costUsdCents: 2,
+              model: 'claude-opus-4-8',
+            },
+          };
+        },
+      },
+      executor: {
+        execute: () => {
+          executeCalls += 1;
+          return Promise.resolve({ results: [], ok: true });
+        },
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const turn = runtime.runTurn({ agentSessionId: seed.id, userMessage: 'open the page' });
+    await modelStarted;
+    await sessions.setModeIfActive(seed.id, 'manual', null);
+    release();
+    const result = await turn;
+
+    expect(result).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'decompose',
+      tokensConsumed: 321,
+    });
+    expect(usageRows).toHaveLength(1);
+    expect(executeCalls).toBe(0);
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(9_679);
+    expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual(['user']);
+  });
+
+  it('late debit failure cannot replace the authority 409 after model settlement', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const modelStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 10_000 });
+    const usageRows: unknown[] = [];
+    const debit = vi
+      .spyOn(sessions, 'debitTokensIfActive')
+      .mockRejectedValueOnce(new Error('debit storage unavailable'));
+    let executeCalls = 0;
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: async () => {
+          started();
+          await held;
+          return {
+            kind: 'plan' as const,
+            intents: [{ kind: 'navigate' as const, url: 'https://example.com' }],
+            tokensConsumed: 321,
+            usage: {
+              decomposerKind: 'claude' as const,
+              anthropicInputTokens: 250,
+              anthropicOutputTokens: 71,
+              costUsdCents: 2,
+              model: 'claude-opus-4-8',
+            },
+          };
+        },
+      },
+      executor: {
+        execute: () => {
+          executeCalls += 1;
+          return Promise.resolve({ results: [], ok: true });
+        },
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      usageRecorder: {
+        record: (args) => {
+          usageRows.push(args);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const turn = runtime.runTurn({ agentSessionId: seed.id, userMessage: 'open the page' });
+    await modelStarted;
+    await sessions.setModeIfActive(seed.id, 'manual', null);
+    release();
+    const result = await turn;
+
+    expect(result).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'decompose',
+      tokensConsumed: 321,
+    });
+    expect(debit).toHaveBeenCalledTimes(1);
+    expect(usageRows).toHaveLength(1);
+    expect(executeCalls).toBe(0);
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(10_000);
+    expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual(['user']);
+  });
+
+  it('rejects a value-equivalent AI→manual→AI ABA after model settlement by its monotonic admission revision', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const modelStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 10_000 });
+    let executeCalls = 0;
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: async () => {
+          started();
+          await held;
+          return {
+            kind: 'plan' as const,
+            intents: [{ kind: 'navigate' as const, url: 'https://example.com' }],
+            tokensConsumed: 321,
+          };
+        },
+      },
+      executor: {
+        execute: () => {
+          executeCalls += 1;
+          return Promise.resolve({ results: [], ok: true });
+        },
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const turn = runtime.runTurn({ agentSessionId: seed.id, userMessage: 'open the page' });
+    await modelStarted;
+    await sessions.setModeIfActive(seed.id, 'manual', null);
+    await sessions.setModeIfActive(seed.id, 'ai', null);
+    expect(await sessions.getAuthoritySnapshot(seed.id)).toMatchObject({
+      status: 'active',
+      mode: 'ai',
+      pairModeState: null,
+      revision: 2,
+    });
+    release();
+    const result = await turn;
+
+    expect(result).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'decompose',
+      tokensConsumed: 321,
+    });
+    expect(executeCalls).toBe(0);
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(9_679);
+    expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual(['user']);
+  });
+
+  it('rejects a value-equivalent pair ai-driving→takeover→ai-driving ABA by revision', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const modelStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 10_000,
+      mode: 'pair',
+    });
+    await sessions.setPairModeState(seed.id, { kind: 'ai-driving' });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: async () => {
+          started();
+          await held;
+          return {
+            kind: 'clarify' as const,
+            clarifyingQuestion: 'Which page?',
+            tokensConsumed: 7,
+          };
+        },
+      },
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const turn = runtime.runTurn({ agentSessionId: seed.id, userMessage: 'continue' });
+    await modelStarted;
+    await sessions.setPairModeState(seed.id, {
+      kind: 'takeover-pending',
+      requestedByClientId: 'client-a',
+      requestedAt: '2026-07-17T00:00:00.000Z',
+    });
+    await sessions.setPairModeState(seed.id, { kind: 'ai-driving' });
+    expect(await sessions.getAuthoritySnapshot(seed.id)).toMatchObject({
+      mode: 'pair',
+      pairModeState: { kind: 'ai-driving' },
+      revision: 3,
+    });
+    release();
+
+    expect(await turn).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'decompose',
+      tokensConsumed: 7,
+    });
+    expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual(['user']);
+  });
+
+  it('retains a settled executor result but publishes no plan or suffix after authority loss', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const executionStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 10_000 });
+    const runtime = new AgentRuntime({
+      decomposer: {
+        decompose: () =>
+          Promise.resolve({
+            kind: 'plan' as const,
+            intents: [{ kind: 'navigate' as const, url: 'https://example.com' }],
+            tokensConsumed: 5,
+          }),
+      },
+      executor: {
+        execute: async () => {
+          started();
+          await held;
+          return {
+            results: [
+              {
+                kind: 'success' as const,
+                intent: { kind: 'navigate' as const, url: 'https://example.com' },
+                summary: 'navigated to https://example.com',
+              },
+            ],
+            ok: true,
+          };
+        },
+      },
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+
+    const turn = runtime.runTurn({ agentSessionId: seed.id, userMessage: 'open the page' });
+    await executionStarted;
+    await sessions.setModeIfActive(seed.id, 'manual', null);
+    release();
+    const result = await turn;
+
+    expect(result).toMatchObject({
+      kind: 'ai-control-unavailable',
+      phase: 'execution',
+      executor: { results: [{ kind: 'success' }] },
+    });
+    expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(9_995);
+    expect((await sessions.get(seed.id))?.transcript.map((entry) => entry.role)).toEqual(['user']);
   });
 
   it('rejects a concurrent same-session turn before a second append/decompose/dispatch, then accepts after release', async () => {

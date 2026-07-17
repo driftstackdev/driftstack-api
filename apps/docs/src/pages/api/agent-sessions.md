@@ -190,14 +190,35 @@ Headers:
   logical turn. If the heartbeat stream or final response is lost, retry the
   exact same session/message/approval request with the same key; the server
   replays the durable terminal status and body without running the browser task
-  again. Changing the message, session, approvals, or explicit BYOK key requires
-  a new key. Reuse while the original outcome is still unknown returns `409`
+  again. Changing the message, session, or approvals requires a new key. The
+  BYOK header is deliberately outside receipt identity: reusing a key after
+  changing that credential still replays the original terminal result and never
+  executes a second browser turn. Use a new idempotency key for an intentionally
+  new AI turn. A manual transcript turn never reads or hashes the irrelevant
+  BYOK header. Reuse while the original outcome is still unknown returns `409`
   and does not dispatch another turn.
 - `x-byok-anthropic-api-key: sk-ant-...` (optional) — supply a
   per-request BYOK key that overrides any account-stored key for
   this turn. Useful for users who don't want to persist a key but
   do want each request authenticated against their own Anthropic
   account. Never logged.
+
+The server admits each request into exactly one control lane before it reads
+credentials, spend limits, or provider configuration. A `manual` request is
+transcript-only and never consults BYOK storage, bundled-LLM settings, model
+providers, or the browser executor. An `ai` request—and a `pair` request while
+AI is driving—retains that exact authority for the whole turn. Takeover,
+handback, mode changes, pause, and close invalidate the admitted turn even if
+the session later returns to the same visible mode.
+
+If control changes while provider or browser work is settling, the request
+returns `409 conflict` with `ai_control_unavailable: true` and a `phase`. The
+server starts no later provider attempt, retry, browser intent, read-back, or
+transcript suffix under the successor controller. Work already completed is
+reported honestly: consumed model usage can include `tokens_consumed` and
+`usage`, and settled browser steps can appear as redacted `partial_results`.
+Do not replay those partial steps automatically; inspect the current session
+under its new controller first.
 
 Response (200) is a discriminated union by `kind`:
 
@@ -213,6 +234,14 @@ Response (200) is a discriminated union by `kind`:
   "ok": true
 }
 ```
+
+AI responses can include `usage`. On the bundled-LLM rail,
+`usage.cost_usd_cents` is the posted 10-cent included-service accounting value,
+not the upstream model's measured cost. The block describes the represented
+provider call; an optional read-back model call is recorded separately and is
+not currently aggregated into this response field, so use cost monitoring for
+the account total. Explicit or stored BYOK responses can instead report measured
+provider cost when available.
 
 A failed step (`"kind": "failure"`) carries a human-readable `reason`
 plus a structured `diagnosis` your automation can branch on without
@@ -261,7 +290,14 @@ dispatch failure cannot prove that the browser action or pacing did not run. Rea
 }
 ```
 
-Closed sessions return `409 Conflict`. When the caller is on the
+Paused and closed sessions return `409 Conflict`; resume a paused session, but
+replace a closed one. If close or pause wins after model or
+browser work has already settled, that terminal 409 retains the same consumed
+`tokens_consumed`, `usage`, and redacted `partial_results` evidence described
+above. Treat it as outcome-known evidence for those listed steps, never as an
+invitation to replay them in a replacement session.
+
+When the caller is on the
 bundled-LLM rail and the account has reached its monthly bundled-LLM
 spend cap (`bundled_llm_monthly_cap_usd_cents`), the turn returns
 `402 Payment Required` (BundledLlmBudgetExhausted) with `spent_cents`
@@ -810,19 +846,19 @@ Filter via
 
 ## Errors
 
-| Status | Type                         | When                                                                                                         |
-| -----: | ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
-|    400 | validation                   | body fails schema (missing `user_message`, etc.)                                                             |
-|    403 | forbidden                    | create with — or mode-flip into — `mode: ai`/`pair` on a tier without the AI-agent feature (Free / Personal) |
-|    404 | not-found                    | session id unknown to the calling account                                                                    |
-|    409 | conflict                     | mode mismatch (e.g. takeover on `mode: 'ai'`)                                                                |
-|    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`)                               |
-|    409 | pair-mode-invalid-transition | state-machine refused the transition (carries `from` + `transition`)                                         |
-|    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)                                          |
-|    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                                              |
-|    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                                                      |
-|    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                                                           |
-|    503 | feature-unavailable          | no BYOK or bundled-LLM provider is available in the deployment                                               |
+| Status | Type                         | When                                                                                                                                                                                                                                                      |
+| -----: | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|    400 | validation                   | body fails schema (missing `user_message`, etc.)                                                                                                                                                                                                          |
+|    403 | forbidden                    | create with — or mode-flip into — `mode: ai`/`pair` on a tier without the AI-agent feature (Free / Personal)                                                                                                                                              |
+|    404 | not-found                    | session id unknown to the calling account                                                                                                                                                                                                                 |
+|    409 | conflict                     | mode mismatch, or `ai_control_unavailable: true` when a message's admitted control epoch changes; the latter includes `phase` and can include consumed `tokens_consumed`, `usage`, and redacted `partial_results` that must not be replayed automatically |
+|    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`)                                                                                                                                                                            |
+|    409 | pair-mode-invalid-transition | state-machine refused the transition (carries `from` + `transition`)                                                                                                                                                                                      |
+|    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)                                                                                                                                                                                       |
+|    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                                                                                                                                                                                           |
+|    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                                                                                                                                                                                                   |
+|    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                                                                                                                                                                                                        |
+|    503 | feature-unavailable          | no BYOK or bundled-LLM provider is available in the deployment                                                                                                                                                                                            |
 
 The pair-mode state-machine transition errors are typed in all
 three SDKs: `PairModeStateInvalidTransitionError`. Branch on

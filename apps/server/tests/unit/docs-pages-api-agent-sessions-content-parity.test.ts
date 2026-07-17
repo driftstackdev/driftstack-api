@@ -113,4 +113,31 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     );
     expect(body).not.toContain('try a broader selector or wait for it to appear');
   });
+
+  it('documents exact control-lane admission, manual provider bypass, and honest partial 409 settlement', () => {
+    expect(body).toMatch(/admits each request into exactly one control lane/);
+    expect(body).toMatch(/A `manual` request is\s*\n?\s*transcript-only and never consults BYOK/);
+    expect(body).toMatch(
+      /invalidate the admitted turn even if\s*\n?\s*the session later returns to the same visible mode/,
+    );
+    expect(body).toMatch(/`409 conflict` with `ai_control_unavailable: true` and a `phase`/);
+    expect(body).toMatch(
+      /starts no later provider attempt, retry, browser intent, read-back, or\s*\n?\s*transcript suffix/,
+    );
+    expect(body).toMatch(/`tokens_consumed` and\s*\n?\s*`usage`/);
+    expect(body).toMatch(/redacted `partial_results`/);
+    expect(body).toMatch(/manual transcript turn never reads or hashes the irrelevant/);
+    expect(body).toMatch(/BYOK header is deliberately outside receipt identity/);
+    expect(body).toMatch(/still replays the original terminal result/);
+    expect(body).toMatch(/close or pause wins after model or\s*browser work has already settled/);
+    expect(body).toMatch(/resume a paused session, but\s*replace a closed one/);
+    expect(body).toMatch(/redacted `partial_results` evidence described\s*above/);
+    expect(body).toMatch(/posted 10-cent included-service accounting value/);
+    expect(body).toMatch(/not the upstream model's measured cost/);
+    expect(body).toMatch(/optional read-back model call is recorded separately/);
+    expect(body).toMatch(/not currently aggregated into this response field/);
+    expect(body).toMatch(
+      /`ai_control_unavailable: true` when a message's admitted control epoch changes/,
+    );
+  });
 });

@@ -45,6 +45,13 @@ export interface IntentDispatcher {
   dispatch(dispatch: IntentDispatch): Promise<ParsedIntentResult>;
 }
 
+interface RunIntentOutcome {
+  /** A result may already have settled before authority was revoked. Retain it
+   * as redacted partial evidence, but never publish it as a normal turn. */
+  result: IntentResult | null;
+  authorityLost: boolean;
+}
+
 /** doc-132 §5.3 slice 3 — bounded auto-retry of transient failures. */
 export interface AutoRetryOptions {
   /** Extra attempts AFTER the first, for a step whose failure diagnosis is
@@ -119,7 +126,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     // (legacy callers) — never dispatch on the `unattached` sentinel.
     const dispatchSessionId = args.agentSessionId ?? args.sessionId;
     for (const intent of args.plan.intents) {
-      if (!(await executionMayContinue(args.shouldContinue))) return { results, ok: false };
+      if (!(await executionMayContinue(args.shouldContinue))) {
+        return { results, ok: false, authorityLost: true };
+      }
       // 0. W443/W445 consequential-action gate — halt (WITHOUT dispatching) on a
       //    purchase / payment / account-deletion the customer hasn't approved this
       //    run. Identical gate to Stub/RealAgentExecutor: the go-live swap must NOT
@@ -152,15 +161,16 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         mapped.params,
         args.shouldContinue,
       );
-      if (result === null) return { results, ok: false };
-      results.push(result);
+      if (result.result !== null) results.push(result.result);
+      if (result.authorityLost) return { results, ok: false, authorityLost: true };
+      if (result.result === null) return { results, ok: false };
       // #139 — halt-on-first-failure, EXCEPT a `wait`: a wait is a best-effort
       // synchronization hint (the decomposer inserts idle-settles that a navigate
       // already covers). A wait timing out must NOT abort the plan and lose the
       // steps after it (e.g. the customer's screenshot) — if a later action truly
       // depends on the awaited state, that action fails on its own with a clearer
       // reason. Any non-wait failure still halts.
-      if (result.kind === 'failure' && intent.kind !== 'wait') break;
+      if (result.result.kind === 'failure' && intent.kind !== 'wait') break;
     }
 
     return { results, ok: results.every((r) => r.kind === 'success') };
@@ -173,7 +183,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
    * null so the runtime falls back to the plan result — the read-back never fails
    * a turn. Uses the same dispatcher + fresh intentId as a normal intent.
    */
-  async observe(sessionId: string): Promise<string | null> {
+  async observe(
+    sessionId: string,
+    shouldContinue?: ExecuteArgs['shouldContinue'],
+  ): Promise<string | null> {
+    if (!(await executionMayContinue(shouldContinue))) return null;
     let dispatch: IntentDispatch;
     try {
       dispatch = serializeIntentDispatch({
@@ -185,6 +199,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     } catch {
       return null;
     }
+    if (!(await executionMayContinue(shouldContinue))) return null;
     // Bound the read-back latency: the plan already succeeded + was recorded, so
     // a hung box must not stretch the turn to the full 30s dispatch budget. Race
     // the dispatch against a shorter deadline; on timeout we return null (no
@@ -195,7 +210,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       .then((parsed) => (parsed.success ? extractPageText(parsed.outputData) : null))
       .catch(() => null);
     const timedOut = this.sleep(this.observeTimeoutMs).then((): string | null => null);
-    return Promise.race([observed, timedOut]);
+    const result = await Promise.race([observed, timedOut]);
+    if (!(await executionMayContinue(shouldContinue))) return null;
+    return result;
   }
 
   /**
@@ -225,8 +242,8 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     intentName: HarnessIntentName,
     params: Record<string, unknown>,
     shouldContinue: ExecuteArgs['shouldContinue'],
-  ): Promise<IntentResult | null> {
-    let result: IntentResult = { kind: 'failure', intent, reason: 'no dispatch attempt made' };
+  ): Promise<RunIntentOutcome> {
+    let result: IntentResult | null = null;
     // Two independent budgets: the short general retryable-failure budget, and a
     // longer PATIENT budget reserved for a cold-starting session (see below).
     let retryAttempt = 0;
@@ -235,7 +252,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // Re-check on EVERY attempt, including after either retry sleep. A close
       // that wins while the box is cold or a retry backs off stops the suffix
       // before a fresh intentId is minted or another external dispatch starts.
-      if (!(await executionMayContinue(shouldContinue))) return null;
+      if (!(await executionMayContinue(shouldContinue))) {
+        return { result, authorityLost: true };
+      }
       // Serialize to the base64 wire envelope (fresh intentId per attempt).
       // Re-validates params; should not fail (agentIntentToDispatch already
       // validated), but the executor must never throw — a guard converts any
@@ -250,9 +269,12 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         });
       } catch (err) {
         return {
-          kind: 'failure',
-          intent,
-          reason: err instanceof Error ? err.message : 'failed to encode intent dispatch',
+          result: {
+            kind: 'failure',
+            intent,
+            reason: err instanceof Error ? err.message : 'failed to encode intent dispatch',
+          },
+          authorityLost: false,
         };
       }
 
@@ -260,7 +282,10 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // → a failure ParsedIntentResult).
       const parsed = await this.dispatcher.dispatch(dispatch);
       result = intentResultToCustomer(intent, parsed);
-      if (result.kind !== 'failure') return result;
+      if (!(await executionMayContinue(shouldContinue))) {
+        return { result, authorityLost: true };
+      }
+      if (result.kind !== 'failure') return { result, authorityLost: false };
 
       // BROWSER COLD-START — `intent_session_not_established` means the box fork's
       // per-session WebDriver isn't up yet (~7-10s spawn). Unlike a dispatch-timeout
@@ -304,7 +329,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         !maybeAlreadyApplied &&
         !isRedundantWaitRetry &&
         retryAttempt < this.maxRetries;
-      if (!shouldRetry) return result;
+      if (!shouldRetry) return { result, authorityLost: false };
       retryAttempt++;
       await this.sleep(this.retryDelayMs);
     }

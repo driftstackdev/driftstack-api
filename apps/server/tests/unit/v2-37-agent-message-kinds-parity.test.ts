@@ -38,8 +38,14 @@ describe('v2-#37 AgentRuntime <-> SDK kind union parity', () => {
     //   - 'plan' — a DecomposeResult kind constructed by reconstructHaltedPlan (#130
     //     consequential-approval resume) + returned by the decomposer; runTurn surfaces
     //     a plan as the 'plan-executed' result kind, never a bare 'plan'.
-    const ROUTE_ERROR_KINDS = ['session-closed', 'turn-in-progress', 'account-turn-limit'] as const;
-    const NON_SDK_KINDS = new Set([...ROUTE_ERROR_KINDS, 'plan']);
+    const ROUTE_ERROR_KINDS = [
+      'session-closed',
+      'turn-in-progress',
+      'account-turn-limit',
+      'ai-control-unavailable',
+    ] as const;
+    const INTERNAL_CONTROL_KINDS = ['manual-transcript', 'ai-control'] as const;
+    const NON_SDK_KINDS = new Set([...ROUTE_ERROR_KINDS, ...INTERNAL_CONTROL_KINDS, 'plan']);
     const KIND_RE = /\bkind:\s*['"]([a-z][a-z-]+)['"]/g;
     const runtimeKinds = new Set<string>();
     let m: RegExpExecArray | null;

@@ -60,6 +60,7 @@ describe('AI-B2 StubAgentExecutor', () => {
     });
 
     expect(result.ok).toBe(false);
+    expect(result.authorityLost).toBe(true);
     expect(result.awaitingConfirmation).toBeUndefined();
     expect(result.results).toHaveLength(1);
     expect(result.results[0]?.kind).toBe('success');

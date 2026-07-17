@@ -50,6 +50,7 @@ import {
 } from '../services/agent-session-transcript-encryption.js';
 import {
   AgentSessionErrorEventSchema,
+  type AgentSessionAuthoritySnapshot,
   type CloseAgentSessionResult,
   type AgentSessionErrorEvent,
   type AgentSessionListPage,
@@ -428,6 +429,29 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 
+  async getAuthoritySnapshot(id: string): Promise<AgentSessionAuthoritySnapshot | null> {
+    // Deliberately avoid selecting/decrypting transcript or credential fields:
+    // this is the hot continuation fence around provider/browser awaits.
+    const rows = await this.database.db
+      .select({
+        status: agentSessions.status,
+        mode: agentSessions.mode,
+        pairModeState: agentSessions.pairModeState,
+        revision: agentSessions.authorityRevision,
+      })
+      .from(agentSessions)
+      .where(eq(agentSessions.id, id))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      status: row.status as AgentSessionAuthoritySnapshot['status'],
+      mode: row.mode as AgentSessionAuthoritySnapshot['mode'],
+      pairModeState: row.pairModeState,
+      revision: row.revision,
+    };
+  }
+
   async listByAccount(
     accountId: string,
     opts?: { limit?: number },
@@ -574,6 +598,51 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     });
   }
 
+  async appendTranscriptIfAuthorityRevision(
+    id: string,
+    expectedRevision: number,
+    entry: TranscriptEntry,
+  ): Promise<AgentSessionRecord | null> {
+    const key = this.requireTranscriptEncryptionKey();
+    const now = this.clock();
+    return this.database.db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(agentSessions)
+        .where(
+          and(
+            eq(agentSessions.id, id),
+            eq(agentSessions.status, 'active'),
+            eq(agentSessions.authorityRevision, expectedRevision),
+          ),
+        )
+        .for('update')
+        .limit(1);
+      const existing = rows[0];
+      if (!existing) return null;
+      const context = { accountId: existing.accountId, sessionId: existing.id };
+      const currentTranscript = readAgentSessionTranscript(existing.transcript, key, context);
+      const encryptedTranscript = encryptAgentSessionTranscript(
+        [...currentTranscript, entry],
+        key,
+        context,
+      );
+      const updated = await tx
+        .update(agentSessions)
+        .set({ transcript: encryptedTranscript, updatedAt: now })
+        .where(
+          and(
+            eq(agentSessions.id, id),
+            eq(agentSessions.status, 'active'),
+            eq(agentSessions.authorityRevision, expectedRevision),
+          ),
+        )
+        .returning();
+      const row = updated[0];
+      return row ? rowToRecord(row, key) : null;
+    });
+  }
+
   async debitTokens(id: string, tokens: number): Promise<AgentSessionRecord> {
     // Atomic debit under a row lock (see the file header concurrency note):
     // SELECT … FOR UPDATE inside a transaction serialises concurrent
@@ -692,6 +761,27 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       throw new Error(`AgentSession ${id} not found`);
     }
     return { kind: 'already_closed', session: existing };
+  }
+
+  async closeWithReasonIfAuthorityRevision(
+    id: string,
+    expectedRevision: number,
+    reason: string,
+  ): Promise<AgentSessionRecord | null> {
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ status: 'closed', closedReason: reason, closedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(agentSessions.id, id),
+          eq(agentSessions.status, 'active'),
+          eq(agentSessions.authorityRevision, expectedRevision),
+        ),
+      )
+      .returning();
+    const row = updated[0];
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 
   async reapOrphanedActiveBefore(cutoff: Date): Promise<number> {

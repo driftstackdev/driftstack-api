@@ -89,6 +89,10 @@ export interface ExecutorRunResult {
    *  action (the last result is `kind: confirmation_required`) — distinct from
    *  a plain failure; the customer approves then the plan re-runs. */
   awaitingConfirmation?: boolean;
+  /** Internal control-authority halt. Any listed results settled before the
+   * fence failed; no undispatched suffix was started. The runtime suppresses
+   * transcript publication and returns an honest authority conflict. */
+  authorityLost?: boolean;
 }
 
 /** Stable signature of a consequential action, for the approve → re-run carry
@@ -188,7 +192,10 @@ export interface AgentExecutor {
    * (`if (executor.observe)`) before use. Best-effort — never throws (returns
    * null on any failure); the read-back is additive, it must never fail a turn.
    */
-  observe?(sessionId: string): Promise<string | null>;
+  observe?(
+    sessionId: string,
+    shouldContinue?: ExecuteArgs['shouldContinue'],
+  ): Promise<string | null>;
 }
 
 /**
@@ -204,7 +211,9 @@ export class StubAgentExecutor implements AgentExecutor {
     // local grant without mutating the caller-owned set.
     const approved = new Set(args.approvedConsequentialActions ?? []);
     for (const intent of args.plan.intents) {
-      if (!(await executionMayContinue(args.shouldContinue))) return { results, ok: false };
+      if (!(await executionMayContinue(args.shouldContinue))) {
+        return { results, ok: false, authorityLost: true };
+      }
       const halt = consequentialHalt(intent, approved);
       if (halt) {
         results.push(halt);
@@ -288,7 +297,9 @@ export class RealAgentExecutor implements AgentExecutor {
       // throwing (the never-throw contract).
       const results: IntentResult[] = [];
       for (const intent of args.plan.intents) {
-        if (!(await executionMayContinue(args.shouldContinue))) return { results, ok: false };
+        if (!(await executionMayContinue(args.shouldContinue))) {
+          return { results, ok: false, authorityLost: true };
+        }
         results.push({ kind: 'failure', intent, reason: 'executor missing account context' });
       }
       return { results, ok: results.length === 0 };
@@ -296,7 +307,9 @@ export class RealAgentExecutor implements AgentExecutor {
     const results: IntentResult[] = [];
     const approved = new Set(args.approvedConsequentialActions ?? []);
     for (const intent of args.plan.intents) {
-      if (!(await executionMayContinue(args.shouldContinue))) return { results, ok: false };
+      if (!(await executionMayContinue(args.shouldContinue))) {
+        return { results, ok: false, authorityLost: true };
+      }
       // W443/W445 — halt BEFORE dispatching an unapproved consequential action
       // so the harness never executes it until the customer confirms.
       const halt = consequentialHalt(intent, approved);
@@ -306,6 +319,9 @@ export class RealAgentExecutor implements AgentExecutor {
       }
       const result = await this.dispatch(account, args.sessionId, intent);
       results.push(result);
+      if (!(await executionMayContinue(args.shouldContinue))) {
+        return { results, ok: false, authorityLost: true };
+      }
       if (result.kind === 'failure') return { results, ok: false };
     }
     return { results, ok: true };
