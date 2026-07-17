@@ -92,15 +92,17 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     expect(body).toMatch(/archetype,/);
   });
 
-  it('stateful create/clone/import/transfer preallocate the profile UUID before wrapping and ordinary reads unwrap under the exact account+profile tuple', () => {
+  it('the shared row-identity factory preallocates the UUID before wrapping; create/clone/import/transfer delegate to it and ordinary reads unwrap under the exact account+profile tuple', () => {
     expect(body).toContain("import { randomUUID } from 'node:crypto';");
+    expect(body).toContain('export function mintProfileRowIdentity(');
+    expect(body).toContain('profileMasterKey: Buffer | null,');
+    expect(body).toContain('accountId: string,');
+    expect(body).toContain('const id = randomUUID();');
+    expect(body).toContain('mintWrappedProfileDek(profileMasterKey, accountId, id).wrappedDek');
     expect(body).toContain(
       'private mintProfileIdentity(accountId: string): { id: string; wrappedDek?: string } {',
     );
-    expect(body).toContain('const id = randomUUID();');
-    expect(body).toContain(
-      'mintWrappedProfileDek(this.profileMasterKey, accountId, id).wrappedDek',
-    );
+    expect(body).toContain('return mintProfileRowIdentity(this.profileMasterKey, accountId);');
     expect(body).toContain('const identity = this.mintProfileIdentity(args.accountId);');
     expect(body).toContain('const cloneIdentity = this.mintProfileIdentity(args.accountId);');
     expect(body).toContain('const importIdentity = this.mintProfileIdentity(args.accountId);');

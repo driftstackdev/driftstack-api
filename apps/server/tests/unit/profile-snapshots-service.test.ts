@@ -16,9 +16,14 @@ import {
   type ProfileSnapshotRecord,
   type ProfileSnapshotsRepo,
 } from '../../src/services/profile-snapshots.js';
-import type { ProfileRecord, ProfilesRepo } from '../../src/services/profiles.js';
+import type { NewProfileInput, ProfileRecord, ProfilesRepo } from '../../src/services/profiles.js';
 import type { AccountAuditService } from '../../src/services/account-audit.js';
 import { ConflictError, NotFoundError, TierLimitError } from '../../src/lib/errors.js';
+import { PROFILE_DEK_V2_PREFIX, unwrapProfileDek } from '../../src/lib/profile-key-hierarchy.js';
+
+const CRYPTO_ACCOUNT_A = '00000000-0000-4000-8000-0000000000a1';
+const CRYPTO_ACCOUNT_B = '00000000-0000-4000-8000-0000000000b2';
+const OTHER_PROFILE_ID = '00000000-0000-4000-8000-0000000000c3';
 
 function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
   return {
@@ -115,7 +120,7 @@ function makeRepos(
     insert: (input) => {
       profileCounter += 1;
       const row: ProfileRecord = {
-        id: `prof_${profileCounter.toString()}`,
+        id: input.id ?? `prof_${profileCounter.toString()}`,
         accountId: input.accountId,
         name: input.name,
         archetype: input.archetype,
@@ -142,7 +147,7 @@ function makeRepos(
       }
       profileCounter += 1;
       const row: ProfileRecord = {
-        id: `prof_${profileCounter.toString()}`,
+        id: input.id ?? `prof_${profileCounter.toString()}`,
         accountId: input.accountId,
         name: input.name,
         archetype: input.archetype,
@@ -338,6 +343,59 @@ describe('V-553.B-19 ProfileSnapshotsService.restore', () => {
     expect(calls.map((c) => c.action)).toEqual(['profile.created']);
   });
 
+  it('preallocates the restored UUID and stores a fresh account+profile-bound v2 DEK', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      snapshots: [makeSnapshot({ accountId: CRYPTO_ACCOUNT_A, parentArchetype: 'mobile_ios' })],
+    });
+    const originalInsert = profilesRepo.insertWithLimit.bind(profilesRepo);
+    let captured: NewProfileInput | undefined;
+    profilesRepo.insertWithLimit = (input, limit) => {
+      captured = input;
+      return originalInsert(input, limit);
+    };
+    const masterKey = Buffer.alloc(32, 29);
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo, null, masterKey);
+
+    const restored = await svc.restore({
+      accountId: CRYPTO_ACCOUNT_A,
+      snapshotId: 'psnap_1',
+      tier: 'team_manual',
+      name: 'state-capable-restore',
+    });
+
+    expect(captured?.id).toBe(restored.id);
+    expect(restored.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(captured?.wrappedDek?.startsWith(PROFILE_DEK_V2_PREFIX)).toBe(true);
+    const wrappedDek = captured?.wrappedDek ?? '';
+    expect(unwrapProfileDek(masterKey, CRYPTO_ACCOUNT_A, restored.id, wrappedDek)).toHaveLength(32);
+    expect(() => unwrapProfileDek(masterKey, CRYPTO_ACCOUNT_B, restored.id, wrappedDek)).toThrow();
+    expect(() =>
+      unwrapProfileDek(masterKey, CRYPTO_ACCOUNT_A, OTHER_PROFILE_ID, wrappedDek),
+    ).toThrow();
+  });
+
+  it('preallocates the restored UUID but stores no DEK when the master key is absent', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({ snapshots: [makeSnapshot()] });
+    const originalInsert = profilesRepo.insertWithLimit.bind(profilesRepo);
+    let captured: NewProfileInput | undefined;
+    profilesRepo.insertWithLimit = (input, limit) => {
+      captured = input;
+      return originalInsert(input, limit);
+    };
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+
+    const restored = await svc.restore({
+      accountId: 'acc_1',
+      snapshotId: 'psnap_1',
+      tier: 'team_manual',
+      name: 'stateless-restore',
+    });
+
+    expect(captured?.id).toBe(restored.id);
+    expect(restored.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(captured?.wrappedDek).toBeUndefined();
+  });
+
   it('translates a concurrent same-name 23505 (race loser) into ConflictError, not a 500', async () => {
     // findByAccountAndName('fresh') misses the pre-check, but a sibling
     // create/restore took it before this insert commits → the
@@ -384,17 +442,27 @@ describe('V-553.B-19 ProfileSnapshotsService.restore', () => {
     // wins the under-lock re-check → insertWithLimit returns limitExceeded. Restore
     // must surface a TierLimitError, not insert past the cap (the 5th profile-
     // creation path, now on the same atomic guard as create/clone/import/transfer).
-    const { snapshotsRepo, profilesRepo } = makeRepos({ snapshots: [makeSnapshot()] });
+    const { snapshotsRepo, profilesRepo, state } = makeRepos({
+      snapshots: [makeSnapshot({ accountId: CRYPTO_ACCOUNT_A })],
+    });
+    const { audit, calls } = makeAudit();
     profilesRepo.insertWithLimit = () => Promise.resolve({ limitExceeded: true, current: 5 });
-    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    const svc = new ProfileSnapshotsService(
+      snapshotsRepo,
+      profilesRepo,
+      audit,
+      Buffer.alloc(32, 7),
+    );
     await expect(
       svc.restore({
-        accountId: 'acc_1',
+        accountId: CRYPTO_ACCOUNT_A,
         snapshotId: 'psnap_1',
         tier: 'team_manual',
         name: 'fresh',
       }),
     ).rejects.toThrow(TierLimitError);
+    expect(state.profiles).toHaveLength(0);
+    expect(calls).toEqual([]);
   });
 });
 

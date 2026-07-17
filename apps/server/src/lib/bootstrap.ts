@@ -1675,6 +1675,7 @@ export async function createProductionDeps(
     new DrizzleProfileSnapshotsRepo(dbHandle),
     profilesRepo,
     accountAuditService,
+    profileMasterKeyBuf,
   );
 
   // Q.2 — fail-fast safety: refuse to boot if STRIPE_SECRET_KEY is

@@ -273,6 +273,23 @@ export interface ProfileSessionGuard {
   countActiveForProfile(profileId: string): Promise<number>;
 }
 
+/**
+ * Preallocate the final profile UUID before minting its optional DEK wrapper so
+ * the v2 envelope is authenticated to the exact account + row identity that is
+ * committed. Every profile-creation path, including snapshot restore, shares
+ * this factory; a missing master key deliberately preserves the stateless,
+ * feature-inert posture while still using the preallocated UUID.
+ */
+export function mintProfileRowIdentity(
+  profileMasterKey: Buffer | null,
+  accountId: string,
+): { id: string; wrappedDek?: string } {
+  const id = randomUUID();
+  return profileMasterKey !== null
+    ? { id, wrappedDek: mintWrappedProfileDek(profileMasterKey, accountId, id).wrappedDek }
+    : { id };
+}
+
 export class ProfilesService {
   constructor(
     private readonly repo: ProfilesRepo,
@@ -324,10 +341,7 @@ export class ProfilesService {
    * persistence silently breaks for that profile.
    */
   private mintProfileIdentity(accountId: string): { id: string; wrappedDek?: string } {
-    const id = randomUUID();
-    return this.profileMasterKey !== null
-      ? { id, wrappedDek: mintWrappedProfileDek(this.profileMasterKey, accountId, id).wrappedDek }
-      : { id };
+    return mintProfileRowIdentity(this.profileMasterKey, accountId);
   }
 
   private async emitAuditBestEffort(

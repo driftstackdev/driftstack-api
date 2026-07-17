@@ -21,7 +21,7 @@
 import type { AccountTier } from '@driftstack/api-types';
 import { ConflictError, NotFoundError, TierLimitError } from '../lib/errors.js';
 import { profileLimitFor } from './sessions.js';
-import { isProfileNameRaceViolation } from './profiles.js';
+import { isProfileNameRaceViolation, mintProfileRowIdentity } from './profiles.js';
 import type { ProfileRecord, ProfilesRepo } from './profiles.js';
 import type { AccountAuditService } from './account-audit.js';
 
@@ -93,6 +93,7 @@ export class ProfileSnapshotsService {
     private readonly snapshotsRepo: ProfileSnapshotsRepo,
     private readonly profilesRepo: ProfilesRepo,
     private readonly accountAudit: AccountAuditService | null = null,
+    private readonly profileMasterKey: Buffer | null = null,
   ) {}
 
   private async emitAuditBestEffort(
@@ -185,14 +186,22 @@ export class ProfileSnapshotsService {
     // the account past its per-tier cap (was a count-then-insert TOCTOU —
     // the 5th profile-creation path, missed by the original create/clone/
     // import/transfer fix).
+    // Profile-backed sessions: restore creates a fresh identity slot with no
+    // copied sealed state, so it must mint its own DEK bound to the final
+    // account + preallocated profile UUID. A missing master key keeps the
+    // feature inert (wrappedDek omitted), matching every other insert path.
+    const identity = mintProfileRowIdentity(this.profileMasterKey, args.accountId);
+
     let result: Awaited<ReturnType<typeof this.profilesRepo.insertWithLimit>>;
     try {
       result = await this.profilesRepo.insertWithLimit(
         {
+          id: identity.id,
           accountId: args.accountId,
           name: args.name,
           archetype: snapshot.parentArchetype,
           description: snapshot.description,
+          wrappedDek: identity.wrappedDek,
         },
         limit,
       );

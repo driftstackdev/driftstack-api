@@ -291,6 +291,9 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body.indexOf('migrateWrappedDekEnvelopes')).toBeLessThan(
       body.indexOf('const profilesService = new ProfilesService'),
     );
+    expect(body).toMatch(
+      /const profileSnapshotsService = new ProfileSnapshotsService\(\s*new DrizzleProfileSnapshotsRepo\(dbHandle\),\s*profilesRepo,\s*accountAuditService,\s*profileMasterKeyBuf,\s*\);/,
+    );
   });
 
   it('synchronously drains legacy account-proxy secrets to record-bound v2 before constructing the dispatch service', () => {
