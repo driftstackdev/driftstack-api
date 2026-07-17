@@ -26,8 +26,6 @@
     "fs:allow-mkdir",
     "fs:allow-exists",
     "fs:allow-read-dir",
-    "updater:default",
-    "process:default",
     {
       "identifier": "shell:allow-open",
       "allow": [

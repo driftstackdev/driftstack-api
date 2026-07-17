@@ -44,7 +44,7 @@
         "frame-ancestors": "'none'",
         "form-action": "'none'"
       },
-      "capabilities": ["default", "simulator"]
+      "capabilities": ["default", "simulator", "updater-windows-linux"]
     }
   },
   "bundle": {
@@ -65,7 +65,6 @@
   },
   "plugins": {
     "updater": {
-      "active": true,
       "endpoints": [
         "https://github.com/driftstackdev/driftstack-api/releases/latest/download/latest.json"
       ],

@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "updater-windows-linux",
+  "description": "Updater install and relaunch permissions for the main Windows and Linux app only. macOS is intentionally excluded so a minisign-only updater artifact cannot replace the stable OS-signed bundle and change its code requirement.",
+  "windows": ["main"],
+  "permissions": ["updater:default", "process:default"],
+  "platforms": ["windows", "linux"]
+}

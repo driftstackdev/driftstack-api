@@ -55,9 +55,6 @@
     }
   },
   "plugins": {
-    "updater": {
-      "active": false
-    },
     "deep-link": {
       "mobile": [],
       "desktop": {

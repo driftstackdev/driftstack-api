@@ -216,9 +216,13 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/fn native_command_origins_separate_main_gui_and_simulator_windows\(\)/);
   });
 
-  it('capabilities/default.json: identifier=default + windows=[main] + 9 core/store permissions (incl. core:window:allow-start-dragging for the custom title-bar drag region) + fs:scope $APPDATA/recordings/** + $DOWNLOAD/** + 7 fs allow-* + updater:default + exact shell:allow-open activation URL allow-list pinned', () => {
+  it('capabilities/default.json + updater-windows-linux.json: main permissions stay least-privilege and updater install/relaunch is Windows/Linux-only', () => {
     const body = read(T('capabilities/default.json'));
     const capability = JSON.parse(body) as {
+      $schema: string;
+      identifier: string;
+      description: string;
+      windows: string[];
       permissions: Array<
         | string
         | {
@@ -227,12 +231,41 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
           }
       >;
     };
-    expect(body).toMatch(/"\$schema": "\.\.\/gen\/schemas\/desktop-schema\.json"/);
-    expect(body).toMatch(/"identifier": "default"/);
-    expect(body).toMatch(
-      /"description": "Default capabilities granted to the main window — only the surfaces the GUI actually needs\."/,
-    );
-    expect(body).toMatch(/"windows": \["main"\]/);
+    expect(capability).toMatchObject({
+      $schema: '../gen/schemas/desktop-schema.json',
+      identifier: 'default',
+      description:
+        'Default capabilities granted to the main window — only the surfaces the GUI actually needs.',
+      windows: ['main'],
+    });
+    expect(capability.permissions).not.toContain('updater:default');
+    expect(capability.permissions).not.toContain('process:default');
+
+    const updaterCapability = JSON.parse(read(T('capabilities/updater-windows-linux.json'))) as {
+      $schema: string;
+      identifier: string;
+      description: string;
+      windows: string[];
+      permissions: string[];
+      platforms: string[];
+    };
+    expect(updaterCapability).toEqual({
+      $schema: '../gen/schemas/desktop-schema.json',
+      identifier: 'updater-windows-linux',
+      description:
+        'Updater install and relaunch permissions for the main Windows and Linux app only. macOS is intentionally excluded so a minisign-only updater artifact cannot replace the stable OS-signed bundle and change its code requirement.',
+      windows: ['main'],
+      permissions: ['updater:default', 'process:default'],
+      platforms: ['windows', 'linux'],
+    });
+    expect(updaterCapability.platforms).not.toContain('macOS');
+
+    const simulatorCapability = JSON.parse(read(T('capabilities/simulator-app.json'))) as {
+      permissions: Array<string | { identifier: string }>;
+    };
+    expect(simulatorCapability.permissions).not.toContain('updater:default');
+    expect(simulatorCapability.permissions).not.toContain('process:default');
+
     expect(body).toMatch(/"core:default"/);
     expect(body).toMatch(/"core:window:default"/);
     // start-dragging: the TitleBar uses data-tauri-drag-region, which invokes the
@@ -259,8 +292,6 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"fs:allow-mkdir"/);
     expect(body).toMatch(/"fs:allow-exists"/);
     expect(body).toMatch(/"fs:allow-read-dir"/);
-    expect(body).toMatch(/"updater:default"/);
-    expect(body).toMatch(/"process:default"/);
     expect(body).toMatch(/"identifier": "shell:allow-open"/);
     const shellOpen = capability.permissions.find(
       (permission) =>
@@ -278,10 +309,18 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     });
     expect(body).not.toMatch(/app-staging\.driftstack\.dev/);
     expect(existsSync(T('capabilities/default.json'))).toBe(true);
+    expect(existsSync(T('capabilities/updater-windows-linux.json'))).toBe(true);
   });
 
   it('tauri.conf.json: productName=Driftstack 0.0.1 + identifier dev.driftstack.gui + frontendDist ../dist + devUrl localhost:1420 + 1 main window (1280×800 / min 960×600 / Overlay titleBarStyle / hiddenTitle / #0b0f14) + 5-target bundle (app/dmg/nsis/appimage/deb) DeveloperTool + macOS minimumSystemVersion 12.0 + Entitlements.plist + V-243 updater endpoint github releases latest + $TAURI_UPDATER_PUBKEY placeholder + V-328 deep-link scheme driftstack desktop-only pinned', () => {
     const body = read(T('tauri.conf.json'));
+    const config = JSON.parse(body) as {
+      app: { security: { capabilities: string[] } };
+      bundle: { active: boolean };
+      plugins: {
+        updater: Record<string, unknown>;
+      };
+    };
     expect(body).toMatch(/"\$schema": "https:\/\/schema\.tauri\.app\/config\/2"/);
     expect(body).toMatch(/"productName": "Driftstack"/);
     expect(body).toMatch(/"version": "0\.0\.1"/);
@@ -312,11 +351,19 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"icons\/icon\.ico"/);
     expect(body).toMatch(/"minimumSystemVersion": "12\.0"/);
     expect(body).toMatch(/"entitlements": "Entitlements\.plist"/);
-    expect(body).toMatch(/"updater": \{/);
-    expect(body).toMatch(/"active": true/);
-    expect(body).toMatch(
-      /"https:\/\/github\.com\/driftstackdev\/driftstack-api\/releases\/latest\/download\/latest\.json"/,
-    );
+    expect(config.app.security.capabilities).toEqual([
+      'default',
+      'simulator',
+      'updater-windows-linux',
+    ]);
+    expect(config.bundle.active).toBe(true);
+    expect(config.plugins.updater).toEqual({
+      endpoints: [
+        'https://github.com/driftstackdev/driftstack-api/releases/latest/download/latest.json',
+      ],
+      pubkey: '$TAURI_UPDATER_PUBKEY',
+    });
+    expect('active' in config.plugins.updater).toBe(false);
     // 2026-06-01 — `dialog` removed: it was a Tauri-v1 updater key that did
     // nothing in v2 (v2's updater is programmatic; the in-app flow lives in
     // src/lib/updater.ts + UpdateBanner.tsx).
@@ -327,6 +374,16 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"desktop": \{/);
     expect(body).toMatch(/"schemes": \["driftstack"\]/);
     expect(existsSync(T('tauri.conf.json'))).toBe(true);
+  });
+
+  it('tauri.simulator.conf.json: simulator app selects only simulator-app and has no inert updater overlay', () => {
+    const config = JSON.parse(read(T('tauri.simulator.conf.json'))) as {
+      app: { security: { capabilities: string[] } };
+      plugins: Record<string, unknown>;
+    };
+
+    expect(config.app.security.capabilities).toEqual(['simulator-app']);
+    expect(config.plugins).not.toHaveProperty('updater');
   });
 
   it('both desktop apps enforce the same Tauri CSP without script/object/frame/form escape hatches', () => {
