@@ -20,14 +20,28 @@ describe('docs /api/archetypes live-contract parity', () => {
     expect(page).toContain('Only customer-selectable entries are returned:');
   });
 
-  it('generates direct create payloads from catalog capabilities without synthesizing ids', () => {
+  it('generates direct create payloads only from one exact live-catalog match', () => {
     expect(page).toContain('## Generate a create payload from the live catalog');
     expect(page).toContain('async function archetypeCreatePayload(filter: ArchetypeFilter = {})');
+    expect(page).toContain('if (requested.length === 0) return {};');
     expect(page).toContain("await fetch('https://api.driftstack.dev/v1/archetypes')");
-    expect(page).toContain('return { archetype: match.id };');
+    expect(page).toContain('const matches = catalog.data.filter(');
+    expect(page).toContain('return { archetype: matches[0]!.id };');
     expect(page).toContain(
       "throw new Error('No currently selectable archetype matches those capabilities.');",
     );
+    expect(page).toContain(
+      "'More than one archetype matches. Add another capability or use an exact catalog id.',",
+    );
+    expect(page).toMatch(
+      /device: 'iPhone 17',[\s\S]*ios_version: '18\.7',[\s\S]*safari_version: '26\.4'/,
+    );
+    expect(page).not.toContain('catalog.data.find(');
+  });
+
+  it('does not promise archetype accessors in registry packages that predate the resource', () => {
+    expect(page).not.toMatch(/client\.archetypes\.list|client\.Archetypes\.List/);
+    expect(page).toContain('The route and its inline response schema are also published');
   });
 
   it('pins direct-write rejection and stored-profile compatibility', () => {

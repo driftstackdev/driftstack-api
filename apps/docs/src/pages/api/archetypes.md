@@ -65,12 +65,16 @@ slug. This helper can generate the body for either `POST /v1/sessions` or
 
 ```ts
 type ArchetypeFilter = {
+  id?: string;
   device?: string;
   ios_version?: string;
   safari_version?: string;
 };
 
 async function archetypeCreatePayload(filter: ArchetypeFilter = {}) {
+  const requested = Object.entries(filter).filter(([, value]) => value !== undefined);
+  if (requested.length === 0) return {};
+
   const response = await fetch('https://api.driftstack.dev/v1/archetypes');
   if (!response.ok) throw new Error(`Catalog request failed: ${response.status}`);
 
@@ -83,22 +87,29 @@ async function archetypeCreatePayload(filter: ArchetypeFilter = {}) {
       safari_version: string;
     }>;
   };
-  const match = catalog.data.find(
+  const matches = catalog.data.filter(
     (entry) =>
+      (filter.id === undefined || entry.id === filter.id) &&
       (filter.device === undefined || entry.device === filter.device) &&
       (filter.ios_version === undefined || entry.ios_version === filter.ios_version) &&
       (filter.safari_version === undefined || entry.safari_version === filter.safari_version),
   );
 
-  if (match === undefined) {
+  if (matches.length === 0) {
     throw new Error('No currently selectable archetype matches those capabilities.');
   }
-  return { archetype: match.id };
+  if (matches.length > 1) {
+    throw new Error(
+      'More than one archetype matches. Add another capability or use an exact catalog id.',
+    );
+  }
+  return { archetype: matches[0]!.id };
 }
 
 const sessionBody = await archetypeCreatePayload({
   device: 'iPhone 17',
   ios_version: '18.7',
+  safari_version: '26.4',
 });
 ```
 
@@ -108,26 +119,7 @@ even if it later leaves the selectable catalog; compatibility operations on
 those profiles remain available, but new direct creates and imports must choose
 from the live response.
 
-The same response schema is published in
-[`/openapi.json`](https://api.driftstack.dev/openapi.json), so generated clients
-can expose it without maintaining a separate hand-written model.
-
-## SDKs
-
-All official SDKs read the same live catalog:
-
-```ts
-const catalog = await client.archetypes.list();
-```
-
-```python
-catalog = client.archetypes.list()
-```
-
-```go
-catalog, err := client.Archetypes.List(ctx)
-```
-
-Use `catalog.default_archetype_id` (Go: `DefaultArchetypeID`) when presenting a
-recommended choice. Do not copy the returned IDs into a separate application
-constant; refresh the cache after its five-minute response lifetime.
+The route and its inline response schema are also published in
+[`/openapi.json`](https://api.driftstack.dev/openapi.json). Do not copy returned
+IDs into a separate application constant; refresh the catalog after its
+five-minute response lifetime.
