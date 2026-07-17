@@ -227,6 +227,42 @@ describe('auth cache — live Free-tier entitlement', () => {
     const deniedAgain = await fx.app.inject({ method: 'GET', url: '/v1/whoami', headers });
     expect(deniedAgain.statusCode).toBe(403);
   });
+
+  it('enforces the Free cli_device route policy on positive cache hits', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const key = await fx.authRepo.findApiKeyByPrefix(keyPrefixFromPlaintext(fx.plaintext));
+    expect(key).not.toBeNull();
+    fx.authRepo.upsertApiKey({ ...key!, provenance: 'cli_device' });
+    const headers = { authorization: `Bearer ${fx.plaintext}` };
+
+    const warm = await fx.app.inject({ method: 'GET', url: '/v1/sessions', headers });
+    expect(warm.statusCode, warm.body).toBe(200);
+    expect(await fx.authCache.get(sha256Hex(fx.plaintext))).not.toBeNull();
+
+    const allowedHit = await fx.app.inject({ method: 'GET', url: '/v1/sessions', headers });
+    expect(allowedHit.statusCode, allowedHit.body).toBe(200);
+
+    const deniedHit = await fx.app.inject({ method: 'GET', url: '/v1/webhooks', headers });
+    expect(deniedHit.statusCode).toBe(403);
+    expect(deniedHit.json<{ detail: string }>().detail).toContain('Free desktop credential');
+
+    const deniedAgain = await fx.app.inject({ method: 'GET', url: '/v1/api-keys', headers });
+    expect(deniedAgain.statusCode).toBe(403);
+    expect(deniedAgain.json<{ detail: string }>().detail).toContain('Free desktop credential');
+  });
+
+  it('does not route-limit a paid cli_device credential', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const key = await fx.authRepo.findApiKeyByPrefix(keyPrefixFromPlaintext(fx.plaintext));
+    expect(key).not.toBeNull();
+    fx.authRepo.upsertApiKey({ ...key!, provenance: 'cli_device' });
+    const headers = { authorization: `Bearer ${fx.plaintext}` };
+
+    const warm = await fx.app.inject({ method: 'GET', url: '/v1/sessions', headers });
+    expect(warm.statusCode, warm.body).toBe(200);
+    const unlisted = await fx.app.inject({ method: 'GET', url: '/v1/webhooks', headers });
+    expect(unlisted.statusCode, unlisted.body).toBe(200);
+  });
 });
 
 describe('auth cache — graceful degradation', () => {

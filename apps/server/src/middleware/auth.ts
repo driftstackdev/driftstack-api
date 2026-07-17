@@ -20,6 +20,10 @@ import {
   UnauthorizedError,
 } from '../lib/errors.js';
 import { requireTierFeature } from '../lib/errors-helpers.js';
+import {
+  isIndependentDeviceKeyDeniedRoute,
+  requireFreeDesktopRouteAccess,
+} from './free-desktop-route-policy.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 
@@ -126,8 +130,17 @@ export const DEFAULT_MFA_FRESHNESS_SECONDS = 15 * 60;
  * bearer must satisfy the current account tier on every request, including a
  * positive auth-cache hit.
  */
-function requireProgrammaticApiAccess(ctx: AccountContext): void {
-  if (ctx.webSession !== null || ctx.apiKey.provenance === 'cli_device') return;
+function requireProgrammaticApiAccess(ctx: AccountContext, request: FastifyRequest): void {
+  if (ctx.webSession !== null) return;
+  if (ctx.apiKey.provenance === 'cli_device') {
+    if (
+      ctx.account.tier === 'free' &&
+      !isIndependentDeviceKeyDeniedRoute(request.method, request.routeOptions.url)
+    ) {
+      requireFreeDesktopRouteAccess(request.method, request.routeOptions.url);
+    }
+    return;
+  }
   requireTierFeature(ctx.account.tier, 'apiAccess');
 }
 
@@ -151,7 +164,7 @@ function authPlugin(
         opts.negativeAuthCache ?? null,
         opts.oauthStore ?? null,
       );
-      requireProgrammaticApiAccess(ctx);
+      requireProgrammaticApiAccess(ctx, request);
       request.account = ctx;
       try {
         opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: 'ok' });
@@ -202,7 +215,7 @@ function authPlugin(
         opts.negativeAuthCache ?? null,
         opts.oauthStore ?? null,
       );
-      requireProgrammaticApiAccess(ctx);
+      requireProgrammaticApiAccess(ctx, request);
       request.account = ctx;
       try {
         opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: 'ok' });

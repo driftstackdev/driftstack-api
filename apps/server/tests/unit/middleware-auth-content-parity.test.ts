@@ -93,20 +93,23 @@ describe('W394.B apps/server/src/middleware/auth.ts content parity', () => {
     expect(body).toMatch(/app\.decorateRequest\('account', null\);/);
   });
 
-  it('requireAuth + requireAuthEventSource: authenticate, enforce current-tier programmatic access, then assign request.account', () => {
+  it('requireAuth + requireAuthEventSource: authenticate, enforce current-tier and Free-device route access, then assign request.account', () => {
     expect(body).toMatch(
-      /const requireAuth = async \(request: FastifyRequest, _reply: FastifyReply\): Promise<void> => \{\s*\n?\s*try \{\s*\n?\s*const token = extractBearerToken\(request\.headers\.authorization\);\s*\n?\s*const ctx = await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*opts\.oauthStore \?\? null,\s*\n?\s*\);\s*\n?\s*requireProgrammaticApiAccess\(ctx\);\s*\n?\s*request\.account = ctx;/,
+      /const requireAuth = async \(request: FastifyRequest, _reply: FastifyReply\): Promise<void> => \{\s*\n?\s*try \{\s*\n?\s*const token = extractBearerToken\(request\.headers\.authorization\);\s*\n?\s*const ctx = await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*opts\.oauthStore \?\? null,\s*\n?\s*\);\s*\n?\s*requireProgrammaticApiAccess\(ctx, request\);\s*\n?\s*request\.account = ctx;/,
     );
     expect(body).toMatch(
-      /const requireAuthEventSource = async \(\s*\n?\s*request: FastifyRequest,\s*\n?\s*_reply: FastifyReply,\s*\n?\s*\): Promise<void> => \{[\s\S]*?const ctx = await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*opts\.oauthStore \?\? null,\s*\n?\s*\);\s*\n?\s*requireProgrammaticApiAccess\(ctx\);\s*\n?\s*request\.account = ctx;/,
+      /const requireAuthEventSource = async \(\s*\n?\s*request: FastifyRequest,\s*\n?\s*_reply: FastifyReply,\s*\n?\s*\): Promise<void> => \{[\s\S]*?const ctx = await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*opts\.negativeAuthCache \?\? null,\s*\n?\s*opts\.oauthStore \?\? null,\s*\n?\s*\);\s*\n?\s*requireProgrammaticApiAccess\(ctx, request\);\s*\n?\s*request\.account = ctx;/,
     );
   });
 
-  it('Free customer API boundary exempts only explicit web sessions and cli_device provenance', () => {
+  it('Free customer API boundary preserves web sessions, route-limits Free devices, and tier-gates ordinary credentials', () => {
     expect(body).toMatch(
-      /function requireProgrammaticApiAccess\(ctx: AccountContext\): void \{\s*\n?\s*if \(ctx\.webSession !== null \|\| ctx\.apiKey\.provenance === 'cli_device'\) return;\s*\n?\s*requireTierFeature\(ctx\.account\.tier, 'apiAccess'\);\s*\n?\s*\}/,
+      /function requireProgrammaticApiAccess\(ctx: AccountContext, request: FastifyRequest\): void \{\s*\n?\s*if \(ctx\.webSession !== null\) return;\s*\n?\s*if \(ctx\.apiKey\.provenance === 'cli_device'\) \{\s*\n?\s*if \(\s*\n?\s*ctx\.account\.tier === 'free' &&\s*\n?\s*!isIndependentDeviceKeyDeniedRoute\(request\.method, request\.routeOptions\.url\)\s*\n?\s*\) \{\s*\n?\s*requireFreeDesktopRouteAccess\(request\.method, request\.routeOptions\.url\);\s*\n?\s*\}\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*requireTierFeature\(ctx\.account\.tier, 'apiAccess'\);\s*\n?\s*\}/,
     );
-    expect(body.match(/requireProgrammaticApiAccess\(ctx\);/g)).toHaveLength(2);
+    expect(body.match(/requireProgrammaticApiAccess\(ctx, request\);/g)).toHaveLength(2);
+    expect(body).toMatch(
+      /import \{\s*\n?\s*isIndependentDeviceKeyDeniedRoute,\s*\n?\s*requireFreeDesktopRouteAccess,\s*\n?\s*\} from '\.\/free-desktop-route-policy\.js';/,
+    );
   });
 
   it('requireScope decorator: calls requireAuth if request.account null, then services/auth.requireScope(ctx, scope)', () => {

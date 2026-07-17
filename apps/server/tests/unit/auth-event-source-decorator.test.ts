@@ -105,6 +105,7 @@ async function buildApp(
   metrics: MetricsRegistry,
   cache: AuthCache | null = null,
   repo: AccountAuthRepo = makeRepo(),
+  route = '/sse',
 ): Promise<FastifyInstance> {
   const app = Fastify();
   await app.register(authPlugin, {
@@ -116,7 +117,7 @@ async function buildApp(
   // The handler echoes the resolved auth context so a positive-path test can
   // assert the request was authenticated with the SAME account regardless of
   // whether the token arrived via header or ?ds_token= query param.
-  app.get('/sse', { preHandler: [app.requireAuthEventSource] }, (req) => ({
+  app.get(route, { preHandler: [app.requireAuthEventSource] }, (req) => ({
     ok: true,
     accountId: req.account?.account.id ?? null,
     scopes: req.account?.apiKey.scopes ?? null,
@@ -211,9 +212,36 @@ describe('requireAuthEventSource — ds_token query fallback', () => {
     await app.close();
   });
 
-  it('keeps the provenance-bound Free desktop credential valid through EventSource auth', async () => {
+  it('keeps the provenance-bound Free desktop credential valid on an allowlisted EventSource route', async () => {
     const metrics = makeRegistry();
     const ctx = contextFor('free', 'cli_device');
+    const route = '/v1/account/me/notifications';
+    const app = await buildApp(metrics, makeHitCache(ctx), makeRepo(true, ctx), route);
+    const res = await app.inject({ method: 'GET', url: `${route}?ds_token=${VALID_TOKEN}` });
+    expect(res.statusCode).toBe(200);
+    expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'ok' })).toBe(1);
+    await app.close();
+  });
+
+  it('403s a Free desktop credential on an unlisted EventSource route', async () => {
+    const metrics = makeRegistry();
+    const ctx = contextFor('free', 'cli_device');
+    const route = '/v1/agent-sessions/:id/transcript';
+    const app = await buildApp(metrics, makeHitCache(ctx), makeRepo(true, ctx), route);
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/asess_x/transcript?ds_token=${VALID_TOKEN}`,
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('Free desktop credential');
+    expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'forbidden' })).toBe(1);
+    expect(metrics.getValue(METRIC_NAMES.authTotal, { outcome: 'ok' })).toBe(0);
+    await app.close();
+  });
+
+  it('does not route-limit a paid cli_device EventSource credential', async () => {
+    const metrics = makeRegistry();
+    const ctx = contextFor('api_builder', 'cli_device');
     const app = await buildApp(metrics, makeHitCache(ctx), makeRepo(true, ctx));
     const res = await app.inject({ method: 'GET', url: `/sse?ds_token=${VALID_TOKEN}` });
     expect(res.statusCode).toBe(200);

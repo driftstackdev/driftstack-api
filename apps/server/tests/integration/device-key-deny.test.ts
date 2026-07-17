@@ -19,6 +19,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { DEVICE_KEY_DENY_ROUTES } from '../../src/middleware/device-key-deny.js';
+import { FREE_DESKTOP_ALLOWED_ROUTES } from '../../src/middleware/free-desktop-route-policy.js';
 
 let fx: TestAppFixture;
 
@@ -205,6 +206,16 @@ function isDeviceDenied(res: { statusCode: number; body: string }): boolean {
   }
 }
 
+function isFreeDesktopRouteDenied(res: { statusCode: number; body: string }): boolean {
+  if (res.statusCode !== 403) return false;
+  try {
+    const b = JSON.parse(res.body) as { detail?: string };
+    return typeof b.detail === 'string' && b.detail.includes('Free desktop credential');
+  } catch {
+    return false;
+  }
+}
+
 describe('C1 device-key deny-gate — every deny-set route 403s a device key', () => {
   it('the request table covers exactly the deny-set (no drift)', () => {
     const covered = new Set(DENY_REQUESTS.map((r) => r.template));
@@ -263,7 +274,6 @@ describe('C1 device-key deny-gate — ordinary account_owner key is never device
 describe('C1 device-key deny-gate — device-need routes stay open to a device key', () => {
   const DEVICE_NEED: Array<{ method: string; url: string }> = [
     { method: 'GET', url: '/v1/account/me' },
-    { method: 'GET', url: '/v1/webhooks' }, // READ allowed (only writes are denied)
     { method: 'POST', url: '/v1/account/me/proxies' }, // account_owner-gated device write
     { method: 'GET', url: '/v1/agent-sessions' },
   ];
@@ -283,6 +293,53 @@ describe('C1 device-key deny-gate — device-need routes stay open to a device k
       ).toBe(false);
     });
   }
+});
+
+describe('Free desktop credential — fail-closed route surface', () => {
+  it('every allowlisted template remains disjoint from the independent deny-set', () => {
+    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(59);
+    for (const route of FREE_DESKTOP_ALLOWED_ROUTES) {
+      expect(DEVICE_KEY_DENY_ROUTES.has(route), route).toBe(false);
+    }
+  });
+
+  it('rejects representative API-key, webhook, web-session, and transcript-SSE reads', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const { deviceKey } = await setup(fx);
+    const normalRequests = ['/v1/api-keys', '/v1/webhooks', '/v1/account/web-sessions'];
+    for (const url of normalRequests) {
+      const res = await fx.app.inject({
+        method: 'GET',
+        url,
+        headers: { authorization: `Bearer ${deviceKey}` },
+      });
+      expect(
+        isFreeDesktopRouteDenied(res),
+        `${url} escaped the Free desktop route policy (${res.statusCode}: ${res.body})`,
+      ).toBe(true);
+    }
+
+    const transcript = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/asess_missing/transcript?ds_token=${encodeURIComponent(deviceKey)}`,
+    });
+    expect(
+      isFreeDesktopRouteDenied(transcript),
+      `transcript SSE escaped the Free desktop route policy (${transcript.statusCode}: ${transcript.body})`,
+    ).toBe(true);
+  });
+
+  it('does not restrict a Free interactive web session on an unlisted route', async () => {
+    fx = await buildTestApp();
+    const { sessionToken } = await setup(fx);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${sessionToken}` },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(isFreeDesktopRouteDenied(res)).toBe(false);
+  });
 });
 
 describe('C1 — /bind requires an interactive web session (self-mint laundering closed)', () => {
@@ -311,7 +368,6 @@ describe('C1 — deny-set never overlaps a known device-need route', () => {
   it('is disjoint from the gui-client device-need templates', () => {
     const DEVICE_NEED_TEMPLATES = [
       'GET:/v1/account/me',
-      'GET:/v1/webhooks',
       'POST:/v1/account/me/proxies',
       'PUT:/v1/account/me/organization',
       'PATCH:/v1/account/me/bundled-llm-settings',
