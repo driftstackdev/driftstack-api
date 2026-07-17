@@ -1,66 +1,106 @@
-// W264.D — drift-guard for /docs/cli-quickstart. Pins:
-// 1. CLI-authorize three-step flow routes are registered.
-// 2. 5-minute activation TTL claim matches the live cli-authorize service.
-// 3. CLI binary name `driftstack` is consistent.
-// 4. Cross-link /docs/api-quickstart exists.
+// Public-truth guard: the device-code authorization protocol is live for the
+// desktop product, but there is no published Driftstack CLI distributable.
+// Keep the fictional install/command/keyring page absent without deleting the
+// real dashboard binder or its server-side protocol.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/cli-quickstart.astro');
+const CLI_PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/cli-quickstart.astro');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/auth-cli.ts');
 const SERVICE = resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts');
+const DASHBOARD_BINDER = resolve(
+  REPO_ROOT,
+  'apps/customer-dashboard/src/pages/cli/authorize.astro',
+);
 
-function read(p: string): string {
-  return readFileSync(p, 'utf8');
+function read(path: string): string {
+  return readFileSync(path, 'utf8');
 }
 
-describe('W264.D /docs/cli-quickstart ↔ live cli-authorize parity', () => {
-  const page = read(PAGE);
-  const route = read(ROUTE);
-  const service = read(SERVICE);
+function walk(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir)) {
+    const full = resolve(dir, entry);
+    const stat = statSync(full);
+    if (stat.isDirectory()) walk(full, out);
+    else out.push(full);
+  }
+  return out;
+}
 
-  it('CLI-facing /initiate + /exchange endpoints documented; /bind is server-side', () => {
-    // The CLI binary only ever calls initiate + exchange. The /bind
-    // endpoint is server-internal (called by the dashboard during the
-    // V-266 activation flow), so the doc doesn't mention it.
-    for (const path of ['/v1/auth/cli-authorize/initiate', '/v1/auth/cli-authorize/exchange']) {
-      expect(page).toContain(path);
+const publicPages = [
+  ...walk(resolve(REPO_ROOT, 'apps/marketing-site/src/pages')),
+  ...walk(resolve(REPO_ROOT, 'apps/docs/src/pages')),
+].filter((path) => /\.(?:astro|md)$/.test(path));
+
+describe('public CLI absence and desktop authorization protocol truth', () => {
+  it('does not publish the nonexistent CLI quickstart or link to it', () => {
+    expect(existsSync(CLI_PAGE)).toBe(false);
+
+    const links = publicPages.filter((path) => read(path).includes('/docs/cli-quickstart'));
+    expect(links).toEqual([]);
+  });
+
+  it('does not advertise fictional CLI packages, installers, releases, commands, or keyring storage', () => {
+    const forbidden = [
+      /@driftstack\/cli\b/,
+      /brew install driftstack\/tap\/driftstack/,
+      /driftstack\/2\.3\.x/,
+      /\bdriftstack (?:login|logout|sessions|profiles|api-keys|config|--version|--profile)\b/,
+      /\bdriftstack-cli\b/,
+    ];
+
+    for (const pattern of forbidden) {
+      const offenders = publicPages
+        .filter((path) => pattern.test(read(path)))
+        .map((path) => path.slice(REPO_ROOT.length + 1));
+      expect(offenders, `public pages matching ${String(pattern)}`).toEqual([]);
+    }
+  });
+
+  it('has no workspace package or executable named @driftstack/cli or driftstack', () => {
+    const manifests = [
+      resolve(REPO_ROOT, 'package.json'),
+      ...walk(resolve(REPO_ROOT, 'apps')).filter((path) => path.endsWith('/package.json')),
+      ...walk(resolve(REPO_ROOT, 'packages')).filter((path) => path.endsWith('/package.json')),
+    ];
+    const offenders: string[] = [];
+
+    for (const manifest of manifests) {
+      const parsed = JSON.parse(read(manifest)) as {
+        name?: string;
+        bin?: string | Record<string, string>;
+      };
+      const hasDriftstackBin =
+        typeof parsed.bin === 'object' &&
+        parsed.bin !== null &&
+        Object.prototype.hasOwnProperty.call(parsed.bin, 'driftstack');
+      if (parsed.name === '@driftstack/cli' || parsed.name === 'driftstack' || hasDriftstackBin) {
+        offenders.push(manifest.slice(REPO_ROOT.length + 1));
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('preserves the live desktop browser-authorization protocol and binder', () => {
+    const route = read(ROUTE);
+    const service = read(SERVICE);
+    const dashboard = read(DASHBOARD_BINDER);
+
+    for (const path of [
+      '/v1/auth/cli-authorize/initiate',
+      '/v1/auth/cli-authorize/exchange',
+      '/v1/auth/cli-authorize/bind-device-code',
+    ]) {
       expect(route).toContain(`'${path}'`);
     }
-    // Verify /bind exists on the route file even though the doc doesn't cite it.
-    expect(route).toContain(`'/v1/auth/cli-authorize/bind-device-code'`);
-  });
-
-  it('5-minute activation TTL claim matches the live service constant', () => {
-    expect(page).toMatch(/5 minutes/);
-    expect(service).toMatch(/5-minute TTL/);
-  });
-
-  it('CLI binary name "driftstack" is the live convention', () => {
-    expect(page).toMatch(/`driftstack`|driftstack login|driftstack --version/);
-  });
-
-  it('OS keyring storage claim matches the supported platforms', () => {
-    expect(page).toMatch(/macOS Keychain/);
-    expect(page).toMatch(/Linux libsecret/);
-    expect(page).toMatch(/Windows\s+Credential Manager/);
-  });
-
-  it('/cli/authorize browser URL points at the dashboard origin (app.driftstack.dev)', () => {
-    expect(page).toMatch(/app\.driftstack\.dev\/cli\/authorize/);
-  });
-
-  it('cross-link points at the docs curl-quickstart successor; the deleted mirror stays gone (S47 2026-07-07 mirror deprecation)', () => {
-    expect(page).toContain('https://docs.driftstack.dev/quickstart-curl/');
-    expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md'))).toBe(true);
-    // A restored mirror page would shadow its 301 in public/_redirects.
-    expect(
-      existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/api-quickstart.astro')),
-    ).toBe(false);
+    expect(service).toMatch(/TTL_SECONDS\s*=\s*5\s*\*\s*60/);
+    expect(dashboard).toContain('/v1/auth/cli-authorize/bind-device-code');
   });
 });

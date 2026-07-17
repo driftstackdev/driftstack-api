@@ -1,10 +1,8 @@
-// W223.A — drift-guard between /docs/cli-quickstart and the CLI
-// authorize routes registered under /v1/auth/cli-authorize/*. The
-// previous revision claimed paths under /v1/cli/authorize/* which
-// don't exist; users following the doc would build the wrong URLs
-// when scripting the flow.
+// Server-side duplicate guard for the intentionally absent public CLI page.
+// The auth-cli routes remain a live desktop/browser device-code protocol; they
+// must not be mistaken for proof that a CLI package or binary is published.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -20,30 +18,50 @@ const DOC_PATH = join(
 );
 const ROUTE_PATH = join(REPO, 'apps', 'server', 'src', 'routes', 'auth-cli.ts');
 const SVC_PATH = join(REPO, 'apps', 'server', 'src', 'services', 'cli-authorize.ts');
+const DASHBOARD_PATH = join(
+  REPO,
+  'apps',
+  'customer-dashboard',
+  'src',
+  'pages',
+  'cli',
+  'authorize.astro',
+);
 
 function read(path: string): string {
   return readFileSync(path, 'utf8');
 }
 
-describe('W223.A cli-quickstart doc parity', () => {
-  const doc = read(DOC_PATH);
+describe('public CLI absence and live auth-cli protocol parity', () => {
   const route = read(ROUTE_PATH);
+  const service = read(SVC_PATH);
+  const dashboard = read(DASHBOARD_PATH);
 
-  it('CLI authorize endpoints in doc match the route registrations', () => {
-    for (const path of ['/v1/auth/cli-authorize/initiate', '/v1/auth/cli-authorize/exchange']) {
-      expect(route, `route should be registered at ${path}`).toContain(`'${path}'`);
-      expect(doc, `doc must reference ${path}`).toContain(path);
-    }
-    // The stale path the previous revision used:
-    expect(doc).not.toMatch(/\/v1\/cli\/authorize\//);
+  it('keeps the fictional marketing quickstart absent', () => {
+    expect(existsSync(DOC_PATH)).toBe(false);
   });
 
-  it('activation-code TTL claim matches the service constant', () => {
-    const m = read(SVC_PATH).match(/TTL_SECONDS\s*=\s*(\d+)\s*\*\s*(\d+)/);
-    expect(m).not.toBeNull();
-    const seconds = Number(m![1]) * Number(m![2]);
-    expect(seconds).toBe(300);
-    // Doc must reflect the 5-minute claim.
-    expect(doc).toMatch(/5 minutes/);
+  it('keeps all three desktop device-code protocol routes registered', () => {
+    for (const path of [
+      '/v1/auth/cli-authorize/initiate',
+      '/v1/auth/cli-authorize/exchange',
+      '/v1/auth/cli-authorize/bind-device-code',
+    ]) {
+      expect(route, `route should remain registered at ${path}`).toContain(`'${path}'`);
+    }
+  });
+
+  it('keeps the five-minute device-code lifetime and real dashboard binder', () => {
+    const ttl = service.match(/TTL_SECONDS\s*=\s*(\d+)\s*\*\s*(\d+)/);
+    expect(ttl).not.toBeNull();
+    expect(Number(ttl![1]) * Number(ttl![2])).toBe(300);
+    expect(dashboard).toContain('/v1/auth/cli-authorize/bind-device-code');
+  });
+
+  it('does not turn protocol implementation files into package-release claims', () => {
+    const implementation = `${route}\n${service}\n${dashboard}`;
+    expect(implementation).not.toMatch(
+      /@driftstack\/cli|brew install driftstack\/tap|driftstack\/2\.3\.x/,
+    );
   });
 });

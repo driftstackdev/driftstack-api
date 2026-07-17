@@ -36,6 +36,9 @@ const targets = [
 const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
 
 const FORBIDDEN_PACKAGES: { pattern: RegExp; canonical: string }[] = [
+  // No CLI package is published. The live device-code endpoints are an
+  // internal desktop/browser-auth protocol, not evidence of a distributable.
+  { pattern: /@driftstack\/cli\b/g, canonical: 'no published CLI package' },
   // TS — fictional npm scopes. Note: @driftstack/api-types is real,
   // so the negative-lookahead pins the bare /api form only.
   { pattern: /@driftstack\/api(?![-/\w])/g, canonical: '@driftstack/sdk' },

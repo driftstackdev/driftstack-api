@@ -5,7 +5,7 @@
 // commitment (would mislead CJS users who land here).
 //
 //   • V-703 doc-comment framing + V-680 posture + companion to
-//     docs.driftstack.dev/quickstart-curl/ (S47) + /docs/cli-quickstart.
+//     docs.driftstack.dev/quickstart-curl/ (S47).
 //   • Package: @driftstack/sdk (npm/bun/pnpm install matrix).
 //   • Node ≥ 20 + Bun ≥ 1.1 + Deno ≥ 1.40 + dual-published (ESM +
 //     CommonJS via conditional exports) commitment.
@@ -35,13 +35,14 @@ function read(p: string): string {
 describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-703 + V-680 framing pinned: 'TypeScript SDK quickstart. Companion to /docs/api-quickstart (raw HTTP / curl) and /docs/cli-quickstart. Pitched at teams that already have a Node/Bun/Deno service and want a typed surface instead of hand-rolling fetch calls. Posture matches V-680: code samples runnable verbatim once a key is in hand.' — pinned so the V-703 + V-680 anchors + 2-companion cross-references + verbatim-runnable-posture all survive (drift to dropping V-680 would orphan the doc from the consistent-posture commitment)", () => {
+  it("V-703 + V-680 framing pinned: 'TypeScript SDK quickstart. Companion to the curl quickstart. Pitched at teams that already have a Node/Bun/Deno service and want a typed surface instead of hand-rolling fetch calls. Posture matches V-680: code samples runnable verbatim once a key is in hand.' — pinned so the V-703 + V-680 anchors + real curl companion + verbatim-runnable posture all survive without advertising an unpublished CLI", () => {
     expect(body).toMatch(
-      /\/\/ V-703 — TypeScript SDK quickstart\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\s*\n?\s*\/\/ \(raw HTTP \/ curl\) and \/docs\/cli-quickstart\./,
+      /\/\/ V-703 — TypeScript SDK quickstart\. Companion to https:\/\/docs\.driftstack\.dev\/quickstart-curl\/\s*\n?\s*\/\/ \(raw HTTP \/ curl\)\. Pitched at teams that already have a Node\/Bun\/Deno service/,
     );
     expect(body).toMatch(
-      /\/\/ already have a Node\/Bun\/Deno service and want a typed surface\s*\n?\s*\/\/ instead of hand-rolling fetch calls\. Posture matches V-680: code\s*\n?\s*\/\/ samples runnable verbatim once a key is in hand\./,
+      /\/\/ and want a typed surface instead of hand-rolling fetch calls\. Posture matches V-680: code\s*\n?\s*\/\/ samples runnable verbatim once a key is in hand\./,
     );
+    expect(body).not.toContain('/docs/cli-quickstart');
   });
 
   it('@driftstack/sdk package + 3-runtime install matrix pinned: bun add + npm install + pnpm add — pinned so the canonical package name + 3-package-manager install paths stay consistent (drift to a different package name would create marketing↔npm divergence; drift to dropping pnpm would orphan one of the major package managers)', () => {
