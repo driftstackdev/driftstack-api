@@ -184,6 +184,44 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     expect(body).toMatch(/created_at: new Date\(order\.created_at\)\.toISOString\(\),/);
   });
 
+  it('provider mint admission is explicit: fresh or pending-unbound only; every non-pending replay remains addressless', () => {
+    expect(body).toMatch(
+      /const mayMintPayment =\s*\n?\s*!replayed \|\| \(order\.status === 'pending' && order\.payment_id === null\);/,
+    );
+    expect(body).toMatch(/serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS &&\s*\n?\s*mayMintPayment/);
+    expect(body).toMatch(
+      /Every other replay state is non-minting: confirming\/partial already has/,
+    );
+    expect(
+      body.replace(
+        /serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS &&\s*\n?\s*mayMintPayment/,
+        'serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS',
+      ),
+    ).not.toMatch(/serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS &&\s*\n?\s*mayMintPayment/);
+  });
+
+  it('fails acting-as checkout closed before body, pricing, order, or provider work', () => {
+    const headerGuard = body.indexOf("const rawActAsAccount = req.headers['x-driftstack-account']");
+    const bodyParse = body.indexOf('CreateCryptoCheckoutSchema.safeParse(req.body)');
+    const pricingRead = body.indexOf('await deps.pricing.listEffective()');
+    const orderCreate = body.indexOf('await deps.service.createIdempotent');
+    expect(headerGuard).toBeGreaterThan(-1);
+    expect(headerGuard).toBeLessThan(bodyParse);
+    expect(headerGuard).toBeLessThan(pricingRead);
+    expect(headerGuard).toBeLessThan(orderCreate);
+    expect(body).toContain('Crypto checkout is available only in the Self workspace.');
+  });
+
+  it('never exposes a provider address before the exact payment is durably bound', () => {
+    expect(body).toContain('nowpayments_payment_not_safely_bound');
+    expect(body).toContain(
+      'minted NowPayments payment is not safely bound and will not be exposed',
+    );
+    expect(body).toMatch(
+      /boundOrder\.payment_id === payment\.paymentId[\s\S]*boundOrder\.status === 'pending'[\s\S]*mapNowpaymentsStatus\(payment\.paymentStatus\) === 'pending'/,
+    );
+  });
+
   it("Auth posture (W496): requireAuth + requireScope('admin:billing') + rateLimit('global') — checkout is a subscription-change action; account_owner satisfies admin:billing (V-481) so the dashboard works, a read/write-only key is blocked", () => {
     expect(body).toMatch(
       /\{ preHandler: \[app\.requireAuth, app\.requireScope\('admin:billing'\), app\.rateLimit\('global'\)\] \},/,
@@ -197,7 +235,9 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     expect(body).toMatch(
       /import type \{ CryptoOrdersService \} from '\.\.\/services\/crypto-orders\.js';/,
     );
-    expect(body).toMatch(/import \{ ValidationError \} from '\.\.\/lib\/errors\.js';/);
+    expect(body).toMatch(
+      /import \{ BadRequestError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+    );
   });
 
   it('file exists at canonical path', () => {

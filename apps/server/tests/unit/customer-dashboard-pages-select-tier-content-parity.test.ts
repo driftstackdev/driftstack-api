@@ -127,6 +127,44 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     expect(body).toMatch(/cancel_url: window\.location\.origin \+ '\/select-tier'/);
   });
 
+  it('crypto checkout uses a cross-tab logical-intent lease, exact terminal retirement, and live address authority', () => {
+    expect(body).toMatch(/const cryptoIntentLocksAvailable =/);
+    expect(body).toMatch(/navigator\.locks\.request\([\s\S]*mode: 'exclusive'/);
+    expect(body).toMatch(/function cryptoIntentScope\(tier\)/);
+    expect(body).toMatch(/account_id: scope\.accountId/);
+    expect(body).toMatch(/product: scope\.tier/);
+    expect(body).toMatch(/function compareRetireCryptoIntentKey\(tier, expectedKey\)/);
+    expect(body).toMatch(/for \(let attempt = 0; attempt < 2; attempt \+= 1\)/);
+    expect(body).toMatch(/CRYPTO_TERMINAL_STATUSES\.has\(body\.status\)/);
+    expect(body).toMatch(/function startCryptoOrderPolling\(entry, initialExpiresAtMs\)/);
+    expect(body).toMatch(/generation !== cryptoPollGeneration/);
+    expect(body).toMatch(/await readCryptoOrderAuthority\(cacheEntry, controller\.signal\)/);
+    expect(body).toMatch(/body\.product !== entry\.tier/);
+    expect(body).toMatch(/expiresAtMs <= Date\.now\(\)/);
+    expect(body).toMatch(/armCryptoExpiryDeadline\(entry, initialExpiresAtMs, generation\)/);
+    expect(body).toMatch(/hideCryptoPaymentAddress\(cryptoStatusMessage/);
+    expect(body).not.toMatch(/const cached = cryptoOrderCache\.get\(tier\);\s*if \(cached\)/);
+  });
+
+  it('purchase mutations fail closed when the shell is acting as a team owner', () => {
+    expect(body).toMatch(
+      /const cryptoWorkspaceSupported = selectedWorkspaceAccountId\.length === 0/,
+    );
+    expect(body).toMatch(/if \(!cryptoWorkspaceSupported\) \{[\s\S]*self-workspace only/);
+    expect(body).toMatch(/authedFetch\('\/v1\/account\/me'/);
+    expect(body).toMatch(/SELF_ACCOUNT_ID_RE\.test\(body\.id \|\| ''\)/);
+  });
+
+  it('never publishes malformed or cross-product provider details as payable', () => {
+    expect(body).toMatch(/body\.product !== expectedTier/);
+    expect(body).toMatch(/function validateCryptoPaymentCandidate\(body\)/);
+    expect(body).toMatch(/\^\[\\x21-\\x7e\]\{1,256\}\$/);
+    expect(body).toMatch(/Number\.isFinite\(numeric\) && numeric > 0/);
+    expect(
+      body.indexOf('await readCryptoOrderAuthority(cacheEntry, controller.signal)'),
+    ).toBeLessThan(body.indexOf('setCryptoCopyTarget(cacheEntry.paymentAddress)'));
+  });
+
   it('Concurrent + Profiles display via TIER_CONCURRENT_SESSION_LIMITS[t.id].toString() + String(PROFILES_PER_TIER[t.id]) — pinned so the per-tier cap display is sourced from the canonical api-types tables (drift to hardcoded numbers in the JSX would diverge from server-side limits when caps change)', () => {
     expect(body).toMatch(/\{TIER_CONCURRENT_SESSION_LIMITS\[t\.id\]\.toString\(\)\}/);
     expect(body).toMatch(/\{String\(PROFILES_PER_TIER\[t\.id\]\)\}/);

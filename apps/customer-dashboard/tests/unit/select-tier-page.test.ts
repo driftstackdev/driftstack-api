@@ -17,6 +17,32 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'select-tier', 'index.html');
 const PAGE_URL = 'https://app.driftstack.dev/select-tier/';
+const DEFAULT_SELF_ACCOUNT_ID = 'acc_00000000-0000-4000-8000-000000000001';
+const FUTURE_EXPIRES_AT = '2099-01-01T00:00:00.000Z';
+
+function cryptoIntentStorageKey(accountId: string, tier: string): string {
+  return `ds_crypto_idem_v2:${accountId}:${tier}`;
+}
+
+function cryptoIntentEnvelope(accountId: string, tier: string, key: string): string {
+  return JSON.stringify({
+    version: 2,
+    account_id: accountId,
+    product: tier,
+    idempotency_key: key,
+  });
+}
+
+function storedCryptoIntentKey(
+  window: JSDOM['window'],
+  accountId: string,
+  tier: string,
+): string | null {
+  const encoded = window.localStorage.getItem(cryptoIntentStorageKey(accountId, tier));
+  if (!encoded) return null;
+  const parsed = JSON.parse(encoded) as { idempotency_key?: unknown };
+  return typeof parsed.idempotency_key === 'string' ? parsed.idempotency_key : null;
+}
 
 function loadBuiltPage(): string {
   return readFileSync(BUILT_PAGE, 'utf8');
@@ -31,6 +57,13 @@ interface SetUpOpts {
   token?: string | null;
   storageDenied?: boolean;
   cryptoStorageDenied?: boolean;
+  locksAvailable?: boolean;
+  lockRequest?: (...args: unknown[]) => Promise<unknown>;
+  actAsAccountId?: string;
+  selfAccountId?: string;
+  accountMeBody?: unknown;
+  accountMeStatus?: number;
+  initialStorage?: Record<string, string>;
   clipboardPlan?: Array<(text: string) => Promise<void>>;
   route: (call: MockFetchCall) => Response | Promise<Response>;
 }
@@ -67,6 +100,14 @@ function setUpDom(
   window.fetch = (input: string, init: RequestInit | undefined) => {
     const call: MockFetchCall = { url: String(input), init };
     fetchCalls.push(call);
+    if (/\/v1\/account\/me$/.test(call.url)) {
+      return Promise.resolve(
+        json(
+          opts.accountMeBody ?? { id: opts.selfAccountId ?? DEFAULT_SELF_ACCOUNT_ID },
+          opts.accountMeStatus ?? 200,
+        ),
+      );
+    }
     return Promise.resolve(opts.route(call));
   };
   Object.defineProperty(window.navigator, 'clipboard', {
@@ -78,6 +119,23 @@ function setUpDom(
       },
     },
   });
+  if (opts.locksAvailable !== false) {
+    Object.defineProperty(window.navigator, 'locks', {
+      configurable: true,
+      value: {
+        request:
+          opts.lockRequest ??
+          ((_name: unknown, optionsOrCallback: unknown, maybeCallback?: unknown) => {
+            const callback =
+              typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+            if (typeof callback !== 'function') {
+              return Promise.reject(new Error('lock callback missing'));
+            }
+            return Promise.resolve().then(() => callback());
+          }),
+      },
+    });
+  }
   if (opts.storageDenied === true) {
     Object.defineProperty(Object.getPrototypeOf(window.localStorage), 'getItem', {
       configurable: true,
@@ -87,6 +145,15 @@ function setUpDom(
     });
   } else if (opts.token !== undefined && opts.token !== null) {
     window.localStorage.setItem('ds_web_session_token', opts.token);
+  }
+  for (const [key, value] of Object.entries(opts.initialStorage ?? {})) {
+    window.localStorage.setItem(key, value);
+  }
+  if (opts.actAsAccountId !== undefined) {
+    // @ts-expect-error — DashboardLayout installs this before the page script.
+    window.driftstackActAsHeaders = () => ({
+      'x-driftstack-account': opts.actAsAccountId,
+    });
   }
   if (opts.cryptoStorageDenied === true) {
     const storagePrototype = Object.getPrototypeOf(window.localStorage);
@@ -489,7 +556,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
   });
 
   it('Stripe buy-tier 503 uses fixed temporary-unavailable guidance', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+    const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: (call) =>
         /\/v1\/billing$/.test(call.url)
@@ -523,6 +590,475 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     expect(text(window, '[data-banner]')).toContain('Sign in to pay with crypto');
   });
 
+  it('fails all purchase controls closed in an acting-as team workspace', async () => {
+    const { window, fetchCalls, hydratedCount } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      actAsAccountId: 'acc_00000000-0000-4000-8000-000000000001',
+      route: () => {
+        throw new Error('team-workspace checkout must not call the self-scoped billing API');
+      },
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls).toHaveLength(0);
+    expect(hydratedCount()).toBe(1);
+    expect(text(window, '[data-banner]')).toMatch(/self-workspace only/i);
+    for (const button of window.document.querySelectorAll<HTMLButtonElement>(
+      '[data-action="buy-tier"], [data-action="buy-tier-crypto"]',
+    )) {
+      expect(button.disabled).toBe(true);
+      expect(button.title).toMatch(/workspace picker to Self/i);
+    }
+  });
+
+  it('fails crypto checkout closed when origin-wide browser locks are unavailable', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      locksAvailable: false,
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url) ? json({ subscription: null }) : json({}, 500),
+    });
+    win = window;
+    await flush();
+
+    const crypto = window.document.querySelector(
+      '[data-action="buy-tier-crypto"]',
+    ) as HTMLButtonElement;
+    expect(crypto.disabled).toBe(true);
+    expect(crypto.title).toMatch(/cross-tab locking/i);
+    crypto.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush();
+    expect(fetchCalls.filter((call) => /\/crypto-checkout$/.test(call.url))).toHaveLength(0);
+    expect(text(window, '[data-banner]')).toMatch(/cross-tab locking/i);
+  });
+
+  it('requires a strict authoritative self-account identity before enabling purchases', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      accountMeBody: { id: 'not-an-account-id' },
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url) ? json({ subscription: null }) : json({}, 500),
+    });
+    win = window;
+    await flush();
+
+    for (const button of window.document.querySelectorAll<HTMLButtonElement>(
+      '[data-action="buy-tier"], [data-action="buy-tier-crypto"]',
+    )) {
+      expect(button.disabled).toBe(true);
+    }
+    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(0);
+    expect(text(window, '[data-banner]')).toMatch(/Purchases remain unavailable/i);
+  });
+
+  it('namespaces the intent envelope and Web Lock by exact self account plus tier', async () => {
+    const accountA = 'acc_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const accountB = 'acc_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const accountAKey = 'crypto-intent-account-a';
+    const lockNames: string[] = [];
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      selfAccountId: accountB,
+      initialStorage: {
+        [cryptoIntentStorageKey(accountA, 'solo_manual')]: cryptoIntentEnvelope(
+          accountA,
+          'solo_manual',
+          accountAKey,
+        ),
+      },
+      lockRequest: async (...args: unknown[]) => {
+        lockNames.push(String(args[0]));
+        const callback = args[2];
+        if (typeof callback !== 'function') throw new Error('lock callback missing');
+        return callback();
+      },
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/crypto-checkout$/.test(call.url)) {
+          return json({
+            order_id: 'ord_account_b',
+            product: 'solo_manual',
+            status: 'pending',
+            provider: 'nowpayments',
+            pay_amount: 0.01,
+            pay_currency: 'btc',
+            payment_address: '0xACCOUNT_B',
+          });
+        }
+        if (/\/v1\/billing\/crypto-orders\/ord_account_b$/.test(call.url)) {
+          return json({
+            order_id: 'ord_account_b',
+            product: 'solo_manual',
+            status: 'pending',
+            expires_at: FUTURE_EXPIRES_AT,
+          });
+        }
+        return json({}, 404);
+      },
+    });
+    win = window;
+    await flush();
+    clickFirst(window, '[data-action="buy-tier-crypto"][data-tier="solo_manual"]');
+    await flush();
+
+    expect(storedCryptoIntentKey(window, accountA, 'solo_manual')).toBe(accountAKey);
+    expect(storedCryptoIntentKey(window, accountB, 'solo_manual')).toMatch(/^crypto-intent-/);
+    expect(lockNames).toEqual([`driftstack:crypto-checkout:${accountB}:solo_manual`]);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('0xACCOUNT_B');
+  });
+
+  it('rejects a cross-tier idempotency replay before rendering or status lookup', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) =>
+        /\/v1\/billing$/.test(call.url)
+          ? json({ subscription: null })
+          : json({
+              order_id: 'ord_wrong_product',
+              product: 'team_manual',
+              status: 'pending',
+              provider: 'nowpayments',
+              pay_amount: 0.01,
+              pay_currency: 'btc',
+              payment_address: '0xMUST_NOT_RENDER',
+            }),
+    });
+    win = window;
+    await flush();
+    clickFirst(window, '[data-action="buy-tier-crypto"][data-tier="solo_manual"]');
+    await flush();
+
+    expect(fetchCalls.filter((call) => /\/crypto-orders\//.test(call.url))).toHaveLength(0);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('—');
+    expect(isHidden(window, '[data-crypto-modal-ready]')).toBe(true);
+    expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBeTruthy();
+  });
+
+  it.each([
+    ['whitespace address', { payment_address: '   ', pay_currency: 'btc', pay_amount: 1 }],
+    ['whitespace currency', { payment_address: '0xSAFE', pay_currency: ' ', pay_amount: 1 }],
+    ['non-positive amount', { payment_address: '0xSAFE', pay_currency: 'btc', pay_amount: 0 }],
+    ['non-decimal amount', { payment_address: '0xSAFE', pay_currency: 'btc', pay_amount: 'NaN' }],
+  ] as const)(
+    'keeps the intent but hides malformed pending payment fields: %s',
+    async (_label, malformed) => {
+      const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+        token: 'tok',
+        route: (call) =>
+          /\/v1\/billing$/.test(call.url)
+            ? json({ subscription: null })
+            : json({
+                order_id: 'ord_malformed_payment',
+                product: 'solo_manual',
+                status: 'pending',
+                provider: 'nowpayments',
+                ...malformed,
+              }),
+      });
+      win = window;
+      await flush();
+      clickFirst(window, '[data-action="buy-tier-crypto"][data-tier="solo_manual"]');
+      await flush();
+
+      expect(fetchCalls.filter((call) => /\/crypto-orders\//.test(call.url))).toHaveLength(0);
+      expect(text(window, '[data-field="crypto-address"]')).toBe('—');
+      expect(
+        (window.document.querySelector('[data-crypto-copy]') as HTMLButtonElement).disabled,
+      ).toBe(true);
+      expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBeTruthy();
+    },
+  );
+
+  it.each([undefined, 'not-a-date', '2020-01-01T00:00:00.000Z'])(
+    'keeps the intent and address hidden for unverifiable pending expiry %s',
+    async (expiresAt) => {
+      const { window } = setUpDom(loadBuiltPage(), {
+        token: 'tok',
+        route: (call) => {
+          if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+          if (/\/v1\/billing\/crypto-checkout$/.test(call.url)) {
+            return json({
+              order_id: 'ord_bad_expiry',
+              product: 'solo_manual',
+              status: 'pending',
+              provider: 'nowpayments',
+              pay_amount: 1,
+              pay_currency: 'btc',
+              payment_address: '0xMUST_NOT_RENDER',
+            });
+          }
+          return json({
+            order_id: 'ord_bad_expiry',
+            product: 'solo_manual',
+            status: 'pending',
+            ...(expiresAt === undefined ? {} : { expires_at: expiresAt }),
+          });
+        },
+      });
+      win = window;
+      await flush();
+      clickFirst(window, '[data-action="buy-tier-crypto"]');
+      await flush();
+
+      expect(text(window, '[data-field="crypto-address"]')).toBe('—');
+      expect(isHidden(window, '[data-crypto-modal-ready]')).toBe(true);
+      expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBeTruthy();
+    },
+  );
+
+  it('owns an expiry deadline that hides the address without waiting for another response', async () => {
+    vi.useFakeTimers();
+    let browserNowMs = Date.parse('2026-07-17T12:00:00.000Z');
+    const expiresAt = new Date(browserNowMs + 2_000).toISOString();
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/crypto-checkout$/.test(call.url)) {
+          return json({
+            order_id: 'ord_deadline',
+            product: 'solo_manual',
+            status: 'pending',
+            provider: 'nowpayments',
+            pay_amount: 1,
+            pay_currency: 'btc',
+            payment_address: '0xDEADLINE',
+          });
+        }
+        return json({
+          order_id: 'ord_deadline',
+          product: 'solo_manual',
+          status: 'pending',
+          expires_at: expiresAt,
+        });
+      },
+    });
+    win = window;
+    vi.spyOn(window.Date, 'now').mockImplementation(() => browserNowMs);
+    await vi.advanceTimersByTimeAsync(0);
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('0xDEADLINE');
+
+    browserNowMs += 2_000;
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('—');
+    expect(text(window, '[data-crypto-modal-error]')).toMatch(/payment deadline/i);
+    expect(fetchCalls.filter((call) => /\/crypto-orders\//.test(call.url))).toHaveLength(1);
+    expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBeTruthy();
+  });
+
+  it('hides a previously verified address when a later pending poll loses expiry authority', async () => {
+    vi.useFakeTimers();
+    let statusReads = 0;
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/crypto-checkout$/.test(call.url)) {
+          return json({
+            order_id: 'ord_poll_malformed',
+            product: 'solo_manual',
+            status: 'pending',
+            provider: 'nowpayments',
+            pay_amount: 1,
+            pay_currency: 'btc',
+            payment_address: '0xPOLL_AUTHORITY',
+          });
+        }
+        statusReads += 1;
+        return json({
+          order_id: 'ord_poll_malformed',
+          product: 'solo_manual',
+          status: 'pending',
+          ...(statusReads === 1 ? { expires_at: FUTURE_EXPIRES_AT } : {}),
+        });
+      },
+    });
+    win = window;
+    await vi.advanceTimersByTimeAsync(0);
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('0xPOLL_AUTHORITY');
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(statusReads).toBe(2);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('—');
+    expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBeTruthy();
+  });
+
+  it.each(['paid', 'failed', 'cancelled'] as const)(
+    'retires an exact %s intent and makes at most one fresh successor request for the explicit click',
+    async (terminalStatus) => {
+      const oldKey = 'crypto-intent-old-terminal';
+      const attempts: MockFetchCall[] = [];
+      const lockNames: string[] = [];
+      const { window } = setUpDom(loadBuiltPage(), {
+        token: 'tok',
+        initialStorage: {
+          [cryptoIntentStorageKey(DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')]: cryptoIntentEnvelope(
+            DEFAULT_SELF_ACCOUNT_ID,
+            'solo_manual',
+            oldKey,
+          ),
+        },
+        lockRequest: async (...args: unknown[]) => {
+          lockNames.push(String(args[0]));
+          const callback = args[2];
+          if (typeof callback !== 'function') throw new Error('lock callback missing');
+          return callback();
+        },
+        route: (call) => {
+          if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+          if (/\/v1\/billing\/crypto-checkout$/.test(call.url)) {
+            attempts.push(call);
+            const key = new Headers(call.init?.headers).get('idempotency-key');
+            if (key === oldKey) {
+              return json({
+                order_id: 'ord_terminal_old',
+                product: 'solo_manual',
+                status: terminalStatus,
+                provider: 'stub',
+                payment_address: null,
+              });
+            }
+            return json({
+              order_id: 'ord_fresh_successor',
+              product: 'solo_manual',
+              status: 'pending',
+              provider: 'nowpayments',
+              pay_amount: 0.0123,
+              pay_currency: 'btc',
+              payment_address: '0xFRESH_SUCCESSOR',
+              expires_at: FUTURE_EXPIRES_AT,
+            });
+          }
+          if (/\/v1\/billing\/crypto-orders\/ord_fresh_successor$/.test(call.url)) {
+            return json({
+              order_id: 'ord_fresh_successor',
+              product: 'solo_manual',
+              status: 'pending',
+              expires_at: FUTURE_EXPIRES_AT,
+            });
+          }
+          return json({}, 404);
+        },
+      });
+      win = window;
+      await flush();
+      clickFirst(window, '[data-action="buy-tier-crypto"]');
+      await flush();
+
+      expect(attempts).toHaveLength(2);
+      const firstKey = new Headers(attempts[0]?.init?.headers).get('idempotency-key');
+      const secondKey = new Headers(attempts[1]?.init?.headers).get('idempotency-key');
+      expect(firstKey).toBe(oldKey);
+      expect(secondKey).toBeTruthy();
+      expect(secondKey).not.toBe(oldKey);
+      expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBe(secondKey);
+      expect(lockNames).toEqual([
+        `driftstack:crypto-checkout:${DEFAULT_SELF_ACCOUNT_ID}:solo_manual`,
+      ]);
+      expect(text(window, '[data-field="crypto-order-id"]')).toBe('ord_fresh_successor');
+      expect(text(window, '[data-field="crypto-address"]')).toBe('0xFRESH_SUCCESSOR');
+      expect(isHidden(window, '[data-crypto-modal-ready]')).toBe(false);
+    },
+  );
+
+  it.each(['confirming', 'partial'] as const)(
+    'keeps a %s intent and never mints a successor while funds may be in flight',
+    async (status) => {
+      const key = 'crypto-intent-money-in-flight';
+      const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+        token: 'tok',
+        initialStorage: {
+          [cryptoIntentStorageKey(DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')]: cryptoIntentEnvelope(
+            DEFAULT_SELF_ACCOUNT_ID,
+            'solo_manual',
+            key,
+          ),
+        },
+        route: (call) =>
+          /\/v1\/billing$/.test(call.url)
+            ? json({ subscription: null })
+            : json({
+                order_id: 'ord_money_in_flight',
+                product: 'solo_manual',
+                status,
+                provider: 'stub',
+                payment_address: null,
+              }),
+      });
+      win = window;
+      await flush();
+      clickFirst(window, '[data-action="buy-tier-crypto"]');
+      await flush();
+
+      expect(fetchCalls.filter((call) => /\/crypto-checkout$/.test(call.url))).toHaveLength(1);
+      expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBe(key);
+      expect(text(window, '[data-crypto-modal-error]')).toMatch(
+        status === 'confirming' ? /confirming on-chain/i : /partial payment/i,
+      );
+      expect(text(window, '[data-field="crypto-address"]')).toBe('—');
+      expect(
+        (window.document.querySelector('[data-crypto-copy]') as HTMLButtonElement).disabled,
+      ).toBe(true);
+    },
+  );
+
+  it('retains the exact crypto intent after an ambiguous transport failure', async () => {
+    const attempts: MockFetchCall[] = [];
+    let fail = true;
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/crypto-checkout$/.test(call.url)) {
+          attempts.push(call);
+          if (fail) {
+            fail = false;
+            return Promise.reject(
+              Object.assign(new Error('transport lost'), { name: 'AbortError' }),
+            );
+          }
+          return json({
+            order_id: 'ord_retry_same_intent',
+            product: 'solo_manual',
+            status: 'pending',
+            provider: 'nowpayments',
+            pay_amount: 1,
+            pay_currency: 'btc',
+            payment_address: '0xRETRY_SAFE',
+          });
+        }
+        if (/\/v1\/billing\/crypto-orders\/ord_retry_same_intent$/.test(call.url)) {
+          return json({
+            order_id: 'ord_retry_same_intent',
+            product: 'solo_manual',
+            status: 'pending',
+            expires_at: FUTURE_EXPIRES_AT,
+          });
+        }
+        return json({}, 404);
+      },
+    });
+    win = window;
+    await flush();
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await flush();
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await flush();
+
+    expect(attempts).toHaveLength(2);
+    const firstKey = new Headers(attempts[0]?.init?.headers).get('idempotency-key');
+    const secondKey = new Headers(attempts[1]?.init?.headers).get('idempotency-key');
+    expect(firstKey).toBeTruthy();
+    expect(secondKey).toBe(firstKey);
+    expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBe(firstKey);
+  });
+
   it('crypto checkout success: renders the exact amount, currency, address, and order id from the API', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
@@ -531,10 +1067,13 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
           ? json({ subscription: null })
           : json({
               provider: 'nowpayments',
+              product: 'solo_manual',
+              status: 'pending',
               pay_amount: 0.0123,
               pay_currency: 'eth',
               payment_address: '0xABCDEF0000000000000000000000000000001234',
               order_id: 'ord_crypto_test1',
+              expires_at: FUTURE_EXPIRES_AT,
             }),
     });
     win = window;
@@ -554,6 +1093,249 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     expect(text(window, '[data-field="crypto-order-id"]')).toBe('ord_crypto_test1');
   });
 
+  it('generation-fenced status polling hides and retires an address as soon as the order becomes terminal', async () => {
+    vi.useFakeTimers();
+    const key = 'crypto-intent-poll-terminal';
+    let statusReads = 0;
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      initialStorage: {
+        [cryptoIntentStorageKey(DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')]: cryptoIntentEnvelope(
+          DEFAULT_SELF_ACCOUNT_ID,
+          'solo_manual',
+          key,
+        ),
+      },
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/crypto-checkout$/.test(call.url)) {
+          return json({
+            order_id: 'ord_poll_terminal',
+            product: 'solo_manual',
+            status: 'pending',
+            provider: 'nowpayments',
+            pay_amount: 0.0123,
+            pay_currency: 'btc',
+            payment_address: '0xMUST_DISAPPEAR',
+          });
+        }
+        if (/\/v1\/billing\/crypto-orders\/ord_poll_terminal$/.test(call.url)) {
+          statusReads += 1;
+          return statusReads === 1
+            ? json({
+                order_id: 'ord_poll_terminal',
+                product: 'solo_manual',
+                status: 'pending',
+                expires_at: FUTURE_EXPIRES_AT,
+              })
+            : json({
+                order_id: 'ord_poll_terminal',
+                product: 'solo_manual',
+                status: 'paid',
+              });
+        }
+        return json({}, 404);
+      },
+    });
+    win = window;
+    await vi.advanceTimersByTimeAsync(0);
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('0xMUST_DISAPPEAR');
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(statusReads).toBe(2);
+    expect(
+      fetchCalls.filter((call) => /\/crypto-orders\/ord_poll_terminal$/.test(call.url)),
+    ).toHaveLength(2);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('—');
+    expect(isHidden(window, '[data-crypto-modal-ready]')).toBe(true);
+    expect(text(window, '[data-crypto-modal-error]')).toMatch(/is paid.*address is now closed/i);
+    expect(
+      (window.document.querySelector('[data-crypto-copy]') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBeNull();
+  });
+
+  it('ignores a stale in-flight status response after another tier takes modal ownership', async () => {
+    vi.useFakeTimers();
+    let resolveOldStatus: ((response: Response) => void) | undefined;
+    const oldStatus = new Promise<Response>((resolve) => {
+      resolveOldStatus = resolve;
+    });
+    let oldStatusReads = 0;
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/crypto-checkout$/.test(call.url)) {
+          if (typeof call.init?.body !== 'string') throw new Error('checkout body missing');
+          const product = JSON.parse(call.init.body) as { product?: string };
+          return product.product === 'solo_manual'
+            ? json({
+                order_id: 'ord_old_poll',
+                product: 'solo_manual',
+                status: 'pending',
+                provider: 'nowpayments',
+                pay_amount: 0.01,
+                pay_currency: 'btc',
+                payment_address: '0xOLD_ADDRESS',
+              })
+            : json({
+                order_id: 'ord_new_owner',
+                product: 'team_manual',
+                status: 'pending',
+                provider: 'nowpayments',
+                pay_amount: 0.02,
+                pay_currency: 'eth',
+                payment_address: '0xNEW_ADDRESS',
+              });
+        }
+        if (/\/v1\/billing\/crypto-orders\/ord_old_poll$/.test(call.url)) {
+          oldStatusReads += 1;
+          return oldStatusReads === 1
+            ? json({
+                order_id: 'ord_old_poll',
+                product: 'solo_manual',
+                status: 'pending',
+                expires_at: FUTURE_EXPIRES_AT,
+              })
+            : oldStatus;
+        }
+        if (/\/v1\/billing\/crypto-orders\/ord_new_owner$/.test(call.url)) {
+          return json({
+            order_id: 'ord_new_owner',
+            product: 'team_manual',
+            status: 'pending',
+            expires_at: FUTURE_EXPIRES_AT,
+          });
+        }
+        return json({}, 404);
+      },
+    });
+    win = window;
+    await vi.advanceTimersByTimeAsync(0);
+    clickFirst(window, '[data-action="buy-tier-crypto"][data-tier="solo_manual"]');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('0xOLD_ADDRESS');
+    const oldIntent = storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual');
+    expect(oldIntent).toBeTruthy();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(oldStatusReads).toBe(2);
+
+    clickFirst(window, '[data-action="buy-tier-crypto"][data-tier="team_manual"]');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(text(window, '[data-field="crypto-order-id"]')).toBe('ord_new_owner');
+    expect(text(window, '[data-field="crypto-address"]')).toBe('0xNEW_ADDRESS');
+    const newIntent = storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'team_manual');
+    expect(newIntent).toBeTruthy();
+
+    resolveOldStatus?.(json({ order_id: 'ord_old_poll', product: 'solo_manual', status: 'paid' }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(text(window, '[data-field="crypto-order-id"]')).toBe('ord_new_owner');
+    expect(text(window, '[data-field="crypto-address"]')).toBe('0xNEW_ADDRESS');
+    expect(isHidden(window, '[data-crypto-modal-ready]')).toBe(false);
+    expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBe(oldIntent);
+    expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'team_manual')).toBe(newIntent);
+  });
+
+  it('keeps an old clipboard write serialized until a fresh order can copy its new address', async () => {
+    vi.useFakeTimers();
+    const oldAddress = '0xOLD_CLIPBOARD_ADDRESS';
+    const newAddress = '0xNEW_CLIPBOARD_ADDRESS';
+    let clipboardValue = '';
+    let resolveOldCopy: (() => void) | undefined;
+    let checkoutAttempts = 0;
+    let oldOrderStatusReads = 0;
+    const { window, clipboardWrites } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      clipboardPlan: [
+        (value) =>
+          new Promise<void>((resolve) => {
+            resolveOldCopy = () => {
+              clipboardValue = value;
+              resolve();
+            };
+          }),
+        (value) => {
+          clipboardValue = value;
+          return Promise.resolve();
+        },
+      ],
+      route: (call) => {
+        if (/\/v1\/billing$/.test(call.url)) return json({ subscription: null });
+        if (/\/v1\/billing\/crypto-checkout$/.test(call.url)) {
+          checkoutAttempts += 1;
+          return json({
+            order_id: checkoutAttempts === 1 ? 'ord_old_copy' : 'ord_new_copy',
+            product: 'solo_manual',
+            status: 'pending',
+            provider: 'nowpayments',
+            pay_amount: checkoutAttempts === 1 ? 0.01 : 0.02,
+            pay_currency: 'btc',
+            payment_address: checkoutAttempts === 1 ? oldAddress : newAddress,
+          });
+        }
+        if (/\/v1\/billing\/crypto-orders\/ord_old_copy$/.test(call.url)) {
+          oldOrderStatusReads += 1;
+          return oldOrderStatusReads === 1
+            ? json({
+                order_id: 'ord_old_copy',
+                product: 'solo_manual',
+                status: 'pending',
+                expires_at: FUTURE_EXPIRES_AT,
+              })
+            : json({ order_id: 'ord_old_copy', product: 'solo_manual', status: 'paid' });
+        }
+        if (/\/v1\/billing\/crypto-orders\/ord_new_copy$/.test(call.url)) {
+          return json({
+            order_id: 'ord_new_copy',
+            product: 'solo_manual',
+            status: 'pending',
+            expires_at: FUTURE_EXPIRES_AT,
+          });
+        }
+        return json({}, 404);
+      },
+    });
+    win = window;
+    await vi.advanceTimersByTimeAsync(0);
+    clickFirst(window, '[data-action="buy-tier-crypto"][data-tier="solo_manual"]');
+    await vi.advanceTimersByTimeAsync(0);
+
+    const copy = window.document.querySelector('[data-crypto-copy]') as HTMLButtonElement;
+    copy.click();
+    expect(clipboardWrites).toEqual([oldAddress]);
+    expect(copy.disabled).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(text(window, '[data-field="crypto-address"]')).toBe('—');
+
+    clickFirst(window, '[data-action="buy-tier-crypto"][data-tier="solo_manual"]');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(text(window, '[data-field="crypto-address"]')).toBe(newAddress);
+    expect(copy.disabled).toBe(true);
+    copy.click();
+    expect(clipboardWrites).toEqual([oldAddress]);
+
+    resolveOldCopy?.();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(clipboardValue).toBe(oldAddress);
+    expect(copy.disabled).toBe(false);
+    expect(copy.textContent).toBe('Copy address');
+
+    copy.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(clipboardWrites).toEqual([oldAddress, newAddress]);
+    expect(clipboardValue).toBe(newAddress);
+    expect(copy.textContent).toBe('Copied ✓');
+  });
+
   it('serializes payment-address copy and recovers from denial on retry', async () => {
     let rejectFirst: ((reason?: unknown) => void) | undefined;
     const firstWrite = new Promise<void>((_resolve, reject) => {
@@ -568,10 +1350,13 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
           ? json({ subscription: null })
           : json({
               provider: 'nowpayments',
+              product: 'solo_manual',
+              status: 'pending',
               pay_amount: 0.0123,
               pay_currency: 'eth',
               payment_address: address,
               order_id: 'ord_crypto_copy',
+              expires_at: FUTURE_EXPIRES_AT,
             }),
     });
     win = window;
@@ -622,13 +1407,18 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     );
   });
 
-  it('crypto checkout stub provider: shows the manual-wire fallback with the order id', async () => {
+  it('crypto checkout stub provider: shows the unavailable/manual-payment fallback with the order id', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: (call) =>
         /\/v1\/billing$/.test(call.url)
           ? json({ subscription: null })
-          : json({ provider: 'stub', order_id: 'ord_stub_1' }),
+          : json({
+              provider: 'stub',
+              product: 'solo_manual',
+              status: 'pending',
+              order_id: 'ord_stub_1',
+            }),
     });
     win = window;
     await flush();
@@ -636,7 +1426,8 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     await flush();
     expect(isHidden(window, '[data-crypto-modal-error]')).toBe(false);
     const err = text(window, '[data-crypto-modal-error]');
-    expect(err).toContain("isn't fully live yet");
+    expect(err).toContain('Crypto checkout is unavailable on this server');
+    expect(err).toContain('billing@driftstack.dev');
     expect(err).toContain('ord_stub_1');
   });
 });

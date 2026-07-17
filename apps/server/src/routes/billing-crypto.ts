@@ -37,7 +37,7 @@ import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { mapNowpaymentsStatus } from '../services/crypto-orders.js';
-import { ValidationError } from '../lib/errors.js';
+import { BadRequestError, ValidationError } from '../lib/errors.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import type { NowPaymentsApiClient } from '../lib/nowpayments-api.js';
 import type { PricingService } from '../services/pricing.js';
@@ -154,6 +154,19 @@ export function registerCryptoCheckoutRoutes(
     // dashboard's web-session works; a read/write-only API key is blocked.
     { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req, reply) => {
+      const rawActAsAccount = req.headers['x-driftstack-account'];
+      const hasActAsAccount = Array.isArray(rawActAsAccount)
+        ? rawActAsAccount.some((value) => value.length > 0)
+        : typeof rawActAsAccount === 'string' && rawActAsAccount.length > 0;
+      if (hasActAsAccount) {
+        // Crypto plan purchases are intentionally self-workspace only. Reject
+        // the standard account-impersonation header before parsing the body or
+        // touching pricing/order/provider state; silently ignoring it would let
+        // a stale or bypassed dashboard buy for Self while claiming Team scope.
+        throw new BadRequestError(
+          'Crypto checkout is available only in the Self workspace. Remove X-Driftstack-Account and retry.',
+        );
+      }
       const ctx = requireCtx(req);
       const parsed = CreateCryptoCheckoutSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
@@ -270,14 +283,21 @@ export function registerCryptoCheckoutRoutes(
       // V-666.D — if NowPayments is wired, mint a real payment
       // address. We do this AFTER the local order is created so a
       // failed NowPayments call still leaves a customer-trackable
-      // order_id in our DB. Order.payment_id stays null until the
-      // first IPN callback (which carries authoritative status).
-      // payment_id from the create call is informational only — the
-      // IPN flow is the canonical source of truth.
+      // order_id in our DB. A successful create binds the provider id before
+      // its address is exposed; the first IPN may backfill an unbound id and
+      // remains the canonical source of payment status truth.
       let provider: 'stub' | 'nowpayments' = 'stub';
       let paymentAddress: string | null = null;
       let payCurrency: string | null = null;
       let payAmount: number | null = null;
+      // Fresh writes always own a new pending/unbound order. A replay may mint
+      // only when the original write never managed to bind its first payment.
+      // Every other replay state is non-minting: confirming/partial already has
+      // money in flight, and paid/failed/cancelled is terminal. Without this
+      // explicit admission predicate, the broad `else if` below minted an
+      // orphan provider payment for every non-pending replay and could then
+      // re-expose the old bound address as payable.
+      const mayMintPayment = !replayed || (order.status === 'pending' && order.payment_id === null);
       // V-666.SEC: skip the NowPayments call when the amount is below
       // their USD-equivalent floor. Avoids surfacing amount_too_low
       // errors to customers for any sub-floor product.
@@ -322,19 +342,14 @@ export function registerCryptoCheckoutRoutes(
       } else if (
         deps.nowpayments !== undefined &&
         deps.nowpaymentsIpnCallbackUrl !== undefined &&
-        serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS
+        serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS &&
+        mayMintPayment
       ) {
         // Fresh order, OR a replay whose original mint never bound a payment_id
-        // (order.payment_id === null) → minting is safe: recordPaymentId binds
-        // the first/only payment_id, so there is no mismatch.
-        //
-        // C8 (open, flagged): for a strictly SEQUENTIAL replay of an order
-        // whose original mint succeeded but whose recordPaymentId FAILED (so
-        // the customer saw address A but payment_id stayed null), this re-mints
-        // address B and orphans A — a fully-safe fix must re-read the order to
-        // tell that case apart from a concurrent replay whose winner is about
-        // to bind (which legitimately mints + echoes the bound address). Left
-        // as-is here so the concurrent path keeps surfacing a payable address.
+        // (order.payment_id === null). A mint is not customer-payable until the
+        // exact order has durably adopted that payment id. If binding fails, the
+        // provider payment may be orphaned internally but its address is never
+        // exposed; a later same-key retry can mint and bind a safe replacement.
         try {
           const payment = await deps.nowpayments.createPayment({
             priceAmount: order.price_cents / 100,
@@ -343,7 +358,6 @@ export function registerCryptoCheckoutRoutes(
             orderDescription: `Driftstack ${order.product}`,
             ipnCallbackUrl: deps.nowpaymentsIpnCallbackUrl,
           });
-          provider = 'nowpayments';
           // Billing-integrity (#9 payment_id binding + #1 crypto-denominated
           // quote) — persist the minted NowPayments payment_id AND the
           // crypto-denominated quote (pay_amount + pay_currency) on the order so
@@ -375,6 +389,11 @@ export function registerCryptoCheckoutRoutes(
                 ? { pay_currency: payment.payCurrency }
                 : {}),
             });
+            // recordPaymentId owns the row lock and may observe an IPN/cancel
+            // transition that happened after createIdempotent returned. Keep
+            // the response status on that newer authoritative snapshot rather
+            // than pairing a hidden address with a stale `pending` status.
+            if (boundOrder !== null) order = boundOrder;
           } catch (bindErr) {
             req.log.warn(
               {
@@ -395,9 +414,15 @@ export function registerCryptoCheckoutRoutes(
             // the address whose IPN will actually reconcile.
             try {
               const bound = await deps.nowpayments.getPayment(boundOrder.payment_id);
-              paymentAddress = bound.payAddress;
-              payCurrency = bound.payCurrency;
-              payAmount = bound.payAmount;
+              if (
+                boundOrder.status === 'pending' &&
+                mapNowpaymentsStatus(bound.paymentStatus) === 'pending'
+              ) {
+                provider = 'nowpayments';
+                paymentAddress = bound.payAddress;
+                payCurrency = bound.payCurrency;
+                payAmount = bound.payAmount;
+              }
             } catch (err) {
               req.log.warn(
                 {
@@ -408,12 +433,25 @@ export function registerCryptoCheckoutRoutes(
                 'failed to re-fetch the concurrently-bound NowPayments payment; returning stub posture',
               );
             }
-          } else {
-            // We bound the order to our freshly-minted payment (or the bind was
-            // best-effort-null and the first IPN backfills) — surface it.
+          } else if (
+            boundOrder !== null &&
+            boundOrder.payment_id === payment.paymentId &&
+            boundOrder.status === 'pending' &&
+            mapNowpaymentsStatus(payment.paymentStatus) === 'pending'
+          ) {
+            // The order durably owns this exact, still-payable provider payment.
+            provider = 'nowpayments';
             paymentAddress = payment.payAddress;
             payCurrency = payment.payCurrency;
             payAmount = payment.payAmount;
+          } else {
+            req.log.warn(
+              {
+                event: 'nowpayments_payment_not_safely_bound',
+                order_id: order.order_id,
+              },
+              'minted NowPayments payment is not safely bound and will not be exposed',
+            );
           }
         } catch (err) {
           // Soft-fail: the local order persists, the customer sees

@@ -129,6 +129,62 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
     expect(secondBody.created_at).toBe(firstBody.created_at);
   });
 
+  it.each([
+    ['paid', 'finished'],
+    ['failed', 'failed'],
+    ['cancelled', null],
+  ] as const)(
+    'V-666.AO replay returns the current %s terminal state without creating a successor order',
+    async (expectedStatus, providerStatus) => {
+      fx = await buildTestApp();
+      const headers = {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': `terminal-state-${expectedStatus}`,
+      };
+      const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
+      const first = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/billing/crypto-checkout',
+        headers,
+        payload,
+      });
+      const firstBody = first.json<CryptoCheckoutResponse>();
+
+      if (providerStatus === null) {
+        const cancelled = await fx.cryptoOrdersService.cancelOrder({
+          order_id: firstBody.order_id,
+          account_id: fx.accountId,
+        });
+        expect(cancelled?.ok).toBe('cancelled');
+      } else {
+        const transitioned = await fx.cryptoOrdersService.applyIpnStatus({
+          order_id: firstBody.order_id,
+          payment_id: `pay_${expectedStatus}`,
+          provider_status: providerStatus,
+        });
+        expect(transitioned?.status).toBe(expectedStatus);
+      }
+
+      const replay = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/billing/crypto-checkout',
+        headers,
+        payload,
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers['idempotent-replayed']).toBe('1');
+      expect(replay.json<CryptoCheckoutResponse>()).toMatchObject({
+        order_id: firstBody.order_id,
+        status: expectedStatus,
+        provider: 'stub',
+        payment_address: null,
+        pay_currency: null,
+      });
+      const all = await fx.cryptoOrdersService.listForAdminPage({ accountId: fx.accountId });
+      expect(all.orders).toHaveLength(1);
+    },
+  );
+
   it('V-666.AO different Idempotency-Keys mint different orders', async () => {
     fx = await buildTestApp();
     const auth = { authorization: `Bearer ${fx.plaintext}` };

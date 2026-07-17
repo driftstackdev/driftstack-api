@@ -6,8 +6,8 @@
 //
 //   • V-184a + V-501 framing comments pinned (placeholder
 //     surface + disabled-while-pending double-checkout guard).
-//   • TIER_CONCURRENT_SESSION_LIMITS + PROFILES_PER_TIER imports
-//     from @driftstack/api-types (schema-driven cap rendering).
+//   • Every displayed cap/feature table imported from
+//     @driftstack/api-types (schema-driven comparison rendering).
 //   • TIERS array pinned: 6 paid tiers (Solo / Team / Agency
 //     Manual + API Starter / Builder / Scale) with exact prices.
 //   • Enterprise mailto:sales@driftstack.dev fallback ("~$4,000/
@@ -19,7 +19,8 @@
 //     cancel_url shapes.
 //   • V-501 withBusy disabled-while-pending double-checkout
 //     guard (no double-Stripe-session).
-//   • "All tiers run the same engine — only caps change" framing.
+//   • Honest shared-engine framing plus operational and optional-
+//     capability differences.
 //   • Refund-honesty copy (legal-grounded rewrite, replaces the old
 //     false automated "pro-rated refund within 14 days" promise —
 //     refunds are admin-manual only): plan stays active through the
@@ -29,7 +30,7 @@
 //   • Change-plan-reuse comment (page reachable from /billing too).
 //   • withSidebar={false} pre-subscribed layout.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -46,15 +47,16 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
   const body = read(PAGE);
 
   it('V-184a + V-501 framing comments pinned (placeholder surface + double-checkout guard)', () => {
-    expect(body).toMatch(/V-184a — onboarding step 4\. Tier picker/);
+    expect(body).toMatch(/V-184a — onboarding step 4 and the post-onboarding plan picker/);
+    expect(body).toMatch(/comparison rows below are derived from the same api-types tables/);
     expect(body).toMatch(
       /V-501 — disabled-while-pending guards on checkout buttons; copy\s*\n?\s*\/\/\s*micro-polish/,
     );
   });
 
-  it('TIER_CONCURRENT_SESSION_LIMITS + PROFILES_PER_TIER imported from @driftstack/api-types', () => {
+  it('every displayed cap/feature table is imported from @driftstack/api-types', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{[\s\S]*?MAX_SESSION_MINUTES_PER_TIER,[\s\S]*?PROFILES_PER_TIER,[\s\S]*?PROXIES_PER_TIER,[\s\S]*?TIER_CONCURRENT_SESSION_LIMITS,[\s\S]*?TIER_FEATURES,[\s\S]*?TIER_STORAGE_BYTES_CAP,[\s\S]*?type AccountTier,[\s\S]*?\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/TIER_CONCURRENT_SESSION_LIMITS\[t\.id\]/);
     expect(body).toMatch(/PROFILES_PER_TIER\[t\.id\]/);
@@ -137,16 +139,68 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     );
   });
 
-  it('fails closed unless the crypto idempotency key survives a storage read-back', () => {
-    expect(body).toMatch(/function persistentCryptoIdempotencyKey\(tier\)/);
-    expect(body).toMatch(/return localStorage\.getItem\(storageKey\) === key \? key : null/);
+  it('owns one exact crypto intent across storage, tabs, retries, and terminal rotation', () => {
+    expect(body).toMatch(/function cryptoIntentScope\(tier\)/);
+    expect(body).toContain(
+      "storageKey: 'ds_crypto_idem_v2:' + authoritativeSelfAccountId + ':' + tier",
+    );
+    expect(body).toContain(
+      "lockName: 'driftstack:crypto-checkout:' + authoritativeSelfAccountId + ':' + tier",
+    );
+    expect(body).toMatch(/function readOrCreateCryptoIntentKey\(tier\)/);
+    expect(body).toMatch(/parsed\.account_id !== scope\.accountId/);
+    expect(body).toMatch(/parsed\.product !== scope\.tier/);
+    expect(body).toMatch(/function compareRetireCryptoIntentKey\(tier, expectedKey\)/);
+    expect(body).toMatch(/parsed\.idempotency_key !== expectedKey/);
+    expect(body).toMatch(/navigator\.locks\.request\([\s\S]*mode: 'exclusive'/);
+    expect(body).toMatch(/for \(let attempt = 0; attempt < 2; attempt \+= 1\)/);
+    expect(body).toMatch(/CRYPTO_TERMINAL_STATUSES\.has\(body\.status\)/);
+    expect(body).toMatch(/body\.status === 'confirming' \|\| body\.status === 'partial'/);
     expect(body).toMatch(/if \(!idempotencyKey\) \{[\s\S]*prevent duplicate payment orders/);
   });
 
-  it('"All tiers run the same engine — only caps + profile counts change" framing pinned', () => {
+  it('never trusts the in-page address cache without live status authority', () => {
+    expect(body).toMatch(/function startCryptoOrderPolling\(entry, initialExpiresAtMs\)/);
+    expect(body).toMatch(/const generation = cryptoPollGeneration/);
+    expect(body).toMatch(/generation !== cryptoPollGeneration/);
+    expect(body).toMatch(/\/v1\/billing\/crypto-orders\/.*encodeURIComponent\(entry\.orderId\)/);
+    expect(body).toMatch(/body\.order_id !== entry\.orderId/);
+    expect(body).toMatch(/body\.product !== entry\.tier/);
+    expect(body).toMatch(/expiresAtMs <= Date\.now\(\)/);
+    expect(body).toMatch(/await readCryptoOrderAuthority\(cacheEntry, controller\.signal\)/);
+    expect(body).toMatch(/armCryptoExpiryDeadline\(entry, initialExpiresAtMs, generation\)/);
+    expect(body).toMatch(/hideCryptoPaymentAddress\(cryptoStatusMessage/);
+    expect(body).not.toMatch(/const cached = cryptoOrderCache\.get\(tier\);\s*if \(cached\)/);
+  });
+
+  it('fails plan purchase closed outside Self and crypto closed without Web Locks', () => {
     expect(body).toMatch(
-      /All tiers run the same engine\. Only concurrent caps and profile\s+counts change between them — there's no fingerprint or feature\s+gating/,
+      /const cryptoWorkspaceSupported = selectedWorkspaceAccountId\.length === 0/,
     );
+    expect(body).toContain(
+      'Plan purchases are self-workspace only. Switch the workspace picker to Self before starting a payment.',
+    );
+    expect(body).toContain('Secure crypto checkout needs browser cross-tab locking support.');
+    expect(body).toMatch(/authedFetch\('\/v1\/account\/me'/);
+    expect(body).toMatch(/SELF_ACCOUNT_ID_RE\.test\(body\.id \|\| ''\)/);
+  });
+
+  it('strictly binds candidate payment fields and checkout product before enabling copy', () => {
+    expect(body).toMatch(/body\.product !== expectedTier/);
+    expect(body).toMatch(/\^\[\\x21-\\x7e\]\{1,256\}\$/);
+    expect(body).toMatch(/\^\[A-Za-z0-9_-\]\{2,32\}\$/);
+    expect(body).toMatch(/Number\.isFinite\(numeric\) && numeric > 0/);
+    expect(body).toMatch(/const candidate = validateCryptoPaymentCandidate\(body\)/);
+    expect(
+      body.indexOf('await readCryptoOrderAuthority(cacheEntry, controller.signal)'),
+    ).toBeLessThan(body.indexOf('setCryptoCopyTarget(cacheEntry.paymentAddress)'));
+  });
+
+  it('shared-engine framing accurately distinguishes operational and optional-capability differences', () => {
+    expect(body).toMatch(
+      /Every tier runs the same verified browser engine and can use every\s*\n?\s*currently available archetype\. Operational limits and optional capabilities\s*\n?\s*differ — compare concurrency, profiles, storage, saved proxies, access,\s*\n?\s*and AI billing below/,
+    );
+    expect(body).not.toMatch(/Only concurrent caps and profile\s+counts change/);
   });
 
   it("Cancel + refund-honesty framing pinned (legal-grounded rewrite: the old automated '14-day pro-rated refund' promise — refunds are admin-manual only, no automated mechanism exists — replaced with 'plan stays active through the paid period, no automatic refunds for unused time, EU/UK 14-day withdrawal handled case-by-case via support@driftstack.dev, crypto non-refundable')", () => {

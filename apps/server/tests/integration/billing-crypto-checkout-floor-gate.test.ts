@@ -17,17 +17,16 @@ function mockNowpayments(): {
   client: NowPaymentsApiClient;
   createPayment: ReturnType<typeof vi.fn>;
 } {
-  const createPayment = vi.fn(
-    (): Promise<CreatePaymentResult> =>
-      Promise.resolve({
-        paymentId: 'pay_test_1',
-        payAddress: '0xPAYADDRESS',
-        payCurrency: 'btc',
-        payAmount: 0.0012,
-        priceAmount: 79,
-        priceCurrency: 'usd',
-        paymentStatus: 'waiting',
-      }),
+  const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
+    Promise.resolve({
+      paymentId: 'pay_test_1',
+      payAddress: '0xPAYADDRESS',
+      payCurrency: 'btc',
+      payAmount: 0.0012,
+      priceAmount: 79,
+      priceCurrency: 'usd',
+      paymentStatus: 'waiting',
+    }),
   );
   return { client: { createPayment } as unknown as NowPaymentsApiClient, createPayment };
 }
@@ -45,6 +44,33 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
   // defensive `amount < NOWPAYMENTS_MIN_USD_CENTS` short-circuit stays in
   // the route but has no product that triggers it, so its dedicated test
   // was removed. The above-floor path below remains the live behaviour.
+  it('rejects acting-as checkout before pricing, order persistence, or provider side effects', async () => {
+    const { client, createPayment } = mockNowpayments();
+    fx = await buildTestApp({ nowpaymentsClient: client });
+    const pricingRead = vi.spyOn(fx.pricingService, 'listEffective');
+    const idempotentCreate = vi.spyOn(fx.cryptoOrdersService, 'createIdempotent');
+    const plainCreate = vi.spyOn(fx.cryptoOrdersService, 'create');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': 'acc_00000000-0000-4000-8000-000000000001',
+        'idempotency-key': 'must-not-be-consumed',
+      },
+      payload: { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/Self workspace/i);
+    expect(pricingRead).not.toHaveBeenCalled();
+    expect(idempotentCreate).not.toHaveBeenCalled();
+    expect(plainCreate).not.toHaveBeenCalled();
+    expect(createPayment).not.toHaveBeenCalled();
+    expect(await fx.cryptoOrdersRepo.listAll()).toEqual([]);
+  });
+
   it('above-floor product (solo_manual) → provider nowpayments, createPayment called once', async () => {
     const { client, createPayment } = mockNowpayments();
     fx = await buildTestApp({ nowpaymentsClient: client });
@@ -62,8 +88,8 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
   });
 
   it('above-floor product but NowPayments createPayment throws → soft-fails to stub, order still persists (V-666.D)', async () => {
-    const createPayment = vi.fn(
-      (): Promise<CreatePaymentResult> => Promise.reject(new Error('nowpayments 502')),
+    const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
+      Promise.reject(new Error('nowpayments 502')),
     );
     const client = { createPayment } as unknown as NowPaymentsApiClient;
     fx = await buildTestApp({ nowpaymentsClient: client });
@@ -84,18 +110,101 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     expect(body.order_id).toMatch(/^ord_/);
   });
 
+  it('never exposes a minted address until that exact payment id is durably bound', async () => {
+    let mint = 0;
+    const createPayment = vi.fn((): Promise<CreatePaymentResult> => {
+      mint += 1;
+      return Promise.resolve({
+        paymentId: `pay_bind_${mint}`,
+        payAddress: `0xBIND${mint}`,
+        payCurrency: 'btc',
+        payAmount: 0.0012,
+        priceAmount: 79,
+        priceCurrency: 'usd',
+        paymentStatus: 'waiting',
+      });
+    });
+    const client = { createPayment } as unknown as NowPaymentsApiClient;
+    fx = await buildTestApp({ nowpaymentsClient: client });
+    vi.spyOn(fx.cryptoOrdersService, 'recordPaymentId').mockRejectedValueOnce(
+      new Error('database write lost'),
+    );
+    const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'idempotency-key': 'k-bind-before-expose',
+    };
+
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    expect(first.statusCode).toBe(201);
+    expect(first.json<{ provider: string; payment_address: string | null }>()).toMatchObject({
+      provider: 'stub',
+      payment_address: null,
+    });
+
+    // The customer never received orphan A. A same-key retry may mint B, but
+    // B becomes payable only after the original service method binds it.
+    const replay = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    expect(replay.statusCode).toBe(201);
+    expect(replay.headers['idempotent-replayed']).toBe('1');
+    expect(replay.json<{ provider: string; payment_address: string | null }>()).toMatchObject({
+      provider: 'nowpayments',
+      payment_address: '0xBIND2',
+    });
+    expect(createPayment).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns the authoritative status observed by payment binding instead of the stale create snapshot', async () => {
+    const { client } = mockNowpayments();
+    fx = await buildTestApp({ nowpaymentsClient: client });
+    vi.spyOn(fx.cryptoOrdersService, 'recordPaymentId').mockImplementationOnce(async (args) => {
+      const current = await fx.cryptoOrdersService.getById(args.order_id);
+      if (current === null) throw new Error('test order missing');
+      return {
+        ...current,
+        payment_id: args.payment_id,
+        status: 'confirming',
+      };
+    });
+
+    const response = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(
+      response.json<{ status: string; provider: string; payment_address: string | null }>(),
+    ).toMatchObject({
+      status: 'confirming',
+      provider: 'stub',
+      payment_address: null,
+    });
+  });
+
   it('idempotency REPLAY does NOT re-mint a NowPayments payment; echoes the ORIGINAL address via getPayment (Fable billing re-audit 2026-07-02)', async () => {
-    const createPayment = vi.fn(
-      (): Promise<CreatePaymentResult> =>
-        Promise.resolve({
-          paymentId: 'pay_orig',
-          payAddress: '0xORIGADDR',
-          payCurrency: 'btc',
-          payAmount: 0.0012,
-          priceAmount: 79,
-          priceCurrency: 'usd',
-          paymentStatus: 'waiting',
-        }),
+    const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
+      Promise.resolve({
+        paymentId: 'pay_orig',
+        payAddress: '0xORIGADDR',
+        payCurrency: 'btc',
+        payAmount: 0.0012,
+        priceAmount: 79,
+        priceCurrency: 'usd',
+        paymentStatus: 'waiting',
+      }),
     );
     const getPayment = vi.fn(() =>
       Promise.resolve({
@@ -155,17 +264,16 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
   });
 
   it('C7 — a replay whose bound payment is no longer waiting (expired/dead) is NOT re-surfaced as payable', async () => {
-    const createPayment = vi.fn(
-      (): Promise<CreatePaymentResult> =>
-        Promise.resolve({
-          paymentId: 'pay_c7',
-          payAddress: '0xLIVEADDR',
-          payCurrency: 'btc',
-          payAmount: 0.0012,
-          priceAmount: 79,
-          priceCurrency: 'usd',
-          paymentStatus: 'waiting',
-        }),
+    const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
+      Promise.resolve({
+        paymentId: 'pay_c7',
+        payAddress: '0xLIVEADDR',
+        payCurrency: 'btc',
+        payAmount: 0.0012,
+        priceAmount: 79,
+        priceCurrency: 'usd',
+        paymentStatus: 'waiting',
+      }),
     );
     // By the time of the replay the bound payment has EXPIRED — its address
     // is dead. NowPayments reports it as such.
@@ -204,6 +312,97 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     expect(body.provider).toBe('stub');
     expect(createPayment).toHaveBeenCalledTimes(1); // never re-mints on replay
   });
+
+  it.each([
+    ['confirming', 'confirming'],
+    ['partial', 'partially_paid'],
+    ['paid', 'finished'],
+    ['failed', 'failed'],
+    ['cancelled', null],
+  ] as const)(
+    'a %s replay is non-minting and never exposes either the old or a newly orphaned address',
+    async (expectedStatus, providerStatus) => {
+      const paymentId = `pay_terminal_${expectedStatus}`;
+      const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
+        Promise.resolve({
+          paymentId,
+          payAddress: '0xTERMINAL_OLD_ADDRESS',
+          payCurrency: 'btc',
+          payAmount: 0.0012,
+          priceAmount: 79,
+          priceCurrency: 'usd',
+          paymentStatus: 'waiting',
+        }),
+      );
+      const getPayment = vi.fn(() =>
+        Promise.resolve({
+          paymentStatus: 'waiting',
+          payAddress: '0xTERMINAL_OLD_ADDRESS',
+          payCurrency: 'btc',
+          payAmount: 0.0012,
+        }),
+      );
+      const client = { createPayment, getPayment } as unknown as NowPaymentsApiClient;
+      fx = await buildTestApp({ nowpaymentsClient: client });
+      const headers = {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': `terminal-replay-${expectedStatus}`,
+      };
+      const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
+
+      const first = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/billing/crypto-checkout',
+        headers,
+        payload,
+      });
+      const firstBody = first.json<{ order_id: string; payment_address: string | null }>();
+      expect(firstBody.payment_address).toBe('0xTERMINAL_OLD_ADDRESS');
+      expect(createPayment).toHaveBeenCalledTimes(1);
+
+      if (providerStatus === null) {
+        const cancelled = await fx.cryptoOrdersService.cancelOrder({
+          order_id: firstBody.order_id,
+          account_id: fx.accountId,
+        });
+        expect(cancelled?.ok).toBe('cancelled');
+      } else {
+        const transitioned = await fx.cryptoOrdersService.applyIpnStatus({
+          order_id: firstBody.order_id,
+          payment_id: paymentId,
+          provider_status: providerStatus,
+        });
+        expect(transitioned?.status).toBe(expectedStatus);
+      }
+
+      const replay = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/billing/crypto-checkout',
+        headers,
+        payload,
+      });
+      expect(replay.statusCode).toBe(201);
+      expect(replay.headers['idempotent-replayed']).toBe('1');
+      const replayBody = replay.json<{
+        order_id: string;
+        status: string;
+        provider: string;
+        payment_address: string | null;
+        pay_currency: string | null;
+        pay_amount: number | null;
+      }>();
+      expect(replayBody).toMatchObject({
+        order_id: firstBody.order_id,
+        status: expectedStatus,
+        provider: 'stub',
+        payment_address: null,
+        pay_currency: null,
+        pay_amount: null,
+      });
+      expect(createPayment).toHaveBeenCalledTimes(1);
+      expect(getPayment).not.toHaveBeenCalled();
+    },
+  );
 
   it('CONCURRENT same-key checkouts never surface an orphaned mint — the loser echoes the BOUND payment (Fable comprehensive audit 2026-07-02)', async () => {
     // Two overlapping checkouts on one Idempotency-Key both read

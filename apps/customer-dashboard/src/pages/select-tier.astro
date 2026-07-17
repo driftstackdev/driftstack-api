@@ -381,6 +381,7 @@ function aiLabel(tier: AccountTier): string {
         );
       }
       window.addEventListener('pagehide', () => {
+        stopCryptoOrderPolling();
         ownedRequestControllers.forEach((controller) => controller.abort());
         ownedRequestControllers.clear();
       });
@@ -461,15 +462,55 @@ function aiLabel(tier: AccountTier): string {
       const cryptoBtns = root.querySelectorAll('[data-action="buy-tier-crypto"]');
       const cryptoLinksByTier = new Map();
       const checkoutKeysByTier = new Map();
+      const SELF_ACCOUNT_ID_RE =
+        /^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+      const cryptoIntentLocksAvailable =
+        typeof navigator.locks === 'object' &&
+        navigator.locks !== null &&
+        typeof navigator.locks.request === 'function';
+      const selectedWorkspaceAccountId = (() => {
+        try {
+          const headers =
+            typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {};
+          const value = headers && headers['x-driftstack-account'];
+          return typeof value === 'string' ? value : '';
+        } catch {
+          return '';
+        }
+      })();
+      const cryptoWorkspaceSupported = selectedWorkspaceAccountId.length === 0;
+      let authoritativeSelfAccountId = null;
       let billingDataAvailable = false;
       let billingUnavailableReason = token
         ? 'Wait for live billing to load'
         : 'Sign in to choose a paid plan';
 
+      function cryptoCheckoutUnavailableReason() {
+        if (!cryptoWorkspaceSupported) {
+          return 'Switch the workspace picker to Self before starting a payment.';
+        }
+        if (!cryptoIntentLocksAvailable) {
+          return 'Secure crypto checkout needs browser cross-tab locking support.';
+        }
+        return billingUnavailableReason;
+      }
+
+      function cryptoCheckoutDisabled() {
+        return (
+          !billingDataAvailable ||
+          !cryptoWorkspaceSupported ||
+          !cryptoIntentLocksAvailable ||
+          authoritativeSelfAccountId === null ||
+          isActiveSubscription(currentSubscription)
+        );
+      }
+
       function setBillingAuthority(available, reason = '') {
         billingDataAvailable = available;
         if (reason) billingUnavailableReason = reason;
-        [...tierButtons, ...cryptoBtns].forEach((button) => {
+        tierButtons.forEach((button) => {
           button.disabled = !available;
           if (available) {
             button.removeAttribute('aria-disabled');
@@ -477,6 +518,21 @@ function aiLabel(tier: AccountTier): string {
           } else {
             button.setAttribute('aria-disabled', 'true');
             button.title = billingUnavailableReason;
+          }
+        });
+        cryptoBtns.forEach((button) => {
+          const disabled =
+            !available ||
+            !cryptoWorkspaceSupported ||
+            !cryptoIntentLocksAvailable ||
+            authoritativeSelfAccountId === null;
+          button.disabled = disabled;
+          if (!disabled) {
+            button.removeAttribute('aria-disabled');
+            button.removeAttribute('title');
+          } else {
+            button.setAttribute('aria-disabled', 'true');
+            button.title = cryptoCheckoutUnavailableReason();
           }
         });
       }
@@ -676,6 +732,7 @@ function aiLabel(tier: AccountTier): string {
       const cryptoCloseBtn = root.querySelector('[data-crypto-modal-close]');
       const cryptoCopyBtn = root.querySelector('[data-crypto-copy]');
       let cryptoCopyInFlight = false;
+      let cryptoPayableAddress = null;
       let cryptoCopyGeneration = 0;
       let cryptoCopyResetTimer = null;
 
@@ -697,32 +754,147 @@ function aiLabel(tier: AccountTier): string {
         }, 2200);
       }
 
-      // Finding #8 — re-clicking "pay with crypto" must not mint a
-      // SECOND order with a different payment address. cryptoOrderCache
-      // remembers the already-minted order per tier (re-showing the
-      // SAME address on a repeat open); cryptoRequestInFlight blocks a
-      // second mint while one is already in flight (the modal is a
-      // singleton, so only one mint can be meaningfully in progress).
+      function syncCryptoCopyAvailability() {
+        if (!cryptoCopyBtn) return;
+        const hasPayableAddress =
+          typeof cryptoPayableAddress === 'string' && cryptoPayableAddress.length > 0;
+        cryptoCopyBtn.disabled = cryptoCopyInFlight || !hasPayableAddress;
+        cryptoCopyBtn.setAttribute('aria-busy', cryptoCopyInFlight ? 'true' : 'false');
+        if (cryptoCopyInFlight && hasPayableAddress) {
+          cryptoCopyBtn.title = 'Wait for the previous copy request to finish.';
+        } else {
+          cryptoCopyBtn.removeAttribute('title');
+        }
+      }
+
+      function invalidateCryptoCopyTarget() {
+        cryptoCopyGeneration += 1;
+        cryptoPayableAddress = null;
+        resetCryptoCopyFeedback();
+        // Presentation ownership can change while the platform clipboard write
+        // is still pending. Keep the transport latch until that exact promise
+        // settles so a late old-address write can never overtake a new copy.
+        syncCryptoCopyAvailability();
+      }
+
+      function setCryptoCopyTarget(address) {
+        cryptoPayableAddress = address;
+        syncCryptoCopyAvailability();
+      }
+
+      // One browser key represents one logical crypto-order intent. The key
+      // survives ambiguous transport outcomes and remains attached while the
+      // order is pending / confirming / partial. A paid / failed / cancelled
+      // order retires only its exact key so a later explicit click can create
+      // a genuinely new order. Web Locks serialize the read/create/rotate +
+      // POST sequence across tabs; without that origin-wide primitive the
+      // checkout fails closed rather than racing two non-refundable addresses.
       const cryptoOrderCache = new Map();
       let cryptoRequestInFlight = false;
+      let cryptoPollTimer = null;
+      let cryptoExpiryTimer = null;
+      let cryptoPollGeneration = 0;
 
-      function persistentCryptoIdempotencyKey(tier) {
-        const storageKey = 'ds_crypto_idem_' + tier;
+      const CRYPTO_TERMINAL_STATUSES = new Set(['paid', 'failed', 'cancelled']);
+      const CRYPTO_NON_PAYABLE_STATUSES = new Set([
+        'confirming',
+        'partial',
+        ...CRYPTO_TERMINAL_STATUSES,
+      ]);
+
+      function cryptoIntentScope(tier) {
+        if (!authoritativeSelfAccountId) return null;
+        return {
+          accountId: authoritativeSelfAccountId,
+          tier,
+          storageKey: 'ds_crypto_idem_v2:' + authoritativeSelfAccountId + ':' + tier,
+          lockName: 'driftstack:crypto-checkout:' + authoritativeSelfAccountId + ':' + tier,
+        };
+      }
+
+      function newCryptoIntentKey() {
+        return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? 'crypto-intent-' + crypto.randomUUID()
+          : 'crypto-intent-' + Date.now().toString() + '-' + Math.random().toString(36).slice(2);
+      }
+
+      function readOrCreateCryptoIntentKey(tier) {
+        const scope = cryptoIntentScope(tier);
+        if (!scope) return null;
         try {
-          let key = localStorage.getItem(storageKey);
-          if (!key) {
-            key =
-              typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-                ? 'crypto-tier-' + crypto.randomUUID()
-                : 'crypto-tier-' + Date.now().toString();
-            localStorage.setItem(storageKey, key);
+          const existing = localStorage.getItem(scope.storageKey);
+          if (existing) {
+            const parsed = JSON.parse(existing);
+            if (
+              !parsed ||
+              typeof parsed !== 'object' ||
+              parsed.version !== 2 ||
+              parsed.account_id !== scope.accountId ||
+              parsed.product !== scope.tier ||
+              typeof parsed.idempotency_key !== 'string' ||
+              !/^[\x21-\x7e]{1,255}$/.test(parsed.idempotency_key)
+            ) {
+              return null;
+            }
+            return parsed.idempotency_key;
           }
-          return localStorage.getItem(storageKey) === key ? key : null;
+          const key = newCryptoIntentKey();
+          const encoded = JSON.stringify({
+            version: 2,
+            account_id: scope.accountId,
+            product: scope.tier,
+            idempotency_key: key,
+          });
+          localStorage.setItem(scope.storageKey, encoded);
+          return localStorage.getItem(scope.storageKey) === encoded ? key : null;
         } catch {
           return null;
         }
       }
+
+      function compareRetireCryptoIntentKey(tier, expectedKey) {
+        const scope = cryptoIntentScope(tier);
+        if (!scope) return false;
+        try {
+          const encoded = localStorage.getItem(scope.storageKey);
+          if (!encoded) return false;
+          const parsed = JSON.parse(encoded);
+          if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            parsed.version !== 2 ||
+            parsed.account_id !== scope.accountId ||
+            parsed.product !== scope.tier ||
+            parsed.idempotency_key !== expectedKey
+          ) {
+            return false;
+          }
+          localStorage.removeItem(scope.storageKey);
+          return localStorage.getItem(scope.storageKey) === null;
+        } catch {
+          return false;
+        }
+      }
+
+      function withCryptoIntentLock(tier, work, signal) {
+        if (!cryptoIntentLocksAvailable) {
+          return Promise.reject(new Error('Secure crypto checkout needs browser locking support.'));
+        }
+        const scope = cryptoIntentScope(tier);
+        if (!scope) {
+          return Promise.reject(new Error('The signed-in account could not be verified.'));
+        }
+        return signal
+          ? navigator.locks.request(
+              scope.lockName,
+              { mode: 'exclusive', signal },
+              work,
+            )
+          : navigator.locks.request(scope.lockName, { mode: 'exclusive' }, work);
+      }
       const CRYPTO_TIMEOUT_MS = 15_000;
+      const CRYPTO_STATUS_POLL_MS = 5_000;
+      const CRYPTO_MAX_TIMER_MS = 2_147_483_647;
 
       function setCryptoText(key, value) {
         const el = root.querySelector('[data-field="' + key + '"]');
@@ -735,13 +907,8 @@ function aiLabel(tier: AccountTier): string {
       }
       function hideCryptoModal() {
         if (!cryptoModal) return;
-        cryptoCopyGeneration += 1;
-        cryptoCopyInFlight = false;
-        resetCryptoCopyFeedback();
-        if (cryptoCopyBtn) {
-          cryptoCopyBtn.disabled = false;
-          cryptoCopyBtn.setAttribute('aria-busy', 'false');
-        }
+        stopCryptoOrderPolling();
+        invalidateCryptoCopyTarget();
         cryptoModal.classList.add('hidden');
         cryptoModal.classList.remove('flex');
       }
@@ -753,10 +920,220 @@ function aiLabel(tier: AccountTier): string {
         cryptoError.classList.remove('hidden');
       }
 
+      function stopCryptoOrderPolling() {
+        cryptoPollGeneration += 1;
+        if (cryptoPollTimer !== null) window.clearTimeout(cryptoPollTimer);
+        if (cryptoExpiryTimer !== null) window.clearTimeout(cryptoExpiryTimer);
+        cryptoPollTimer = null;
+        cryptoExpiryTimer = null;
+      }
+
+      function hideCryptoPaymentAddress(message) {
+        stopCryptoOrderPolling();
+        invalidateCryptoCopyTarget();
+        setCryptoText('crypto-amount', '—');
+        setCryptoText('crypto-currency', '—');
+        setCryptoText('crypto-address', '—');
+        showCryptoError(message);
+      }
+
+      function cryptoStatusMessage(status, orderId) {
+        if (status === 'confirming') {
+          return (
+            'Order ' +
+            orderId +
+            ' is confirming on-chain. Do not send another payment or start another order.'
+          );
+        }
+        if (status === 'partial') {
+          return (
+            'Order ' +
+            orderId +
+            ' received a partial payment. Do not send again here; contact billing@driftstack.dev.'
+          );
+        }
+        if (status === 'paid') {
+          return 'Order ' + orderId + ' is paid. Its payment address is now closed.';
+        }
+        if (status === 'failed') {
+          return 'Order ' + orderId + ' is closed. Start a new payment to receive a new address.';
+        }
+        return 'Order ' + orderId + ' was cancelled. Start a new payment to receive a new address.';
+      }
+
+      function validateCryptoCheckoutBody(body, expectedTier) {
+        if (!body || typeof body !== 'object') return null;
+        if (
+          typeof body.order_id !== 'string' ||
+          !/^ord_[A-Za-z0-9_-]{1,96}$/.test(body.order_id) ||
+          body.product !== expectedTier ||
+          (body.provider !== 'stub' && body.provider !== 'nowpayments')
+        ) {
+          return null;
+        }
+        if (
+          ![
+            'pending',
+            'confirming',
+            'partial',
+            'paid',
+            'failed',
+            'cancelled',
+          ].includes(body.status)
+        ) {
+          return null;
+        }
+        return body;
+      }
+
+      function normalizePositiveCryptoAmount(value) {
+        const text = typeof value === 'number' ? String(value) : value;
+        if (
+          typeof text !== 'string' ||
+          text.length < 1 ||
+          text.length > 64 ||
+          !/^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(text)
+        ) {
+          return null;
+        }
+        const numeric = Number(text);
+        return Number.isFinite(numeric) && numeric > 0 ? text : null;
+      }
+
+      function validateCryptoPaymentCandidate(body) {
+        if (body.provider !== 'nowpayments') return null;
+        if (
+          typeof body.payment_address !== 'string' ||
+          !/^[\x21-\x7e]{1,256}$/.test(body.payment_address) ||
+          typeof body.pay_currency !== 'string' ||
+          !/^[A-Za-z0-9_-]{2,32}$/.test(body.pay_currency)
+        ) {
+          return null;
+        }
+        const payAmount = normalizePositiveCryptoAmount(body.pay_amount);
+        if (payAmount === null) return null;
+        return {
+          payAmount,
+          payCurrency: body.pay_currency,
+          paymentAddress: body.payment_address,
+        };
+      }
+
+      function validateCryptoOrderAuthority(body, entry) {
+        if (
+          !body ||
+          typeof body !== 'object' ||
+          body.order_id !== entry.orderId ||
+          body.product !== entry.tier ||
+          ![
+            'pending',
+            'confirming',
+            'partial',
+            'paid',
+            'failed',
+            'cancelled',
+          ].includes(body.status)
+        ) {
+          return null;
+        }
+        if (body.status !== 'pending') return { status: body.status, expiresAtMs: null };
+        if (typeof body.expires_at !== 'string') return null;
+        const expiresAtMs = Date.parse(body.expires_at);
+        if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) return null;
+        return { status: body.status, expiresAtMs };
+      }
+
+      async function readCryptoOrderAuthority(entry, signal) {
+        const res = await authedFetch(
+          '/v1/billing/crypto-orders/' + encodeURIComponent(entry.orderId),
+          signal ? { method: 'GET', signal } : { method: 'GET' },
+        );
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw window.driftstackResponseError(res, body);
+        const authority = validateCryptoOrderAuthority(body, entry);
+        if (!authority) throw new Error('Crypto order authority response was incomplete.');
+        return authority;
+      }
+
+      function armCryptoExpiryDeadline(entry, expiresAtMs, generation) {
+        if (generation !== cryptoPollGeneration) return;
+        if (cryptoExpiryTimer !== null) window.clearTimeout(cryptoExpiryTimer);
+        const remaining = expiresAtMs - Date.now();
+        if (remaining <= 0) {
+          hideCryptoPaymentAddress(
+            'Order ' +
+              entry.orderId +
+              ' reached its payment deadline. Reopen checkout to verify it before sending.',
+          );
+          return;
+        }
+        cryptoExpiryTimer = window.setTimeout(() => {
+          if (generation !== cryptoPollGeneration) return;
+          if (Date.now() < expiresAtMs) {
+            armCryptoExpiryDeadline(entry, expiresAtMs, generation);
+            return;
+          }
+          hideCryptoPaymentAddress(
+            'Order ' +
+              entry.orderId +
+              ' reached its payment deadline. Reopen checkout to verify it before sending.',
+          );
+        }, Math.min(remaining, CRYPTO_MAX_TIMER_MS));
+      }
+
+      function startCryptoOrderPolling(entry, initialExpiresAtMs) {
+        stopCryptoOrderPolling();
+        const generation = cryptoPollGeneration;
+        armCryptoExpiryDeadline(entry, initialExpiresAtMs, generation);
+
+        const poll = async () => {
+          if (generation !== cryptoPollGeneration) return;
+          try {
+            const authority = await readCryptoOrderAuthority(entry);
+            if (generation !== cryptoPollGeneration) return;
+            if (authority.status === 'pending') {
+              armCryptoExpiryDeadline(entry, authority.expiresAtMs, generation);
+              cryptoPollTimer = window.setTimeout(poll, CRYPTO_STATUS_POLL_MS);
+              return;
+            }
+            if (!CRYPTO_NON_PAYABLE_STATUSES.has(authority.status)) {
+              throw new Error('Crypto order returned an unknown status.');
+            }
+
+            const cached = cryptoOrderCache.get(entry.tier);
+            if (cached && cached.orderId === entry.orderId) cryptoOrderCache.delete(entry.tier);
+            hideCryptoPaymentAddress(cryptoStatusMessage(authority.status, entry.orderId));
+            if (CRYPTO_TERMINAL_STATUSES.has(authority.status)) {
+              await withCryptoIntentLock(entry.tier, () =>
+                compareRetireCryptoIntentKey(entry.tier, entry.idempotencyKey),
+              );
+            }
+          } catch (err) {
+            if (generation !== cryptoPollGeneration) return;
+            hideCryptoPaymentAddress(
+              window.driftstackRequestErrorMessage(
+                err,
+                'Order status could not be verified. Do not send payment until you reopen checkout.',
+              ),
+            );
+          }
+        };
+
+        cryptoPollTimer = window.setTimeout(poll, CRYPTO_STATUS_POLL_MS);
+      }
+
       cryptoBtns.forEach((btn) => {
         btn.addEventListener('click', async () => {
           if (!token) {
             showBanner('Sign in to pay with crypto.');
+            return;
+          }
+          if (!cryptoWorkspaceSupported) {
+            showBanner('Switch the workspace picker to Self before starting a payment.');
+            return;
+          }
+          if (!cryptoIntentLocksAvailable) {
+            showBanner('Secure crypto checkout needs browser cross-tab locking support.');
             return;
           }
           if (!billingDataAvailable) {
@@ -775,26 +1152,13 @@ function aiLabel(tier: AccountTier): string {
           if (!cryptoLoading || !cryptoError || !cryptoReady) return;
           setCryptoText('crypto-tier-label', tierLabel);
           cryptoError.classList.add('hidden');
-
-          // Re-opening for a tier that already minted an order this page
-          // load re-shows the SAME address rather than starting a second
-          // order (each mint gets its own distinct address — two open
-          // orders for one tier is a real double-payment risk since
-          // crypto payments are non-refundable).
-          const cached = cryptoOrderCache.get(tier);
-          if (cached) {
-            cryptoLoading.classList.add('hidden');
-            setCryptoText('crypto-amount', cached.payAmount);
-            setCryptoText('crypto-currency', cached.payCurrency);
-            setCryptoText('crypto-address', cached.paymentAddress);
-            setCryptoText('crypto-order-id', cached.orderId);
-            cryptoReady.classList.remove('hidden');
-            showCryptoModal();
-            return;
-          }
-
+          stopCryptoOrderPolling();
+          invalidateCryptoCopyTarget();
           cryptoLoading.classList.remove('hidden');
           cryptoReady.classList.add('hidden');
+          setCryptoText('crypto-amount', '—');
+          setCryptoText('crypto-currency', '—');
+          setCryptoText('crypto-address', '—');
           showCryptoModal();
           cryptoRequestInFlight = true;
           btn.disabled = true;
@@ -802,63 +1166,177 @@ function aiLabel(tier: AccountTier): string {
           const controller = new AbortController();
           const timeout = window.setTimeout(() => controller.abort(), CRYPTO_TIMEOUT_MS);
           try {
-            // Persist the idempotency key per-tier so a RELOAD (which wipes the
-            // in-page cryptoOrderCache) reuses the SAME key → the server returns
-            // the SAME order instead of minting a second distinct pay-address.
-            // Crypto is non-refundable, so a reload-created duplicate order is a
-            // real double-payment risk. Kept random per browser (not a fixed
-            // 'crypto-tier-<tier>') so it can't collide across accounts.
-            const idempotencyKey = persistentCryptoIdempotencyKey(tier);
-            if (!idempotencyKey) {
-              showCryptoError(
-                'Secure crypto checkout needs browser site storage to prevent duplicate payment orders. Enable site storage and try again.',
-              );
-              return;
-            }
-            const res = await authedFetch('/v1/billing/crypto-checkout', {
-              method: 'POST',
-              signal: controller.signal,
-              headers: {
-                'content-type': 'application/json',
-                'idempotency-key': idempotencyKey,
+            await withCryptoIntentLock(
+              tier,
+              async () => {
+                let idempotencyKey = readOrCreateCryptoIntentKey(tier);
+                if (!idempotencyKey) {
+                  showCryptoError(
+                    'Secure crypto checkout needs browser site storage to prevent duplicate payment orders. Enable site storage and try again.',
+                  );
+                  return;
+                }
+
+                // At most one successor is allowed in this click. The first
+                // terminal response proves the persisted intent is finished;
+                // retiring that exact key and issuing one fresh request fulfils
+                // the customer's explicit Pay click without looping through a
+                // corrupt or unexpectedly terminal response forever.
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                  const res = await authedFetch('/v1/billing/crypto-checkout', {
+                    method: 'POST',
+                    signal: controller.signal,
+                    headers: {
+                      'content-type': 'application/json',
+                      'idempotency-key': idempotencyKey,
+                    },
+                    body: JSON.stringify({
+                      product: tier,
+                      price_cents: priceCents,
+                      price_currency: 'USD',
+                    }),
+                  });
+                  const decoded = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    showCryptoError(
+                      window.driftstackRequestErrorMessage(
+                        window.driftstackResponseError(res, decoded),
+                        'Could not start crypto checkout. Try again.',
+                      ),
+                    );
+                    return;
+                  }
+                  const body = validateCryptoCheckoutBody(decoded, tier);
+                  if (!body) {
+                    showCryptoError(
+                      'Crypto checkout returned an incomplete response. Try again with the same payment intent.',
+                    );
+                    return;
+                  }
+
+                  if (CRYPTO_TERMINAL_STATUSES.has(body.status)) {
+                    cryptoOrderCache.delete(tier);
+                    hideCryptoPaymentAddress(cryptoStatusMessage(body.status, body.order_id));
+                    const retired = compareRetireCryptoIntentKey(tier, idempotencyKey);
+                    if (!retired) {
+                      showCryptoError(
+                        'The completed payment intent could not be retired safely. Reload before starting another payment.',
+                      );
+                      return;
+                    }
+                    if (attempt === 0) {
+                      idempotencyKey = readOrCreateCryptoIntentKey(tier);
+                      if (!idempotencyKey) {
+                        showCryptoError(
+                          'Secure crypto checkout needs browser site storage to start a new payment.',
+                        );
+                        return;
+                      }
+                      cryptoLoading.classList.remove('hidden');
+                      cryptoError.classList.add('hidden');
+                      continue;
+                    }
+                    return;
+                  }
+
+                  if (body.status === 'confirming' || body.status === 'partial') {
+                    cryptoOrderCache.delete(tier);
+                    hideCryptoPaymentAddress(cryptoStatusMessage(body.status, body.order_id));
+                    return;
+                  }
+
+                  if (body.provider === 'stub') {
+                    cryptoOrderCache.delete(tier);
+                    showCryptoError(
+                      'Crypto checkout is unavailable on this server. Use card checkout, or email ' +
+                        'billing@driftstack.dev with order_id ' +
+                        body.order_id +
+                        ' for manual payment instructions.',
+                    );
+                    return;
+                  }
+
+                  const candidate = validateCryptoPaymentCandidate(body);
+                  if (!candidate) {
+                    cryptoOrderCache.delete(tier);
+                    hideCryptoPaymentAddress(
+                      'Crypto checkout returned malformed payment details. Do not send payment; retry with the same payment intent.',
+                    );
+                    return;
+                  }
+
+                  const cacheEntry = {
+                    payAmount: candidate.payAmount,
+                    payCurrency: candidate.payCurrency,
+                    paymentAddress: candidate.paymentAddress,
+                    orderId: body.order_id,
+                    idempotencyKey,
+                    tier,
+                  };
+                  let authority;
+                  try {
+                    // The POST address is only a candidate. Before it can enter
+                    // the DOM/clipboard, re-read the exact account-owned order
+                    // and prove product, pending status, and a future deadline.
+                    authority = await readCryptoOrderAuthority(cacheEntry, controller.signal);
+                  } catch (err) {
+                    hideCryptoPaymentAddress(
+                      window.driftstackRequestErrorMessage(
+                        err,
+                        'Order status could not be verified. Do not send payment; retry with the same payment intent.',
+                      ),
+                    );
+                    return;
+                  }
+                  if (CRYPTO_TERMINAL_STATUSES.has(authority.status)) {
+                    cryptoOrderCache.delete(tier);
+                    hideCryptoPaymentAddress(
+                      cryptoStatusMessage(authority.status, cacheEntry.orderId),
+                    );
+                    const retired = compareRetireCryptoIntentKey(tier, idempotencyKey);
+                    if (!retired) {
+                      showCryptoError(
+                        'The completed payment intent could not be retired safely. Reload before starting another payment.',
+                      );
+                      return;
+                    }
+                    if (attempt === 0) {
+                      idempotencyKey = readOrCreateCryptoIntentKey(tier);
+                      if (!idempotencyKey) {
+                        showCryptoError(
+                          'Secure crypto checkout needs browser site storage to start a new payment.',
+                        );
+                        return;
+                      }
+                      cryptoLoading.classList.remove('hidden');
+                      cryptoError.classList.add('hidden');
+                      continue;
+                    }
+                    return;
+                  }
+                  if (authority.status === 'confirming' || authority.status === 'partial') {
+                    cryptoOrderCache.delete(tier);
+                    hideCryptoPaymentAddress(
+                      cryptoStatusMessage(authority.status, cacheEntry.orderId),
+                    );
+                    return;
+                  }
+
+                  cryptoOrderCache.set(tier, cacheEntry);
+                  cryptoLoading.classList.add('hidden');
+                  cryptoError.classList.add('hidden');
+                  setCryptoText('crypto-amount', cacheEntry.payAmount);
+                  setCryptoText('crypto-currency', cacheEntry.payCurrency);
+                  setCryptoText('crypto-address', cacheEntry.paymentAddress);
+                  setCryptoText('crypto-order-id', cacheEntry.orderId);
+                  setCryptoCopyTarget(cacheEntry.paymentAddress);
+                  cryptoReady.classList.remove('hidden');
+                  startCryptoOrderPolling(cacheEntry, authority.expiresAtMs);
+                  return;
+                }
               },
-              body: JSON.stringify({
-                product: tier,
-                price_cents: priceCents,
-                price_currency: 'USD',
-              }),
-            });
-            const body = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              showCryptoError(
-                window.driftstackRequestErrorMessage(
-                  window.driftstackResponseError(res, body),
-                  'Could not start crypto checkout. Try again.',
-                ),
-              );
-              return;
-            }
-            if (body.provider === 'stub' || !body.payment_address) {
-              showCryptoError(
-                'Crypto checkout is unavailable on this server. Use card checkout, or email ' +
-                  'billing@driftstack.dev with order_id ' +
-                  (body.order_id || 'unknown') +
-                  ' for manual payment instructions.',
-              );
-              return;
-            }
-            cryptoOrderCache.set(tier, {
-              payAmount: String(body.pay_amount),
-              payCurrency: body.pay_currency,
-              paymentAddress: body.payment_address,
-              orderId: body.order_id,
-            });
-            cryptoLoading.classList.add('hidden');
-            setCryptoText('crypto-amount', String(body.pay_amount));
-            setCryptoText('crypto-currency', body.pay_currency);
-            setCryptoText('crypto-address', body.payment_address);
-            setCryptoText('crypto-order-id', body.order_id);
-            cryptoReady.classList.remove('hidden');
+              controller.signal,
+            );
           } catch (err) {
             showCryptoError(
               err && err.name === 'AbortError'
@@ -871,7 +1349,7 @@ function aiLabel(tier: AccountTier): string {
           } finally {
             window.clearTimeout(timeout);
             cryptoRequestInFlight = false;
-            btn.disabled = !billingDataAvailable || isActiveSubscription(currentSubscription);
+            btn.disabled = cryptoCheckoutDisabled();
             btn.setAttribute('aria-busy', 'false');
           }
         });
@@ -885,8 +1363,8 @@ function aiLabel(tier: AccountTier): string {
       }
       if (cryptoCopyBtn) {
         cryptoCopyBtn.addEventListener('click', async () => {
-          const addr = root.querySelector('[data-field="crypto-address"]');
-          if (!addr || !addr.textContent || cryptoCopyInFlight) return;
+          const address = cryptoPayableAddress;
+          if (!address || cryptoCopyBtn.disabled || cryptoCopyInFlight) return;
           const generation = ++cryptoCopyGeneration;
           cryptoCopyInFlight = true;
           resetCryptoCopyFeedback();
@@ -895,7 +1373,7 @@ function aiLabel(tier: AccountTier): string {
           cryptoCopyBtn.disabled = true;
           cryptoCopyBtn.setAttribute('aria-busy', 'true');
           try {
-            await window.driftstackWriteClipboard(addr.textContent);
+            await window.driftstackWriteClipboard(address);
             showCryptoCopyResult('Copied ✓', 'Payment address copied', generation);
           } catch {
             showCryptoCopyResult(
@@ -903,13 +1381,15 @@ function aiLabel(tier: AccountTier): string {
               'Could not copy payment address; select it manually',
               generation,
             );
-            showBanner('Copy failed. Select the payment address manually.');
-          } finally {
             if (generation === cryptoCopyGeneration) {
-              cryptoCopyInFlight = false;
-              cryptoCopyBtn.disabled = false;
-              cryptoCopyBtn.setAttribute('aria-busy', 'false');
+              showBanner('Copy failed. Select the payment address manually.');
             }
+          } finally {
+            // No newer write can start while the latch is true, so this exact
+            // owner always releases it. Presentation generation independently
+            // decides whether its feedback is still allowed to render.
+            cryptoCopyInFlight = false;
+            syncCryptoCopyAvailability();
           }
         });
       }
@@ -927,17 +1407,34 @@ function aiLabel(tier: AccountTier): string {
         }
         return;
       }
+      if (!cryptoWorkspaceSupported) {
+        setBillingAuthority(
+          false,
+          'Switch the workspace picker to Self before starting a payment.',
+        );
+        showBanner(
+          'Plan purchases are self-workspace only. Switch the workspace picker to Self before starting a payment.',
+        );
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
+        return;
+      }
 
-      authedFetch('/v1/billing', { method: 'GET' })
-        .then((r) =>
-          r.ok
-            ? r.json()
-            : r
-                .json()
-                .catch(() => ({}))
-                .then((body) => Promise.reject(window.driftstackResponseError(r, body))),
-        )
-        .then((body) => {
+      const selfAccountPromise = authedFetch('/v1/account/me', { method: 'GET' }).then(
+        async (response) => {
+          const body = await response.json().catch(() => ({}));
+          if (!response.ok) throw window.driftstackResponseError(response, body);
+          if (!body || typeof body !== 'object' || !SELF_ACCOUNT_ID_RE.test(body.id || '')) {
+            throw new Error('The signed-in account identity response was incomplete.');
+          }
+          return body.id;
+        },
+      );
+      const billingPromise = authedFetch('/v1/billing', { method: 'GET' }).then(
+        async (response) => {
+          const body = await response.json().catch(() => ({}));
+          if (!response.ok) throw window.driftstackResponseError(response, body);
           if (
             !body ||
             typeof body !== 'object' ||
@@ -945,10 +1442,18 @@ function aiLabel(tier: AccountTier): string {
           ) {
             throw new Error('The billing response was incomplete.');
           }
+          return body;
+        },
+      );
+
+      Promise.all([selfAccountPromise, billingPromise])
+        .then(([selfAccountId, body]) => {
+          authoritativeSelfAccountId = selfAccountId;
           setBillingAuthority(true);
           applySubscriptionState(body.subscription || null);
         })
         .catch((err) => {
+          authoritativeSelfAccountId = null;
           setBillingAuthority(false, 'Reload to try loading live billing again');
           const reason = window.driftstackRequestErrorMessage(
             err,
