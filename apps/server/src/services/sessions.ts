@@ -651,12 +651,14 @@ export class SessionsService {
         waitUntil: body.wait_until,
       }),
     );
-    await this.deps.repo.recordEvent({
-      sessionId: session.id,
-      type: 'navigated',
-      payload: { url: body.url, final_url: result.finalUrl, status: result.status },
-      durationMs: result.durationMs,
-    });
+    await this.persistPostSuccessObservability(session, 'navigate', 'event', () =>
+      this.deps.repo.recordEvent({
+        sessionId: session.id,
+        type: 'navigated',
+        payload: { url: body.url, final_url: result.finalUrl, status: result.status },
+        durationMs: result.durationMs,
+      }),
+    );
     return result;
   }
 
@@ -673,12 +675,14 @@ export class SessionsService {
         timeoutMs: body.timeout_ms ?? 10_000,
       }),
     );
-    await this.deps.repo.recordEvent({
-      sessionId: session.id,
-      type: 'interacted',
-      payload: { action: body.action },
-      durationMs: result.durationMs,
-    });
+    await this.persistPostSuccessObservability(session, 'interact', 'event', () =>
+      this.deps.repo.recordEvent({
+        sessionId: session.id,
+        type: 'interacted',
+        payload: { action: body.action },
+        durationMs: result.durationMs,
+      }),
+    );
     return result;
   }
 
@@ -695,12 +699,14 @@ export class SessionsService {
         timeoutMs: body.timeout_ms ?? 10_000,
       }),
     );
-    await this.deps.repo.recordEvent({
-      sessionId: session.id,
-      type: 'gui_input',
-      payload: { action: body.action },
-      durationMs: result.durationMs,
-    });
+    await this.persistPostSuccessObservability(session, 'gui_input', 'event', () =>
+      this.deps.repo.recordEvent({
+        sessionId: session.id,
+        type: 'gui_input',
+        payload: { action: body.action },
+        durationMs: result.durationMs,
+      }),
+    );
     return result;
   }
 
@@ -717,12 +723,14 @@ export class SessionsService {
         timeoutMs: body.timeout_ms ?? 30_000,
       }),
     );
-    await this.deps.repo.recordEvent({
-      sessionId: session.id,
-      type: 'waited',
-      payload: { condition: body.condition, satisfied: result.satisfied },
-      durationMs: result.durationMs,
-    });
+    await this.persistPostSuccessObservability(session, 'wait', 'event', () =>
+      this.deps.repo.recordEvent({
+        sessionId: session.id,
+        type: 'waited',
+        payload: { condition: body.condition, satisfied: result.satisfied },
+        durationMs: result.durationMs,
+      }),
+    );
     return result;
   }
 
@@ -743,15 +751,19 @@ export class SessionsService {
     const state = await this.runWithFailureCapture(ctx, session, 'state_capture', () =>
       this.deps.driver.getState(session.driverSessionId),
     );
-    await this.deps.repo.updateSessionStatus(session.id, session.status, {
-      lastStateAt: state.capturedAt,
-    });
-    await this.deps.repo.recordEvent({
-      sessionId: session.id,
-      type: 'state_captured',
-      payload: { url: state.url, title: state.title },
-      durationMs: null,
-    });
+    await this.persistPostSuccessObservability(session, 'state_capture', 'status', () =>
+      this.deps.repo.updateSessionStatus(session.id, session.status, {
+        lastStateAt: state.capturedAt,
+      }),
+    );
+    await this.persistPostSuccessObservability(session, 'state_capture', 'event', () =>
+      this.deps.repo.recordEvent({
+        sessionId: session.id,
+        type: 'state_captured',
+        payload: { url: state.url, title: state.title },
+        durationMs: null,
+      }),
+    );
     return state;
   }
 
@@ -774,15 +786,17 @@ export class SessionsService {
         fullPage: body.full_page,
       }),
     );
-    await this.deps.repo.recordEvent({
-      sessionId: session.id,
-      type:
-        body.kind === 'screenshot' || body.kind === 'pdf'
-          ? 'screenshot_captured'
-          : 'state_captured',
-      payload: { kind: body.kind, byte_size: result.byteSize },
-      durationMs: result.durationMs,
-    });
+    await this.persistPostSuccessObservability(session, 'capture', 'event', () =>
+      this.deps.repo.recordEvent({
+        sessionId: session.id,
+        type:
+          body.kind === 'screenshot' || body.kind === 'pdf'
+            ? 'screenshot_captured'
+            : 'state_captured',
+        payload: { kind: body.kind, byte_size: result.byteSize },
+        durationMs: result.durationMs,
+      }),
+    );
     return result;
   }
 
@@ -1210,6 +1224,49 @@ export class SessionsService {
       throw new SessionDestroyedError();
     }
     return session;
+  }
+
+  /**
+   * Once a driver call succeeds, its external browser outcome is authoritative.
+   * Event/last-state writes happen afterwards and are observability only; turning
+   * their failure into a request failure would invite callers to replay an action
+   * that already happened. Preserve the exact successful response and emit only
+   * a bounded, redacted diagnostic. Serialized destroy intentionally does not use
+   * this helper because its terminal row and event share one atomic transaction.
+   */
+  private async persistPostSuccessObservability(
+    session: SessionRecord,
+    operation: string,
+    persistence: 'event' | 'status',
+    persist: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await persist();
+    } catch (err) {
+      // Persistence errors can embed SQL values or driver/customer data. This
+      // log only needs a bounded class for routing; allowlist it rather than
+      // trying to redact arbitrary free text at a truncation boundary.
+      const rawErrorName = err instanceof Error ? err.name : 'UnknownError';
+      const errorName = /^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(rawErrorName)
+        ? rawErrorName
+        : 'Error';
+      try {
+        this.deps.logger?.error?.(
+          {
+            component: 'sessions-service',
+            event: 'post_success_persistence_failed',
+            account_id: session.accountId,
+            session_id: session.id,
+            operation,
+            persistence,
+            error_name: errorName,
+          },
+          'session post-success observability write failed; preserving authoritative driver success',
+        );
+      } catch {
+        // Logging is best-effort; never turn a committed browser action into an ambiguous failure.
+      }
+    }
   }
 
   /**

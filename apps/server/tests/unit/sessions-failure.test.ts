@@ -88,6 +88,8 @@ class StubRepo implements SessionRepo {
    *  event type — exercises the create() best-effort created-event guard (a
    *  post-success event write must not fail the request + leak the live session). */
   throwOnRecordEventType: { type: string; error: Error } | null = null;
+  /** Opt-in: fail one matching status write after a successful state capture. */
+  throwOnUpdateSessionStatus: { status: SessionRecord['status']; error: Error } | null = null;
 
   insertSession(input: NewSessionInput): Promise<SessionRecord> {
     if (this.throwOnInsert !== null) return Promise.reject(this.throwOnInsert);
@@ -222,6 +224,9 @@ class StubRepo implements SessionRepo {
     status: SessionRecord['status'],
     extra?: { lastStateAt?: Date; destroyedAt?: Date },
   ): Promise<void> {
+    if (this.throwOnUpdateSessionStatus?.status === status) {
+      return Promise.reject(this.throwOnUpdateSessionStatus.error);
+    }
     const r = this.sessions.get(id);
     if (!r || r.status === 'destroyed' || r.status === 'errored') return Promise.resolve();
     this.sessions.set(id, {
@@ -291,6 +296,9 @@ class ThrowingDriver implements Driver {
   /** Records every driver session id passed to destroy() — lets the
    *  create-rollback test assert the orphaned driver session was reaped. */
   readonly destroyedIds: string[] = [];
+  /** Exact non-lifecycle operation calls, used to prove no post-success replay. */
+  readonly operationCalls: string[] = [];
+  readonly capturedAt = new Date('2026-07-15T17:45:00.000Z');
 
   /** Opt-in: when set, the NEXT createSession() rejects (simulates a worker-
    *  dispatch failure AFTER the reservation slot was taken). */
@@ -346,6 +354,7 @@ class ThrowingDriver implements Driver {
     return Promise.resolve({ driverSessionId });
   }
   navigate(): Promise<{ url: string; finalUrl: string; status: number; durationMs: number }> {
+    this.operationCalls.push('navigate');
     this.throwIfArmed();
     return Promise.resolve({
       url: 'about:blank',
@@ -355,14 +364,17 @@ class ThrowingDriver implements Driver {
     });
   }
   interact(): Promise<{ durationMs: number }> {
+    this.operationCalls.push('interact');
     this.throwIfArmed();
     return Promise.resolve({ durationMs: 1 });
   }
   guiInput(): Promise<{ durationMs: number }> {
+    this.operationCalls.push('gui_input');
     this.throwIfArmed();
     return Promise.resolve({ durationMs: 1 });
   }
   wait(): Promise<{ satisfied: boolean; durationMs: number }> {
+    this.operationCalls.push('wait');
     this.throwIfArmed();
     return Promise.resolve({ satisfied: true, durationMs: 1 });
   }
@@ -374,6 +386,7 @@ class ThrowingDriver implements Driver {
     pageState: null;
     capturedAt: Date;
   }> {
+    this.operationCalls.push('state_capture');
     if (this.onGetState !== null) this.onGetState();
     this.throwIfArmed();
     return Promise.resolve({
@@ -382,7 +395,7 @@ class ThrowingDriver implements Driver {
       cookies: [],
       localStorage: {},
       pageState: null,
-      capturedAt: new Date(),
+      capturedAt: this.capturedAt,
     });
   }
   capture(): Promise<{
@@ -392,6 +405,7 @@ class ThrowingDriver implements Driver {
     byteSize: number;
     durationMs: number;
   }> {
+    this.operationCalls.push('capture');
     this.throwIfArmed();
     return Promise.resolve({
       kind: 'screenshot',
@@ -433,7 +447,7 @@ interface LoggedError {
   msg: string;
 }
 
-function buildService(): {
+function buildService(opts: { loggerThrows?: boolean } = {}): {
   service: SessionsService;
   repo: StubRepo;
   driver: ThrowingDriver;
@@ -464,6 +478,7 @@ function buildService(): {
     logger: {
       error: (obj, msg) => {
         loggedErrors.push({ obj, msg });
+        if (opts.loggerThrows === true) throw new Error('logger sink failed');
       },
     },
   });
@@ -629,6 +644,187 @@ describe('SessionsService — V-090 driver-failure capture', () => {
       expect(webhookOp).toBe(expectedOp);
       expect(repo.read(session.id)?.status).toBe('errored');
     }
+  });
+
+  it('post-success event failures preserve each authoritative driver result without replay or terminalization', async () => {
+    const cases: ReadonlyArray<{
+      operation: string;
+      eventType: SessionEventInput['type'];
+      run: (service: SessionsService, ctx: AccountContext, sessionId: string) => Promise<unknown>;
+      expected: (driver: ThrowingDriver) => unknown;
+    }> = [
+      {
+        operation: 'navigate',
+        eventType: 'navigated',
+        run: (service, ctx, sessionId) =>
+          service.navigate(ctx, sessionId, {
+            url: 'https://example.com',
+            wait_until: 'load',
+          }),
+        expected: () => ({
+          url: 'about:blank',
+          finalUrl: 'about:blank',
+          status: 200,
+          durationMs: 1,
+        }),
+      },
+      {
+        operation: 'interact',
+        eventType: 'interacted',
+        run: (service, ctx, sessionId) =>
+          service.interact(ctx, sessionId, {
+            action: { kind: 'tap', selector: 'button[type=submit]' },
+          }),
+        expected: () => ({ durationMs: 1 }),
+      },
+      {
+        operation: 'gui_input',
+        eventType: 'gui_input',
+        run: (service, ctx, sessionId) =>
+          service.guiInput(ctx, sessionId, { action: { kind: 'tap_at', x: 12, y: 34 } }),
+        expected: () => ({ durationMs: 1 }),
+      },
+      {
+        operation: 'wait',
+        eventType: 'waited',
+        run: (service, ctx, sessionId) =>
+          service.wait(ctx, sessionId, {
+            condition: { kind: 'selector', selector: '#ready' },
+          }),
+        expected: () => ({ satisfied: true, durationMs: 1 }),
+      },
+      {
+        operation: 'state_capture',
+        eventType: 'state_captured',
+        run: (service, ctx, sessionId) => service.getState(ctx, sessionId),
+        expected: (driver) => ({
+          url: null,
+          title: null,
+          cookies: [],
+          localStorage: {},
+          pageState: null,
+          capturedAt: driver.capturedAt,
+        }),
+      },
+      {
+        operation: 'capture',
+        eventType: 'screenshot_captured',
+        run: (service, ctx, sessionId) =>
+          service.capture(ctx, sessionId, { kind: 'screenshot', full_page: false }),
+        expected: () => ({
+          kind: 'screenshot',
+          data: 'AAAA',
+          encoding: 'base64',
+          byteSize: 4,
+          durationMs: 1,
+        }),
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { service, repo, driver, webhookEvents, lifecycleEvents, loggedErrors } =
+        buildService();
+      const ctx = buildCtx();
+      const session = await service.create(ctx, {
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      const persistenceError = new Error(
+        'write failed for https://user:pass@example.com/a?token=event_secret',
+      );
+      persistenceError.name = 'PersistenceError Bearer bmFtZS1zZWNyZXQ=';
+      repo.throwOnRecordEventType = { type: testCase.eventType, error: persistenceError };
+
+      const result = await testCase.run(service, ctx, session.id);
+
+      expect(result).toEqual(testCase.expected(driver));
+      expect(driver.operationCalls).toEqual([testCase.operation]);
+      expect(driver.destroyedIds).toEqual([]);
+      expect(repo.read(session.id)).toMatchObject({ status: 'ready', destroyedAt: null });
+      expect(webhookEvents).toEqual([]);
+      expect(lifecycleEvents).toEqual([]);
+      expect(repo.events.some((event) => event.type === 'errored')).toBe(false);
+      expect(loggedErrors).toHaveLength(1);
+      expect(loggedErrors[0]?.obj).toMatchObject({
+        event: 'post_success_persistence_failed',
+        account_id: session.accountId,
+        session_id: session.id,
+        operation: testCase.operation,
+        persistence: 'event',
+      });
+      expect(loggedErrors[0]?.obj.error_name).toBe('Error');
+      expect(loggedErrors[0]?.obj).not.toHaveProperty('error_message');
+      const diagnostic = JSON.stringify(loggedErrors[0]?.obj);
+      for (const secret of ['user:pass', 'event_secret', 'bmFtZS1zZWNyZXQ=']) {
+        expect(diagnostic).not.toContain(secret);
+      }
+      if (testCase.operation === 'state_capture') {
+        expect(repo.read(session.id)?.lastStateAt).toEqual(driver.capturedAt);
+      }
+    }
+  });
+
+  it('getState status-stamp failure still returns the captured state and attempts its event once', async () => {
+    const { service, repo, driver, webhookEvents, lifecycleEvents, loggedErrors } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    repo.throwOnUpdateSessionStatus = {
+      status: 'ready',
+      error: new Error('last-state timestamp store failed'),
+    };
+
+    const state = await service.getState(ctx, session.id);
+
+    expect(state).toEqual({
+      url: null,
+      title: null,
+      cookies: [],
+      localStorage: {},
+      pageState: null,
+      capturedAt: driver.capturedAt,
+    });
+    expect(driver.operationCalls).toEqual(['state_capture']);
+    expect(driver.destroyedIds).toEqual([]);
+    expect(repo.read(session.id)).toMatchObject({
+      status: 'ready',
+      destroyedAt: null,
+      lastStateAt: null,
+    });
+    expect(repo.events.filter((event) => event.type === 'state_captured')).toHaveLength(1);
+    expect(repo.events.filter((event) => event.type === 'errored')).toHaveLength(0);
+    expect(webhookEvents).toEqual([]);
+    expect(lifecycleEvents).toEqual([]);
+    expect(loggedErrors).toHaveLength(1);
+    expect(loggedErrors[0]?.obj).toMatchObject({
+      event: 'post_success_persistence_failed',
+      operation: 'state_capture',
+      persistence: 'status',
+    });
+  });
+
+  it('a throwing diagnostic sink cannot convert a committed interaction into a replayable failure', async () => {
+    const { service, repo, driver, webhookEvents, lifecycleEvents } = buildService({
+      loggerThrows: true,
+    });
+    const ctx = buildCtx();
+    const session = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    repo.throwOnRecordEventType = {
+      type: 'interacted',
+      error: new Error('interaction event store failed'),
+    };
+
+    await expect(
+      service.interact(ctx, session.id, { action: { kind: 'tap', selector: '#once' } }),
+    ).resolves.toEqual({ durationMs: 1 });
+    expect(driver.operationCalls).toEqual(['interact']);
+    expect(driver.destroyedIds).toEqual([]);
+    expect(repo.read(session.id)).toMatchObject({ status: 'ready', destroyedAt: null });
+    expect(repo.events.filter((event) => event.type === 'errored')).toHaveLength(0);
+    expect(webhookEvents).toEqual([]);
+    expect(lifecycleEvents).toEqual([]);
   });
 
   it('create: a DB reservation-insert failure spins NO worker (the slot is reserved before dispatch)', async () => {

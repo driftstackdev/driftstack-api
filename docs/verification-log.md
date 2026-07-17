@@ -28947,3 +28947,35 @@ server source and test TypeScript, targeted ESLint, Prettier and scoped
 diff/whitespace checks are green. The harness source is deliberately not built,
 signed, installed or activated; Family-B, WebKit, API deployment/environment, fleet,
 customer-session and foreign pnpm state remain untouched.
+
+---
+
+## V-694 — Browser success remains the authoritative API response
+
+**Date:** 2026-07-17
+
+`navigate`, `interact`, `guiInput`, `wait`, `getState` and `capture` previously
+completed their driver call and then awaited an event or last-state database write.
+If that post-success observability write failed, the route returned an ambiguous
+server error even though the browser action had already happened. A normal client
+retry could therefore replay a click, submission or coordinate input.
+
+Every affected operation now treats the exact successful driver result as
+authoritative. Its event and, for `getState`, last-state timestamp are independently
+best-effort: persistence failure leaves the session ready, emits no failure webhook
+or lifecycle event, never destroys the driver, and cannot replace the successful
+response. A bounded structured error record contains only account/session ids,
+operation, persistence kind and a strictly allowlisted error class; it stores no
+arbitrary exception message, action body or browser result. A throwing logger is
+also contained. Genuine driver failures remain inside the existing failure-capture
+path and still terminalize the session. Serialized destroy deliberately retains its
+atomic terminal-row-plus-event transaction and does not use this helper.
+
+Deterministic proof injects an event failure after each of the six exact driver
+results and requires complete result equality, one driver invocation, zero teardown,
+zero errored event/fan-out and a ready row. The state path additionally proves event
+failure still persists the exact capture timestamp, while timestamp failure still
+records the state event and returns the complete capture. The direct suite passes
+21/21 tests; the expanded sixteen-file SessionsService union passes 227/227. Strict
+server source/test TypeScript, targeted ESLint, Prettier and diff/whitespace checks
+are green.
