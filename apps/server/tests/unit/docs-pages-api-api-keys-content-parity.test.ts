@@ -130,6 +130,10 @@ describe('W762 docs /api/api-keys content parity', () => {
     ]) {
       expect(p, `scope ${scope}`).toMatch(new RegExp(`\\| \`${scope}\``));
     }
+    expect(p).toMatch(
+      /Read-only access to list\/get endpoints such as sessions, profiles, and usage\./,
+    );
+    expect(p).not.toMatch(/list sessions, recordings|recordings API/i);
   });
 
   it("CRITICAL gui_control reserved-for-GUI framing pinned. The 'Reserved for the GUI Client; do not request manually' wording protects against customers requesting the GUI scope on application keys.", () => {

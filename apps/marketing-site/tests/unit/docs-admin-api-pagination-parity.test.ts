@@ -1,7 +1,8 @@
 // W355.A — drift guard for /docs/admin-api-pagination. The
-// V-717 reference for cursor pagination on the admin surface.
-// V-666.AM introduced the convention on /v1/admin/crypto-orders;
-// this page is the canonical contract description.
+// V-717 reference for the current endpoint pagination matrix.
+// V-666.AM introduced the detailed cursor convention on
+// /v1/admin/crypto-orders; this page scopes that contract and names
+// the status-subscriber offset exception.
 //
 // Pinned:
 //   • limit default 50, max 200 on /v1/admin/crypto-orders — both
@@ -85,9 +86,30 @@ describe('W355.A /docs/admin-api-pagination parity', () => {
     expect(body).toMatch(/limit:\s*['"]50['"]/);
   });
 
-  it("'assume an endpoint does NOT paginate until its docs list next_cursor' rollout posture pinned", () => {
+  it('publishes the current cursor-route matrix and status-subscriber offset exception', () => {
+    for (const route of [
+      '/v1/admin/accounts',
+      '/v1/admin/sessions',
+      '/v1/admin/api-keys',
+      '/v1/admin/audit-log',
+      '/v1/admin/crypto-orders',
+      '/v1/admin/webhook-dlq',
+      '/v1/admin/rate-limit-overrides',
+    ]) {
+      expect(body).toContain(`<code>GET ${route}</code>`);
+    }
+    expect(body).toContain('<code>GET /v1/admin/status-subscribers</code>');
+    expect(body).toMatch(/accepts <code>limit<\/code> and <code>offset<\/code>/);
+    expect(body).toMatch(/returns the rows in <code>data<\/code>/);
+    expect(body).toMatch(/without a\s*<code>next_cursor<\/code> field/);
+    expect(body).not.toMatch(/will roll out|assume an\s*endpoint does NOT paginate/i);
+  });
+
+  it('scopes crypto-order cursor internals and limits to that route', () => {
+    expect(body).toMatch(/Why crypto orders use cursors, not offsets/);
+    expect(body).toMatch(/The crypto-order contract/);
     expect(body).toMatch(
-      /assume an\s*endpoint does NOT paginate until its documentation lists the\s*field/,
+      /<code>\(created_at, order_id\)<\/code>,\s*<code>orders<\/code>[^]*apply specifically to crypto orders/,
     );
   });
 

@@ -26,6 +26,10 @@ describe('W255.A docs/api/api-keys ↔ live api-keys parity', () => {
 
   it('doc cites the basic read + write scopes', () => {
     expect(doc).toMatch(/"scopes":\s*\[\s*"read",\s*"write"\s*\]/);
+    expect(doc).toMatch(
+      /Read-only access to list\/get endpoints such as sessions, profiles, and usage\./,
+    );
+    expect(doc).not.toMatch(/list sessions, recordings|recordings API/i);
   });
 
   it('rotation grace window is 24 hours', () => {

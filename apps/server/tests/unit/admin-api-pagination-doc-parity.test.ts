@@ -19,6 +19,23 @@ const DOC_PATH = join(
   'admin-api-pagination.astro',
 );
 const ROUTE_PATH = join(REPO, 'apps', 'server', 'src', 'routes', 'admin-crypto-orders.ts');
+const STATUS_SUBSCRIBERS_ROUTE_PATH = join(
+  REPO,
+  'apps',
+  'server',
+  'src',
+  'routes',
+  'admin-status-subscribers.ts',
+);
+const CURSOR_ROUTE_PATHS = [
+  ['accounts', 'admin-accounts.ts'],
+  ['sessions', 'admin-sessions.ts'],
+  ['api-keys', 'admin-api-keys.ts'],
+  ['audit-log', 'admin-audit-log.ts'],
+  ['crypto-orders', 'admin-crypto-orders.ts'],
+  ['webhook-dlq', 'admin-webhooks.ts'],
+  ['rate-limit-overrides', 'admin-rate-limit-overrides.ts'],
+] as const;
 
 function read(path: string): string {
   return readFileSync(path, 'utf8');
@@ -47,5 +64,32 @@ describe('W225.A admin-api-pagination doc parity', () => {
   it('doc tells callers to treat the cursor as opaque', () => {
     expect(doc).toMatch(/opaque/i);
     expect(doc).toMatch(/Do not\s+try to parse the cursor/);
+  });
+
+  it('documents every current cursor list route that returns next_cursor', () => {
+    for (const [routeName, filename] of CURSOR_ROUTE_PATHS) {
+      const source = read(join(REPO, 'apps', 'server', 'src', 'routes', filename));
+      expect(source).toContain(`'/v1/admin/${routeName}'`);
+      expect(source).toMatch(/next_cursor:/);
+      expect(doc).toContain(`<code>GET /v1/admin/${routeName}</code>`);
+    }
+  });
+
+  it('documents status subscribers as the limit/offset + data exception', () => {
+    const source = read(STATUS_SUBSCRIBERS_ROUTE_PATH);
+    expect(source).toMatch(/offset: z\.coerce\.number\(\)\.int\(\)\.min\(0\)\.optional\(\)/);
+    expect(source).toMatch(/return \{\s+data: rows\.map/);
+    expect(source).not.toMatch(/next_cursor:/);
+    expect(doc).toContain('<code>GET /v1/admin/status-subscribers</code>');
+    expect(doc).toMatch(/accepts <code>limit<\/code> and <code>offset<\/code>/);
+    expect(doc).toMatch(/without a\s*<code>next_cursor<\/code> field/);
+  });
+
+  it('scopes the detailed cursor internals and order envelope to crypto orders', () => {
+    expect(doc).toMatch(/The crypto-order contract/);
+    expect(doc).toMatch(
+      /<code>\(created_at, order_id\)<\/code>,\s*<code>orders<\/code>[^]*apply specifically to crypto orders/,
+    );
+    expect(doc).not.toMatch(/will roll out|assume an\s*endpoint does NOT paginate/i);
   });
 });

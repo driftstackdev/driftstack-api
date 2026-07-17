@@ -8,7 +8,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // (where admin actions land).
 ---
 
-<BaseLayout title="Admin API — Driftstack" description="The driftstack_internal_admin scope: what it can do, how to mint a key, and which endpoints it unlocks.">
+<BaseLayout title="Admin API — Driftstack" description="The driftstack_internal_admin staff scope: its access boundary, representative operations, and audit posture.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Admin API</h1>
 
@@ -24,22 +24,25 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>The scope</h2>
     <p>
       Every admin endpoint is preHandler-gated on
-      <code>driftstack_internal_admin</code>. A customer-facing API
-      key cannot acquire this scope — minting an admin key requires
-      direct DB-level provisioning (we explicitly do not expose a
-      "promote to admin" API). The scope only unlocks the routes
-      listed below; it does <strong>not</strong> bypass any
-      customer-facing authentication.
+      <code>driftstack_internal_admin</code>. Customer key-management
+      APIs cannot grant that scope. Production staff access uses a
+      normal authenticated web session whose exact account email is
+      present in the server's boot-time staff allowlist; the configured
+      project-owner account is included in that authority. There is no
+      public or self-service "promote to admin" operation. The route
+      examples below are not an exhaustive specification — the generated
+      OpenAPI document is the authoritative current route list.
     </p>
 
-    <h2>What admin keys cannot do</h2>
+    <h2>What admin authority cannot do</h2>
     <ul>
       <li>
-        Read or modify another customer's <strong>sessions</strong>,
-        <strong>recordings</strong>, <strong>profiles</strong>, or
-        <strong>API keys</strong>. Those endpoints scope by
-        <code>account_id</code> on the calling key — there is no
-        admin-impersonation path.
+        Impersonate a customer or turn an admin credential into a
+        customer-scoped API credential. Bounded admin routes can inspect
+        cross-account session and API-key <em>metadata</em>, force-destroy a
+        session, and revoke a key, but they do not reveal API-key plaintext or
+        expose customer-scoped resources through impersonation. Desktop
+        recordings are local files and never enter the admin API.
       </li>
       <li>
         Issue a crypto refund. Crypto payments are non-refundable
@@ -115,16 +118,47 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </tbody>
     </table>
 
+    <h3>Status subscribers</h3>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>GET /v1/admin/status-subscribers</code></td>
+          <td>
+            List subscriber rows with <code>limit</code> (1–200) and
+            <code>offset</code> (0 or greater). The response envelope is
+            <code>&#123; data: [...] &#125;</code>; this route does not return a cursor.
+          </td>
+        </tr>
+        <tr>
+          <td><code>POST /v1/admin/status-subscribers/force-subscribe</code></td>
+          <td>
+            Add or restore an address only when staff has documented out-of-band
+            consent. The write is audit-logged.
+          </td>
+        </tr>
+        <tr>
+          <td><code>POST /v1/admin/status-subscribers/:id/force-unsubscribe</code></td>
+          <td>
+            Mark the exact <code>sub_&lt;uuid&gt;</code> row unsubscribed and retain
+            its tombstone. The write is audit-logged.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
     <h3>Other admin surfaces</h3>
     <p>
       The crypto-orders surface is documented in detail because it
-      sees the most external interest. Other admin routes exist for:
+      sees the most external interest. Representative additional routes cover:
     </p>
     <ul>
       <li>Account lifecycle (suspend / unsuspend / restore).</li>
+      <li>Cross-account session and API-key metadata plus bounded force actions.</li>
+      <li>Webhook delivery dead-letter inspection and recovery.</li>
       <li>Health probe + incident management for the public status page.</li>
       <li>Cost-monitoring alert overrides.</li>
-      <li>Audit-log archive runs.</li>
+      <li>Audit-log inspection.</li>
     </ul>
     <p>
       Each is gated on the same scope and is audit-logged.
@@ -136,26 +170,24 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       acting admin key id, the action, the resource it touched, and
       a timestamp. The customer-facing
       <a href="/docs/audit-log/">audit log</a> page documents the
-      schema. Audit rows are archived to R2 after 90 days (per
-      ADR-006).
+      schema. This page does not claim an active R2 archive pipeline;
+      retention follows the published legal and operational policy.
     </p>
 
-    <h2>Minting an admin key</h2>
+    <h2>Staff access and revocation</h2>
     <p>
-      For internal staff: <code>drift admin keys create
-      --scope driftstack_internal_admin</code> from a host with the
-      <code>DATABASE_URL</code> set. The plaintext token is shown
-      once + stored as a SHA-256 hash. There is no "self-service
-      promotion" path; minting an admin key requires database
-      access.
+      Staff sign in through the same web-session flow as other users. At
+      authentication time, the server adds
+      <code>driftstack_internal_admin</code> only when the account email matches
+      <code>DRIFTSTACK_STAFF_EMAILS</code> or the configured
+      <code>DRIFTSTACK_OWNER_EMAIL</code>. The allowlist is loaded at boot, so a
+      configuration change requires a controlled API restart.
     </p>
-
-    <h2>Disabling an admin key</h2>
     <p>
-      <code>drift admin keys revoke &lt;key_id&gt;</code>. The key's
-      <code>revoked_at</code> column is set; the next auth-cache
-      refresh (≤ 60s) propagates the revocation to all server
-      replicas.
+      Revoke the affected web session and remove the email from staff authority
+      (or change the owner configuration) before that restart. Customer-facing
+      key creation and rotation can never mint this staff scope. Driftstack does
+      not publish a separate admin-key CLI.
     </p>
 
     <h2>Related</h2>

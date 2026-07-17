@@ -1,29 +1,29 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
-// V-717 — admin-API pagination reference. Documents the cursor
-// convention introduced by V-666.AM on /v1/admin/crypto-orders.
-// Customers (or auditors) reading this either to integrate the
-// admin surface or to confirm the contract is stable.
+// V-717 — admin-API pagination reference. Documents the current
+// endpoint matrix plus the cursor convention introduced by V-666.AM
+// on /v1/admin/crypto-orders. Customers (or auditors) read this to
+// integrate the admin surface or confirm the contract is stable.
 ---
 
-<BaseLayout title="Admin API pagination — Driftstack" description="Cursor-based pagination on the Driftstack admin API: how next_cursor works, when to stop, and the contract guarantees.">
+<BaseLayout title="Admin API pagination — Driftstack" description="Current Driftstack admin API pagination by endpoint, including opaque cursors and the status-subscriber offset exception.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Admin API pagination</h1>
 
     <p class="lead">
-      The Driftstack admin API uses <strong>cursor-based pagination</strong>
-      on list endpoints. A cursor is an opaque, server-issued token
-      that resumes the scan immediately after the last row of the
-      previous page. This page documents the contract.
+      Driftstack admin list endpoints use <strong>endpoint-specific pagination</strong>.
+      High-volume lists use opaque cursors; status subscribers use
+      <code>limit</code> plus <code>offset</code>. Check the current
+      endpoint matrix below instead of assuming one universal envelope.
     </p>
 
-    <h2>Why cursors and not offsets</h2>
+    <h2>Why crypto orders use cursors, not offsets</h2>
     <p>
       Offset pagination (<code>?page=2</code>) is convenient but breaks
       when rows are inserted or removed between page requests:
-      callers can skip rows or see duplicates. The admin surface
-      lists rows ordered by <code>created_at DESC</code> with
+      callers can skip rows or see duplicates. The crypto-order list
+      orders rows by <code>created_at DESC</code> with
       <code>order_id</code> as the tiebreaker; new orders arrive at
       the front of the list constantly. A cursor anchored to the
       last seen <code>(created_at, order_id)</code> pair gives a
@@ -31,9 +31,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       added.
     </p>
 
-    <h2>The contract</h2>
+    <h2>The crypto-order contract</h2>
     <p>
-      A list response looks like:
+      <code>GET /v1/admin/crypto-orders</code> returns:
     </p>
     <pre><code>{`{
   "orders": [ ...up to \`limit\` rows... ],
@@ -107,13 +107,31 @@ do {{
       empty result over surfacing decode internals.</li>
     </ul>
 
-    <h2>Other endpoints</h2>
+    <h2>Current endpoint matrix</h2>
     <p>
-      The cursor convention will roll out to other admin list
-      endpoints over time. Each endpoint's documentation will note
-      whether it returns <code>next_cursor</code>; assume an
-      endpoint does NOT paginate until its documentation lists the
-      field.
+      These list routes currently accept <code>cursor</code> and return
+      <code>next_cursor</code>:
+    </p>
+    <ul>
+      <li><code>GET /v1/admin/accounts</code></li>
+      <li><code>GET /v1/admin/sessions</code></li>
+      <li><code>GET /v1/admin/api-keys</code></li>
+      <li><code>GET /v1/admin/audit-log</code></li>
+      <li><code>GET /v1/admin/crypto-orders</code></li>
+      <li><code>GET /v1/admin/webhook-dlq</code></li>
+      <li><code>GET /v1/admin/rate-limit-overrides</code></li>
+    </ul>
+    <p>
+      <code>GET /v1/admin/status-subscribers</code> is the current
+      exception: it accepts <code>limit</code> and <code>offset</code>
+      and returns the rows in <code>data</code>, without a
+      <code>next_cursor</code> field.
+    </p>
+    <p>
+      Cursor encoding, ordering, limits, filters, and collection-field
+      names are route-specific. The <code>(created_at, order_id)</code>,
+      <code>orders</code>, default <code>limit=50</code>, and max
+      <code>200</code> details above apply specifically to crypto orders.
     </p>
 
     <h2>Related</h2>

@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Account notifications (SSE)
-description: Real-time per-account event stream — cost-threshold alerts, incident broadcasts, high-severity audit events, and session errors.
+description: Real-time per-account event stream — operational-cost threshold alerts, incident broadcasts, high-severity audit events, and session errors.
 ---
 
 # Account notifications
@@ -29,7 +29,7 @@ etc.) should prefer the header.
 The token must carry the broad `read` scope; `account_owner` also
 satisfies the gate. Resource-granular scopes such as `read:sessions`,
 `read:webhooks`, or `read:audit` deliberately do not, because this one
-stream mixes billing, audit, incident, and session events. Treat both
+stream mixes cost telemetry, audit, incident, and session events. Treat both
 the token and the resulting stream as sensitive account-wide data.
 
 ## Frame shape
@@ -59,20 +59,23 @@ to keep load-balancers from closing idle connections. Ignore these.
 
 ### `cost.threshold_alert`
 
-Fires when an account crosses a tier-spend threshold (soft or hard,
-in either direction).
+Fires when the account's operational cost-to-serve estimate crosses an
+operator threshold (soft or hard, in either direction). This is a unit-economics
+signal for product operations. It is not a customer spending cap, an invoice
+event, or an overage trigger, and it does not email, rate-limit, or interrupt
+the account.
 
 | field                | type                                                             | notes                                      |
 | -------------------- | ---------------------------------------------------------------- | ------------------------------------------ |
 | `kind`               | `"cost.threshold_alert"`                                         | discriminator                              |
 | `accountId`          | `string`                                                         | calling account                            |
-| `severity`           | `"warn" \| "critical" \| "resolved"`                             | `resolved` = spend dropped back below soft |
+| `severity`           | `"warn" \| "critical" \| "resolved"`                             | `resolved` = estimate dropped below soft   |
 | `billingCycle`       | `string`                                                         | `YYYY-MM` UTC                              |
 | `previousState`      | `"under-soft" \| "between-soft-and-hard" \| "over-hard" \| null` | `null` on first-ever evaluation            |
 | `currentState`       | same enum                                                        |                                            |
-| `totalCents`         | `number`                                                         | spend in the current cycle                 |
-| `thresholdSoftCents` | `number`                                                         | soft cap                                   |
-| `thresholdHardCents` | `number`                                                         | hard cap                                   |
+| `totalCents`         | `number`                                                         | operational estimate for the current cycle |
+| `thresholdSoftCents` | `number`                                                         | operator soft threshold                    |
+| `thresholdHardCents` | `number`                                                         | operator hard threshold                    |
 | `at`                 | `string`                                                         | ISO8601 server publish time                |
 
 ### `incident.broadcast`
@@ -132,10 +135,9 @@ dropped on the floor. `EventSource`'s native auto-reconnect (default
 3s backoff) is the v0.1 reconnect story; transient drops resume
 without any app-level glue.
 
-There is no `Last-Event-ID` resume in v0.1; the next v0.2 slice will
-add a small per-account ring buffer once a customer concretely asks
-for one. For the durable trail of any event covered by
-`audit.high_severity`, query `GET /v1/account/audit-log`.
+There is no `Last-Event-ID` resume: a reconnect resumes the live stream
+without replaying missed frames. For the durable trail of any event covered
+by `audit.high_severity`, query `GET /v1/account/audit-log`.
 
 ## Quotas + rate-limit
 

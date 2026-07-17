@@ -1,8 +1,8 @@
 // W508.B — drift guard for apps/marketing-site/src/pages/docs/admin-api-pagination.astro.
-// V-717 admin-API cursor-pagination reference (V-666.AM impl). Drift
-// here either breaks the cursor-opaque contract (would let clients
-// rely on internal cursor shape) or changes the (created_at, order_id)
-// anchoring (would create marketing↔server divergence).
+// V-717 admin-API endpoint pagination reference (V-666.AM crypto
+// implementation). Drift here either breaks the endpoint matrix,
+// cursor-opaque contract, or the crypto-specific
+// (created_at, order_id) anchoring.
 //
 //   • V-717 + V-666.AM anchors.
 //   • Cursor-vs-offset rationale + created_at DESC + order_id tiebreak.
@@ -29,18 +29,19 @@ function read(p: string): string {
 describe('W508.B apps/marketing-site/src/pages/docs/admin-api-pagination.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-717 + V-666.AM framing pinned: 'admin-API pagination reference. Documents the cursor convention introduced by V-666.AM on /v1/admin/crypto-orders.' — pinned so the V-717 + V-666.AM anchors survive (drift to dropping V-666.AM would orphan the customer-facing doc from the engineering implementation)", () => {
+  it('V-717 + V-666.AM framing pins the current matrix and crypto-order implementation', () => {
     expect(body).toMatch(
-      /\/\/ V-717 — admin-API pagination reference\. Documents the cursor\s*\n?\s*\/\/ convention introduced by V-666\.AM on \/v1\/admin\/crypto-orders\./,
+      /\/\/ V-717 — admin-API pagination reference\. Documents the current\s*\n?\s*\/\/ endpoint matrix plus the cursor convention introduced by V-666\.AM\s*\n?\s*\/\/ on \/v1\/admin\/crypto-orders\./,
     );
   });
 
-  it("Cursor-vs-offset rationale pinned: 'Offset pagination (?page=2) is convenient but breaks when rows are inserted or removed between page requests' + 'created_at DESC with order_id as the tiebreaker' + 'A cursor anchored to the last seen (created_at, order_id) pair gives a stable walk' — pinned so the offset-breaks-on-insert rationale + the (created_at, order_id) anchoring + the stable-walk commitment all survive (drift to changing the tiebreaker would create marketing↔SQL-order-by divergence; drift to dropping the rationale would lose the why-cursor-not-offset reasoning)", () => {
+  it('crypto-order cursor-vs-offset rationale and anchor remain scoped and pinned', () => {
+    expect(body).toMatch(/Why crypto orders use cursors, not offsets/);
     expect(body).toMatch(
       /Offset pagination \(<code>\?page=2<\/code>\) is convenient but breaks\s*\n?\s*when rows are inserted or removed between page requests/,
     );
     expect(body).toMatch(
-      /lists rows ordered by <code>created_at DESC<\/code> with\s*\n?\s*<code>order_id<\/code> as the tiebreaker/,
+      /crypto-order list\s*\n?\s*orders rows by <code>created_at DESC<\/code> with\s*\n?\s*<code>order_id<\/code> as the tiebreaker/,
     );
     expect(body).toMatch(
       /A cursor anchored to the\s*\n?\s*last seen <code>\(created_at, order_id\)<\/code> pair gives a\s*\n?\s*stable walk/,
@@ -92,10 +93,23 @@ describe('W508.B apps/marketing-site/src/pages/docs/admin-api-pagination.astro c
     );
   });
 
-  it("Other-endpoints rollout framing pinned: 'The cursor convention will roll out to other admin list endpoints over time. Each endpoint's documentation will note whether it returns next_cursor; assume an endpoint does NOT paginate until its documentation lists the field.' — pinned so the don't-assume-pagination-by-default commitment survives (drift to assuming pagination-everywhere would let clients walk endpoints that ignore the cursor)", () => {
-    expect(body).toMatch(
-      /The cursor convention will roll out to other admin list\s*\n?\s*endpoints over time\. Each endpoint's documentation will note\s*\n?\s*whether it returns <code>next_cursor<\/code>; assume an\s*\n?\s*endpoint does NOT paginate until its documentation lists the\s*\n?\s*field\./,
-    );
+  it('current route matrix, offset exception, and crypto-only detail scope are pinned', () => {
+    for (const route of [
+      '/v1/admin/accounts',
+      '/v1/admin/sessions',
+      '/v1/admin/api-keys',
+      '/v1/admin/audit-log',
+      '/v1/admin/crypto-orders',
+      '/v1/admin/webhook-dlq',
+      '/v1/admin/rate-limit-overrides',
+    ]) {
+      expect(body).toContain(`<code>GET ${route}</code>`);
+    }
+    expect(body).toContain('<code>GET /v1/admin/status-subscribers</code>');
+    expect(body).toMatch(/accepts <code>limit<\/code> and <code>offset<\/code>/);
+    expect(body).toMatch(/without a\s*<code>next_cursor<\/code> field/);
+    expect(body).toMatch(/details above apply specifically to crypto orders/);
+    expect(body).not.toMatch(/will roll out|assume an\s*endpoint does NOT paginate/i);
   });
 
   it('file exists at canonical path', () => {

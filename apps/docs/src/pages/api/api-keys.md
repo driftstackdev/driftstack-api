@@ -169,7 +169,7 @@ key instead.
 
 | Scope                       | Capability                                                                                        |
 | --------------------------- | ------------------------------------------------------------------------------------------------- |
-| `read`                      | Read-only access (list sessions, recordings, profiles, usage).                                    |
+| `read`                      | Read-only access to list/get endpoints such as sessions, profiles, and usage.                     |
 | `write`                     | Mutations (create/destroy sessions, profiles, etc.). Does NOT include read — pair it with `read`. |
 | `account_owner`             | Self-service mutations (create/rotate/revoke API keys, billing portal redirect).                  |
 | `gui_control`               | Reserved for the GUI Client; do not request manually.                                             |

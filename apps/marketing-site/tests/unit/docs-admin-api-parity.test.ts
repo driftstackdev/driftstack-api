@@ -10,6 +10,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/admin-api.astro');
 const ADMIN_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-crypto-orders.ts');
+const STATUS_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-status-subscribers.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -18,6 +19,7 @@ function read(p: string): string {
 describe('W265.C /docs/admin-api ↔ /v1/admin/crypto-orders/* route parity', () => {
   const page = read(PAGE);
   const route = read(ADMIN_ROUTE);
+  const statusRoute = read(STATUS_ROUTE);
 
   it('every /v1/admin/crypto-orders/* path documented is registered', () => {
     // Pull paths from <code>METHOD /v1/admin/crypto-orders/...</code> rows.
@@ -42,8 +44,39 @@ describe('W265.C /docs/admin-api ↔ /v1/admin/crypto-orders/* route parity', ()
     expect(page).toMatch(/<code>driftstack_internal_admin<\/code>/);
   });
 
-  it('cites the no-admin-impersonation invariant', () => {
-    expect(page).toMatch(/no\s+admin-impersonation path/i);
+  it('states bounded cross-account metadata authority without claiming impersonation', () => {
+    expect(page).toMatch(
+      /Impersonate a customer or turn an admin credential into a\s+customer-scoped API credential/,
+    );
+    expect(page).toMatch(/cross-account session and API-key <em>metadata<\/em>/);
+    expect(page).toMatch(/do not reveal API-key plaintext/);
+    expect(page).toMatch(/Desktop\s+recordings are local files and never enter the admin API\./i);
+    expect(page).not.toMatch(/<strong>recordings<\/strong>/i);
+  });
+
+  it('documents all three live status-subscriber operations and the offset envelope', () => {
+    for (const path of [
+      '/v1/admin/status-subscribers',
+      '/v1/admin/status-subscribers/force-subscribe',
+      '/v1/admin/status-subscribers/:id/force-unsubscribe',
+    ]) {
+      expect(page).toContain(path);
+      expect(statusRoute).toContain(`'${path}'`);
+    }
+    expect(page).toMatch(/<code>limit<\/code> \(1–200\)/);
+    expect(page).toMatch(/<code>offset<\/code> \(0 or greater\)/);
+    expect(page).toContain('<code>&#123; data: [...] &#125;</code>');
+    expect(page).toMatch(/does not return a cursor/);
+  });
+
+  it('documents the staff web-session allowlist and forbids the fictional admin CLI/archive', () => {
+    expect(page).toContain('<code>DRIFTSTACK_STAFF_EMAILS</code>');
+    expect(page).toContain('<code>DRIFTSTACK_OWNER_EMAIL</code>');
+    expect(page).toMatch(/generated\s+OpenAPI document is the authoritative current route list/);
+    expect(page).toMatch(/does\s+not publish a separate admin-key CLI/);
+    expect(page).toMatch(/does not claim an active R2 archive pipeline/);
+    expect(page).not.toMatch(/drift admin keys (?:create|revoke)/);
+    expect(page).not.toMatch(/archived to R2 after 90 days/);
   });
 
   it('cites the no-crypto-refund invariant', () => {
