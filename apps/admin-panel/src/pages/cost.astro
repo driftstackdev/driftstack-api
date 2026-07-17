@@ -146,9 +146,8 @@ const apiBaseUrl = resolveApiBaseUrl();
             <code class="font-mono text-xs">limit=50</code> accounts (by
             creation order) — not the platform-wide top spenders. Fetches that
             page then asks <code class="font-mono text-xs">/v1/admin/cost/overview</code>
-            to sort it by total cost desc. A high-cost account outside the most
-            recent 50 won't appear until a server-side cost-ranked endpoint
-            lands; for a specific account use the per-account breakdown above.
+            to sort it by total cost desc. Accounts outside that page are not
+            included; use the per-account breakdown above for a specific account.
           </p>
         </div>
         <div class="flex items-center gap-2">

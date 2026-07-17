@@ -93,6 +93,10 @@ describe('admin-panel pages/cost content parity', () => {
     expect(body).toMatch(
       /Fetches that\s*\n?\s*page then asks <code class="font-mono text-xs">\/v1\/admin\/cost\/overview<\/code>\s*\n?\s*to sort it by total cost desc\./,
     );
+    expect(body).toMatch(
+      /Accounts outside that page are not\s*\n?\s*included; use the per-account breakdown above for a specific account\./,
+    );
+    expect(body).not.toMatch(/until a server-side cost-ranked endpoint\s*\n?\s*lands/i);
   });
 
   it("Cents-to-dollar helper inline pattern pinned: 'const cents = (n) => $ + (Number(n ?? 0) / 100).toFixed(2);'. Drift to dropping ?? 0 fallback would render NaN for null entries; drift to a different precision would break consistency with the rest of the admin panel's currency display", () => {
