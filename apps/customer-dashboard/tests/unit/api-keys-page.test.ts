@@ -30,8 +30,15 @@ interface SetUpOpts {
   storageDenied?: boolean;
   confirmReturns?: boolean;
   callerTier?: string;
+  callerId?: string;
+  callerTeams?: Array<{
+    owner_account_id: string;
+    role: string;
+    membership_id?: string;
+  }>;
   effectiveTier?: string;
   entitlementPlan?: (call: MockFetchCall) => Response | Promise<Response>;
+  accountMePlan?: (call: MockFetchCall) => Response | Promise<Response>;
   actAsHeaders?: Record<string, string>;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
   clipboardPlan?: Array<(text: string) => Promise<void>>;
@@ -68,7 +75,23 @@ function setUpDom(
     const call: MockFetchCall = { url: String(input), init };
     fetchCalls.push(call);
     if (/\/v1\/account\/me$/.test(call.url)) {
-      return Promise.resolve(json({ tier: opts.callerTier ?? 'free' }));
+      const callerId = opts.callerId ?? 'acc_caller';
+      const selectedOwner =
+        opts.actAsHeaders?.['x-driftstack-account'] ??
+        opts.actAsHeaders?.['X-Driftstack-Account'] ??
+        '';
+      const defaultTeams =
+        selectedOwner && selectedOwner !== callerId
+          ? [{ owner_account_id: selectedOwner, role: 'admin', membership_id: 'mem_default' }]
+          : [];
+      return Promise.resolve(
+        opts.accountMePlan?.(call) ??
+          json({
+            id: callerId,
+            tier: opts.callerTier ?? 'free',
+            teams: opts.callerTeams ?? defaultTeams,
+          }),
+      );
     }
     if (/\/v1\/usage$/.test(call.url)) {
       return Promise.resolve(
@@ -253,7 +276,7 @@ describe('api-keys page — local integration', () => {
     await flush();
 
     expect(window.document.querySelector('[data-revoke="key_active"]')).toBeTruthy();
-    expect(window.document.querySelector('[data-rotate="key_active"]')).toBeNull();
+    expect(isHidden(window, '[data-rotate="key_active"]')).toBe(true);
     expect(isHidden(window, '[data-api-access-notice]')).toBe(false);
     expect(window.document.querySelector('[data-api-access-notice]')?.textContent).toContain(
       'Free sessions',
@@ -296,7 +319,7 @@ describe('api-keys page — local integration', () => {
       await flush();
 
       expect(window.document.querySelector('[data-revoke="key_active"]')).toBeTruthy();
-      expect(window.document.querySelector('[data-rotate="key_active"]')).toBeNull();
+      expect(isHidden(window, '[data-rotate="key_active"]')).toBe(true);
       expect(isHidden(window, '[data-api-access-notice]')).toBe(false);
       expect(fetchCalls.some((call) => /\/v1\/usage$/.test(call.url))).toBe(true);
       expect(
@@ -307,7 +330,7 @@ describe('api-keys page — local integration', () => {
     },
   );
 
-  it('uses the same bearer and selected-owner headers for effective-tier entitlement and key listing', async () => {
+  it('uses selected-owner headers for effective reads but caller-only headers for role authority', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       actAsHeaders: { 'x-driftstack-account': 'acc_owner' },
@@ -316,41 +339,124 @@ describe('api-keys page — local integration', () => {
     win = window;
     await flush();
 
-    const reads = fetchCalls.filter((call) => /\/v1\/(?:api-keys|usage)$/.test(call.url));
-    expect(reads).toHaveLength(2);
-    for (const read of reads) {
+    const effectiveReads = fetchCalls.filter((call) => /\/v1\/(?:api-keys|usage)$/.test(call.url));
+    expect(effectiveReads).toHaveLength(2);
+    for (const read of effectiveReads) {
       expect(read.init?.headers).toMatchObject({
         authorization: 'Bearer tok',
         'x-driftstack-account': 'acc_owner',
       });
     }
+    const callerRead = fetchCalls.find((call) => /\/v1\/account\/me$/.test(call.url));
+    expect(callerRead?.init?.headers).toEqual({ authorization: 'Bearer tok' });
+  });
+
+  it('Free caller acting as a paid team admin gets paid write controls from both authorities', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      callerTier: 'free',
+      effectiveTier: 'api_builder',
+      callerTeams: [{ owner_account_id: 'acc_owner', role: 'admin', membership_id: 'mem_admin' }],
+      actAsHeaders: { 'x-driftstack-account': 'acc_owner' },
+      fetchPlan: [() => json({ data: [ACTIVE_KEY] })],
+    });
+    win = window;
+    await flush();
+
+    expect(fetchCalls.some((call) => /\/v1\/account\/me$/.test(call.url))).toBe(true);
+    expect(fetchCalls.some((call) => /\/v1\/usage$/.test(call.url))).toBe(true);
+    expect(isHidden(window, '[data-rotate="key_active"]')).toBe(false);
+    expect(isHidden(window, '[data-revoke="key_active"]')).toBe(false);
+    expect(isHidden(window, 'section[data-api-access-only]')).toBe(false);
+    expect(isHidden(window, '[data-show-create]')).toBe(false);
+  });
+
+  it('paid caller acting as a paid team member keeps SDK guidance and list read-only even after forced DOM clicks', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      callerTier: 'api_builder',
+      effectiveTier: 'api_builder',
+      callerTeams: [{ owner_account_id: 'acc_owner', role: 'member', membership_id: 'mem_member' }],
+      actAsHeaders: { 'x-driftstack-account': 'acc_owner' },
+      fetchPlan: [() => json({ data: [ACTIVE_KEY] })],
+    });
+    win = window;
+    await flush();
+
+    expect(isHidden(window, 'section[data-api-access-only]')).toBe(false);
+    expect(isHidden(window, '[data-show-create]')).toBe(true);
+    expect(isHidden(window, '[data-rotate="key_active"]')).toBe(true);
+    expect(isHidden(window, '[data-revoke="key_active"]')).toBe(true);
+    expect(window.document.querySelector('[data-api-access-notice]')?.textContent).toContain(
+      'selected team role is read-only',
+    );
+
+    const createButton = window.document.querySelector('[data-show-create]') as HTMLButtonElement;
+    createButton.classList.remove('hidden');
+    createButton.disabled = false;
+    createButton.click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'Forced member key';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+
+    for (const selector of ['[data-rotate="key_active"]', '[data-revoke="key_active"]']) {
+      const button = window.document.querySelector(selector) as HTMLButtonElement;
+      button.classList.remove('hidden');
+      button.disabled = false;
+      button.click();
+    }
+    await flushMicrotasks();
+
+    expect(isHidden(window, '[data-create-form-wrap]')).toBe(true);
+    expect(
+      fetchCalls.filter((call) =>
+        ['POST', 'DELETE'].includes(String(call.init?.method ?? '').toUpperCase()),
+      ),
+    ).toHaveLength(0);
   });
 
   it.each([
-    ['Free caller acting as a paid owner', 'free', 'api_builder', true],
-    ['paid caller acting as a Free owner', 'api_builder', 'free', false],
-  ])(
-    '%s derives controls from the selected effective account',
-    async (_label, callerTier, effectiveTier, shouldManage) => {
-      const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
-        token: 'tok',
-        callerTier,
-        effectiveTier,
-        actAsHeaders: { 'x-driftstack-account': 'acc_owner' },
-        fetchPlan: [() => json({ data: [ACTIVE_KEY] })],
-      });
-      win = window;
-      await flush();
+    ['missing selected-team membership', { callerTeams: [] }],
+    ['caller identity lookup failure', { accountMePlan: () => json({}, 503) }],
+  ])('%s fails closed for every write while preserving key reads', async (_label, authority) => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      effectiveTier: 'api_builder',
+      actAsHeaders: { 'x-driftstack-account': 'acc_owner' },
+      ...authority,
+      fetchPlan: [() => json({ data: [ACTIVE_KEY] })],
+    });
+    win = window;
+    await flush();
 
-      expect(fetchCalls.some((call) => /\/v1\/account\/me$/.test(call.url))).toBe(false);
-      expect(fetchCalls.some((call) => /\/v1\/usage$/.test(call.url))).toBe(true);
-      expect(Boolean(window.document.querySelector('[data-rotate="key_active"]'))).toBe(
-        shouldManage,
-      );
-      expect(isHidden(window, 'section[data-api-access-only]')).toBe(!shouldManage);
-      expect(window.document.querySelector('[data-revoke="key_active"]')).toBeTruthy();
-    },
-  );
+    expect(window.document.querySelector('[data-list]')?.textContent).toContain('CI key');
+    expect(isHidden(window, '[data-rotate="key_active"]')).toBe(true);
+    expect(isHidden(window, '[data-revoke="key_active"]')).toBe(true);
+    expect(isHidden(window, '[data-show-create]')).toBe(true);
+    expect(
+      fetchCalls.filter((call) =>
+        ['POST', 'DELETE'].includes(String(call.init?.method ?? '').toUpperCase()),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('paid caller acting as a Free admin preserves revoke but hides tier-gated create and rotate', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      callerTier: 'api_builder',
+      effectiveTier: 'free',
+      callerTeams: [{ owner_account_id: 'acc_owner', role: 'admin', membership_id: 'mem_admin' }],
+      actAsHeaders: { 'x-driftstack-account': 'acc_owner' },
+      fetchPlan: [() => json({ data: [ACTIVE_KEY] })],
+    });
+    win = window;
+    await flush();
+
+    expect(isHidden(window, '[data-show-create]')).toBe(true);
+    expect(isHidden(window, '[data-rotate="key_active"]')).toBe(true);
+    expect(isHidden(window, '[data-revoke="key_active"]')).toBe(false);
+    expect(isHidden(window, 'section[data-api-access-only]')).toBe(true);
+  });
 
   it('requires the initial authoritative list before allowing a create', async () => {
     let releaseInitial: (response: Response) => void = () => {};

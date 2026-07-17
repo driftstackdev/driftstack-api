@@ -12,6 +12,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/api-keys.astro');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin.ts');
+const ACCOUNT_ME_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/account-me.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -20,6 +21,7 @@ function read(p: string): string {
 describe('W269.B /api-keys page ↔ /v1/api-keys/* route parity', () => {
   const page = read(PAGE);
   const route = read(ROUTE);
+  const accountMeRoute = read(ACCOUNT_ME_ROUTE);
 
   it('GET + POST /v1/api-keys are registered', () => {
     expect(page).toMatch(/\/v1\/api-keys(?!\/)/);
@@ -31,7 +33,7 @@ describe('W269.B /api-keys page ↔ /v1/api-keys/* route parity', () => {
     expect(route).toContain(`'/v1/api-keys/:id'`);
   });
 
-  it('GET /v1/usage is the effective-account tier authority and shares selected-owner headers with key listing', () => {
+  it('effective tier and key list share selected-owner headers; role authority is caller-only', () => {
     expect(page).toContain("fetch(apiBaseUrl + '/v1/usage'");
     expect(route).toContain("'/v1/usage'");
     expect(route).toMatch(
@@ -39,9 +41,17 @@ describe('W269.B /api-keys page ↔ /v1/api-keys/* route parity', () => {
     );
     expect(route).toMatch(/usageService\.summaryFor\(owner\.id, owner\.tier\)/);
     const entitlementRead = page.match(/fetch\(apiBaseUrl \+ '\/v1\/usage',[\s\S]*?\n\s*\}\)/)?.[0];
-    expect(entitlementRead).toContain('headers: authedHeaders()');
+    expect(entitlementRead).toContain('headers: effectiveHeaders');
     expect(page).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*headers: authedHeaders\(\)/);
-    expect(page).not.toContain("fetch(apiBaseUrl + '/v1/account/me'");
+    expect(page).toContain("fetch(apiBaseUrl + '/v1/account/me'");
+    expect(accountMeRoute).toContain("'/v1/account/me'");
+    expect(page).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/account\/me', \{\s*headers: callerOnlyHeaders\(\)/,
+    );
+    expect(page).toMatch(
+      /function callerOnlyHeaders\(extra = \{\}\) \{\s*return \{\s*\.\.\.extra,\s*authorization: 'Bearer ' \+ token,\s*\};\s*\}/,
+    );
+    expect(page).toMatch(/const writeAccess = resolveWriteAccess\(me, selectedId\)/);
   });
 
   it('granular scope checkboxes reference real ApiKeyScopeSchema values', () => {

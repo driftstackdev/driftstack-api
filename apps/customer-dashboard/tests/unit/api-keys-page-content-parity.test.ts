@@ -110,7 +110,7 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toMatch(/Authorization: Bearer\s*&lt;key&gt;/);
   });
 
-  it('derives API-key controls from canonical tier apiAccess and fails closed before rendering paid actions', () => {
+  it('combines canonical effective tier with caller-only self/team write authority', () => {
     expect(TIER_FEATURES.free.apiAccess).toBe(false);
     expect(body).toMatch(/import \{ TIER_FEATURES \} from '@driftstack\/api-types'/);
     expect(body).toMatch(
@@ -119,28 +119,47 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toMatch(/data-tier-api-access=\{JSON\.stringify\(tierApiAccess\)\}/);
     expect(body).toMatch(/JSON\.parse\(root\.getAttribute\('data-tier-api-access'\) \|\| '\{\}'\)/);
     expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/usage'/);
-    expect(body).toMatch(/headers: authedHeaders\(\),\s*signal: controller\.signal/);
+    expect(body).toMatch(/headers: effectiveHeaders,\s*signal: controller\.signal/);
+    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me'/);
+    expect(body).toMatch(/headers: callerOnlyHeaders\(\),\s*signal: controller\.signal/);
+    expect(body).toMatch(
+      /function callerOnlyHeaders\(extra = \{\}\) \{[\s\S]*?authorization: 'Bearer ' \+ token,[\s\S]*?\};\s*\}/,
+    );
+    expect(body).not.toMatch(
+      /function callerOnlyHeaders\(extra = \{\}\) \{[\s\S]*?window\.driftstackActAsHeaders/,
+    );
     expect(body).toMatch(/Object\.prototype\.hasOwnProperty\.call\(tierApiAccess, tier\)/);
-    expect(body).toMatch(/setApiAccess\(knownTier, knownTier && tierApiAccess\[tier\] === true\)/);
-    expect(body).toMatch(/class="btn-primary hidden"\s*data-show-create\s*data-api-access-only/);
+    expect(body).toMatch(/const writeAccess = resolveWriteAccess\(me, selectedId\)/);
+    expect(body).toMatch(/if \(!selectedId \|\| selectedId === me\.id\)/);
+    expect(body).toMatch(/matches\.length !== 1/);
+    expect(body).toMatch(/role !== 'admin' && role !== 'member'/);
+    expect(body).toMatch(/granted: role === 'admin'/);
+    expect(body).toMatch(/class="btn-primary hidden"\s*data-show-create\s*data-api-write-only/);
     expect(body).toMatch(/class="dashboard-card mb-8 hidden" data-api-access-only/);
     expect(body).toMatch(
-      /\/v1\/account\/me intentionally describes the caller and ignores\s*\/\/ X-Driftstack-Account\. \/v1\/usage resolves the selected effective\s*\/\/ account and returns its authoritative tier/,
+      /\/v1\/usage supplies the selected effective account's tier[\s\S]*?caller-only \/v1\/account\/me supplies self identity plus team roles/,
     );
-    expect(body).not.toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me'/);
   });
 
-  it('keeps list/revoke live while Free, unknown, and failed entitlement states guard forced mutations', () => {
-    expect(body).toMatch(/const rotateAction = apiAccessGranted\s*\?/);
-    expect(body).toMatch(/rotateAction \+\s*'<button type="button" data-revoke="'/);
-    expect(body).toContain('Existing keys remain visible so you can revoke them.');
-    expect(body).toContain('revocation remains available.');
+  it('keeps paid SDK guidance separate from team-admin-only mutations and guards forced DOM paths', () => {
+    expect(body).toMatch(/const canWrite = canWriteSelectedAccount\(\)/);
+    expect(body).toMatch(/const canRotate = canWrite && apiAccessVerified && apiAccessGranted/);
+    expect(body).toMatch(/\(canRotate \? '' : ' hidden'\)/);
+    expect(body).toMatch(/\(canWrite \? '' : ' hidden'\)/);
+    expect(body).toMatch(/apiAccessOnly\.forEach[\s\S]*?!showPaidGuidance/);
+    expect(body).toMatch(/apiWriteOnly\.forEach[\s\S]*?!showWriteControls/);
+    expect(body).toContain('selected team role is read-only');
+    expect(body).toContain('Ask a team admin to create, rotate, or revoke keys.');
+    expect(body).toMatch(
+      /function wireRevokeButtons\(\)[\s\S]*?if \(!writeAccessVerified \|\| !writeAccessGranted\)/,
+    );
+    expect(body).toMatch(
+      /function wireRotateButtons\(\)[\s\S]*?!writeAccessVerified[\s\S]*?!writeAccessGranted/,
+    );
     expect(
-      body.match(/if \(!apiAccessVerified \|\| !apiAccessGranted\)/g)?.length,
+      body.match(/!writeAccessVerified \|\|\s*!writeAccessGranted/g)?.length,
     ).toBeGreaterThanOrEqual(3);
-    expect(body).toContain('API-key rotation requires verified access on an API-enabled tier.');
-    expect(body).toContain('API-key creation requires an API-enabled tier.');
-    expect(body).toMatch(/if \(!showPaidControls\) \{[\s\S]*?revealPre\.textContent = ''/);
+    expect(body).toMatch(/if \(!showWriteControls\) \{[\s\S]*?revealPre\.textContent = ''/);
   });
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {

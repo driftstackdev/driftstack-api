@@ -49,7 +49,7 @@ const tierApiAccess = Object.fromEntries(
           type="button"
           class="btn-primary hidden"
           data-show-create
-          data-api-access-only
+          data-api-write-only
           disabled
           aria-disabled="true"
           title="Live API keys must load before creating another."
@@ -437,7 +437,7 @@ npm i @driftstack/sdk</code></pre>
         type="button"
         class="btn-primary mt-6 hidden"
         data-show-create
-        data-api-access-only
+        data-api-write-only
         disabled
         aria-disabled="true"
         title="Live API keys must load before creating another."
@@ -496,6 +496,7 @@ npm i @driftstack/sdk</code></pre>
       const revealDismiss = root.querySelector('[data-created-dismiss]');
       const showCreateBtns = root.querySelectorAll('[data-show-create]');
       const apiAccessOnly = root.querySelectorAll('[data-api-access-only]');
+      const apiWriteOnly = root.querySelectorAll('[data-api-write-only]');
       const apiAccessNotice = root.querySelector('[data-api-access-notice]');
       const apiAccessNoticeCopy = root.querySelector('[data-api-access-notice-copy]');
       const apiAccessUpgrade = root.querySelector('[data-api-access-upgrade]');
@@ -554,6 +555,8 @@ npm i @driftstack/sdk</code></pre>
       let apiAccessGranted = false;
       let apiAccessVerified = false;
       let apiAccessSettled = false;
+      let writeAccessGranted = false;
+      let writeAccessVerified = false;
 
       function showBanner(text) {
         if (!banner) return;
@@ -566,32 +569,54 @@ npm i @driftstack/sdk</code></pre>
         banner.classList.add('hidden');
       }
 
+      function canWriteSelectedAccount() {
+        return Boolean(token && writeAccessVerified && writeAccessGranted);
+      }
+
       function canManageApiKeys() {
-        return Boolean(token && keyDataAvailable && apiAccessVerified && apiAccessGranted);
+        return Boolean(
+          keyDataAvailable &&
+            canWriteSelectedAccount() &&
+            apiAccessVerified &&
+            apiAccessGranted,
+        );
       }
 
       function syncApiAccessUi() {
-        const showPaidControls = apiAccessVerified && apiAccessGranted;
+        const showPaidGuidance = apiAccessVerified && apiAccessGranted;
+        const showWriteControls = showPaidGuidance && canWriteSelectedAccount();
         apiAccessOnly.forEach((element) => {
-          element.classList.toggle('hidden', !showPaidControls);
+          element.classList.toggle('hidden', !showPaidGuidance);
+        });
+        apiWriteOnly.forEach((element) => {
+          element.classList.toggle('hidden', !showWriteControls);
         });
         if (apiAccessNotice) {
-          apiAccessNotice.classList.toggle('hidden', showPaidControls || !apiAccessSettled);
+          apiAccessNotice.classList.toggle('hidden', showWriteControls || !apiAccessSettled);
         }
         if (apiAccessNoticeCopy) {
-          apiAccessNoticeCopy.textContent = apiAccessVerified
-            ? "The selected account's current plan keeps customer API-key creation, rotation, and SDK automation disabled. Existing keys remain visible so you can revoke them. Use the desktop app and browser sign-in for Free sessions, or choose an API-enabled tier."
-            : 'Your API-key list remains available, but plan access could not be verified. Creation and rotation stay disabled until access can be checked; revocation remains available.';
+          apiAccessNoticeCopy.textContent = !apiAccessVerified
+            ? 'Your API-key list remains available, but plan access could not be verified. Creation and rotation stay disabled until plan access can be checked.'
+            : !apiAccessGranted
+              ? "The selected account's current plan keeps customer API-key creation, rotation, and SDK automation disabled. Existing keys remain visible to authorized owners and team admins so they can revoke them. Use the desktop app and browser sign-in for Free sessions, or choose an API-enabled tier."
+              : !writeAccessVerified
+                ? 'This paid account can use customer API keys and the SDK guidance below, but your write permission for the selected account could not be verified. The key list stays read-only.'
+                : 'This paid account can use customer API keys and the SDK guidance below, but your selected team role is read-only. Ask a team admin to create, rotate, or revoke keys.';
         }
         if (apiAccessUpgrade) {
-          apiAccessUpgrade.classList.toggle('hidden', !apiAccessVerified);
+          apiAccessUpgrade.classList.toggle(
+            'hidden',
+            !apiAccessVerified || apiAccessGranted,
+          );
         }
-        if (emptyCopy && apiAccessSettled && !showPaidControls) {
-          emptyCopy.textContent = apiAccessVerified
-            ? 'No customer API keys are active. Free sessions use the desktop app with browser sign-in; API-enabled tiers can create keys for SDK automation.'
-            : 'No API keys are available to list. Creation and rotation stay disabled until plan access can be verified.';
+        if (emptyCopy && apiAccessSettled && !showWriteControls) {
+          emptyCopy.textContent = !apiAccessVerified
+            ? 'No API keys are available to list. Key mutations stay disabled until plan and account permissions can be verified.'
+            : !apiAccessGranted
+              ? 'No customer API keys are active. Free sessions use the desktop app with browser sign-in; API-enabled tiers can create keys for SDK automation.'
+              : 'No API keys are active on this paid account. The selected team scope is read-only; ask a team admin to create one.';
         }
-        if (!showPaidControls) {
+        if (!showWriteControls) {
           if (formWrap) formWrap.classList.add('hidden');
           if (reveal) reveal.classList.add('hidden');
           if (revealPre) revealPre.textContent = '';
@@ -606,9 +631,9 @@ npm i @driftstack/sdk</code></pre>
             button.removeAttribute('title');
           } else {
             button.setAttribute('aria-disabled', 'true');
-            button.title = showPaidControls
+            button.title = showWriteControls
               ? 'Live API keys must load before creating another.'
-              : 'API-key creation requires verified access on an API-enabled tier.';
+              : 'API-key creation requires an API-enabled tier and verified write access.';
           }
         });
         if (createSubmit) {
@@ -617,14 +642,16 @@ npm i @driftstack/sdk</code></pre>
         if (keyDataAvailable && ul && !ul.classList.contains('hidden')) {
           ul.innerHTML = keySnapshot.map(keyLi).join('');
           wireRevokeButtons();
-          if (showPaidControls) wireRotateButtons();
+          wireRotateButtons();
         }
       }
 
-      function setApiAccess(verified, granted) {
+      function setApiAccess(verified, granted, writeVerified, writeGranted) {
         apiAccessSettled = true;
         apiAccessVerified = verified;
         apiAccessGranted = verified && granted;
+        writeAccessVerified = writeVerified;
+        writeAccessGranted = writeVerified && writeGranted;
         syncApiAccessUi();
       }
 
@@ -660,6 +687,44 @@ npm i @driftstack/sdk</code></pre>
         };
       }
 
+      // /v1/account/me is caller identity/teams authority and deliberately
+      // ignores act-as. Never forward X-Driftstack-Account on this read: doing
+      // so would make the selected owner's role appear self-authorized.
+      function callerOnlyHeaders(extra = {}) {
+        return {
+          ...extra,
+          authorization: 'Bearer ' + token,
+        };
+      }
+
+      function selectedAccountId(headers) {
+        const selected =
+          headers && typeof headers['x-driftstack-account'] === 'string'
+            ? headers['x-driftstack-account']
+            : '';
+        return selected;
+      }
+
+      function resolveWriteAccess(me, selectedId) {
+        if (!me || typeof me.id !== 'string' || !Array.isArray(me.teams)) {
+          return { verified: false, granted: false };
+        }
+        if (!selectedId || selectedId === me.id) {
+          return { verified: true, granted: true };
+        }
+        const matches = me.teams.filter(
+          (team) => team && team.owner_account_id === selectedId,
+        );
+        if (matches.length !== 1) {
+          return { verified: false, granted: false };
+        }
+        const role = matches[0] && matches[0].role;
+        if (role !== 'admin' && role !== 'member') {
+          return { verified: false, granted: false };
+        }
+        return { verified: true, granted: role === 'admin' };
+      }
+
       function loadApiAccess() {
         if (!token) return;
         if (entitlementController) entitlementController.abort();
@@ -668,27 +733,43 @@ npm i @driftstack/sdk</code></pre>
         const generation = ++entitlementGeneration;
         const isCurrent = () => generation === entitlementGeneration;
         const timeout = window.setTimeout(() => controller.abort(), API_KEY_TIMEOUT_MS);
-        // /v1/account/me intentionally describes the caller and ignores
-        // X-Driftstack-Account. /v1/usage resolves the selected effective
-        // account and returns its authoritative tier, matching API-key routes.
-        return fetch(apiBaseUrl + '/v1/usage', {
-          headers: authedHeaders(),
-          signal: controller.signal,
-        })
-          .then((response) => {
+        const effectiveHeaders = authedHeaders();
+        const selectedId = selectedAccountId(effectiveHeaders);
+        // /v1/usage supplies the selected effective account's tier. The
+        // caller-only /v1/account/me supplies self identity plus team roles.
+        // Both authorities must agree before any write control is enabled.
+        return Promise.all([
+          fetch(apiBaseUrl + '/v1/usage', {
+            headers: effectiveHeaders,
+            signal: controller.signal,
+          }).then((response) => {
             if (!response.ok) throw new Error('HTTP ' + response.status);
             return response.json();
-          })
-          .then((summary) => {
+          }),
+          fetch(apiBaseUrl + '/v1/account/me', {
+            headers: callerOnlyHeaders(),
+            signal: controller.signal,
+          }).then((response) => {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+          }),
+        ])
+          .then(([summary, me]) => {
             if (!isCurrent()) return false;
             const tier = typeof summary.tier === 'string' ? summary.tier : '';
             const knownTier = Object.prototype.hasOwnProperty.call(tierApiAccess, tier);
-            setApiAccess(knownTier, knownTier && tierApiAccess[tier] === true);
-            return knownTier;
+            const writeAccess = resolveWriteAccess(me, selectedId);
+            setApiAccess(
+              knownTier,
+              knownTier && tierApiAccess[tier] === true,
+              writeAccess.verified,
+              writeAccess.granted,
+            );
+            return knownTier && writeAccess.verified;
           })
           .catch(() => {
             if (!isCurrent()) return false;
-            setApiAccess(false, false);
+            setApiAccess(false, false, false, false);
             return false;
           })
           .finally(() => {
@@ -748,21 +829,23 @@ npm i @driftstack/sdk</code></pre>
 
       function keyLi(k) {
         const isRevoked = k.revoked_at !== null && k.revoked_at !== undefined;
+        const canWrite = canWriteSelectedAccount();
+        const canRotate = canWrite && apiAccessVerified && apiAccessGranted;
         const mutationInFlight = mutationKeyIdsInFlight.has(String(k.id));
         const revokeOutcomeUnknown = ambiguousRevokeIds.has(String(k.id));
         const rotateOutcomeUnknown = ambiguousRotateIds.has(String(k.id));
         const rotateDisabledAttributes =
-          mutationInFlight || revokeOutcomeUnknown || rotateOutcomeUnknown
+          !canRotate || mutationInFlight || revokeOutcomeUnknown || rotateOutcomeUnknown
             ? ' disabled aria-disabled="true"'
             : '';
         const rotateDisabledClass =
-          mutationInFlight || revokeOutcomeUnknown || rotateOutcomeUnknown
+          !canRotate || mutationInFlight || revokeOutcomeUnknown || rotateOutcomeUnknown
             ? ' cursor-not-allowed opacity-60'
             : '';
-        const revokeDisabledAttributes = mutationInFlight || revokeOutcomeUnknown
+        const revokeDisabledAttributes = !canWrite || mutationInFlight || revokeOutcomeUnknown
           ? ' disabled aria-disabled="true"'
           : '';
-        const revokeDisabledClass = mutationInFlight || revokeOutcomeUnknown
+        const revokeDisabledClass = !canWrite || mutationInFlight || revokeOutcomeUnknown
           ? ' cursor-not-allowed opacity-60'
           : '';
         const scopes = (k.scopes || [])
@@ -773,19 +856,19 @@ npm i @driftstack/sdk</code></pre>
               '</span>',
           )
           .join('');
-        const rotateAction = apiAccessGranted
-          ? '<button type="button" data-rotate="' +
-            escapeHtml(k.id) +
-            '" data-rotate-name="' +
-            escapeHtml(k.name) +
-            '"' +
-            rotateDisabledAttributes +
-            ' class="text-sm text-tk-accent-text hover:underline' +
-            rotateDisabledClass +
-            '">' +
-            (rotateOutcomeUnknown ? 'Rotation outcome unknown' : 'Rotate') +
-            '</button>'
-          : '';
+        const rotateAction =
+          '<button type="button" data-rotate="' +
+          escapeHtml(k.id) +
+          '" data-rotate-name="' +
+          escapeHtml(k.name) +
+          '"' +
+          rotateDisabledAttributes +
+          ' class="text-sm text-tk-accent-text hover:underline' +
+          (canRotate ? '' : ' hidden') +
+          rotateDisabledClass +
+          '">' +
+          (rotateOutcomeUnknown ? 'Rotation outcome unknown' : 'Rotate') +
+          '</button>';
         const revokeAction = isRevoked
           ? '<span class="rounded-full bg-tk-surface px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked ' +
             escapeHtml(fmtIso(k.revoked_at)) +
@@ -799,6 +882,7 @@ npm i @driftstack/sdk</code></pre>
             '"' +
             revokeDisabledAttributes +
             ' class="text-sm text-tk-err-text hover:underline' +
+            (canWrite ? '' : ' hidden') +
             revokeDisabledClass +
             '">' +
             (revokeOutcomeUnknown ? 'Check status' : 'Revoke') +
@@ -1038,6 +1122,14 @@ npm i @driftstack/sdk</code></pre>
         const buttons = ul.querySelectorAll('[data-revoke]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', async () => {
+            if (!writeAccessVerified || !writeAccessGranted) {
+              showBanner(
+                writeAccessVerified
+                  ? 'Only a team admin can revoke keys for the selected account.'
+                  : 'API-key revocation stays disabled until account permissions can be verified.',
+              );
+              return;
+            }
             const id = btn.getAttribute('data-revoke');
             if (ambiguousRevokeIds.has(String(id || ''))) return;
             if (mutationButtonsInFlight.has(btn)) return;
@@ -1158,9 +1250,16 @@ npm i @driftstack/sdk</code></pre>
         const buttons = ul.querySelectorAll('[data-rotate]');
         buttons.forEach((btn) => {
           btn.addEventListener('click', async () => {
-            if (!apiAccessVerified || !apiAccessGranted) {
+            if (
+              !apiAccessVerified ||
+              !apiAccessGranted ||
+              !writeAccessVerified ||
+              !writeAccessGranted
+            ) {
               showBanner(
-                'API-key rotation requires verified access on an API-enabled tier.',
+                writeAccessVerified && !writeAccessGranted
+                  ? 'Only a team admin can rotate keys for the selected account.'
+                  : 'API-key rotation requires an API-enabled tier and verified write access.',
               );
               return;
             }
@@ -1252,11 +1351,16 @@ npm i @driftstack/sdk</code></pre>
       }
 
       function showCreate() {
-        if (!apiAccessVerified || !apiAccessGranted) {
+        if (
+          !apiAccessVerified ||
+          !apiAccessGranted ||
+          !writeAccessVerified ||
+          !writeAccessGranted
+        ) {
           showBanner(
-            apiAccessVerified
-              ? 'API-key creation requires an API-enabled tier.'
-              : 'API-key creation stays disabled until plan access can be verified.',
+            writeAccessVerified && !writeAccessGranted
+              ? 'Only a team admin can create keys for the selected account.'
+              : 'API-key creation requires an API-enabled tier and verified write access.',
           );
           return;
         }
@@ -1315,11 +1419,16 @@ npm i @driftstack/sdk</code></pre>
 
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
-        if (!apiAccessVerified || !apiAccessGranted) {
+        if (
+          !apiAccessVerified ||
+          !apiAccessGranted ||
+          !writeAccessVerified ||
+          !writeAccessGranted
+        ) {
           showBanner(
-            apiAccessVerified
-              ? 'API-key creation requires an API-enabled tier.'
-              : 'API-key creation stays disabled until plan access can be verified.',
+            writeAccessVerified && !writeAccessGranted
+              ? 'Only a team admin can create keys for the selected account.'
+              : 'API-key creation requires an API-enabled tier and verified write access.',
           );
           return;
         }

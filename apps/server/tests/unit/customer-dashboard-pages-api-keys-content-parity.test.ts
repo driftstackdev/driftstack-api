@@ -127,14 +127,20 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     );
   });
 
-  it('effective-account tier read plus all four API-key operations share authorization + selected-owner headers', () => {
+  it('effective reads share selected-owner headers while caller role authority strips act-as', () => {
     expect(body).toMatch(
       /function authedHeaders\(extra = \{\}\) \{[\s\S]*?authorization: 'Bearer ' \+ token,[\s\S]*?window\.driftstackActAsHeaders\(\)/,
     );
     expect(body.match(/fetch\(apiBaseUrl \+ '\/v1\/api-keys/g)).toHaveLength(4);
-    expect(body.match(/headers: authedHeaders\(/g)).toHaveLength(5);
+    expect(body.match(/headers: authedHeaders\(/g)).toHaveLength(4);
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/usage', \{\s*headers: authedHeaders\(\),\s*signal: controller\.signal/,
+      /fetch\(apiBaseUrl \+ '\/v1\/usage', \{\s*headers: effectiveHeaders,\s*signal: controller\.signal/,
+    );
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/account\/me', \{\s*headers: callerOnlyHeaders\(\),\s*signal: controller\.signal/,
+    );
+    expect(body).toMatch(
+      /function callerOnlyHeaders\(extra = \{\}\) \{\s*return \{\s*\.\.\.extra,\s*authorization: 'Bearer ' \+ token,\s*\};\s*\}/,
     );
     expect(body).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: authedHeaders\(\{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\}\),\s*\n?\s*body: JSON\.stringify\(\{ name: name, scopes: scopes \}\),\s*\n?\s*signal: controller\.signal,/,
@@ -148,7 +154,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
   });
 
   it('Static, signed-out, and failed list states keep key creation unavailable and replace indefinite skeletons with an explicit non-authoritative row', () => {
-    expect(body.match(/data-show-create\s*data-api-access-only\s*disabled/g)).toHaveLength(2);
+    expect(body.match(/data-show-create\s*data-api-write-only\s*disabled/g)).toHaveLength(2);
     expect(body).toMatch(/let keyDataAvailable = false;/);
     expect(body).toMatch(
       /function setCreateAvailability\(available\) \{\s*keyDataAvailable = available;\s*syncApiAccessUi\(\);\s*\}/,
@@ -166,7 +172,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
       /\.catch\(\(err\) => \{\s*if \(!isCurrent\(\)\) return;\s*renderUnavailable\(/,
     );
     expect(body).toMatch(
-      /function showCreate\(\) \{\s*if \(!apiAccessVerified \|\| !apiAccessGranted\) \{[\s\S]*?if \(!token \|\| !keyDataAvailable\) \{/,
+      /function showCreate\(\) \{\s*if \([\s\S]*?!apiAccessVerified[\s\S]*?!apiAccessGranted[\s\S]*?!writeAccessVerified[\s\S]*?!writeAccessGranted[\s\S]*?\) \{[\s\S]*?if \(!token \|\| !keyDataAvailable\) \{/,
     );
     expect(body).toMatch(
       /if \(!token\) \{\s*renderUnavailable\('Sign in to load your API keys\.'\);\s*showBanner\('Sign in to see live API keys\.'\);[\s\S]*?window\.dashboardHydrated\(\);[\s\S]*?return;/,
@@ -174,24 +180,28 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     expect(body).not.toMatch(/Showing preview data below/);
   });
 
-  it('canonical apiAccess entitlement is fail-closed and keeps revoke outside the paid-only branch', () => {
+  it('canonical entitlement plus exact team role jointly fail closed every write path', () => {
     expect(body).toMatch(/import \{ TIER_FEATURES \} from '@driftstack\/api-types'/);
     expect(body).toMatch(/features\.apiAccess/);
     expect(body).toMatch(/data-tier-api-access=\{JSON\.stringify\(tierApiAccess\)\}/);
     expect(body).toMatch(/JSON\.parse\(root\.getAttribute\('data-tier-api-access'\) \|\| '\{\}'\)/);
     expect(body).toMatch(/Object\.prototype\.hasOwnProperty\.call\(tierApiAccess, tier\)/);
-    expect(body).toMatch(/setApiAccess\(knownTier, knownTier && tierApiAccess\[tier\] === true\)/);
+    expect(body).toMatch(/const writeAccess = resolveWriteAccess\(me, selectedId\)/);
     expect(body).toMatch(
-      /\/v1\/account\/me intentionally describes the caller and ignores[\s\S]*?\/v1\/usage resolves the selected effective[\s\S]*?account and returns its authoritative tier/,
+      /\/v1\/usage supplies the selected effective account's tier[\s\S]*?caller-only \/v1\/account\/me supplies self identity plus team roles/,
     );
-    expect(body).not.toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me'/);
-    expect(body).toMatch(/const rotateAction = apiAccessGranted\s*\?/);
-    expect(body).toMatch(/rotateAction \+\s*'<button type="button" data-revoke="'/);
-    expect(body).toContain('Existing keys remain visible so you can revoke them.');
-    expect(body).toContain('revocation remains available.');
-    expect(body).toMatch(/if \(!showPaidControls\) \{[\s\S]*?revealPre\.textContent = ''/);
+    expect(body).toMatch(/if \(!selectedId \|\| selectedId === me\.id\)/);
+    expect(body).toMatch(/matches\.length !== 1/);
+    expect(body).toMatch(/role !== 'admin' && role !== 'member'/);
+    expect(body).toMatch(/granted: role === 'admin'/);
+    expect(body).toMatch(/const canWrite = canWriteSelectedAccount\(\)/);
+    expect(body).toMatch(/const canRotate = canWrite && apiAccessVerified && apiAccessGranted/);
+    expect(body).toMatch(/\(canRotate \? '' : ' hidden'\)/);
+    expect(body).toMatch(/\(canWrite \? '' : ' hidden'\)/);
+    expect(body).toMatch(/if \(!showWriteControls\) \{[\s\S]*?revealPre\.textContent = ''/);
+    expect(body).toContain('selected team role is read-only');
     expect(
-      body.match(/if \(!apiAccessVerified \|\| !apiAccessGranted\)/g)?.length,
+      body.match(/!writeAccessVerified \|\|\s*!writeAccessGranted/g)?.length,
     ).toBeGreaterThanOrEqual(3);
   });
 
