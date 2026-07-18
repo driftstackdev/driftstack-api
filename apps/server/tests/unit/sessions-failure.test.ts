@@ -18,6 +18,7 @@ import type {
   SessionRecord,
   SessionEventInput,
   NewSessionInput,
+  SessionOperationClaimResult,
   SerializedSessionDestroyInput,
   SerializedSessionDestroyResult,
 } from '../../src/services/sessions.js';
@@ -39,6 +40,10 @@ interface RecordedLifecycleEvent {
     | { kind: 'session.failed.first'; sessionId: string; errorMessage: string }
     | { kind: 'session.success.first'; sessionId: string };
 }
+
+type RecordedNotification = Parameters<
+  NonNullable<SessionsServiceDeps['notifications']>['publish']
+>[0];
 
 const PRIVATE_SENTINEL = 'PRIVATE_SESSION_PAYLOAD_91c7f0';
 
@@ -95,7 +100,7 @@ function buildCtx(): AccountContext {
 
 class StubRepo implements SessionRepo {
   private readonly sessions = new Map<string, SessionRecord>();
-  private readonly destroyTails = new Map<string, Promise<void>>();
+  private readonly sessionMutationTails = new Map<string, Promise<void>>();
   readonly events: SessionEventInput[] = [];
   /** Opt-in (default null): when set, insertSession /
    *  insertSessionIfUnderLimit reject with it.
@@ -129,6 +134,17 @@ class StubRepo implements SessionRepo {
     id: string;
     status: SessionRecord['status'];
     extra?: { lastStateAt?: Date; destroyedAt?: Date };
+  }> = [];
+  throwOnClaimSessionOperation: Error | null = null;
+  throwOnSettleSessionOperation: Error | null = null;
+  throwOnFailSessionOperation: Error | null = null;
+  throwOnTouchSessionLastStateAt: Error | null = null;
+  holdOnTouchSessionLastStateAt: Deferred<void> | null = null;
+  readonly touchSessionLastStateAtAttempts: Array<{
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+    lastStateAt: Date;
   }> = [];
 
   insertSession(input: NewSessionInput): Promise<SessionRecord> {
@@ -191,6 +207,115 @@ class StubRepo implements SessionRepo {
     this.sessions.set(input.id, updated);
     return Promise.resolve(updated);
   }
+  claimSessionOperation(id: string, accountId: string): Promise<SessionOperationClaimResult> {
+    if (this.throwOnClaimSessionOperation !== null) {
+      return Promise.reject(this.throwOnClaimSessionOperation);
+    }
+    return this.withSessionMutationLock(id, () => {
+      const current = this.sessions.get(id);
+      if (!current || current.accountId !== accountId) return { kind: 'not_found' };
+      if (
+        current.status === 'destroyed' ||
+        current.status === 'errored' ||
+        current.destroyedAt !== null
+      ) {
+        return { kind: 'terminal', session: current };
+      }
+      if (current.status === 'creating' || current.status === 'busy') {
+        return { kind: 'conflict', status: current.status };
+      }
+      const claimed: SessionRecord = { ...current, status: 'busy', updatedAt: new Date() };
+      this.sessions.set(id, claimed);
+      return { kind: 'claimed', session: claimed };
+    });
+  }
+  settleSessionOperation(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+  }): Promise<boolean> {
+    if (this.throwOnSettleSessionOperation !== null) {
+      return Promise.reject(this.throwOnSettleSessionOperation);
+    }
+    return this.withSessionMutationLock(input.id, () => {
+      const current = this.sessions.get(input.id);
+      if (
+        !current ||
+        current.accountId !== input.accountId ||
+        current.driverSessionId !== input.driverSessionId ||
+        current.status !== 'busy' ||
+        current.destroyedAt !== null
+      ) {
+        return false;
+      }
+      this.sessions.set(input.id, { ...current, status: 'ready', updatedAt: new Date() });
+      return true;
+    });
+  }
+  failSessionOperation(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+    erroredAt: Date;
+  }): Promise<SessionRecord | null> {
+    if (this.throwOnFailSessionOperation !== null) {
+      return Promise.reject(this.throwOnFailSessionOperation);
+    }
+    return this.withSessionMutationLock(input.id, () => {
+      const current = this.sessions.get(input.id);
+      if (
+        !current ||
+        current.accountId !== input.accountId ||
+        current.driverSessionId !== input.driverSessionId ||
+        current.status !== 'busy' ||
+        current.destroyedAt !== null
+      ) {
+        return null;
+      }
+      const failed: SessionRecord = {
+        ...current,
+        status: 'errored',
+        destroyedAt: input.erroredAt,
+        updatedAt: new Date(),
+      };
+      this.sessions.set(input.id, failed);
+      return failed;
+    });
+  }
+  touchSessionLastStateAt(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+    lastStateAt: Date;
+  }): Promise<void> {
+    this.touchSessionLastStateAtAttempts.push(input);
+    if (this.throwOnTouchSessionLastStateAt !== null) {
+      return Promise.reject(this.throwOnTouchSessionLastStateAt);
+    }
+    const apply = (): Promise<void> =>
+      this.withSessionMutationLock(input.id, () => {
+        const current = this.sessions.get(input.id);
+        if (
+          !current ||
+          current.accountId !== input.accountId ||
+          current.driverSessionId !== input.driverSessionId ||
+          current.status === 'destroyed' ||
+          current.status === 'errored' ||
+          current.destroyedAt !== null
+        ) {
+          return;
+        }
+        const lastStateAt =
+          current.lastStateAt !== null && current.lastStateAt > input.lastStateAt
+            ? current.lastStateAt
+            : input.lastStateAt;
+        this.sessions.set(input.id, { ...current, lastStateAt, updatedAt: new Date() });
+      });
+    if (this.holdOnTouchSessionLastStateAt !== null) {
+      return this.holdOnTouchSessionLastStateAt.promise.then(apply);
+    }
+    return apply();
+  }
   findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const r = this.sessions.get(id);
     if (!r || r.accountId !== accountId) return Promise.resolve(null);
@@ -203,15 +328,7 @@ class StubRepo implements SessionRepo {
     input: SerializedSessionDestroyInput,
     destroyDriverSession: (session: SessionRecord) => Promise<void>,
   ): Promise<SerializedSessionDestroyResult> {
-    const previous = this.destroyTails.get(input.id) ?? Promise.resolve();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const tail = previous.then(() => gate);
-    this.destroyTails.set(input.id, tail);
-    await previous;
-    try {
+    return this.withSessionMutationLock(input.id, async () => {
       const current = this.sessions.get(input.id);
       if (!current || (input.accountId !== null && current.accountId !== input.accountId)) {
         return { kind: 'not_found' };
@@ -250,9 +367,22 @@ class StubRepo implements SessionRepo {
         throw error;
       }
       return { kind: 'destroyed', session: updated };
+    });
+  }
+  private async withSessionMutationLock<T>(id: string, fn: () => T | Promise<T>): Promise<T> {
+    const previous = this.sessionMutationTails.get(id) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.sessionMutationTails.set(id, tail);
+    await previous;
+    try {
+      return await fn();
     } finally {
       release();
-      if (this.destroyTails.get(input.id) === tail) this.destroyTails.delete(input.id);
+      if (this.sessionMutationTails.get(id) === tail) this.sessionMutationTails.delete(id);
     }
   }
   // Terminal statuses ('destroyed', 'errored') are STICKY — mirrors the Drizzle
@@ -274,7 +404,7 @@ class StubRepo implements SessionRepo {
     }
     const apply = (): void => {
       const r = this.sessions.get(id);
-      if (!r || r.status === 'destroyed' || r.status === 'errored') return;
+      if (!r || r.status === 'busy' || r.status === 'destroyed' || r.status === 'errored') return;
       this.sessions.set(id, {
         ...r,
         status,
@@ -297,8 +427,26 @@ class StubRepo implements SessionRepo {
   listActiveByAccount(): Promise<SessionRecord[]> {
     return Promise.resolve([]);
   }
-  listSessions(): Promise<{ items: SessionRecord[]; nextCursor: string | null }> {
-    return Promise.resolve({ items: [], nextCursor: null });
+  listSessions(
+    accountId: string,
+    opts: { limit: number; cursor?: string },
+  ): Promise<{ items: SessionRecord[]; nextCursor: string | null }> {
+    const ordered = [...this.sessions.values()]
+      .filter((session) => session.accountId === accountId)
+      .sort(
+        (left, right) =>
+          right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id),
+      );
+    const cursorIndex =
+      opts.cursor === undefined ? -1 : ordered.findIndex((session) => session.id === opts.cursor);
+    const offset = cursorIndex < 0 ? 0 : cursorIndex + 1;
+    const page = ordered.slice(offset, offset + opts.limit + 1);
+    const hasMore = page.length > opts.limit;
+    const items = hasMore ? page.slice(0, opts.limit) : page;
+    return Promise.resolve({
+      items,
+      nextCursor: hasMore ? (items.at(-1)?.id ?? null) : null,
+    });
   }
   listAllSessions(): Promise<{ items: SessionRecord[]; nextCursor: string | null }> {
     return Promise.resolve({ items: [], nextCursor: null });
@@ -362,16 +510,18 @@ class ThrowingDriver implements Driver {
   readonly createdIds: string[] = [];
   /** Exact non-lifecycle operation calls, used to prove no post-success replay. */
   readonly operationCalls: string[] = [];
-  readonly capturedAt = new Date('2026-07-15T17:45:00.000Z');
+  capturedAt = new Date('2026-07-15T17:45:00.000Z');
 
   /** Opt-in: when set, the NEXT createSession() rejects (simulates a worker-
    *  dispatch failure AFTER the reservation slot was taken). */
   private throwOnCreate: Error | null = null;
+  private holdOnCreate: Deferred<void> | null = null;
 
   /** Opt-in: when set, the NEXT destroy() rejects (simulates a driver/network
    *  fault on teardown — exercises the destroy() slot-release backstop, #4). */
   private throwOnDestroy: Error | null = null;
   private hangOnDestroy = false;
+  private holdOnOperation: { operation: string; deferred: Deferred<void> } | null = null;
 
   /** Runs after a real driver id is allocated but before createSession resolves. */
   onCreateSession: ((driverSessionId: string) => void) | null = null;
@@ -387,6 +537,14 @@ class ThrowingDriver implements Driver {
 
   primeCreateThrow(err: Error): void {
     this.throwOnCreate = err;
+  }
+
+  primeCreateHold(gate: Deferred<void>): void {
+    this.holdOnCreate = gate;
+  }
+
+  primeOperationHold(operation: string, gate: Deferred<void>): void {
+    this.holdOnOperation = { operation, deferred: gate };
   }
 
   primeDestroyThrow(err: Error): void {
@@ -406,6 +564,13 @@ class ThrowingDriver implements Driver {
     throw err;
   }
 
+  private waitIfHeld(operation: string): Promise<void> {
+    if (this.holdOnOperation?.operation !== operation) return Promise.resolve();
+    const gate = this.holdOnOperation.deferred;
+    this.holdOnOperation = null;
+    return gate.promise;
+  }
+
   createSession(): Promise<{ driverSessionId: string }> {
     if (this.throwOnCreate !== null) {
       const err = this.throwOnCreate;
@@ -416,32 +581,37 @@ class ThrowingDriver implements Driver {
     const driverSessionId = `mock-${this.nextId.toString()}`;
     this.createdIds.push(driverSessionId);
     this.onCreateSession?.(driverSessionId);
+    if (this.holdOnCreate !== null) {
+      const gate = this.holdOnCreate;
+      this.holdOnCreate = null;
+      return gate.promise.then(() => ({ driverSessionId }));
+    }
     return Promise.resolve({ driverSessionId });
   }
   navigate(): Promise<{ url: string; finalUrl: string; status: number; durationMs: number }> {
     this.operationCalls.push('navigate');
     this.throwIfArmed();
-    return Promise.resolve({
+    return this.waitIfHeld('navigate').then(() => ({
       url: 'about:blank',
       finalUrl: 'about:blank',
       status: 200,
       durationMs: 1,
-    });
+    }));
   }
   interact(): Promise<{ durationMs: number }> {
     this.operationCalls.push('interact');
     this.throwIfArmed();
-    return Promise.resolve({ durationMs: 1 });
+    return this.waitIfHeld('interact').then(() => ({ durationMs: 1 }));
   }
   guiInput(): Promise<{ durationMs: number }> {
     this.operationCalls.push('gui_input');
     this.throwIfArmed();
-    return Promise.resolve({ durationMs: 1 });
+    return this.waitIfHeld('gui_input').then(() => ({ durationMs: 1 }));
   }
   wait(): Promise<{ satisfied: boolean; durationMs: number }> {
     this.operationCalls.push('wait');
     this.throwIfArmed();
-    return Promise.resolve({ satisfied: true, durationMs: 1 });
+    return this.waitIfHeld('wait').then(() => ({ satisfied: true, durationMs: 1 }));
   }
   getState(): Promise<{
     url: string | null;
@@ -454,14 +624,14 @@ class ThrowingDriver implements Driver {
     this.operationCalls.push('state_capture');
     if (this.onGetState !== null) this.onGetState();
     this.throwIfArmed();
-    return Promise.resolve({
+    return this.waitIfHeld('state_capture').then(() => ({
       url: null,
       title: null,
       cookies: [],
       localStorage: {},
       pageState: null,
       capturedAt: this.capturedAt,
-    });
+    }));
   }
   capture(): Promise<{
     kind: 'screenshot' | 'pdf' | 'dom_snapshot';
@@ -472,25 +642,28 @@ class ThrowingDriver implements Driver {
   }> {
     this.operationCalls.push('capture');
     this.throwIfArmed();
-    return Promise.resolve({
-      kind: 'screenshot',
+    return this.waitIfHeld('capture').then(() => ({
+      kind: 'screenshot' as const,
       data: 'AAAA',
-      encoding: 'base64',
+      encoding: 'base64' as const,
       byteSize: 4,
       durationMs: 1,
-    });
+    }));
   }
   extract(): Promise<{ value: Record<string, unknown>; durationMs: number }> {
+    this.operationCalls.push('extract');
     this.throwIfArmed();
-    return Promise.resolve({ value: { x: 'mock' }, durationMs: 1 });
+    return this.waitIfHeld('extract').then(() => ({ value: { x: 'mock' }, durationMs: 1 }));
   }
   search(): Promise<{ submitted: boolean; resultsVisible?: boolean; durationMs: number }> {
+    this.operationCalls.push('search');
     this.throwIfArmed();
-    return Promise.resolve({ submitted: true, durationMs: 1 });
+    return this.waitIfHeld('search').then(() => ({ submitted: true, durationMs: 1 }));
   }
   login(): Promise<{ loggedIn: boolean; postLoginUrl?: string; durationMs: number }> {
+    this.operationCalls.push('login');
     this.throwIfArmed();
-    return Promise.resolve({ loggedIn: true, durationMs: 1 });
+    return this.waitIfHeld('login').then(() => ({ loggedIn: true, durationMs: 1 }));
   }
   destroy(driverSessionId: string): Promise<void> {
     this.destroyedIds.push(driverSessionId);
@@ -523,6 +696,7 @@ function buildService(
   driver: ThrowingDriver;
   webhookEvents: RecordedEvent[];
   lifecycleEvents: RecordedLifecycleEvent[];
+  notifications: RecordedNotification[];
   loggedErrors: LoggedError[];
   accountAuditInputs: AccountAuditInput[];
 } {
@@ -530,6 +704,7 @@ function buildService(
   const driver = new ThrowingDriver();
   const webhookEvents: RecordedEvent[] = [];
   const lifecycleEvents: RecordedLifecycleEvent[] = [];
+  const notifications: RecordedNotification[] = [];
   const loggedErrors: LoggedError[] = [];
   const accountAuditInputs: AccountAuditInput[] = [];
   const service = new SessionsService({
@@ -545,6 +720,11 @@ function buildService(
       emit: (accountId, event) => {
         lifecycleEvents.push({ accountId, event });
         return Promise.resolve();
+      },
+    },
+    notifications: {
+      publish: (event) => {
+        notifications.push(event);
       },
     },
     ...(opts.accountAuditRecord === undefined
@@ -570,6 +750,7 @@ function buildService(
     driver,
     webhookEvents,
     lifecycleEvents,
+    notifications,
     loggedErrors,
     accountAuditInputs,
   };
@@ -969,16 +1150,13 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     }
   });
 
-  it('getState status-stamp failure still returns the captured state and attempts its event once', async () => {
+  it('getState timestamp-touch failure still returns the captured state and attempts its event once', async () => {
     const { service, repo, driver, webhookEvents, lifecycleEvents, loggedErrors } = buildService();
     const ctx = buildCtx();
     const session = await service.create(ctx, {
       archetype: 'iphone16pro_ios18_7_safari26_4',
     });
-    repo.throwOnUpdateSessionStatus = {
-      status: 'ready',
-      error: new Error('last-state timestamp store failed'),
-    };
+    repo.throwOnTouchSessionLastStateAt = new Error('last-state timestamp store failed');
 
     const state = await service.getState(ctx, session.id);
 
@@ -1214,7 +1392,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     }
   });
 
-  it('getState admits its status and event writes independently without withholding captured state', async () => {
+  it('getState admits its timestamp touch and event independently without withholding captured state', async () => {
     vi.useFakeTimers();
     try {
       const { service, repo, driver, webhookEvents, lifecycleEvents, loggedErrors } =
@@ -1227,7 +1405,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
 
       const heldStatus = deferred<void>();
       const heldEvent = deferred<void>();
-      repo.holdOnUpdateSessionStatus = { status: 'ready', deferred: heldStatus };
+      repo.holdOnTouchSessionLastStateAt = heldStatus;
       repo.holdOnRecordEventType = { type: 'state_captured', deferred: heldEvent };
 
       await expect(service.getState(ctx, session.id)).resolves.toEqual({
@@ -1239,8 +1417,8 @@ describe('SessionsService — V-090 driver-failure capture', () => {
         capturedAt: driver.capturedAt,
       });
       expect(
-        repo.updateSessionStatusAttempts.filter(
-          (attempt) => attempt.extra?.lastStateAt?.getTime() === driver.capturedAt.getTime(),
+        repo.touchSessionLastStateAtAttempts.filter(
+          (attempt) => attempt.lastStateAt.getTime() === driver.capturedAt.getTime(),
         ),
       ).toHaveLength(1);
       expect(
@@ -1602,30 +1780,335 @@ describe('SessionsService — V-090 driver-failure capture', () => {
   });
 });
 
+describe('SessionsService — one atomic owner per direct driver operation', () => {
+  it('one held owner rejects all other eight operations before dispatch, then releases a successor', async () => {
+    const { service, repo, driver } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const held = deferred<void>();
+    driver.primeOperationHold('navigate', held);
+    const owner = service.navigate(ctx, session.id, {
+      url: 'https://example.com',
+      wait_until: 'load',
+    });
+    await vi.waitFor(() => expect(repo.read(session.id)?.status).toBe('busy'));
+    await repo.updateSessionStatus(session.id, 'ready');
+    expect(repo.read(session.id)?.status).toBe('busy');
+
+    const contenders: Array<() => Promise<unknown>> = [
+      () =>
+        service.interact(ctx, session.id, {
+          action: { kind: 'tap', selector: '#submit' },
+        }),
+      () => service.guiInput(ctx, session.id, { action: { kind: 'tap_at', x: 1, y: 2 } }),
+      () => service.wait(ctx, session.id, { condition: { kind: 'selector', selector: '#ready' } }),
+      () => service.getState(ctx, session.id),
+      () => service.capture(ctx, session.id, { kind: 'screenshot', full_page: false }),
+      () =>
+        service.extract(ctx, session.id, {
+          extractions: [{ name: 'title', selector: 'h1', type: 'text' }],
+        }),
+      () => service.search(ctx, session.id, { query: 'driftstack', submit: true }),
+      () => service.login(ctx, session.id, { username: 'user', password: 'secret' }),
+    ];
+    for (const contender of contenders) {
+      await expect(contender()).rejects.toMatchObject({ name: 'ConflictError', status: 409 });
+    }
+    expect(driver.operationCalls).toEqual(['navigate']);
+    expect(repo.read(session.id)?.status).toBe('busy');
+
+    held.resolve();
+    await expect(owner).resolves.toMatchObject({ status: 200 });
+    expect(repo.read(session.id)?.status).toBe('ready');
+    expect(repo.events.filter((event) => event.type === 'navigated')).toHaveLength(1);
+
+    await expect(
+      service.interact(ctx, session.id, { action: { kind: 'tap', selector: '#successor' } }),
+    ).resolves.toEqual({ durationMs: 1 });
+    expect(driver.operationCalls).toEqual(['navigate', 'interact']);
+    expect(repo.read(session.id)?.status).toBe('ready');
+  });
+
+  it('a visible creating reservation rejects direct work with zero operation dispatch', async () => {
+    const { service, repo, driver, webhookEvents, notifications } = buildService();
+    const ctx = buildCtx();
+    const heldCreate = deferred<void>();
+    driver.primeCreateHold(heldCreate);
+    const creating = service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    await vi.waitFor(async () => {
+      await expect(service.list(ctx, { limit: 10 })).resolves.toMatchObject({
+        items: [
+          {
+            id: 'sess-0000',
+            status: 'creating',
+            driverSessionId: expect.stringMatching(/^reserving:/),
+          },
+        ],
+        nextCursor: null,
+      });
+    });
+
+    await expect(
+      service.navigate(ctx, 'sess-0000', { url: 'https://example.com', wait_until: 'load' }),
+    ).rejects.toMatchObject({ name: 'ConflictError', status: 409 });
+    expect(driver.operationCalls).toEqual([]);
+    expect(repo.events.filter((event) => event.type === 'errored')).toEqual([]);
+    expect(webhookEvents).toEqual([]);
+    expect(notifications).toEqual([]);
+
+    heldCreate.resolve();
+    await expect(creating).resolves.toMatchObject({ id: 'sess-0000', status: 'ready' });
+  });
+
+  it('missing and cross-account ids are indistinguishable while terminal rows return 410', async () => {
+    const { service, repo, driver } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const foreignCtx: AccountContext = {
+      ...ctx,
+      account: { ...ctx.account, id: 'acc-foreign' },
+      apiKey: { ...ctx.apiKey, id: 'key-foreign', accountId: 'acc-foreign' },
+    };
+    const capture = async (promise: Promise<unknown>): Promise<Record<string, unknown>> => {
+      try {
+        await promise;
+        throw new Error('expected rejection');
+      } catch (error) {
+        const value = error as {
+          name?: string;
+          status?: number;
+          type?: string;
+          title?: string;
+          detail?: string;
+        };
+        return {
+          name: value.name,
+          status: value.status,
+          type: value.type,
+          title: value.title,
+          detail: value.detail,
+        };
+      }
+    };
+    const missing = await capture(
+      service.navigate(
+        ctx,
+        session.id,
+        { url: 'https://example.com', wait_until: 'load' },
+        {
+          effectiveAccountId: 'acc-missing',
+        },
+      ),
+    );
+    const foreign = await capture(
+      service.navigate(foreignCtx, session.id, {
+        url: 'https://example.com',
+        wait_until: 'load',
+      }),
+    );
+    expect(foreign).toEqual(missing);
+    expect(missing).toMatchObject({ name: 'NotFoundError', status: 404 });
+    expect(driver.operationCalls).toEqual([]);
+
+    repo.forceTerminal(session.id, 'destroyed', new Date());
+    await expect(
+      service.navigate(ctx, session.id, { url: 'https://example.com', wait_until: 'load' }),
+    ).rejects.toBeInstanceOf(SessionDestroyedError);
+    expect(driver.operationCalls).toEqual([]);
+  });
+
+  it('failure-first elects exactly one terminal teardown and makes a later close inert', async () => {
+    const { service, repo, driver, webhookEvents, lifecycleEvents, notifications } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const held = deferred<void>();
+    driver.primeOperationHold('navigate', held);
+    const owner = service.navigate(ctx, session.id, {
+      url: 'https://example.com',
+      wait_until: 'load',
+    });
+    await vi.waitFor(() => expect(repo.read(session.id)?.status).toBe('busy'));
+    const driverError = new Error('held driver failed');
+    driverError.name = 'DriverError';
+    held.reject(driverError);
+    await expect(owner).rejects.toBe(driverError);
+
+    expect(repo.read(session.id)).toMatchObject({ status: 'errored' });
+    expect(driver.destroyedIds).toEqual([session.driverSessionId]);
+    expect(repo.events.filter((event) => event.type === 'errored')).toHaveLength(1);
+    expect(notifications).toHaveLength(1);
+    expect(webhookEvents.map((event) => event.eventType)).toEqual(['session.failed']);
+    expect(lifecycleEvents).toHaveLength(1);
+
+    await expect(service.destroy(ctx, session.id)).resolves.toBeUndefined();
+    expect(driver.destroyedIds).toEqual([session.driverSessionId]);
+    expect(repo.events.filter((event) => event.type === 'destroyed')).toHaveLength(0);
+    expect(webhookEvents.map((event) => event.eventType)).toEqual(['session.failed']);
+  });
+
+  for (const tail of ['success', 'failure'] as const) {
+    it(`close-first suppresses a late ${tail} tail with no second teardown or stale observability`, async () => {
+      const { service, repo, driver, webhookEvents, lifecycleEvents, notifications } =
+        buildService();
+      const ctx = buildCtx();
+      const session = await service.create(ctx, {
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      const held = deferred<void>();
+      driver.primeOperationHold('navigate', held);
+      const owner = service.navigate(ctx, session.id, {
+        url: 'https://example.com',
+        wait_until: 'load',
+      });
+      await vi.waitFor(() => expect(repo.read(session.id)?.status).toBe('busy'));
+
+      await service.destroy(ctx, session.id);
+      if (tail === 'success') held.resolve();
+      else {
+        const oldError = new Error('old driver failure');
+        oldError.name = 'DriverError';
+        held.reject(oldError);
+      }
+      await expect(owner).rejects.toBeInstanceOf(SessionDestroyedError);
+
+      expect(repo.read(session.id)?.status).toBe('destroyed');
+      expect(driver.destroyedIds).toEqual([session.driverSessionId]);
+      expect(repo.events.filter((event) => event.type === 'destroyed')).toHaveLength(1);
+      expect(repo.events.filter((event) => event.type === 'navigated')).toHaveLength(0);
+      expect(repo.events.filter((event) => event.type === 'errored')).toHaveLength(0);
+      expect(notifications).toEqual([]);
+      expect(lifecycleEvents.map((entry) => entry.event.kind)).toEqual(['session.success.first']);
+      expect(webhookEvents.map((event) => event.eventType)).toEqual(['session.completed']);
+    });
+  }
+
+  it('a delayed state timestamp touch is monotonic and cannot release a successor owner', async () => {
+    const { service, repo, driver } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const oldCapturedAt = new Date('2026-07-17T10:00:00.000Z');
+    driver.capturedAt = oldCapturedAt;
+    const heldTouch = deferred<void>();
+    repo.holdOnTouchSessionLastStateAt = heldTouch;
+    await service.getState(ctx, session.id);
+    await vi.waitFor(() => expect(repo.touchSessionLastStateAtAttempts).toHaveLength(1));
+    repo.holdOnTouchSessionLastStateAt = null;
+
+    const heldNavigate = deferred<void>();
+    driver.primeOperationHold('navigate', heldNavigate);
+    const successor = service.navigate(ctx, session.id, {
+      url: 'https://example.com',
+      wait_until: 'load',
+    });
+    await vi.waitFor(() => expect(repo.read(session.id)?.status).toBe('busy'));
+    heldTouch.resolve();
+    await vi.waitFor(() => expect(repo.read(session.id)?.lastStateAt).toEqual(oldCapturedAt));
+    expect(repo.read(session.id)?.status).toBe('busy');
+    heldNavigate.resolve();
+    await successor;
+    expect(repo.read(session.id)?.status).toBe('ready');
+
+    const newer = new Date('2026-07-17T11:00:00.000Z');
+    await repo.touchSessionLastStateAt({
+      id: session.id,
+      accountId: session.accountId,
+      driverSessionId: session.driverSessionId,
+      lastStateAt: newer,
+    });
+    await repo.touchSessionLastStateAt({
+      id: session.id,
+      accountId: session.accountId,
+      driverSessionId: session.driverSessionId,
+      lastStateAt: oldCapturedAt,
+    });
+    expect(repo.read(session.id)?.lastStateAt).toEqual(newer);
+  });
+
+  it('claim, success-settlement and failure-election database errors never become failure fanout', async () => {
+    const claimCase = buildService();
+    const ctx = buildCtx();
+    const claimSession = await claimCase.service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const claimError = new Error('claim database unavailable');
+    claimCase.repo.throwOnClaimSessionOperation = claimError;
+    await expect(
+      claimCase.service.navigate(ctx, claimSession.id, {
+        url: 'https://example.com',
+        wait_until: 'load',
+      }),
+    ).rejects.toBe(claimError);
+    expect(claimCase.driver.operationCalls).toEqual([]);
+    expect(claimCase.driver.destroyedIds).toEqual([]);
+
+    const settleCase = buildService();
+    const settleSession = await settleCase.service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const settleError = new Error('settlement database unavailable');
+    settleCase.repo.throwOnSettleSessionOperation = settleError;
+    await expect(
+      settleCase.service.navigate(ctx, settleSession.id, {
+        url: 'https://example.com',
+        wait_until: 'load',
+      }),
+    ).rejects.toBe(settleError);
+    expect(settleCase.repo.read(settleSession.id)?.status).toBe('busy');
+    expect(settleCase.driver.operationCalls).toEqual(['navigate']);
+    expect(settleCase.driver.destroyedIds).toEqual([]);
+    expect(settleCase.repo.events.filter((event) => event.type !== 'created')).toEqual([]);
+    expect(settleCase.webhookEvents).toEqual([]);
+
+    const failureCase = buildService();
+    const failureSession = await failureCase.service.create(ctx, {
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const electionError = new Error('failure election database unavailable');
+    failureCase.repo.throwOnFailSessionOperation = electionError;
+    failureCase.driver.primeNextThrow({ name: 'DriverError', message: 'driver failed first' });
+    await expect(
+      failureCase.service.navigate(ctx, failureSession.id, {
+        url: 'https://example.com',
+        wait_until: 'load',
+      }),
+    ).rejects.toBe(electionError);
+    expect(failureCase.repo.read(failureSession.id)?.status).toBe('busy');
+    expect(failureCase.driver.destroyedIds).toEqual([]);
+    expect(failureCase.repo.events.filter((event) => event.type !== 'created')).toEqual([]);
+    expect(failureCase.webhookEvents).toEqual([]);
+    expect(failureCase.lifecycleEvents).toEqual([]);
+    expect(failureCase.notifications).toEqual([]);
+  });
+});
+
 describe('SessionsService — terminal-state resurrection guard', () => {
-  it('getState() does NOT resurrect a row destroyed mid box round-trip (concurrent-destroy race)', async () => {
-    // getState reads status='ready' (requireOwned), awaits the box round-trip,
-    // then writes the STALE 'ready' back. If a concurrent destroy marked the row
-    // 'destroyed' during the round-trip, the terminal-sticky guard must reject
-    // that write-back — otherwise the row flips back to 'ready' (destroyedAt left
-    // set) → use-after-destroy + re-inclusion in the sweeps.
+  it('getState close-winner suppresses the stale success tail and never resurrects the row', async () => {
     const { service, repo, driver } = buildService();
     const ctx = buildCtx();
     const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
 
     const destroyedAt = new Date();
-    // Land the concurrent destroy DURING the box round-trip, after requireOwned
-    // already captured status='ready' but before getState's stale write-back.
+    // Land the terminal winner after the operation claimed busy but before its
+    // owner settlement. The stale capture must return 410 and publish nothing.
     driver.onGetState = () => {
       repo.forceTerminal(session.id, 'destroyed', destroyedAt);
     };
 
-    await service.getState(ctx, session.id);
+    await expect(service.getState(ctx, session.id)).rejects.toBeInstanceOf(SessionDestroyedError);
 
     const after = repo.read(session.id);
-    // The row STAYS destroyed — the stale 'ready' write-back was a no-op.
     expect(after?.status).toBe('destroyed');
     expect(after?.destroyedAt).toEqual(destroyedAt);
+    expect(repo.touchSessionLastStateAtAttempts).toEqual([]);
+    expect(repo.events.filter((event) => event.type === 'state_captured')).toHaveLength(0);
   });
 
   it('updateSessionStatus is terminal-sticky (no resurrection; no destroyed→errored / errored→destroyed flip; normal transitions still apply)', async () => {

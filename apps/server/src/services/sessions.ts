@@ -34,6 +34,7 @@ import type { GUIInputRequest } from '../schemas/gui-input.js';
 import {
   BadRequestError,
   ConcurrencyLimitError,
+  ConflictError,
   NotFoundError,
   SessionDestroyedError,
 } from '../lib/errors.js';
@@ -181,6 +182,12 @@ export type SerializedSessionDestroyResult =
   | { kind: 'driver_error'; session: SessionRecord; error: unknown }
   | { kind: 'not_found' };
 
+export type SessionOperationClaimResult =
+  | { kind: 'claimed'; session: SessionRecord }
+  | { kind: 'conflict'; status: 'creating' | 'busy' }
+  | { kind: 'terminal'; session: SessionRecord }
+  | { kind: 'not_found' };
+
 export interface SessionListPage {
   items: SessionRecord[];
   /** Cursor for the next page; null when this is the last page. */
@@ -224,6 +231,32 @@ export interface SessionRepo {
     reservationDriverSessionId: string;
     driverSessionId: string;
   }): Promise<SessionRecord | null>;
+  /**
+   * Atomically admit one live driver operation for an owned session. Only an
+   * exact scoped `ready` row may become `busy`; creating/busy, terminal and
+   * missing-or-foreign outcomes stay distinguishable without a read/claim gap.
+   */
+  claimSessionOperation(id: string, accountId: string): Promise<SessionOperationClaimResult>;
+  /** Release the exact live operation slot after authoritative driver success. */
+  settleSessionOperation(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+  }): Promise<boolean>;
+  /** Elect the exact live operation as the sole terminal failure winner. */
+  failSessionOperation(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+    erroredAt: Date;
+  }): Promise<SessionRecord | null>;
+  /** Persist a state-capture timestamp without changing operation ownership. */
+  touchSessionLastStateAt(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+    lastStateAt: Date;
+  }): Promise<void>;
   /** Find a session by id, scoped to the supplied account. */
   findSession(id: string, accountId: string): Promise<SessionRecord | null>;
   /** Find a session by id WITHOUT account scoping (admin force-actions only). */
@@ -624,13 +657,17 @@ export class SessionsService {
     if (!/^https?:\/\//i.test(body.url)) {
       throw new BadRequestError('Only http:// and https:// URLs can be navigated.');
     }
-    const session = await this.requireOwned(ctx, sessionId, opts);
-    const result = await this.runWithFailureCapture(ctx, session, 'navigate', () =>
-      this.deps.driver.navigate(session.driverSessionId, {
-        url: body.url,
-        timeoutMs: body.timeout_ms ?? 30_000,
-        waitUntil: body.wait_until,
-      }),
+    const { session, result } = await this.runWithFailureCapture(
+      ctx,
+      sessionId,
+      opts,
+      'navigate',
+      (claimed) =>
+        this.deps.driver.navigate(claimed.driverSessionId, {
+          url: body.url,
+          timeoutMs: body.timeout_ms ?? 30_000,
+          waitUntil: body.wait_until,
+        }),
     );
     const event = projectSessionEventMetadata({
       type: 'navigated',
@@ -652,12 +689,16 @@ export class SessionsService {
     body: InteractRequest,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<{ durationMs: number }> {
-    const session = await this.requireOwned(ctx, sessionId, opts);
-    const result = await this.runWithFailureCapture(ctx, session, 'interact', () =>
-      this.deps.driver.interact(session.driverSessionId, {
-        action: body.action,
-        timeoutMs: body.timeout_ms ?? 10_000,
-      }),
+    const { session, result } = await this.runWithFailureCapture(
+      ctx,
+      sessionId,
+      opts,
+      'interact',
+      (claimed) =>
+        this.deps.driver.interact(claimed.driverSessionId, {
+          action: body.action,
+          timeoutMs: body.timeout_ms ?? 10_000,
+        }),
     );
     const event = projectSessionEventMetadata({
       type: 'interacted',
@@ -676,12 +717,16 @@ export class SessionsService {
     body: GUIInputRequest,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<{ durationMs: number }> {
-    const session = await this.requireOwned(ctx, sessionId, opts);
-    const result = await this.runWithFailureCapture(ctx, session, 'gui_input', () =>
-      this.deps.driver.guiInput(session.driverSessionId, {
-        action: body.action,
-        timeoutMs: body.timeout_ms ?? 10_000,
-      }),
+    const { session, result } = await this.runWithFailureCapture(
+      ctx,
+      sessionId,
+      opts,
+      'gui_input',
+      (claimed) =>
+        this.deps.driver.guiInput(claimed.driverSessionId, {
+          action: body.action,
+          timeoutMs: body.timeout_ms ?? 10_000,
+        }),
     );
     const event = projectSessionEventMetadata({
       type: 'gui_input',
@@ -700,12 +745,16 @@ export class SessionsService {
     body: WaitRequest,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<{ satisfied: boolean; durationMs: number }> {
-    const session = await this.requireOwned(ctx, sessionId, opts);
-    const result = await this.runWithFailureCapture(ctx, session, 'wait', () =>
-      this.deps.driver.wait(session.driverSessionId, {
-        condition: body.condition,
-        timeoutMs: body.timeout_ms ?? 30_000,
-      }),
+    const { session, result } = await this.runWithFailureCapture(
+      ctx,
+      sessionId,
+      opts,
+      'wait',
+      (claimed) =>
+        this.deps.driver.wait(claimed.driverSessionId, {
+          condition: body.condition,
+          timeoutMs: body.timeout_ms ?? 30_000,
+        }),
     );
     const event = projectSessionEventMetadata({
       type: 'waited',
@@ -731,9 +780,12 @@ export class SessionsService {
     pageState: PageState | null;
     capturedAt: Date;
   }> {
-    const session = await this.requireOwned(ctx, sessionId, opts);
-    const state = await this.runWithFailureCapture(ctx, session, 'state_capture', () =>
-      this.deps.driver.getState(session.driverSessionId),
+    const { session, result: state } = await this.runWithFailureCapture(
+      ctx,
+      sessionId,
+      opts,
+      'state_capture',
+      (claimed) => this.deps.driver.getState(claimed.driverSessionId),
     );
     const capturedAt = state.capturedAt;
     this.persistPostSuccessObservability(
@@ -742,7 +794,10 @@ export class SessionsService {
       'state_capture',
       'status',
       () =>
-        this.deps.repo.updateSessionStatus(session.id, session.status, {
+        this.deps.repo.touchSessionLastStateAt({
+          id: session.id,
+          accountId: session.accountId,
+          driverSessionId: session.driverSessionId,
           lastStateAt: capturedAt,
         }),
     );
@@ -773,12 +828,16 @@ export class SessionsService {
     byteSize: number;
     durationMs: number;
   }> {
-    const session = await this.requireOwned(ctx, sessionId, opts);
-    const result = await this.runWithFailureCapture(ctx, session, 'capture', () =>
-      this.deps.driver.capture(session.driverSessionId, {
-        kind: body.kind,
-        fullPage: body.full_page,
-      }),
+    const { session, result } = await this.runWithFailureCapture(
+      ctx,
+      sessionId,
+      opts,
+      'capture',
+      (claimed) =>
+        this.deps.driver.capture(claimed.driverSessionId, {
+          kind: body.kind,
+          fullPage: body.full_page,
+        }),
     );
     const event = projectSessionEventMetadata({
       type:
@@ -803,10 +862,15 @@ export class SessionsService {
     body: ExtractRequest,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<{ value: Record<string, unknown>; durationMs: number }> {
-    const session = await this.requireOwned(ctx, sessionId, opts);
-    return this.runWithFailureCapture(ctx, session, 'extract', () =>
-      this.deps.driver.extract(session.driverSessionId, { extractions: body.extractions }),
+    const { result } = await this.runWithFailureCapture(
+      ctx,
+      sessionId,
+      opts,
+      'extract',
+      (claimed) =>
+        this.deps.driver.extract(claimed.driverSessionId, { extractions: body.extractions }),
     );
+    return result;
   }
 
   /** Find the search field, type the query realistically, submit (harness
@@ -817,9 +881,8 @@ export class SessionsService {
     body: SearchRequest,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<{ submitted: boolean; resultsVisible?: boolean; durationMs: number }> {
-    const session = await this.requireOwned(ctx, sessionId, opts);
-    return this.runWithFailureCapture(ctx, session, 'search', () =>
-      this.deps.driver.search(session.driverSessionId, {
+    const { result } = await this.runWithFailureCapture(ctx, sessionId, opts, 'search', (claimed) =>
+      this.deps.driver.search(claimed.driverSessionId, {
         query: body.query,
         ...(body.search_selector !== undefined ? { searchSelector: body.search_selector } : {}),
         submit: body.submit,
@@ -829,6 +892,7 @@ export class SessionsService {
         ...(body.timeout_seconds !== undefined ? { timeoutSeconds: body.timeout_seconds } : {}),
       }),
     );
+    return result;
   }
 
   /** Heuristic credential login (harness `login` intent, A3). A driver
@@ -840,9 +904,8 @@ export class SessionsService {
     body: SessionLoginRequest,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<{ loggedIn: boolean; postLoginUrl?: string; durationMs: number }> {
-    const session = await this.requireOwned(ctx, sessionId, opts);
-    return this.runWithFailureCapture(ctx, session, 'login', () =>
-      this.deps.driver.login(session.driverSessionId, {
+    const { result } = await this.runWithFailureCapture(ctx, sessionId, opts, 'login', (claimed) =>
+      this.deps.driver.login(claimed.driverSessionId, {
         username: body.username,
         password: body.password,
         ...(body.username_selector !== undefined
@@ -856,6 +919,7 @@ export class SessionsService {
         ...(body.timeout_seconds !== undefined ? { timeoutSeconds: body.timeout_seconds } : {}),
       }),
     );
+    return result;
   }
 
   async destroy(
@@ -1195,8 +1259,8 @@ export class SessionsService {
 
   /**
    * V-531.B — pure ownership check for routes that only need to know
-   * "does this account own this session" without the driver side-effects
-   * the existing `requireOwned` path triggers. Returns the row when
+   * "does this account own this session" without claiming a direct driver
+   * operation. Returns the row when
    * owned + not in a terminal state, null otherwise. Used by
    * /v1/sessions/:id/livekit-token to gate token minting.
    */
@@ -1208,28 +1272,6 @@ export class SessionsService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-
-  private async requireOwned(
-    ctx: AccountContext,
-    sessionId: string,
-    opts: { effectiveAccountId?: string } = {},
-  ): Promise<SessionRecord> {
-    // V-326e3 — when effectiveAccountId is set, look up the session
-    // on the OWNER's account (route layer has already enforced the
-    // 'admin' role for write actions). Read actions (getState) allow
-    // both 'member' and 'admin' roles per the V-330 read pattern.
-    const accountId = opts.effectiveAccountId ?? ctx.account.id;
-    const session = await this.deps.repo.findSession(sessionId, accountId);
-    if (!session) throw new NotFoundError(`Session "${sessionId}" not found.`);
-    // V-090 founder-approved semantic: a session that has entered the
-    // 'errored' state behaves the same as 'destroyed' for the customer
-    // — subsequent ops 410. The only useful op on a failed session is
-    // a delete (idempotent destroy) which is allowed to short-circuit.
-    if (session.status === 'destroyed' || session.status === 'errored') {
-      throw new SessionDestroyedError();
-    }
-    return session;
-  }
 
   /**
    * Once a driver call succeeds, its external browser outcome is authoritative.
@@ -1309,25 +1351,36 @@ export class SessionsService {
   }
 
   /**
-   * V-090: wrap a driver call so that on throw, we mark the session
-   * `errored`, set destroyedAt, fire `session.failed` webhook event,
-   * and re-throw the original error. The route layer catches the
-   * re-throw and surfaces it as a DriverError / SessionTimeoutError
-   * RFC 7807 problem.
-   *
-   * The webhook event fires ONLY on the first failure for this
-   * session. Subsequent calls would 410 SessionDestroyed at
-   * `requireOwned` before reaching here, so duplicate `session.failed`
-   * emissions are not a risk.
+   * Claim exactly one direct driver operation, then settle only that claimed
+   * busy slot. Repository failures live outside the driver catch so an
+   * infrastructure failure is never reclassified as a browser failure. A
+   * concurrent destroy/failure winner makes either settlement CAS lose; that
+   * stale tail returns 410 and publishes no success/failure observability.
    */
   private async runWithFailureCapture<T>(
-    _ctx: AccountContext,
-    session: SessionRecord,
+    ctx: AccountContext,
+    sessionId: string,
+    opts: { effectiveAccountId?: string },
     operation: string,
-    fn: () => Promise<T>,
-  ): Promise<T> {
+    fn: (session: SessionRecord) => Promise<T>,
+  ): Promise<{ session: SessionRecord; result: T }> {
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const claim = await this.deps.repo.claimSessionOperation(sessionId, accountId);
+    if (claim.kind === 'not_found') {
+      throw new NotFoundError(`Session "${sessionId}" not found.`);
+    }
+    if (claim.kind === 'terminal') throw new SessionDestroyedError();
+    if (claim.kind === 'conflict') {
+      throw new ConflictError(
+        `Session is ${claim.status}; direct driver operations require ready status.`,
+        { session_status: claim.status },
+      );
+    }
+
+    const session = claim.session;
+    let result: T;
     try {
-      return await fn();
+      result = await fn(session);
     } catch (err) {
       const erroredAt = new Date();
       const failureClass = classifySessionFailure(err);
@@ -1338,16 +1391,17 @@ export class SessionsService {
         durationMs: null,
       });
 
-      // Persist the failure state. Errors here are swallowed so the
-      // original driver error still propagates to the caller — the DB
-      // write is best-effort, the user-facing error wins.
-      try {
-        await this.deps.repo.updateSessionStatus(session.id, 'errored', {
-          destroyedAt: erroredAt,
-        });
-      } catch {
-        /* swallow — original error wins */
-      }
+      // Elect the exact claimed busy row before ANY teardown or fan-out. A
+      // close winner returns null; an infrastructure rejection propagates as
+      // itself instead of being swallowed/misclassified as a driver failure.
+      const failed = await this.deps.repo.failSessionOperation({
+        id: session.id,
+        accountId: session.accountId,
+        driverSessionId: session.driverSessionId,
+        erroredAt,
+      });
+      if (failed === null) throw new SessionDestroyedError();
+
       // Tear down the LIVE driver/browser session. Marking the row 'errored' +
       // stamping destroyedAt frees the DB cap slot, but the duration sweeper only
       // reaps ACTIVE_SESSION_STATUSES (creating/ready/busy) and destroy() short-
@@ -1424,6 +1478,14 @@ export class SessionsService {
 
       throw err;
     }
+
+    const settled = await this.deps.repo.settleSessionOperation({
+      id: session.id,
+      accountId: session.accountId,
+      driverSessionId: session.driverSessionId,
+    });
+    if (!settled) throw new SessionDestroyedError();
+    return { session: { ...session, status: 'ready' }, result };
   }
 
   /**

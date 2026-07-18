@@ -76,12 +76,26 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
-  it("CRITICAL session-create-blocks-until-ready framing pinned. The 'SDK\\'s sessions.create() blocks until ready; any intermediate creating state isn\\'t directly observable' wording explains the SDK→server protocol.", () => {
+  it('create returns only at ready while concurrent resource reads can observe the durable creating reservation', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The SDK's `sessions\.create\(\)` blocks until `ready`; any\s*\n?intermediate `creating` state isn't directly observable\./,
+      /The SDK's `sessions\.create\(\)` call returns only after the\s*\n?new session reaches `ready`, but concurrent resource reads and lists can\s*\n?observe its durable `creating` reservation while the driver starts\./,
     );
+    expect(p).toMatch(
+      /session already `creating` or `busy` returns `409 Conflict` without a\s*\n?second driver dispatch/,
+    );
+    expect(p).not.toMatch(/creating` state isn't directly observable/);
+  });
+
+  it('direct operation owner and state timestamp truth are explicit', () => {
+    const p = read(PAGE);
+    expect(p).toMatch(/Every direct driver operation atomically claims `ready` → `busy`/);
+    expect(p).toMatch(/Success settles `busy` → `ready`/);
+    expect(p).toMatch(/driver failure\s*\n?elects `busy` → terminal `errored`/);
+    expect(p).toMatch(/outcome-unknown\s*\n?`busy` owner is not automatically reclaimed/);
+    expect(p).toMatch(/`last_state_at` is the most recent successful `getState` capture timestamp/);
+    expect(p).not.toMatch(/most recent `getState` \/ `capture` \/\s*\n?`navigate`/);
   });
 
   it('CRITICAL LOCKED_ARCHETYPE_ID default + 3-purpose enum pinned. archetype defaults to iphone17_ios18_7_safari26_4; purpose defaults to production_customer with cumulative_rig_validation + test_domain_probe reserved internal.', () => {
@@ -168,6 +182,13 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).not.toMatch(/`wait_for`:/);
   });
 
+  it('navigation driver failures terminalize the session instead of advertising unsafe retry', () => {
+    const p = read(PAGE);
+    expect(p).toMatch(/failure winner becomes terminal `errored`, tears down its runtime/);
+    expect(p).toMatch(/subsequent operations return\s*\n?`410 Gone`/);
+    expect(p).not.toMatch(/session itself stays `ready` for a retry/);
+  });
+
   it('CRITICAL 4-interact-kind enum pinned — tap/type/scroll/press, with the correct discriminator name (kind) and request-body wrapper (action). The previous pin used "Supported types" + a flat top-level shape, but the schema in packages/api-types/src/sessions.ts:140 is a discriminatedUnion on `kind` wrapped inside `action`. The route accepts { action: { kind, ... }, timeout_ms? } per InteractRequestSchema at sessions.ts:166. Drift would force customers to copy the wrong shape and 4xx at the schema layer.', () => {
     const p = read(PAGE);
 
@@ -242,13 +263,14 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).toMatch(/a `member`\s+write returns 403/);
   });
 
-  it('CRITICAL 7-row common-errors table pinned — 401/403/404/410/504/502/503. session-timeout is 504 (matches SessionTimeoutError + the errors reference), not 408. Drift to dropping a row would hide an error class from SDK consumers.', () => {
+  it('CRITICAL 8-row common-errors table pinned — includes 409 operation ownership and terminal 410', () => {
     const p = read(PAGE);
 
     const errors: Array<[string, string]> = [
       ['401', 'unauthorized'],
       ['403', 'forbidden'],
       ['404', 'not-found'],
+      ['409', 'conflict'],
       ['410', 'session-destroyed'],
       ['504', 'session-timeout'],
       ['502', 'driver-error'],
@@ -259,6 +281,8 @@ describe('W761 docs /api/sessions content parity', () => {
         new RegExp(`\\| ${status}\\s+\\| \`${errorType}\``),
       );
     }
+    expect(p).toMatch(/Session is `creating` or another operation owns `busy`/);
+    expect(p).toMatch(/Session is `destroyed`\/`errored`, or destroy won; recreate/);
   });
 
   it('CRITICAL 7-endpoint canonical action list pinned — POST /v1/sessions + GET /v1/sessions + GET /v1/sessions/:id (single resource) + GET /v1/sessions/:id/state + POST /v1/sessions/:id/{navigate,interact,wait,capture} + DELETE /v1/sessions/:id. 2026-06-24: "Get one" now documents the real single-resource GET /v1/sessions/:id (routes/sessions.ts:475, backs sessions.get()); the live-state GET /v1/sessions/:id/state stays the "Get state" endpoint. Drift would let SDK URL generation diverge.', () => {

@@ -29340,3 +29340,57 @@ diff/whitespace checks are green.
 
 No route, repository, schema, migration, OpenAPI, SDK, shared build/deploy, native,
 Fleet/Family-B, environment, customer, secret, or foreign pnpm path was changed.
+
+---
+
+## V-702 — Direct session operations have one database-elected owner
+
+**Date:** 2026-07-17
+
+The nine direct session operations previously read a ready row and dispatched
+independently. Two callers could therefore mutate the same live browser at once, a
+visible `creating` reservation could receive work through its non-routable
+`reserving:*` placeholder, and operation failure could race explicit close into two
+terminal teardown and observability paths. State capture also reused a status write
+to persist `last_state_at`, which could release a later owner after an asynchronous
+tail.
+
+One scoped PostgreSQL transaction now elects the sole operation owner through
+`ready→busy`. `creating` and `busy` conflict before driver dispatch; missing and
+cross-account identifiers remain indistinguishable; terminal rows retain the
+existing gone contract. Success may return to `ready` only through an exact
+account-and-driver-bound settlement. Driver failure first elects
+`busy→errored`; only that winner tears down the browser and emits the error event,
+notification, webhook and lifecycle signal. Serialized close participates in the
+same row order. If close wins, a late success or failure owner returns the terminal
+session error with no second teardown or stale success/failure publication. If
+failure wins, later close is inert.
+
+`last_state_at` now uses a status-neutral, exact-driver-bound, monotonic touch.
+Generic status writes cannot release or terminalize a live `busy` owner. Claim,
+success-settlement and failure-election database errors remain database failures;
+they are not converted into driver failures or failure fanout. No automatic
+crash-time `busy→ready` reclaim exists because the current row has no durable
+operation token or cancellation fence that could distinguish an old tail from a
+successor.
+
+Deterministic service proof holds one operation while every other direct operation
+rejects before dispatch, observes a held create through the public list API, covers
+missing/cross-account/creating/busy/terminal classification, both terminal winner
+orders, delayed state persistence, monotonic touch and database-error separation.
+The affected non-database matrix passes 18 files and 314/314 tests. Six connected
+PostgreSQL files pass 18/18 tests, including nine independently blocked claim
+connections, close-first success and failure settlement, failure-first close,
+wrong-driver predicates, generic busy-write exclusion and event cardinality.
+Strict server source and test TypeScript, the docs Astro check (11 files, zero
+diagnostics), targeted ESLint, Prettier and diff/whitespace checks are green.
+
+The remaining crash boundary requires durable cleanup architecture: a process can
+commit failure election and stop before driver teardown, leaving a live browser
+behind an errored row. Retrying settlement after an unknown database outcome is not
+safe without a durable operation token. Failure-winner driver teardown also retains
+its pre-existing unbounded await, and public wording that close releases a
+concurrent slot “immediately” remains queued for a separately authorized truth
+correction. No route, OpenAPI, SDK, shared workspace build/deploy, native,
+harness/Fleet/Family-B, environment, customer, secret or foreign pnpm action was
+performed.

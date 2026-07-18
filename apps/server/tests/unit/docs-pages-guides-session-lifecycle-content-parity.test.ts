@@ -1,8 +1,8 @@
 // W781 — apps/docs guides/session-lifecycle.md content parity. One-
 // hundred-seventh in the cross-SDK drift-guard series.
 //
-// /guides/session-lifecycle is the canonical state-diagram + 10-min
-// idle-timeout + try/finally pattern reference. Drift to the state
+// /guides/session-lifecycle is the canonical state-diagram + direct-operation
+// ownership + try/finally pattern reference. Drift to the state
 // machine or the concurrent-cap-is-only-meter framing would mismatch
 // W761 /api/sessions + W749 dashboard /sessions + ADR-004 pricing.
 
@@ -65,12 +65,16 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     expect(p).not.toMatch(/│ active │/);
   });
 
-  it("CRITICAL creating-is-not-observed framing pinned (replaces the fictional 'session is active' framing — the SessionStatus enum has no `active` value). The 'In practice you don\\'t observe creating separately — the SDK\\'s sessions.create() blocks until the server-side transition reaches ready' wording explains the SDK-side state abstraction.", () => {
+  it('create returns at ready while resource reads may observe creating; direct operations have one busy owner', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /In practice you don't observe `creating` separately — the SDK's `sessions\.create\(\)` blocks until the server-side transition reaches `ready`/,
+      /The SDK's `sessions\.create\(\)` call returns only after the server-side transition reaches `ready`[\s\S]+?concurrent resource read or list can observe the durable `creating` reservation/,
     );
+    expect(p).toMatch(/Every direct driver operation atomically claims `ready` → `busy`/);
+    expect(p).toMatch(/another operation returns `409 Conflict` without a second driver dispatch/);
+    expect(p).toMatch(/driver failure elects terminal `errored`/);
+    expect(p).not.toMatch(/you don't observe `creating` separately/);
     // The previous fictional framing must NOT return.
     expect(p).not.toMatch(/once the session is `active` and ready/);
   });
@@ -152,11 +156,14 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it("CRITICAL state-read shape pinned — url + title + cookies + local_storage + captured_at (matches SessionStateSchema + the GET /state serializer; NOT ready_state/viewport, which the endpoint does not return). The 'Cheap; safe to poll at low frequency' framing is the canonical heartbeat-safety claim.", () => {
+  it('state-read shape and operation-owner-aware polling contract are pinned', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /read-only introspection: current `url`, `title`, persisted `cookies` \+ `local_storage`, and a `captured_at` timestamp\. Cheap; safe to poll at low frequency\./,
+      /read-only page introspection: current `url`, `title`, persisted `cookies` \+ `local_storage`, and a `captured_at` timestamp\.[\s\S]+?it at low frequency only while the resource is `ready`/,
+    );
+    expect(p).toMatch(
+      /use `GET \/v1\/sessions\/:id` or the list endpoint to observe persisted `creating` \/ `busy` status/,
     );
   });
 
@@ -229,7 +236,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     expect(p).not.toMatch(/cheapest heartbeat/);
   });
 
-  it('CRITICAL 7-error-shape catalog pinned. 429-rate-limited + 429-concurrency-limit + 429-tier-limit + 404 + 409 + 410 session-destroyed + 502/503 driver. Matches W776 /sdk/error-handling problem-detail URL hierarchy.', () => {
+  it('error catalog distinguishes creating/busy 409 from destroyed/errored/close-winner 410', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
@@ -245,10 +252,23 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
       /`404 Not Found` — session ID doesn't exist \(or already destroyed and TTL-evicted\)\./,
     );
     expect(p).toMatch(
-      /`409 Conflict` — operation invalid for the current state \(e\.g\. `navigate` after destroy\)\./,
+      /`409 Conflict` — a direct driver operation found the session `creating`, or another operation already owns `busy`/,
     );
-    expect(p).toMatch(/`410 Gone` \(`https:\/\/errors\.driftstack\.dev\/session-destroyed`\)/);
+    expect(p).toMatch(
+      /`410 Gone` \(`https:\/\/errors\.driftstack\.dev\/session-destroyed`\) — the session is `destroyed` or `errored`, or this operation lost a race to destroy/,
+    );
+    expect(p).not.toMatch(/`navigate` after destroy/);
     expect(p).toMatch(/`502 Bad Gateway` \/ `503 Service Unavailable` — driver-side error/);
+  });
+
+  it('outcome-unknown busy ownership is never automatically reclaimed', () => {
+    const p = read(PAGE);
+    expect(p).toMatch(
+      /A `busy` row with an outcome-unknown owner is not automatically reset after a server crash/,
+    );
+    expect(p).toMatch(
+      /automatic reclaim would risk replaying work that may already have changed the page/,
+    );
   });
 
   it("CRITICAL session.completed + session.failed webhook events pinned. The 2-terminal-event set + 'Intermediate state transitions (e.g. a hypothetical session.created) are not on the bus today' wording explains the no-intermediate-events contract.", () => {

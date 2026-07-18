@@ -27,6 +27,7 @@ import type {
   SerializedSessionDestroyInput,
   SerializedSessionDestroyResult,
 } from '../services/sessions.js';
+import type { SessionOperationClaimResult } from '../services/sessions.js';
 import type { Database } from './client.js';
 import { accounts, agentSessions, sessionEvents, sessions } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
@@ -174,6 +175,101 @@ export class DrizzleSessionRepo implements SessionRepo {
     return row ? toSessionRecord(row) : null;
   }
 
+  async claimSessionOperation(id: string, accountId: string): Promise<SessionOperationClaimResult> {
+    return this.database.db.transaction(async (tx) => {
+      const scope = and(eq(sessions.id, id), eq(sessions.accountId, accountId));
+      const [locked] = await tx.select().from(sessions).where(scope).limit(1).for('update');
+      if (!locked) return { kind: 'not_found' };
+
+      const current = toSessionRecord(locked);
+      if (
+        current.status === 'destroyed' ||
+        current.status === 'errored' ||
+        current.destroyedAt !== null
+      ) {
+        return { kind: 'terminal', session: current };
+      }
+      if (current.status === 'creating' || current.status === 'busy') {
+        return { kind: 'conflict', status: current.status };
+      }
+
+      const [claimed] = await tx
+        .update(sessions)
+        .set({ status: 'busy', updatedAt: new Date() })
+        .where(and(scope, eq(sessions.status, 'ready'), isNull(sessions.destroyedAt)))
+        .returning();
+      if (!claimed) throw new Error('claimSessionOperation lost a locked ready row');
+      return { kind: 'claimed', session: toSessionRecord(claimed) };
+    });
+  }
+
+  async settleSessionOperation(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+  }): Promise<boolean> {
+    const [settled] = await this.database.db
+      .update(sessions)
+      .set({ status: 'ready', updatedAt: new Date() })
+      .where(
+        and(
+          eq(sessions.id, input.id),
+          eq(sessions.accountId, input.accountId),
+          eq(sessions.driverSessionId, input.driverSessionId),
+          eq(sessions.status, 'busy'),
+          isNull(sessions.destroyedAt),
+        ),
+      )
+      .returning({ id: sessions.id });
+    return settled !== undefined;
+  }
+
+  async failSessionOperation(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+    erroredAt: Date;
+  }): Promise<SessionRecord | null> {
+    const [failed] = await this.database.db
+      .update(sessions)
+      .set({ status: 'errored', destroyedAt: input.erroredAt, updatedAt: new Date() })
+      .where(
+        and(
+          eq(sessions.id, input.id),
+          eq(sessions.accountId, input.accountId),
+          eq(sessions.driverSessionId, input.driverSessionId),
+          eq(sessions.status, 'busy'),
+          isNull(sessions.destroyedAt),
+        ),
+      )
+      .returning();
+    return failed ? toSessionRecord(failed) : null;
+  }
+
+  async touchSessionLastStateAt(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+    lastStateAt: Date;
+  }): Promise<void> {
+    const lastStateAt = input.lastStateAt.toISOString();
+    await this.database.db
+      .update(sessions)
+      .set({
+        lastStateAt: sql<Date>`GREATEST(COALESCE(${sessions.lastStateAt}, ${lastStateAt}::timestamptz), ${lastStateAt}::timestamptz)`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(sessions.id, input.id),
+          eq(sessions.accountId, input.accountId),
+          eq(sessions.driverSessionId, input.driverSessionId),
+          notInArray(sessions.status, ['destroyed', 'errored']),
+          isNull(sessions.destroyedAt),
+        ),
+      );
+  }
+
   async findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const [row] = await this.database.db
       .select()
@@ -244,21 +340,12 @@ export class DrizzleSessionRepo implements SessionRepo {
     });
   }
 
-  // Terminal statuses ('destroyed', 'errored') are STICKY: once a row reaches
-  // either, this write is a silent no-op (the WHERE excludes terminal rows).
-  // This closes a concurrent-destroy resurrection race — a caller can read a
-  // non-terminal status, await a slow box round-trip, then write the STALE
-  // status back onto a row that a concurrent destroy()/runWithFailureCapture
-  // marked terminal in between. Without this guard the row flips back to
-  // non-terminal (destroyedAt left set) → use-after-destroy (requireOwned only
-  // rejects destroyed/errored, so navigate/interact/capture get dispatched to a
-  // dead box) + re-inclusion in the active/expiry sweeps (double driver.destroy
-  // + duplicate session.completed webhook). Every LEGITIMATE transition still
-  // applies: non-terminal→terminal (normal destroy/error), non-terminal→
-  // non-terminal (create 'ready', getState write-back). Nothing legitimately
-  // transitions OUT of a terminal state (they are sinks), and a terminal→
-  // terminal write (e.g. destroyed→errored) must NOT reorder teardown, so the
-  // no-op is correct for every caller — none inspects the result.
+  // Legacy lifecycle helper for create-reservation cleanup and test/admin
+  // seeding. Terminal rows are sticky, and a `busy` row is excluded entirely:
+  // only settleSessionOperation/failSessionOperation or serialized destroy may
+  // release/terminalize a live operation owner. State capture uses the separate
+  // status-neutral timestamp touch, so no delayed generic write can free a
+  // successor's slot.
   async updateSessionStatus(
     id: string,
     status: SessionRecord['status'],
@@ -272,7 +359,9 @@ export class DrizzleSessionRepo implements SessionRepo {
         ...(extra?.lastStateAt ? { lastStateAt: extra.lastStateAt } : {}),
         ...(extra?.destroyedAt ? { destroyedAt: extra.destroyedAt } : {}),
       })
-      .where(and(eq(sessions.id, id), notInArray(sessions.status, ['destroyed', 'errored'])));
+      .where(
+        and(eq(sessions.id, id), notInArray(sessions.status, ['busy', 'destroyed', 'errored'])),
+      );
   }
 
   async countActiveSessions(accountId: string): Promise<number> {

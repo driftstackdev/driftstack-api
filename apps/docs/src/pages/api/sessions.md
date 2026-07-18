@@ -61,8 +61,18 @@ cap.
 ```
 
 `status` is one of `creating`, `ready`, `busy`, `destroyed`,
-`errored`. The SDK's `sessions.create()` blocks until `ready`; any
-intermediate `creating` state isn't directly observable.
+`errored`. The SDK's `sessions.create()` call returns only after the
+new session reaches `ready`, but concurrent resource reads and lists can
+observe its durable `creating` reservation while the driver starts.
+
+Every direct driver operation atomically claims `ready` → `busy`; a
+session already `creating` or `busy` returns `409 Conflict` without a
+second driver dispatch. Success settles `busy` → `ready`. A driver failure
+elects `busy` → terminal `errored`, while an explicit destroy can instead
+win `busy` → terminal `destroyed`; an operation that loses that race returns
+`410 Gone` and publishes no stale success or failure event. An outcome-unknown
+`busy` owner is not automatically reclaimed after a server crash—destroy the
+session and create a fresh one rather than retrying work into an uncertain page.
 
 `purpose` selects the WebKit driver harness configuration .
 `production_customer` is the default; the other values
@@ -74,8 +84,9 @@ customer's own identification — surfaced in dashboards + the
 audit log. `metadata` is an arbitrary JSON object for the
 customer's own bookkeeping.
 
-`last_state_at` is the most recent `getState` / `capture` /
-`navigate` / `interact` / `wait` ack timestamp. `updated_at`
+`last_state_at` is the most recent successful `getState` capture timestamp.
+Its persistence is status-neutral and cannot release another operation's
+`busy` ownership. `updated_at`
 reflects any server-side state mutation (status changes,
 metadata writes).
 
@@ -206,8 +217,10 @@ payload) rather than the resource record, use
 on success — `url` is the originally requested URL, `final_url`
 reflects any HTTP redirects.
 
-`502 DriverError` for navigation-time failures (DNS, TLS, network);
-the session itself stays `ready` for a retry.
+`502 DriverError` for navigation-time failures (DNS, TLS, network). The
+failure winner becomes terminal `errored`, tears down its runtime, and
+returns the typed driver error from this call; subsequent operations return
+`410 Gone`, so create a fresh session instead of retrying this one.
 
 ## Interact
 
@@ -439,7 +452,8 @@ write returns 403).
 | 401    | `unauthorized`          | Missing / invalid bearer                                      |
 | 403    | `forbidden`             | Scope missing (write on a read-only key)                      |
 | 404    | `not-found`             | Session not found / not owned                                 |
-| 410    | `session-destroyed`     | Session is `destroyed`; recreate                              |
+| 409    | `conflict`              | Session is `creating` or another operation owns `busy`        |
+| 410    | `session-destroyed`     | Session is `destroyed`/`errored`, or destroy won; recreate    |
 | 504    | `session-timeout`       | An operation exceeded its time budget mid-call                |
 | 502    | `driver-error`          | Driver-level failure (network, crash)                         |
 | 503    | `driver-not-integrated` | The selected browser driver is unavailable in this deployment |

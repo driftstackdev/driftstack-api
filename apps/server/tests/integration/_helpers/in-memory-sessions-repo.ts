@@ -7,6 +7,7 @@ import type {
   NewSessionInput,
   SessionEventInput,
   SessionListPage,
+  SessionOperationClaimResult,
   SessionRecord,
   SessionRepo,
   SerializedSessionDestroyInput,
@@ -21,7 +22,7 @@ interface StoredEvent extends SessionEventInput {
 export class InMemorySessionsRepo implements SessionRepo {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly events: StoredEvent[] = [];
-  private readonly destroyTails = new Map<string, Promise<void>>();
+  private readonly sessionMutationTails = new Map<string, Promise<void>>();
   /**
    * 6.g — account_id → tier. The real Drizzle repo JOINs sessions to the
    * `accounts` table to resolve tier for `listExpiredForAutoDestroy`; this
@@ -116,6 +117,101 @@ export class InMemorySessionsRepo implements SessionRepo {
     return Promise.resolve(updated);
   }
 
+  claimSessionOperation(id: string, accountId: string): Promise<SessionOperationClaimResult> {
+    return this.withSessionMutationLock(id, () => {
+      const current = this.sessions.get(id);
+      if (!current || current.accountId !== accountId) return { kind: 'not_found' };
+      if (
+        current.status === 'destroyed' ||
+        current.status === 'errored' ||
+        current.destroyedAt !== null
+      ) {
+        return { kind: 'terminal', session: { ...current } };
+      }
+      if (current.status === 'creating' || current.status === 'busy') {
+        return { kind: 'conflict', status: current.status };
+      }
+      const claimed: SessionRecord = { ...current, status: 'busy', updatedAt: new Date() };
+      this.sessions.set(id, claimed);
+      return { kind: 'claimed', session: { ...claimed } };
+    });
+  }
+
+  settleSessionOperation(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+  }): Promise<boolean> {
+    return this.withSessionMutationLock(input.id, () => {
+      const current = this.sessions.get(input.id);
+      if (
+        !current ||
+        current.accountId !== input.accountId ||
+        current.driverSessionId !== input.driverSessionId ||
+        current.status !== 'busy' ||
+        current.destroyedAt !== null
+      ) {
+        return false;
+      }
+      this.sessions.set(input.id, { ...current, status: 'ready', updatedAt: new Date() });
+      return true;
+    });
+  }
+
+  failSessionOperation(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+    erroredAt: Date;
+  }): Promise<SessionRecord | null> {
+    return this.withSessionMutationLock(input.id, () => {
+      const current = this.sessions.get(input.id);
+      if (
+        !current ||
+        current.accountId !== input.accountId ||
+        current.driverSessionId !== input.driverSessionId ||
+        current.status !== 'busy' ||
+        current.destroyedAt !== null
+      ) {
+        return null;
+      }
+      const failed: SessionRecord = {
+        ...current,
+        status: 'errored',
+        destroyedAt: input.erroredAt,
+        updatedAt: new Date(),
+      };
+      this.sessions.set(input.id, failed);
+      return { ...failed };
+    });
+  }
+
+  touchSessionLastStateAt(input: {
+    id: string;
+    accountId: string;
+    driverSessionId: string;
+    lastStateAt: Date;
+  }): Promise<void> {
+    return this.withSessionMutationLock(input.id, () => {
+      const current = this.sessions.get(input.id);
+      if (
+        !current ||
+        current.accountId !== input.accountId ||
+        current.driverSessionId !== input.driverSessionId ||
+        current.status === 'destroyed' ||
+        current.status === 'errored' ||
+        current.destroyedAt !== null
+      ) {
+        return;
+      }
+      const lastStateAt =
+        current.lastStateAt !== null && current.lastStateAt > input.lastStateAt
+          ? current.lastStateAt
+          : input.lastStateAt;
+      this.sessions.set(input.id, { ...current, lastStateAt, updatedAt: new Date() });
+    });
+  }
+
   findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const s = this.sessions.get(id);
     if (!s || s.accountId !== accountId) return Promise.resolve(null);
@@ -130,15 +226,7 @@ export class InMemorySessionsRepo implements SessionRepo {
     input: SerializedSessionDestroyInput,
     destroyDriverSession: (session: SessionRecord) => Promise<void>,
   ): Promise<SerializedSessionDestroyResult> {
-    const previous = this.destroyTails.get(input.id) ?? Promise.resolve();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const tail = previous.then(() => gate);
-    this.destroyTails.set(input.id, tail);
-    await previous;
-    try {
+    return this.withSessionMutationLock(input.id, async () => {
       const current = this.sessions.get(input.id);
       if (!current || (input.accountId !== null && current.accountId !== input.accountId)) {
         return { kind: 'not_found' };
@@ -174,9 +262,23 @@ export class InMemorySessionsRepo implements SessionRepo {
         createdAt: new Date(),
       });
       return { kind: 'destroyed', session: { ...updated } };
+    });
+  }
+
+  private async withSessionMutationLock<T>(id: string, fn: () => T | Promise<T>): Promise<T> {
+    const previous = this.sessionMutationTails.get(id) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.sessionMutationTails.set(id, tail);
+    await previous;
+    try {
+      return await fn();
     } finally {
       release();
-      if (this.destroyTails.get(input.id) === tail) this.destroyTails.delete(input.id);
+      if (this.sessionMutationTails.get(id) === tail) this.sessionMutationTails.delete(id);
     }
   }
 
@@ -190,7 +292,7 @@ export class InMemorySessionsRepo implements SessionRepo {
     extra?: { lastStateAt?: Date; destroyedAt?: Date },
   ): Promise<void> {
     const s = this.sessions.get(id);
-    if (s && s.status !== 'destroyed' && s.status !== 'errored') {
+    if (s && s.status !== 'busy' && s.status !== 'destroyed' && s.status !== 'errored') {
       const updated: SessionRecord = {
         ...s,
         status,

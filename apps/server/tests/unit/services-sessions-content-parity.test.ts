@@ -274,18 +274,14 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
-  it("V-090 requireOwned: 'destroyed' OR 'errored' → SessionDestroyedError 410 (errored = destroyed for customer)", () => {
-    expect(body).toMatch(
-      /\/\/ V-090 founder-approved semantic: a session that has entered the\s*\n?\s*\/\/ 'errored' state behaves the same as 'destroyed' for the customer\s*\n?\s*\/\/ — subsequent ops 410\./,
-    );
-    expect(body).toMatch(
-      /if \(session\.status === 'destroyed' \|\| session\.status === 'errored'\) \{\s*\n?\s*throw new SessionDestroyedError\(\);/,
-    );
+  it('direct operations map a terminal atomic claim to SessionDestroyedError 410', () => {
+    expect(body).toMatch(/const claim = await this\.deps\.repo\.claimSessionOperation\(/);
+    expect(body).toContain("if (claim.kind === 'terminal') throw new SessionDestroyedError();");
   });
 
   it('V-531.B findOwnedSessionLite: pure ownership check without driver side-effects, returns null on terminal-state sessions instead of throwing (route-friendly contract)', () => {
     expect(body).toMatch(
-      /V-531\.B — pure ownership check for routes that only need to know\s*\n?\s*\* "does this account own this session" without the driver side-effects\s*\n?\s*\* the existing `requireOwned` path triggers\. Returns the row when\s*\n?\s*\* owned \+ not in a terminal state, null otherwise\./,
+      /V-531\.B — pure ownership check for routes that only need to know\s*\n?\s*\* "does this account own this session" without claiming a direct driver\s*\n?\s*\* operation\. Returns the row when\s*\n?\s*\* owned \+ not in a terminal state, null otherwise\./,
     );
     expect(body).toMatch(
       /async findOwnedSessionLite\(accountId: string, sessionId: string\): Promise<SessionRecord \| null> \{/,
@@ -324,17 +320,50 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/throw err;/);
   });
 
-  it("runWithFailureCapture: updateSessionStatus 'errored' + recordEvent 'errored' + re-throw original err (DB writes best-effort)", () => {
+  it('runWithFailureCapture: exact busy failure election precedes winner-only teardown/event and rethrow', () => {
     expect(body).toMatch(
-      /\/\/ Persist the failure state\. Errors here are swallowed so the\s*\n?\s*\/\/ original driver error still propagates to the caller — the DB\s*\n?\s*\/\/ write is best-effort, the user-facing error wins\./,
+      /const failed = await this\.deps\.repo\.failSessionOperation\(\{\s*id: session\.id,\s*accountId: session\.accountId,\s*driverSessionId: session\.driverSessionId,\s*erroredAt,\s*\}\);/,
     );
-    expect(body).toMatch(
-      /await this\.deps\.repo\.updateSessionStatus\(session\.id, 'errored', \{\s*\n?\s*destroyedAt: erroredAt,\s*\n?\s*\}\);/,
-    );
+    expect(body).toContain('if (failed === null) throw new SessionDestroyedError();');
     expect(body).toMatch(
       /await this\.deps\.repo\.recordEvent\(\{\s*sessionId: session\.id,\s*\.\.\.errorEvent,\s*\}\);/,
     );
     expect(body).toMatch(/throw err;/);
+  });
+
+  it('all nine direct driver operations share ready→busy admission and exact success settlement', () => {
+    expect(body).toMatch(
+      /export type SessionOperationClaimResult =\s*\| \{ kind: 'claimed'; session: SessionRecord \}\s*\| \{ kind: 'conflict'; status: 'creating' \| 'busy' \}\s*\| \{ kind: 'terminal'; session: SessionRecord \}\s*\| \{ kind: 'not_found' \};/,
+    );
+    for (const operation of [
+      'navigate',
+      'interact',
+      'gui_input',
+      'wait',
+      'state_capture',
+      'capture',
+      'extract',
+      'search',
+      'login',
+    ]) {
+      expect(body).toContain(`'${operation}',`);
+    }
+    expect(body).toMatch(
+      /const settled = await this\.deps\.repo\.settleSessionOperation\(\{\s*id: session\.id,\s*accountId: session\.accountId,\s*driverSessionId: session\.driverSessionId,\s*\}\);/,
+    );
+    expect(body).toContain('if (!settled) throw new SessionDestroyedError();');
+    expect(body).toMatch(
+      /if \(claim\.kind === 'conflict'\) \{\s*throw new ConflictError\([\s\S]+?session_status: claim\.status/,
+    );
+  });
+
+  it('getState uses a status-neutral monotonic timestamp touch after owner settlement', () => {
+    expect(body).toMatch(
+      /this\.deps\.repo\.touchSessionLastStateAt\(\{\s*id: session\.id,\s*accountId: session\.accountId,\s*driverSessionId: session\.driverSessionId,\s*lastStateAt: capturedAt,/,
+    );
+    expect(body).not.toMatch(
+      /updateSessionStatus\(session\.id, session\.status, \{\s*lastStateAt: capturedAt/,
+    );
   });
 
   it('successful event payloads are projected synchronously before detached persistence', () => {
@@ -371,7 +400,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/import type \{ Driver \} from '\.\.\/drivers\/types\.js';/);
     expect(body).toMatch(/import type \{ GUIInputRequest \} from '\.\.\/schemas\/gui-input\.js';/);
     expect(body).toMatch(
-      /import \{[\s\S]*?BadRequestError,[\s\S]*?ConcurrencyLimitError,[\s\S]*?NotFoundError,[\s\S]*?SessionDestroyedError,[\s\S]*?\} from '\.\.\/lib\/errors\.js';/,
+      /import \{[\s\S]*?BadRequestError,[\s\S]*?ConcurrencyLimitError,[\s\S]*?ConflictError,[\s\S]*?NotFoundError,[\s\S]*?SessionDestroyedError,[\s\S]*?\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
       /import \{ requireScope as throwIfMissingScope \} from '\.\.\/lib\/errors-helpers\.js';/,

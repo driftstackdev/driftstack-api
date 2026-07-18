@@ -36,7 +36,7 @@ The wire-level `session.status` enum has five values: `creating` / `ready` / `bu
                                                             (or `errored` on driver failure)
 ```
 
-In practice you don't observe `creating` separately — the SDK's `sessions.create()` blocks until the server-side transition reaches `ready` (the driver is allocated and the harness is responding). Every method call flips the session into `busy` for the duration and back to `ready` on ack. `errored` is a terminal failure state mirroring `destroyed` but caused by a driver-side fault (not by an explicit destroy or the free-tier duration cap).
+The SDK's `sessions.create()` call returns only after the server-side transition reaches `ready` (the driver is allocated and the harness is responding), but a concurrent resource read or list can observe the durable `creating` reservation. Every direct driver operation atomically claims `ready` → `busy`; while the session is `creating` or `busy`, another operation returns `409 Conflict` without a second driver dispatch. Success settles `busy` → `ready`. A driver failure elects terminal `errored`; an explicit destroy can instead win terminal `destroyed`, and the losing operation returns `410 Gone` without stale success/failure events.
 
 ## Concurrency
 
@@ -93,7 +93,7 @@ console.log(result.final_url, result.status, result.duration_ms);
 
 **`POST /v1/sessions/:id/wait`** — block until a selector appears, a URL pattern is reached, or a timeout elapses.
 
-**`GET /v1/sessions/:id/state`** — read-only introspection: current `url`, `title`, persisted `cookies` + `local_storage`, and a `captured_at` timestamp. Cheap; safe to poll at low frequency.
+**`GET /v1/sessions/:id/state`** — read-only page introspection: current `url`, `title`, persisted `cookies` + `local_storage`, and a `captured_at` timestamp. It is itself a claimed driver operation, so poll it at low frequency only while the resource is `ready`; use `GET /v1/sessions/:id` or the list endpoint to observe persisted `creating` / `busy` status without competing for the driver owner.
 
 ## Capture
 
@@ -140,8 +140,8 @@ Every error returned by the session endpoints conforms to the [problem+json shap
 - `429 Too Many Requests` (`https://errors.driftstack.dev/concurrency-limit`) — concurrent-session cap reached. Wait for an active session to finish.
 - `429 Too Many Requests` (`https://errors.driftstack.dev/tier-limit`) — a tier-derived cap (e.g. profile count) is reached.
 - `404 Not Found` — session ID doesn't exist (or already destroyed and TTL-evicted).
-- `409 Conflict` — operation invalid for the current state (e.g. `navigate` after destroy).
-- `410 Gone` (`https://errors.driftstack.dev/session-destroyed`) — operating on a session that has already been destroyed.
+- `409 Conflict` — a direct driver operation found the session `creating`, or another operation already owns `busy`; retry only after the resource reports `ready`.
+- `410 Gone` (`https://errors.driftstack.dev/session-destroyed`) — the session is `destroyed` or `errored`, or this operation lost a race to destroy; create a fresh session.
 - `502 Bad Gateway` / `503 Service Unavailable` — driver-side error (`driver-error` / `driver-not-integrated` / `feature-unavailable`).
 
 The SDKs map these to typed error classes — catch `RateLimitError`, `ConcurrencyLimitError`, the tier-limit class (`TierLimitError` in TypeScript, `QuotaExceededError` in Python and Go), `SessionDestroyedError`, `DriverError`, etc. The full mapping lives at [/reference/errors](/reference/errors/).
@@ -156,11 +156,12 @@ If you've configured a webhook endpoint, terminal session events fire on the bus
 - `session.challenge_detected` — the in-session harness flagged a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge (e.g. in the live view) and it resumes.
 - `session.profile_save_failed` — a profile-backed session did not replace the stored profile at teardown. Failure reasons are terminal and the next restore will be stale; `superseded` is benign and means a newer saved profile won the conditional write.
 
-Intermediate state transitions (e.g. a hypothetical `session.created`) are not on the bus today — the create + destroy round-trip is fast enough that polling `sessions.getState` covers in-flight needs. See the [webhook events catalog](/webhooks/events/) for full payload shapes and signature verification.
+Intermediate state transitions (e.g. a hypothetical `session.created`) are not on the bus today. Read the session resource or list endpoint for persisted lifecycle status; do not poll `sessions.getState` while another driver operation owns `busy`. See the [webhook events catalog](/webhooks/events/) for full payload shapes and signature verification.
 
 ## Notes
 
 - A destroyed session requires a fresh `sessions.create()`; sessions are not resumable after destroy. Plan your workflow to recreate cleanly when a long pause is expected.
+- A `busy` row with an outcome-unknown owner is not automatically reset after a server crash. Destroy it and create a fresh session; automatic reclaim would risk replaying work that may already have changed the page.
 - Session-level resource quotas (per-session bandwidth, memory) are not customer-facing today. Fleet-level enforcement runs internally; tier concurrent caps are the only customer-visible meter.
 
 ## Next steps
