@@ -33,8 +33,9 @@ click **Invite member**. Fill in:
 - **Email**: the teammate's email address. They'll be able to accept
   only when signed in to a Driftstack account on this address.
 - **Role**:
-  - `member` — read access to the owner's sessions / profiles /
-    audit log / etc. Cannot make changes.
+  - `member` — read access to the owner's persisted session metadata /
+    profiles / audit log / etc. Live session state requires `admin`.
+    Cannot make changes.
   - `admin` — full read + write. Can create sessions, mint API
     keys, manage webhooks on the owner's behalf.
 
@@ -113,7 +114,11 @@ curl -X POST https://api.driftstack.dev/v1/sessions \
 
 Role gating:
 
-- **Read endpoints** (GET): both `member` and `admin` allowed.
+- **Persisted metadata reads** (including session list/detail): both
+  `member` and `admin` allowed.
+- **Live session state** (`GET /v1/sessions/:id/state`): `admin` only.
+  It claims the driver and returns cookies/local storage; `member` gets
+  `403` before any session or driver mutation.
 - **Write endpoints** (POST / PATCH / DELETE / api-keys rotate):
   `admin` role only. `member` gets `403`.
 
@@ -205,8 +210,8 @@ Use `role: 'member'` for read-only access. Useful for:
 
 - Auditors / compliance reviewers (read the audit log + usage
   reports without write capability).
-- Junior teammates being onboarded (read sessions + profiles
-  without risk of accidentally minting a key or destroying a
+- Junior teammates being onboarded (read session list/detail metadata +
+  profiles without risk of accidentally minting a key or destroying a
   session).
 
 ### Graceful key rotation across the team

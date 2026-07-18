@@ -4,7 +4,7 @@
 // auth repo) + that the routes that surface teams to the client return
 // the populated data.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
@@ -15,6 +15,45 @@ afterEach(async () => {
 
 const OWNER_ACCOUNT_ID = '00000000-0000-4000-8000-000000000a01';
 const MEMBERSHIP_ID = '00000000-0000-4000-8000-000000000a02';
+
+async function seedTeamOwnerSession(
+  role: 'admin' | 'member',
+  driverSessionId: string,
+  label: string,
+) {
+  fx = await buildTestApp();
+  fx.authRepo.upsertAccount({
+    id: OWNER_ACCOUNT_ID,
+    email: 'owner@example.test',
+    name: null,
+    tier: 'api_scale',
+    status: 'active',
+    timezone: null,
+    avatarR2Key: null,
+    slug: null,
+    region: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  fx.authRepo.setTeamMemberships(fx.accountId, [
+    {
+      membershipId: MEMBERSHIP_ID,
+      ownerAccountId: OWNER_ACCOUNT_ID,
+      role,
+    },
+  ]);
+  const owner = await fx.sessionsRepo.insertSession({
+    accountId: OWNER_ACCOUNT_ID,
+    apiKeyId: '00000000-0000-4000-8000-000000000bff',
+    driverSessionId,
+    archetype: 'iphone-16-pro-ios-26-4-1',
+    purpose: 'production_customer',
+    label,
+    metadata: { classification: 'persisted-metadata' },
+  });
+  await fx.sessionsRepo.updateSessionStatus(owner.id, 'ready');
+  return owner;
+}
 
 describe('V-326 — auth path loads teams[] into AccountContext', () => {
   it('GET /v1/account/me returns empty teams[] for an account on no teams', async () => {
@@ -1018,40 +1057,72 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(res.statusCode).toBe(403);
   });
 
-  it('GET /v1/sessions/:id/state as MEMBER role reads OWNER session state (read role-agnostic)', async () => {
-    fx = await buildTestApp();
-    fx.authRepo.upsertAccount({
-      id: OWNER_ACCOUNT_ID,
-      email: 'owner@example.test',
-      name: null,
-      tier: 'api_scale',
-      status: 'active',
-      timezone: null,
-      avatarR2Key: null,
-      slug: null,
-      region: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fx.authRepo.setTeamMemberships(fx.accountId, [
-      {
-        membershipId: MEMBERSHIP_ID,
-        ownerAccountId: OWNER_ACCOUNT_ID,
-        role: 'member',
-      },
+  it('team member reads owner list/detail metadata but state is 403 before every session/driver mutation', async () => {
+    const owner = await seedTeamOwnerSession('member', 'drv_owner_member', 'owner-metadata');
+    const before = fx.sessionsRepo.getSession(owner.id);
+    const claim = vi.spyOn(fx.sessionsRepo, 'claimSessionOperation');
+    const settle = vi.spyOn(fx.sessionsRepo, 'settleSessionOperation');
+    const fail = vi.spyOn(fx.sessionsRepo, 'failSessionOperation');
+    const touch = vi.spyOn(fx.sessionsRepo, 'touchSessionLastStateAt');
+    const record = vi.spyOn(fx.sessionsRepo, 'recordEvent');
+    const getState = vi.spyOn(fx.driver, 'getState');
+    const destroy = vi.spyOn(fx.driver, 'destroy');
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+    };
+
+    const list = await fx.app.inject({ method: 'GET', url: '/v1/sessions', headers });
+    expect(list.statusCode).toBe(200);
+    expect(list.json<{ data: Array<{ id: string; label: string }> }>().data).toEqual([
+      expect.objectContaining({ id: `ses_${owner.id}`, label: 'owner-metadata' }),
     ]);
-    const owner = await fx.sessionsRepo.insertSession({
-      accountId: OWNER_ACCOUNT_ID,
-      apiKeyId: '00000000-0000-4000-8000-000000000bff',
-      driverSessionId: 'drv_owner',
-      archetype: 'iphone-16-pro-ios-26-4-1',
-      purpose: 'production_customer',
-      label: null,
-      metadata: null,
+
+    const detail = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/sessions/ses_${owner.id}`,
+      headers,
     });
-    // Promote to ready so requireOwned doesn't 410.
-    await fx.sessionsRepo.updateSessionStatus(owner.id, 'ready');
-    const res = await fx.app.inject({
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json<{ id: string; account_id: string; metadata: unknown }>()).toMatchObject({
+      id: `ses_${owner.id}`,
+      account_id: `acc_${OWNER_ACCOUNT_ID}`,
+      metadata: { classification: 'persisted-metadata' },
+    });
+
+    const state = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/sessions/ses_${owner.id}/state`,
+      headers,
+    });
+    expect(state.statusCode).toBe(403);
+    expect(state.json<{ detail: string }>().detail).toMatch(
+      /Live session operations on a team owner require admin role/,
+    );
+    expect(claim).not.toHaveBeenCalled();
+    expect(settle).not.toHaveBeenCalled();
+    expect(fail).not.toHaveBeenCalled();
+    expect(touch).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
+    expect(getState).not.toHaveBeenCalled();
+    expect(destroy).not.toHaveBeenCalled();
+    expect(fx.sessionsRepo.getSession(owner.id)).toEqual(before);
+    expect(fx.sessionsRepo.getEvents()).toEqual([]);
+  });
+
+  it('team admin receives exact owner cookies/localStorage from the owner driver', async () => {
+    const owner = await seedTeamOwnerSession('admin', 'drv_owner_admin', 'owner-live');
+    const capturedAt = new Date('2026-07-17T20:00:00.000Z');
+    const getState = vi.spyOn(fx.driver, 'getState').mockResolvedValue({
+      url: 'https://owner.example.test/private',
+      title: 'Owner portal',
+      cookies: [{ name: 'owner-session', value: 'cookie-value', httpOnly: true }],
+      localStorage: { owner_token: 'storage-value' },
+      pageState: { state: 'loaded' },
+      capturedAt,
+    });
+
+    const state = await fx.app.inject({
       method: 'GET',
       url: `/v1/sessions/ses_${owner.id}/state`,
       headers: {
@@ -1059,9 +1130,57 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
       },
     });
-    // 200 (mock driver returns state) OR 5xx if driver is misconfigured.
-    // Either way the role gate passed; that's the important assertion.
-    expect(res.statusCode).not.toBe(403);
+    expect(state.statusCode).toBe(200);
+    expect(state.json()).toEqual({
+      url: 'https://owner.example.test/private',
+      title: 'Owner portal',
+      cookies: [{ name: 'owner-session', value: 'cookie-value', httpOnly: true }],
+      local_storage: { owner_token: 'storage-value' },
+      page_state: { state: 'loaded' },
+      captured_at: capturedAt.toISOString(),
+    });
+    expect(getState).toHaveBeenCalledTimes(1);
+    expect(getState).toHaveBeenCalledWith('drv_owner_admin');
+    expect(fx.sessionsRepo.getSession(owner.id)?.status).toBe('ready');
+  });
+
+  it('self read:sessions access still receives exact live state without a team header', async () => {
+    fx = await buildTestApp({ scopes: ['read:sessions'] });
+    const self = await fx.sessionsRepo.insertSession({
+      accountId: fx.accountId,
+      apiKeyId: fx.apiKeyId,
+      driverSessionId: 'drv_self_state',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      purpose: 'production_customer',
+      label: 'self-live',
+      metadata: null,
+    });
+    await fx.sessionsRepo.updateSessionStatus(self.id, 'ready');
+    const capturedAt = new Date('2026-07-17T20:01:00.000Z');
+    const getState = vi.spyOn(fx.driver, 'getState').mockResolvedValue({
+      url: 'https://self.example.test',
+      title: 'Self portal',
+      cookies: [{ name: 'self-session', value: 'self-cookie' }],
+      localStorage: { self_token: 'self-storage' },
+      pageState: null,
+      capturedAt,
+    });
+
+    const state = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/sessions/ses_${self.id}/state`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(state.statusCode).toBe(200);
+    expect(state.json()).toEqual({
+      url: 'https://self.example.test',
+      title: 'Self portal',
+      cookies: [{ name: 'self-session', value: 'self-cookie' }],
+      local_storage: { self_token: 'self-storage' },
+      page_state: null,
+      captured_at: capturedAt.toISOString(),
+    });
+    expect(getState).toHaveBeenCalledWith('drv_self_state');
   });
 
   it('POST /v1/profiles as admin team member creates profile on the OWNER account', async () => {

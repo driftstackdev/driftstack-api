@@ -29438,3 +29438,39 @@ durable operation-token and post-election cleanup residuals recorded in V-702. N
 route, service, repository, schema, migration, SDK runtime, shared workspace
 build/deploy, native, harness/Fleet/Family-B, environment, customer, secret, package
 publication or foreign pnpm action was performed.
+
+---
+
+## V-704 — Team members cannot inspect or terminalize an owner's live browser
+
+**Date:** 2026-07-17
+
+The team role model allowed members to read persisted session records, but the same
+role also reached `GET /v1/sessions/:id/state`. That endpoint is not a passive
+metadata read: it claims the live driver, returns cookies and local storage, writes
+state-capture evidence, and can elect terminal session failure if the driver call
+fails. A member could therefore disclose the owner's browser secrets, block an owner
+operation, or terminalize the owner's session despite lacking mutation authority.
+
+One `effectiveAccountIdForLiveOperation` gate now protects all nine live driver
+routes: navigate, interact, GUI input, wait, state, capture, extract, search and
+login. Team scope requires the exact `admin` role before the service can claim the
+session or contact its driver. State retains the `read:sessions` API-key floor, and
+self-account callers remain unchanged. Team members still receive persisted list
+and detail metadata; only the secret-bearing live-state boundary is denied.
+
+The integration proof makes the ordering load-bearing. A member lists and describes
+the owner's row successfully, then receives the role-specific 403 for state with
+zero operation claim/settlement/failure, timestamp touch, event write, driver state
+read or cleanup and an exactly unchanged session row. Team-admin and self paths each
+return exact non-empty cookies/local storage and call the precise owner/self driver
+session id. A source guard inventories all nine helper call sites and preserves the
+state route's `read:sessions` prehandler. The three public docs distinguish metadata
+reads from live state and are protected by exact content guards.
+
+The focused route/integration/documentation proof passes 5 files and 130/130 tests;
+the expanded session, RBAC and cross-source replay passes 13 files and 259/259 tests.
+Strict server source/test TypeScript, docs Astro checking, targeted ESLint,
+Prettier and diff/whitespace checks are green. No service, repository, schema,
+migration, OpenAPI, SDK, shared workspace build/deploy, native, harness/Fleet,
+Family-B, environment, customer, secret or foreign pnpm action was performed.

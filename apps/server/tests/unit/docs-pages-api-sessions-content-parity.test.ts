@@ -248,7 +248,9 @@ describe('W761 docs /api/sessions content parity', () => {
   it('CRITICAL read-vs-write scope split pinned — GET=read, POST/DELETE=write. Drift to different scoping would mismatch server-side enforcement.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Read endpoints \(GET\) accept any valid bearer with `read` scope\./);
+    expect(p).toMatch(
+      /GET endpoints require a bearer that satisfies the `read` scope; the team-role\s*\n?restrictions below also apply\./,
+    );
     expect(p).toMatch(
       /Write endpoints \(POST navigate \/ interact \/ wait \/ capture \/ extract \/ search \/ login; DELETE\)\s*\n?require the `write:sessions` scope \(a broad `write` key also satisfies\s*\n?it\)\./,
     );
@@ -258,9 +260,25 @@ describe('W761 docs /api/sessions content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Team RBAC: `X-Driftstack-Account` is honored —/);
-    expect(p).toMatch(/`member` can read\s+the owner's sessions/);
-    expect(p).toMatch(/writes require the\s+`admin`\s+role/);
-    expect(p).toMatch(/a `member`\s+write returns 403/);
+    expect(p).toMatch(/`member` can list\s+and read the owner's persisted session metadata/);
+    expect(p).toMatch(/live state and\s+writes require the `admin` role/);
+    expect(p).toMatch(
+      /A member's state or write request returns\s+403 before the driver is contacted/,
+    );
+  });
+
+  it('CRITICAL team-scoped state is an admin-only secret-bearing live operation while self read:sessions is unchanged', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/Despite its `GET` method, this is a live driver operation/);
+    expect(p).toMatch(/With\s+`X-Driftstack-Account`, only a team `admin` may call it/);
+    expect(p).toMatch(
+      /a team `member`\s+receives `403` before the driver or session row is touched/,
+    );
+    expect(p).toMatch(
+      /Members may still\s+use the sessions list and `GET \/v1\/sessions\/:id` for persisted metadata/,
+    );
+    expect(p).toMatch(/A\s+self-account caller with `read:sessions` is unchanged/);
   });
 
   it('CRITICAL 8-row common-errors table pinned — includes 409 operation ownership and terminal 410', () => {
@@ -281,6 +299,7 @@ describe('W761 docs /api/sessions content parity', () => {
         new RegExp(`\\| ${status}\\s+\\| \`${errorType}\``),
       );
     }
+    expect(p).toMatch(/\| 403\s+\| `forbidden`\s+\| Scope missing or team role is insufficient/);
     expect(p).toMatch(/Session is `creating` or another operation owns `busy`/);
     expect(p).toMatch(/Session is `destroyed`\/`errored`, or destroy won; recreate/);
   });

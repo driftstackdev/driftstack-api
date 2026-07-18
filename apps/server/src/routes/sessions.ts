@@ -36,23 +36,26 @@ import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { parseProfileId } from '../lib/profile-id.js';
 
 /**
- * V-326e3 — resolves the effective account for a write-type session
- * action (navigate / interact / wait / capture / etc.) and enforces
- * the Q1 admin-only role gate. Returns the effective accountId
- * (string) when team-scoped, undefined when self-scoped (route uses
- * ctx.account.id default).
+ * Resolves the effective account for a live driver operation and enforces
+ * the team-admin role gate before the service can claim or contact that
+ * runtime. Returns the effective accountId when team-scoped and undefined
+ * when self-scoped (the service uses ctx.account.id by default).
  *
- * Read-type actions (getState) accept any role and use the simpler
- * resolveEffectiveAccount inline.
+ * Persisted metadata reads (list / describe) remain available to team
+ * members and use resolveEffectiveAccount inline. Live state is deliberately
+ * different: it exposes cookies and localStorage and owns the driver while
+ * capturing, so it must use this gate too.
  */
-function effectiveAccountIdForWrite(
+function effectiveAccountIdForLiveOperation(
   request: FastifyRequest,
   ctx: NonNullable<FastifyRequest['account']>,
 ): string | undefined {
   const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
   if (effective.kind !== 'team') return undefined;
   if (effective.role !== 'admin') {
-    throw new ForbiddenError('This action on a team owner requires admin role on that team.');
+    throw new ForbiddenError(
+      'Live session operations on a team owner require admin role on that team.',
+    );
   }
   return effective.accountId;
 }
@@ -416,7 +419,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = NavigateRequestSchema.parse(request.body ?? {});
-      const eff = effectiveAccountIdForWrite(request, ctx);
+      const eff = effectiveAccountIdForLiveOperation(request, ctx);
       const result = await service.navigate(
         ctx,
         id,
@@ -443,7 +446,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = InteractRequestSchema.parse(request.body ?? {});
-      const eff = effectiveAccountIdForWrite(request, ctx);
+      const eff = effectiveAccountIdForLiveOperation(request, ctx);
       const result = await service.interact(
         ctx,
         id,
@@ -469,7 +472,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = GUIInputRequestSchema.parse(request.body ?? {});
-      const eff = effectiveAccountIdForWrite(request, ctx);
+      const eff = effectiveAccountIdForLiveOperation(request, ctx);
       const result = await service.guiInput(
         ctx,
         id,
@@ -494,7 +497,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = WaitRequestSchema.parse(request.body ?? {});
-      const eff = effectiveAccountIdForWrite(request, ctx);
+      const eff = effectiveAccountIdForLiveOperation(request, ctx);
       const result = await service.wait(
         ctx,
         id,
@@ -541,13 +544,11 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   );
 
   // ── GET /v1/sessions/:id/state ─────────────────────────────────────────
-  // V-326e3 — getState is a READ; both 'member' and 'admin' allowed.
-  // #122 — read:sessions floor (same rationale as GET /v1/sessions/:id
-  // above): getState returns the live page-state / cookies / localStorage,
-  // a pure read of session data, so it takes the same granular read floor
-  // the list route already enforces. Broad `read` / `account_owner` keys
-  // satisfy it; a write:sessions-only or gui_control key no longer reads
-  // session state it can't list.
+  // Live state exposes cookies/localStorage and claims the driver while it
+  // captures. Team members may read persisted list/detail metadata, but only
+  // team admins may perform this live operation on the owner's session.
+  // `read:sessions` remains the API-key scope floor for self and team-admin
+  // callers; broad `read` / `account_owner` keys continue to satisfy it.
   app.get<{ Params: { id: string } }>(
     '/v1/sessions/:id/state',
     {
@@ -556,11 +557,11 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const eff = effectiveAccountIdForLiveOperation(request, ctx);
       const state = await service.getState(
         ctx,
         id,
-        effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
+        eff !== undefined ? { effectiveAccountId: eff } : {},
       );
       return {
         url: state.url,
@@ -587,7 +588,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = CaptureRequestSchema.parse(request.body ?? {});
-      const eff = effectiveAccountIdForWrite(request, ctx);
+      const eff = effectiveAccountIdForLiveOperation(request, ctx);
       const result = await service.capture(
         ctx,
         id,
@@ -617,7 +618,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = ExtractRequestSchema.parse(request.body ?? {});
-      const eff = effectiveAccountIdForWrite(request, ctx);
+      const eff = effectiveAccountIdForLiveOperation(request, ctx);
       const result = await service.extract(
         ctx,
         id,
@@ -640,7 +641,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = SearchRequestSchema.parse(request.body ?? {});
-      const eff = effectiveAccountIdForWrite(request, ctx);
+      const eff = effectiveAccountIdForLiveOperation(request, ctx);
       const result = await service.search(
         ctx,
         id,
@@ -667,7 +668,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = SessionLoginRequestSchema.parse(request.body ?? {});
-      const eff = effectiveAccountIdForWrite(request, ctx);
+      const eff = effectiveAccountIdForLiveOperation(request, ctx);
       const result = await service.login(
         ctx,
         id,

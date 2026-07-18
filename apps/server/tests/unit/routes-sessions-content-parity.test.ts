@@ -10,9 +10,9 @@
 //   • sessions:create rate-limit bucket on POST /v1/sessions.
 //   • V-326e1 — POST: admin role required when team-scoped; owner's
 //     tier drives concurrent cap.
-//   • V-326e3 — write actions (navigate / interact / wait / capture
-//     / gui-input) require admin role on team; READ (getState) accepts
-//     both member and admin.
+//   • Live driver operations (including state, which exposes cookies and
+//     localStorage) require admin role on team; persisted list/detail
+//     metadata remains readable by both member and admin.
 //   • V-326e2 — DELETE: admin-only on team scope.
 //   • L-001 gui_control gate: customer keys never carry; enterprise
 //     self-hosted GUI keys do; gui-input bypasses behavioral simulation.
@@ -67,16 +67,46 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toMatch(/readEffectiveAccountHeader\(request\)/);
   });
 
-  it('V-326e3 effectiveAccountIdForWrite framing pinned: write-type session action (navigate/interact/wait/capture/etc.) enforces Q1 admin-only role gate; returns accountId when team-scoped + admin; undefined when self-scoped; throws ForbiddenError on member; READ actions (getState) use simpler resolveEffectiveAccount inline', () => {
+  it('effectiveAccountIdForLiveOperation gates all nine live-driver routes while persisted metadata reads remain member-readable', () => {
     expect(body).toMatch(
-      /\*\s*V-326e3 — resolves the effective account for a write-type session\s*\n?\s*\*\s*action \(navigate \/ interact \/ wait \/ capture \/ etc\.\) and enforces\s*\n?\s*\*\s*the Q1 admin-only role gate\. Returns the effective accountId\s*\n?\s*\*\s*\(string\) when team-scoped, undefined when self-scoped \(route uses\s*\n?\s*\*\s*ctx\.account\.id default\)\./,
+      /\*\s*Resolves the effective account for a live driver operation and enforces\s*\n?\s*\*\s*the team-admin role gate before the service can claim or contact that\s*\n?\s*\*\s*runtime\./,
     );
     expect(body).toMatch(
-      /\*\s*Read-type actions \(getState\) accept any role and use the simpler\s*\n?\s*\*\s*resolveEffectiveAccount inline\./,
+      /\*\s*Persisted metadata reads \(list \/ describe\) remain available to team\s*\n?\s*\*\s*members and use resolveEffectiveAccount inline\. Live state is deliberately\s*\n?\s*\*\s*different: it exposes cookies and localStorage and owns the driver while\s*\n?\s*\*\s*capturing, so it must use this gate too\./,
     );
     expect(body).toMatch(
-      /function effectiveAccountIdForWrite\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*ctx: NonNullable<FastifyRequest\['account'\]>,\s*\n?\s*\): string \| undefined \{\s*\n?\s*const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*if \(effective\.kind !== 'team'\) return undefined;\s*\n?\s*if \(effective\.role !== 'admin'\) \{\s*\n?\s*throw new ForbiddenError\('This action on a team owner requires admin role on that team\.'\);\s*\n?\s*\}\s*\n?\s*return effective\.accountId;\s*\n?\s*\}/,
+      /function effectiveAccountIdForLiveOperation\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*ctx: NonNullable<FastifyRequest\['account'\]>,\s*\n?\s*\): string \| undefined \{\s*\n?\s*const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*if \(effective\.kind !== 'team'\) return undefined;\s*\n?\s*if \(effective\.role !== 'admin'\) \{\s*\n?\s*throw new ForbiddenError\(\s*\n?\s*'Live session operations on a team owner require admin role on that team\.',\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*return effective\.accountId;\s*\n?\s*\}/,
     );
+    const liveRoutes = [
+      ['/v1/sessions/:id/navigate', 'navigate'],
+      ['/v1/sessions/:id/interact', 'interact'],
+      ['/v1/sessions/:id/gui-input', 'guiInput'],
+      ['/v1/sessions/:id/wait', 'wait'],
+      ['/v1/sessions/:id/state', 'getState'],
+      ['/v1/sessions/:id/capture', 'capture'],
+      ['/v1/sessions/:id/extract', 'extract'],
+      ['/v1/sessions/:id/search', 'search'],
+      ['/v1/sessions/:id/login', 'login'],
+    ] as const;
+    for (const [path, serviceMethod] of liveRoutes) {
+      const start = body.indexOf(`'${path}'`);
+      expect(start, `${path} route exists`).toBeGreaterThan(-1);
+      const nextRoute = body.indexOf('\n  // ──', start + path.length);
+      const block = body.slice(start, nextRoute === -1 ? body.length : nextRoute);
+      const gate = 'const eff = effectiveAccountIdForLiveOperation(request, ctx);';
+      const serviceCall = `await service.${serviceMethod}(`;
+      expect(block.match(/effectiveAccountIdForLiveOperation\(request, ctx\)/g), path).toHaveLength(
+        1,
+      );
+      expect(block.indexOf(gate), `${path} authority gate`).toBeGreaterThan(-1);
+      expect(block.indexOf(serviceCall), `${path} service call`).toBeGreaterThan(
+        block.indexOf(gate),
+      );
+      expect(block, `${path} effective owner delivery`).toContain(
+        'eff !== undefined ? { effectiveAccountId: eff } : {}',
+      );
+    }
+    expect(body).not.toContain('effectiveAccountIdForWrite');
   });
 
   it('PUBLIC_ID_RE regex (3-letter prefix + UUID) + uuidFromPrefixedId (validates expectedPrefix) + prefixId helper', () => {
@@ -170,7 +200,7 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('V-326e3 POST /v1/sessions/:id/navigate: NavigateRequestSchema + effectiveAccountIdForWrite gate + response (url + final_url + status + duration_ms snake_case)', () => {
+  it('V-326e3 POST /v1/sessions/:id/navigate: NavigateRequestSchema + live-operation gate + response (url + final_url + status + duration_ms snake_case)', () => {
     expect(body).toMatch(
       /\/\/ ── POST \/v1\/sessions\/:id\/navigate ─[\s\S]*?\/\/ V-326e3 — admin-only when targeting an owner via X-Driftstack-\s*\n?\s*\/\/ Account; member role gets 403\./,
     );
@@ -190,10 +220,9 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toMatch(/const body = GUIInputRequestSchema\.parse\(request\.body \?\? \{\}\);/);
   });
 
-  it('V-326e3 getState READ semantics pinned: both member and admin allowed; uses resolveEffectiveAccount inline (not effectiveAccountIdForWrite)', () => {
-    expect(body).toMatch(/\/\/ V-326e3 — getState is a READ; both 'member' and 'admin' allowed\./);
+  it('getState retains read:sessions but requires team-admin live-operation authority before service/driver contact', () => {
     expect(body).toMatch(
-      /const state = await service\.getState\(\s*\n?\s*ctx,\s*\n?\s*id,\s*\n?\s*effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\},\s*\n?\s*\);/,
+      /app\.get<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/sessions\/:id\/state',[\s\S]{0,300}?preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\],[\s\S]{0,300}?const eff = effectiveAccountIdForLiveOperation\(request, ctx\);\s*\n?\s*const state = await service\.getState\(\s*\n?\s*ctx,\s*\n?\s*id,\s*\n?\s*eff !== undefined \? \{ effectiveAccountId: eff \} : \{\},\s*\n?\s*\);/,
     );
     expect(body).toMatch(
       // W615 — page_state (lifecycle for pollers) sits between local_storage

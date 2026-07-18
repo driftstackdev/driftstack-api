@@ -93,7 +93,7 @@ console.log(result.final_url, result.status, result.duration_ms);
 
 **`POST /v1/sessions/:id/wait`** — block until a selector appears, a URL pattern is reached, or a timeout elapses.
 
-**`GET /v1/sessions/:id/state`** — read-only page introspection: current `url`, `title`, persisted `cookies` + `local_storage`, and a `captured_at` timestamp. It is itself a claimed driver operation, so poll it at low frequency only while the resource is `ready`; use `GET /v1/sessions/:id` or the list endpoint to observe persisted `creating` / `busy` status without competing for the driver owner.
+**`GET /v1/sessions/:id/state`** — live page introspection: current `url`, `title`, cookies + `local_storage`, and a `captured_at` timestamp. It is itself a claimed driver operation, so poll it at low frequency only while the resource is `ready`; use `GET /v1/sessions/:id` or the list endpoint to observe persisted `creating` / `busy` metadata without competing for the driver owner. When acting as a team owner, state requires the `admin` role because it exposes browser secrets and contacts the live driver; a `member` remains able to read list/detail metadata but receives `403` for state before the session is claimed. Self-account `read:sessions` access is unchanged.
 
 ## Capture
 

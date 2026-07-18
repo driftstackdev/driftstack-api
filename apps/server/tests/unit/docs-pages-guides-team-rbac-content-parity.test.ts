@@ -55,11 +55,11 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     expect(p).toMatch(/## Step 5 — Audit the team's actions \(owner\)/);
   });
 
-  it('CRITICAL 2-role framing — member (read) + admin (read+write) pinned. Matches W766 /api/team + W757 dashboard role-gating split.', () => {
+  it('CRITICAL 2-role framing — member persisted reads exclude live state; admin retains live/write authority', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`member` — read access to the owner's sessions \/ profiles \/\s*\n?\s+audit log \/ etc\. Cannot make changes\./,
+      /`member` — read access to the owner's persisted session metadata \/\s*\n?\s+profiles \/ audit log \/ etc\. Live session state requires `admin`\.\s*\n?\s+Cannot make changes\./,
     );
     expect(p).toMatch(
       /`admin` — full read \+ write\. Can create sessions, mint API\s*\n?\s+keys, manage webhooks on the owner's behalf\./,
@@ -131,10 +131,18 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     );
   });
 
-  it('CRITICAL role-gating split — GET = member+admin, POST/PATCH/DELETE/rotate = admin-only framing pinned. Matches W766 /api/team + W757 dashboard role enforcement.', () => {
+  it('CRITICAL role-gating split — persisted metadata reads allow members; live state and mutations are admin-only', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\*\*Read endpoints\*\* \(GET\): both `member` and `admin` allowed\./);
+    expect(p).toMatch(
+      /\*\*Persisted metadata reads\*\* \(including session list\/detail\): both\s*\n?\s+`member` and `admin` allowed\./,
+    );
+    expect(p).toMatch(
+      /\*\*Live session state\*\* \(`GET \/v1\/sessions\/:id\/state`\): `admin` only\./,
+    );
+    expect(p).toMatch(
+      /It claims the driver and returns cookies\/local storage; `member` gets\s*\n?\s+`403` before any session or driver mutation\./,
+    );
     expect(p).toMatch(
       /\*\*Write endpoints\*\* \(POST \/ PATCH \/ DELETE \/ api-keys rotate\):\s*\n?\s+`admin` role only\. `member` gets `403`\./,
     );
@@ -222,7 +230,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
       /Auditors \/ compliance reviewers \(read the audit log \+ usage\s*\n?\s+reports without write capability\)\./,
     );
     expect(p).toMatch(
-      /Junior teammates being onboarded \(read sessions \+ profiles\s*\n?\s+without risk of accidentally minting a key or destroying a\s*\n?\s+session\)\./,
+      /Junior teammates being onboarded \(read session list\/detail metadata \+\s*\n?\s+profiles without risk of accidentally minting a key or destroying a\s*\n?\s+session\)\./,
     );
   });
 

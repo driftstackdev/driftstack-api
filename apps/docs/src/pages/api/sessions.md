@@ -285,6 +285,13 @@ discriminated union in `packages/api-types/src/sessions.ts`:
 timestamp (subject to a payload-size cap). Useful for checkpoint-like
 reads without a full screenshot.
 
+Despite its `GET` method, this is a live driver operation: it claims the
+session while capturing and discloses browser secrets. With
+`X-Driftstack-Account`, only a team `admin` may call it; a team `member`
+receives `403` before the driver or session row is touched. Members may still
+use the sessions list and `GET /v1/sessions/:id` for persisted metadata. A
+self-account caller with `read:sessions` is unchanged.
+
 Also includes `page_state` — the page lifecycle as the browser sees
 it: `{ state: 'loading' | 'loaded' | 'errored' }`, with an `error`
 object (`kind`: `http` / `tls` / `dns` / `net` / `timeout`, plus
@@ -438,19 +445,21 @@ flips to `destroyed`.
 
 ## Auth + scoping
 
-Read endpoints (GET) accept any valid bearer with `read` scope.
+GET endpoints require a bearer that satisfies the `read` scope; the team-role
+restrictions below also apply.
 Write endpoints (POST navigate / interact / wait / capture / extract / search / login; DELETE)
 require the `write:sessions` scope (a broad `write` key also satisfies
-it). Team RBAC: `X-Driftstack-Account` is honored — a `member` can read
-the owner's sessions, but writes require the `admin` role (a `member`
-write returns 403).
+it). Team RBAC: `X-Driftstack-Account` is honored — a `member` can list
+and read the owner's persisted session metadata, while live state and
+writes require the `admin` role. A member's state or write request returns
+403 before the driver is contacted.
 
 ## Errors common to every endpoint
 
 | Status | Type                    | When                                                          |
 | ------ | ----------------------- | ------------------------------------------------------------- |
 | 401    | `unauthorized`          | Missing / invalid bearer                                      |
-| 403    | `forbidden`             | Scope missing (write on a read-only key)                      |
+| 403    | `forbidden`             | Scope missing or team role is insufficient                    |
 | 404    | `not-found`             | Session not found / not owned                                 |
 | 409    | `conflict`              | Session is `creating` or another operation owns `busy`        |
 | 410    | `session-destroyed`     | Session is `destroyed`/`errored`, or destroy won; recreate    |

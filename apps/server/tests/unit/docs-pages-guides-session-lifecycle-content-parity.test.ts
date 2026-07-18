@@ -156,15 +156,20 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it('state-read shape and operation-owner-aware polling contract are pinned', () => {
+  it('state shape, operation-owner polling and team-admin secret boundary are pinned', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /read-only page introspection: current `url`, `title`, persisted `cookies` \+ `local_storage`, and a `captured_at` timestamp\.[\s\S]+?it at low frequency only while the resource is `ready`/,
+      /live page introspection: current `url`, `title`, cookies \+ `local_storage`, and a `captured_at` timestamp\.[\s\S]+?it at low frequency only while the resource is `ready`/,
     );
     expect(p).toMatch(
-      /use `GET \/v1\/sessions\/:id` or the list endpoint to observe persisted `creating` \/ `busy` status/,
+      /use `GET \/v1\/sessions\/:id` or the list endpoint to observe persisted `creating` \/ `busy` metadata/,
     );
+    expect(p).toMatch(/When acting as a team owner, state requires the `admin` role/);
+    expect(p).toMatch(
+      /a `member` remains able to read list\/detail metadata but receives `403` for state before the session is claimed/,
+    );
+    expect(p).toMatch(/Self-account `read:sessions` access is unchanged/);
   });
 
   it("CRITICAL capture R2-EU-presigned-URL framing pinned. The 'Captures are stored on the EU-resident object-storage sub-processor (Cloudflare R2) and the response includes a signed URL that\\'s valid for a bounded window (~15 minutes). Persist the bytes if you need them long-term' wording matches W770 /api/account avatar EU-jurisdiction R2 + 1h-presigned + the GDPR data-residency framing.", () => {
