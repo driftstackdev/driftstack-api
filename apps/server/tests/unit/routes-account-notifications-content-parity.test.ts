@@ -9,8 +9,8 @@
 //   • Per-accountId scope via requireAuthEventSource + ctx.account.id
 //     (SSE route — accepts the bearer token via ?ds_token= since
 //     EventSource can't set an Authorization header).
-//   • SSE headers: text/event-stream + no-cache + keep-alive +
-//     x-accel-buffering: no.
+//   • SSE headers: text/event-stream + private no-store/no-cache/no-transform +
+//     keep-alive + x-accel-buffering: no + origin-specific CORS.
 //   • Frame shape: `event: <kind>` + `data: <JSON>` + double-LF.
 //   • Heartbeat at 25s default (overridable for tests).
 //   • Cleanup: clearInterval + unsubscribe + reply.raw.end() on
@@ -194,9 +194,9 @@ describe('routes/account-notifications.ts content parity', () => {
     expect(body).toMatch(/bus\.subscribe\(accountId,/);
   });
 
-  it('SSE headers pinned: text/event-stream + no-cache + keep-alive + x-accel-buffering: no', () => {
+  it('SSE headers pinned: text/event-stream + private no-store/no-cache/no-transform + keep-alive + x-accel-buffering: no', () => {
     expect(body).toMatch(/'content-type': 'text\/event-stream; charset=utf-8'/);
-    expect(body).toMatch(/'cache-control': 'no-cache, no-transform'/);
+    expect(body).toMatch(/'cache-control': 'no-cache, no-store, private, no-transform'/);
     expect(body).toMatch(/connection: 'keep-alive'/);
     expect(body).toMatch(/'x-accel-buffering': 'no'/);
   });
@@ -395,6 +395,12 @@ describe('account notification SSE captured lifecycle', () => {
 
     expect(connection.status).toBe(200);
     expect(connection.headers?.['content-type']).toBe('text/event-stream; charset=utf-8');
+    expect(connection.headers?.['cache-control']).toBe('no-cache, no-store, private, no-transform');
+    expect(connection.headers).toMatchObject({
+      'access-control-allow-origin': 'https://app.driftstack.dev',
+      'access-control-allow-credentials': 'true',
+      vary: 'Origin',
+    });
     expect(connection.writes).toContain(': stream open\n\n');
     expect(connection.writes).toContain('event: session.errored\n');
     expect(connection.writes.some((chunk) => chunk.includes('"sessionId":"ses_test"'))).toBe(true);
@@ -403,6 +409,18 @@ describe('account notification SSE captured lifecycle', () => {
     expect(scopeCheck).toHaveBeenCalledTimes(1);
     expect(connection.endCount).toBe(0);
     expect(bus.subscriberCount('acc_test')).toBe(1);
+    connection.request.raw.emit('close');
+  });
+
+  it('keeps private cache policy but omits CORS headers for a disallowed origin', () => {
+    const { handler } = captureNotificationsHandler();
+    const connection = makeConnection({ origin: 'https://cross-account.invalid' });
+    handler(connection.request, connection.reply);
+
+    expect(connection.headers?.['cache-control']).toBe('no-cache, no-store, private, no-transform');
+    expect(connection.headers).not.toHaveProperty('access-control-allow-origin');
+    expect(connection.headers).not.toHaveProperty('access-control-allow-credentials');
+    expect(connection.headers).not.toHaveProperty('vary');
     connection.request.raw.emit('close');
   });
 });

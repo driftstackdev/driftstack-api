@@ -29474,3 +29474,45 @@ Strict server source/test TypeScript, docs Astro checking, targeted ESLint,
 Prettier and diff/whitespace checks are green. No service, repository, schema,
 migration, OpenAPI, SDK, shared workspace build/deploy, native, harness/Fleet,
 Family-B, environment, customer, secret or foreign pnpm action was performed.
+
+---
+
+## V-705 — Authenticated event streams are private at the wire boundary
+
+**Date:** 2026-07-17
+
+The transcript and account-notification event streams hijack the Fastify reply
+and write directly to the socket. That bypasses both the global CORS plugin and
+the ordinary cache-policy hook. Transcript responses therefore omitted CORS
+entirely, while both authenticated streams allowed storage semantics that were
+unsafe for transcript, billing, audit and session data. The broad
+`/v1/status*` cache exemption also left subscription, confirmation and
+unsubscribe responses without an explicit cache policy even though those
+flows carry mailbox state and one-time tokens.
+
+Both authenticated streams now send
+`no-cache, no-store, private, no-transform` before the first byte. Transcript
+SSE receives the exact app CORS authority and, like notifications, reflects
+only an allowed origin with credentials and `Vary: Origin`; a disallowed or
+absent origin receives no CORS grant. The global private-response hook no
+longer exempts the entire status prefix. Public status JSON and incident reads
+retain their explicit `public, max-age=30`, and public status SSE retains its
+explicit `no-cache, no-transform`; only subscribe, confirm and unsubscribe
+inherit `no-store, private`. Existing route-owned cache policies remain
+authoritative.
+
+A real-listener integration proof opens transcript, notification and public
+status streams under strict CORS, checks allowed and disallowed origins, then
+aborts and drains each response before app teardown. It also drives the full
+subscribe-confirm-unsubscribe lifecycle with synthetic addresses and tokens,
+proving all three private headers without printing credential material. The
+focused proof passes seven files and 82/82 tests; the expanded stream, status,
+CORS, security-header and agent-session matrix passes fifteen files and
+308/308 tests. Strict server source and test TypeScript, marketing Astro check
+(85 files, zero diagnostics), targeted ESLint, Prettier and exact-path
+diff/whitespace checks are green.
+
+No status-service semantics, authentication, public status cache lifetime,
+schema, migration, OpenAPI, SDK, shared workspace build/deploy, native,
+harness/Fleet/Family-B, environment, customer, secret, package or foreign pnpm
+action was performed.

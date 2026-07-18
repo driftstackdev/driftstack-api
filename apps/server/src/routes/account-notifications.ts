@@ -105,7 +105,7 @@ export function registerAccountNotificationsRoutes(
 
       reply.raw.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
-        'cache-control': 'no-cache, no-transform',
+        'cache-control': 'no-cache, no-store, private, no-transform',
         connection: 'keep-alive',
         'x-accel-buffering': 'no',
         // W586 — hijacked reply bypasses @fastify/cors's onSend hook, so set

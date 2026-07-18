@@ -136,6 +136,7 @@ import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { readClientIp } from '../lib/client-ip.js';
+import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 import { customerSafeNodeDiagnostic } from '../services/scrub-node-diagnostics.js';
 
 // gui_control_key control-auth (separate-simulator-app support). The
@@ -512,6 +513,9 @@ export interface AgentSessionsRoutesDeps {
    * registration (route just won't exist).
    */
   transcriptEventBus?: AgentSessionEventBus;
+  /** CORS authority for the hijacked transcript SSE response. Raw writes bypass
+   *  the app-level CORS hook, so this must mirror AppDeps exactly. */
+  cors?: CorsAllowDeps;
   /** Heartbeat interval for the SSE stream (ms). Defaults to 30s. */
   transcriptHeartbeatMs?: number;
   /** Maximum concurrent transcript streams per authenticated account.
@@ -3334,9 +3338,13 @@ export function registerAgentSessionsRoutes(
         try {
           reply.raw.writeHead(200, {
             'content-type': 'text/event-stream; charset=utf-8',
-            'cache-control': 'no-cache, no-transform',
+            'cache-control': 'no-cache, no-store, private, no-transform',
             connection: 'keep-alive',
             'x-accel-buffering': 'no',
+            // Hijacked replies bypass @fastify/cors. Reflect only the exact
+            // allowed origin and vary caches by Origin; disallowed origins get
+            // no ACAO header and are blocked by the browser.
+            ...sseCorsHeaders(req.headers.origin, deps.cors ?? {}),
           });
           reply.raw.write(': stream open\n\n');
 

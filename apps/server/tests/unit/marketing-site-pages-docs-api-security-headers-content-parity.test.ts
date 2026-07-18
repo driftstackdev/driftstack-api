@@ -8,7 +8,8 @@
 //   • Always-on transport 5-header table: HSTS (2-year + preload) +
 //     X-Content-Type-Options nosniff + X-Frame-Options SAMEORIGIN +
 //     Referrer-Policy no-referrer + X-DNS-Prefetch-Control off.
-//   • Cache-Control 5-route map with V-666.BS/.BT/.BW anchors.
+//   • Cache-Control private-default + two authenticated SSE + status mutation
+//     and explicit public-status exceptions.
 //   • CORS allow-list + 10-minute pre-flight + Article-13 cookie auth.
 //   • Cross-Origin-Resource-Policy: cross-origin (not same-origin).
 //   • What we DON'T set 3-list: CSP (no HTML) + COEP (no embeds) +
@@ -59,15 +60,18 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
     );
   });
 
-  it('Cache-Control 5-route posture: /v1/account/* + /v1/admin/* + /v1/billing/* (no-store, private) + /v1/status (public, max-age=30) + /v1/status/stream (no-cache, no-transform) — pinned so the 5-route cache-policy map survives (drift to dropping no-store on any /v1/account-or-admin-or-billing path would let proxy/back-forward caches retain private state). The previous skip pinned inline `(V-666.BS)` / `(V-666.BT)` / `(V-666.BW)` anchors that were removed from the customer-facing copy as a UX cleanup (internal V-anchors should not bleed into marketing pages); the 5-route policy map itself survives without them.', () => {
+  it('Cache-Control posture: all caller-private /v1 responses default private no-store; authenticated transcript/notification SSE retain private no-store plus no-cache/no-transform; status mailbox mutations are private; public status reads/stream retain explicit policies', () => {
     expect(body).toMatch(
-      /<td><code>\/v1\/account\/\*<\/code>\s*<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
+      /<td><code>\/v1\/\*<\/code> \(caller-private default\)<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>\/v1\/admin\/\*<\/code>\s*<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
+      /<td><code>\/v1\/agent-sessions\/&#123;id&#125;\/transcript<\/code> \(authenticated SSE\)<\/td>\s*\n?\s*<td><code>no-cache, no-store, private, no-transform<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>\/v1\/billing\/\*<\/code>\s*<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
+      /<td><code>\/v1\/account\/me\/notifications<\/code> \(authenticated SSE\)<\/td>\s*\n?\s*<td><code>no-cache, no-store, private, no-transform<\/code><\/td>/,
+    );
+    expect(body).toMatch(
+      /<td><code>\/v1\/status\/subscribe\*<\/code> \(mailbox mutation\)<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
     );
     expect(body).toMatch(
       /<td><code>\/v1\/status<\/code> \(public\)<\/td>\s*\n?\s*<td><code>public, max-age=30<\/code><\/td>/,
@@ -81,9 +85,16 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
     expect(body).not.toMatch(/\(V-666\.BW\)/);
   });
 
-  it("Defense-in-depth rationale framing pinned: 'Endpoints under /v1/account/*, /v1/admin/*, and /v1/billing/* return caller-private dynamic state. They are auth-gated at the request layer; the no-store, private header is defense-in-depth so shared / proxy caches can't hold onto private payloads and browser back-forward cache can't serve stale state after logout.' — pinned so the auth-gated + defense-in-depth + back-forward-cache rationale survives (drift to dropping the back-forward-cache mention would let customers question why no-store is needed alongside auth)", () => {
+  it('Defense-in-depth rationale pins authenticated SSE Origin variance and prevents public-status cache policy from reaching mailbox workflow responses', () => {
+    expect(body).toMatch(/Caller-private <code>\/v1\/\*<\/code> responses default to/);
     expect(body).toMatch(
-      /<code>no-store, private<\/code> header is\s*\n?\s*defense-in-depth so shared \/ proxy caches can't hold onto\s*\n?\s*private payloads and browser back-forward cache can't serve\s*\n?\s*stale state after logout\./,
+      /reflect only an allowed\s*\n?\s*<code>Origin<\/code> and send <code>Vary: Origin<\/code>/,
+    );
+    expect(body).toMatch(
+      /defense-in-depth so shared \/ proxy caches can't hold onto private\s*\n?\s*payloads and browser back-forward cache can't serve stale state\s*\n?\s*after logout\./,
+    );
+    expect(body).toMatch(
+      /subscription, confirmation, and unsubscribe responses\s*\n?\s*never inherit them/,
     );
   });
 

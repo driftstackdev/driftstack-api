@@ -65,15 +65,19 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <thead><tr><th>Path</th><th>Cache-Control</th></tr></thead>
       <tbody>
         <tr>
- <td><code>/v1/account/*</code> </td>
+          <td><code>/v1/*</code> (caller-private default)</td>
           <td><code>no-store, private</code></td>
         </tr>
         <tr>
- <td><code>/v1/admin/*</code> </td>
-          <td><code>no-store, private</code></td>
+          <td><code>/v1/agent-sessions/&#123;id&#125;/transcript</code> (authenticated SSE)</td>
+          <td><code>no-cache, no-store, private, no-transform</code></td>
         </tr>
         <tr>
- <td><code>/v1/billing/*</code> </td>
+          <td><code>/v1/account/me/notifications</code> (authenticated SSE)</td>
+          <td><code>no-cache, no-store, private, no-transform</code></td>
+        </tr>
+        <tr>
+          <td><code>/v1/status/subscribe*</code> (mailbox mutation)</td>
           <td><code>no-store, private</code></td>
         </tr>
         <tr>
@@ -87,13 +91,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </tbody>
     </table>
     <p>
-      Endpoints under <code>/v1/account/*</code>,
-      <code>/v1/admin/*</code>, and <code>/v1/billing/*</code> return
-      caller-private dynamic state. They are auth-gated at the
-      request layer; the <code>no-store, private</code> header is
-      defense-in-depth so shared / proxy caches can't hold onto
-      private payloads and browser back-forward cache can't serve
-      stale state after logout.
+      Caller-private <code>/v1/*</code> responses default to
+      <code>no-store, private</code>. Authenticated event streams add
+      <code>no-cache</code> and <code>no-transform</code> while retaining
+      <code>no-store, private</code>; they also reflect only an allowed
+      <code>Origin</code> and send <code>Vary: Origin</code>. This is
+      defense-in-depth so shared / proxy caches can't hold onto private
+      payloads and browser back-forward cache can't serve stale state
+      after logout. Public status reads opt into the public policies
+      shown above; subscription, confirmation, and unsubscribe responses
+      never inherit them because they carry mailbox workflow state and
+      one-time tokens.
     </p>
 
     <h2>CORS</h2>

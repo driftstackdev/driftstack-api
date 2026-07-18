@@ -33,6 +33,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/server/src/routes/status-subscribe.ts');
+const APP = resolve(REPO_ROOT, 'apps/server/src/lib/app.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -40,6 +41,7 @@ function read(p: string): string {
 
 describe('W411.A apps/server/src/routes/status-subscribe.ts content parity', () => {
   const body = read(LIB);
+  const app = read(APP);
 
   it('V-295c3 framing pinned: 3 routes (POST subscribe + GET confirm + GET unsubscribe) with double-opt-in', () => {
     expect(body).toMatch(/V-295c3 — public status-page email subscription routes\./);
@@ -103,6 +105,14 @@ describe('W411.A apps/server/src/routes/status-subscribe.ts content parity', () 
     expect(body).toMatch(
       /if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
     );
+  });
+
+  it('all three status mutation responses inherit private no-store instead of the public-status cache policy', () => {
+    expect(app).toMatch(/req\.url\.startsWith\('\/v1\/'\)/);
+    expect(app).not.toMatch(/!req\.url\.startsWith\('\/v1\/status'\)/);
+    expect(app).toMatch(/reply\.getHeader\('cache-control'\) === undefined/);
+    expect(app).toMatch(/reply\.header\('cache-control', 'no-store, private'\)/);
+    expect(app).toMatch(/subscribe\/confirm\/unsubscribe carry mailbox state and one-time tokens/);
   });
 
   it('imports: FastifyInstance + zod + StatusSubscribersService + RateLimitStore + AUTH_IP_LIMITS/ipRateLimit + ValidationError', () => {

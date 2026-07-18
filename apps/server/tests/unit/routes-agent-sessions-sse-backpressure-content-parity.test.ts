@@ -1,6 +1,6 @@
 // W383 — drift guard for the agent-session transcript SSE backpressure cap.
 //
-// The transcript stream (GET /v1/agent-sessions/:id/transcript/stream) hijacks
+// The transcript stream (GET /v1/agent-sessions/:id/transcript) hijacks
 // the reply and writes live transcript events to the raw socket. Without a cap,
 // a STALLED client (TCP window full) lets events buffer unboundedly in
 // reply.raw.writableLength → server OOM. The guard closes the stream past a
@@ -29,7 +29,7 @@ function read(p: string): string {
 
 interface CapturedRequest {
   params: { id: string };
-  headers: { 'last-event-id'?: string };
+  headers: { 'last-event-id'?: string; origin?: string };
   raw: EventEmitter;
   account: {
     account: { id: string };
@@ -39,7 +39,7 @@ interface CapturedRequest {
 
 interface CapturedReplyRaw {
   writableLength: number;
-  writeHead: () => void;
+  writeHead: (status: number, headers: Record<string, string>) => void;
   write: (chunk: string) => boolean;
   end: () => void;
 }
@@ -57,6 +57,11 @@ function captureTranscriptHandler(
     maxStreams?: number;
     authCheck?: () => void | Promise<void>;
     scopeCheck?: () => void | Promise<void>;
+    cors?: {
+      permissiveCors?: boolean;
+      dashboardOrigin?: string;
+      corsAllowedOrigins?: string[];
+    };
   } = {},
 ): {
   handler: CapturedHandler;
@@ -98,6 +103,7 @@ function captureTranscriptHandler(
     transcriptEventBus: bus,
     transcriptHeartbeatMs: opts.heartbeatMs ?? 30_000,
     transcriptMaxStreamsPerAccount: opts.maxStreams ?? 10,
+    cors: opts.cors ?? {},
   });
   if (handler === undefined) throw new Error('transcript handler was not registered');
   return { handler, bus, authCheck, scopeCheck };
@@ -110,6 +116,7 @@ function makeConnection(
     lastEventId?: string;
     writableLength?: number;
     failWriteHead?: boolean;
+    origin?: string;
   } = {},
 ): {
   request: CapturedRequest;
@@ -117,14 +124,21 @@ function makeConnection(
   writes: string[];
   readonly endCount: number;
   readonly hijackCount: number;
+  readonly status: number | undefined;
+  readonly headers: Record<string, string> | undefined;
 } {
   const writes: string[] = [];
   let endCount = 0;
   let hijackCount = 0;
+  let status: number | undefined;
+  let headers: Record<string, string> | undefined;
   const accountId = opts.accountId ?? 'acc_owner';
+  const requestHeaders: CapturedRequest['headers'] = {};
+  if (opts.lastEventId !== undefined) requestHeaders['last-event-id'] = opts.lastEventId;
+  if (opts.origin !== undefined) requestHeaders.origin = opts.origin;
   const request: CapturedRequest = {
     params: { id: 'agt_test' },
-    headers: opts.lastEventId === undefined ? {} : { 'last-event-id': opts.lastEventId },
+    headers: requestHeaders,
     raw: new EventEmitter(),
     account: {
       account: { id: accountId },
@@ -136,8 +150,10 @@ function makeConnection(
   };
   const raw: CapturedReplyRaw = {
     writableLength: opts.writableLength ?? 0,
-    writeHead: () => {
+    writeHead: (nextStatus, nextHeaders) => {
       if (opts.failWriteHead === true) throw new Error('synthetic setup failure');
+      status = nextStatus;
+      headers = nextHeaders;
     },
     write: (chunk) => {
       writes.push(chunk);
@@ -161,6 +177,12 @@ function makeConnection(
     },
     get hijackCount() {
       return hijackCount;
+    },
+    get status() {
+      return status;
+    },
+    get headers() {
+      return headers;
     },
   };
 }
@@ -193,6 +215,11 @@ describe('W383 agent-session transcript SSE backpressure guard content parity', 
     expect(body).toMatch(/reply\.raw\.end\(\);/);
   });
 
+  it('pins private no-store streaming cache policy and origin-specific raw CORS', () => {
+    expect(body).toMatch(/'cache-control': 'no-cache, no-store, private, no-transform'/);
+    expect(body).toMatch(/\.\.\.sseCorsHeaders\(req\.headers\.origin, deps\.cors \?\? \{\}\)/);
+  });
+
   it('requires the granular session-read scope after EventSource authentication', () => {
     expect(body).toMatch(/const requireTranscriptRead = app\.requireScope\('read:sessions'\);/);
     expect(body).toMatch(
@@ -215,6 +242,29 @@ describe('W383 agent-session transcript SSE backpressure guard content parity', 
 });
 
 describe('agent transcript SSE captured lifecycle', () => {
+  it('reflects an allowed origin with Vary and omits CORS for a disallowed origin', async () => {
+    const { handler } = captureTranscriptHandler();
+    const allowed = makeConnection({ origin: 'https://app.driftstack.dev' });
+    await handler(allowed.request, allowed.reply);
+    expect(allowed.status).toBe(200);
+    expect(allowed.headers).toMatchObject({
+      'cache-control': 'no-cache, no-store, private, no-transform',
+      'access-control-allow-origin': 'https://app.driftstack.dev',
+      'access-control-allow-credentials': 'true',
+      vary: 'Origin',
+    });
+
+    const disallowed = makeConnection({ origin: 'https://cross-account.invalid' });
+    await handler(disallowed.request, disallowed.reply);
+    expect(disallowed.headers?.['cache-control']).toBe('no-cache, no-store, private, no-transform');
+    expect(disallowed.headers).not.toHaveProperty('access-control-allow-origin');
+    expect(disallowed.headers).not.toHaveProperty('access-control-allow-credentials');
+    expect(disallowed.headers).not.toHaveProperty('vary');
+
+    allowed.request.raw.emit('close');
+    disallowed.request.raw.emit('close');
+  });
+
   it('caps one authenticated account at ten streams, isolates another account, and reuses a released slot', async () => {
     const { handler, bus } = captureTranscriptHandler();
     const ownerConnections = Array.from({ length: 10 }, () => makeConnection());

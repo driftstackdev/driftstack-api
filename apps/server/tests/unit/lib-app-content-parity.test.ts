@@ -13,7 +13,7 @@
 //     allowedHeaders + exposedHeaders incl. W199 RateLimit set;
 //     preflight maxAge 600.
 //   • no-store onSend hook defaults Cache-Control no-store,private on
-//     ALL of /v1 except /v1/status* + routes that set their own header.
+//     ALL of /v1 except routes that set their own explicit header.
 //   • Public probes: /health (+/healthz), /version (V-195 +
 //     V-337), /ready (Promise.all + per-check timeout 1500ms).
 //   • Auth-flow / MFA / CLI-authorize / Stripe / NowPayments /
@@ -144,17 +144,18 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/registerErrorHandler\(app\);/);
   });
 
-  it('no-store onSend hook: defaults Cache-Control no-store,private on ALL of /v1 EXCEPT /v1/status* and EXCEPT routes that set their own Cache-Control (preserves public status caching + SSE no-cache/no-transform). Discrete pins (the prior single mega-regex was a long \\s*\\n? chain).', () => {
-    // Rationale block pinned (the broadening + the two carve-outs).
+  it('no-store onSend hook: defaults Cache-Control no-store,private on ALL of /v1 except routes that set their own Cache-Control; public status reads/stream opt in explicitly while status subscription mutations stay private. Discrete pins avoid a backtracking mega-regex.', () => {
+    // Rationale block pinned (the broadening + the one route-owned-header carve-out).
     expect(body).toMatch(
       /default Cache-Control:\s*\n?\s*\/\/ no-store, private on every caller-private \/v1 response/,
     );
     expect(body).toMatch(/now the default for ALL of \/v1/);
-    expect(body).toMatch(/no-transform stops proxies buffering/);
+    expect(body).toMatch(/there is intentionally no `\/v1\/status\*` prefix exemption/);
+    expect(body).toMatch(/subscribe\/confirm\/unsubscribe carry mailbox state and one-time tokens/);
     // The hook condition — discrete pins, not one backtracking chain.
     expect(body).toMatch(/app\.addHook\('onSend', \(req, reply, _payload, done\) => \{/);
     expect(body).toMatch(/req\.url\.startsWith\('\/v1\/'\)/);
-    expect(body).toMatch(/!req\.url\.startsWith\('\/v1\/status'\)/);
+    expect(body).not.toMatch(/!req\.url\.startsWith\('\/v1\/status'\)/);
     expect(body).toMatch(/reply\.getHeader\('cache-control'\) === undefined/);
     expect(body).toMatch(/void reply\.header\('cache-control', 'no-store, private'\);/);
   });

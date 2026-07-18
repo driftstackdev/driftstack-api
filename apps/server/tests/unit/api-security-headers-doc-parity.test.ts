@@ -65,6 +65,18 @@ describe('W244.D api-security-headers doc parity', () => {
     expect(doc).not.toMatch(/Access-Control-Max-Age:\s*300/);
   });
 
+  it('documents the executable private-cache default, authenticated SSE policy, and public-status exceptions', () => {
+    expect(app).toMatch(/req\.url\.startsWith\('\/v1\/'\)/);
+    expect(app).not.toMatch(/!req\.url\.startsWith\('\/v1\/status'\)/);
+    expect(app).toMatch(/reply\.header\('cache-control', 'no-store, private'\)/);
+    expect(doc).toMatch(/\/v1\/\*<\/code> \(caller-private default\)/);
+    expect(doc.match(/no-cache, no-store, private, no-transform/g)).toHaveLength(2);
+    expect(doc).toMatch(/\/v1\/status\/subscribe\*<\/code> \(mailbox mutation\)/);
+    expect(doc).toMatch(/\/v1\/status<\/code> \(public\)/);
+    expect(doc).toMatch(/\/v1\/status\/stream<\/code> \(SSE\)/);
+    expect(doc).toMatch(/<code>Vary: Origin<\/code>/);
+  });
+
   it('Cross-Origin-Resource-Policy reflects the cross-origin posture', () => {
     expect(app).toMatch(/crossOriginResourcePolicy:\s*\{\s*policy:\s*'cross-origin'/);
     expect(doc).toMatch(/Cross-Origin-Resource-Policy:\s*cross-origin/);

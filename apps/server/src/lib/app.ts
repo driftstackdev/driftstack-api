@@ -978,23 +978,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // /v1/profile-snapshots, /v1/agent-sessions, /v1/api-keys, /v1/webhooks,
   // /v1/webhook-deliveries, /v1/team, /v1/usage, /v1/oauth, /v1/legal/required,
   // ...) whose GET payloads are caller-private and must not sit in a shared /
-  // proxy / browser cache. So it's now the default for ALL of /v1, with two
-  // deliberate carve-outs:
-  //   1. /v1/status* — the PUBLIC status page (status / incidents / sla /
-  //      stream): public + cacheable; those routes set their own
-  //      `public, max-age=30`. Excluded by prefix.
-  //   2. Never OVERRIDE a Cache-Control a route set itself. Preserves the
-  //      public incident reads' `public, max-age=30` AND — critically — the SSE
-  //      streams' `no-cache, no-transform` (no-transform stops proxies buffering
-  //      the event stream; clobbering it to no-store would risk breaking SSE
-  //      delivery — a latent bug the old unconditional /v1/account/* stamp had
-  //      for the notifications stream).
+  // proxy / browser cache. So it's now the default for ALL of /v1, with one
+  // deliberate carve-out: never OVERRIDE a Cache-Control a route set itself.
+  // This preserves the public status reads' `public, max-age=30` and the public
+  // status stream's `no-cache, no-transform`, while the unauthenticated status
+  // subscription mutations inherit the private no-store default. Preserving a
+  // route-owned header also keeps `no-transform` on every SSE response so an
+  // intermediary cannot buffer or rewrite the stream.
+  //
+  // In particular, there is intentionally no `/v1/status*` prefix exemption:
+  // public status routes opt into their public cache policy explicitly, while
+  // subscribe/confirm/unsubscribe carry mailbox state and one-time tokens.
   app.addHook('onSend', (req, reply, _payload, done) => {
-    if (
-      req.url.startsWith('/v1/') &&
-      !req.url.startsWith('/v1/status') &&
-      reply.getHeader('cache-control') === undefined
-    ) {
+    if (req.url.startsWith('/v1/') && reply.getHeader('cache-control') === undefined) {
       void reply.header('cache-control', 'no-store, private');
     }
     done();
@@ -1501,6 +1497,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.agentSessionEventBus !== undefined
         ? { transcriptEventBus: deps.agentSessionEventBus }
         : {}),
+      // Raw transcript SSE bypasses @fastify/cors's onSend hook. Give the route
+      // the same origin authority as the app-level CORS plugin so its 200 stream
+      // reflects only an allowed origin and varies caches by Origin.
+      cors: {
+        permissiveCors: deps.permissiveCors,
+        dashboardOrigin: deps.dashboardOrigin,
+        corsAllowedOrigins: deps.corsAllowedOrigins,
+      },
       // Arc 2 sub-slice 8.4 (v2-#8) — gui_control_key auto-mint. The
       // route registers only when an encryption key is wired (shared
       // MFA_ENCRYPTION_KEY per the BYOK / MFA pattern).
