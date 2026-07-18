@@ -305,6 +305,41 @@ function buildRegistry(): OpenAPIRegistry {
     429: { description: 'Rate limit or concurrency limit hit.', content: problemContent },
   };
 
+  const directSessionOperationErrors = {
+    404: {
+      description: 'Session not found (or owned by another account).',
+      content: problemContent,
+    },
+    409: {
+      description:
+        'Session is still creating, or is busy because another direct operation owns it. Wait until the session is ready before retrying; if it remains busy, end it and create a fresh session.',
+      content: problemContent,
+    },
+    410: {
+      description:
+        'Session is terminal or was closed during the operation. Create a fresh session instead of retrying this session.',
+      content: problemContent,
+    },
+    502: {
+      description:
+        'The browser driver failed during the operation. This session is terminal; create a fresh session.',
+      content: problemContent,
+    },
+    503: {
+      description:
+        'The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.',
+      content: problemContent,
+    },
+  };
+
+  const directSessionOperationTimeout = {
+    504: {
+      description:
+        'The operation exceeded its time budget. This session is terminal; create a fresh session.',
+      content: problemContent,
+    },
+  };
+
   // ── Sessions ───────────────────────────────────────────────────────────
   registerRoute(r, {
     method: 'post',
@@ -369,9 +404,8 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Navigation completed.',
         content: { 'application/json': { schema: NavigateResponseSchema } },
       },
-      404: { description: 'Session not found.', content: problemContent },
-      410: { description: 'Session destroyed.', content: problemContent },
-      502: { description: 'Driver-level error during navigation.', content: problemContent },
+      ...directSessionOperationErrors,
+      ...directSessionOperationTimeout,
       ...errors4xx,
     },
   });
@@ -399,9 +433,8 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Interaction completed.',
         content: { 'application/json': { schema: InteractResponseSchema } },
       },
-      404: { description: 'Session not found.', content: problemContent },
-      410: { description: 'Session destroyed.', content: problemContent },
-      502: { description: 'Driver-level error.', content: problemContent },
+      ...directSessionOperationErrors,
+      ...directSessionOperationTimeout,
       ...errors4xx,
     },
   });
@@ -434,10 +467,7 @@ function buildRegistry(): OpenAPIRegistry {
           },
         },
       },
-      404: {
-        description: 'Session not found (or owned by another account).',
-        content: problemContent,
-      },
+      ...directSessionOperationErrors,
       ...errors4xx,
     },
   });
@@ -487,10 +517,7 @@ function buildRegistry(): OpenAPIRegistry {
           },
         },
       },
-      404: {
-        description: 'Session not found (or owned by another account).',
-        content: problemContent,
-      },
+      ...directSessionOperationErrors,
       ...errors4xx,
     },
   });
@@ -529,10 +556,7 @@ function buildRegistry(): OpenAPIRegistry {
           },
         },
       },
-      404: {
-        description: 'Session not found (or owned by another account).',
-        content: problemContent,
-      },
+      ...directSessionOperationErrors,
       ...errors4xx,
     },
   });
@@ -571,10 +595,7 @@ function buildRegistry(): OpenAPIRegistry {
           },
         },
       },
-      404: {
-        description: 'Session not found (or owned by another account).',
-        content: problemContent,
-      },
+      ...directSessionOperationErrors,
       ...errors4xx,
     },
   });
@@ -607,10 +628,7 @@ function buildRegistry(): OpenAPIRegistry {
           },
         },
       },
-      404: {
-        description: 'Session not found (or owned by another account).',
-        content: problemContent,
-      },
+      ...directSessionOperationErrors,
       ...errors4xx,
     },
   });
@@ -647,10 +665,7 @@ function buildRegistry(): OpenAPIRegistry {
           },
         },
       },
-      404: {
-        description: 'Session not found (or owned by another account).',
-        content: problemContent,
-      },
+      ...directSessionOperationErrors,
       ...errors4xx,
     },
   });

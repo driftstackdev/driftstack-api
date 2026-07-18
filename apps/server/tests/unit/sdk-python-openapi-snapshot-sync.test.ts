@@ -9,10 +9,10 @@
 // and route-coverage checks path↔route, not snapshot↔spec.
 //
 // Scope is STRUCTURAL on purpose (paths, per-path methods, operationIds,
-// component-schema keys) — not a byte-for-byte compare. That catches the
-// real drift class (added/removed endpoints, operations, operationIds,
-// schemas) while staying immune to prettier formatting / example-value
-// churn. If this fails, the fix is almost always:
+// response-status sets, component-schema keys) — not a byte-for-byte compare.
+// That catches the real drift class (added/removed endpoints, operations,
+// operationIds, documented outcomes, schemas) while staying immune to prettier
+// formatting / example-value churn. If this fails, the fix is almost always:
 //   npm run sdk:python:dump-spec && npx prettier --write packages/sdk-python/openapi.json
 // committed in the SAME change as the openapi.ts edit. (A new schema here
 // also implies a pending datamodel-codegen run for models.py — see
@@ -33,7 +33,10 @@ const FIX =
 
 interface MinimalSpec {
   info: { version: string };
-  paths: Record<string, Record<string, { operationId?: string }>>;
+  paths: Record<
+    string,
+    Record<string, { operationId?: string; responses?: Record<string, unknown> }>
+  >;
   components?: { schemas?: Record<string, unknown> };
 }
 
@@ -49,6 +52,19 @@ function operationIdsOf(spec: MinimalSpec): Set<string> {
   const out = new Set<string>();
   for (const ops of Object.values(spec.paths)) {
     for (const op of Object.values(ops)) if (op.operationId) out.add(op.operationId);
+  }
+  return out;
+}
+
+function responseStatusSetsOf(spec: MinimalSpec): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [path, operations] of Object.entries(spec.paths)) {
+    for (const [method, operation] of Object.entries(operations)) {
+      if (operation.responses === undefined) continue;
+      out[`${method.toUpperCase()} ${path}`] = Object.keys(operation.responses).sort(
+        (left, right) => Number(left) - Number(right),
+      );
+    }
   }
   return out;
 }
@@ -71,6 +87,10 @@ describe('sdk-python openapi.json snapshot ↔ live spec structural sync', () =>
 
   it(`operationId set matches — SDK-aligned ids stay dumped (${FIX})`, () => {
     expect([...operationIdsOf(snapshot)].sort()).toEqual([...operationIdsOf(live)].sort());
+  });
+
+  it(`response status sets match for every operation (${FIX})`, () => {
+    expect(responseStatusSetsOf(snapshot)).toEqual(responseStatusSetsOf(live));
   });
 
   it(`component-schema key set matches — a new schema also implies a models.py codegen run (${FIX})`, () => {

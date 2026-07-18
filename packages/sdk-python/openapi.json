@@ -6003,7 +6003,17 @@
             }
           },
           "404": {
-            "description": "Session not found.",
+            "description": "Session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Session is still creating, or is busy because another direct operation owns it. Wait until the session is ready before retrying; if it remains busy, end it and create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6013,7 +6023,7 @@
             }
           },
           "410": {
-            "description": "Session destroyed.",
+            "description": "Session is terminal or was closed during the operation. Create a fresh session instead of retrying this session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6033,7 +6043,27 @@
             }
           },
           "502": {
-            "description": "Driver-level error during navigation.",
+            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The operation exceeded its time budget. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6222,7 +6252,17 @@
             }
           },
           "404": {
-            "description": "Session not found.",
+            "description": "Session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Session is still creating, or is busy because another direct operation owns it. Wait until the session is ready before retrying; if it remains busy, end it and create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6232,7 +6272,7 @@
             }
           },
           "410": {
-            "description": "Session destroyed.",
+            "description": "Session is terminal or was closed during the operation. Create a fresh session instead of retrying this session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6252,7 +6292,27 @@
             }
           },
           "502": {
-            "description": "Driver-level error.",
+            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The operation exceeded its time budget. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6433,8 +6493,48 @@
               }
             }
           },
+          "409": {
+            "description": "Session is still creating, or is busy because another direct operation owns it. Wait until the session is ready before retrying; if it remains busy, end it and create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Session is terminal or was closed during the operation. Create a fresh session instead of retrying this session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6852,8 +6952,48 @@
               }
             }
           },
+          "409": {
+            "description": "Session is still creating, or is busy because another direct operation owns it. Wait until the session is ready before retrying; if it remains busy, end it and create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Session is terminal or was closed during the operation. Create a fresh session instead of retrying this session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6989,8 +7129,48 @@
               }
             }
           },
+          "409": {
+            "description": "Session is still creating, or is busy because another direct operation owns it. Wait until the session is ready before retrying; if it remains busy, end it and create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Session is terminal or was closed during the operation. Create a fresh session instead of retrying this session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7168,8 +7348,48 @@
               }
             }
           },
+          "409": {
+            "description": "Session is still creating, or is busy because another direct operation owns it. Wait until the session is ready before retrying; if it remains busy, end it and create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Session is terminal or was closed during the operation. Create a fresh session instead of retrying this session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7300,8 +7520,48 @@
               }
             }
           },
+          "409": {
+            "description": "Session is still creating, or is busy because another direct operation owns it. Wait until the session is ready before retrying; if it remains busy, end it and create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Session is terminal or was closed during the operation. Create a fresh session instead of retrying this session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7439,8 +7699,48 @@
               }
             }
           },
+          "409": {
+            "description": "Session is still creating, or is busy because another direct operation owns it. Wait until the session is ready before retrying; if it remains busy, end it and create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Session is terminal or was closed during the operation. Create a fresh session instead of retrying this session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {

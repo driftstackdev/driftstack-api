@@ -233,8 +233,13 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
   }
 
   it('inventories the complete current published and registered operation sets', () => {
-    expect(specOperations.size).toBe(231);
-    expect(routeOperations.size).toBe(253);
+    // d5e30ea9c published the 232nd operation in the frozen generator
+    // authority; keep this inventory aligned with that exact spec rather than
+    // retaining the prior archetype-catalog-era count.
+    expect(specOperations.size).toBe(232);
+    // f66e8a02c added PUT /v1/admin/incidents/:id as the 254th unique Fastify
+    // registration; this verifier-only correction does not add a route.
+    expect(routeOperations.size).toBe(254);
   });
 
   it('documents the method-specific customer-core contract', () => {

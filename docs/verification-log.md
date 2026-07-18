@@ -29394,3 +29394,47 @@ concurrent slot “immediately” remains queued for a separately authorized tru
 correction. No route, OpenAPI, SDK, shared workspace build/deploy, native,
 harness/Fleet/Family-B, environment, customer, secret or foreign pnpm action was
 performed.
+
+---
+
+## V-703 — Direct-operation recovery is explicit in the generated contract
+
+**Date:** 2026-07-17
+
+The executable session service distinguishes an operation still waiting for
+exclusive ownership from a session that can never accept work again. The generated
+OpenAPI contract did not: it omitted 409 entirely, published 410 on only two of the
+eight public direct operations, and preserved that incomplete response map in the
+frozen Python SDK input. Generated clients could therefore retry a terminal session
+or fail to wait for a legitimate owner without any machine-readable contract for the
+choice.
+
+One shared response matrix now covers navigate, interact, wait, state capture,
+capture, extract, search and login. A 409 says the reservation is still creating or
+another operation owns `busy`; callers wait for `ready`, then end and recreate a
+session that remains stuck. A 410 says the row is terminal or close won during the
+operation and requires a fresh session. Every response uses the canonical RFC
+problem schema. Driver loss (502) and an unavailable selected driver (503) are
+published on all eight operations and explain the resulting terminal recovery;
+producer-backed timeouts (504) remain limited to navigate and interact. Metadata GET
+and idempotent DELETE are explicitly guarded against inheriting operation-only
+409/410 outcomes.
+
+The committed Python OpenAPI snapshot is generated twice from source with identical
+SHA-256 `32a27f072d60b41a92a3f1e7376e0d401c184bc93e84b545541bc65c1c2d7d22`.
+Its structural sync guard now compares response-status sets for every published
+operation, while the direct-operation invariant compares exact live/frozen status
+sets and descriptions, recovery wording, problem references and non-contamination.
+The focused proof passes two files and 32/32 tests; the affected runtime/OpenAPI/docs
+matrix passes 10 files and 165/165 tests. The expanded OpenAPI inventory and
+cross-source replay passes 21 files and 175/175 tests, including verifier-only
+corrections for the already-shipped 232-operation spec, 254 Fastify registrations
+and twelve generated constrained `timeoutMs` fields. Strict server source and test
+TypeScript, targeted ESLint, Prettier and diff/whitespace checks are green.
+
+This is a response-contract correction only. It does not make the current mock
+driver a production browser adapter, activate the direct-login surface, or solve the
+durable operation-token and post-election cleanup residuals recorded in V-702. No
+route, service, repository, schema, migration, SDK runtime, shared workspace
+build/deploy, native, harness/Fleet/Family-B, environment, customer, secret, package
+publication or foreign pnpm action was performed.
