@@ -37,12 +37,22 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
         <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
           Your account is already on the free plan: 1 profile, 1 concurrent
           session of up to 20 minutes. No subscription, no expiry — the best way to
-          try Driftstack before committing. Launch the desktop app and choose browser sign-in;
-          that provisions a restricted device credential for the app, not a customer API key.
+          try Driftstack before committing. The signed Apple-silicon macOS app is
+          supplied directly by Driftstack support. Once you have it, launch the app and
+          choose browser sign-in; that provisions a restricted device credential for the
+          app, not a customer API key.
         </p>
-        <a href="/" class="btn-primary mt-4 inline-flex">
-          Go to your dashboard
-        </a>
+        <div class="mt-4 flex flex-wrap gap-3">
+          <a href="/" class="btn-primary inline-flex">
+            Go to your dashboard
+          </a>
+          <a
+            href="mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access"
+            class="btn-secondary inline-flex"
+          >
+            Request desktop app access
+          </a>
+        </div>
       </li>
       <li class="card p-6">
         <div class="flex items-baseline justify-between gap-3">
@@ -82,9 +92,10 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
             >2</span
           >
           <span class="leading-relaxed">
-            Download the Driftstack desktop app and choose browser sign-in.
-            Driftstack provisions a restricted device credential for the app;
-            that's where Free customers launch and drive iPhone Safari sessions.
+            Request the signed Apple-silicon macOS app from Driftstack support,
+            then choose browser sign-in. Driftstack provisions a restricted device
+            credential for the app; that's where Free customers launch and drive
+            iPhone Safari sessions. There is no public installer link.
           </span>
         </li>
         <li class="flex gap-4">

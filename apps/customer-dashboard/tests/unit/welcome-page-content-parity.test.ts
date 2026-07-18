@@ -61,16 +61,19 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     expect(body).toMatch(
       /Start free with no card — or pick a paid tier and we'll send you\s+to Stripe to confirm payment\. Your card details stay between you\s+and Stripe — we never see them/,
     );
-    // Step 2 — Free uses browser sign-in to provision the app's restricted
-    // device credential; this is deliberately not framed as a customer key.
+    // Step 2 — support supplies the signed app; Free then uses browser
+    // sign-in to provision its restricted device credential.
     expect(body).toMatch(
-      /Download the Driftstack desktop app and choose browser sign-in\.\s+Driftstack provisions a restricted device credential for the app;\s+that's where Free customers launch and drive iPhone Safari sessions/,
+      /Request the signed Apple-silicon macOS app from Driftstack support,\s+then choose browser sign-in\. Driftstack provisions a restricted device\s+credential for the app; that's where Free customers launch and drive\s+iPhone Safari sessions\. There is no public installer link\./,
+    );
+    expect(body).toContain(
+      'mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access',
     );
     // Step 3 — customer keys and SDK automation are paid-tier capabilities.
     expect(body).toMatch(
       /On an API-enabled paid tier, create a customer API key for SDK\s+automation\. Customer keys can be revoked or rotated any time;\s+Free desktop sign-in does not require one/,
     );
-    expect(body).toMatch(/restricted device credential for the app, not a customer API key/);
+    expect(body).toMatch(/restricted device credential for the\s+app, not a customer API key/);
     expect(body).toMatch(/customer API\s+keys, and SDK automation/);
     expect(body).not.toMatch(/API key[^.]*connect the desktop app/i);
   });
@@ -83,7 +86,7 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
   });
 
   it('CTAs go to the dashboard home (free start) + /select-tier (upgrade) — destinations exist (2026-07-02: free CTA moved off the deleted /first-session)', () => {
-    expect(body).toMatch(/<a href="\/" class="btn-primary/);
+    expect(body).toMatch(/<a href="\/" class="btn-primary inline-flex">/);
     expect(body).toMatch(/href="\/select-tier\/"/);
     expect(existsSync(SELECT_TIER)).toBe(true);
   });

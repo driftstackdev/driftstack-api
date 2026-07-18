@@ -33,7 +33,7 @@ interface SetUpOpts {
   /** Page URL override (e.g. the ?subscribed= post-checkout landing). */
   url?: string;
   /** Extra localStorage entries seeded before the page script runs
-   *  (e.g. ds_onboarding_dismissed / ds_onboarding_app_clicked). */
+   *  (e.g. ds_onboarding_dismissed or a retired marker under test). */
   storage?: Record<string, string>;
 }
 
@@ -501,10 +501,9 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     ).toBe('true');
   });
 
-  it('onboarding: fully-onboarded account (app clicked, key, session, team) auto-hides the checklist', async () => {
+  it('onboarding: a key plus a recorded session and team membership auto-hide the checklist', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
-      storage: { ds_onboarding_app_clicked: '1' },
       route: makeRouter({
         me: { name: 'A', tier: 'team_manual' },
         apiKeys: [{ revoked_at: null }],
@@ -515,6 +514,26 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     win = window;
     await flush();
     expect(isHidden(window, '[data-onboarding]')).toBe(true);
+  });
+
+  it('onboarding: a retired app-link click marker is scrubbed and cannot fake app completion', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      storage: { ds_onboarding_app_clicked: '1' },
+      route: makeRouter({
+        me: { name: 'A', tier: 'solo_manual' },
+        apiKeys: [],
+        sessions: [],
+        teamStatus: 403,
+      }),
+    });
+    win = window;
+    await flush();
+    expect(window.localStorage.getItem('ds_onboarding_app_clicked')).toBeNull();
+    expect(
+      window.document.querySelector('[data-onboarding-step="app"]')?.getAttribute('data-step-done'),
+    ).toBeNull();
+    expect(isHidden(window, '[data-onboarding]')).toBe(false);
   });
 
   it('onboarding: recorded usage alone (no session rows) also satisfies the first-session step', async () => {
@@ -533,6 +552,9 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
       window.document
         .querySelector('[data-onboarding-step="session"]')
         ?.getAttribute('data-step-done'),
+    ).toBe('true');
+    expect(
+      window.document.querySelector('[data-onboarding-step="app"]')?.getAttribute('data-step-done'),
     ).toBe('true');
   });
 

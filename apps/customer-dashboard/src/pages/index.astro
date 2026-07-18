@@ -74,12 +74,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             —
           </span>
           <a
-            href="https://docs.driftstack.dev/quickstart/"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access"
             class="btn-primary"
           >
-            Get the app
+            Request desktop app
           </a>
         </div>
       </header>
@@ -116,13 +114,13 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           <span data-step-marker class="badge-count mt-0.5">1</span>
           <span>
             <a
-              href="https://docs.driftstack.dev/quickstart/"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access"
               data-onboarding-app-link
-              class="font-medium text-tk-ink hover:text-tk-accent-text">Get the desktop app</a
+              class="font-medium text-tk-ink hover:text-tk-accent-text">Request desktop app access</a
             >
-            <span class="mt-0.5 block text-xs text-tk-ink-3">Sessions are driven there.</span>
+            <span class="mt-0.5 block text-xs text-tk-ink-3"
+              >Signed Apple-silicon macOS app, supplied directly by Driftstack.</span
+            >
           </span>
         </li>
         <li data-onboarding-step="key" class="flex items-start gap-2.5 text-sm">
@@ -281,9 +279,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       </h2>
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <a
-          href="https://docs.driftstack.dev/quickstart/"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access"
           class="group rounded-lg border border-tk-border bg-tk-surface p-4 hover:border-tk-accent/40 hover:bg-tk-surface/80"
         >
           <div class="flex items-center gap-2">
@@ -292,9 +288,11 @@ const ARCHETYPE_LABELS = Object.fromEntries(
                 <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
               </svg>
             </span>
-            <p class="font-medium text-tk-ink">Get the app</p>
+            <p class="font-medium text-tk-ink">Request desktop app</p>
           </div>
-          <p class="mt-2 text-xs text-tk-ink-3">Launch iPhone sessions from the desktop app.</p>
+          <p class="mt-2 text-xs text-tk-ink-3">
+            Ask Driftstack for the signed Apple-silicon macOS app.
+          </p>
         </a>
         <a
           href="/team/"
@@ -341,9 +339,9 @@ const ARCHETYPE_LABELS = Object.fromEntries(
                 <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
               </svg>
             </span>
-            <p class="font-medium text-tk-ink">Read the quickstart</p>
+            <p class="font-medium text-tk-ink">API quickstart</p>
           </div>
-          <p class="mt-2 text-xs text-tk-ink-3">10-min walkthrough on docs.</p>
+          <p class="mt-2 text-xs text-tk-ink-3">Paid-tier code walkthrough on docs.</p>
         </a>
       </div>
     </section>
@@ -495,7 +493,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         if (sub) {
           showBanner(
             'Your ' + tierLabel(sub) + ' subscription is active — welcome aboard. ' +
-              'Install the desktop app to start your first session.',
+              'Request desktop app access to start your first session.',
           );
         }
       } catch (_) {
@@ -505,13 +503,15 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       // Fleet v2 (2026-07-02) — onboarding checklist state. Mirrors the
       // desktop FirstRunWizard order (app → connect → session → team).
       // null = not yet known; the panel renders once key+session settle so
-      // there is no flash for fully-onboarded accounts. 'app' is not
-      // server-verifiable — a click on the download link marks it done
-      // (localStorage ds_onboarding_app_clicked).
+      // there is no flash for fully-onboarded accounts. A click cannot prove
+      // that the signed app was received or installed; only a recorded session
+      // proves app access.
       const onboarding = { app: false, key: null, session: null, team: null };
       let onboardingDismissed = false;
       try {
-        onboarding.app = localStorage.getItem('ds_onboarding_app_clicked') === '1';
+        // Retire the former click-to-complete marker: opening a link was never
+        // evidence that an installer existed, completed, or launched.
+        localStorage.removeItem('ds_onboarding_app_clicked');
         onboardingDismissed = localStorage.getItem('ds_onboarding_dismissed') === '1';
       } catch (_) {
         /* defaults */
@@ -562,19 +562,6 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           renderOnboarding();
         });
       }
-      const onboardingAppLink = root.querySelector('[data-onboarding-app-link]');
-      if (onboardingAppLink) {
-        onboardingAppLink.addEventListener('click', function () {
-          onboarding.app = true;
-          try {
-            localStorage.setItem('ds_onboarding_app_clicked', '1');
-          } catch (_) {
-            /* session-only */
-          }
-          renderOnboarding();
-        });
-      }
-
       // V-331 — pick up the X-Driftstack-Account header from the
       // shared helper installed by DashboardLayout. Self-scope returns
       // {} so the request behaves identically when not "acting as".
@@ -697,6 +684,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           // Onboarding: ANY session ever (terminal ones included) counts as
           // "ran a first session"; non-zero usage below also satisfies it.
           onboarding.session = onboarding.session === true || all.length > 0;
+          onboarding.app = onboarding.session === true;
           renderOnboarding();
           const active = all.filter(function (s) {
             return s.status !== 'destroyed' && s.status !== 'errored';
@@ -785,6 +773,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           // Onboarding: recorded usage also proves a first session ran.
           if (isFinite(minutes) && minutes > 0) {
             onboarding.session = true;
+            onboarding.app = true;
             renderOnboarding();
           }
         })

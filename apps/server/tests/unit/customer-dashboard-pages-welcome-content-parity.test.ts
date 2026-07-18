@@ -41,7 +41,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
       /Your account is already on the free plan: 1 profile, 1 concurrent\s*\n?\s*session of up to 20 minutes\. No subscription, no expiry/,
     );
     expect(body).toMatch(
-      /<a href="\/" class="btn-primary mt-4 inline-flex">\s*\n?\s*Go to your dashboard\s*\n?\s*<\/a>/,
+      /<a href="\/" class="btn-primary inline-flex">\s*\n?\s*Go to your dashboard\s*\n?\s*<\/a>/,
     );
   });
 
@@ -66,15 +66,19 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(
       /Your card details stay between you\s*\n?\s*and Stripe — we never see them\./,
     );
-    // Step 2 — browser sign-in provisions the restricted app credential.
+    // Step 2 — support supplies the signed app, then browser sign-in
+    // provisions the restricted app credential.
     expect(body).toMatch(
-      /Download the Driftstack desktop app and choose browser sign-in\.\s*\n?\s*Driftstack provisions a restricted device credential for the app;\s*\n?\s*that's where Free customers launch and drive iPhone Safari sessions\./,
+      /Request the signed Apple-silicon macOS app from Driftstack support,\s*\n?\s*then choose browser sign-in\. Driftstack provisions a restricted device\s*\n?\s*credential for the app; that's where Free customers launch and drive\s*\n?\s*iPhone Safari sessions\. There is no public installer link\./,
+    );
+    expect(body).toContain(
+      'mailto:support@driftstack.dev?subject=Driftstack%20desktop%20app%20access',
     );
     // Step 3 — customer keys/SDK automation require a paid API tier.
     expect(body).toMatch(
       /On an API-enabled paid tier, create a customer API key for SDK\s*\n?\s*automation\. Customer keys can be revoked or rotated any time;\s*\n?\s*Free desktop sign-in does not require one\./,
     );
-    expect(body).toMatch(/restricted device credential for the app, not a customer API key/);
+    expect(body).toMatch(/restricted device credential for the\s+app, not a customer API key/);
     expect(body).not.toMatch(/API key[^.]*connect the desktop app/i);
     // The numbered-circle visual treatment: glow-red bordered round badges 1/2/3.
     expect(body).toMatch(/rounded-full border border-tk-accent\/40 bg-tk-accent\/10/);
