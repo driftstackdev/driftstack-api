@@ -76,4 +76,9 @@ describe('W244.D api-security-headers doc parity', () => {
     expect(doc).toMatch(/x-ratelimit-bucket/);
     expect(doc).toMatch(/x-ratelimit-limit/);
   });
+
+  it('exposes the crypto-checkout replay marker to cross-origin GUI clients', () => {
+    expect(app).toMatch(/'idempotent-replayed',/);
+    expect(doc).toMatch(/Access-Control-Expose-Headers:[^\n]*idempotent-replayed/);
+  });
 });

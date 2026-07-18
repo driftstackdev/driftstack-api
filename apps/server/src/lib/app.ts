@@ -878,6 +878,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ],
     exposedHeaders: [
       'x-request-id',
+      // Crypto checkout replays are safe only when the cross-origin GUI can
+      // distinguish the restored order from a freshly minted response.
+      'idempotent-replayed',
       // W199 — full RateLimit-header set documented at /docs/rate-limits.
       'x-ratelimit-bucket',
       'x-ratelimit-limit',

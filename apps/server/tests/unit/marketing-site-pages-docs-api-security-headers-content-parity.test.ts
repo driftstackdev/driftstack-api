@@ -104,7 +104,7 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
     );
     expect(body).toMatch(
       // W561 — IETF ratelimit-* names exposed alongside the x- set.
-      /Access-Control-Expose-Headers: x-request-id, x-ratelimit-bucket, x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, ratelimit-limit, ratelimit-remaining, ratelimit-reset, retry-after/,
+      /Access-Control-Expose-Headers: x-request-id, idempotent-replayed, x-ratelimit-bucket, x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, ratelimit-limit, ratelimit-remaining, ratelimit-reset, retry-after/,
     );
     expect(body).toMatch(/Access-Control-Max-Age: 600/);
     expect(body).toMatch(/Access-Control-Allow-Credentials: true/);

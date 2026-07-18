@@ -109,7 +109,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <pre><code>{`Access-Control-Allow-Origin: <reflected allow-list match>
 Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
 Access-Control-Allow-Headers: authorization, content-type, x-request-id, stripe-signature, x-nowpayments-sig
-Access-Control-Expose-Headers: x-request-id, x-ratelimit-bucket, x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, ratelimit-limit, ratelimit-remaining, ratelimit-reset, retry-after
+Access-Control-Expose-Headers: x-request-id, idempotent-replayed, x-ratelimit-bucket, x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, ratelimit-limit, ratelimit-remaining, ratelimit-reset, retry-after
 Access-Control-Max-Age: 600
 Access-Control-Allow-Credentials: true`}</code></pre>
 

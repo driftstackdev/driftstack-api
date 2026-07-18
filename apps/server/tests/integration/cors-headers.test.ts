@@ -82,7 +82,7 @@ describe('V-664.B CORS — preflight (OPTIONS)', () => {
 });
 
 describe('V-664.B CORS — actual-request response', () => {
-  it('exposedHeaders includes x-request-id + rate-limit headers', async () => {
+  it('exposedHeaders includes request, checkout-replay, and rate-limit headers', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'GET',
@@ -91,6 +91,7 @@ describe('V-664.B CORS — actual-request response', () => {
     });
     const exposed = res.headers['access-control-expose-headers'] ?? '';
     expect(exposed.toLowerCase()).toContain('x-request-id');
+    expect(exposed.toLowerCase()).toContain('idempotent-replayed');
     expect(exposed.toLowerCase()).toContain('x-ratelimit-remaining');
     expect(exposed.toLowerCase()).toContain('retry-after');
   });

@@ -115,6 +115,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     // Per-line pins (not one long \s*\n chain — W561 added the IETF names and
     // extending the chain past 5 groups risks the backtracking-hang lesson).
     expect(body).toMatch(/exposedHeaders: \[\s*\n?\s*'x-request-id',/);
+    expect(body).toMatch(/'idempotent-replayed',/);
     expect(body).toMatch(/'x-ratelimit-bucket',/);
     expect(body).toMatch(/'x-ratelimit-limit',/);
     expect(body).toMatch(/'x-ratelimit-remaining',/);
