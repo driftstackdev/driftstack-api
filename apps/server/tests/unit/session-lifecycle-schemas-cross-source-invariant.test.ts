@@ -78,7 +78,10 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
       /CreateSessionRequestSchema = z\.object\(\{\s*\n\s*archetype: SelectableArchetypeIdSchema\.optional\(\)/,
     );
     expect(p).toMatch(/purpose: SessionPurposeSchema\.optional\(\)/);
-    expect(p).toMatch(/label: z\.string\(\)\.max\(120\)\.optional\(\)/);
+    // 41f065b41 centralized the launch/create label bound so those two request
+    // shapes cannot drift while still preserving optional create semantics.
+    expect(p).toMatch(/SessionLabelSchema = z\.string\(\)\.max\(120\)/);
+    expect(p).toMatch(/label: SessionLabelSchema\.optional\(\)/);
     // Bounded-blob fix — metadata is the size-capped SessionMetadataSchema.
     expect(p).toMatch(/metadata: SessionMetadataSchema\.optional\(\)/);
     expect(p).toMatch(/profile_id: z\.string\(\)\.optional\(\)/);
