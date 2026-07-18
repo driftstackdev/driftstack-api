@@ -85,7 +85,11 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(body).toMatch(/member then runs sessions \/ manages resources scoped to the owner's/);
     expect(body).toMatch(/account\./);
     expect(body).toMatch(/^## Step 1 — Invite a teammate \(owner\)$/m);
-    expect(body).toMatch(/- `member` — read access to the owner's sessions \/ profiles \//);
+    // V-704 — team members retain persisted resource reads, but live browser
+    // state contains secrets and therefore requires team-admin authority.
+    expect(body).toMatch(
+      /- `member` — read access to the owner's persisted session metadata \/\s+profiles \/ audit log \/ etc\. Live session state requires `admin`\./,
+    );
     expect(body).toMatch(/- `admin` — full read \+ write\. Can create sessions, mint API/);
     expect(body).toMatch(/-H "Authorization: Bearer \$DRIFTSTACK_OWNER_KEY"/);
     expect(body).toMatch(/-d '\{"email": "alice@example\.com", "role": "admin"\}'/);
@@ -114,7 +118,14 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(body).toMatch(/│ destroyed │/);
     expect(body).toMatch(/`errored`/);
     expect(body).toMatch(/destroy/);
-    expect(body).toMatch(/In practice you don't observe `creating` separately/);
+    // V-702 — creation has a durable reservation that concurrent list/detail
+    // reads can observe; direct operations require exact ready → busy admission.
+    expect(body).toMatch(
+      /concurrent resource read or list can observe the durable `creating` reservation/,
+    );
+    expect(body).toMatch(
+      /Every direct driver operation atomically claims `ready` → `busy`; while the session is `creating` or `busy`, another operation returns `409 Conflict`/,
+    );
     expect(body).toMatch(/^## Concurrency$/m);
     expect(body).toMatch(
       // S31 2026-07-07 (fable-truth-audit) — concurrency 429s carry no Retry-After.
