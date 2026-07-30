@@ -68,11 +68,17 @@ describe('docs homepage reference list content parity', () => {
 
   it('Recipes surface carries the v1.0/v1.1 scope qualifier on the /api index (matches slice 121 roadmap.astro promotion + slice 143 about.astro framing — drift to dropping the create/list/read/delete-at-v1.0 + execute-only-at-v1.1 clause would re-open the marketing-vs-reality gap closed across the 3 surfaces). S22.5: re-pointed from the superseded homepage card to api/index.astro, where the clause appears verbatim.', () => {
     expect(apiIndex).toMatch(/<a href="\/api\/recipes\/">Recipes<\/a>/);
+    // `1c9f80b24` replaced the prelaunch version promise with a present-tense
+    // contract. The load-bearing claim is unchanged — create/list/read/delete
+    // exist and execution does not — but it must not be restated as a dated
+    // roadmap commitment, so the shipped copy is pinned as-is.
     expect(apiIndex).toMatch(
-      /Create \/ list \/ read \/ delete ship at v1\.0; only execute\s+\(replay\) lands at v1\.1\./,
+      /The current API supports create \/ list \/ read \/ delete;\s+it does not expose recipe execution\./,
     );
-    // Ban the superseded "Write-only at v1.0" framing — v1.0 ships create/list/read/delete.
+    // Ban the superseded "Write-only at v1.0" framing and any return to a
+    // version-dated promise for recipe execution.
     expect(apiIndex).not.toMatch(/Write-only at v1\.0/);
+    expect(apiIndex).not.toMatch(/lands at v1\.1/);
     expect(body).not.toMatch(/Write-only at v1\.0/);
   });
 });
