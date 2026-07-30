@@ -52,7 +52,9 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/export interface AgentSessionPanelProps \{/);
     expect(body).toMatch(/info: LiveKitInfo;/);
     expect(body).toMatch(/aspectRatio\?: number;/);
-    expect(body).toMatch(/onStateChange\?: \(state: LivekitConnectionState\) => void;/);
+    // The callback now also receives the Room so a consumer can act on the
+    // exact room the transition belongs to.
+    expect(body).toMatch(/onStateChange\?: \(state: LivekitConnectionState, room: Room\) => void;/);
   });
 
   it('iPhone 16 Pro aspect-ratio default pinned: 1206/2622 ≈ 0.46 (the locked archetype iphone17_ios18_7_safari26_4; iPhone 17 shares iPhone 16 Pro geometry). Drift to a different default would render a wrong-aspect video frame when callers omit aspectRatio', () => {
@@ -120,7 +122,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).not.toMatch(/\}, \[info, onStateChange\]\);/);
     // onStateChange flows through a latest-value ref, decoupled from the effect.
     expect(body).toMatch(/const onStateChangeRef = useRef\(onStateChange\);/);
-    expect(body).toMatch(/onStateChangeRef\.current\?\.\(next\);/);
+    expect(body).toMatch(/onStateChangeRef\.current\?\.\(next, room\);/);
   });
 
   it("W617 no-publisher detection: NO_PUBLISHER_TIMEOUT_MS = 30_000 module export (raised from 10s so a COLD worker spawn — fresh browser fork → page load → LiveKit join — doesn't prematurely flip to the 'no video' message right as the stream appears, founder's first real launch 2026-06-18); publisher tri-state ('waiting' → 'publishing' on TrackSubscribed video, 'waiting' → 'none' on post-connect timeout); the 'none' overlay offers the parent's onNoPublisher fallback (open-polling-viewer button) — pinned for the founder-hit connected-but-empty-room black screen (no browser worker publishing)", () => {
@@ -128,8 +130,12 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(
       /const \[publisher, setPublisher\] = useState<'waiting' \| 'publishing' \| 'none'>\('waiting'\);/,
     );
-    expect(body).toMatch(/setPublisher\('publishing'\);/);
-    expect(body).toMatch(/setPublisher\(\(p\) => \(p === 'waiting' \? 'none' : p\)\);/);
+    // Publisher transitions go through the effect-local `setP` writer, which
+    // also mirrors into publisherRef and notifies onPublisher.
+    expect(body).toMatch(/setP\('publishing'\);/);
+    // The post-connect timeout escalates to 'none' only while the panel is
+    // still waiting — a publisher that arrived first must not be overwritten.
+    expect(body).toMatch(/if \(publisherRef\.current === 'waiting'\) setP\('none'\);/);
     // Timer cleared on unmount so a closed panel can't fire a stale fallback.
     expect(body).toMatch(/if \(noPublisherTimer !== null\) clearTimeout\(noPublisherTimer\);/);
     expect(body).toMatch(/data-overlay="publisher-state"/);
@@ -158,7 +164,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/clearPublisherLostTimer\(\);/);
     expect(body).toMatch(/setPublisherReconnecting\(false\);/);
     // The grace timer escalates to 'none' only after PUBLISHER_LOST_GRACE_MS.
-    expect(body).toMatch(/setPublisher\('none'\);/);
+    expect(body).toMatch(/setP\('none'\);/);
     expect(body).toMatch(/PUBLISHER_LOST_GRACE_MS\);/);
     // Guard the regression: NO instant publisher→'none' flip on a track drop.
     expect(body).not.toMatch(/setPublisher\(\(p\) => \(p === 'publishing' \? 'none' : p\)\);/);
@@ -202,6 +208,6 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // ref 250ms later was a silent no-op (every freeze escalated to a full Room rebuild).
     expect(body).toMatch(/pub\.setSubscribed\?\.\(true\);/);
     // The recovery effect keys on the recoverAction prop.
-    expect(body).toMatch(/\}, \[recoverAction\]\);/);
+    expect(body).toMatch(/\}, \[recoverAction, room\]\);/);
   });
 });

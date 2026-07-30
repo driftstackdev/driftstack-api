@@ -86,7 +86,10 @@ describe('LK.6.d — useInputCapture hook', () => {
     // The per-archetype live dims are an opt on the hook + a param on pointerToViewport,
     // threaded from the <video>'s first full-res natural size ÷ dpr (parent-side).
     expect(body).toMatch(/logical\?: \{ width: number; height: number \}/);
-    expect(body).toMatch(/\}, \[room, video, enabled, logicalW, logicalH\]\);/);
+    // `ownsAuthority` joined the dependency list when input was fenced to the
+    // control-authority holder: losing authority must re-run the effect and
+    // detach the listeners, not keep sending input from a demoted viewer.
+    expect(body).toMatch(/\}, \[room, video, enabled, logicalW, logicalH, ownsAuthority\]\);/);
   });
 
   it('mouseButton() restricts to 0|1|2 (left/middle/right) matching Quartz', () => {
@@ -130,7 +133,9 @@ describe('LK.6.d — useInputCapture hook', () => {
     // Effect reads PRIMITIVES off opts (room / videoElement→video / enabled) so it
     // re-runs on the real values, then short-circuits before installing any listener.
     expect(body).toMatch(/const \{ room, videoElement: video, enabled \} = opts;/);
-    expect(body).toMatch(/if \(!enabled \|\| room === null \|\| video === null\) return;/);
+    expect(body).toMatch(
+      /if \(!enabled \|\| room === null \|\| video === null \|\| !ownsAuthority\(room\)\) return;/,
+    );
   });
 
   it('sendInputEvent rejections are swallowed per-event BUT the first failure is surfaced (best-effort — handlers never throw; a silently-dead control channel read as view-only, founder-hit 2026-06-12)', () => {
