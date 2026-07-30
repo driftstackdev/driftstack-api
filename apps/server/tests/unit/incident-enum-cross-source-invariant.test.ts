@@ -125,6 +125,13 @@ describe('W851 incident enum cross-source invariant', () => {
 
   it('CRITICAL no source declares forbidden incident-status names (open / closed / acknowledged / fixed / completed / in_progress). These are common incident-tool conventions that V-295a intentionally avoids — drift to introducing them would fragment the 4-status lifecycle.', () => {
     const apiTypes = read(resolve(REPO_ROOT, 'packages/api-types/src/incidents.ts'));
+    // Scope the check to the IncidentStatusSchema enum body. The old pattern
+    // started at the identifier and ran on until ANY `])`, so it swept up
+    // later, unrelated schemas — `IncidentListStateSchema` legitimately offers
+    // an 'open' FILTER, which tripped this as a false positive.
+    const statusEnum = /IncidentStatusSchema = z\.enum\(\[([\s\S]*?)\]\)/.exec(apiTypes);
+    expect(statusEnum, 'IncidentStatusSchema enum block not found').not.toBeNull();
+    const body = statusEnum![1]!;
     for (const forbidden of [
       "'open'",
       "'closed'",
@@ -133,10 +140,17 @@ describe('W851 incident enum cross-source invariant', () => {
       "'completed'",
       "'in_progress'",
     ]) {
-      expect(apiTypes, `IncidentStatus must NOT include forbidden status ${forbidden}`).not.toMatch(
-        new RegExp(`IncidentStatusSchema[\\s\\S]+?${forbidden}[\\s\\S]+?\\]\\)`),
+      expect(body, `IncidentStatus must NOT include forbidden status ${forbidden}`).not.toContain(
+        forbidden,
       );
     }
+    // The lifecycle itself stays exactly four states.
+    expect(body.match(/'[a-z_]+'/g)).toEqual([
+      "'investigating'",
+      "'identified'",
+      "'monitoring'",
+      "'resolved'",
+    ]);
   });
 
   // ─── Severity ordering matches escalation ────────────────────

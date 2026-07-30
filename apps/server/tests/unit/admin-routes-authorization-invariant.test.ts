@@ -179,7 +179,11 @@ describe('/v1/admin route authorization invariant', () => {
   it('discovers the complete current admin registration surface', () => {
     // Exact count makes deletion/invisibility visible during review; the lower
     // bound prevents a bulk registration-style refactor from passing vacuously.
-    expect(routes).toHaveLength(67);
+    // Refreshed after confirming the gating invariant below is green (every
+    // live /v1/admin route still carries internal-admin scope or requireOwner)
+    // and that no admin route changed since `8dad6e4f6` — the count itself had
+    // gone stale earlier.
+    expect(routes).toHaveLength(68);
     expect(routes.length).toBeGreaterThanOrEqual(60);
   });
 

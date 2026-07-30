@@ -511,8 +511,13 @@ describe('all-route caller-authority invariant', () => {
   );
 
   it('discovers the complete current Fastify registration surface', () => {
-    expect(routes).toHaveLength(285);
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(214);
+    // Review tripwire, not a security assertion — the invariant below is what
+    // actually enforces authority. Counts refreshed after verifying that the
+    // structurally-UNAUTHORIZED set is exactly the 71 reviewed exemptions
+    // (35 public + 1 manual-auth + 35 disabled) and that the route surface is
+    // byte-identical to `8dad6e4f6`, i.e. the drift predates this refresh.
+    expect(routes).toHaveLength(286);
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(215);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {
