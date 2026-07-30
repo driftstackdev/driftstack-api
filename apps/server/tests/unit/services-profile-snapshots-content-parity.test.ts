@@ -125,8 +125,14 @@ describe('W401.C apps/server/src/services/profile-snapshots.ts content parity', 
     // insert under an account-row lock), the same guard as create/clone/import/
     // transfer; wrapped in try/catch (concurrent same-name race → ConflictError,
     // not 500), so the assignment is `result = await ...` inside the try.
+    // f216a86ea — restore mints a FRESH row identity (preallocated UUID +
+    // account-bound wrapped DEK) rather than inheriting anything from the
+    // snapshot, and threads both into that same atomic insert.
     expect(body).toMatch(
-      /result = await this\.profilesRepo\.insertWithLimit\(\s*\n?\s*\{\s*\n?\s*accountId: args\.accountId,\s*\n?\s*name: args\.name,\s*\n?\s*archetype: snapshot\.parentArchetype,\s*\n?\s*description: snapshot\.description,\s*\n?\s*\},\s*\n?\s*limit,\s*\n?\s*\);/,
+      /const identity = mintProfileRowIdentity\(this\.profileMasterKey, args\.accountId\);/,
+    );
+    expect(body).toMatch(
+      /result = await this\.profilesRepo\.insertWithLimit\(\s*\n?\s*\{\s*\n?\s*id: identity\.id,\s*\n?\s*accountId: args\.accountId,\s*\n?\s*name: args\.name,\s*\n?\s*archetype: snapshot\.parentArchetype,\s*\n?\s*description: snapshot\.description,\s*\n?\s*wrappedDek: identity\.wrappedDek,\s*\n?\s*\},\s*\n?\s*limit,\s*\n?\s*\);/,
     );
     expect(body).toMatch(/if \('limitExceeded' in result\) \{/);
     expect(body).toMatch(/const restored = result\.record;/);

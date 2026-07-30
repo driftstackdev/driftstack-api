@@ -168,7 +168,7 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
           intentId: frame.intentId,
           success: true,
           durationMs: 7,
-          outputData: base64Json({ ok: true }),
+          outputData: base64Json({ url: 'https://example.test' }),
         }),
       );
     });
@@ -186,6 +186,10 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
     expect(result.success).toBe(true);
     expect(result.intentId).toBe('intent-1');
     expect(result.sessionId).toBe('sess-1');
+    // The DECODED, per-intent-validated navigate payload (2962e823d): proves the
+    // frame went through parseIntentResult's success branch — not a synthesized
+    // failure, and not an undecoded base64 passthrough.
+    expect(result.outputData).toEqual({ url: 'https://example.test' });
   });
 
   it('answers one non-empty protocol ping with exactly one byte-identical pong and keeps dispatch live', async () => {
@@ -224,7 +228,7 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
           intentId: frame.intentId,
           success: true,
           durationMs: 1,
-          outputData: base64Json({ pongPreservedDispatch: true }),
+          outputData: base64Json({ url: 'https://example.test/after-pong' }),
         }),
       );
     });
@@ -241,6 +245,7 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
       sessionId: 'sess-after-pong',
       intentId: 'intent-after-pong',
     });
+    expect(result.outputData).toEqual({ url: 'https://example.test/after-pong' });
     expect(ws.readyState).toBe(WebSocket.OPEN);
     expect(fx.fleetControlRegistry.get(NODE_ID)).toBe(conn);
   });
@@ -286,7 +291,7 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
           intentId: frame.intentId,
           success: true,
           durationMs: 2,
-          outputData: base64Json({ recovered: true }),
+          outputData: base64Json({ url: 'https://example.test/recovered' }),
         }),
       );
     });
@@ -325,6 +330,7 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
         intentId: 'intent-recovered',
         sessionId: 'sess-recovered',
       });
+      expect(recovered.outputData).toEqual({ url: 'https://example.test/recovered' });
       expect(clientFrames).toBe(1);
       expect(conn!.correlator.inFlight()).toBe(0);
       expect(ws.readyState).toBe(WebSocket.OPEN);
@@ -410,7 +416,7 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
           intentId: frame.intentId,
           success: true,
           durationMs: 3,
-          outputData: base64Json({ ok: true }),
+          outputData: base64Json({ url: 'https://example.test' }),
         }),
       );
     });
@@ -453,6 +459,7 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
     const result = await otherDispatch;
     expect(result.success).toBe(true);
     expect(result.intentId).toBe('other-intent');
+    expect(result.outputData).toEqual({ url: 'https://example.test' });
     await expect(largeDownload).resolves.toMatchObject({
       status: 'data',
       name: 'big-file.bin',

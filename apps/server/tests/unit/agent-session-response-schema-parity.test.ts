@@ -111,11 +111,24 @@ describe('agent-session response schema parity', () => {
     expect(oapi).toMatch(/data: z\.array\(AgentSessionSchema\)/);
   });
 
-  it('OpenAPI types the `session` envelope on the POST /:id/message turn-result union (all 3 members — plan-executed/clarify/refuse — carried session: z.object({}) before)', () => {
+  it('OpenAPI types the `session` envelope on the POST /:id/message turn-result union — every member (plan-executed/clarify/refuse/logged-manual) carries session: AgentSessionSchema (was z.object({}))', () => {
     const oapi = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
-    const sessionFields = oapi.match(/session: AgentSessionSchema,/g) ?? [];
-    // 3 union members each carry the updated session envelope.
-    expect(sessionFields.length).toBe(3);
+    // Scoped to the turn-result union itself: a `session:` field added
+    // anywhere else in openapi.ts must not be able to satisfy this guard.
+    // Non-greedy and terminated on the union's own 4-space-indented `])`
+    // (members close at 6 spaces), so it cannot run past the declaration.
+    const unionRe =
+      /const AgentMessageResponseOpenApi = z\n {4}\.discriminatedUnion\('kind', \[\n([\s\S]+?)\n {4}\]\)/;
+    const union = oapi.match(unionRe)?.[1] ?? '';
+    expect(union, 'AgentMessageResponseOpenApi union must be present in openapi.ts').not.toBe('');
+    const members = union.match(/kind: z\.literal\('/g) ?? [];
+    const sessionFields = union.match(/session: AgentSessionSchema,/g) ?? [];
+    // d5e30ea9c published the 4th runtime variant: logged-manual, the
+    // transcript-only operator turn agent-runtime.ts returns with a session.
+    expect(members.length).toBe(4);
+    // EVERY member carries the updated session envelope — a variant that
+    // ships without one fails here instead of silently passing a recount.
+    expect(sessionFields.length).toBe(members.length);
   });
 
   it('OpenAPI types the message turn-result intents/results arrays (were z.array(z.object({}))); AgentIntent/IntentResult cover the route vocabulary', () => {

@@ -181,7 +181,17 @@ describe('W1049 routes/admin V-326e6 + V-330e cross-source invariant', () => {
 
   it('CRITICAL requireAuth + global rate-limit on every admin route. Drift to dropping either would expose api-keys management to anonymous or unrate-limited callers.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin.ts'));
-    const refs = p.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/g) ?? [];
-    expect(refs.length, 'requireAuth + global rate-limit chain count').toBeGreaterThanOrEqual(6);
+    const routes = p.match(/\bapp\.(?:get|post|put|patch|delete)[<(]/g) ?? [];
+    const chains = p.match(/preHandler: \[[^\]]*\]/g) ?? [];
+    expect(routes.length, 'admin route registration count').toBe(6);
+    expect(chains.length, 'admin routes carrying a preHandler chain').toBe(routes.length);
+    for (const chain of chains) {
+      expect(chain, 'requireAuth first in every admin preHandler chain').toMatch(
+        /^preHandler: \[\s*app\.requireAuth\s*,/,
+      );
+      expect(chain, 'global rate-limit last in every admin preHandler chain').toMatch(
+        /app\.rateLimit\('global'\),?\s*\]$/,
+      );
+    }
   });
 });

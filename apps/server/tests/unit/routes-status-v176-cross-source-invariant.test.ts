@@ -30,8 +30,9 @@
 //   the response for ~30s. Response includes Cache-Control: public,
 //   max-age=30'.
 //
-//   Response shape — { overall_status, components, recent_incidents:
-//     [] placeholder }.
+//   Response shape — { overall_status (aggregateOverall(components)
+//     escalated by open-incident truth), components,
+//     recent_incidents, open_incidents, incident_data_complete }.
 //
 // stays in lockstep across apps/server/src/routes/status.ts.
 
@@ -108,12 +109,19 @@ describe('W1033 routes/status V-176 cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL response shape — { overall_status: aggregateOverall(components), components, recent_incidents: PublicIncidentSummary[] (V-545.A — populated from incidentsService when wired) }.', () => {
+  it('CRITICAL response shape — { overall_status: overallStatus (aggregateOverall(components) escalated by open-incident truth), components, recent_incidents: PublicIncidentSummary[], open_incidents, incident_data_complete (f66e8a02c — fail closed) }.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status.ts'));
-    expect(p).toMatch(/overall_status: aggregateOverall\(components\),/);
+    expect(p).toMatch(/let overallStatus = aggregateOverall\(components\);/);
+    expect(p).toMatch(/if \(hasOpenOutage\) overallStatus = 'major_outage';/);
+    expect(p).toMatch(
+      /else if \(\(!incidentDataComplete \|\| openIncidentCount > 0\) && overallStatus === 'operational'\) \{/,
+    );
+    expect(p).toMatch(/overall_status: overallStatus,/);
     expect(p).toMatch(/components,/);
     expect(p).toMatch(/recent_incidents: recentIncidents,/);
     expect(p).toMatch(/recent_incidents: readonly PublicIncidentSummary\[\];/);
+    expect(p).toMatch(/open_incidents: incidentDataComplete \? openIncidentCount : null,/);
+    expect(p).toMatch(/incident_data_complete: incidentDataComplete,/);
   });
 
   it('CRITICAL endpoint runs Promise.all(opts.readinessChecks.map(runComponentCheck)) — parallel per-check execution.', () => {

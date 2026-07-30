@@ -271,27 +271,44 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     expect(p).toMatch(/body: JSON\.stringify\(\{ name: name, scopes: scopes \}\)/);
   });
 
-  it('CRITICAL plan entitlement is canonical, fail-closed, no-flash, and cannot be bypassed through forced DOM handlers.', () => {
+  it('CRITICAL plan entitlement + team write role are canonical, fail-closed, no-flash, and cannot be bypassed through forced DOM handlers.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/import \{ TIER_FEATURES \} from '@driftstack\/api-types'/);
     expect(p).toMatch(/features\.apiAccess/);
     expect(p).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/usage'/);
-    expect(p).toMatch(/headers: authedHeaders\(\),\s*signal: controller\.signal/);
+    expect(p).toMatch(/headers: effectiveHeaders,\s*signal: controller\.signal/);
     expect(p).toMatch(/Object\.prototype\.hasOwnProperty\.call\(tierApiAccess, tier\)/);
-    expect(p).toMatch(/class="btn-primary hidden"\s*data-show-create\s*data-api-access-only/);
+    expect(p).toMatch(/class="btn-primary hidden"\s*data-show-create\s*data-api-write-only/);
     expect(p).toMatch(/class="dashboard-card mb-8 hidden" data-api-access-only/);
-    expect(p).toMatch(/const rotateAction = apiAccessGranted\s*\?/);
+    expect(p).toMatch(/const canRotate = canWrite && apiAccessVerified && apiAccessGranted;/);
+    expect(p).toMatch(/\(canRotate \? '' : ' hidden'\) \+/);
     expect(p).toMatch(/rotateAction \+\s*'<button type="button" data-revoke="'/);
-    expect(p).toContain('Existing keys remain visible so you can revoke them.');
-    expect(p).toContain('revocation remains available.');
-    expect(p).toMatch(
-      /\/v1\/account\/me intentionally describes the caller and ignores[\s\S]*?\/v1\/usage resolves the selected effective[\s\S]*?account and returns its authoritative tier/,
+    expect(p).toContain(
+      'Existing keys remain visible to authorized owners and team admins so they can revoke them.',
     );
-    expect(p).not.toMatch(/fetch\(apiBaseUrl \+ '\/v1\/account\/me'/);
+    expect(p).toContain('Creation and rotation stay disabled until plan access can be checked.');
+    // d6dd0d28b — /v1/usage (act-as forwarded) stays the ONLY tier authority;
+    // /v1/account/me is fetched caller-only so the selected owner can never
+    // self-authorize its own team role.
+    expect(p).toMatch(/\.then\(\(\[summary, me\]\) => \{/);
+    expect(p).toMatch(/const tier = typeof summary\.tier === 'string' \? summary\.tier : '';/);
+    expect(p).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/usage', \{\s*headers: effectiveHeaders,/);
+    expect(p).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/account\/me', \{\s*headers: callerOnlyHeaders\(\),/,
+    );
+    expect(p).toMatch(
+      /\/v1\/account\/me is caller identity\/teams authority and deliberately[\s\S]*?ignores act-as\. Never forward X-Driftstack-Account on this read/,
+    );
+    expect(p).toMatch(
+      /function callerOnlyHeaders\(extra = \{\}\) \{\s*return \{\s*\.\.\.extra,\s*authorization: 'Bearer ' \+ token,\s*\};\s*\}/,
+    );
     expect(
-      p.match(/if \(!apiAccessVerified \|\| !apiAccessGranted\)/g)?.length,
+      p.match(/!apiAccessGranted \|\|\s*!writeAccessVerified \|\|\s*!writeAccessGranted/g)?.length,
     ).toBeGreaterThanOrEqual(3);
+    expect(
+      p.match(/!writeAccessVerified \|\|\s*!writeAccessGranted/g)?.length,
+    ).toBeGreaterThanOrEqual(4);
   });
 
   it('CRITICAL resolveApiBaseUrl + DashboardLayout used. /api-keys IS sidebar-enabled — customers navigate from here to sessions and back.', () => {
