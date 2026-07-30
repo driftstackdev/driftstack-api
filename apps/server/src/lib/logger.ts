@@ -41,6 +41,9 @@ const SENSITIVE_ERR_KEYS = new Set([
   // and presented on the TOTP/recovery exchange.
   'challengetoken',
   'debugtoken',
+  // EventSource query-bearer spelling when a Problem extension or upstream
+  // object preserves the original snake/camel-case key.
+  'dstoken',
   'sessiontoken',
   'apikey',
   'xapikey',
@@ -92,6 +95,16 @@ function redactErrValue(value: unknown, depth: number, seen: WeakSet<object>): u
 export function redactErrSerializer(err: unknown): Record<string, unknown> {
   const base = pino.stdSerializers.err(err as Error) as Record<string, unknown>;
   return redactErrValue(base, 0, new WeakSet<object>()) as Record<string, unknown>;
+}
+
+/**
+ * RFC 7807 problems are logged as a top-level `problem` sibling of `err`.
+ * Pino applies serializers by top-level key, so the `err` serializer above
+ * cannot reach problem.detail/extensions. Reuse the same recursive, key-aware,
+ * depth/cycle-bounded sanitizer without changing the customer response object.
+ */
+export function redactProblemSerializer(problem: unknown): unknown {
+  return redactErrValue(problem, 0, new WeakSet<object>());
 }
 
 /**
@@ -265,6 +278,10 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
       // message/stack before they reach the logs (free-text vector redact.paths
       // can't cover). See redactErrSerializer.
       err: redactErrSerializer,
+      // Known ApiError details/extensions may contain an upstream URL or
+      // request-derived diagnostic. Keep the structured problem fields while
+      // scrubbing credentials from this separate top-level log channel.
+      problem: redactProblemSerializer,
     },
     formatters: {
       level: (label) => ({ level: label }),

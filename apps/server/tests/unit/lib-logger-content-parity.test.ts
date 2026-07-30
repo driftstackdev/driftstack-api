@@ -169,6 +169,13 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
     expect(body).toMatch(/err: redactErrSerializer,/);
   });
 
+  it('top-level RFC 7807 problem records reuse the bounded recursive sanitizer and are wired into every Pino child', () => {
+    expect(body).toMatch(/export function redactProblemSerializer\(problem: unknown\): unknown/);
+    expect(body).toMatch(/return redactErrValue\(problem, 0, new WeakSet<object>\(\)\)/);
+    expect(body).toMatch(/'dstoken',/);
+    expect(body).toMatch(/problem: redactProblemSerializer,/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

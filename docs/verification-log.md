@@ -29516,3 +29516,34 @@ No status-service semantics, authentication, public status cache lifetime,
 schema, migration, OpenAPI, SDK, shared workspace build/deploy, native,
 harness/Fleet/Family-B, environment, customer, secret, package or foreign pnpm
 action was performed.
+
+---
+
+## V-706 — Structured problem logs cannot bypass credential redaction
+
+**Date:** 2026-07-17
+
+The global error handler and agent-message route log an RFC 7807 `problem`
+beside the caught `err`. Pino's existing `err` serializer recursively scrubbed
+URL userinfo, query bearers and credential-bearing keys, but serializers are
+selected by top-level field name. The sibling `problem.detail` and extensions
+therefore bypassed that protection and could preserve an upstream URL containing
+userinfo or a `ds_token` in structured logs even though `err` was clean.
+
+The logger now applies the same string, sensitive-key, depth and cycle-bounded
+sanitizer to every top-level `problem` record. Snake/camel `ds_token` keys join
+the canonical sensitive-key authority. Public diagnostic fields such as
+`type`, `title`, `status`, numeric extensions and clean context remain intact;
+the customer-facing problem object is never mutated or replaced.
+
+Behavioral proof covers nested URL and keyed credentials, clean byte-equivalence,
+over-depth and cyclic input, inherited request-child serialization, and real
+400/502/503 Fastify error-handler paths. For each real path the response retains
+its exact status, detail, extensions and request instance while the captured log
+contains no synthetic credential marker and keeps both safe problem fields and
+the sanitized full `err` diagnostic. A source inventory pins all five current
+top-level problem producers to this centralized boundary.
+
+No error-handler, route, response schema, OpenAPI, SDK, shared build/deploy,
+native, harness/Fleet, environment, customer, secret, package or foreign pnpm
+surface changed.

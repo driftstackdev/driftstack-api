@@ -156,6 +156,14 @@ describe('W968 V-494 logger redaction cross-source invariant', () => {
     expect(p).toMatch(/'challengetoken',/);
   });
 
+  it('CRITICAL RFC 7807 problem sibling uses the same recursive sanitizer, including ds_token key aliases', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/logger.ts'));
+    expect(p).toMatch(/'dstoken',/);
+    expect(p).toMatch(/export function redactProblemSerializer\(problem: unknown\): unknown/);
+    expect(p).toMatch(/return redactErrValue\(problem, 0, new WeakSet<object>\(\)\)/);
+    expect(p).toMatch(/problem: redactProblemSerializer,/);
+  });
+
   it('CRITICAL auth-material taxonomy covers MFA seed, web/LiveKit sessions, OAuth PKCE and IDP state URL', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/logger.ts'));
     for (const path of [
