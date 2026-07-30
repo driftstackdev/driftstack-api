@@ -39,6 +39,7 @@ import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { mapNowpaymentsStatus } from '../services/crypto-orders.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
+import { EFFECTIVE_ACCOUNT_HEADER } from '../lib/effective-account-header.js';
 import type { NowPaymentsApiClient } from '../lib/nowpayments-api.js';
 import type { PricingService } from '../services/pricing.js';
 
@@ -154,7 +155,9 @@ export function registerCryptoCheckoutRoutes(
     // dashboard's web-session works; a read/write-only API key is blocked.
     { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req, reply) => {
-      const rawActAsAccount = req.headers['x-driftstack-account'];
+      // Use the shared header constant rather than a raw literal so this
+      // rejection can never drift from the name the resolver parses.
+      const rawActAsAccount = req.headers[EFFECTIVE_ACCOUNT_HEADER];
       const hasActAsAccount = Array.isArray(rawActAsAccount)
         ? rawActAsAccount.some((value) => value.length > 0)
         : typeof rawActAsAccount === 'string' && rawActAsAccount.length > 0;

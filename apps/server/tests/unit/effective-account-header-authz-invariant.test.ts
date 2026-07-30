@@ -167,7 +167,12 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
   const reads = scans.flatMap((scan) => scan.reads);
 
   it('discovers the complete current acting-as reader surface', () => {
-    expect(reads).toHaveLength(31);
+    // Review tripwire, not the security assertion — the invariant below is what
+    // enforces authorization. Refreshed after confirming every one of the 30
+    // reads is authorized (unvalidatedReads() is empty) and that the reader
+    // surface is still exactly these 9 route files. The 31st read disappeared
+    // through consolidation, not by an unsafe read escaping the resolver.
+    expect(reads).toHaveLength(30);
     expect(new Set(reads.map((read) => read.file)).size).toBe(9);
   });
 

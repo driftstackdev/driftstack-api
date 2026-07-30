@@ -201,10 +201,19 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
   });
 
   it('fails acting-as checkout closed before body, pricing, order, or provider work', () => {
-    const headerGuard = body.indexOf("const rawActAsAccount = req.headers['x-driftstack-account']");
+    // The header NAME now comes from the shared EFFECTIVE_ACCOUNT_HEADER
+    // constant so this rejection cannot drift from the name the membership
+    // resolver parses; the load-bearing property here is unchanged ordering —
+    // the guard still runs before body parse, pricing and order creation.
+    const headerGuard = body.indexOf(
+      'const rawActAsAccount = req.headers[EFFECTIVE_ACCOUNT_HEADER]',
+    );
     const bodyParse = body.indexOf('CreateCryptoCheckoutSchema.safeParse(req.body)');
     const pricingRead = body.indexOf('await deps.pricing.listEffective()');
     const orderCreate = body.indexOf('await deps.service.createIdempotent');
+    expect(body).toMatch(
+      /import \{ EFFECTIVE_ACCOUNT_HEADER \} from '\.\.\/lib\/effective-account-header\.js';/,
+    );
     expect(headerGuard).toBeGreaterThan(-1);
     expect(headerGuard).toBeLessThan(bodyParse);
     expect(headerGuard).toBeLessThan(pricingRead);
