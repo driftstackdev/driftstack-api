@@ -209,6 +209,12 @@ asyncio.run(main())
 
 Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydantic models.
 
+`sessions.search` and `sessions.login` are typed in every SDK, but the routes
+themselves are capability-gated: they require a deployment advertising a real
+direct-driver search/login capability and otherwise return `503` before the
+session is looked up or any browser work starts. See
+[Sessions](/api/sessions/) for both response branches.
+
 ## Go
 
 **Status:** published as a tagged pre-1.0 module. Commit `go.mod` and `go.sum` for reproducible deployments.
@@ -255,23 +261,23 @@ The HTTP API and the SDKs version independently. SDKs at any version stay compat
 
 ## What ships
 
-| Capability        | TS  | Python | Go  | Notes                                                                    |
-| ----------------- | --- | ------ | --- | ------------------------------------------------------------------------ |
-| Sessions          | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait/capture/getState/extract/search/login |
-| Agent sessions    | ✅  | ✅     | ✅  | create/get/message/close/takeover/handback/livekitToken                  |
-| Recipes           | ✅  | ✅     | ✅  | create/list/get/delete; no execute method                                |
-| Profiles          | ✅  | ✅     | ✅  | Create, list, get, delete                                                |
-| Profile snapshots | ✅  | ✅     | ✅  | capture/list/restore/delete                                              |
-| API keys          | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace                                         |
-| Webhooks          | ✅  | ✅     | ✅  | CRUD + delivery introspection + `replayDelivery` + `rotateSecret`        |
-| Team RBAC         | ✅  | ✅     | ✅  | Invite/accept/list/remove                                                |
-| Usage             | ✅  | ✅     | ✅  | Current-period read + 30-day daily series                                |
-| Audit log         | ✅  | ✅     | ✅  | Paginated read + GDPR-Article-20 CSV/JSON export                         |
-| MFA               | ✅  | ✅     | ✅  | TOTP enroll/verify/disable + recovery-code regen                         |
-| Billing           | ✅  | ✅     | ✅  | State read + Stripe checkout/portal                                      |
-| Email preferences | ✅  | ✅     | ✅  | List + set + opt-in/out (non-critical templates only)                    |
-| Legal             | ✅  | ✅     | ✅  | Catalog + required + accept (content-hash-bound)                         |
-| Account self      | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts + teams[]                |
+| Capability        | TS  | Python | Go  | Notes                                                                                          |
+| ----------------- | --- | ------ | --- | ---------------------------------------------------------------------------------------------- |
+| Sessions          | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait/capture/getState/extract; search/login are capability-gated |
+| Agent sessions    | ✅  | ✅     | ✅  | create/get/message/close/takeover/handback/livekitToken                                        |
+| Recipes           | ✅  | ✅     | ✅  | create/list/get/delete; no execute method                                                      |
+| Profiles          | ✅  | ✅     | ✅  | Create, list, get, delete                                                                      |
+| Profile snapshots | ✅  | ✅     | ✅  | capture/list/restore/delete                                                                    |
+| API keys          | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace                                                               |
+| Webhooks          | ✅  | ✅     | ✅  | CRUD + delivery introspection + `replayDelivery` + `rotateSecret`                              |
+| Team RBAC         | ✅  | ✅     | ✅  | Invite/accept/list/remove                                                                      |
+| Usage             | ✅  | ✅     | ✅  | Current-period read + 30-day daily series                                                      |
+| Audit log         | ✅  | ✅     | ✅  | Paginated read + GDPR-Article-20 CSV/JSON export                                               |
+| MFA               | ✅  | ✅     | ✅  | TOTP enroll/verify/disable + recovery-code regen                                               |
+| Billing           | ✅  | ✅     | ✅  | State read + Stripe checkout/portal                                                            |
+| Email preferences | ✅  | ✅     | ✅  | List + set + opt-in/out (non-critical templates only)                                          |
+| Legal             | ✅  | ✅     | ✅  | Catalog + required + accept (content-hash-bound)                                               |
+| Account self      | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts + teams[]                                      |
 
 ## Next steps
 

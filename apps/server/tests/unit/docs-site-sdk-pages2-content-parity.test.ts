@@ -71,8 +71,10 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(/^## Versioning across SDKs$/m);
     expect(body).toMatch(/The HTTP API and the SDKs version independently\./);
     expect(body).toMatch(/^## What ships$/m);
+    // search/login are typed everywhere but capability-gated at the route, so
+    // the row must not read as plain shipped availability.
     expect(body).toMatch(
-      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\/extract\/search\/login\s+\|/,
+      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\/extract; search\/login are capability-gated\s+\|/,
     );
     expect(body).toMatch(
       /\| API keys\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Includes `rotate` with 24h grace\s+\|/,

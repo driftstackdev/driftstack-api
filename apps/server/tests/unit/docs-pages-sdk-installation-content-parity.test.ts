@@ -271,6 +271,18 @@ describe('W778 docs /sdk/installation content parity', () => {
     }
   });
 
+  it('CRITICAL search/login are presented as capability-gated, never as shipped availability. Every currently shipped driver reports non-real capability, so both routes return 503 before session lookup; a bare "Full CRUD + ... /search/login" claim here would market availability the deployment does not have.', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(
+      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\/extract; search\/login are capability-gated/,
+    );
+    expect(p).toMatch(
+      /`sessions\.search` and `sessions\.login` are typed in every SDK, but the routes\s*\n?themselves are capability-gated: they require a deployment advertising a real\s*\n?direct-driver search\/login capability and otherwise return `503` before the\s*\n?session is looked up or any browser work starts\./,
+    );
+    expect(p).toMatch(/\[Sessions\]\(\/api\/sessions\/\)/);
+  });
+
   it('CRITICAL Next-steps 3-link set pinned — /quickstart/ + /guides/profile-management/ + /guides/session-lifecycle/. Drift to dropping any link would force new customers to hunt for follow-on content.', () => {
     const p = read(PAGE);
 

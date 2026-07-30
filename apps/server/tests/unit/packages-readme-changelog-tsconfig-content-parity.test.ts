@@ -84,6 +84,16 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
       /client\.apiKeys\.rotate\(id, options\?\)\s+\/\/ V-296 — 24h grace, plaintext shown once/,
     );
     expect(body).toMatch(/client\.team\.listOwners\(\)/);
+    // The two direct browser operations are typed but capability-gated. Listing
+    // them beside the always-available verbs without that note would market
+    // availability no shipped deployment has (every driver reports non-real
+    // capability, so both routes return 503 before session lookup).
+    expect(body).toMatch(
+      /client\.sessions\.search\(id, body\) \/\/ capability-gated — 503 unless the deployment has a real direct driver/,
+    );
+    expect(body).toMatch(
+      /client\.sessions\.login\(id, body\)\s+\/\/ capability-gated — 503 unless the deployment has a real direct driver/,
+    );
     expect(existsSync(P('sdk-typescript/README.md'))).toBe(true);
   });
 

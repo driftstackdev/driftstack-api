@@ -56,8 +56,8 @@ client.sessions.wait(id, body)
 client.sessions.getState(id)
 client.sessions.capture(id, body)
 client.sessions.extract(id, body)
-client.sessions.search(id, body)
-client.sessions.login(id, body)
+client.sessions.search(id, body) // capability-gated — 503 unless the deployment has a real direct driver
+client.sessions.login(id, body)  // capability-gated — 503 unless the deployment has a real direct driver
 client.sessions.destroy(id)
 
 client.egress.attachToSession(sessionId, config)  // EG-API-1.2 — route THIS session through a proxy
