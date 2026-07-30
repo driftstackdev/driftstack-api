@@ -58,6 +58,14 @@ describe('W420.A apps/server/src/routes/admin.ts content parity', () => {
     expect(body).toMatch(/\/\/ V-330e — same effective-account treatment as \/v1\/usage above\./);
   });
 
+  it('both usage reads require broad read authority before rate limiting and effective-owner resolution', () => {
+    expect(
+      body.match(
+        /preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\]/g,
+      ),
+    ).toHaveLength(2);
+  });
+
   it('Owner-account-deleted-mid-request → 403 ForbiddenError ("Owner account no longer exists.") on /v1/usage', () => {
     expect(body).toMatch(
       /\/\/ Membership references an account that's been deleted between\s*\n?\s*\/\/ the auth-cache load and the route call\. Surface as 403 — the\s*\n?\s*\/\/ membership is effectively invalid\./,

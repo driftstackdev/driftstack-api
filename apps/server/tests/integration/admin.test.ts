@@ -1,6 +1,6 @@
 // Integration tests for admin endpoints (api-keys + usage).
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
@@ -202,6 +202,35 @@ describe('DELETE /v1/api-keys/:id', () => {
 });
 
 describe('GET /v1/usage', () => {
+  it.each(['write', 'read:sessions'] as const)(
+    '403s a self-scoped %s-only key before reading usage',
+    async (scope) => {
+      fx = await buildTestApp({ scopes: [scope] });
+      const totals = vi.spyOn(fx.usageRepo, 'totalsForPeriod');
+      const daily = vi.spyOn(fx.usageRepo, 'dailyBucketsForRange');
+
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: '/v1/usage',
+        headers: auth(fx),
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(totals).not.toHaveBeenCalled();
+      expect(daily).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['read', 'account_owner'] as const)('accepts a self-scoped %s key', async (scope) => {
+    fx = await buildTestApp({ scopes: [scope] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
   it('200 returns current-period summary with zero totals + tier quotas', async () => {
     fx = await buildTestApp({ tier: 'api_scale' });
     const res = await fx.app.inject({
@@ -269,6 +298,35 @@ describe('GET /v1/usage/series (V-170)', () => {
 
   afterEach(async () => {
     if (fx) await fx.cleanup();
+  });
+
+  it.each(['write', 'read:sessions'] as const)(
+    '403s a self-scoped %s-only key before reading daily usage',
+    async (scope) => {
+      fx = await buildTestApp({ scopes: [scope] });
+      const totals = vi.spyOn(fx.usageRepo, 'totalsForPeriod');
+      const daily = vi.spyOn(fx.usageRepo, 'dailyBucketsForRange');
+
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: '/v1/usage/series',
+        headers: auth(fx),
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(totals).not.toHaveBeenCalled();
+      expect(daily).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['read', 'account_owner'] as const)('accepts a self-scoped %s key', async (scope) => {
+    fx = await buildTestApp({ scopes: [scope] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage/series?days=1',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
   });
 
   it('200 returns 30-day contiguous bucket series with empty totals (default)', async () => {

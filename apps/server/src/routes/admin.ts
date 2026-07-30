@@ -205,7 +205,7 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
   app.get(
     '/v1/usage',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -237,7 +237,7 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
   app.get(
     '/v1/usage/series',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;

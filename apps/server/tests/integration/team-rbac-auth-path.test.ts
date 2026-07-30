@@ -16,6 +16,29 @@ afterEach(async () => {
 const OWNER_ACCOUNT_ID = '00000000-0000-4000-8000-000000000a01';
 const MEMBERSHIP_ID = '00000000-0000-4000-8000-000000000a02';
 
+function seedUsageOwner(role: 'admin' | 'member' = 'member'): void {
+  fx.authRepo.upsertAccount({
+    id: OWNER_ACCOUNT_ID,
+    email: 'owner@example.test',
+    name: null,
+    tier: 'api_scale',
+    status: 'active',
+    timezone: null,
+    avatarR2Key: null,
+    slug: null,
+    region: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  fx.authRepo.setTeamMemberships(fx.accountId, [
+    {
+      membershipId: MEMBERSHIP_ID,
+      ownerAccountId: OWNER_ACCOUNT_ID,
+      role,
+    },
+  ]);
+}
+
 async function seedTeamOwnerSession(
   role: 'admin' | 'member',
   driverSessionId: string,
@@ -736,26 +759,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
   it('GET /v1/usage as team member with X-Driftstack-Account returns OWNER tier-aware quotas', async () => {
     fx = await buildTestApp({ tier: 'api_starter' });
     // Seed the OWNER account row so the route can resolve the owner's tier.
-    fx.authRepo.upsertAccount({
-      id: OWNER_ACCOUNT_ID,
-      email: 'owner@example.test',
-      name: null,
-      tier: 'api_scale',
-      status: 'active',
-      timezone: null,
-      avatarR2Key: null,
-      slug: null,
-      region: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fx.authRepo.setTeamMemberships(fx.accountId, [
-      {
-        membershipId: MEMBERSHIP_ID,
-        ownerAccountId: OWNER_ACCOUNT_ID,
-        role: 'member',
-      },
-    ]);
+    seedUsageOwner();
     const res = await fx.app.inject({
       method: 'GET',
       url: '/v1/usage',
@@ -776,6 +780,62 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     });
     expect(own.json<{ tier: string }>().tier).toBe('api_starter');
   });
+
+  it.each(['write', 'read:sessions'] as const)(
+    'rejects team usage reads for a %s-only key before owner or usage-repo work',
+    async (scope) => {
+      fx = await buildTestApp({ scopes: [scope] });
+      seedUsageOwner();
+      const getOwner = vi.spyOn(fx.authRepo, 'getAccount');
+      const totals = vi.spyOn(fx.usageRepo, 'totalsForPeriod');
+      const daily = vi.spyOn(fx.usageRepo, 'dailyBucketsForRange');
+      const headers = {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      };
+
+      const summary = await fx.app.inject({ method: 'GET', url: '/v1/usage', headers });
+      const series = await fx.app.inject({
+        method: 'GET',
+        url: '/v1/usage/series?days=1',
+        headers,
+      });
+
+      expect(summary.statusCode).toBe(403);
+      expect(series.statusCode).toBe(403);
+      // Authentication may refresh the actor account, but the route body must
+      // never resolve the selected owner after the scope gate rejects.
+      expect(getOwner).toHaveBeenCalledTimes(2);
+      expect(getOwner).toHaveBeenNthCalledWith(1, fx.accountId);
+      expect(getOwner).toHaveBeenNthCalledWith(2, fx.accountId);
+      expect(getOwner).not.toHaveBeenCalledWith(OWNER_ACCOUNT_ID);
+      expect(totals).not.toHaveBeenCalled();
+      expect(daily).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['read', 'account_owner'] as const)(
+    'preserves selected-owner usage reads for a %s key',
+    async (scope) => {
+      fx = await buildTestApp({ tier: 'api_starter', scopes: [scope] });
+      seedUsageOwner();
+      const headers = {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      };
+
+      const summary = await fx.app.inject({ method: 'GET', url: '/v1/usage', headers });
+      const series = await fx.app.inject({
+        method: 'GET',
+        url: '/v1/usage/series?days=1',
+        headers,
+      });
+
+      expect(summary.statusCode).toBe(200);
+      expect(summary.json<{ tier: string }>().tier).toBe('api_scale');
+      expect(series.statusCode).toBe(200);
+    },
+  );
 
   it('GET /v1/webhooks returns OWNER endpoints when caller is a team member + sets X-Driftstack-Account', async () => {
     fx = await buildTestApp();

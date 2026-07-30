@@ -265,6 +265,17 @@ describe('W769 docs /api/usage content parity', () => {
     expect(p).toMatch(/`GET \/v1\/usage\/series\?days=30`/);
   });
 
+  it('CRITICAL auth contract — both endpoints require read and honor selected team workspace', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(
+      /Both endpoints accept any valid bearer \(API key OR web session\)\s*\n?\s*with `read` scope\./,
+    );
+    expect(p).toMatch(
+      /The X-Driftstack-Account header is honored for\s*\n?\s*team scopes — member roles read the owner's usage\./,
+    );
+  });
+
   it('test file metadata — file exists at canonical path', () => {
     expect(
       existsSync(
