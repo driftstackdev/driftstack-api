@@ -59,7 +59,13 @@ describe('residual protected-route API-key scope contract', () => {
     expect(goTeam).toContain('// Requires account_owner.');
     const goCrypto = read('packages/sdk-go/crypto_orders.go');
     expect(goCrypto).toContain('// Quote previews the authoritative fiat price without minting an');
-    expect(goCrypto).toContain('// order (V-666.H). Requires read:billing; broad read or');
+    // The scope sentence is the load-bearing claim. `9c53dd232` deliberately
+    // stripped internal rollout markers from the shipped Go SDK, so pinning
+    // the old "(V-666.H)" text here made this guard require copy the product
+    // had intentionally removed.
+    expect(goCrypto).toContain('// order. Requires read:billing; broad read or');
+    expect(goCrypto).toContain('// account_owner also satisfies it.');
+    expect(goCrypto).not.toMatch(/V-666/);
   });
 
   it('keeps the generated OpenAPI snapshot scope summaries in sync', () => {
