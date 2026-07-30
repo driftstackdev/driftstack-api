@@ -75,7 +75,7 @@ New table `session_operations`:
 | `account_id`                               | fk accounts, cascade. Ownership is checked on every read.                                                                                            |
 | `session_id`                               | fk sessions.                                                                                                                                         |
 | `driver_incarnation_id`                    | uuid. Binds the operation to ONE driver lifetime so a settled result can never be applied to a successor session that reused the id.                 |
-| `kind`                                     | enum `login                                                                                                                                          | search`. |
+| `kind`                                     | enum `login` \| `search`.                                                                                                                            |
 | `status`                                   | enum per §2.                                                                                                                                         |
 | `idempotency_key_hash`                     | sha256 of the `Idempotency-Key` header, nullable.                                                                                                    |
 | `request_fingerprint`                      | sha256 over the canonicalised request body. Same key + different fingerprint ⇒ 409, mirroring `crypto_orders`.                                       |
