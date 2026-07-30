@@ -153,6 +153,29 @@ interface SimTab {
   title: string;
 }
 
+/**
+ * Resolve a page-state frame to the tab it is allowed to affect.
+ *
+ * Older nodes omit `tabId` (or serialize the absence as null), so that exact
+ * legacy shape still targets the active tab. A present tag is an ownership
+ * claim: it must name a tab in this window or the frame is inert. Falling an
+ * unknown tag back to the active tab lets a buffered frame from a renderer
+ * whose tab was closed corrupt the foreground tab's metadata and chrome.
+ *
+ * This is deliberately a tab-membership fence. Distinguishing two renderer
+ * incarnations that reuse the same logical tab id requires an incarnation
+ * token on the wire; membership alone cannot make that stronger claim.
+ */
+function resolvePageStateTabTarget(
+  rawTabId: unknown,
+  tabs: readonly SimTab[],
+  activeTabId: string,
+): string | null {
+  if (rawTabId === undefined || rawTabId === null) return activeTabId;
+  if (typeof rawTabId !== 'string' || rawTabId === '') return null;
+  return tabs.some((tab) => tab.id === rawTabId) ? rawTabId : null;
+}
+
 interface SimulatorRoomBinding {
   sessionId: string;
   room: Room;
@@ -4254,11 +4277,12 @@ export function SimulatorWindow(): JSX.Element {
   clearManualAuthorityDeferredWorkRef.current = clearAllActivationRetries;
   useEffect(() => () => clearAllActivationRetries(), [clearAllActivationRetries]);
   // SINGLE writer of a tab's stored url/title (live-state accuracy refactor). Applies
-  // a box-sourced page_state to ONE tab: the frame's tabId when present (forward-
-  // compatible per-tab routing — activates automatically once the box sends tabId),
-  // else the active tab. Re-publishes the full list only when something actually
-  // changed (no wire storm from the ~2s poll re-asserting the same values). liveUrl/
-  // liveTitle are mirrored separately (only when the written tab IS the active one).
+  // a box-sourced page_state to ONE tab: the frame's recognised tabId when present,
+  // else the active tab for legacy null/omitted frames. A present unknown/malformed
+  // tag is inert rather than being allowed to mutate the foreground tab. Re-publishes
+  // the full list only when something actually changed (no wire storm from the ~2s
+  // poll re-asserting the same values). liveUrl/liveTitle are mirrored separately
+  // (only when the written tab IS the active one).
   const writeTabPageState = useCallback(
     (
       frame: {
@@ -4287,20 +4311,15 @@ export function SimulatorWindow(): JSX.Element {
       // activation/chrome state and again inside the updater so an A→B→A poll can
       // never seed a later valid tab-list publication with stale A data.
       if (manualInputControlRef.current.epoch !== expectedAuthorityEpoch) return;
-      const rawFrameTabId =
-        typeof frame.tabId === 'string' && frame.tabId !== '' ? frame.tabId : null;
-      // Regression guard — the box's per-tab page_state TAGGING went live (#63). The
-      // box now stamps a tabId, but if that id doesn't correspond to a tab THIS window
-      // actually has (box↔GUI id-scheme skew, or a background renderer's id), routing
-      // the url/title to it matches NO tab and silently drops the update → the founder's
-      // "title/url stopped changing at all". Treat an UNRECOGNISED tabId as tabId-less:
-      // fall back to the active tab (the proven pre-tagging path) so url/title keep
-      // updating live. A tabId we DO recognise still routes exactly to that tab.
-      const frameTabId =
-        rawFrameTabId !== null && tabsRef.current.some((t) => t.id === rawFrameTabId)
-          ? rawFrameTabId
-          : null;
-      const targetId = frameTabId ?? activeTabIdRef.current;
+      const targetId = resolvePageStateTabTarget(
+        frame.tabId,
+        tabsRef.current,
+        activeTabIdRef.current,
+      );
+      // A present tag is renderer ownership, not a compatibility hint. If that
+      // renderer's tab is no longer listed (or the frame is malformed), drop the whole
+      // metadata write instead of contaminating whichever tab is active now.
+      if (targetId === null) return;
       // A page-state frame may come from a warm BACKGROUND renderer before the box has
       // committed it to the foreground. It can update that tab's url/title below, but
       // it cannot settle a live activation owner: only a correlated success proves the
@@ -4355,7 +4374,8 @@ export function SimulatorWindow(): JSX.Element {
       // ~2.5s AFTER a switch may describe the PRIOR tab — writing its url/title onto the
       // just-switched-to tab is exactly the revert.
       const inSwitchGrace =
-        frameTabId === null && Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
+        (frame.tabId === undefined || frame.tabId === null) &&
+        Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
       setTabs((prev) => {
         if (manualInputControlRef.current.epoch !== expectedAuthorityEpoch) return prev;
         // Suppress ONLY the provably-stale case: an in-grace tabId-less frame whose url
@@ -4710,6 +4730,11 @@ export function SimulatorWindow(): JSX.Element {
           // operator switch so an older tabId-less frame cannot immediately reopen it.
           lastSwitchAtRef.current = Date.now();
           resetPageChromeForSwitch();
+          // Data-channel callbacks read membership from the ref, not React's eventual
+          // render. Publish the replacement synchronously so another frame delivered
+          // in this same task routes against the restored set rather than the retired
+          // seed/previous set.
+          tabsRef.current = restored;
           setTabs(restored);
           setActiveTabIdSynchronized(active.id);
           // Reflect the active tab's url in the address bar (the BrowserBar reads liveUrl).
@@ -4744,6 +4769,15 @@ export function SimulatorWindow(): JSX.Element {
         // loading bar / re-stamp the "page unresponsive" badge ABOVE the "Session ended"
         // overlay (window chrome around the video panel, not suppressed by it).
         if (sessionEndedRef.current !== null) return;
+        const pageStateTargetId = resolvePageStateTabTarget(
+          msg.tabId,
+          tabsRef.current,
+          activeTabIdRef.current,
+        );
+        // Unknown/malformed tagged frames can be buffered after close/restore. They
+        // own no tab in this window, so they must not mutate input dimensions, focus,
+        // tab metadata, or any foreground page chrome.
+        if (pageStateTargetId === null) return;
         // A3 W3005 — adopt the box's FIXED per-archetype logical content dims as the
         // tap/scroll coordinate space (every page_state frame carries them). The
         // durable fix for SFU-downscale tap drift: the encoded track px vary with
@@ -4776,17 +4810,11 @@ export function SimulatorWindow(): JSX.Element {
             listenerAuthorityEpoch,
           )
         ) {
-          const rawFocusTabId =
-            typeof msg.tabId === 'string' && msg.tabId !== '' ? msg.tabId : null;
-          const focusTabId =
-            rawFocusTabId !== null && tabsRef.current.some((t) => t.id === rawFocusTabId)
-              ? rawFocusTabId
-              : null;
+          const isLegacyTablessFrame = msg.tabId === undefined || msg.tabId === null;
           const inTablessSwitchGrace =
-            rawFocusTabId === null && Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
+            isLegacyTablessFrame && Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
           const focusIsAuthoritative =
-            focusTabId === activeTabIdRef.current ||
-            (rawFocusTabId === null && !inTablessSwitchGrace);
+            pageStateTargetId === activeTabIdRef.current && !inTablessSwitchGrace;
           if (focusIsAuthoritative) {
             if (msg.inputFocused === false) {
               if (keyboardFocusSuppressedTabRef.current === activeTabIdRef.current) {
@@ -4803,10 +4831,11 @@ export function SimulatorWindow(): JSX.Element {
           }
         }
         // Box is the ONLY writer of a tab's stored url/title (live-state accuracy
-        // refactor). Route by tabId when the frame carries one, else the active tab;
-        // a title-only frame (no url) still refreshes the label. The derived effect
-        // re-mirrors the active tab into liveUrl/liveTitle, so the address bar +
-        // window title follow automatically when the written tab is the active one.
+        // refactor). Route a recognised tabId exactly, retain the active fallback only
+        // for legacy null/omitted tags, and reject unknown ownership above. A title-only
+        // frame (no url) still refreshes the label. The derived effect re-mirrors the
+        // active tab into liveUrl/liveTitle, so the address bar + window title follow
+        // automatically when the written tab is the active one.
         if (
           (typeof msg.url === 'string' && msg.url !== '') ||
           (typeof msg.title === 'string' && msg.title !== '')
@@ -4822,25 +4851,16 @@ export function SimulatorWindow(): JSX.Element {
         // #116 warm-tabs pre-flight — the page chrome below (freeze badge / error
         // overlay / load-stall advisory / loading bar + watchdog / nav-target gate /
         // progress) is WINDOW-GLOBAL, not per-tab. url/title route per-tab above, but the
-        // FOREGROUND chrome must be driven ONLY by a frame for the ACTIVE tab. A tabId-less
-        // or UNRECOGNISED frame is treated as the active tab for compatibility with older/
-        // self-hosted nodes. Current fleet tabId stamping plus live BACKGROUND renderers mean
-        // a background tab's 'loading'/'errored'/'stalled'
+        // FOREGROUND chrome must be driven ONLY by a frame for the ACTIVE tab. A null/
+        // omitted tag retains compatibility with older/self-hosted nodes; an unknown
+        // present tag was rejected above. Current fleet tabId stamping plus live
+        // BACKGROUND renderers mean a background tab's 'loading'/'errored'/'stalled'
         // would otherwise pop the foreground's loading bar / "PAGE FAILED TO LOAD" overlay /
         // "page unresponsive" badge and repoint the window-global currentNavTargetRef —
         // which then suppresses the foreground page's OWN real error (the #72/#135 false-
-        // suppression, re-introduced cross-tab). Mirrors writeTabPageState's tabId
-        // recognition exactly. NOTE: this early-out requires the chrome block to remain the
+        // suppression, re-introduced cross-tab). NOTE: this early-out requires the chrome block to remain the
         // LAST statements in this handler (it is — the try ends at the catch below).
-        {
-          const rawChromeTabId =
-            typeof msg.tabId === 'string' && msg.tabId !== '' ? msg.tabId : null;
-          const chromeTabId =
-            rawChromeTabId !== null && tabsRef.current.some((t) => t.id === rawChromeTabId)
-              ? rawChromeTabId
-              : null;
-          if (chromeTabId !== null && chromeTabId !== activeTabIdRef.current) return;
-        }
+        if (pageStateTargetId !== activeTabIdRef.current) return;
         // #135 — a page_state{state:'stalled'} is OVERLOADED: A3's NAV-stall timer
         // (box 5eeaf794a) tags a slow-LOAD stall with error.kind==='timeout', while the
         // W2845 renderer-FREEZE stall carries no error. Split them: the timeout variant
@@ -5039,6 +5059,15 @@ export function SimulatorWindow(): JSX.Element {
             roomBindingRef.current.room !== pollRoom
           )
             return;
+          const pollTargetId = resolvePageStateTabTarget(
+            ps.tabId,
+            tabsRef.current,
+            activeTabIdRef.current,
+          );
+          // A tagged poll is scoped to that renderer. If its tab was closed or the
+          // restored set replaced it, the stale response is inert rather than being
+          // reinterpreted as foreground state.
+          if (pollTargetId === null) return;
           // Box-sourced url/title → tab storage (the box is the only writer). When
           // the poll frame carries a tabId, route precisely — no grace needed (it
           // lands on the right tab). When an older/self-hosted node omits it, the poll
@@ -5076,18 +5105,12 @@ export function SimulatorWindow(): JSX.Element {
           // #116 warm-tabs pre-flight (mirrors the data-channel path): the window-global
           // page chrome below (freeze badge / error overlay / load-stall advisory / loading
           // bar + watchdog / nav-target gate) must be driven ONLY by a frame for the ACTIVE
-          // tab. tabId-less or UNRECOGNISED ⇒ active for older/self-hosted compatibility;
-          // current fleet tabId stamping plus live BACKGROUND renderers mean a background
+          // tab. A null/omitted tag retains older/self-hosted compatibility; a present
+          // unknown tag was rejected above. Current fleet tabId stamping plus live BACKGROUND renderers mean a background
           // tab's poll frame routes its url/title above but must not
           // touch the foreground chrome (else the #72/#135 false-error is re-introduced
           // cross-tab). Recognition mirrors writeTabPageState exactly.
-          const rawPollChromeTabId =
-            typeof ps.tabId === 'string' && ps.tabId !== '' ? ps.tabId : null;
-          const pollChromeTabId =
-            rawPollChromeTabId !== null && tabsRef.current.some((t) => t.id === rawPollChromeTabId)
-              ? rawPollChromeTabId
-              : null;
-          if (pollChromeTabId !== null && pollChromeTabId !== activeTabIdRef.current) return;
+          if (pollTargetId !== activeTabIdRef.current) return;
           // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
           // (independent of the loading grace window; a stall is real regardless).
           // #4 — through applyStalledState so each 'stalled' poll refreshes the TTL
@@ -6681,14 +6704,17 @@ export function SimulatorWindow(): JSX.Element {
       discardActivationForTab(id);
       // Whether the close moves focus to a neighbour (we closed the ACTIVE tab). Side
       // effects (grace-arm + chrome reset) run OUTSIDE the setTabs reducer to keep it pure.
-      const closingActive = id === activeTabId;
+      const currentActiveTabId = activeTabIdRef.current;
+      const closingActive = id === currentActiveTabId;
       if (closingActive) {
         // Moving focus to a neighbour is a newer explicit choice than any deferred
         // activation for the tab being removed. An inactive previous tab may close
         // while the current target is pending, so do not erase that target's work.
         deferredActivationUntilReadyRef.current = null;
       }
-      // Compute the neighbour we're focusing (deterministic from the current `tabs`) so we
+      const currentTabs = tabsRef.current;
+      // Compute the neighbour we're focusing (deterministic from the synchronous tab
+      // mirror) so we
       // can ask the box to ACTIVATE it — tabListUpdate is fire-and-forget state-only and
       // does NOT switch the published page (only activateTab does, per the A2↔A3 contract,
       // agent-tab-ops.ts). Without an activateTab the strip + address bar flip to the
@@ -6696,8 +6722,8 @@ export function SimulatorWindow(): JSX.Element {
       // "closed a tab and the content didn't change."
       let focusNeighbor: SimTab | undefined;
       if (closingActive) {
-        const idx = tabs.findIndex((t) => t.id === id);
-        const remaining = tabs.filter((t) => t.id !== id);
+        const idx = currentTabs.findIndex((t) => t.id === id);
+        const remaining = currentTabs.filter((t) => t.id !== id);
         if (idx !== -1 && remaining.length > 0) {
           focusNeighbor = remaining[Math.max(0, idx - 1)] ?? remaining[0];
         }
@@ -6713,28 +6739,26 @@ export function SimulatorWindow(): JSX.Element {
         // neighbour's real state on its next page_state).
         resetPageChromeForSwitch();
       }
-      setTabs((prev) => {
-        if (currentTabTransport(sessionId, room, authorityEpoch) === null) return prev;
-        if (prev.length <= 1) return prev; // never go below one tab
-        const idx = prev.findIndex((t) => t.id === id);
-        if (idx === -1) return prev;
-        const next = prev.filter((t) => t.id !== id);
-        // Choosing the new active tab only matters if we closed the active one.
-        // `next` is non-empty here (prev had >1 and we removed one); prefer the tab to
-        // the left of the closed index, else the first remaining.
-        let nextActive = activeTabId;
-        if (closingActive) {
-          const neighbor = next[Math.max(0, idx - 1)] ?? next[0];
-          if (neighbor !== undefined) nextActive = neighbor.id;
-        }
-        // Publish the structural removal synchronously for data-channel callbacks.
-        // A reject can arrive immediately after the close commits, before passive
-        // effects; it must not discover the removed previous tab in a stale mirror.
-        tabsRef.current = next;
-        emitTabList(next, nextActive, authorityEpoch);
-        if (nextActive !== activeTabId) setActiveTabIdSynchronized(nextActive);
-        return next;
-      });
+      if (currentTabTransport(sessionId, room, authorityEpoch) === null) return;
+      if (currentTabs.length <= 1) return; // never go below one tab
+      const closedIndex = currentTabs.findIndex((tab) => tab.id === id);
+      if (closedIndex === -1) return;
+      const next = currentTabs.filter((tab) => tab.id !== id);
+      // Choosing the new active tab only matters if we closed the active one.
+      // `next` is non-empty here (currentTabs had >1 and we removed one); prefer
+      // the tab to the left of the closed index, else the first remaining.
+      let nextActive = currentActiveTabId;
+      if (closingActive) {
+        const neighbor = next[Math.max(0, closedIndex - 1)] ?? next[0];
+        if (neighbor !== undefined) nextActive = neighbor.id;
+      }
+      // Publish membership and focus before scheduling either React state update.
+      // A buffered frame may be delivered in this same task; it must observe one
+      // coherent post-close owner set without waiting for render/passive effects.
+      tabsRef.current = next;
+      if (nextActive !== currentActiveTabId) setActiveTabIdSynchronized(nextActive);
+      setTabs(next);
+      emitTabList(next, nextActive, authorityEpoch);
       // Tell the box to actually switch the published page to the focused neighbour
       // (correlated activateTab, re-issued on a missed ack like a normal switch). Done
       // OUTSIDE the reducer (keep it pure); guarded on a real neighbour + a connected
@@ -6760,7 +6784,6 @@ export function SimulatorWindow(): JSX.Element {
       emitTabList,
       resetPageChromeForSwitch,
       room,
-      tabs,
       inputCongested,
       showNotice,
       discardActivationForTab,

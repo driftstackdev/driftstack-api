@@ -65,6 +65,7 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
     onRoom?: (room: unknown, ownerRoom: unknown) => void;
     onStateChange?: (s: { kind: string }, room: unknown) => void;
     onPublisher?: (p: string, room: unknown) => void;
+    inputLogical?: { width: number; height: number };
   }) => {
     useEffect(() => {
       props.onRoom?.(fakeRoom, fakeRoom);
@@ -73,7 +74,13 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
       props.onStateChange?.({ kind: 'connected' }, fakeRoom);
       props.onPublisher?.('publishing', fakeRoom);
     }, [props]);
-    return <div data-component="agent-session-panel-mock" />;
+    return (
+      <div
+        data-component="agent-session-panel-mock"
+        data-logical-width={props.inputLogical?.width}
+        data-logical-height={props.inputLogical?.height}
+      />
+    );
   },
 }));
 
@@ -499,6 +506,56 @@ describe('SimulatorWindow — page tab strip', () => {
     // The address bar reflects the active tab's url (BrowserBar reads liveUrl). While
     // not editing it collapses to the hostname (iOS Safari treatment); the full url is
     // still verified via the tab model elsewhere.
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    expect(addressInput.value).toBe('b.example');
+  });
+
+  it('publishes restored membership synchronously so a same-turn background frame routes to the restored tab', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+
+    // Deliver the restore and a frame from restored background tab A in ONE task.
+    // React has not committed setTabs(restored) between these callbacks, so routing
+    // must read the synchronously replaced tabsRef rather than the retired seed set.
+    act(() => {
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({
+            type: 'tabListRestore',
+            tabs: [
+              { id: 'tab_a', url: 'https://a.example/', scrollY: 0, title: 'Alpha' },
+              { id: 'tab_b', url: 'https://b.example/', scrollY: 120, title: 'Bravo' },
+            ],
+            activeTabId: 'tab_b',
+          }),
+        ),
+      );
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({
+            type: 'page_state',
+            tabId: 'tab_a',
+            state: 'errored',
+            url: 'https://a.example/late',
+            title: 'Alpha Late',
+            error: { kind: 'dns' },
+          }),
+        ),
+      );
+    });
+
+    const byId = tabsById();
+    expect(byId.get('tab_a')).toMatchObject({
+      url: 'https://a.example/late',
+      title: 'Alpha Late',
+    });
+    expect(byId.get('tab_b')).toMatchObject({
+      url: 'https://b.example/',
+      title: 'Bravo',
+    });
+    // A is a recognised BACKGROUND owner: its metadata applies to A, but its
+    // error chrome cannot cover active B.
+    expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
     expect(addressInput.value).toBe('b.example');
   });
@@ -1053,27 +1110,196 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(addressInput.value).toBe('two.example');
   });
 
-  it('(e) a page_state with an UNRECOGNISED tabId falls back to the active tab, never dropped (regression: #63 box tagging must not FREEZE url/title on a box↔GUI id skew)', () => {
+  it('(e) a present UNRECOGNISED tabId is metadata/chrome-inert while absent and current tags retain normal routing', () => {
     const { container } = renderSim();
     expect(dataHandler).not.toBeNull();
     // Active tab loads site A (establishes a known active tab + its stored url).
     pushPageState({ state: 'loaded', url: 'https://active.example/', title: 'Active' });
     const activeId = (lastTabListCall().tabs[0] as { id: string }).id;
-    // The box now stamps a tabId (#63), but sends one THIS window has no tab for —
-    // box-internal id / id-scheme skew. It must NOT be dropped (that froze the
-    // founder's url/title); fall back to the active tab so it keeps updating live.
+    // A buffered frame from a renderer this window no longer owns must not be
+    // reinterpreted as active. It cannot overwrite url/title or surface its error.
     pushPageState({
-      state: 'loaded',
+      state: 'errored',
       tabId: 'box-internal-id-not-in-gui',
       url: 'https://updated.example/',
       title: 'Updated',
+      error: { kind: 'dns' },
     });
-    const byId = tabsById();
-    expect(byId.get(activeId)?.url).toBe('https://updated.example/');
-    expect(byId.get(activeId)?.title).toBe('Updated');
-    // The visible address bar (active tab) reflects the update (hostname collapse).
+    let byId = tabsById();
+    expect(byId.get(activeId)?.url).toBe('https://active.example/');
+    expect(byId.get(activeId)?.title).toBe('Active');
+    expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
     const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
-    expect(addressInput.value).toBe('updated.example');
+    expect(addressInput.value).toBe('active.example');
+    const panel = container.querySelector(
+      '[data-component="agent-session-panel-mock"]',
+    ) as HTMLElement;
+    const logicalWidth = panel.getAttribute('data-logical-width');
+    const logicalHeight = panel.getAttribute('data-logical-height');
+
+    // A present malformed tag is equally inert; it cannot claim input dimensions,
+    // keyboard focus, metadata, or foreground stall chrome.
+    pushPageState({
+      state: 'stalled',
+      tabId: 42,
+      url: 'https://malformed.example/',
+      title: 'Malformed',
+      logicalContentWidth: 999,
+      logicalContentHeight: 888,
+      inputFocused: true,
+      error: null,
+    });
+    byId = tabsById();
+    expect(byId.get(activeId)?.url).toBe('https://active.example/');
+    expect(byId.get(activeId)?.title).toBe('Active');
+    expect(container.querySelector('[data-component="page-stalled-badge"]')).toBeNull();
+    expect(keyboardPressed(container)).toBe('false');
+    expect(panel.getAttribute('data-logical-width')).toBe(logicalWidth);
+    expect(panel.getAttribute('data-logical-height')).toBe(logicalHeight);
+
+    // Legacy explicit-null ownership still targets active, preserving older nodes.
+    pushPageState({
+      state: 'loaded',
+      tabId: null,
+      url: 'https://legacy.example/',
+      title: 'Legacy',
+    });
+    byId = tabsById();
+    expect(byId.get(activeId)?.url).toBe('https://legacy.example/');
+    expect(byId.get(activeId)?.title).toBe('Legacy');
+
+    // A recognised current tag routes identically and remains authoritative.
+    pushPageState({
+      state: 'loaded',
+      tabId: activeId,
+      url: 'https://current.example/',
+      title: 'Current',
+    });
+    byId = tabsById();
+    expect(byId.get(activeId)?.url).toBe('https://current.example/');
+    expect(byId.get(activeId)?.title).toBe('Current');
+    expect(addressInput.value).toBe('current.example');
+  });
+
+  it('keeps an unknown-tagged 2s page-state poll fully inert across loading, error, freeze, and load-stall states', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      expect(dataHandler).not.toBeNull();
+      pushPageState({ state: 'loaded', url: 'https://active.example/', title: 'Active' });
+      const activeId = (lastTabListCall().tabs[0] as { id: string }).id;
+      const addressInput = container.querySelector(
+        '[aria-label="Address bar"]',
+      ) as HTMLInputElement;
+      const baseline = tabsById().get(activeId);
+
+      const unknownPollFrames: Array<NonNullable<typeof pageStateValue>> = [
+        {
+          state: 'loading',
+          tabId: 'renderer-no-longer-owned',
+          url: 'https://unknown.example/loading',
+          title: 'Unknown Loading',
+          error: null,
+        },
+        {
+          state: 'errored',
+          tabId: 'renderer-no-longer-owned',
+          url: 'https://unknown.example/error',
+          title: 'Unknown Error',
+          error: { kind: 'dns', message: 'must stay hidden' },
+        },
+        {
+          state: 'stalled',
+          tabId: 'renderer-no-longer-owned',
+          url: 'https://unknown.example/frozen',
+          title: 'Unknown Frozen',
+          error: null,
+        },
+        {
+          state: 'stalled',
+          tabId: 'renderer-no-longer-owned',
+          url: 'https://unknown.example/slow',
+          title: 'Unknown Slow Load',
+          error: { kind: 'timeout', message: 'must stay hidden' },
+        },
+      ];
+
+      for (const frame of unknownPollFrames) {
+        pageStateValue = frame;
+        const callsBeforeTick = getAgentSessionPageState.mock.calls.length;
+        await act(async () => {
+          vi.advanceTimersByTime(2000);
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        expect(getAgentSessionPageState.mock.calls.length).toBe(callsBeforeTick + 1);
+        expect(tabsById().get(activeId)).toEqual(baseline);
+        expect(addressInput.value).toBe('active.example');
+        expect(container.querySelector('[data-component="simulator-loadbar"]')).toBeNull();
+        expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
+        expect(container.querySelector('[data-component="page-stalled-badge"]')).toBeNull();
+        expect(container.querySelector('[data-component="page-load-stalled-banner"]')).toBeNull();
+        expect(container.querySelector('[data-component="video-frozen-badge"]')).toBeNull();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops a stale tagged frame after that tab closes instead of contaminating its active neighbour', () => {
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    pushPageState({ state: 'loaded', url: 'https://alpha.example/', title: 'Alpha' });
+    const alphaId = (lastTabListCall().tabs[0] as { id: string }).id;
+
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    pushPageState({ state: 'loaded', url: 'https://bravo.example/', title: 'Bravo' });
+    const bravoId = (lastTabListCall().tabs[1] as { id: string }).id;
+    const panel = container.querySelector(
+      '[data-component="agent-session-panel-mock"]',
+    ) as HTMLElement;
+    const initialLogicalWidth = panel.getAttribute('data-logical-width');
+    const initialLogicalHeight = panel.getAttribute('data-logical-height');
+
+    // Closing active Bravo focuses Alpha and synchronously removes Bravo from the
+    // membership mirror. Deliver the click and buffered Bravo failure in ONE outer
+    // React task: there is no intervening commit/effect that can repair a stale ref.
+    // Logical dimensions are intentionally included because they update before the
+    // active-tab chrome gate; this assertion fails if the closed owner still resolves.
+    act(() => {
+      within(tabEls(container)[1])
+        .getByLabelText('Close tab')
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      dataHandler?.(
+        new TextEncoder().encode(
+          JSON.stringify({
+            type: 'page_state',
+            tabId: bravoId,
+            state: 'errored',
+            url: 'https://stale-bravo.example/',
+            title: 'Stale Bravo',
+            logicalContentWidth: 999,
+            logicalContentHeight: 888,
+            inputFocused: true,
+            error: { kind: 'dns' },
+          }),
+        ),
+      );
+    });
+
+    const byId = tabsById();
+    expect(byId.size).toBe(1);
+    expect(byId.get(alphaId)).toMatchObject({
+      url: 'https://alpha.example/',
+      title: 'Alpha',
+    });
+    expect(lastTabListCall().activeTabId).toBe(alphaId);
+    expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
+    expect(keyboardPressed(container)).toBe('false');
+    expect(panel.getAttribute('data-logical-width')).toBe(initialLogicalWidth);
+    expect(panel.getAttribute('data-logical-height')).toBe(initialLogicalHeight);
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    expect(addressInput.value).toBe('alpha.example');
   });
 
   // ── Branded new-tab page (founder 2026-06-25) ─────────────────────────────────
