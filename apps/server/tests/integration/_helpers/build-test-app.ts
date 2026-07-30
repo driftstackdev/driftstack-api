@@ -233,6 +233,14 @@ export interface TestAppOptions {
   keyRevoked?: boolean;
   keyExpired?: boolean;
   /**
+   * Provenance of the seeded key. Default `null` = an ordinary customer
+   * API key. `'cli_device'` seeds the desktop device credential, which is
+   * the ONLY credential that reaches the API on a `free` account: ordinary
+   * keys are refused by the Free customer-API boundary before any route
+   * gate runs, so a free-tier route test must opt into this.
+   */
+  keyProvenance?: 'cli_device';
+  /**
    * Optional override for the seeded account id. Default is the
    * historical hardcoded value. Tests that need two distinct accounts
    * pass this to keep the second fixture from clobbering the first.
@@ -688,6 +696,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     revokedAt: opts.keyRevoked === true ? new Date('2026-01-15T00:00:00Z') : null,
     expiresAt: opts.keyExpired === true ? new Date('2026-01-15T00:00:00Z') : null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
+    provenance: opts.keyProvenance ?? null,
   });
 
   const sessionsRepo = new InMemorySessionsRepo();
@@ -711,6 +720,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     revokedAt: opts.keyRevoked === true ? new Date('2026-01-15T00:00:00Z') : null,
     expiresAt: opts.keyExpired === true ? new Date('2026-01-15T00:00:00Z') : null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
+    // Both repos back the SAME production row, so provenance must match on
+    // each — the keys repo re-upserts into authRepo and would otherwise
+    // silently downgrade a desktop credential back to an ordinary key.
+    provenance: opts.keyProvenance ?? null,
   });
   const authCache = new InMemoryAuthCache();
   const authCoalescer = new AuthCoalescer();

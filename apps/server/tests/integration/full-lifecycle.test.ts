@@ -108,6 +108,16 @@ async function acceptAllLegalDocs(fx: TestAppFixture, bearer: string): Promise<v
   }
 }
 
+/** Mirror a checkout upgrade for an account created through the signup flow.
+ *  `3202fdb17` made Free an interactive desktop tier, so a fresh signup cannot
+ *  mint a general customer API key until it is on a paid tier. */
+async function upgradeSignupToPaidTier(fx: TestAppFixture, email: string): Promise<void> {
+  const row = await fx.authFlowsRepo.findAccountByEmail(email);
+  if (row === null) throw new Error(`no signup account for ${email}`);
+  fx.authFlowsRepo.seedAccount({ ...row, tier: 'api_builder' });
+  await fx.authCache.invalidateAccount(row.id);
+}
+
 describe('Full customer lifecycle (V-166)', () => {
   let fx: TestAppFixture;
 
@@ -151,6 +161,21 @@ describe('Full customer lifecycle (V-166)', () => {
     // onboarding interleaves this between signup and first-key.
     await acceptAllLegalDocs(fx, session.token);
 
+    // `3202fdb17` made Free an interactive desktop tier: a brand-new signup
+    // lands on `free` and CANNOT mint a general customer API key. The desktop
+    // device flow issues its own restricted credential instead.
+    const mintOnFree = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${session.token}` },
+      payload: { name: 'first-api-key', scopes: ['read', 'write'] },
+    });
+    expect(mintOnFree.statusCode).toBe(403);
+    expect(mintOnFree.json<{ detail: string }>().detail).toContain('"apiAccess"');
+
+    // Upgrade the way checkout does, then the same web session mints the key.
+    await upgradeSignupToPaidTier(fx, 'lifecycle-signup@driftstack.local');
+
     // V-168 — the web session token authenticates against /v1/api-keys.
     const mintKey = await fx.app.inject({
       method: 'POST',
@@ -179,6 +204,7 @@ describe('Full customer lifecycle (V-166)', () => {
       payload: { token: signup.json<SignupResponse>().debug_token! },
     });
     const sessionToken = verify.json<SessionEnvelope>().session.token;
+    await upgradeSignupToPaidTier(fx, 'logout-test@driftstack.local');
     await acceptAllLegalDocs(fx, sessionToken);
 
     // Use the session to populate the auth cache (mint a key — works
@@ -275,6 +301,7 @@ describe('Full customer lifecycle (V-166)', () => {
     });
     const sessionToken = verify.json<SessionEnvelope>().session.token;
     await acceptAllLegalDocs(fx, sessionToken);
+    await upgradeSignupToPaidTier(fx, 'scope-test@driftstack.local');
 
     // V-174 — web sessions get ['read', 'write', 'account_owner'] (no
     // legacy 'admin'). The dashboard user has full customer-account

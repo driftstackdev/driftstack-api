@@ -14,6 +14,14 @@
 //   - gui_control keys are untouched: the CREATE route authenticates via
 //     requireAuth + requireScope only (controlKeyOrAccountAuth is wired
 //     to the session-scoped control endpoints, never to create).
+//
+// Credential note (`3202fdb17` + `e9b6cd91d`): on a `free` account an
+// ORDINARY api key is refused by the Free customer-API boundary before any
+// route gate runs, so it can never reach the aiAgent gate. Free is a desktop
+// tier, and `POST:/v1/agent-sessions` is on the Free desktop allowlist — so
+// the free cases below authenticate with the `cli_device` credential, which
+// is the caller that actually reaches this gate in production. The boundary
+// itself is pinned separately at the bottom of this file.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
@@ -27,7 +35,11 @@ describe('S42 aiAgent tier gate — POST /v1/agent-sessions', () => {
   });
 
   it('free tier, mode omitted (server default = ai) → 403 tier error', async () => {
-    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'free' });
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      tier: 'free',
+      keyProvenance: 'cli_device',
+    });
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/agent-sessions',
@@ -42,7 +54,11 @@ describe('S42 aiAgent tier gate — POST /v1/agent-sessions', () => {
   });
 
   it("free tier, mode:'pair' → 403 (pair is LLM-driven too)", async () => {
-    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'free' });
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      tier: 'free',
+      keyProvenance: 'cli_device',
+    });
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/agent-sessions',
@@ -68,7 +84,11 @@ describe('S42 aiAgent tier gate — POST /v1/agent-sessions', () => {
   });
 
   it("free tier, mode:'manual' → 201 (the GUI manual product stays open)", async () => {
-    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'free' });
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      tier: 'free',
+      keyProvenance: 'cli_device',
+    });
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/agent-sessions',
@@ -200,7 +220,11 @@ describe('S42 aiAgent tier gate — POST /v1/agent-sessions/:id/mode', () => {
   }
 
   it("free tier: manual session flipped to mode:'ai' → 403 tier error (create-gate bypass closed)", async () => {
-    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'free' });
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      tier: 'free',
+      keyProvenance: 'cli_device',
+    });
     const id = await createManualSession();
     const res = await fx.app.inject({
       method: 'POST',
@@ -229,7 +253,11 @@ describe('S42 aiAgent tier gate — POST /v1/agent-sessions/:id/mode', () => {
   });
 
   it('free tier: gui_control_key flip manual → ai ALSO 403 (control key proves session access, never tier)', async () => {
-    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'free' });
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      tier: 'free',
+      keyProvenance: 'cli_device',
+    });
     const id = await createManualSession();
     const mint = await fx.app.inject({
       method: 'GET',
@@ -249,7 +277,11 @@ describe('S42 aiAgent tier gate — POST /v1/agent-sessions/:id/mode', () => {
   });
 
   it('mid-session downgrade: ai session on a now-free account flips ai → manual → 200 (handback never tier-refused)', async () => {
-    fx = await buildTestApp({ enableAgentRuntime: true }); // api_builder default
+    // Desktop credential on a paid tier: it reaches every route now, and it is
+    // still the caller that can reach the API after the downgrade below. An
+    // ordinary key would lose API access entirely on `free` — pinned as its own
+    // case at the bottom of this file.
+    fx = await buildTestApp({ enableAgentRuntime: true, keyProvenance: 'cli_device' });
     const create = await fx.app.inject({
       method: 'POST',
       url: '/v1/agent-sessions',
@@ -282,7 +314,11 @@ describe('S42 aiAgent tier gate — POST /v1/agent-sessions/:id/mode', () => {
   });
 
   it("free tier: idempotent same-mode POST { mode: 'manual' } on a manual session stays 200 (no-op precedes the gate)", async () => {
-    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'free' });
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      tier: 'free',
+      keyProvenance: 'cli_device',
+    });
     const id = await createManualSession();
     const res = await fx.app.inject({
       method: 'POST',
@@ -291,6 +327,23 @@ describe('S42 aiAgent tier gate — POST /v1/agent-sessions/:id/mode', () => {
       payload: { mode: 'manual' },
     });
     expect(res.statusCode).toBe(200);
+  });
+
+  it('free tier, ORDINARY api key → 403 apiAccess BEFORE the aiAgent gate. `3202fdb17` made Free an interactive desktop tier rather than a customer API tier, so the customer-API boundary refuses the request at auth time and the route-level aiAgent gate is never consulted. Pinned so the two gates cannot be confused for one another.', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, tier: 'free' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, mode: 'manual' },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ type: string; detail: string }>();
+    expect(body.type).toBe(PROBLEM_TYPES.Forbidden);
+    expect(body.detail).toContain('"apiAccess"');
+    // Even `manual`, which the aiAgent gate always admits, is refused here —
+    // proof the boundary runs first.
+    expect(body.detail).not.toContain('"aiAgent"');
   });
 
   it('api_builder: manual → ai flip stays 200 (aiAgent tiers unaffected)', async () => {
