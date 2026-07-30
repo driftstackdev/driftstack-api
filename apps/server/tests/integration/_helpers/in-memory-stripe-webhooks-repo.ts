@@ -63,6 +63,19 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
   private readonly subs = new Map<string, SubscriptionMirrorRow>();
   private readonly accounts = new Map<string, AccountFacet>();
   private readonly entitlements = new Map<string, CryptoEntitlementRow>();
+  /**
+   * Production writes ONE `accounts.tier` column, so a Stripe/crypto
+   * activation is immediately visible to the auth path. This fixture split the
+   * facet into its own map, which meant an upgraded account still authenticated
+   * on its OLD tier — invisible until the Free customer-API boundary started
+   * refusing those requests. The mirror keeps the two stores in lockstep.
+   */
+  private tierMirror: ((accountId: string, tier: AccountTier) => void) | null = null;
+
+  /** Test seam: propagate every tier write to the auth store, as prod does. */
+  setTierMirror(mirror: (accountId: string, tier: AccountTier) => void): void {
+    this.tierMirror = mirror;
+  }
 
   /** Test seam: register account ↔ Stripe customer link. */
   registerAccount(args: {
@@ -182,8 +195,15 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     const a = this.accounts.get(args.accountId);
     if (!a) return Promise.resolve({ previousTier: null });
     const previousTier = a.tier;
-    this.accounts.set(args.accountId, { ...a, tier: args.tier });
+    this.writeTier(a, args.tier);
     return Promise.resolve({ previousTier });
+  }
+
+  private writeTier(facet: AccountFacet, tier: AccountTier): void {
+    this.accounts.set(facet.id, { ...facet, tier });
+    // Only a real transition mirrors: a same-tier write must not evict the
+    // auth cache, because "no needless eviction" is itself a pinned contract.
+    if (facet.tier !== tier) this.tierMirror?.(facet.id, tier);
   }
 
   setAccountTierIfUpgrade(args: {
@@ -200,7 +220,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     if (!isCryptoTierUpgrade(previousTier, args.tier)) {
       return Promise.resolve({ previousTier, applied: false });
     }
-    this.accounts.set(args.accountId, { ...a, tier: args.tier });
+    this.writeTier(a, args.tier);
     return Promise.resolve({ previousTier, applied: true });
   }
 
@@ -226,7 +246,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
       if (e.accountId !== args.accountId || e.expiresAt.getTime() <= args.at.getTime()) continue;
       if (tierActivationRank(e.tier) > tierActivationRank(appliedTier)) appliedTier = e.tier;
     }
-    this.accounts.set(args.accountId, { ...a, tier: appliedTier });
+    this.writeTier(a, appliedTier);
     return Promise.resolve({ previousTier, appliedTier });
   }
 
@@ -259,7 +279,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
       }
     }
     if (appliedTier === null) return Promise.resolve({ previousTier, appliedTier: previousTier });
-    this.accounts.set(args.accountId, { ...a, tier: appliedTier });
+    this.writeTier(a, appliedTier);
     return Promise.resolve({ previousTier, appliedTier });
   }
 
@@ -334,7 +354,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
 
     let applied = false;
     if (isCryptoTierUpgrade(previousTier, args.tier)) {
-      this.accounts.set(args.accountId, { ...a, tier: args.tier });
+      this.writeTier(a, args.tier);
       applied = true;
     }
     return Promise.resolve({

@@ -315,7 +315,7 @@ describe('POST /v1/profiles/import — per-cycle import cap', () => {
   }
 
   it('429 TierLimit on the (2×cap+1)th import even after purging prior imports', async () => {
-    fx = await buildTestApp({ tier: 'free' }); // profile cap 1 → import cap 2/cycle
+    fx = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' }); // profile cap 1 → import cap 2/cycle
 
     // Import #1, then delete + purge to truly free the profile-cap slot.
     // (L4b anti-abuse: a soft-deleted profile still holds a slot until purged,

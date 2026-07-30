@@ -227,8 +227,12 @@ describe('S41 crypto paid → account tier activation', () => {
   });
 
   it('the admin apply-ipn path activates identically (activation lives at the single paid transition in applyIpnStatus)', async () => {
+    // Staff caller on the admin surface: `3202fdb17` bars an ordinary key on a
+    // `free` account from the customer API, and no admin route is on the Free
+    // desktop allowlist — so the caller holds a paid tier. The ORDER still
+    // activates `agency_manual`, which is what this case is about.
     fx = await buildTestApp({
-      tier: 'free',
+      tier: 'solo_manual',
       scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
     });
     await seed(fx, { order_id: 'ord_s41_admin', product: 'agency_manual' });
@@ -249,7 +253,7 @@ describe('S41 crypto paid → account tier activation', () => {
     const rows = tierChangedAuditRows(fx);
     expect(rows.length).toBe(1);
     const payload = rows[0]!.payload as Record<string, unknown>;
-    expect(payload.from).toBe('free');
+    expect(payload.from).toBe('solo_manual');
     expect(payload.to).toBe('agency_manual');
     expect(payload.crypto_order_id).toBe('ord_s41_admin');
   });

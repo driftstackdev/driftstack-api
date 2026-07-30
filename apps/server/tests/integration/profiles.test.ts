@@ -143,7 +143,7 @@ describe('POST /v1/profiles', () => {
 
   it('429 TierLimit when profile count exceeds tier limit', async () => {
     // free permits 1 profile; create one then expect the second to fail.
-    fx = await buildTestApp({ tier: 'free' });
+    fx = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' });
     const first = await fx.app.inject({
       method: 'POST',
       url: '/v1/profiles',
@@ -942,7 +942,7 @@ describe('L4b anti-abuse — trashed profiles count toward the cap + manual purg
   it('trashing a profile does NOT free a cap slot — trash-then-create stays 429', async () => {
     // free tier permits 1 profile. Create it, trash it, then attempt to create
     // another: the trashed row still occupies the slot, so the cap holds.
-    fx = await buildTestApp({ tier: 'free' });
+    fx = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' });
     const auth = { authorization: `Bearer ${fx.plaintext}` };
     const first = await fx.app.inject({
       method: 'POST',
@@ -973,7 +973,7 @@ describe('L4b anti-abuse — trashed profiles count toward the cap + manual purg
   });
 
   it('purging a trashed profile frees the slot — create then succeeds (200)', async () => {
-    fx = await buildTestApp({ tier: 'free' });
+    fx = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' });
     const auth = { authorization: `Bearer ${fx.plaintext}` };
     const first = await fx.app.inject({
       method: 'POST',

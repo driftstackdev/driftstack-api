@@ -80,7 +80,7 @@ describe('POST/GET /v1/account/me/proxies', () => {
 
   it('enforces the calling account tier cap atomically', async () => {
     const cappedCreate = vi.spyOn(InMemoryAccountProxiesRepo.prototype, 'createIfUnderLimit');
-    fx = await buildTestApp({ tier: 'free' });
+    fx = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' });
 
     const first = await fx.app.inject({
       method: 'POST',

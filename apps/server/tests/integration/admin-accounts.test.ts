@@ -36,7 +36,11 @@ describe('POST /v1/admin/accounts/:id/tier', () => {
   });
 
   it('writes an audit row capturing input + admin identity', async () => {
-    fx = await buildTestApp({ tier: 'free' });
+    // The caller is staff acting through the admin API. `3202fdb17` bars an
+    // ordinary key on a `free` account from the customer API entirely, and the
+    // admin surface is not on the Free desktop allowlist — so the fixture holds
+    // a paid tier and the mutation still exercises a real tier transition.
+    fx = await buildTestApp({ tier: 'solo_manual' });
     await fx.app.inject({
       method: 'POST',
       url: `/v1/admin/accounts/${accId(fx)}/tier`,

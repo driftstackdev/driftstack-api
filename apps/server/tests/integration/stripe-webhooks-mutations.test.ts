@@ -421,7 +421,10 @@ describe('V-226 — subscription tier changes emit account audit entries', () =>
   });
 
   it('emits subscription.tier_changed when subscription.deleted downgrades to free', async () => {
-    fx = await buildTestApp({ tier: 'api_builder' });
+    // The downgrade lands the account on `free`, where an ordinary key loses
+    // customer-API access; the audit read below uses the desktop credential,
+    // which is the caller that still reaches the allowlisted route.
+    fx = await buildTestApp({ tier: 'api_builder', keyProvenance: 'cli_device' });
     const raw = buildSubscriptionEvent({
       eventId: 'evt_v226_downgrade',
       type: 'customer.subscription.deleted',

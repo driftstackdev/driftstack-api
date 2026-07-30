@@ -1292,6 +1292,16 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // dashboard. priceToTier mirrors the test fixture's tierPrices so
   // subscription events resolve back to the right local tier.
   const stripeWebhooksRepo = new InMemoryStripeWebhooksRepo();
+  // Production keeps ONE accounts.tier column, so a Stripe/crypto activation is
+  // immediately visible to authentication. Mirror every tier write into the
+  // auth store (and drop the cached context) so a fixture upgrade authenticates
+  // on the NEW tier — otherwise an upgraded account keeps hitting tier gates it
+  // has already paid past.
+  stripeWebhooksRepo.setTierMirror((mirroredAccountId, tier) => {
+    const existing = authRepo.allAccounts().find((a) => a.id === mirroredAccountId);
+    if (existing !== undefined) authRepo.upsertAccount({ ...existing, tier });
+    void authCache.invalidateAccount(mirroredAccountId);
+  });
   // Register the seeded account so the webhook handler can resolve it.
   // The test fixture pins a known stripe_customer_id ('cus_test_default')
   // so canned subscription events with `customer: 'cus_test_default'`
