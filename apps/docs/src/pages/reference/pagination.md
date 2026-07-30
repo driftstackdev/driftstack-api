@@ -120,9 +120,9 @@ func ListAllAuditEntries(ctx context.Context, c *driftstack.Client) ([]driftstac
 ## Ordering + stability
 
 - **Default order** is newest-first (`created_at` desc) on every
-  paginated endpoint. Endpoints with a different natural ordering
-  (e.g. `/v1/admin/fleet-nodes/{id}` would order by `last_seen_at`)
-  document the variation inline; cursor semantics are unchanged.
+  paginated endpoint. If an endpoint ever adopts a different natural
+  ordering, it documents that variation inline; cursor semantics are
+  unchanged either way.
 
 - **Stability under writes:** because cursors encode position
   relative to the underlying row identity (not an offset),
