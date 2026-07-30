@@ -208,10 +208,14 @@ describe('W720 sdk-go-crypto-orders marketing-doc parity', () => {
     );
   });
 
-  it('CRITICAL V-666 sub-anchor doc references — V-666.BR (status filter) + V-666.AU (events timeline). Threads the per-verb feature provenance through the Go doc.', () => {
+  it('CRITICAL per-verb capability claims survive in rendered copy — server-side status filter, by-hand cursor drive, and the events timeline on Get. `6ca50d40e` stripped the internal "V-666.*" prefixes from customer-visible text, so the sentences are what must be pinned.', () => {
     const doc = read(DOC);
-    expect(doc).toMatch(/V-666\.BR/);
-    expect(doc).toMatch(/V-666\.AU timeline/);
+    expect(doc).toMatch(/\/\/ Narrow to a single status server-side\./);
+    expect(doc).toMatch(/\/\/ Or drive the cursor by hand\./);
+    expect(doc).toMatch(/fmt\.Println\(single\["events"\]\) \/\/ Event timeline/);
+    // Rendered body carries no internal rollout markers.
+    const rendered = doc.slice(doc.indexOf('---', doc.indexOf('---') + 3));
+    expect(rendered).not.toMatch(/\bV-\d+/);
   });
 
   it('Doc-parity 6-invariant cluster — W190 anchor + ctx-first 7-verb roster + pointer-to-string optionals + functional-options idempotency-key + Iterate-callback-bool + uuid.NewString + time.RFC3339-UTC + non-refundable framing.', () => {

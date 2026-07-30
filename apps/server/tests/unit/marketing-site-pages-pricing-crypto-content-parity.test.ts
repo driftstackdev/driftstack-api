@@ -39,10 +39,15 @@ describe('W502.B apps/marketing-site/src/pages/pricing/crypto.astro content pari
     );
   });
 
-  it("NowPayments stub-posture framing pinned: 'the checkout endpoint mints an order but payment-address minting is stubbed — the customer-facing flow is \"request quote, support sends a payment address out-of-band, IPN settles.\" That arrangement holds until the V-666.D follow-up wires a NowPayments merchant account' — pinned so the honest 'we mint orders but addresses are stub' commitment survives (drift to claiming live address minting would over-promise pre-V-666.D)", () => {
+  it('NowPayments posture framing pinned to the CURRENT live flow: the API mints the order and the one-time payment address, the signed IPN settles and activates the tier, and a deployment without provider credentials fails closed. `6f30d12f5` superseded the old stub posture, and `apps/server/src/routes/billing-crypto.ts` really does mint `pay_address` through NowPayments `POST /v1/payment` — so the page must describe that flow, and must keep the fail-closed sentence rather than implying every deployment can take crypto.', () => {
     expect(body).toMatch(
-      /\/\/ payment-address minting is stubbed — the customer-facing flow is\s*\n?\s*\/\/ "request quote, support sends a payment address out-of-band, IPN\s*\n?\s*\/\/ settles\." That arrangement holds until the V-666\.D follow-up wires\s*\n?\s*\/\/ a NowPayments merchant account/,
+      /\/\/ Posture \(current\): production checkout is live\. The API mints the\s*\n?\s*\/\/ NowPayments order and one-time payment address; the signed IPN\s*\n?\s*\/\/ settles it and activates the purchased tier\./,
     );
+    expect(body).toMatch(
+      /Deployments without provider\s*\n?\s*\/\/ credentials fail closed and direct customers to card or billing\./,
+    );
+    // The superseded stub framing must not come back as customer-facing copy.
+    expect(body).not.toMatch(/payment-address minting is stubbed/);
   });
 
   it('W247.C labels-derived framing pinned: derived from API_TIERS (single source of truth in marketing-site/src/data/pricing.ts) + "Hard-coded prices here drifted against the canonical table; deriving keeps both layers in lockstep." — pinned so the W247.C derive-from-API_TIERS rationale survives (drift to hardcoding prices would re-introduce the divergence W247.C fixed)', () => {

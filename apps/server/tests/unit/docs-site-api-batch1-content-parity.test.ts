@@ -34,8 +34,15 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(body).toMatch(/<a href="\/api\/versioning\/">Versioning policy<\/a>/);
     expect(body).toMatch(/<code>https:\/\/api\.driftstack\.dev\/openapi\.json<\/code>;/);
     expect(body).toMatch(/rendered via Scalar UI on the API host at <code>\/docs\/<\/code>\./);
-    expect(body).toMatch(/<code>ds_live_…<\/code> for production,/);
-    expect(body).toMatch(/<code>ds_test_…<\/code> for the free tier/);
+    // `ds_test_…` is the restricted desktop device credential, not a general
+    // free-tier sandbox key — pinning the old "for the free tier" phrasing
+    // would re-assert a sandbox surface the product does not offer.
+    expect(body).toMatch(
+      /Customer API keys are <code>ds_live_…<\/code> on every\s*\n?\s*paid tier, including Manual\./,
+    );
+    expect(body).toMatch(
+      /<code>ds_test_…<\/code> device credential automatically; it is not a general sandbox key\./,
+    );
     expect(body).toMatch(/x-ratelimit-remaining/);
     expect(body).toMatch(/<code>retry-after<\/code>/);
     expect(existsSync(P('index.astro'))).toBe(true);
@@ -119,11 +126,14 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(existsSync(P('account.md'))).toBe(true);
   });
 
-  it('auth.md: 2 auth surfaces (customer dashboard vs API-key SDK) + signup/login/verify-email/MFA challenge+step-up/magic-link/password-reset/refresh/logout pinned', () => {
+  it('auth.md: 3 auth surfaces — API-key bearer for SDK consumers, web-session auth for the dashboard, and browser-authorized desktop device credentials. The desktop credential is a third surface with its own restricted `ds_test_…` key, so pinning the superseded two-surface count would hide it from the page contract.', () => {
     const body = read(P('auth.md'));
     expect(body).toMatch(/^title: Authentication flows$/m);
     expect(body).toMatch(/^# Authentication flows$/m);
-    expect(body).toMatch(/Driftstack has two auth surfaces:/);
+    expect(body).toMatch(/Driftstack has three auth surfaces:/);
+    expect(body).toMatch(/\*\*Customer API-key bearer auth\*\*/);
+    expect(body).toMatch(/\*\*Web-session auth\*\*/);
+    expect(body).toMatch(/\*\*Browser-authorized device credentials\*\*/);
     expect(existsSync(P('auth.md'))).toBe(true);
   });
 });

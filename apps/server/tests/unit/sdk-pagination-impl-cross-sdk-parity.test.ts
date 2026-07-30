@@ -28,9 +28,12 @@ describe('W818 cross-SDK pagination implementation parity', () => {
 
   // ─── V-anchor framing ─────────────────────────────────────────
 
-  it("CRITICAL TS V-118 anchor + Python V-126 + 'parity with TS SDK V-118/V-119' framing pinned. Drift to dropping the V-anchors would lose provenance to the canonical implementation.", () => {
+  it('CRITICAL TS keeps its internal V-118 provenance anchor in a `//` comment (stripped from the published `dist`), while the Python module docstring — which ships inside the wheel and surfaces in `help()` — must stay free of internal rollout markers per `3b9b8731b`.', () => {
     expect(read(TS)).toMatch(/\/\/ V-118: cursor-pagination async-iterator helper\./);
-    expect(read(PY)).toMatch(/V-126 — Python parity with TS SDK V-118\/V-119\./);
+    const pyDocstring = /^""".*?"""/s.exec(read(PY))?.[0] ?? '';
+    expect(pyDocstring).not.toBe('');
+    expect(pyDocstring).toMatch(/^"""Cursor-pagination iterator helpers\./);
+    expect(pyDocstring).not.toMatch(/\bV-\d+|\bW\d{3,}/);
   });
 
   // ─── Envelope shape: { data, next_cursor } ────────────────────
@@ -40,7 +43,7 @@ describe('W818 cross-SDK pagination implementation parity', () => {
       /Every Driftstack list endpoint returns the same envelope shape:\s*\n\/\/\s+\{ data: T\[\], next_cursor: string \| null \}/,
     );
     expect(read(PY)).toMatch(
-      /Every Driftstack list\s*\nendpoint returns ``\{ data: \[\.\.\.\], next_cursor: str \| None \}``\./,
+      /Driftstack list endpoints return\s*\n``\{ data: \[\.\.\.\], next_cursor: str \| None \}``\./,
     );
   });
 
@@ -101,7 +104,11 @@ describe('W818 cross-SDK pagination implementation parity', () => {
     expect(read(PY)).toMatch(
       /The helpers duck-type the page object — any pydantic ``BaseModel`` with\s*\n``\.data`` \/ ``\.next_cursor`` attributes works, as does a raw ``dict``/,
     );
-    expect(read(PY)).toMatch(/untyped resources like ProfilesResource currently/);
+    // Same guarantee, stated without naming an internal resource: raw-dict
+    // pages stay forward-compatible with new response fields.
+    expect(read(PY)).toMatch(
+      /Resources that return raw dictionaries intentionally\s*\nretain forward compatibility with additional response fields\./,
+    );
   });
 
   it('CRITICAL Python _extract_data + _extract_next_cursor private helpers pinned. The dict-fallback-after-attribute-check pattern (isinstance dict → .get; else → attribute) is the load-bearing duck-typing implementation.', () => {

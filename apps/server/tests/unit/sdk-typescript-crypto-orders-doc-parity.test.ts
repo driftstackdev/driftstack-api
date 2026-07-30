@@ -88,19 +88,19 @@ describe('W718 sdk-typescript-crypto-orders marketing-doc parity', () => {
     );
   });
 
-  it('CRITICAL V-666.BR status filter doc anchor pinned — `V-666.BR — narrow to a single status server-side`. The anchor threads the status-filter feature provenance into the doc.', () => {
+  it('CRITICAL server-side status filter is documented. `6ca50d40e` stripped internal rollout markers from rendered customer copy, so the load-bearing claim is the capability sentence, not the old "V-666.BR" prefix.', () => {
     const doc = read(DOC);
-    expect(doc).toMatch(/V-666\.BR — narrow to a single status server-side/);
+    expect(doc).toMatch(/\/\/ Narrow to a single status server-side\./);
   });
 
-  it('CRITICAL V-666.BU explicit-cursor doc anchor pinned. The anchor threads the cursor-paging feature provenance.', () => {
+  it('CRITICAL explicit cursor paging is documented alongside the async walker, so a customer can page manually or iterate.', () => {
     const doc = read(DOC);
-    expect(doc).toMatch(/V-666\.BU — explicit cursor paging/);
+    expect(doc).toMatch(/\/\/ Explicit cursor paging\./);
   });
 
-  it('CRITICAL V-666.AU events-timeline doc anchor pinned on get() return. The anchor threads the events-timeline feature into the doc — drift to dropping would lose customer-facing claim about what get() returns.', () => {
+  it('CRITICAL get() is documented as returning the event timeline — the customer-facing claim about what get() adds over list().', () => {
     const doc = read(DOC);
-    expect(doc).toMatch(/V-666\.AU timeline/);
+    expect(doc).toMatch(/console\.log\(single\.events\); \/\/ Event timeline/);
   });
 
   it('CRITICAL CryptoOrderStatus 6-value closed-roster doc match. The 6 values (pending/confirming/paid/failed/partial/cancelled) MUST match the api-types CryptoOrderStatus enum; drift would let customers think other statuses are valid.', () => {
@@ -191,17 +191,22 @@ describe('W718 sdk-typescript-crypto-orders marketing-doc parity', () => {
     );
   });
 
-  it('Doc-parity 5-invariant cluster — V-722 anchor + 7-verb roster + 6-status closed enum + V-666.BR/BU/AU/AO sub-anchors + non-refundable framing + customer-facing-only framing. Drift on any would fragment the doc/source-of-truth alignment.', () => {
+  it('Doc-parity cluster — internal V-722 provenance stays in non-rendered frontmatter, the verb roster and the three capability claims survive in rendered copy, and no internal rollout marker leaks into what the customer reads.', () => {
     const doc = read(DOC);
 
-    expect(doc).toMatch(/V-722/);
+    // Frontmatter comment: compiled away, never rendered.
+    expect(doc).toMatch(/^\/\/ V-722 — TypeScript SDK reference for the crypto-orders surface\.$/m);
     expect(doc).toMatch(/client\.cryptoOrders\.quote\(/);
     expect(doc).toMatch(/client\.cryptoOrders\.createCheckout\(/);
-    expect(doc).toMatch(/V-666\.BR/);
-    expect(doc).toMatch(/V-666\.BU/);
-    expect(doc).toMatch(/V-666\.AU/);
+    expect(doc).toMatch(/\/\/ Narrow to a single status server-side\./);
+    expect(doc).toMatch(/\/\/ Explicit cursor paging\./);
+    expect(doc).toMatch(/console\.log\(single\.events\); \/\/ Event timeline/);
     expect(doc).toMatch(/Crypto payments are non-refundable/);
     expect(doc).toMatch(/Admin endpoints are not exposed/);
+    // Rendered body (everything after the frontmatter fence) carries no
+    // internal rollout markers — the `6ca50d40e` product decision.
+    const rendered = doc.slice(doc.indexOf('---', doc.indexOf('---') + 3));
+    expect(rendered).not.toMatch(/\bV-\d+/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

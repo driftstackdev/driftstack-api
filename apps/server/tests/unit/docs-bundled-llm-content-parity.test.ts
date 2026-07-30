@@ -47,8 +47,15 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
 
   it('documents live desktop controls and exact flat standard bundled billing', () => {
     expect(body).toMatch(/Settings → AI[\s\S]*?& billing/);
-    expect(body).toMatch(/\$0\.10 per agent turn/);
-    expect(body).toMatch(/Enterprise can use a contracted custom rate/);
+    // The flat rate is the load-bearing customer claim; the page states it as
+    // an included-service accounting value (a budget, not an itemized Stripe
+    // line), so the amount, the per-turn unit and the model/token independence
+    // are pinned rather than one exact phrasing of the sentence.
+    expect(body).toMatch(
+      /flat \*\*\$0\.10\s*\n?\s*included-service accounting value per agent turn\*\*/,
+    );
+    expect(body).toMatch(/independent of model choice\s*\n?\s*and token count/);
+    expect(body).toMatch(/Enterprise can\s*\n?\s*use a contracted custom budget/);
     expect(body).toMatch(/bundled_flat_per_turn/);
     expect(body).not.toMatch(/Cost-per-turn varies with the underlying model/);
   });
