@@ -1,9 +1,10 @@
 // V-298c / V-309e — Team RBAC resource.
 //
-// All six /v1/team/* endpoints. The auth path itself does NOT yet
-// honor team membership (V-298d); accepted members can sign in but
-// the membership grants no implicit permissions on the owner's
-// resources until V-298d ships.
+// All six /v1/team/* endpoints. Team membership IS honored on the auth
+// path: send `X-Driftstack-Account: acc_<owner-uuid>` to act on the
+// resources of an owner you are a member of. The request is authorized
+// against your membership role ('admin' or 'member') and the route's
+// required scope; without the header every call acts on your own account.
 
 import type { HttpClient } from '../http.js';
 

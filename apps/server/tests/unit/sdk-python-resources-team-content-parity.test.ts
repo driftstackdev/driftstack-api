@@ -43,9 +43,17 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
   it("file exists at canonical path + module docstring V-298c/V-309f framing + V-298d auth-path-integration-not-yet-permissioning contract. CRITICAL: accepted members can sign in but their membership grants no implicit permissions on the owner's resources until V-298d ships. Drift to dropping this framing would silently widen the auth surface.", () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^"""V-298c \/ V-309f — Team RBAC resource\.\n/);
-    expect(body).toMatch(/All six \/v1\/team\/\* endpoints\. Auth path integration is V-298d —/);
-    expect(body).toMatch(/accepted members can sign in but the membership grants no implicit/);
-    expect(body).toMatch(/permissions on the owner's resources until V-298d ships\./);
+    // `resolveEffectiveAccount` (apps/server/src/services/auth.ts) resolves
+    // `X-Driftstack-Account: acc_<uuid>` against `ctx.teams` and carries the
+    // membership role through, so members DO act on the owner's resources.
+    // The old "no implicit permissions until V-298d ships" caveat was a
+    // deferred promise that is now simply false on a shipped SDK surface.
+    expect(body).toMatch(
+      /All six \/v1\/team\/\* endpoints\. Team membership IS honored on the auth/,
+    );
+    expect(body).toMatch(/``X-Driftstack-Account: acc_<owner-uuid>`` to act on the/);
+    expect(body).toMatch(/against your membership role \(``admin`` or ``member``\)/);
+    expect(body).not.toMatch(/grants no implicit permissions/);
   });
 
   it('TeamRole = Literal["member", "admin"] narrow enum pinned. Drift to adding "owner" or "viewer" would let the SDK accept role values the server-side enum still rejects — customers would get cryptic 400s instead of compile-time/typecheck-time errors.', () => {

@@ -5,10 +5,11 @@ import (
 	"net/url"
 )
 
-// TeamResource handles /v1/team/*. V-298c routes; auth path
-// integration is V-298d — accepted members can sign in but the
-// membership grants no implicit permissions on the owner's resources
-// until V-298d ships.
+// TeamResource handles /v1/team/*. V-298c routes. Team membership IS
+// honored on the auth path: send X-Driftstack-Account: acc_<owner-uuid> to
+// act on the resources of an owner you are a member of. The request is
+// authorized against your membership role (admin or member) and the route's
+// required scope; without the header every call acts on your own account.
 type TeamResource struct {
 	client *Client
 }

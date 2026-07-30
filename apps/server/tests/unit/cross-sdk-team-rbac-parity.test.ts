@@ -50,22 +50,30 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
     expect(py).toMatch(/V-298c/);
   });
 
-  it('CRITICAL V-298d auth-path-pending caveat pinned in all 3 SDKs. The "auth path integration is V-298d — accepted members can sign in but the membership grants no implicit permissions on the owner\'s resources until V-298d ships" framing tells customers what team RBAC currently does NOT do (yet). Drift to dropping this caveat would let callers assume implicit permissions exist.', () => {
+  it('CRITICAL the acting-as contract is stated identically in all 3 SDKs, and the superseded "no implicit permissions" caveat is banned. That caveat was a deferred promise that became FALSE: `resolveEffectiveAccount` (apps/server/src/services/auth.ts) resolves `X-Driftstack-Account: acc_<uuid>` against `ctx.teams` and carries the membership role through, so members DO act on the owner\'s resources today. Leaving it pinned would have kept a false limitation on three shipped SDK surfaces.', () => {
     const ts = read(TS_TEAM);
     const go = read(GO_TEAM);
     const py = read(PY_TEAM);
 
-    // sdk-typescript: "honor team membership (V-298d); accepted members can sign in but"
-    expect(ts).toMatch(/V-298d/);
-    expect(ts).toMatch(/accepted members can sign in but/);
-
-    // sdk-go: similar V-298d framing.
-    expect(go).toMatch(/V-298d/);
-    expect(go).toMatch(/accepted members can sign in but/);
-
-    // sdk-python: similar V-298d framing.
-    expect(py).toMatch(/V-298d/);
-    expect(py).toMatch(/accepted members can sign in but/);
+    for (const [name, body] of [
+      ['sdk-typescript', ts],
+      ['sdk-go', go],
+      ['sdk-python', py],
+    ] as const) {
+      // The header name customers must send.
+      expect(body, `${name} acting-as header`).toMatch(/X-Driftstack-Account: acc_<owner-uuid>/);
+      // Membership is honored, not pending.
+      expect(body, `${name} honored`).toMatch(
+        /[Tt]eam membership IS\s*\n?(?:\/\/ )?honored on the auth/,
+      );
+      // Authorization is role- AND scope-bound, not implicit.
+      expect(body, `${name} role`).toMatch(/membership role/);
+      expect(body, `${name} scope`).toMatch(/required scope/);
+      // Absent header means self, which is what keeps the default safe.
+      expect(body, `${name} self default`).toMatch(/acts on your own account/);
+      // The superseded deferred promise must never return.
+      expect(body, `${name} no stale caveat`).not.toMatch(/grants no implicit permissions/);
+    }
   });
 
   it('CRITICAL "no implicit permissions" framing pinned in all 3 SDKs. The "membership grants no implicit permissions on the owner\'s resources" wording is the load-bearing claim that prevents callers from assuming they can act ON BEHALF OF the owner. Drift to dropping would silently widen the auth surface.', () => {
@@ -73,13 +81,22 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
     const go = read(GO_TEAM);
     const py = read(PY_TEAM);
 
-    // sdk-typescript carries "grants no implicit permissions on the owner's" on single line.
-    expect(ts).toMatch(/grants no implicit permissions on the owner's/);
-
-    // sdk-go: "membership grants no implicit permissions on the owner's resources" (single line).
-    expect(go).toMatch(/grants no implicit permissions on the owner's/);
-
-    expect(py).toMatch(/grants no implicit/);
+    // The safety claim is no longer "you get nothing"; it is "you get exactly
+    // the owner you are a member of, at your role, within the route's scope,
+    // and only when you ASK via the header". Pin that in all three.
+    for (const [name, body] of [
+      ['sdk-typescript', ts],
+      ['sdk-go', go],
+      ['sdk-python', py],
+    ] as const) {
+      expect(body, `${name} membership-bound`).toMatch(/an owner you are a member of/);
+      expect(body, `${name} role-bound`).toMatch(/membership role/);
+      expect(body, `${name} scope-bound`).toMatch(/required scope/);
+      expect(body, `${name} explicit opt-in`).toMatch(
+        /without the header every call acts on your own account/,
+      );
+      expect(body, `${name} stale caveat gone`).not.toMatch(/grants no implicit permissions/);
+    }
   });
 
   it("CRITICAL TeamRole 2-value union pinned in sdk-typescript + sdk-python. The closed-2 set ('member' | 'admin') is what dashboards anchor their role-badge rendering on. sdk-go uses string type (no compile-time literal-union). Drift to a 3rd value would break the closed-set switch.", () => {
@@ -174,7 +191,10 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
 
     for (const [name, body] of Object.entries(sdks)) {
       expect(body, `${name} V-298c`).toMatch(/V-298c/);
-      expect(body, `${name} V-298d`).toMatch(/V-298d/);
+      // V-298d is deliberately NOT pinned: it referenced a pending auth-path
+      // integration that has since shipped, and the anchor was removed with the
+      // stale caveat it belonged to.
+      expect(body, `${name} no pending-integration anchor`).not.toMatch(/V-298d/);
       // "member" wording appears in all SDKs (either as role literal or comment).
       expect(body, `${name} member`).toMatch(/member/i);
     }

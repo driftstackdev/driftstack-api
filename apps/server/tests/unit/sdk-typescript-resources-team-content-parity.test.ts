@@ -4,10 +4,10 @@
 // W660 splits the original 11 it() blocks into 17 focused per-concept
 // blocks + pins previously-implicit invariants:
 //
-//   • V-298d-pending caveat — "The auth path itself does NOT yet
-//     honor team membership (V-298d); accepted members can sign in
-//     but the membership grants no implicit permissions on the
-//     owner's resources until V-298d ships." Drift to dropping
+//   • Acting-as contract — team membership IS honored on the auth
+//     path via `X-Driftstack-Account: acc_<owner-uuid>`, authorized
+//     against the caller's membership role and the route's scope.
+//     Drift to dropping
 //     this caveat would let callers assume implicit permissions
 //     that don't yet exist — silently broken authorization.
 //   • TeamRole 2-value union ('member' | 'admin') pinned. Drift
@@ -55,10 +55,12 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     expect(body).toMatch(/\/\/ All six \/v1\/team\/\* endpoints\./);
   });
 
-  it('CRITICAL V-298d-pending caveat pinned per-line: "The auth path itself does NOT yet honor team membership (V-298d); accepted members can sign in but the membership grants no implicit permissions on the owner\'s resources until V-298d ships." Drift to dropping this caveat would let callers assume implicit permissions that don\'t yet exist — silently broken authorization across the whole product.', () => {
+  it("CRITICAL acting-as contract pinned per-line. The old text claimed membership granted NO implicit permissions until a future release; `resolveEffectiveAccount` in apps/server/src/services/auth.ts proves otherwise — it resolves `X-Driftstack-Account: acc_<uuid>` against `ctx.teams` and carries the membership role through, so members DO act on the owner's resources today. Pinning the stale caveat would keep a false limitation on a shipped SDK surface.", () => {
     expect(body).toMatch(
-      /\/\/ All six \/v1\/team\/\* endpoints\. The auth path itself does NOT yet\s*\n?\s*\/\/ honor team membership \(V-298d\); accepted members can sign in but\s*\n?\s*\/\/ the membership grants no implicit permissions on the owner's\s*\n?\s*\/\/ resources until V-298d ships\./,
+      /\/\/ All six \/v1\/team\/\* endpoints\. Team membership IS honored on the auth\s*\n?\s*\/\/ path: send `X-Driftstack-Account: acc_<owner-uuid>` to act on the\s*\n?\s*\/\/ resources of an owner you are a member of\./,
     );
+    // The superseded claim must never come back to a shipped SDK surface.
+    expect(body).not.toMatch(/grants no implicit permissions/);
   });
 
   it('Imports — HttpClient only (no @driftstack/api-types import). Team shapes are SDK-DEFINED locally, not re-exported from api-types. Drift to importing from api-types would force Zod schema parity for both SDK and dashboard — but the dashboard uses a different subset.', () => {

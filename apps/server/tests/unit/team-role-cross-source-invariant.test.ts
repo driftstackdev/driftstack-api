@@ -108,12 +108,19 @@ describe('W853 TeamRole cross-source invariant', () => {
 
   it("CRITICAL the 2-role model has 'member' as the READ-only default + 'admin' as the WRITE-grant role. The TS SDK declaration order (member first) signals the default. Drift to inverting the order or names would break the 'least-privilege' framing.", () => {
     const sdkTs = read(resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/team.ts'));
-    // Member appears BEFORE admin in the union (least-privilege default).
-    const idxMember = sdkTs.indexOf("'member'");
-    const idxAdmin = sdkTs.indexOf("'admin'");
+    // Scope to the TeamRole DECLARATION. Searching the whole file for the
+    // quoted literals made this guard trip on ordinary prose: doc copy that
+    // mentions the roles (e.g. "your membership role ('admin' or 'member')")
+    // would decide the ordering verdict instead of the union itself.
+    const decl = /export type TeamRole = ([^;]+);/.exec(sdkTs);
+    expect(decl, 'TeamRole union declaration must be present').not.toBeNull();
+    const union = decl![1]!;
+    const idxMember = union.indexOf("'member'");
+    const idxAdmin = union.indexOf("'admin'");
     expect(idxMember).toBeGreaterThan(-1);
     expect(idxAdmin).toBeGreaterThan(-1);
-    expect(idxMember, "'member' should appear before 'admin' in TS SDK type").toBeLessThan(
+    // Member appears BEFORE admin in the union (least-privilege default).
+    expect(idxMember, "'member' should appear before 'admin' in the TeamRole union").toBeLessThan(
       idxAdmin,
     );
   });

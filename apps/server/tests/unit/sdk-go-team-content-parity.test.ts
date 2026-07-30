@@ -40,10 +40,19 @@ describe('W591.A packages/sdk-go/team.go content parity', () => {
   it("file exists at canonical path + TeamResource V-298c routes anchor + V-298d auth-path-not-yet-permissioned contract pinned. CRITICAL distinction: accepted members CAN SIGN IN, but their membership grants no implicit permissions on the owner's resources until V-298d ships. Drift to claiming the membership grants implicit permissions would silently widen the auth surface.", () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^package driftstack$/m);
-    expect(body).toMatch(/\/\/ TeamResource handles \/v1\/team\/\*\. V-298c routes; auth path/);
-    expect(body).toMatch(/\/\/ integration is V-298d — accepted members can sign in but the/);
-    expect(body).toMatch(/\/\/ membership grants no implicit permissions on the owner's resources/);
-    expect(body).toMatch(/\/\/ until V-298d ships\./);
+    // `resolveEffectiveAccount` (apps/server/src/services/auth.ts) resolves
+    // `X-Driftstack-Account: acc_<uuid>` against `ctx.teams` and carries the
+    // membership role through, so members DO act on the owner's resources.
+    // The old "no implicit permissions until V-298d ships" caveat was a
+    // deferred promise that is now simply false on a shipped SDK surface.
+    expect(body).toMatch(
+      /\/\/ TeamResource handles \/v1\/team\/\*\. V-298c routes\. Team membership IS/,
+    );
+    expect(body).toMatch(
+      /\/\/ honored on the auth path: send X-Driftstack-Account: acc_<owner-uuid> to/,
+    );
+    expect(body).toMatch(/\/\/ authorized against your membership role \(admin or member\)/);
+    expect(body).not.toMatch(/grants no implicit permissions/);
     expect(body).toMatch(/^type TeamResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
   });
 
