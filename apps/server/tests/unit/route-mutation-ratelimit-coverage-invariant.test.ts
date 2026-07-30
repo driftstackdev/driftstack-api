@@ -290,8 +290,14 @@ describe('mutation-route rate-limit coverage invariant', () => {
   );
 
   it('discovers the complete current mutation registration surface', () => {
-    expect(routes).toHaveLength(160);
-    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(74);
+    // Review tripwire, not a security assertion — the invariant below is what
+    // enforces protection. Refreshed after confirming violations(routes) is
+    // EMPTY at this count, i.e. all 161 mutation routes carry a limiter, a
+    // privileged gate, or an exact reviewed exemption. NOTE: A3's dual
+    // actor + effective-owner limiter lane will move this number again; refresh
+    // it the same way (prove violations() empty first), never by chasing green.
+    expect(routes).toHaveLength(161);
+    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(75);
   });
 
   it('every mutation route has a limiter, privileged gate, or exact exemption', () => {

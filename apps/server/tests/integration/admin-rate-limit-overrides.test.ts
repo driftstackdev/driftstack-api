@@ -366,7 +366,13 @@ describe('R2 consume-path integration', () => {
   });
 
   it('end-to-end via HTTP: setting an override is visible to the next request', async () => {
-    fx = await buildTestApp({ tier: 'free' });
+    // Paid tier: this case drives BOTH an admin route (to set the override) and
+    // a customer route (to observe it on the next auth-cache fill) with one
+    // credential. After `3202fdb17` no single Free credential can do both — an
+    // ordinary key is refused at the customer-API boundary, and the desktop
+    // credential is barred from the admin surface. The override capacity being
+    // asserted is tier-independent, so the tier here is incidental.
+    fx = await buildTestApp({ tier: 'api_builder' });
 
     // Warm the cache (loads AccountContext with no overrides).
     const before = await fx.app.inject({

@@ -2,7 +2,11 @@
 // GET /v1/admin/accounts/:id/usage and GET /v1/admin/audit-log.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import {
+  buildTestApp,
+  seedAdditionalAccount,
+  type TestAppFixture,
+} from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
 
@@ -40,11 +44,17 @@ describe('GET /v1/admin/accounts/:id/usage', () => {
   });
 
   it('uses the TARGET account tier (not the caller tier) for quotas', async () => {
-    // Caller tier doesn't matter — admin endpoint reflects target.
-    fx = await buildTestApp({ tier: 'free' });
+    // Caller tier doesn't matter — the admin endpoint reflects the TARGET. This
+    // now uses two distinct accounts so the claim is literally exercised: a
+    // paid staff caller reads a separate `free` account. (It previously pointed
+    // a free fixture at itself, which since `3202fdb17` cannot even reach the
+    // admin surface — an ordinary key on Free is refused at the customer-API
+    // boundary, and Free's desktop credential is barred from /v1/admin.)
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const target = await seedAdditionalAccount(fx, { tier: 'free' });
     const res = await fx.app.inject({
       method: 'GET',
-      url: `/v1/admin/accounts/acc_${fx.accountId}/usage`,
+      url: `/v1/admin/accounts/acc_${target.accountId}/usage`,
       headers: auth(fx),
     });
     const body = res.json<{ tier: string; quotas: Record<string, number | null> }>();

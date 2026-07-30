@@ -104,7 +104,12 @@ describe('W199/W200 rate-limit response headers', () => {
   // bucket (capacity 5; cost 1 per call) by firing 6 POST /v1/sessions
   // calls and assert the 6th returns 429 with the full header set.
   it('v2-#23 429 path: retry-after + x-ratelimit-* headers MUST be present so SDK backoff has a stable contract', async () => {
-    fx = await buildTestApp({ tier: 'free' });
+    // Free has the smallest `sessions:create` capacity, which is why this case
+    // uses it. `3202fdb17` made Free an interactive desktop tier, so an ORDINARY
+    // key is refused at the customer-API boundary before the limiter ever runs;
+    // POST /v1/sessions is on the Free desktop allowlist, so the desktop
+    // credential is the caller that actually reaches the bucket in production.
+    fx = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' });
     const expectedCapacity = TIER_RATE_LIMIT_DEFAULTS.free['sessions:create'].capacity;
 
     // Burn capacity. Bucket fires from the FIRST request, so capacity
