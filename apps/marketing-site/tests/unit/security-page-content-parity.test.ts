@@ -6,18 +6,22 @@
 //
 // Pinned:
 //   • 6 numbered pillar slots present (transport / egress /
-//     api-keys / webhooks / team-rbac / no-customer-data-access).
-//   • Egress is framed as ROADMAP (no server-side
-//     implementation today) — load-bearing honesty claim.
+//     api-keys / webhooks / team-rbac / live-media-handling).
+//   • Egress is framed as the SHIPPED per-profile SOCKS5 exit, with
+//     UDP/QUIC routing + remote DNS stated as PROXY-DEPENDENT (the
+//     only egress backend wired server-side is SocksProxyBackend)
+//     — load-bearing honesty claim.
 //   • Scrypt logN=15 + 30s sha256-keyed auth cache claims pinned
 //     (specific, falsifiable security parameters).
 //   • Webhook signature shape t=<timestamp>,v1=<hex> + 5-minute
 //     replay window pinned ↔ V-359 contract.
 //   • "What we don't claim" honesty block: no SOC 2 + no ISO
 //     27001 + EU-default residency pinned.
-//   • Sub-processor list cited (Hetzner, Neon, Upstash,
+//   • Sub-processor disclosure: the page cross-links the live
+//     register at /trust/sub-processors, and the register data
+//     module itself carries every vendor (Hetzner, Neon, Upstash,
 //     Cloudflare, Postmark, Sentry, Stripe, Anthropic, Moneybird,
-//     MacStadium) + cross-link to /trust/sub-processors.
+//     MacStadium, LiveKit, NowPayments).
 //   • Threat-model in/out scope structure pinned (5 in-scope +
 //     4 out-of-scope buckets).
 //   • Cross-link to /v1/account/audit-log/export (GDPR Article
@@ -40,20 +44,34 @@ function read(p: string): string {
 describe('W365.A marketing-site /security page parity', () => {
   const body = read(PAGE);
 
-  it('6 numbered pillar slots present (transport / egress / api-keys / webhooks / rbac / no-data-access). 2026-05-22 — egress label flipped from "(roadmap)" to plain "Egress" after the per-profile capability shipped.', () => {
+  it('6 numbered pillar slots present (transport / egress / api-keys / webhooks / rbac / live-media). 2026-07-17 (e36e5b4e2) — pillar 06 renamed from "No-customer-data-access posture" to "Live-media handling": the old pillar claimed screenshots / DOM snapshots / cookies "never reach our servers", which the Capture endpoint contradicts (they pass through the API inline and are simply not retained). The narrower implemented boundary is pinned here; the overclaimed label is negatively pinned so it cannot return.', () => {
     expect(body).toMatch(/01 · Transport/);
     expect(body).toMatch(/02 · Egress/);
     expect(body).toMatch(/03 · API keys/);
     expect(body).toMatch(/04 · Webhooks/);
     expect(body).toMatch(/05 · Team roles \(RBAC\)/); // S20c 2026-07-06: plain words lead, RBAC kept in parens
-    expect(body).toMatch(/06 · No-customer-data-access posture/);
+    expect(body).toMatch(/06 · Live-media handling/);
+    expect(body).toMatch(/Live-session media is not retained by default\./);
+    expect(body).not.toMatch(/06 · No-customer-data-access posture/);
+    expect(body).not.toMatch(/none of it ever reaches our servers/);
   });
 
-  it('egress framed as SHIPPED per-profile (SOCKS5 / OpenVPN / WireGuard). 2026-05-22 — flipped from honest-roadmap framing to concrete capability claim per planning 133 Phase 1 + SocksProxyBackend wired in bootstrap.', () => {
-    expect(body).toMatch(/Each profile can attach its own egress configuration/);
-    expect(body).toMatch(/SOCKS5/);
-    expect(body).toMatch(/OpenVPN/);
-    expect(body).toMatch(/WireGuard/);
+  it('egress framed as the SHIPPED per-profile SOCKS5 exit, with UDP/QUIC + remote DNS stated as proxy-dependent. 2026-07-17 (e36e5b4e2) — OpenVPN / WireGuard pins retired: no server-side egress backend exists (only SocksProxyBackend implements SessionEgressService), the pre-launch proxy gate skips VPN schemes, and the green sibling guard apps/server/tests/unit/security-page-doc-parity.test.ts (W246.A) forbids both words on this page. The unconditional "UDP/WebRTC/QUIC tunnelling" + "DNS leaks blocked" absolutes are negatively pinned — the impl makes both proxy-capability-dependent.', () => {
+    expect(body).toMatch(/02 · Egress/);
+    expect(body).toMatch(/A profile can attach a public SOCKS5 proxy as its exit/);
+    expect(body).toMatch(/Per-profile SOCKS5; capability reported after launch\./);
+    // Fail-closed limitation disclosures — load-bearing.
+    expect(body).toMatch(/blocks internal proxy targets, and requests\s+remote DNS/);
+    expect(body).toMatch(
+      /UDP \/ WebRTC \/ QUIC routing depends on the proxy's\s+reported UDP capability/,
+    );
+    expect(body).toMatch(
+      /Without an\s+attached config, session traffic exits via Driftstack-managed\s+infrastructure/,
+    );
+    expect(body).toMatch(/We never store destination response bodies/);
+    // The two claims the implementation contradicts must stay gone.
+    expect(body).not.toMatch(/DNS\s+leaks blocked/);
+    expect(body).not.toMatch(/that many proxies drop/);
   });
 
   it('scrypt logN=15 + 30s sha256-keyed auth cache parameters pinned (falsifiable claims)', () => {
@@ -100,7 +118,15 @@ describe('W365.A marketing-site /security page parity', () => {
     expect(body).not.toMatch(/Compute, database, object storage all in the EU/);
   });
 
-  it('sub-processor list cited + cross-link to /trust/sub-processors resolves', () => {
+  it('sub-processor disclosure resolves to the canonical live register (page links it; the register carries every vendor)', () => {
+    // 2026-07-17 (e36e5b4e2): the page stopped duplicating a 10-name
+    // inline list. That list had gone STALE and UNDER-disclosed — the
+    // register also carries LiveKit (live-session media relay) and
+    // NowPayments (crypto checkout). The vendor pins therefore move to
+    // the register the Article 28(2) notices are cut from; the page
+    // keeps the pointer + the completeness claim + a negative pin so a
+    // partial inline list cannot come back.
+    const register = read(resolve(REPO_ROOT, 'apps/marketing-site/src/data/sub-processors.ts'));
     for (const sp of [
       'Hetzner',
       'Neon',
@@ -112,10 +138,17 @@ describe('W365.A marketing-site /security page parity', () => {
       'Anthropic',
       'Moneybird',
       'MacStadium',
+      'LiveKit',
+      'NowPayments',
     ]) {
-      expect(body).toContain(sp);
+      expect(register).toContain(sp);
     }
+    expect(body).toMatch(
+      /live register lists every provider with its purpose, region,\s+and transfer mechanism/,
+    );
+    expect(body).toMatch(/including conditional services/);
     expect(body).toContain('/trust/sub-processors');
+    expect(body).not.toMatch(/Hetzner, Neon, Upstash, Cloudflare, Postmark/);
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/sub-processors.md')),
     ).toBe(true);

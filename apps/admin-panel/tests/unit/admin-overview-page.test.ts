@@ -94,7 +94,7 @@ function makeRouter(opts: {
   auditStatus?: number;
   sessionStats?: Record<string, unknown>;
   sessionStatsStatus?: number;
-  incidents?: Array<Record<string, unknown>>;
+  incidentsBody?: Record<string, unknown>;
   incidentsStatus?: number;
   payingStats?: Record<string, unknown>;
   payingStatsStatus?: number;
@@ -137,7 +137,20 @@ function makeRouter(opts: {
       );
     }
     if (/\/v1\/admin\/incidents/.test(call.url)) {
-      return json({ data: opts.incidents ?? [] }, opts.incidentsStatus ?? 200);
+      // The open-incidents KPI reads the server's exact aggregate, so the
+      // default must be a COMPLETE page envelope. A bare {data:[]} is rejected
+      // as unverifiable and would otherwise degrade every unrelated test in
+      // this file to the incidents-unavailable + global-banner path.
+      return json(
+        opts.incidentsBody ?? {
+          data: [],
+          total: 0,
+          open_count: 0,
+          has_more: false,
+          next_cursor: null,
+        },
+        opts.incidentsStatus ?? 200,
+      );
     }
     if (/\/v1\/admin\/sessions\/stats/.test(call.url)) {
       return json(
@@ -295,37 +308,83 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(refresh.textContent?.trim()).toBe('Refresh now');
   });
 
-  it('open-incidents KPI: counts non-resolved incidents from /v1/admin/incidents (status !== resolved)', async () => {
-    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+  it('open-incidents KPI: renders the exact server open_count, never a count of the bounded row sample', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
       route: makeRouter({
         overview: { accounts: { active: 1, suspended: 0, deleted: 0, total: 1 } },
-        incidents: [
-          { id: 'inc_1', status: 'investigating' },
-          { id: 'inc_2', status: 'monitoring' },
-          { id: 'inc_3', status: 'resolved' },
-        ],
+        // One row on the page, two open incidents in total. A tile that counted
+        // rows would under-report the outage and read as less broken than it is.
+        incidentsBody: {
+          data: [{ id: 'inc_2f1c8a90-4b6d-4a3e-9d21-77c0f5b8e412', status: 'investigating' }],
+          total: 2,
+          open_count: 2,
+          has_more: true,
+          next_cursor: 'cur_next',
+        },
         audit: [],
       }),
     });
     win = window;
     await flush();
-    // 2 of the 3 incidents are non-resolved → open count = 2 (real data, not the old mock tile).
+    // Real data, not the old mock tile — and exact, not inferred.
     expect(text(window, '[data-field="incidents-open"]')).toBe('2');
+    // The lifecycle predicate is applied in SQL BEFORE the row limit, which is
+    // what makes the aggregate exact no matter how few rows come back.
+    expect(fetchCalls.find((call) => /\/v1\/admin\/incidents/.test(call.url))?.url).toMatch(
+      /\/v1\/admin\/incidents\?state=open&limit=1$/,
+    );
   });
 
-  it('open-incidents KPI: zero non-resolved incidents → 0 (all resolved)', async () => {
+  it('open-incidents KPI: a row sample without the exact aggregate is never rendered as a count', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
       route: makeRouter({
         overview: { accounts: { active: 1, suspended: 0, deleted: 0, total: 1 } },
-        incidents: [{ id: 'inc_1', status: 'resolved' }],
+        // Legacy shape: rows only, no total/open_count/has_more/next_cursor.
+        incidentsBody: {
+          data: [
+            { id: 'inc_1', status: 'investigating' },
+            { id: 'inc_2', status: 'monitoring' },
+            { id: 'inc_3', status: 'resolved' },
+          ],
+        },
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-field="incidents-open"]')).toBe('—');
+  });
+
+  it('open-incidents KPI: a VERIFIED all-time open_count of zero renders 0', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: { accounts: { active: 1, suspended: 0, deleted: 0, total: 1 } },
+        incidentsBody: { data: [], total: 0, open_count: 0, has_more: false, next_cursor: null },
         audit: [],
       }),
     });
     win = window;
     await flush();
     expect(text(window, '[data-field="incidents-open"]')).toBe('0');
+  });
+
+  it('open-incidents KPI: an all-clear the response cannot prove is withheld, not shown as 0', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: { accounts: { active: 1, suspended: 0, deleted: 0, total: 1 } },
+        // has_more:true with next_cursor:null cannot describe a complete page,
+        // so the zero it carries is not trustworthy operator truth.
+        incidentsBody: { data: [], total: 0, open_count: 0, has_more: true, next_cursor: null },
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-field="incidents-open"]')).toBe('—');
   });
 
   it('accounts-by-tier: renders a labelled bar per tier with live counts + total from overview.by_tier', async () => {

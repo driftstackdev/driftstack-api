@@ -9,6 +9,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = read('apps/marketing-site/src/pages/docs/cost-monitoring.astro');
 const ROUTE = read('apps/server/src/routes/account-cost.ts');
+const COST_SERVICE = read('apps/server/src/services/cost-monitoring.ts');
 const AGGREGATOR = read('apps/server/src/services/cost-aggregator.ts');
 const USAGE = read('apps/server/src/services/usage.ts');
 
@@ -20,7 +21,13 @@ describe('W265.B operational cost estimate public/runtime parity', () => {
   it('documents the registered UTC-month endpoint and zero fresh-account response', () => {
     expect(PAGE).toMatch(/GET \/v1\/account\/cost\?billing_cycle=YYYY-MM/);
     expect(ROUTE).toContain(`'/v1/account/cost'`);
-    expect(ROUTE).toMatch(/regex\(\/\^\\d\{4\}-\\d\{2\}\$\//);
+    // 8636d5021 (2026-07-17) hoisted the inline /^\d{4}-\d{2}$/ into the shared
+    // BILLING_CYCLE_PATTERN, which is strictly tighter (rejects month 00 and
+    // 13–99) while documenting the same YYYY-MM contract to customers.
+    expect(ROUTE).toContain('billing_cycle: z.string().regex(BILLING_CYCLE_PATTERN).optional()');
+    expect(COST_SERVICE).toContain(
+      'export const BILLING_CYCLE_PATTERN = /^\\d{4}-(?:0[1-9]|1[0-2])$/;',
+    );
     expect(PAGE).toMatch(/synthesised zero-breakdown for fresh accounts/);
     expect(PAGE).toMatch(/\(no 404\)/);
   });

@@ -20,6 +20,8 @@ import {
   SessionStatusSchema,
   PaginationQuerySchema,
   SubscribableWebhookEventTypeSchema,
+  CreateSessionRequestSchema,
+  LOCKED_ARCHETYPE_ID,
   PROBLEM_TYPES,
 } from '@driftstack/api-types';
 
@@ -90,10 +92,23 @@ describe('W345.A /docs/sessions parity', () => {
     expect(body).toMatch(/"id":\s*"ses_/);
   });
 
-  it('archetype slug rules: lowercase [a-z0-9_], 3–60 chars', () => {
-    // Pin the validator's character class & length range so a
-    // refactor that loosens the regex needs a doc update too.
-    expect(body).toMatch(/lowercase slug \(3–60 chars,\s*<code>\[a-z0-9_\]<\/code>/);
+  it('archetype must be an id the live GET /v1/archetypes catalog returns', () => {
+    // a05933cc0 (2026-07-15) retired the "mint your own 3–60-char slug via
+    // the Profiles API" framing: customers cannot mint archetypes, and the
+    // create-session input contract refuses anything the public catalog does
+    // not return. Pin the page's catalog claim against the schema that
+    // enforces it (SelectableArchetypeIdSchema's isSelectableArchetypeId
+    // refine) plus the default_archetype_id fallback the catalog owns.
+    expect(body).toMatch(
+      /<code>archetype<\/code> identifies an exact device, iOS, and\s*Safari combination from the live <code>GET \/v1\/archetypes<\/code>\s*catalog\./,
+    );
+    expect(body).toMatch(/<code>default_archetype_id<\/code>/);
+    const catalogId = CreateSessionRequestSchema.safeParse({ archetype: LOCKED_ARCHETYPE_ID });
+    const offCatalog = CreateSessionRequestSchema.safeParse({
+      archetype: 'not_a_catalog_archetype',
+    });
+    expect(catalogId.success).toBe(true);
+    expect(offCatalog.success).toBe(false);
   });
 
   it('cross-links to the curl quickstart (docs successor), /docs/rate-limits, and the concurrency guide (docs successor) all resolve (S47 2026-07-07)', () => {

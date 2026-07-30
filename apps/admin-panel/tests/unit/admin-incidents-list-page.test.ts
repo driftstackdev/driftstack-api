@@ -9,6 +9,18 @@
 // [data-banner] state for load failures, separate from the no-token state,
 // separate from the genuinely-empty state.
 //
+// f66e8a02c hardened both halves of that operator truth, and this file pins
+// the hardened contract:
+//   READ  — the page renders a list only from a provably COMPLETE page
+//           envelope ({data,total,open_count,has_more,next_cursor}). The
+//           heading count is the server's exact open_count, never the length
+//           of a capped row sample, and a truncated page says so out loud.
+//           An envelope it cannot verify is a load failure, not an all-clear.
+//   WRITE — creation is an idempotent PUT /v1/admin/incidents/:id against a
+//           browser-preallocated id with a frozen payload. An unknown outcome
+//           is retryable BY CONSTRUCTION (the replay is byte-identical), which
+//           replaced the old "refresh and title-match a bounded list" guess.
+//
 // Loads the built dist page + runs the inline script in jsdom against a
 // mock fetch, mirroring admin-accounts-page.test.ts.
 
@@ -103,15 +115,90 @@ afterEach(() => {
   win = undefined;
 });
 
+// The page renders a list only from a page it can PROVE is complete, so
+// fixtures must be real `Incident` rows inside a real `ListIncidentsResponse`
+// envelope (packages/api-types/src/incidents.ts): exact `total`/`open_count`
+// plus a `has_more`/`next_cursor` pair that agree with each other.
 const INCIDENT = {
-  id: 'inc_live1',
+  id: 'inc_2f1c8a90-4b6d-4a3e-9d21-77c0f5b8e412',
   title: 'Elevated 5xx on /v1/sessions/create',
   description: 'Investigating.',
   severity: 'major',
   status: 'investigating',
+  affected_components: ['api', 'sessions'],
   public: true,
   started_at: '2026-06-30T00:00:00.000Z',
+  resolved_at: null,
+  created_at: '2026-06-30T00:00:00.000Z',
+  updated_at: '2026-06-30T00:00:00.000Z',
 };
+
+const RESOLVED_INCIDENT = {
+  ...INCIDENT,
+  id: 'inc_3a2b1c04-5d6e-4f70-8a91-b2c3d4e5f607',
+  title: 'Recovered capture backlog',
+  status: 'resolved',
+  started_at: '2026-06-29T00:00:00.000Z',
+  resolved_at: '2026-06-29T12:00:00.000Z',
+  created_at: '2026-06-29T00:00:00.000Z',
+  updated_at: '2026-06-29T12:00:00.000Z',
+};
+
+/** A complete `ListIncidentsResponse` page. `open_count` is the exact
+ *  ALL-TIME open total for the scope, independent of how many rows fit. */
+function listPage(
+  data: Array<Record<string, unknown>>,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    data,
+    total: data.length,
+    open_count: 0,
+    has_more: false,
+    next_cursor: null,
+    ...overrides,
+  };
+}
+
+/** The page partitions the lifecycle server-side: one request for open rows,
+ *  one for resolved rows. Route on `state=` so each gets its own page. */
+function listRoute(
+  openBody: Record<string, unknown>,
+  resolvedBody: Record<string, unknown>,
+): (call: MockFetchCall) => Response {
+  return (call) => (/state=resolved/.test(call.url) ? json(resolvedBody) : json(openBody));
+}
+
+/** The exact `PutIncidentResponse` the page accepts: the outcome, the echoed
+ *  incident under the client-owned id, and exactly one initial update — all
+ *  matching the frozen request byte for byte. */
+function writeSuccess(
+  call: MockFetchCall,
+  outcome: 'created' | 'replayed',
+): Record<string, unknown> {
+  const id = String(call.url).split('/').pop() as string;
+  const sent = JSON.parse(String(call.init?.body ?? '{}')) as Record<string, unknown>;
+  return {
+    outcome,
+    incident: {
+      ...INCIDENT,
+      ...sent,
+      id,
+      resolved_at: null,
+      created_at: sent.started_at,
+      updated_at: sent.started_at,
+    },
+    updates: [
+      {
+        id: 'incu_9c4d1e20-6f7a-4b8c-9d0e-1f2a3b4c5d6e',
+        incident_id: id,
+        message: sent.description,
+        status: sent.status,
+        posted_at: sent.started_at,
+      },
+    ],
+  };
+}
 
 describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty behaviour', () => {
   it('no token: shows a distinct sign-in banner (not silently the empty state)', async () => {
@@ -132,27 +219,74 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     expect(text(window, '[data-incidents-list]')).not.toContain('All systems operational');
   });
 
-  it('genuinely empty: zero incidents renders the operational message with NO error banner', async () => {
+  it('genuinely empty: a VERIFIED zero-incident page renders the operational message with NO error banner', async () => {
+    const empty = listPage([]);
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: listRoute(empty, empty),
+    });
+    win = window;
+    await flush();
+    expect(bannerHidden(window)).toBe(true);
+    expect(text(window, '[data-incidents-list]')).toContain('All systems operational');
+    expect(text(window, '[data-open-count]')).toBe('0');
+  });
+
+  it('an all-clear the response cannot prove is never rendered as "All systems operational"', async () => {
+    // A bare {data:[]} carries no exact open_count and no complete-page proof.
+    // It cannot license the calm empty state on the one page whose entire job
+    // is surfacing active incidents (audit waefer6wu) — a truncated or
+    // partially-filtered body must read as a load failure, not as health.
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
       route: () => json({ data: [] }),
     });
     win = window;
     await flush();
-    expect(bannerHidden(window)).toBe(true);
-    expect(text(window, '[data-incidents-list]')).toContain('All systems operational');
+    expect(bannerHidden(window)).toBe(false);
+    expect(text(window, '[data-incidents-list]')).not.toContain('All systems operational');
+    expect(text(window, '[data-open-count]')).toBe('—');
   });
 
   it('open incidents render + banner stays hidden', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
-      route: () => json({ data: [INCIDENT] }),
+      route: listRoute(
+        listPage([INCIDENT], { open_count: 1 }),
+        listPage([RESOLVED_INCIDENT], { open_count: 1 }),
+      ),
     });
     win = window;
     await flush();
     expect(bannerHidden(window)).toBe(true);
     expect(text(window, '[data-incidents-list]')).toContain('Elevated 5xx on /v1/sessions/create');
+    expect(text(window, '[data-incidents-list]')).toContain('Recovered capture backlog');
     expect(text(window, '[data-open-count]')).toBe('1');
+  });
+
+  it('a truncated open page shows the exact open total and discloses what is off screen', async () => {
+    // Operator truth: a capped page must never present itself as the whole
+    // list. The heading count comes from the exact server aggregate, and the
+    // shortfall is stated rather than implied by a short list.
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: listRoute(
+        listPage([INCIDENT], {
+          total: 7,
+          open_count: 7,
+          has_more: true,
+          next_cursor: 'cur_next',
+        }),
+        listPage([], { open_count: 7 }),
+      ),
+    });
+    win = window;
+    await flush();
+    expect(bannerHidden(window)).toBe(true);
+    expect(text(window, '[data-open-count]')).toBe('7');
+    expect(text(window, '[data-incidents-list]')).toContain(
+      'Showing 1 of 7 open incidents. Use the API cursor to review the remainder.',
+    );
   });
 
   it('403: a load failure must NEVER render identically to "no incidents" — distinct, retry-capable banner + open-count clears', async () => {
@@ -183,9 +317,13 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
 
   it('retry button re-fetches and clears the error banner on success', async () => {
     let shouldFail = true;
+    const healthy = listRoute(
+      listPage([INCIDENT], { open_count: 1 }),
+      listPage([], { open_count: 1 }),
+    );
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
-      route: () => (shouldFail ? json({ detail: 'boom' }, 500) : json({ data: [INCIDENT] })),
+      route: (call) => (shouldFail ? json({ detail: 'boom' }, 500) : healthy(call)),
     });
     win = window;
     await flush();
@@ -199,14 +337,14 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     expect(text(window, '[data-incidents-list]')).toContain('Elevated 5xx on /v1/sessions/create');
   });
 
-  it('single-flights incident creation and exposes accessible busy state', async () => {
-    let finishPost: (response: Response) => void = () => {};
-    const pendingPost = new Promise<Response>((resolve) => {
-      finishPost = resolve;
+  it('single-flights incident creation on ONE client-owned id and exposes accessible busy state', async () => {
+    let finishPut: (response: Response) => void = () => {};
+    const pendingPut = new Promise<Response>((resolve) => {
+      finishPut = resolve;
     });
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
-      route: (call) => (call.init?.method === 'POST' ? pendingPost : json({ data: [] })),
+      route: (call) => (call.init?.method === 'PUT' ? pendingPut : json(listPage([]))),
     });
     win = window;
     await flush();
@@ -219,27 +357,35 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush(2);
 
-    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    const writes = fetchCalls.filter((call) => call.init?.method === 'PUT');
+    expect(writes).toHaveLength(1);
+    // Never an unaddressed create: the browser preallocates the incident id so
+    // the write is replayable rather than duplicable.
+    expect(fetchCalls.every((call) => call.init?.method !== 'POST')).toBe(true);
+    expect(writes[0].url).toMatch(
+      /\/v1\/admin\/incidents\/inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
     expect(submit.disabled).toBe(true);
     expect(submit.getAttribute('aria-busy')).toBe('true');
     expect(submit.textContent).toContain('Posting');
 
-    finishPost(json({ id: 'inc_new' }));
+    finishPut(json(writeSuccess(writes[0], 'created'), 201));
     await flush();
     expect(submit.disabled).toBe(false);
     expect(submit.hasAttribute('aria-busy')).toBe(false);
+    expect(text(window, '#form-error')).toBe('');
   });
 
   it('does not report a malformed accepted incident body as a failed post', async () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
       route: (call) =>
-        call.init?.method === 'POST'
+        call.init?.method === 'PUT'
           ? new Response('{', {
-              status: 200,
+              status: 201,
               headers: { 'content-type': 'application/json' },
             })
-          : json({ data: [] }),
+          : json(listPage([])),
     });
     win = window;
     await flush();
@@ -251,22 +397,18 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
 
-    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(1);
+    // An unparseable body proves nothing either way, so the page must not
+    // claim failure — it names the outcome as unknown and offers the replay.
     expect(text(window, '#form-error')).not.toContain('Failed to post incident');
+    expect(text(window, '#form-error')).toContain('The result was not confirmed.');
   });
 
-  it('reconciles a committed incident after POST timeout instead of inviting a duplicate', async () => {
+  it('an ambiguous write is retried with the SAME id and byte-identical payload, so it cannot duplicate', async () => {
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
-    let committed = false;
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
-      route: (call) => {
-        if (call.init?.method === 'POST') {
-          committed = true;
-          return Promise.reject(timeout);
-        }
-        return json({ data: committed ? [INCIDENT] : [] });
-      },
+      route: (call) => (call.init?.method === 'PUT' ? Promise.reject(timeout) : json(listPage([]))),
     });
     win = window;
     await flush();
@@ -277,31 +419,42 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush(12);
 
-    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
-    expect(fetchCalls.filter((call) => call.init?.method !== 'POST')).toHaveLength(2);
-    expect(text(window, '[data-incidents-list]')).toContain(INCIDENT.title);
+    // The operator is told the outcome is unknown AND why retrying is safe.
+    // The previous design guessed by title-matching a capped list, so a missed
+    // match could still invite a second PUBLIC incident; the frozen id removes
+    // the guess entirely.
     expect(text(window, '#form-error')).toMatch(
-      /exact title and initial update.*not posted again.*open the existing incident/i,
+      /not confirmed.*same incident id and exact payload.*cannot create a duplicate/i,
     );
     const submit = window.document.getElementById('submit-btn') as HTMLButtonElement;
-    expect(submit.disabled).toBe(true);
-    expect(submit.textContent).toBe('Already posted');
+    expect(submit.disabled).toBe(false);
+    expect(submit.textContent).toBe('Retry same request');
+    expect(submit.getAttribute('title')).toBe(
+      'Retries reuse the same incident id and frozen payload.',
+    );
+
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    await flush();
-    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    await flush(12);
+    const writes = fetchCalls.filter((call) => call.init?.method === 'PUT');
+    expect(writes).toHaveLength(2);
+    expect(writes[1].url).toBe(writes[0].url);
+    expect(writes[1].init?.body).toBe(writes[0].init?.body);
+    expect(fetchCalls.every((call) => call.init?.method !== 'POST')).toBe(true);
   });
 
-  it('blocks repost when both incident creation and authoritative reconciliation fail', async () => {
+  it('blocks every further write when the preallocated id already holds a DIFFERENT incident', async () => {
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
-    let postStarted = false;
+    let writeCount = 0;
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
       route: (call) => {
-        if (call.init?.method === 'POST') {
-          postStarted = true;
-          return Promise.reject(timeout);
+        if (call.init?.method === 'PUT') {
+          writeCount += 1;
+          return writeCount === 1
+            ? Promise.reject(timeout)
+            : json({ type: 'https://errors.driftstack.dev/conflict', detail: 'mismatch' }, 409);
         }
-        return postStarted ? json({ detail: 'unavailable' }, 503) : json({ data: [] });
+        return json(listPage([]));
       },
     });
     win = window;
@@ -312,24 +465,32 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
       'Investigating elevated failures.';
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush(12);
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(12);
 
+    // A 409 means the id is bound to a payload the operator did not send here.
+    // Blind retrying could not be proven safe, so the form hard-stops and
+    // routes the operator to the existing incident first.
     const submit = window.document.getElementById('submit-btn') as HTMLButtonElement;
-    expect(text(window, '#form-error')).toMatch(
-      /couldn't refresh the incident list.*reload and verify.*duplicate public incident/i,
+    expect(text(window, '#form-error')).toContain(
+      'This request id already belongs to a different incident payload. Reload and inspect the existing incident before taking another action.',
     );
     expect(submit.disabled).toBe(true);
-    expect(submit.textContent).toBe('Verify before retrying');
+    expect(submit.getAttribute('title')).toBe(
+      'Reload and inspect the conflicting incident before continuing.',
+    );
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-    await flush();
-    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+    await flush(12);
+    expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(2);
   });
 
-  it('allows a deliberate retry after a successful refresh proves the exact incident absent', async () => {
-    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+  it('an authoritative rejection clears the frozen attempt so a corrected repost uses a NEW id', async () => {
     const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',
       route: (call) =>
-        call.init?.method === 'POST' ? Promise.reject(timeout) : json({ data: [] }),
+        call.init?.method === 'PUT'
+          ? json({ type: 'https://errors.driftstack.dev/validation-failed', detail: 'bad' }, 422)
+          : json(listPage([])),
     });
     win = window;
     await flush();
@@ -340,12 +501,17 @@ describe('admin-panel Incidents list (incidents/index.astro) error-vs-empty beha
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush(12);
 
+    // A 4xx is authoritative: nothing was written, so the operator starts a
+    // clean attempt instead of replaying a request the server refused.
     const submit = window.document.getElementById('submit-btn') as HTMLButtonElement;
-    expect(text(window, '#form-error')).toMatch(
-      /no incident with this exact title and initial update.*you can retry/i,
-    );
+    expect(text(window, '#form-error')).not.toBe('');
     expect(submit.disabled).toBe(false);
     expect(submit.textContent).toBe('Post incident');
-    expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(1);
+
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush(12);
+    const writes = fetchCalls.filter((call) => call.init?.method === 'PUT');
+    expect(writes).toHaveLength(2);
+    expect(writes[1].url).not.toBe(writes[0].url);
   });
 });

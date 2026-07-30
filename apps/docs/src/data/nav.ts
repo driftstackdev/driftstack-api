@@ -378,8 +378,8 @@ export const DOC_NAV: DocNavSection[] = [
             method: 'POST',
           },
           {
-            href: '/api/auth/#exchange-for-the-api-key',
-            label: 'Exchange for the API key',
+            href: '/api/auth/#exchange-for-the-device-credential',
+            label: 'Exchange for the device credential',
             method: 'POST',
           },
         ],
@@ -522,7 +522,7 @@ export const DOC_NAV: DocNavSection[] = [
         children: [
           {
             href: '/api/cost-monitoring/#read-the-estimate',
-            label: 'Read estimate',
+            label: 'Read the estimate',
             method: 'GET',
           },
         ],

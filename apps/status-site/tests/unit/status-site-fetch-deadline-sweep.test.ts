@@ -35,6 +35,14 @@ describe('status-site bounded request sweep', () => {
       expect(body).toMatch(/\.finally\(\(\) => clearTimeout\(timer\)\)/);
       boundedCalls += deadlineUses.length - 1;
     }
-    expect(boundedCalls).toBe(8);
+    // 7, not 8: index.astro routes its THREE bounded requests (live incidents,
+    // live readiness /v1/status, R2 snapshot fallback) through one shared
+    // `load()` wrapper around fetchWithDeadline (f66e8a02c) instead of two
+    // inline call sites. Bounded request coverage went up, call sites went down.
+    // This total stays load-bearing: adding or deleting any awaited
+    // fetchWithDeadline call site on any of the six pages flips it, and a raw
+    // fetch smuggled in outside the helper is caught by the per-page
+    // `rawFetches.length === 1` assertion above.
+    expect(boundedCalls).toBe(7);
   });
 });

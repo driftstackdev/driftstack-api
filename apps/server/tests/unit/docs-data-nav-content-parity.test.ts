@@ -276,7 +276,7 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
 
   it('operational estimate child uses the canonical current heading anchor', () => {
     expect(body).toMatch(
-      /href: '\/api\/cost-monitoring\/#read-the-estimate',\s*\n?\s*label: 'Read estimate',\s*\n?\s*method: 'GET'/,
+      /href: '\/api\/cost-monitoring\/#read-the-estimate',\s*\n?\s*label: 'Read the estimate',\s*\n?\s*method: 'GET'/,
     );
     expect(body).not.toContain('/api/cost-monitoring/#read-your-cost');
   });

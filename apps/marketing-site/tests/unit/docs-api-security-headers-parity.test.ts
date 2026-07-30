@@ -13,8 +13,11 @@
 //   • CORP cross-origin (vs helmet default same-origin)
 //   • COEP disabled
 //   • CORS methods + allowed headers + exposed headers + maxAge=600
-//   • Cache-Control posture: /v1/account/*, /v1/admin/*, /v1/billing/*
-//     all `no-store, private`; /v1/status uses public, max-age=30
+//   • Cache-Control posture: `no-store, private` is the DEFAULT for all of
+//     /v1/* (c86c7b793 broadened it from the account/admin/billing prefixes);
+//     the authenticated transcript + notification SSE add no-cache and
+//     no-transform; status mailbox mutations stay private; /v1/status public
+//     reads use public, max-age=30
 //   • Default helmet headers we keep (nosniff, SAMEORIGIN,
 //     Referrer-Policy: no-referrer, X-DNS-Prefetch-Control: off)
 //   • Vulnerability-disclosure cross-link + security@driftstack.dev
@@ -101,10 +104,22 @@ describe('W351.C /docs/api-security-headers parity', () => {
     expect(app).toMatch(/maxAge:\s*600/);
   });
 
-  it('Cache-Control posture pinned across /v1/account /admin /billing /status', () => {
-    expect(body).toMatch(/\/v1\/account\/\*[\s\S]*no-store, private/);
-    expect(body).toMatch(/\/v1\/admin\/\*[\s\S]*no-store, private/);
-    expect(body).toMatch(/\/v1\/billing\/\*[\s\S]*no-store, private/);
+  it('Cache-Control posture pinned: /v1/* private default, private SSE, public status', () => {
+    // c86c7b793 broadened the server default from the /v1/account, /v1/admin
+    // and /v1/billing prefixes to EVERY /v1 response, so the page now makes
+    // the stronger (and true) claim. Pin the page row against the onSend hook
+    // that actually produces it, so narrowing the hook turns this red.
+    expect(body).toMatch(
+      /<code>\/v1\/\*<\/code> \(caller-private default\)[\s\S]{0,200}no-store, private/,
+    );
+    expect(app).toMatch(/req\.url\.startsWith\('\/v1\/'\)[\s\S]{0,200}'no-store, private'/);
+    expect(body).toMatch(
+      /\/v1\/agent-sessions\/&#123;id&#125;\/transcript[\s\S]{0,200}no-cache, no-store, private, no-transform/,
+    );
+    expect(body).toMatch(
+      /\/v1\/account\/me\/notifications[\s\S]{0,200}no-cache, no-store, private, no-transform/,
+    );
+    expect(body).toMatch(/\/v1\/status\/subscribe\*[\s\S]{0,200}no-store, private/);
     expect(body).toMatch(/\/v1\/status[\s\S]{0,200}public, max-age=30/);
     expect(body).toMatch(/\/v1\/status\/stream[\s\S]{0,200}no-cache, no-transform/);
   });

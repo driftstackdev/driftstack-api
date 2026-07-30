@@ -37,9 +37,26 @@ describe('W253.A docs/api/sessions ↔ tier-cap parity', () => {
     }
   });
 
+  // 2026-07-30 — NARROWED, not relaxed. The page-wide `not.toMatch(/409
+  // Conflict/i)` was a crude proxy for "the cap returns 429" and started
+  // catching an UNRELATED, accurate 409: `8f8ba2376` (fix(api): serialize
+  // direct session operations) documents that a `creating`/`busy` session
+  // returns `409 Conflict`, which matches ConflictError (status 409) in
+  // apps/server/src/lib/errors.ts. The cap-vs-409 promise is now pinned where
+  // it actually lives — the `## Concurrency` section must state 429 and name
+  // no 409 at all, and the Create errors list must map the concurrent-session
+  // cap to `429 ConcurrencyLimit` (ConcurrencyLimitError, status 429).
   it('says concurrency-cap exhaustion returns 429 (not 409)', () => {
     expect(doc).toMatch(/429 Too Many/);
-    expect(doc).not.toMatch(/409\s+Conflict/i);
+    const section = /\n## Concurrency\n([\s\S]*?)\n## /.exec(doc)?.[1] ?? '';
+    expect(section, 'the "## Concurrency" section must exist').not.toBe('');
+    expect(section).toMatch(
+      /Hitting the cap on `POST \/v1\/sessions` returns `429 Too Many\nRequests`/,
+    );
+    expect(section).not.toMatch(/409/);
+    expect(doc).toMatch(/- `429 ConcurrencyLimit` — concurrent-session cap hit\./);
+    expect(doc).not.toMatch(/409[^\n]*concurren/i);
+    expect(doc).not.toMatch(/concurren[^\n]*409/i);
   });
 
   it('session ids use the ses_ prefix', () => {

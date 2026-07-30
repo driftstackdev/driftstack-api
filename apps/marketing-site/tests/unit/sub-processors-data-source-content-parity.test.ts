@@ -107,13 +107,22 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     // framing so future drift can't quietly drop either mode's
     // disclosure.
     // S20c 2026-07-06 plain-language pass: both modes' disclosures
-    // survive with plain words leading (BYOK spelled out; "rail"
-    // dropped for plain "Bundled"); transient-proxy framing kept.
+    // survive with plain words leading (BYOK spelled out);
+    // transient-proxy framing kept. d44370d98 2026-07-17 renamed mode
+    // (2) from "Bundled" to "Driftstack-provided access"; the
+    // load-bearing data-handling disclosure — that this mode is
+    // opt-in only — is unchanged and stays pinned verbatim below.
     expect(body).toMatch(
       /Bring your own key \(BYOK\) — the customer supplies their own Anthropic API key/,
     );
     expect(body).toMatch(/a transient proxy/);
-    expect(body).toMatch(/Bundled — opt-in only/);
+    // Runtime backing for "opt-in only": every bundled turn is gated
+    // on accounts.bundled_llm_consent, read fail-closed by
+    // apps/server/src/db/bundled-llm-repo.ts (missing row => caller
+    // treats as consent=false). The DPA Annex 3 row still reads
+    // "Anthropic, PBC (conditional, opt-in only)" — register and
+    // Annex 3 stay in sync.
+    expect(body).toMatch(/Driftstack-provided access — opt-in only/);
     expect(body).toMatch(
       /Session data flows to Anthropic only when one of these two modes is actually used in a given AI step/, // S20c 2026-07-06
     );
@@ -138,11 +147,23 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     expect(body).toMatch(/Disabled by default; engaged only when explicitly initiated\./);
   });
 
-  it('Stripe row: bundled-AI billing + BYOK direct-provider boundary + BTW reverse-charge via Stripe Tax', () => {
+  it('Stripe row: included-service AI budget (no Stripe line item) + BYOK direct-provider boundary + BTW reverse-charge via Stripe Tax', () => {
+    // d44370d98 2026-07-17 — the retired row claimed Stripe performs
+    // "billing for Driftstack-bundled AI usage". Runtime truth: a
+    // bundled turn posts a flat $0.10 accounting row into the internal
+    // usage_records table (record_type 'agent_decomposer_bundled',
+    // cost_basis 'bundled_flat_per_turn') and is swept against
+    // accounts.bundled_llm_monthly_cap_usd_cents — see
+    // apps/server/src/db/agent-decomposer-usage-recorder.ts and
+    // bundled-llm-repo.ts sumMonthlySpendCents. Neither
+    // stripe-billing-provider.ts nor billing.ts itemizes it. The row
+    // now narrows the disclosed Stripe data flow to what actually
+    // flows, and keeps the BYOK boundary intact.
     expect(body).toMatch(
-      /Payment processing, subscription management, billing for Driftstack-bundled AI usage, and VAT \(Dutch BTW\) reverse-charge handling via Stripe Tax\. BYOK AI usage is billed directly by the model provider, not Stripe through Driftstack\./,
+      /Payment processing, subscription management, and VAT \(Dutch BTW\) reverse-charge handling via Stripe Tax\. Standard bundled-LLM turns use an included-service accounting budget and are not separately itemized by Stripe; BYOK AI usage is billed directly by the model provider\./,
     );
     expect(body).toMatch(/Stripe Payments Europe Ltd \(Ireland\)/);
+    expect(body).not.toMatch(/billing for Driftstack-bundled AI usage/);
   });
 
   it('Cloudflare R2 row: corrected object classes + default jurisdiction + SCCs/DPF transfer basis (S43 2026-07-07)', () => {

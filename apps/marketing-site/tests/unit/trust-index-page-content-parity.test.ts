@@ -115,12 +115,34 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     );
   });
 
-  it('"session traffic exits through your egress" + "Driftstack orchestrates; proxy carries the bytes" framing pinned', () => {
-    // S20c 2026-07-06 plain-language pass: same no-URL-visibility +
-    // customer-egress facts, plain words lead.
+  it('destination-URL answer pinned: control-plane URL processing + navigation-event recording, then SOCKS5-or-managed-egress browser traffic', () => {
+    // e36e5b4e2 2026-07-17 "docs: align public security claims with
+    // runtime truth". The retired copy answered "No. … so the
+    // addresses you visit don't pass through us" — FALSE against
+    // runtime: POST /sessions/:id/navigate carries body.url through
+    // the control plane, and SessionsService.navigate persists a
+    // `navigated` session event (requested_origin / final_origin) for
+    // the account — see apps/server/src/services/sessions.ts and
+    // apps/server/src/lib/session-event-metadata.ts. The page now
+    // discloses more, not less (it also names the managed-egress
+    // fallback the old copy hid), so the retired false privacy claim
+    // is negatively pinned and cannot silently return.
+    //
+    // Deliberately NOT negatively pinned: "OpenVPN / WireGuard".
+    // Customer-attached VPN egress IS shipped — account_proxies rows
+    // carry scheme openvpn|wireguard (apps/server/src/db/schema.ts,
+    // migration 0082), the /v1/account/me/proxies CRUD is live
+    // (apps/server/src/routes/account-me.ts) and a proxy_id resolves
+    // into the dispatch's inlineProxyConfig (apps/server/src/lib/
+    // app.ts). It is customer-documented at
+    // apps/docs/src/pages/api/proxies.md and named on /, /comparison,
+    // /about and /trust/security-overview. Only the E1
+    // /v1/sessions/:id/proxy route is a 503 scaffold. This guard must
+    // not forbid the page from naming a real capability.
     expect(body).toMatch(
-      /Session traffic leaves for the web through the exit you\s+configure \(your egress\) — your own SOCKS5 proxy or OpenVPN \/\s+WireGuard VPN\. Driftstack starts and manages the session;\s+your proxy carries the actual browsing traffic, so the\s+addresses you visit don't pass through us\./,
+      /Yes, when you send a navigate request or an agent plans one,\s+Driftstack's control plane processes the destination URL and\s+records the navigation event for your account\. The browser's\s+destination traffic then leaves through your configured public\s+SOCKS5 proxy, or through Driftstack-managed infrastructure when\s+the profile has no attached exit\./,
     );
+    expect(body).not.toMatch(/addresses you visit don't pass through us/);
   });
 
   it('DPA pre-signed-by-Driftstack + Article 28(2) SCC framing pinned', () => {
@@ -167,10 +189,19 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     );
   });
 
-  it('mailto:support@driftstack.dev escape hatch pinned (questionnaire fill-out)', () => {
+  it('mailto:support@driftstack.dev escape hatch pinned (questionnaire fill-out, no unbacked turnaround clock)', () => {
     expect(body).toMatch(/mailto:support@driftstack\.dev/);
     expect(body).toMatch(/Bring the questionnaire\. We'll fill it\./);
-    expect(body).toMatch(/we write line-by-line within a working day/);
+    // e36e5b4e2 2026-07-17 — "the rest we write line-by-line within a
+    // working day" was an implicit response-time SLA with no
+    // contractual or operational backing: the only first-response
+    // commitment that exists is ToS §9 Severity-1 on API Scale /
+    // Enterprise (docs/legal/terms-of-service.md), which says nothing
+    // about questionnaires. The commitment to answer every remaining
+    // item survives and is pinned; the unbacked clock is negatively
+    // pinned so it cannot return.
+    expect(body).toMatch(/we answer the remaining items in writing/);
+    expect(body).not.toMatch(/within a working day/);
   });
 
   it('hero title pinned: "One bookmark for everything compliance-relevant."', () => {

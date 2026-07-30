@@ -44,7 +44,20 @@ describe('W330.B /pricing hero baseline', () => {
   });
 
   it('positions usage as concurrent-only (no hour metering)', () => {
-    expect(body).toMatch(/Pay per concurrent session/);
-    expect(body).toMatch(/is unmetered/);
+    // c24e3c307 "docs: separate subscription and usage estimates" rescoped this
+    // band: the no-overage claim now covers BROWSER usage only, and the page
+    // discloses that optional bundled LLM draws on a separate included-service
+    // monthly budget. That is strictly MORE truthful than the old blanket
+    // "No surprise overage bills" — the concurrent-only / no-hour-metering
+    // promise itself is unchanged, so this guard repins onto the surviving
+    // substance AND onto the compensating disclosure that makes the narrowing
+    // honest. (Sibling guards pricing-page-content-parity.test.ts:141-145 and
+    // apps/server/tests/unit/marketing-site-pages-pricing-content-parity.test.ts:87-91
+    // were repinned in that same commit; this one was missed.)
+    expect(body).toMatch(/Browser subscriptions are priced by concurrent capacity\./);
+    expect(body).toMatch(/Run as many hours as you want within your concurrent cap\./);
+    expect(body).toMatch(/session hours, API calls, and page navigations are unmetered within/);
+    expect(body).toMatch(/No browser-usage overage bills\./);
+    expect(body).toMatch(/bundled LLM uses a separate included-service monthly budget/);
   });
 });
