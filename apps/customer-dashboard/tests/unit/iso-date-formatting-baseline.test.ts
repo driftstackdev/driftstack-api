@@ -44,8 +44,13 @@ describe('W299.B customer-dashboard date-formatting baseline', () => {
       if (!/\b\w+_at\b/.test(body)) continue;
       // Subscription page is V-134 stub w/ mock data, exempt.
       if (/subscription\.astro$/.test(f)) continue;
+      // `Date.parse(...)` counts too: a page may consume a `*_at` value purely
+      // as a numeric deadline for timer arithmetic and never render it. The
+      // old allowlist matched the literal `Date(`, which `Date.parse(` does not
+      // contain, so select-tier.astro — which parses `expires_at` into an
+      // expiry deadline and never puts it in the DOM — was a false positive.
       if (
-        !/toLocaleString|toLocaleDateString|toLocaleTimeString|Intl\.DateTimeFormat|Date\(/.test(
+        !/toLocaleString|toLocaleDateString|toLocaleTimeString|Intl\.DateTimeFormat|Date\(|Date\.parse\(/.test(
           body,
         )
       ) {

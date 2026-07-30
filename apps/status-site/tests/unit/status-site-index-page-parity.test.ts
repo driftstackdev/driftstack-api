@@ -113,32 +113,37 @@ describe('W357.C status-site /index page parity', () => {
     expect(read(STATUS_STREAM_ROUTE)).toContain("'/v1/status/stream'");
   });
 
-  it('R2 fallback semantics: ≤60s stale snapshot when API unreachable', () => {
+  it('R2 fallback semantics: a cached snapshot is labelled as such, and an unconfirmable aggregate WITHHOLDS all-clear. `f66e8a02c` replaced the single "API temporarily unreachable" banner with composed per-condition truth notices; the load-bearing property is that a degraded read can never render as a confirmed green.', () => {
     expect(body).toMatch(/PUBLIC_STATUS_R2_URL/);
     expect(body).toMatch(/incidents-public\.json/);
     expect(body).toMatch(
-      /API temporarily unreachable; showing the last cached snapshot \(≤60s old\)/,
+      /Incident feed is a cached snapshot \(\$\{formatSnapshotAge\(generatedAt\)\}\)/,
     );
+    expect(body).toMatch(/Current component health is unavailable; all-clear is withheld\./);
+    expect(body).toMatch(/Live status could not confirm a coherent incident aggregate\./);
   });
 
   it('60s safety-net refetch interval pinned (covers SSE outages)', () => {
     expect(body).toMatch(/setInterval\(fetchAndRender,\s*60_000\)/);
   });
 
-  it('W563: "last updated" stamp element + markUpdated() set on every successful fetch', () => {
+  it('W563: "last updated" stamp element + a stamp that reflects REAL data. `f66e8a02c` made it stamp the DATA timestamp (the snapshot\'s own generatedAt) rather than wall-clock now, so a cached snapshot can no longer look freshly fetched.', () => {
     // The element exists with an aria-live region for screen-reader refresh.
     expect(body).toMatch(/id="last-updated"[^>]*aria-live="polite"/);
-    // markUpdated() writes a UTC time stamp...
-    expect(body).toMatch(/function markUpdated\(\)/);
+    // The stamp accepts the data timestamp, defaulting to now.
+    expect(body).toMatch(/function markUpdated\(at = new Date\(\)\.toISOString\(\)\)/);
     expect(body).toMatch(
-      /'Last updated ' \+ new Date\(\)\.toISOString\(\)\.slice\(11, 19\) \+ ' UTC'/,
+      /'Data timestamp ' \+ new Date\(at\)\.toISOString\(\)\.replace\('T', ' '\)\.slice\(0, 19\) \+ ' UTC'/,
     );
-    // ...and is invoked from the render path (covers empty + populated states).
-    expect(body).toMatch(/\n\s*markUpdated\(\);/);
+    // ...and the render path passes the feed's own generatedAt when it has one.
+    expect(body).toMatch(/markUpdated\(generatedAt \?\? new Date\(\)\.toISOString\(\)\);/);
   });
 
-  it('"last 30 days" framing + V-657 quick-nav to /subscribe + /history', () => {
-    expect(body).toMatch(/Incidents — last 30 days/);
+  it('incident-scope framing + V-657 quick-nav to /subscribe + /history', () => {
+    // Heading widened by `f66e8a02c`: ALL active incidents are listed, not just
+    // those opened inside the 30-day window, so an old-but-still-open incident
+    // can no longer fall off the public page.
+    expect(body).toMatch(/Incidents — all active \+ 30-day history/);
     expect(body).toMatch(/Subscribe to incident emails/);
     expect(body).toMatch(/Full incident history \(90 days\)/);
     // Both cross-links resolve.

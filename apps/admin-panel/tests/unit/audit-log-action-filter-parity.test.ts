@@ -66,15 +66,20 @@ describe('W345.C admin /audit-log filter + lifecycle parity', () => {
   it('result-only filtering is client-side (server schema does not accept result yet)', () => {
     // Catches a future server addition that should remove the
     // client-side filter pass.
+    // `6ca61a422` renamed the in-memory buffer to `loadedEntries` so the page
+    // can say WHICH window it filtered; the filter predicate is unchanged.
     expect(page).toMatch(
-      /entries\.filter\(\(e\) => String\(e\.result\)\.startsWith\(resultFilter\)\)/,
+      /loadedEntries\.filter\(\(e\) => String\(e\.result\)\.startsWith\(resultFilter\)\)/,
     );
     expect(schemaSrc).not.toMatch(/result:\s*z\.enum/);
   });
 
-  it('footnote pins 90-day hot retention + ADR-006 (no fictional JSONL export)', () => {
-    expect(page).toMatch(/Retention 90 days hot in Postgres/);
-    expect(page).toMatch(/ADR-006/);
+  it('footnote points at the REAL extract route and promises no export format the API does not serve. `6ca61a422` replaced the static retention sentence with a description of the live cursor-paginated read; the load-bearing property is unchanged — the console must not advertise an export the route cannot serve.', () => {
+    expect(page).toMatch(
+      /This console reads the live PostgreSQL audit rows newest first and paginates\s*\n?\s*by cursor\./,
+    );
+    expect(page).toMatch(/For a complete live admin-side extract, pull every page from/);
+    expect(page).toMatch(/\/v1\/admin\/audit-log/);
     // Negative guard: W350.C scrubbed the page's `?format=jsonl`
     // claim because the route doesn't support it. Re-introducing
     // it without a real route should break this test.
