@@ -19,12 +19,20 @@ import type {
   WaitCondition,
 } from '@driftstack/api-types';
 import type { GUIInputAction } from '../schemas/gui-input.js';
+import { z } from 'zod';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Identity
 // ───────────────────────────────────────────────────────────────────────────
 
 export type DriverSessionId = string;
+
+/** Whether this driver can execute a customer-visible direct browser operation
+ *  for real. Simulation is intentionally distinct from unavailable: both fail
+ *  closed on the corresponding public search/login route, while tests/dev
+ *  diagnostics can still identify why. A future authenticated FleetDriver is
+ *  the first eligible `real` implementation. */
+export type DriverOperationCapability = 'real' | 'simulation' | 'unavailable';
 
 export interface CreateSessionInput {
   /** iPhone archetype slug, e.g. "iphone17_ios18_7_safari26_4". */
@@ -153,12 +161,33 @@ export interface SearchInput {
   timeoutSeconds?: number;
 }
 
-export interface SearchResult {
-  submitted: boolean;
-  /** Present only when waitForResultsSelector was given (timeout → false). */
-  resultsVisible?: boolean;
-  durationMs: number;
-}
+export const DRIVER_SEARCH_DURATION_MAX_MS = 600_000;
+
+const DriverSearchNormalResultSchema = z
+  .object({
+    submitted: z.boolean(),
+    queryTruncated: z.literal(false),
+    /** Present only when waitForResultsSelector was given (timeout → false). */
+    resultsVisible: z.boolean().optional(),
+    durationMs: z.number().int().min(0).max(DRIVER_SEARCH_DURATION_MAX_MS),
+  })
+  .strict();
+
+const DriverSearchTruncatedResultSchema = z
+  .object({
+    submitted: z.literal(false),
+    queryTruncated: z.literal(true),
+    durationMs: z.number().int().min(0).max(DRIVER_SEARCH_DURATION_MAX_MS),
+  })
+  .strict();
+
+/** A truncated query is a zero-submit refusal, never an ambiguous partial
+ *  search. This is also the runtime trust boundary for future Fleet output. */
+export const DriverSearchResultSchema = z.discriminatedUnion('queryTruncated', [
+  DriverSearchNormalResultSchema,
+  DriverSearchTruncatedResultSchema,
+]);
+export type SearchResult = z.infer<typeof DriverSearchResultSchema>;
 
 export interface LoginInput {
   username: string;
@@ -171,17 +200,44 @@ export interface LoginInput {
   timeoutSeconds?: number;
 }
 
-export interface LoginResult {
-  loggedIn: boolean;
-  postLoginUrl?: string;
-  durationMs: number;
-}
+export const DRIVER_LOGIN_DURATION_MAX_MS = 600_000;
+export const DRIVER_LOGIN_URL_MAX_LENGTH = 8192;
+
+const DriverLoginSubmittedResultSchema = z
+  .object({
+    submitted: z.literal(true),
+    credentialsTruncated: z.literal(false),
+    loggedIn: z.boolean(),
+    postLoginUrl: z.string().max(DRIVER_LOGIN_URL_MAX_LENGTH).optional(),
+    durationMs: z.number().int().min(0).max(DRIVER_LOGIN_DURATION_MAX_MS),
+  })
+  .strict();
+
+const DriverLoginTruncatedResultSchema = z
+  .object({
+    submitted: z.literal(false),
+    credentialsTruncated: z.literal(true),
+    loggedIn: z.literal(false),
+    durationMs: z.number().int().min(0).max(DRIVER_LOGIN_DURATION_MAX_MS),
+  })
+  .strict();
+
+/** Runtime trust boundary for the future authenticated FleetDriver. Driver
+ *  implementations are process-local today, but their eventual result is
+ *  decoded from a remote harness and must not rely on erased TypeScript types. */
+export const DriverLoginResultSchema = z.discriminatedUnion('submitted', [
+  DriverLoginSubmittedResultSchema,
+  DriverLoginTruncatedResultSchema,
+]);
+export type LoginResult = z.infer<typeof DriverLoginResultSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Driver interface
 // ───────────────────────────────────────────────────────────────────────────
 
 export interface Driver {
+  readonly searchCapability: DriverOperationCapability;
+  readonly loginCapability: DriverOperationCapability;
   createSession(input: CreateSessionInput): Promise<CreateSessionResult>;
   navigate(sessionId: DriverSessionId, input: NavigateInput): Promise<NavigateResult>;
   interact(sessionId: DriverSessionId, input: InteractInput): Promise<InteractResult>;

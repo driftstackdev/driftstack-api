@@ -51,6 +51,51 @@ describe('MockDriver — session lifecycle', () => {
   });
 });
 
+describe('MockDriver — login result truth', () => {
+  it('returns the complete submitted branch with bounded duration and no credential echo', async () => {
+    const driver = fastDriver();
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
+    const result = await driver.login(driverSessionId, {
+      username: 'user@example.com',
+      password: 'do-not-echo',
+    });
+    expect(result).toEqual({
+      submitted: true,
+      credentialsTruncated: false,
+      loggedIn: true,
+      postLoginUrl: 'https://example.com/account',
+      durationMs: 0,
+    });
+    expect(JSON.stringify(result)).not.toContain('user@example.com');
+    expect(JSON.stringify(result)).not.toContain('do-not-echo');
+  });
+});
+
+describe('MockDriver — search result truth', () => {
+  it('returns the normal non-truncated branch without echoing the query', async () => {
+    const driver = fastDriver();
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
+    const result = await driver.search(driverSessionId, {
+      query: 'do-not-echo',
+      submit: true,
+      waitForResultsSelector: '#results',
+    });
+    expect(result).toEqual({
+      submitted: true,
+      queryTruncated: false,
+      resultsVisible: true,
+      durationMs: 0,
+    });
+    expect(JSON.stringify(result)).not.toContain('do-not-echo');
+  });
+});
+
 describe('MockDriver — navigate', () => {
   it('happy-path 200 with finalUrl matching url', async () => {
     const driver = fastDriver();

@@ -207,8 +207,9 @@ func (r *SessionsResource) Search(ctx context.Context, sessionID string, body *S
 }
 
 // Login performs a heuristic credential login (types username + password and
-// submits). LoggedIn is the post-submit assessment (a captcha / 2FA /
-// login-required landing yields false, never a false positive).
+// submits). LoggedIn is a post-submit assessment, not authentication proof:
+// without an explicit SuccessSelector, a captcha / 2FA / login-required page
+// that removes the password field can be assessed as logged in.
 func (r *SessionsResource) Login(ctx context.Context, sessionID string, body *SessionLoginRequest) (*SessionLoginResponse, error) {
 	var out SessionLoginResponse
 	if err := r.client.do(ctx, requestOptions{

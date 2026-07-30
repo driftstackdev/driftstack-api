@@ -15,9 +15,11 @@ import {
   type DispatchTransport,
 } from '../../src/services/harness-dispatch-correlator.js';
 import { encodeWireData } from '../../src/services/harness-control-codec.js';
-import type {
-  IntentDispatch,
-  HarnessIntentName,
+import {
+  HARNESS_LOGIN_PRODUCER_DEADLINE_MS,
+  HARNESS_SEARCH_PRODUCER_DEADLINE_MS,
+  type IntentDispatch,
+  type HarnessIntentName,
 } from '../../src/schemas/harness-control-protocol.js';
 
 function dispatch(
@@ -61,10 +63,18 @@ describe('dispatchTimeoutMs', () => {
     }
   });
 
-  it('allows search/login both a 300s typing phase and a separate 300s result wait plus slack', () => {
-    for (const n of ['search', 'login'] as HarnessIntentName[]) {
-      expect(dispatchTimeoutMs(n), n).toBe(615_000);
-    }
+  it('derives search from its one exact 600s producer wall owner plus 15s transport slack', () => {
+    expect(HARNESS_SEARCH_PRODUCER_DEADLINE_MS).toBe(600_000);
+    expect(dispatchTimeoutMs('search')).toBe(
+      HARNESS_SEARCH_PRODUCER_DEADLINE_MS + DISPATCH_TIMEOUT_SLACK_MS,
+    );
+  });
+
+  it('derives login from its one exact 600s producer wall owner plus 15s transport slack', () => {
+    expect(HARNESS_LOGIN_PRODUCER_DEADLINE_MS).toBe(600_000);
+    expect(dispatchTimeoutMs('login')).toBe(
+      HARNESS_LOGIN_PRODUCER_DEADLINE_MS + DISPATCH_TIMEOUT_SLACK_MS,
+    );
   });
 
   it('uses the exact 300s producer wall fence plus a positive bounded delivery margin for fill_form/scroll', () => {
@@ -168,6 +178,36 @@ describe('IntentDispatchCorrelator', () => {
       outputData: encodeWireData({ paused_ms: 300_000, capped: false, behavioral: true }),
     });
     expect((await p).success).toBe(true);
+  });
+
+  it('keeps login pending through the 600s producer deadline and times it out at 615s', async () => {
+    const { transport } = recorder();
+    const c = new IntentDispatchCorrelator(transport);
+    const p = c.dispatch(dispatch('int_login', 'login', { username: 'u', password: 'p' }));
+    await vi.advanceTimersByTimeAsync(HARNESS_LOGIN_PRODUCER_DEADLINE_MS);
+    expect(c.inFlight()).toBe(1);
+    await vi.advanceTimersByTimeAsync(DISPATCH_TIMEOUT_SLACK_MS);
+    await expect(p).resolves.toMatchObject({
+      success: false,
+      errorCode: 'intent_dispatch_error',
+      errorMessage: 'dispatch timed out after 615000ms',
+    });
+    expect(c.inFlight()).toBe(0);
+  });
+
+  it('keeps search pending through the 600s producer deadline and times it out at 615s', async () => {
+    const { transport } = recorder();
+    const c = new IntentDispatchCorrelator(transport);
+    const p = c.dispatch(dispatch('int_search', 'search', { query: 'q' }));
+    await vi.advanceTimersByTimeAsync(HARNESS_SEARCH_PRODUCER_DEADLINE_MS);
+    expect(c.inFlight()).toBe(1);
+    await vi.advanceTimersByTimeAsync(DISPATCH_TIMEOUT_SLACK_MS);
+    await expect(p).resolves.toMatchObject({
+      success: false,
+      errorCode: 'intent_dispatch_error',
+      errorMessage: 'dispatch timed out after 615000ms',
+    });
+    expect(c.inFlight()).toBe(0);
   });
 
   it('fast-fails on intent_dispatch_no_session SessionStatus (no timeout wait)', async () => {

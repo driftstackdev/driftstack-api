@@ -81,6 +81,8 @@ interface SessionEntry {
  * createSession + reused; never closed (process exit reaps it).
  */
 export class PlaywrightDriver implements Driver {
+  readonly searchCapability = 'unavailable' as const;
+  readonly loginCapability = 'unavailable' as const;
   private browserPromise: Promise<Browser> | null = null;
   private readonly sessions = new Map<DriverSessionId, SessionEntry>();
 

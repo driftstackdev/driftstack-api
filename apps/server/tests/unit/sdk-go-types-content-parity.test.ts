@@ -189,6 +189,34 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
     expect(body).toMatch(/func NewTimeCondition\(ms int\) WaitCondition \{/);
   });
 
+  it('SessionLoginResponse carries both discriminators + duration and rejects null, contradictory, missing, over-budget or extra response fields during JSON decode', () => {
+    expect(body).toMatch(
+      /type SessionLoginResponse struct \{\s*\n\s*Submitted\s+bool\s+`json:"submitted"`\s*\n\s*CredentialsTruncated bool\s+`json:"credentials_truncated"`\s*\n\s*LoggedIn\s+bool\s+`json:"logged_in"`\s*\n\s*PostLoginURL\s+string `json:"post_login_url,omitempty"`\s*\n\s*DurationMS\s+int\s+`json:"duration_ms"`\s*\n\}/,
+    );
+    expect(body).toMatch(
+      /func \(r \*SessionLoginResponse\) UnmarshalJSON\(data \[\]byte\) error \{/,
+    );
+    expect(body).toContain('"credentials_truncated": true');
+    expect(body).toContain('invalid session login response: missing required outcome field');
+    expect(body).toContain('invalid session login response: duration_ms outside 0..600000');
+    expect(body).toContain('invalid session login response: post_login_url cannot be null');
+    expect(body).toContain('invalid session login response: contradictory truncated outcome');
+    expect(body).toContain(
+      'invalid session login response: complete credentials were not submitted',
+    );
+  });
+
+  it('SearchResponse enforces complete-vs-safe-truncation truth during JSON decode', () => {
+    expect(body).toMatch(
+      /type SearchResponse struct \{[\s\S]*?Submitted\s+bool\s+`json:"submitted"`[\s\S]*?QueryTruncated\s+bool\s+`json:"query_truncated"`[\s\S]*?ResultsVisible\s+\*bool\s+`json:"results_visible,omitempty"`[\s\S]*?DurationMS\s+int\s+`json:"duration_ms"`[\s\S]*?\}/,
+    );
+    expect(body).toMatch(/func \(r \*SearchResponse\) UnmarshalJSON\(data \[\]byte\) error \{/);
+    expect(body).toContain('invalid session search response: results_visible cannot be null');
+    expect(body).toContain('invalid session search response: missing required outcome field');
+    expect(body).toContain('invalid session search response: duration_ms outside 0..600000');
+    expect(body).toContain('invalid session search response: contradictory truncated outcome');
+  });
+
   it('Webhook/billing/profile/event-envelope structures: V-359 WebhookEndpoint rotation grace + V-351 UpdateWebhookRequest pointer fields + V-185 WebhookEndpointDeliveryCounts + V-429 Subscription + Event{Type+Data raw} + V-426 Profile structs pinned', () => {
     expect(body).toMatch(
       /\/\/ V-359 — rotation grace state\. Both null when no rotation in flight\./,

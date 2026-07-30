@@ -32,6 +32,8 @@ import type {
 } from './types.js';
 
 export class WebKitDriver implements Driver {
+  readonly searchCapability = 'unavailable' as const;
+  readonly loginCapability = 'unavailable' as const;
   async createSession(_input: CreateSessionInput): Promise<CreateSessionResult> {
     await Promise.resolve();
     throw new DriverNotIntegratedError();

@@ -26,17 +26,29 @@ from driftstack._generated.models import (
     NavigateResponse,
     PaginationQuery,
     SearchRequest,
-    SearchResponse,
+    SearchResponse1,
+    SearchResponse2,
     Session,
     SessionLoginRequest,
-    SessionLoginResponse,
+    SessionLoginResponse1,
+    SessionLoginResponse2,
     SessionState,
     WaitRequest,
     WaitResponse,
 )
+from driftstack._generated.models import (
+    SearchResponse as GeneratedSearchResponse,
+)
+from driftstack._generated.models import (
+    SessionLoginResponse as GeneratedSessionLoginResponse,
+)
+from driftstack.errors import TransportError
 from driftstack.http import AsyncHttpClient, HttpClient, parse_model
 from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body, coerce_query
+
+SearchResponse = SearchResponse1 | SearchResponse2
+SessionLoginResponse = SessionLoginResponse1 | SessionLoginResponse2
 
 
 class SessionsListPage(BaseModel):
@@ -49,6 +61,102 @@ class SessionsListPage(BaseModel):
 
 def _session_path(session_id: str, suffix: str = "") -> str:
     return f"/v1/sessions/{quote(session_id, safe='')}{suffix}"
+
+
+_DURATION_MS_MAX = 600_000
+
+_SEARCH_REQUIRED_KEYS = frozenset({"submitted", "query_truncated", "duration_ms"})
+_LOGIN_REQUIRED_KEYS = frozenset({"submitted", "credentials_truncated", "logged_in", "duration_ms"})
+
+
+def _schema_error() -> TransportError:
+    """One fixed message so a hostile body can never shape the exception."""
+    return TransportError("response did not match expected schema", status=None)
+
+
+def _exact_bool(payload: dict[str, Any], key: str) -> bool:
+    """Require a real JSON boolean.
+
+    ``isinstance(True, int)`` is true, so ``bool`` fields must be checked by
+    exact type: otherwise a hostile ``1``/``0``/``"false"`` is coerced by
+    Pydantic's default lax mode and reaches the customer as a fabricated
+    ``submitted``/``logged_in`` verdict.
+    """
+    value = payload[key]
+    if type(value) is not bool:
+        raise _schema_error()
+    return value
+
+
+def _exact_duration_ms(payload: dict[str, Any]) -> None:
+    """Require a real JSON integer inside the producer budget."""
+    value = payload["duration_ms"]
+    # ``type(...) is int`` also rejects ``bool``; lax mode would otherwise
+    # accept ``"1"``/``1.0``/``True`` as a duration.
+    if type(value) is not int or not 0 <= value <= _DURATION_MS_MAX:
+        raise _schema_error()
+
+
+def _validate_raw_search_response(data: Any) -> None:
+    """Reject hostile primitives before the generated model coerces them."""
+    if not isinstance(data, dict) or not _SEARCH_REQUIRED_KEYS <= set(data):
+        raise _schema_error()
+    submitted = _exact_bool(data, "submitted")
+    truncated = _exact_bool(data, "query_truncated")
+    _exact_duration_ms(data)
+    if truncated:
+        # Safe refusal is exact: nothing was submitted and no results
+        # assessment exists to report.
+        if submitted or set(data) != _SEARCH_REQUIRED_KEYS:
+            raise _schema_error()
+        return
+    if set(data) - _SEARCH_REQUIRED_KEYS - {"results_visible"}:
+        raise _schema_error()
+    # The generated optional field cannot distinguish absent from explicit
+    # JSON null; the public wire contract permits only absence or a boolean.
+    if "results_visible" in data:
+        _exact_bool(data, "results_visible")
+
+
+def _validate_raw_login_response(data: Any) -> None:
+    """Reject hostile primitives before the generated model coerces them."""
+    if not isinstance(data, dict) or not _LOGIN_REQUIRED_KEYS <= set(data):
+        raise _schema_error()
+    submitted = _exact_bool(data, "submitted")
+    truncated = _exact_bool(data, "credentials_truncated")
+    logged_in = _exact_bool(data, "logged_in")
+    _exact_duration_ms(data)
+    if truncated:
+        # Safe refusal is exact: no submission, no session, and no URL.
+        if submitted or logged_in or set(data) != _LOGIN_REQUIRED_KEYS:
+            raise _schema_error()
+        return
+    if not submitted or set(data) - _LOGIN_REQUIRED_KEYS - {"post_login_url"}:
+        raise _schema_error()
+    # OpenAPI models represent an absent optional field as ``None`` and the
+    # generator therefore cannot distinguish it from an explicit JSON null.
+    # The wire contract is stricter: post_login_url may be absent, never null.
+    if "post_login_url" in data and type(data["post_login_url"]) is not str:
+        raise _schema_error()
+
+
+def _parse_session_search_response(data: Any) -> SearchResponse:
+    """Validate the strict union and expose its selected branch directly."""
+    _validate_raw_search_response(data)
+    return parse_model(GeneratedSearchResponse, data).root
+
+
+def _parse_session_login_response(data: Any) -> SessionLoginResponse:
+    """Validate the generated strict union and expose its selected branch.
+
+    ``datamodel-code-generator`` correctly emits an OpenAPI ``oneOf`` as a
+    Pydantic ``RootModel``. Returning that wrapper would silently break the
+    established customer ergonomics (``result.logged_in``); unwrap only after
+    the raw primitive check and the root model have both enforced the exact
+    submitted/truncated branch.
+    """
+    _validate_raw_login_response(data)
+    return parse_model(GeneratedSessionLoginResponse, data).root
 
 
 class SessionsResource:
@@ -130,7 +238,7 @@ class SessionsResource:
         data = self._http.request(
             "POST", _session_path(session_id, "/search"), json_body=coerce_body(body)
         )
-        return parse_model(SearchResponse, data)
+        return _parse_session_search_response(data)
 
     def login(
         self, session_id: str, body: SessionLoginRequest | dict[str, Any]
@@ -138,7 +246,7 @@ class SessionsResource:
         data = self._http.request(
             "POST", _session_path(session_id, "/login"), json_body=coerce_body(body)
         )
-        return parse_model(SessionLoginResponse, data)
+        return _parse_session_login_response(data)
 
     def destroy(self, session_id: str) -> None:
         """Destroy the session. Idempotent (safe to call twice)."""
@@ -227,7 +335,7 @@ class AsyncSessionsResource:
         data = await self._http.request(
             "POST", _session_path(session_id, "/search"), json_body=coerce_body(body)
         )
-        return parse_model(SearchResponse, data)
+        return _parse_session_search_response(data)
 
     async def login(
         self, session_id: str, body: SessionLoginRequest | dict[str, Any]
@@ -235,7 +343,7 @@ class AsyncSessionsResource:
         data = await self._http.request(
             "POST", _session_path(session_id, "/login"), json_body=coerce_body(body)
         )
-        return parse_model(SessionLoginResponse, data)
+        return _parse_session_login_response(data)
 
     async def destroy(self, session_id: str) -> None:
         await self._http.request("DELETE", _session_path(session_id))

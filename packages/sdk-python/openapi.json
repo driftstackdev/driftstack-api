@@ -1966,17 +1966,22 @@
         "properties": {
           "query": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 10000
           },
           "search_selector": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 262144
           },
           "submit": {
             "type": "boolean",
             "default": true
           },
           "wait_for_results_selector": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 262144
           },
           "timeout_seconds": {
             "type": "integer",
@@ -1987,39 +1992,83 @@
         "required": ["query"]
       },
       "SearchResponse": {
-        "type": "object",
-        "properties": {
-          "submitted": {
-            "type": "boolean"
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "submitted": {
+                "type": "boolean"
+              },
+              "query_truncated": {
+                "type": "boolean",
+                "enum": [false]
+              },
+              "results_visible": {
+                "type": "boolean"
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 600000
+              }
+            },
+            "required": ["submitted", "query_truncated", "duration_ms"],
+            "additionalProperties": false
           },
-          "results_visible": {
-            "type": "boolean"
+          {
+            "type": "object",
+            "properties": {
+              "submitted": {
+                "type": "boolean",
+                "enum": [false]
+              },
+              "query_truncated": {
+                "type": "boolean",
+                "enum": [true]
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 600000
+              }
+            },
+            "required": ["submitted", "query_truncated", "duration_ms"],
+            "additionalProperties": false
           }
-        },
-        "required": ["submitted"]
+        ]
       },
       "SessionLoginRequest": {
         "type": "object",
         "properties": {
           "username": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 10000
           },
           "password": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 10000
           },
           "username_selector": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 262144
           },
           "password_selector": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 262144
           },
           "submit_selector": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 262144
           },
           "success_selector": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 262144
           },
           "timeout_seconds": {
             "type": "integer",
@@ -2030,16 +2079,58 @@
         "required": ["username", "password"]
       },
       "SessionLoginResponse": {
-        "type": "object",
-        "properties": {
-          "logged_in": {
-            "type": "boolean"
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "submitted": {
+                "type": "boolean",
+                "enum": [true]
+              },
+              "credentials_truncated": {
+                "type": "boolean",
+                "enum": [false]
+              },
+              "logged_in": {
+                "type": "boolean"
+              },
+              "post_login_url": {
+                "type": "string"
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 600000
+              }
+            },
+            "required": ["submitted", "credentials_truncated", "logged_in", "duration_ms"],
+            "additionalProperties": false
           },
-          "post_login_url": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "submitted": {
+                "type": "boolean",
+                "enum": [false]
+              },
+              "credentials_truncated": {
+                "type": "boolean",
+                "enum": [true]
+              },
+              "logged_in": {
+                "type": "boolean",
+                "enum": [false]
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 600000
+              }
+            },
+            "required": ["submitted", "credentials_truncated", "logged_in", "duration_ms"],
+            "additionalProperties": false
           }
-        },
-        "required": ["logged_in"]
+        ]
       },
       "CreateApiKeyRequest": {
         "type": "object",
@@ -7404,7 +7495,7 @@
     "/v1/sessions/{id}/search": {
       "post": {
         "operationId": "searchSession",
-        "summary": "Find the search field, type the query, and submit",
+        "summary": "Search a page (real direct-driver capability required)",
         "tags": ["sessions"],
         "security": [
           {
@@ -7429,17 +7520,22 @@
                 "properties": {
                   "query": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 10000
                   },
                   "search_selector": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 262144
                   },
                   "submit": {
                     "type": "boolean",
                     "default": true
                   },
                   "wait_for_results_selector": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 262144
                   },
                   "timeout_seconds": {
                     "type": "integer",
@@ -7458,24 +7554,60 @@
         },
         "responses": {
           "200": {
-            "description": "Query typed and (optionally) submitted.",
+            "description": "Requires an explicitly real direct-driver search capability. All currently shipped drivers report non-real capability, so unavailable deployments return 503 before session lookup, operation claim, any driver call, or browser-side query handling. query_truncated=false means the complete query was typed and the caller-requested submit behavior was honored; query_truncated=true is an exact safe zero-submit refusal with no results assessment. duration_ms is capped at 600 seconds. The control plane may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "submitted": {
-                      "type": "boolean"
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "submitted": {
+                          "type": "boolean"
+                        },
+                        "query_truncated": {
+                          "type": "boolean",
+                          "enum": [false]
+                        },
+                        "results_visible": {
+                          "type": "boolean"
+                        },
+                        "duration_ms": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 600000
+                        }
+                      },
+                      "required": ["submitted", "query_truncated", "duration_ms"],
+                      "additionalProperties": false
                     },
-                    "results_visible": {
-                      "type": "boolean"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "submitted": {
+                          "type": "boolean",
+                          "enum": [false]
+                        },
+                        "query_truncated": {
+                          "type": "boolean",
+                          "enum": [true]
+                        },
+                        "duration_ms": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 600000
+                        }
+                      },
+                      "required": ["submitted", "query_truncated", "duration_ms"],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": ["submitted"]
+                  ]
                 },
                 "example": {
                   "submitted": true,
-                  "results_visible": true
+                  "query_truncated": false,
+                  "results_visible": true,
+                  "duration_ms": 8420
                 }
               }
             }
@@ -7576,7 +7708,7 @@
     "/v1/sessions/{id}/login": {
       "post": {
         "operationId": "loginSession",
-        "summary": "Heuristic credential login (type username + password, submit)",
+        "summary": "Credential login (real direct-driver capability required)",
         "tags": ["sessions"],
         "security": [
           {
@@ -7601,23 +7733,33 @@
                 "properties": {
                   "username": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 10000
                   },
                   "password": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 10000
                   },
                   "username_selector": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 262144
                   },
                   "password_selector": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 262144
                   },
                   "submit_selector": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 262144
                   },
                   "success_selector": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 262144
                   },
                   "timeout_seconds": {
                     "type": "integer",
@@ -7637,24 +7779,79 @@
         },
         "responses": {
           "200": {
-            "description": "Credentials typed and submitted; logged_in is the post-submit assessment.",
+            "description": "Requires an explicitly real direct-driver login capability. All currently shipped drivers report non-real capability, so unavailable deployments return 503 before session lookup, operation claim, any driver call, or browser-side credential handling. submitted=true means complete credentials were submitted and assessed; credentials_truncated=true is a safe zero-submit refusal. duration_ms is capped at 600 seconds. The control plane may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "logged_in": {
-                      "type": "boolean"
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "submitted": {
+                          "type": "boolean",
+                          "enum": [true]
+                        },
+                        "credentials_truncated": {
+                          "type": "boolean",
+                          "enum": [false]
+                        },
+                        "logged_in": {
+                          "type": "boolean"
+                        },
+                        "post_login_url": {
+                          "type": "string"
+                        },
+                        "duration_ms": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 600000
+                        }
+                      },
+                      "required": [
+                        "submitted",
+                        "credentials_truncated",
+                        "logged_in",
+                        "duration_ms"
+                      ],
+                      "additionalProperties": false
                     },
-                    "post_login_url": {
-                      "type": "string"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "submitted": {
+                          "type": "boolean",
+                          "enum": [false]
+                        },
+                        "credentials_truncated": {
+                          "type": "boolean",
+                          "enum": [true]
+                        },
+                        "logged_in": {
+                          "type": "boolean",
+                          "enum": [false]
+                        },
+                        "duration_ms": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 600000
+                        }
+                      },
+                      "required": [
+                        "submitted",
+                        "credentials_truncated",
+                        "logged_in",
+                        "duration_ms"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": ["logged_in"]
+                  ]
                 },
                 "example": {
+                  "submitted": true,
+                  "credentials_truncated": false,
                   "logged_in": true,
-                  "post_login_url": "https://example.com/account"
+                  "post_login_url": "https://example.com/account",
+                  "duration_ms": 12450
                 }
               }
             }

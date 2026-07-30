@@ -29,6 +29,8 @@ import {
   HARNESS_INTENT_NAMES,
   HARNESS_ERROR_CODES,
   HARNESS_BEHAVIORAL_PAUSE_CAP_MS,
+  HARNESS_LOGIN_PRODUCER_DEADLINE_MS,
+  HARNESS_SEARCH_PRODUCER_DEADLINE_MS,
   HARNESS_WAIT_FOR_CAP_SECONDS,
   HARNESS_SCROLL_DEFAULT_DISTANCE_PX,
   HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS,
@@ -992,9 +994,10 @@ describe('harness-control-protocol behavioral contract', () => {
       fill_form: { fields_filled: 1, submitted: false, truncated: false },
       search: { submitted: true, query_truncated: false },
       login: {
+        submitted: true,
+        credentials_truncated: false,
         logged_in: true,
         post_login_url: 'https://example.com/account',
-        credentials_truncated: false,
       },
     };
     for (const name of HARNESS_INTENT_NAMES) {
@@ -1017,6 +1020,87 @@ describe('harness-control-protocol behavioral contract', () => {
         truncated: true,
       }).success,
     ).toBe(false);
+  });
+
+  it('login result is an exact submitted-or-safe-truncation union with a 600s producer owner', () => {
+    expect(HARNESS_LOGIN_PRODUCER_DEADLINE_MS).toBe(600_000);
+    const schema = HARNESS_INTENT_RESULT_SCHEMAS.login;
+    for (const valid of [
+      {
+        submitted: true,
+        credentials_truncated: false,
+        logged_in: true,
+        post_login_url: 'https://example.com/account',
+      },
+      { submitted: true, credentials_truncated: false, logged_in: false },
+      { submitted: false, credentials_truncated: true, logged_in: false },
+    ]) {
+      expect(schema.safeParse(valid).success, JSON.stringify(valid)).toBe(true);
+    }
+
+    for (const invalid of [
+      { logged_in: true, credentials_truncated: false },
+      { submitted: true, credentials_truncated: true, logged_in: false },
+      { submitted: false, credentials_truncated: false, logged_in: false },
+      { submitted: false, credentials_truncated: true, logged_in: true },
+      {
+        submitted: false,
+        credentials_truncated: true,
+        logged_in: false,
+        post_login_url: 'https://example.com/account',
+      },
+      {
+        submitted: false,
+        credentials_truncated: true,
+        logged_in: false,
+        username: 'must-never-return',
+      },
+    ]) {
+      expect(schema.safeParse(invalid).success, JSON.stringify(invalid)).toBe(false);
+    }
+  });
+
+  it('fill_form result is an exact complete-or-safe-truncation union', () => {
+    const schema = HARNESS_INTENT_RESULT_SCHEMAS.fill_form;
+    for (const valid of [
+      { fields_filled: 1, submitted: false, truncated: false },
+      { fields_filled: 50, submitted: true, truncated: false },
+      { fields_filled: 0, submitted: false, truncated: true, truncated_fields: [0] },
+      { fields_filled: 49, submitted: false, truncated: true, truncated_fields: [49] },
+    ]) {
+      expect(schema.safeParse(valid).success, JSON.stringify(valid)).toBe(true);
+    }
+    for (const invalid of [
+      { fields_filled: 0, submitted: false, truncated: false },
+      { fields_filled: 51, submitted: false, truncated: false },
+      { fields_filled: 1, submitted: false, truncated: false, truncated_fields: [1] },
+      { fields_filled: 0, submitted: true, truncated: true, truncated_fields: [0] },
+      { fields_filled: 1, submitted: false, truncated: true, truncated_fields: [0] },
+      { fields_filled: 1, submitted: false, truncated: true, truncated_fields: [1, 2] },
+      { fields_filled: 50, submitted: false, truncated: true, truncated_fields: [50] },
+    ]) {
+      expect(schema.safeParse(invalid).success, JSON.stringify(invalid)).toBe(false);
+    }
+  });
+
+  it('search result is an exact normal-or-zero-submit truncation union with a 600s owner', () => {
+    expect(HARNESS_SEARCH_PRODUCER_DEADLINE_MS).toBe(600_000);
+    const schema = HARNESS_INTENT_RESULT_SCHEMAS.search;
+    for (const valid of [
+      { submitted: true, query_truncated: false, results_visible: true },
+      { submitted: false, query_truncated: false },
+      { submitted: false, query_truncated: true },
+    ]) {
+      expect(schema.safeParse(valid).success, JSON.stringify(valid)).toBe(true);
+    }
+    for (const invalid of [
+      { submitted: true, query_truncated: true },
+      { submitted: false, query_truncated: true, results_visible: false },
+      { submitted: false, query_truncated: false, query: 'must-never-return' },
+      { submitted: false },
+    ]) {
+      expect(schema.safeParse(invalid).success, JSON.stringify(invalid)).toBe(false);
+    }
   });
 
   it('every live failure code is accepted by the exclusive failure envelope', () => {

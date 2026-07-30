@@ -20,6 +20,8 @@ import type {
   WaitRequest,
   WaitResponse,
 } from '@driftstack/api-types';
+import { SearchResponseSchema, SessionLoginResponseSchema } from '@driftstack/api-types';
+import { TransportError } from '../errors.js';
 import type { HttpClient } from '../http.js';
 import { iteratePaginated } from '../pagination.js';
 
@@ -133,26 +135,34 @@ export class SessionsResource {
     });
   }
 
-  /** Find the search field, type the query realistically, and submit
-   *  (defaults to submitting). Returns whether it submitted + optionally
-   *  whether results became visible. */
-  search(sessionId: string, body: SearchRequestInput): Promise<SearchResponse> {
-    return this.http.request<SearchResponse>({
+  /** Find the search field and type the query realistically. The strict
+   *  result distinguishes complete work from a safe zero-submit truncation. */
+  async search(sessionId: string, body: SearchRequestInput): Promise<SearchResponse> {
+    const response = await this.http.request<unknown>({
       method: 'POST',
       path: `/v1/sessions/${encodeURIComponent(sessionId)}/search`,
       body,
     });
+    const parsed = SearchResponseSchema.safeParse(response);
+    if (!parsed.success) {
+      throw new TransportError('invalid session search response body', 200, parsed.error);
+    }
+    return parsed.data;
   }
 
   /** Heuristic credential login — types the username + password and submits.
-   *  `logged_in` is the post-submit assessment (a captcha / 2FA / login-required
-   *  landing yields false, never a false positive). */
-  login(sessionId: string, body: SessionLoginRequest): Promise<SessionLoginResponse> {
-    return this.http.request<SessionLoginResponse>({
+   *  `logged_in` is a post-submit assessment, not authentication proof. */
+  async login(sessionId: string, body: SessionLoginRequest): Promise<SessionLoginResponse> {
+    const response = await this.http.request<unknown>({
       method: 'POST',
       path: `/v1/sessions/${encodeURIComponent(sessionId)}/login`,
       body,
     });
+    const parsed = SessionLoginResponseSchema.safeParse(response);
+    if (!parsed.success) {
+      throw new TransportError('invalid session login response body', 200, parsed.error);
+    }
+    return parsed.data;
   }
 
   /** Destroy the session. Idempotent. */

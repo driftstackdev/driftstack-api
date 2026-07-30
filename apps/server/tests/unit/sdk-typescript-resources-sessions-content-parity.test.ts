@@ -54,6 +54,10 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
       /import type \{\s*\n?\s*CaptureRequestInput,\s*\n?\s*CaptureResponse,\s*\n?\s*ExtractRequest,\s*\n?\s*ExtractResponse,\s*\n?\s*SearchRequestInput,\s*\n?\s*SearchResponse,\s*\n?\s*SessionLoginRequest,\s*\n?\s*SessionLoginResponse,\s*\n?\s*CreateSessionRequest,\s*\n?\s*InteractRequest,\s*\n?\s*InteractResponse,\s*\n?\s*NavigateRequestInput,\s*\n?\s*NavigateResponse,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Session,\s*\n?\s*SessionState,\s*\n?\s*WaitRequest,\s*\n?\s*WaitResponse,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
+    expect(body).toMatch(
+      /import \{ SearchResponseSchema, SessionLoginResponseSchema \} from '@driftstack\/api-types';/,
+    );
+    expect(body).toMatch(/import \{ TransportError \} from '\.\.\/errors\.js';/);
     expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
   });
 
@@ -152,7 +156,7 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
   });
 
   it('13-verb inventory + verb-mix invariants — exactly 13 method declarations (create + list + iterate + get + navigate + interact + wait + getState + capture + extract + search + login + destroy). Verb mix: 8 POSTs (create + navigate + interact + wait + capture + extract + search + login) + 3 GETs (list + get + getState) + 1 DELETE (destroy) = 12 wire-call verbs (iterate is delegation). ZERO PATCH/PUT — sessions are atomic; no partial-update.', () => {
-    const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
+    const methods = body.match(/^ {2}(?!constructor)(?:async )?[a-zA-Z]+\(/gm) ?? [];
     expect(methods.length, 'expected 13 verb declarations').toBe(13);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
     expect(posts, 'expected 8 POSTs').toBe(8);
@@ -162,6 +166,28 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
     expect(deletes, 'expected 1 DELETE (destroy)').toBe(1);
     expect(body).not.toMatch(/method: 'PATCH'/);
     expect(body).not.toMatch(/method: 'PUT'/);
+  });
+
+  it('login validates the successful body at runtime and normalizes schema drift to TransportError', () => {
+    expect(body).toMatch(
+      /async login\(sessionId: string, body: SessionLoginRequest\): Promise<SessionLoginResponse>/,
+    );
+    expect(body).toMatch(/const response = await this\.http\.request<unknown>\(/);
+    expect(body).toMatch(/const parsed = SessionLoginResponseSchema\.safeParse\(response\);/);
+    expect(body).toMatch(
+      /throw new TransportError\('invalid session login response body', 200, parsed\.error\);/,
+    );
+    expect(body).toMatch(/return parsed\.data;/);
+  });
+
+  it('search validates the strict response union at runtime and normalizes schema drift to TransportError', () => {
+    expect(body).toMatch(
+      /async search\(sessionId: string, body: SearchRequestInput\): Promise<SearchResponse>/,
+    );
+    expect(body).toMatch(/const parsed = SearchResponseSchema\.safeParse\(response\);/);
+    expect(body).toMatch(
+      /throw new TransportError\('invalid session search response body', 200, parsed\.error\);/,
+    );
   });
 
   it('Wire-path inventory — bare /v1/sessions (create + list) + per-id sub-paths for 6 verbs (navigate/interact/wait/state/capture + bare destroy). The "interact + tap+type+scroll+press" pattern follows 1-path-per-action (no shared /interact endpoint with action body discriminator) so each verb is independently rate-limitable server-side. Drift to a shared /interact path would collapse server-side rate-limit granularity.', () => {

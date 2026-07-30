@@ -44,6 +44,8 @@ describe('W431.B apps/server/src/drivers/webkit.ts content parity', () => {
 
   it('WebKitDriver implements Driver; 8 method signatures pinned', () => {
     expect(body).toMatch(/export class WebKitDriver implements Driver \{/);
+    expect(body).toContain("readonly searchCapability = 'unavailable' as const;");
+    expect(body).toContain("readonly loginCapability = 'unavailable' as const;");
     expect(body).toMatch(
       /async createSession\(_input: CreateSessionInput\): Promise<CreateSessionResult> \{/,
     );
@@ -77,10 +79,13 @@ describe('W431.B apps/server/src/drivers/webkit.ts content parity', () => {
     expect((awaitResolveCount ?? []).length).toBe(11);
   });
 
-  it('No constructor, no fields, no state — pure stub class', () => {
+  it('No constructor or mutable/private state — only the fail-closed capability', () => {
     expect(body).not.toMatch(/constructor\(/);
     expect(body).not.toMatch(/private\s+\w/);
-    expect(body).not.toMatch(/readonly\s+\w/);
+    expect(body.match(/readonly\s+\w+/g)).toEqual([
+      'readonly searchCapability',
+      'readonly loginCapability',
+    ]);
   });
 
   it('file exists at canonical path', () => {

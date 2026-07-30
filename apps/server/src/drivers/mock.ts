@@ -102,6 +102,8 @@ export interface MockDriverOptions {
 }
 
 export class MockDriver implements Driver {
+  readonly searchCapability = 'simulation' as const;
+  readonly loginCapability = 'simulation' as const;
   private readonly sessions = new Map<DriverSessionId, InternalSession>();
   private nextId = 1;
   private readonly navigateLatencyMs: number;
@@ -306,6 +308,7 @@ export class MockDriver implements Driver {
     // selector was given, a synthetic visible result.
     return {
       submitted: input.submit,
+      queryTruncated: false,
       ...(input.waitForResultsSelector !== undefined ? { resultsVisible: true } : {}),
       durationMs: Date.now() - start,
     };
@@ -319,6 +322,8 @@ export class MockDriver implements Driver {
     // WebKit driver. The mock reports a successful login (never echoes the
     // password — _input is unused).
     return {
+      submitted: true,
+      credentialsTruncated: false,
       loggedIn: true,
       postLoginUrl: 'https://example.com/account',
       durationMs: Date.now() - start,

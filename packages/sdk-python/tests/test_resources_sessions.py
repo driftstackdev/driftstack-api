@@ -18,7 +18,11 @@ from driftstack._generated.models import (
     CreateSessionResponse,
     InteractResponse,
     NavigateResponse,
+    SearchResponse1,
+    SearchResponse2,
     Session,
+    SessionLoginResponse1,
+    SessionLoginResponse2,
     SessionState,
     WaitResponse,
 )
@@ -196,6 +200,202 @@ def test_sync_capture() -> None:
         assert isinstance(result, CaptureResponse)
 
 
+def test_sync_search_returns_direct_completed_branch_attributes() -> None:
+    response = {
+        "submitted": False,
+        "query_truncated": False,
+        "results_visible": False,
+        "duration_ms": 8_420,
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/sessions/ses_xx/search").mock(
+            return_value=httpx.Response(200, json=response)
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.sessions.search(
+                "ses_xx", {"query": "wireless headphones", "submit": False}
+            )
+
+    assert isinstance(result, SearchResponse1)
+    assert result.submitted is False
+    assert result.query_truncated is False
+    assert result.results_visible is False
+    assert result.duration_ms == 8_420
+    assert b"wireless headphones" in route.calls[0].request.read()
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        {
+            "submitted": False,
+            "query_truncated": True,
+            "results_visible": False,
+            "duration_ms": 1,
+        },
+        {
+            "submitted": True,
+            "query_truncated": False,
+            "results_visible": None,
+            "duration_ms": 1,
+        },
+    ],
+)
+def test_sync_search_rejects_malformed_success_body_as_transport_error(
+    response: dict[str, object],
+) -> None:
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/sessions/ses_xx/search").mock(
+            return_value=httpx.Response(200, json=response)
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError):
+                client.sessions.search("ses_xx", {"query": "wireless headphones"})
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        # JSON 1/0 are not booleans. `isinstance(True, int)` is true, so
+        # pydantic's lax mode would coerce these into a fabricated
+        # submitted/refusal verdict the browser never produced.
+        {"submitted": 1, "query_truncated": False, "duration_ms": 1},
+        {"submitted": False, "query_truncated": 0, "duration_ms": 1},
+        {"submitted": False, "query_truncated": False, "results_visible": 1, "duration_ms": 1},
+        # duration_ms must be a real integer inside the 600,000 ms producer
+        # budget — never a numeric string, float or bool.
+        {"submitted": False, "query_truncated": False, "duration_ms": "1"},
+        {"submitted": False, "query_truncated": False, "duration_ms": 1.0},
+        {"submitted": False, "query_truncated": False, "duration_ms": True},
+        {"submitted": False, "query_truncated": False, "duration_ms": 600_001},
+        # A safe refusal never carries a results assessment.
+        {"submitted": False, "query_truncated": True, "results_visible": False, "duration_ms": 1},
+    ],
+)
+def test_sync_search_rejects_hostile_primitive_body_as_transport_error(
+    response: dict[str, object],
+) -> None:
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/sessions/ses_xx/search").mock(
+            return_value=httpx.Response(200, json=response)
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError):
+                client.sessions.search("ses_xx", {"query": "wireless headphones"})
+
+
+def test_sync_login_returns_direct_submitted_branch_attributes() -> None:
+    response = {
+        "submitted": True,
+        "credentials_truncated": False,
+        "logged_in": False,
+        "post_login_url": "https://example.test/challenge",
+        "duration_ms": 12_450,
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/sessions/ses_xx/login").mock(
+            return_value=httpx.Response(200, json=response)
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.sessions.login(
+                "ses_xx", {"username": "user@example.test", "password": "not-logged"}
+            )
+
+    assert isinstance(result, SessionLoginResponse1)
+    assert result.submitted is True
+    assert result.credentials_truncated is False
+    assert result.logged_in is False
+    assert result.post_login_url == "https://example.test/challenge"
+    assert result.duration_ms == 12_450
+    sent = route.calls[0].request.read().decode()
+    assert "user@example.test" in sent
+
+
+def test_sync_login_rejects_contradictory_success_body_as_transport_error() -> None:
+    response = {
+        "submitted": False,
+        "credentials_truncated": True,
+        "logged_in": False,
+        "post_login_url": "https://example.test/should-not-exist",
+        "duration_ms": 1,
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/sessions/ses_xx/login").mock(return_value=httpx.Response(200, json=response))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError):
+                client.sessions.login(
+                    "ses_xx", {"username": "user@example.test", "password": "not-logged"}
+                )
+
+
+def test_sync_login_rejects_explicit_null_url_as_transport_error() -> None:
+    response = {
+        "submitted": True,
+        "credentials_truncated": False,
+        "logged_in": False,
+        "post_login_url": None,
+        "duration_ms": 1,
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/sessions/ses_xx/login").mock(return_value=httpx.Response(200, json=response))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError):
+                client.sessions.login(
+                    "ses_xx", {"username": "user@example.test", "password": "not-logged"}
+                )
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        # A coerced 1/0/"false" would publish a credential-submission or
+        # session verdict the harness never asserted.
+        {"submitted": 1, "credentials_truncated": False, "logged_in": False, "duration_ms": 1},
+        {"submitted": False, "credentials_truncated": 1, "logged_in": False, "duration_ms": 1},
+        {
+            "submitted": True,
+            "credentials_truncated": False,
+            "logged_in": "false",
+            "duration_ms": 1,
+        },
+        # duration_ms must be a real integer inside the 600,000 ms producer
+        # budget — never a numeric string, float or bool.
+        {"submitted": True, "credentials_truncated": False, "logged_in": False, "duration_ms": "1"},
+        {"submitted": True, "credentials_truncated": False, "logged_in": False, "duration_ms": 1.0},
+        {
+            "submitted": True,
+            "credentials_truncated": False,
+            "logged_in": False,
+            "duration_ms": True,
+        },
+        {
+            "submitted": True,
+            "credentials_truncated": False,
+            "logged_in": False,
+            "duration_ms": 600_001,
+        },
+        # post_login_url is absent or an exact string, never another primitive.
+        {
+            "submitted": True,
+            "credentials_truncated": False,
+            "logged_in": False,
+            "post_login_url": 5,
+            "duration_ms": 1,
+        },
+    ],
+)
+def test_sync_login_rejects_hostile_primitive_body_as_transport_error(
+    response: dict[str, object],
+) -> None:
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/sessions/ses_xx/login").mock(return_value=httpx.Response(200, json=response))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError):
+                client.sessions.login(
+                    "ses_xx", {"username": "user@example.test", "password": "not-logged"}
+                )
+
+
 def test_sync_destroy_returns_none_on_204() -> None:
     with respx.mock(base_url=BASE) as mock:
         mock.delete("/v1/sessions/ses_xx").mock(return_value=httpx.Response(204))
@@ -230,6 +430,101 @@ async def test_async_create_session_posts_and_decodes() -> None:
             result = await client.sessions.create()
         assert isinstance(result, CreateSessionResponse)
         assert str(result.id) == SESSION_FIXTURE["id"]
+
+
+@pytest.mark.asyncio
+async def test_async_search_returns_direct_safe_refusal_attributes() -> None:
+    response = {
+        "submitted": False,
+        "query_truncated": True,
+        "duration_ms": 600_000,
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/sessions/ses_xx/search").mock(
+            return_value=httpx.Response(200, json=response)
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.sessions.search("ses_xx", {"query": "wireless headphones"})
+
+    assert isinstance(result, SearchResponse2)
+    assert result.submitted is False
+    assert result.query_truncated is True
+    assert result.duration_ms == 600_000
+    assert not hasattr(result, "results_visible")
+
+
+@pytest.mark.asyncio
+async def test_async_login_returns_direct_safe_refusal_attributes() -> None:
+    response = {
+        "submitted": False,
+        "credentials_truncated": True,
+        "logged_in": False,
+        "duration_ms": 600_000,
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/sessions/ses_xx/login").mock(return_value=httpx.Response(200, json=response))
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.sessions.login(
+                "ses_xx", {"username": "user@example.test", "password": "not-logged"}
+            )
+
+    assert isinstance(result, SessionLoginResponse2)
+    assert result.submitted is False
+    assert result.credentials_truncated is True
+    assert result.logged_in is False
+    assert result.duration_ms == 600_000
+    assert not hasattr(result, "post_login_url")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        {"submitted": 1, "query_truncated": False, "duration_ms": 1},
+        {"submitted": False, "query_truncated": 0, "duration_ms": 1},
+        {"submitted": False, "query_truncated": False, "results_visible": 1, "duration_ms": 1},
+        {"submitted": False, "query_truncated": False, "duration_ms": "1"},
+    ],
+)
+async def test_async_search_rejects_hostile_primitive_body_as_transport_error(
+    response: dict[str, object],
+) -> None:
+    """The async path shares one validator; drift here would leave it unguarded."""
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/sessions/ses_xx/search").mock(
+            return_value=httpx.Response(200, json=response)
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError):
+                await client.sessions.search("ses_xx", {"query": "wireless headphones"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        {"submitted": 1, "credentials_truncated": False, "logged_in": False, "duration_ms": 1},
+        {"submitted": False, "credentials_truncated": 1, "logged_in": False, "duration_ms": 1},
+        {
+            "submitted": True,
+            "credentials_truncated": False,
+            "logged_in": "false",
+            "duration_ms": 1,
+        },
+        {"submitted": True, "credentials_truncated": False, "logged_in": False, "duration_ms": "1"},
+    ],
+)
+async def test_async_login_rejects_hostile_primitive_body_as_transport_error(
+    response: dict[str, object],
+) -> None:
+    """The async path shares one validator; drift here would leave it unguarded."""
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/sessions/ses_xx/login").mock(return_value=httpx.Response(200, json=response))
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            with pytest.raises(TransportError):
+                await client.sessions.login(
+                    "ses_xx", {"username": "user@example.test", "password": "not-logged"}
+                )
 
 
 @pytest.mark.asyncio

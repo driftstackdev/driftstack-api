@@ -400,11 +400,40 @@ the field is detected heuristically. `submit` defaults to `true` (set it
 `false` to type without submitting). When `wait_for_results_selector` is
 given, the call waits for that selector after submit and reports whether it
 appeared (a timeout is `results_visible: false`, not an error). `timeout_seconds`
-(1–120, default 10) caps that wait. The response:
+(1–120, default 10) caps that wait. `query` is required and capped at 10,000
+characters before any session operation is claimed.
+
+The response is a strict two-branch result. A complete query preserves the
+caller-requested submit behavior and may include the results assessment:
 
 ```json
-{ "submitted": true, "results_visible": true }
+{
+  "submitted": true,
+  "query_truncated": false,
+  "results_visible": true,
+  "duration_ms": 8420
+}
 ```
+
+If behavioural typing reaches its safety bound, search refuses safely before
+Return, settle, or the results wait. The refusal cannot carry
+`results_visible`:
+
+```json
+{
+  "submitted": false,
+  "query_truncated": true,
+  "duration_ms": 600000
+}
+```
+
+`duration_ms` is capped at 600,000ms of browser work. The control plane may
+reserve a separate 15,000ms for teardown and result delivery; that time does not
+extend successful search work. This endpoint requires an explicitly real
+direct-driver search capability. Every currently shipped driver reports
+non-real capability, so unavailable deployments return `503` before session
+lookup, operation claim, any driver call, or browser-side query handling. There
+is no public `fill_form` session route or SDK method.
 
 ## Login
 
@@ -422,17 +451,50 @@ Heuristic credential login: types `username` then `password` realistically
 and submits. The `password` is sent to the harness but **never logged**.
 `username_selector` / `password_selector` / `submit_selector` are optional —
 omit them and the fields are detected heuristically (submit falls back to
-Return on the password field). `logged_in` is the post-submit assessment and
-is **never a false positive** — a captcha / 2FA / login-required landing
-yields `false`. Give `success_selector` for a robust signal on known or
-multi-step logins (its post-submit presence means success); omit it and the
-password-field-gone + URL heuristic is used. `timeout_seconds` (1–120, default 10) caps the post-submit success wait. `post_login_url` lets you drive a
-challenge/pause flow when login didn't complete. Recipe-based login for a known
-site is the separate `execute_recipe` surface, not this intent. The response:
+Return on the password field). Give `success_selector` for a robust signal on
+known or multi-step logins (its post-submit presence means success); omit it
+and the password-field-gone heuristic is used. Without an explicit success
+selector, a challenge page that removes the password field can be assessed as
+logged in, so treat `logged_in` as an assessment rather than an authentication
+proof. `timeout_seconds` (1–120, default 10) caps the post-submit success wait.
+`post_login_url` lets you drive a challenge/pause flow when login didn't
+complete. Recipe-based login for a known site is the separate `execute_recipe`
+surface, not this intent.
+
+The response is a strict two-branch result. Complete credentials are submitted
+and assessed only in the `submitted: true` branch:
 
 ```json
-{ "logged_in": true, "post_login_url": "https://example.com/account" }
+{
+  "submitted": true,
+  "credentials_truncated": false,
+  "logged_in": true,
+  "post_login_url": "https://example.com/account",
+  "duration_ms": 12450
+}
 ```
+
+If behavioural typing reaches its safety bound, login refuses safely before
+submission. It does not type the password after a truncated username and does
+not expose a URL on this branch:
+
+```json
+{
+  "submitted": false,
+  "credentials_truncated": true,
+  "logged_in": false,
+  "duration_ms": 600000
+}
+```
+
+`duration_ms` is capped at 600,000ms across both fields, submission, and
+assessment. The control plane may reserve a separate 15,000ms for teardown and
+result delivery; that time does not extend successful login work. This endpoint
+requires an explicitly real direct-driver login capability. Every currently
+shipped driver reports non-real capability, so unavailable deployments return
+the documented `503` before session lookup, operation claim, any driver call,
+or browser-side credential handling. Do not send customer credentials until a
+deployment advertises the real capability.
 
 ## Destroy
 

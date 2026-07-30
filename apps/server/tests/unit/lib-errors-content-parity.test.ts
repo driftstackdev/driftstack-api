@@ -150,8 +150,10 @@ describe('W389.A apps/server/src/lib/errors.ts content parity', () => {
 
   it('DriverNotIntegratedError = 503 DriverNotIntegrated', () => {
     expect(body).toMatch(
-      /export class DriverNotIntegratedError extends ApiError \{[\s\S]+?type: PROBLEM_TYPES\.DriverNotIntegrated,\s*\n?\s*title: 'Driver not integrated',\s*\n?\s*status: 503,/,
+      /export class DriverNotIntegratedError extends ApiError \{[\s\S]+?type: PROBLEM_TYPES\.DriverNotIntegrated,\s*\n?\s*title: 'Driver not integrated',\s*\n?\s*status: 503,[\s\S]+?detail:\s*\n?\s*'The selected browser driver does not implement this operation in this deployment\.',/,
     );
+    expect(body).not.toMatch(/DriverNotIntegratedError[\s\S]{0,500}?real WebKit/);
+    expect(body).not.toMatch(/DriverNotIntegratedError[\s\S]{0,500}?credential login/i);
   });
 
   it('V-352b FeatureUnavailableError = 503 (deploy-time-disabled features, e.g. avatar upload)', () => {

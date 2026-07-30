@@ -57,6 +57,86 @@ func TestNavigateRequestMarshalling(t *testing.T) {
 	}
 }
 
+func TestSessionLoginResponseStrictBranches(t *testing.T) {
+	t.Run("submitted branch", func(t *testing.T) {
+		raw := []byte(`{"submitted":true,"credentials_truncated":false,"logged_in":false,"post_login_url":"https://example.test/challenge","duration_ms":12450}`)
+		var got SessionLoginResponse
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if !got.Submitted || got.CredentialsTruncated || got.LoggedIn || got.DurationMS != 12450 {
+			t.Fatalf("unexpected submitted outcome: %+v", got)
+		}
+		if got.PostLoginURL != "https://example.test/challenge" {
+			t.Fatalf("post_login_url=%q", got.PostLoginURL)
+		}
+	})
+
+	t.Run("safe truncation branch", func(t *testing.T) {
+		raw := []byte(`{"submitted":false,"credentials_truncated":true,"logged_in":false,"duration_ms":600000}`)
+		var got SessionLoginResponse
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got.Submitted || !got.CredentialsTruncated || got.LoggedIn || got.PostLoginURL != "" || got.DurationMS != 600000 {
+			t.Fatalf("unexpected truncation outcome: %+v", got)
+		}
+	})
+
+	invalid := []string{
+		`{"submitted":true,"credentials_truncated":true,"logged_in":false,"duration_ms":1}`,
+		`{"submitted":false,"credentials_truncated":true,"logged_in":true,"duration_ms":1}`,
+		`{"submitted":false,"credentials_truncated":true,"logged_in":false,"post_login_url":"https://example.test/leak","duration_ms":1}`,
+		`{"submitted":false,"credentials_truncated":true,"logged_in":false,"post_login_url":null,"duration_ms":1}`,
+		`{"submitted":true,"credentials_truncated":false,"logged_in":true,"post_login_url":null,"duration_ms":1}`,
+		`{"submitted":true,"credentials_truncated":false,"logged_in":true,"duration_ms":600001}`,
+		`{"submitted":true,"credentials_truncated":false,"logged_in":true,"duration_ms":1,"unexpected":true}`,
+		`{"credentials_truncated":false,"logged_in":true,"duration_ms":1}`,
+	}
+	for i, raw := range invalid {
+		var got SessionLoginResponse
+		if err := json.Unmarshal([]byte(raw), &got); err == nil {
+			t.Fatalf("invalid case %d was accepted: %+v", i, got)
+		}
+	}
+}
+
+func TestSearchResponseStrictBranches(t *testing.T) {
+	visible := false
+	completedRaw := []byte(`{"submitted":false,"query_truncated":false,"results_visible":false,"duration_ms":8420}`)
+	var completed SearchResponse
+	if err := json.Unmarshal(completedRaw, &completed); err != nil {
+		t.Fatalf("unmarshal completed: %v", err)
+	}
+	if completed.Submitted || completed.QueryTruncated || completed.DurationMS != 8420 || completed.ResultsVisible == nil || *completed.ResultsVisible != visible {
+		t.Fatalf("unexpected completed outcome: %+v", completed)
+	}
+
+	truncatedRaw := []byte(`{"submitted":false,"query_truncated":true,"duration_ms":600000}`)
+	var truncated SearchResponse
+	if err := json.Unmarshal(truncatedRaw, &truncated); err != nil {
+		t.Fatalf("unmarshal truncated: %v", err)
+	}
+	if truncated.Submitted || !truncated.QueryTruncated || truncated.ResultsVisible != nil || truncated.DurationMS != 600000 {
+		t.Fatalf("unexpected truncated outcome: %+v", truncated)
+	}
+
+	invalid := []string{
+		`{"submitted":true,"query_truncated":true,"duration_ms":1}`,
+		`{"submitted":false,"query_truncated":true,"results_visible":false,"duration_ms":1}`,
+		`{"submitted":true,"query_truncated":false,"results_visible":null,"duration_ms":1}`,
+		`{"submitted":true,"query_truncated":false,"duration_ms":600001}`,
+		`{"submitted":true,"query_truncated":false,"duration_ms":1,"unexpected":true}`,
+		`{"query_truncated":false,"duration_ms":1}`,
+	}
+	for i, raw := range invalid {
+		var got SearchResponse
+		if err := json.Unmarshal([]byte(raw), &got); err == nil {
+			t.Fatalf("invalid case %d was accepted: %+v", i, got)
+		}
+	}
+}
+
 func TestInteractActionConstructors(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -121,6 +121,164 @@ describe('parseIntentResult', () => {
     expect(r.errorCode).toBeUndefined();
   });
 
+  it('decodes only the two exact login terminals and preserves producer duration', () => {
+    const submitted = parseIntentResult(
+      {
+        type: 'intentResult',
+        sessionId: 'ses_x',
+        intentId: 'int_login_submitted',
+        success: true,
+        durationMs: 600_000,
+        outputData: encodeWireData({
+          submitted: true,
+          credentials_truncated: false,
+          logged_in: false,
+          post_login_url: 'https://example.com/login?error=1',
+        }),
+      },
+      'login',
+    );
+    expect(submitted).toMatchObject({
+      success: true,
+      durationMs: 600_000,
+      outputData: {
+        submitted: true,
+        credentials_truncated: false,
+        logged_in: false,
+      },
+    });
+
+    const truncated = parseIntentResult(
+      {
+        type: 'intentResult',
+        sessionId: 'ses_x',
+        intentId: 'int_login_truncated',
+        success: true,
+        durationMs: 1,
+        outputData: encodeWireData({
+          submitted: false,
+          credentials_truncated: true,
+          logged_in: false,
+        }),
+      },
+      'login',
+    );
+    expect(truncated.outputData).toEqual({
+      submitted: false,
+      credentials_truncated: true,
+      logged_in: false,
+    });
+
+    for (const invalid of [
+      { submitted: false, credentials_truncated: true, logged_in: true },
+      {
+        submitted: false,
+        credentials_truncated: true,
+        logged_in: false,
+        post_login_url: 'https://example.com/account',
+      },
+      { submitted: true, credentials_truncated: false, logged_in: true, password: 'secret' },
+    ]) {
+      expect(() =>
+        parseIntentResult(
+          {
+            type: 'intentResult',
+            sessionId: 'ses_x',
+            intentId: 'int_login_bad',
+            success: true,
+            durationMs: 1,
+            outputData: encodeWireData(invalid),
+          },
+          'login',
+        ),
+      ).toThrow(HarnessWireCodecError);
+    }
+  });
+
+  it('decodes only the exact fill_form complete and safe-truncation terminals', () => {
+    for (const outputData of [
+      { fields_filled: 1, submitted: false, truncated: false },
+      { fields_filled: 50, submitted: true, truncated: false },
+      { fields_filled: 0, submitted: false, truncated: true, truncated_fields: [0] },
+      { fields_filled: 49, submitted: false, truncated: true, truncated_fields: [49] },
+    ]) {
+      expect(
+        parseIntentResult(
+          {
+            type: 'intentResult',
+            sessionId: 'ses_x',
+            intentId: 'int_fill',
+            success: true,
+            durationMs: 1,
+            outputData: encodeWireData(outputData),
+          },
+          'fill_form',
+        ).outputData,
+      ).toEqual(outputData);
+    }
+    for (const outputData of [
+      { fields_filled: 0, submitted: false, truncated: false },
+      { fields_filled: 1, submitted: true, truncated: true, truncated_fields: [1] },
+      { fields_filled: 1, submitted: false, truncated: true, truncated_fields: [0] },
+      { fields_filled: 1, submitted: false, truncated: true, truncated_fields: [1, 2] },
+    ]) {
+      expect(() =>
+        parseIntentResult(
+          {
+            type: 'intentResult',
+            sessionId: 'ses_x',
+            intentId: 'int_fill_bad',
+            success: true,
+            durationMs: 1,
+            outputData: encodeWireData(outputData),
+          },
+          'fill_form',
+        ),
+      ).toThrow(HarnessWireCodecError);
+    }
+  });
+
+  it('decodes only the exact search normal and zero-submit truncation terminals', () => {
+    for (const outputData of [
+      { submitted: true, query_truncated: false, results_visible: false },
+      { submitted: false, query_truncated: false },
+      { submitted: false, query_truncated: true },
+    ]) {
+      expect(
+        parseIntentResult(
+          {
+            type: 'intentResult',
+            sessionId: 'ses_x',
+            intentId: 'int_search',
+            success: true,
+            durationMs: 600_000,
+            outputData: encodeWireData(outputData),
+          },
+          'search',
+        ).outputData,
+      ).toEqual(outputData);
+    }
+    for (const outputData of [
+      { submitted: true, query_truncated: true },
+      { submitted: false, query_truncated: true, results_visible: false },
+      { submitted: false, query_truncated: false, query: 'must-never-return' },
+    ]) {
+      expect(() =>
+        parseIntentResult(
+          {
+            type: 'intentResult',
+            sessionId: 'ses_x',
+            intentId: 'int_search_bad',
+            success: true,
+            durationMs: 1,
+            outputData: encodeWireData(outputData),
+          },
+          'search',
+        ),
+      ).toThrow(HarnessWireCodecError);
+    }
+  });
+
   it('decodes a failure frame (no outputData, errorCode + errorMessage preserved)', () => {
     const r = parseIntentResult(
       {

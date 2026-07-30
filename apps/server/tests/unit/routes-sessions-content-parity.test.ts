@@ -109,6 +109,32 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).not.toContain('effectiveAccountIdForWrite');
   });
 
+  it('login route mirrors the exact submitted/truncated union and cannot leak a URL from refusal', () => {
+    const start = body.indexOf("'/v1/sessions/:id/login'");
+    const end = body.indexOf('\n  // ── DELETE', start);
+    const block = body.slice(start, end);
+    expect(block).toContain('if (!result.submitted) {');
+    expect(block).toMatch(
+      /submitted: false as const,\s*credentials_truncated: true as const,\s*logged_in: false as const,\s*duration_ms: result\.durationMs,/,
+    );
+    expect(block).toMatch(
+      /submitted: true as const,\s*credentials_truncated: false as const,\s*logged_in: result\.loggedIn,/,
+    );
+    expect(block.match(/post_login_url/g)).toHaveLength(1);
+  });
+
+  it('search route mirrors the exact normal/truncated union and cannot leak visibility from refusal', () => {
+    const start = body.indexOf("'/v1/sessions/:id/search'");
+    const end = body.indexOf('\n  // ── POST /v1/sessions/:id/login', start);
+    const block = body.slice(start, end);
+    expect(block).toContain('if (result.queryTruncated) {');
+    expect(block).toMatch(
+      /submitted: false as const,\s*query_truncated: true as const,\s*duration_ms: result\.durationMs,/,
+    );
+    expect(block).toMatch(/submitted: result\.submitted,\s*query_truncated: false as const,/);
+    expect(block.match(/results_visible/g)).toHaveLength(1);
+  });
+
   it('PUBLIC_ID_RE regex (3-letter prefix + UUID) + uuidFromPrefixedId (validates expectedPrefix) + prefixId helper', () => {
     expect(body).toMatch(
       /const PUBLIC_ID_RE = \/\^\[a-z\]\{3\}_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/;/,

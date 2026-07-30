@@ -24,6 +24,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  DRIVER_LOGIN_DURATION_MAX_MS,
+  DRIVER_SEARCH_DURATION_MAX_MS,
+  DriverLoginResultSchema,
+  DriverSearchResultSchema,
+} from '../../src/drivers/types.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -128,9 +134,76 @@ describe('W430.B apps/server/src/drivers/types.ts content parity', () => {
   });
 
   it('Driver interface: 11 methods (createSession + navigate + interact + guiInput L-001 + wait + getState + capture + extract + search + login + destroy)', () => {
-    expect(body).toMatch(
-      /export interface Driver \{\s*\n?\s*createSession\(input: CreateSessionInput\): Promise<CreateSessionResult>;\s*\n?\s*navigate\(sessionId: DriverSessionId, input: NavigateInput\): Promise<NavigateResult>;\s*\n?\s*interact\(sessionId: DriverSessionId, input: InteractInput\): Promise<InteractResult>;\s*\n?\s*\/\*\* GUI-control plane \(L-001\) — coordinate-level input\. \*\/\s*\n?\s*guiInput\(sessionId: DriverSessionId, input: GUIInputInput\): Promise<GUIInputResult>;\s*\n?\s*wait\(sessionId: DriverSessionId, input: WaitInput\): Promise<WaitResult>;\s*\n?\s*getState\(sessionId: DriverSessionId\): Promise<SessionStateResult>;\s*\n?\s*capture\(sessionId: DriverSessionId, input: CaptureInput\): Promise<CaptureResult>;\s*\n?\s*extract\(sessionId: DriverSessionId, input: ExtractInput\): Promise<ExtractResult>;\s*\n?\s*search\(sessionId: DriverSessionId, input: SearchInput\): Promise<SearchResult>;\s*\n?\s*login\(sessionId: DriverSessionId, input: LoginInput\): Promise<LoginResult>;\s*\n?\s*destroy\(sessionId: DriverSessionId\): Promise<void>;\s*\n?\s*\}/,
+    expect(body).toContain(
+      "export type DriverOperationCapability = 'real' | 'simulation' | 'unavailable';",
     );
+    expect(body).toMatch(
+      /export interface Driver \{\s*\n?\s*readonly searchCapability: DriverOperationCapability;\s*\n?\s*readonly loginCapability: DriverOperationCapability;\s*\n?\s*createSession\(input: CreateSessionInput\): Promise<CreateSessionResult>;\s*\n?\s*navigate\(sessionId: DriverSessionId, input: NavigateInput\): Promise<NavigateResult>;\s*\n?\s*interact\(sessionId: DriverSessionId, input: InteractInput\): Promise<InteractResult>;\s*\n?\s*\/\*\* GUI-control plane \(L-001\) — coordinate-level input\. \*\/\s*\n?\s*guiInput\(sessionId: DriverSessionId, input: GUIInputInput\): Promise<GUIInputResult>;\s*\n?\s*wait\(sessionId: DriverSessionId, input: WaitInput\): Promise<WaitResult>;\s*\n?\s*getState\(sessionId: DriverSessionId\): Promise<SessionStateResult>;\s*\n?\s*capture\(sessionId: DriverSessionId, input: CaptureInput\): Promise<CaptureResult>;\s*\n?\s*extract\(sessionId: DriverSessionId, input: ExtractInput\): Promise<ExtractResult>;\s*\n?\s*search\(sessionId: DriverSessionId, input: SearchInput\): Promise<SearchResult>;\s*\n?\s*login\(sessionId: DriverSessionId, input: LoginInput\): Promise<LoginResult>;\s*\n?\s*destroy\(sessionId: DriverSessionId\): Promise<void>;\s*\n?\s*\}/,
+    );
+  });
+
+  it('SearchResult preserves exact normal versus zero-submit query-truncation terminals', () => {
+    expect(DRIVER_SEARCH_DURATION_MAX_MS).toBe(600_000);
+    for (const valid of [
+      { submitted: true, queryTruncated: false, resultsVisible: false, durationMs: 600_000 },
+      { submitted: false, queryTruncated: false, durationMs: 1 },
+      { submitted: false, queryTruncated: true, durationMs: 0 },
+    ]) {
+      expect(DriverSearchResultSchema.safeParse(valid).success).toBe(true);
+    }
+    for (const invalid of [
+      { submitted: true, queryTruncated: true, durationMs: 1 },
+      { submitted: false, queryTruncated: true, resultsVisible: false, durationMs: 1 },
+      { submitted: false, queryTruncated: false, durationMs: -1 },
+      { submitted: true, queryTruncated: false, durationMs: 600_001 },
+      { submitted: true, queryTruncated: false, durationMs: 1, query: 'must-not-survive' },
+    ]) {
+      expect(DriverSearchResultSchema.safeParse(invalid).success).toBe(false);
+    }
+  });
+
+  it('LoginResult preserves the exact submitted versus zero-submit truncation branch', () => {
+    expect(body).toContain('export const DRIVER_LOGIN_DURATION_MAX_MS = 600_000;');
+    expect(body).toContain("z.discriminatedUnion('submitted'");
+    expect(DRIVER_LOGIN_DURATION_MAX_MS).toBe(600_000);
+    for (const valid of [
+      {
+        submitted: true,
+        credentialsTruncated: false,
+        loggedIn: true,
+        durationMs: 600_000,
+      },
+      {
+        submitted: false,
+        credentialsTruncated: true,
+        loggedIn: false,
+        durationMs: 0,
+      },
+    ]) {
+      expect(DriverLoginResultSchema.safeParse(valid).success).toBe(true);
+    }
+    for (const invalid of [
+      { submitted: true, credentialsTruncated: true, loggedIn: true, durationMs: 1 },
+      { submitted: false, credentialsTruncated: true, loggedIn: true, durationMs: 1 },
+      {
+        submitted: false,
+        credentialsTruncated: true,
+        loggedIn: false,
+        postLoginUrl: 'https://example.com',
+        durationMs: 1,
+      },
+      { submitted: true, credentialsTruncated: false, loggedIn: true, durationMs: -1 },
+      { submitted: true, credentialsTruncated: false, loggedIn: true, durationMs: 600_001 },
+      {
+        submitted: true,
+        credentialsTruncated: false,
+        loggedIn: true,
+        durationMs: 1,
+        password: 'must-never-survive',
+      },
+    ]) {
+      expect(DriverLoginResultSchema.safeParse(invalid).success).toBe(false);
+    }
   });
 
   it('file exists at canonical path', () => {

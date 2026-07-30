@@ -228,21 +228,47 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
-  it('Search contract pinned (harness intent A3 W244/W245): SearchRequest {query min1, search_selector?, submit default true, wait_for_results_selector?, timeout_seconds 1..120?} + SearchResponse {submitted, results_visible?}. Drift breaks the cross-package contract the /v1/sessions/:id/search route + 3 SDK search methods import', () => {
+  it('Search contract pins query 1..10000 and the strict completed-vs-zero-submit-truncated response with 0..600000ms duration', () => {
     expect(body).toMatch(
-      /export const SearchRequestSchema = z\.object\(\{[\s\S]*?query: z\.string\(\)\.min\(1\),[\s\S]*?search_selector: z\.string\(\)\.optional\(\),[\s\S]*?submit: z\.boolean\(\)\.default\(true\),[\s\S]*?wait_for_results_selector: z\.string\(\)\.optional\(\),[\s\S]*?timeout_seconds: z\.number\(\)\.int\(\)\.min\(1\)\.max\(120\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const SearchRequestSchema = z\.object\(\{[\s\S]*?query: z\.string\(\)\.min\(1\)\.max\(10_000\),[\s\S]*?search_selector: z\.string\(\)\.min\(1\)\.max\(262_144\)\.optional\(\),[\s\S]*?submit: z\.boolean\(\)\.default\(true\),[\s\S]*?wait_for_results_selector: z\.string\(\)\.min\(1\)\.max\(262_144\)\.optional\(\),[\s\S]*?timeout_seconds: z\.number\(\)\.int\(\)\.min\(1\)\.max\(120\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const SearchResponseSchema = z\.object\(\{[\s\S]*?submitted: z\.boolean\(\),[\s\S]*?results_visible: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const SearchDurationMsSchema = z\.number\(\)\.int\(\)\.min\(0\)\.max\(600_000\);/,
+    );
+    expect(body).toMatch(
+      /const SearchCompletedResponseSchema = z[\s\S]*?submitted: z\.boolean\(\),[\s\S]*?query_truncated: z\.literal\(false\),[\s\S]*?results_visible: z\.boolean\(\)\.optional\(\),[\s\S]*?duration_ms: SearchDurationMsSchema,[\s\S]*?\.strict\(\);/,
+    );
+    expect(body).toMatch(
+      /const SearchTruncatedResponseSchema = z[\s\S]*?submitted: z\.literal\(false\),[\s\S]*?query_truncated: z\.literal\(true\),[\s\S]*?duration_ms: SearchDurationMsSchema,[\s\S]*?\.strict\(\);/,
+    );
+    expect(body).toMatch(
+      /export const SearchResponseSchema = z\.discriminatedUnion\('query_truncated', \[[\s\S]*?SearchCompletedResponseSchema,[\s\S]*?SearchTruncatedResponseSchema,[\s\S]*?\]\);/,
     );
   });
 
-  it('SessionLogin contract pinned (harness intent A3 W244/W245): SessionLoginRequest {username min1, password min1 SENSITIVE, username_selector?, password_selector?, submit_selector?, success_selector?, timeout_seconds 1..120?} + SessionLoginResponse {logged_in, post_login_url?}. Named SessionLogin* to avoid colliding with auth LoginRequest. Drift breaks the cross-package contract the /v1/sessions/:id/login route + 3 SDK login methods import', () => {
+  it('SessionLogin contract pins the request and strict submitted-vs-truncated response union, including the activation-held 0..600000ms duration', () => {
     expect(body).toMatch(
-      /export const SessionLoginRequestSchema = z\.object\(\{[\s\S]*?username: z\.string\(\)\.min\(1\),[\s\S]*?password: z\.string\(\)\.min\(1\),[\s\S]*?username_selector: z\.string\(\)\.optional\(\),[\s\S]*?password_selector: z\.string\(\)\.optional\(\),[\s\S]*?submit_selector: z\.string\(\)\.optional\(\),[\s\S]*?success_selector: z\.string\(\)\.optional\(\),[\s\S]*?timeout_seconds: z\.number\(\)\.int\(\)\.min\(1\)\.max\(120\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const SessionLoginRequestSchema = z\.object\(\{[\s\S]*?username: z\.string\(\)\.min\(1\)\.max\(10_000\),[\s\S]*?password: z\.string\(\)\.min\(1\)\.max\(10_000\),[\s\S]*?username_selector: z\.string\(\)\.min\(1\)\.max\(262_144\)\.optional\(\),[\s\S]*?password_selector: z\.string\(\)\.min\(1\)\.max\(262_144\)\.optional\(\),[\s\S]*?submit_selector: z\.string\(\)\.min\(1\)\.max\(262_144\)\.optional\(\),[\s\S]*?success_selector: z\.string\(\)\.min\(1\)\.max\(262_144\)\.optional\(\),[\s\S]*?timeout_seconds: z\.number\(\)\.int\(\)\.min\(1\)\.max\(120\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const SessionLoginResponseSchema = z\.object\(\{[\s\S]*?logged_in: z\.boolean\(\),[\s\S]*?post_login_url: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const SessionLoginDurationMsSchema = z\.number\(\)\.int\(\)\.min\(0\)\.max\(600_000\);/,
+    );
+    expect(body).toMatch(
+      /const SessionLoginSubmittedResponseSchema = z[\s\S]*?submitted: z\.literal\(true\),[\s\S]*?credentials_truncated: z\.literal\(false\),[\s\S]*?logged_in: z\.boolean\(\),[\s\S]*?post_login_url: z\.string\(\)\.optional\(\),[\s\S]*?duration_ms: SessionLoginDurationMsSchema,[\s\S]*?\.strict\(\);/,
+    );
+    // post_login_url is the plain session URL. This lane invents no URL
+    // mutation, and an authorized `GET /state` already returns the same
+    // value — so a "redacted" adjective here would be a false guarantee that
+    // callers (and future log-handling code) could rely on.
+    expect(body).toMatch(
+      /\/\*\* The session URL after submit settled, when the browser supplied one\.\s*\n\s*\*\s*Not redacted or otherwise rewritten: an authorized `GET \/state` already\s*\n\s*\*\s*returns the same URL\. Keep it out of logs like any other session URL\. \*\/\s*\n\s*post_login_url: z\.string\(\)\.optional\(\),/,
+    );
+    expect(body).not.toMatch(/redacted URL/);
+    expect(body).toMatch(
+      /const SessionLoginTruncatedResponseSchema = z[\s\S]*?submitted: z\.literal\(false\),[\s\S]*?credentials_truncated: z\.literal\(true\),[\s\S]*?logged_in: z\.literal\(false\),[\s\S]*?duration_ms: SessionLoginDurationMsSchema,[\s\S]*?\.strict\(\);/,
+    );
+    expect(body).toMatch(
+      /export const SessionLoginResponseSchema = z\.discriminatedUnion\('credentials_truncated', \[[\s\S]*?SessionLoginSubmittedResponseSchema,[\s\S]*?SessionLoginTruncatedResponseSchema,[\s\S]*?\]\);/,
     );
   });
 

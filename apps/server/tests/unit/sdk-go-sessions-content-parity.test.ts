@@ -140,11 +140,26 @@ describe('W589.B packages/sdk-go/sessions.go content parity', () => {
     );
   });
 
-  it('Sub-path consistency across the 5 per-id action verbs: /navigate /interact /wait /state /capture all prefixed with "/v1/sessions/" + url.PathEscape(sessionID). Locked here separately so a future refactor adding a 6th verb gets caught if it drops the PathEscape — the load-bearing invariant that prevents id-injection across the whole action surface.', () => {
+  it('Login — POST /v1/sessions/{id}/login. The doc-comment must describe LoggedIn as a post-submit ASSESSMENT, not authentication proof: without an explicit SuccessSelector a captcha / 2FA / login-required page that removes the password field is assessed as logged in. A "never a false positive" guarantee here would contradict the public API page and the TypeScript SDK, and would invite callers to treat the heuristic as proof.', () => {
+    expect(body).toMatch(
+      /\/\/ Login performs a heuristic credential login \(types username \+ password and\s*\n\/\/ submits\)\. LoggedIn is a post-submit assessment, not authentication proof:\s*\n\/\/ without an explicit SuccessSelector, a captcha \/ 2FA \/ login-required page\s*\n\/\/ that removes the password field can be assessed as logged in\./,
+    );
+    expect(body).not.toMatch(/never a false positive/);
+    expect(body).toMatch(
+      /func \(r \*SessionsResource\) Login\(ctx context\.Context, sessionID string, body \*SessionLoginRequest\) \(\*SessionLoginResponse, error\)/,
+    );
+    expect(body).toMatch(
+      /method: "POST",\s*\n\s*path:\s+"\/v1\/sessions\/" \+ url\.PathEscape\(sessionID\) \+ "\/login",/,
+    );
+  });
+
+  it('Sub-path consistency across the 7 per-id action verbs: /navigate /interact /wait /state /capture /search /login all prefixed with "/v1/sessions/" + url.PathEscape(sessionID). Locked here separately so a future refactor adding an 8th verb gets caught if it drops the PathEscape — the load-bearing invariant that prevents id-injection across the whole action surface.', () => {
     expect(body).toMatch(/url\.PathEscape\(sessionID\) \+ "\/navigate"/);
     expect(body).toMatch(/url\.PathEscape\(sessionID\) \+ "\/interact"/);
     expect(body).toMatch(/url\.PathEscape\(sessionID\) \+ "\/wait"/);
     expect(body).toMatch(/url\.PathEscape\(sessionID\) \+ "\/state"/);
     expect(body).toMatch(/url\.PathEscape\(sessionID\) \+ "\/capture"/);
+    expect(body).toMatch(/url\.PathEscape\(sessionID\) \+ "\/search"/);
+    expect(body).toMatch(/url\.PathEscape\(sessionID\) \+ "\/login"/);
   });
 });

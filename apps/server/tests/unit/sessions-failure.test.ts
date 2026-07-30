@@ -22,7 +22,7 @@ import type {
   SerializedSessionDestroyInput,
   SerializedSessionDestroyResult,
 } from '../../src/services/sessions.js';
-import type { Driver } from '../../src/drivers/types.js';
+import type { Driver, SearchResult } from '../../src/drivers/types.js';
 import type { AccountContext } from '../../src/services/auth.js';
 
 interface RecordedEvent {
@@ -502,6 +502,8 @@ class StubRepo implements SessionRepo {
 }
 
 class ThrowingDriver implements Driver {
+  readonly searchCapability = 'real' as const;
+  readonly loginCapability = 'real' as const;
   private nextId = 0;
   private throwOnNext: { name: string; message: string } | null = null;
   /** Records every driver session id passed to destroy() — lets the
@@ -655,15 +657,30 @@ class ThrowingDriver implements Driver {
     this.throwIfArmed();
     return this.waitIfHeld('extract').then(() => ({ value: { x: 'mock' }, durationMs: 1 }));
   }
-  search(): Promise<{ submitted: boolean; resultsVisible?: boolean; durationMs: number }> {
+  search(): Promise<SearchResult> {
     this.operationCalls.push('search');
     this.throwIfArmed();
-    return this.waitIfHeld('search').then(() => ({ submitted: true, durationMs: 1 }));
+    return this.waitIfHeld('search').then(() => ({
+      submitted: true,
+      queryTruncated: false,
+      durationMs: 1,
+    }));
   }
-  login(): Promise<{ loggedIn: boolean; postLoginUrl?: string; durationMs: number }> {
+  login(): Promise<{
+    submitted: true;
+    credentialsTruncated: false;
+    loggedIn: boolean;
+    postLoginUrl?: string;
+    durationMs: number;
+  }> {
     this.operationCalls.push('login');
     this.throwIfArmed();
-    return this.waitIfHeld('login').then(() => ({ loggedIn: true, durationMs: 1 }));
+    return this.waitIfHeld('login').then(() => ({
+      submitted: true as const,
+      credentialsTruncated: false as const,
+      loggedIn: true,
+      durationMs: 1,
+    }));
   }
   destroy(driverSessionId: string): Promise<void> {
     this.destroyedIds.push(driverSessionId);
@@ -1761,6 +1778,35 @@ describe('SessionsService — V-090 driver-failure capture', () => {
       expect(webhookEvents.filter((event) => event.eventType === 'session.completed')).toHaveLength(
         0,
       );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('login failure cleanup is bounded so a hung driver cannot suppress the original error', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, repo, driver, webhookEvents } = buildService();
+      const ctx = buildCtx();
+      const session = await service.create(ctx, {
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      driver.primeNextThrow({ name: 'DriverError', message: 'login failed before cleanup' });
+      driver.primeDestroyHang();
+
+      const rejection = expect(
+        service.login(ctx, session.id, { username: 'user', password: 'secret' }),
+      ).rejects.toMatchObject({
+        name: 'DriverError',
+        message: 'login failed before cleanup',
+      });
+      await vi.waitFor(() => expect(repo.read(session.id)?.status).toBe('errored'));
+      await vi.advanceTimersByTimeAsync(SESSION_DESTROY_DRIVER_TIMEOUT_MS);
+      await rejection;
+
+      expect(driver.destroyedIds).toEqual([session.driverSessionId]);
+      expect(repo.events.filter((event) => event.type === 'errored')).toHaveLength(1);
+      expect(webhookEvents.map((event) => event.eventType)).toEqual(['session.failed']);
     } finally {
       vi.useRealTimers();
     }

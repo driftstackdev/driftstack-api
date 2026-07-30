@@ -527,8 +527,18 @@ and cross-intent result shapes settle deterministically as
   `Authorization: Bearer <jwt>` on the WS upgrade). Harness signer wired to it (A3 `d1482885`).
 - Dispatch correlation/timeout (A3 W106): 1:1 by `intentId`; fast-fail on the errored SessionStatus
   `intent_dispatch_no_session: <intentName>`; per-intent timeout follows the live producer budget plus
-  15 seconds of transport slack where that budget is proved: 615s for search/login (300s typing plus a separate
-  300s result wait), 315s for click/send_keys/behavioral_pause/wait_for, 70s for navigate/back/forward and 30s
+  15 seconds of transport slack where that budget is proved. Login targets an exact **600,000ms producer wall +
+  15,000ms delivery slack = 615,000ms correlation** across username resolution/type, password
+  resolution/type, submit, settle, and assessment. The 615,000ms control-plane deadline is not an
+  early producer-loss detector. This is not yet activation evidence: the current producer creates the
+  deadline task after its worker, reacquires actor ownership after the worker returns, and measures
+  duration with `Date`, so an honest worker-first result is not yet proved to publish at or below
+  600,000ms. A follow-up producer fence must make that public result bound executable before activation.
+  Search now targets the same **600,000ms producer wall + 15,000ms delivery slack = 615,000ms
+  correlation** and exposes an exact zero-submit truncation terminal. Its producer proof is landed,
+  but activation likewise remains held until the monotonic deadline is part of mutation/publication
+  authority. The remaining current policies are 315s for
+  click/send_keys/behavioral_pause/wait_for, 70s for navigate/back/forward and 30s
   for remaining short observation/key/script intents. fill_form and scroll now use an exact 315s correlation
   deadline: a producer-enforced 300s monotonic whole-intent fence plus 15s for bounded exact-browser
   SIGTERM→SIGKILL→exit confirmation and delivery. Producer cleanup is bounded to 3s SIGTERM + 1s SIGKILL
@@ -538,6 +548,18 @@ and cross-intent result shapes settle deterministically as
   capacity and lost-reply failures remain retryable `intent_dispatch_error`. A blanket long timeout is deliberately
   avoided so genuine connection loss remains fast for
   short operations. No result on connection-drop settles as `intent_dispatch_error` at the applicable deadline.
+
+The login schema/correlation slice is contract-only and does **not** activate public direct login.
+Activation remains blocked until the producer proves the 600,000ms result-publication bound, a real
+direct driver consumes the intent, and a durable public
+operation transport spans the 615-second lifetime across SDK defaults, nginx and the proxied edge.
+The current roughly 30-second SDK defaults, request-derived maximums and public ingress ceilings are
+not widened or presented as sufficient by this contract. A mock-driver 200 is not capability
+evidence and must not receive customer credentials. Every currently shipped driver advertises a
+non-real login capability, and the route fails with 503 before session lookup or operation claim;
+only an explicit future real capability may reach the strict result path. Direct search has the same
+contract-only posture: every shipped driver is non-real and returns 503 before lookup/claim. `fill_form`
+remains an internal harness intent with no public session route or SDK method.
 
 ### DONE on the API side (all unwired → zero prod change until the bootstrap swap)
 

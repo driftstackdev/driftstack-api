@@ -258,8 +258,11 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toContain("new Error('Session driver destroy timed out.')");
     const boundedCalls = body.match(/destroyDriverSessionWithTimeout\(/g) ?? [];
     // One declaration + two post-dispatch create cleanups + customer destroy +
-    // duration sweep + suspension reclaim.
-    expect(boundedCalls).toHaveLength(6);
+    // duration sweep + suspension reclaim + driver-operation failure cleanup.
+    expect(boundedCalls).toHaveLength(7);
+    expect(body).toMatch(
+      /const failed = await this\.deps\.repo\.failSessionOperation\([\s\S]+?await destroyDriverSessionWithTimeout\(\(\) =>\s*this\.deps\.driver\.destroy\(session\.driverSessionId\),\s*\)\.catch\(\(\) => \{\}\);/,
+    );
   });
 
   it('destroy: emits session.completed webhook + V-304a session.success.first email + V-216 session.destroyed audit all try/catch swallow', () => {
@@ -357,6 +360,37 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
+  it('login returns the driver discriminated result without dropping submission truth', () => {
+    expect(body).toMatch(
+      /import \{\s*DriverLoginResultSchema,\s*DriverSearchResultSchema,\s*type Driver,\s*type LoginResult,\s*type SearchResult,?\s*\} from '\.\.\/drivers\/types\.js';/,
+    );
+    expect(body).toMatch(
+      /async login\(\s*ctx: AccountContext,\s*sessionId: string,\s*body: SessionLoginRequest,\s*opts: \{ effectiveAccountId\?: string \} = \{\},\s*\): Promise<LoginResult> \{/,
+    );
+    expect(body).toContain('this.deps.driver.login(claimed.driverSessionId, {');
+    expect(body).toMatch(
+      /if \(this\.deps\.driver\.loginCapability !== 'real'\) \{\s*throw new DriverNotIntegratedError\(\);\s*\}\s*const \{ result \} = await this\.runWithFailureCapture/,
+    );
+    expect(body).toMatch(
+      /const rawResult = await this\.deps\.driver\.login\([\s\S]+?const parsed = DriverLoginResultSchema\.safeParse\(rawResult\);\s*if \(!parsed\.success\) \{[\s\S]+?throw new DriverError\('The browser driver returned an invalid login result\.'\);\s*\}\s*return parsed\.data;/,
+    );
+  });
+
+  it('search fails closed on non-real capability and strictly parses the driver terminal', () => {
+    expect(body).toMatch(
+      /async search\(\s*ctx: AccountContext,\s*sessionId: string,\s*body: SearchRequest,\s*opts: \{ effectiveAccountId\?: string \} = \{\},\s*\): Promise<SearchResult> \{/,
+    );
+    expect(body).toMatch(
+      /if \(this\.deps\.driver\.searchCapability !== 'real'\) \{\s*throw new DriverNotIntegratedError\(\);\s*\}\s*const \{ result \} = await this\.runWithFailureCapture/,
+    );
+    expect(body).toMatch(
+      /const rawResult = await this\.deps\.driver\.search\([\s\S]+?const parsed = DriverSearchResultSchema\.safeParse\(rawResult\);\s*if \(!parsed\.success\) \{\s*throw new DriverError\('The browser driver returned an invalid search result\.'\);\s*\}/,
+    );
+    expect(body).toMatch(
+      /if \(\s*!parsed\.data\.queryTruncated &&\s*\(parsed\.data\.submitted !== body\.submit \|\|\s*\(parsed\.data\.resultsVisible !== undefined\) !==\s*\(body\.wait_for_results_selector !== undefined\)\)\s*\) \{\s*throw new DriverError\('The browser driver returned an invalid search result\.'\);\s*\}/,
+    );
+  });
+
   it('getState uses a status-neutral monotonic timestamp touch after owner settlement', () => {
     expect(body).toMatch(
       /this\.deps\.repo\.touchSessionLastStateAt\(\{\s*id: session\.id,\s*accountId: session\.accountId,\s*driverSessionId: session\.driverSessionId,\s*lastStateAt: capturedAt,/,
@@ -397,10 +431,12 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
       /import \{\s*\n?\s*DEFAULT_BEHAVIORAL_PROFILE,\s*\n?\s*DEFAULT_SESSION_PURPOSE,\s*\n?\s*LOCKED_ARCHETYPE_ID,\s*\n?\s*MAX_SESSION_MINUTES_PER_TIER,\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,/,
     );
     expect(body).toMatch(/import type \{ AccountContext \} from '\.\/auth\.js';/);
-    expect(body).toMatch(/import type \{ Driver \} from '\.\.\/drivers\/types\.js';/);
+    expect(body).toMatch(
+      /import \{\s*DriverLoginResultSchema,\s*DriverSearchResultSchema,\s*type Driver,\s*type LoginResult,\s*type SearchResult,?\s*\} from '\.\.\/drivers\/types\.js';/,
+    );
     expect(body).toMatch(/import type \{ GUIInputRequest \} from '\.\.\/schemas\/gui-input\.js';/);
     expect(body).toMatch(
-      /import \{[\s\S]*?BadRequestError,[\s\S]*?ConcurrencyLimitError,[\s\S]*?ConflictError,[\s\S]*?NotFoundError,[\s\S]*?SessionDestroyedError,[\s\S]*?\} from '\.\.\/lib\/errors\.js';/,
+      /import \{[\s\S]*?BadRequestError,[\s\S]*?ConcurrencyLimitError,[\s\S]*?ConflictError,[\s\S]*?DriverError,[\s\S]*?DriverNotIntegratedError,[\s\S]*?NotFoundError,[\s\S]*?SessionDestroyedError,[\s\S]*?\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
       /import \{ requireScope as throwIfMissingScope \} from '\.\.\/lib\/errors-helpers\.js';/,

@@ -1,7 +1,9 @@
 package driftstack
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -536,9 +538,57 @@ type SearchRequest struct {
 }
 
 type SearchResponse struct {
-	Submitted bool `json:"submitted"`
+	Submitted      bool `json:"submitted"`
+	QueryTruncated bool `json:"query_truncated"`
 	// Present only when WaitForResultsSelector was given (timeout → false).
 	ResultsVisible *bool `json:"results_visible,omitempty"`
+	DurationMS     int   `json:"duration_ms"`
+}
+
+// UnmarshalJSON enforces the strict complete-vs-safe-refusal search result.
+// A truncated query is never submitted and cannot carry a results assessment.
+func (r *SearchResponse) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	allowed := map[string]bool{
+		"submitted": true, "query_truncated": true,
+		"results_visible": true, "duration_ms": true,
+	}
+	for name := range fields {
+		if !allowed[name] {
+			return fmt.Errorf("invalid session search response field %q", name)
+		}
+	}
+	if raw, present := fields["results_visible"]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return fmt.Errorf("invalid session search response: results_visible cannot be null")
+	}
+
+	var wire struct {
+		Submitted      *bool `json:"submitted"`
+		QueryTruncated *bool `json:"query_truncated"`
+		ResultsVisible *bool `json:"results_visible"`
+		DurationMS     *int  `json:"duration_ms"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if wire.Submitted == nil || wire.QueryTruncated == nil || wire.DurationMS == nil {
+		return fmt.Errorf("invalid session search response: missing required outcome field")
+	}
+	if *wire.DurationMS < 0 || *wire.DurationMS > 600_000 {
+		return fmt.Errorf("invalid session search response: duration_ms outside 0..600000")
+	}
+	if *wire.QueryTruncated && (*wire.Submitted || wire.ResultsVisible != nil) {
+		return fmt.Errorf("invalid session search response: contradictory truncated outcome")
+	}
+
+	r.Submitted = *wire.Submitted
+	r.QueryTruncated = *wire.QueryTruncated
+	r.ResultsVisible = wire.ResultsVisible
+	r.DurationMS = *wire.DurationMS
+	return nil
 }
 
 // SessionLoginRequest drives the in-browser credential-login op. Named
@@ -556,8 +606,68 @@ type SessionLoginRequest struct {
 }
 
 type SessionLoginResponse struct {
-	LoggedIn     bool   `json:"logged_in"`
-	PostLoginURL string `json:"post_login_url,omitempty"`
+	Submitted            bool   `json:"submitted"`
+	CredentialsTruncated bool   `json:"credentials_truncated"`
+	LoggedIn             bool   `json:"logged_in"`
+	PostLoginURL         string `json:"post_login_url,omitempty"`
+	DurationMS           int    `json:"duration_ms"`
+}
+
+// UnmarshalJSON enforces the public two-branch login result. A truncated
+// credential is a safe zero-submit refusal and therefore cannot carry a URL;
+// a complete credential flow must report submitted=true. This keeps the Go SDK
+// from silently accepting a contradictory server response.
+func (r *SessionLoginResponse) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	allowed := map[string]bool{
+		"submitted": true, "credentials_truncated": true, "logged_in": true,
+		"post_login_url": true, "duration_ms": true,
+	}
+	for name := range fields {
+		if !allowed[name] {
+			return fmt.Errorf("invalid session login response field %q", name)
+		}
+	}
+	if raw, present := fields["post_login_url"]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return fmt.Errorf("invalid session login response: post_login_url cannot be null")
+	}
+
+	var wire struct {
+		Submitted            *bool   `json:"submitted"`
+		CredentialsTruncated *bool   `json:"credentials_truncated"`
+		LoggedIn             *bool   `json:"logged_in"`
+		PostLoginURL         *string `json:"post_login_url"`
+		DurationMS           *int    `json:"duration_ms"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if wire.Submitted == nil || wire.CredentialsTruncated == nil || wire.LoggedIn == nil || wire.DurationMS == nil {
+		return fmt.Errorf("invalid session login response: missing required outcome field")
+	}
+	if *wire.DurationMS < 0 || *wire.DurationMS > 600_000 {
+		return fmt.Errorf("invalid session login response: duration_ms outside 0..600000")
+	}
+	if *wire.CredentialsTruncated {
+		if *wire.Submitted || *wire.LoggedIn || wire.PostLoginURL != nil {
+			return fmt.Errorf("invalid session login response: contradictory truncated outcome")
+		}
+	} else if !*wire.Submitted {
+		return fmt.Errorf("invalid session login response: complete credentials were not submitted")
+	}
+
+	r.Submitted = *wire.Submitted
+	r.CredentialsTruncated = *wire.CredentialsTruncated
+	r.LoggedIn = *wire.LoggedIn
+	r.DurationMS = *wire.DurationMS
+	r.PostLoginURL = ""
+	if wire.PostLoginURL != nil {
+		r.PostLoginURL = *wire.PostLoginURL
+	}
+	return nil
 }
 
 // ──────────────────────────────────────────────────────────────────

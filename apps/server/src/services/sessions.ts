@@ -29,12 +29,20 @@ import {
 } from '@driftstack/api-types';
 import { randomUUID } from 'node:crypto';
 import type { AccountContext } from './auth.js';
-import type { Driver } from '../drivers/types.js';
+import {
+  DriverLoginResultSchema,
+  DriverSearchResultSchema,
+  type Driver,
+  type LoginResult,
+  type SearchResult,
+} from '../drivers/types.js';
 import type { GUIInputRequest } from '../schemas/gui-input.js';
 import {
   BadRequestError,
   ConcurrencyLimitError,
   ConflictError,
+  DriverError,
+  DriverNotIntegratedError,
   NotFoundError,
   SessionDestroyedError,
 } from '../lib/errors.js';
@@ -880,17 +888,39 @@ export class SessionsService {
     sessionId: string,
     body: SearchRequest,
     opts: { effectiveAccountId?: string } = {},
-  ): Promise<{ submitted: boolean; resultsVisible?: boolean; durationMs: number }> {
-    const { result } = await this.runWithFailureCapture(ctx, sessionId, opts, 'search', (claimed) =>
-      this.deps.driver.search(claimed.driverSessionId, {
-        query: body.query,
-        ...(body.search_selector !== undefined ? { searchSelector: body.search_selector } : {}),
-        submit: body.submit,
-        ...(body.wait_for_results_selector !== undefined
-          ? { waitForResultsSelector: body.wait_for_results_selector }
-          : {}),
-        ...(body.timeout_seconds !== undefined ? { timeoutSeconds: body.timeout_seconds } : {}),
-      }),
+  ): Promise<SearchResult> {
+    if (this.deps.driver.searchCapability !== 'real') {
+      throw new DriverNotIntegratedError();
+    }
+    const { result } = await this.runWithFailureCapture(
+      ctx,
+      sessionId,
+      opts,
+      'search',
+      async (claimed) => {
+        const rawResult = await this.deps.driver.search(claimed.driverSessionId, {
+          query: body.query,
+          ...(body.search_selector !== undefined ? { searchSelector: body.search_selector } : {}),
+          submit: body.submit,
+          ...(body.wait_for_results_selector !== undefined
+            ? { waitForResultsSelector: body.wait_for_results_selector }
+            : {}),
+          ...(body.timeout_seconds !== undefined ? { timeoutSeconds: body.timeout_seconds } : {}),
+        });
+        const parsed = DriverSearchResultSchema.safeParse(rawResult);
+        if (!parsed.success) {
+          throw new DriverError('The browser driver returned an invalid search result.');
+        }
+        if (
+          !parsed.data.queryTruncated &&
+          (parsed.data.submitted !== body.submit ||
+            (parsed.data.resultsVisible !== undefined) !==
+              (body.wait_for_results_selector !== undefined))
+        ) {
+          throw new DriverError('The browser driver returned an invalid search result.');
+        }
+        return parsed.data;
+      },
     );
     return result;
   }
@@ -903,21 +933,45 @@ export class SessionsService {
     sessionId: string,
     body: SessionLoginRequest,
     opts: { effectiveAccountId?: string } = {},
-  ): Promise<{ loggedIn: boolean; postLoginUrl?: string; durationMs: number }> {
-    const { result } = await this.runWithFailureCapture(ctx, sessionId, opts, 'login', (claimed) =>
-      this.deps.driver.login(claimed.driverSessionId, {
-        username: body.username,
-        password: body.password,
-        ...(body.username_selector !== undefined
-          ? { usernameSelector: body.username_selector }
-          : {}),
-        ...(body.password_selector !== undefined
-          ? { passwordSelector: body.password_selector }
-          : {}),
-        ...(body.submit_selector !== undefined ? { submitSelector: body.submit_selector } : {}),
-        ...(body.success_selector !== undefined ? { successSelector: body.success_selector } : {}),
-        ...(body.timeout_seconds !== undefined ? { timeoutSeconds: body.timeout_seconds } : {}),
-      }),
+  ): Promise<LoginResult> {
+    // Direct login must never turn the deterministic mock (or an unavailable
+    // local adapter) into a customer-visible synthetic credential submission.
+    // Check before ownership lookup/operation claim so an inactive capability
+    // has zero row, driver, event, or timing side effects. A future
+    // authenticated FleetDriver must opt in explicitly with `real`.
+    if (this.deps.driver.loginCapability !== 'real') {
+      throw new DriverNotIntegratedError();
+    }
+    const { result } = await this.runWithFailureCapture(
+      ctx,
+      sessionId,
+      opts,
+      'login',
+      async (claimed) => {
+        const rawResult = await this.deps.driver.login(claimed.driverSessionId, {
+          username: body.username,
+          password: body.password,
+          ...(body.username_selector !== undefined
+            ? { usernameSelector: body.username_selector }
+            : {}),
+          ...(body.password_selector !== undefined
+            ? { passwordSelector: body.password_selector }
+            : {}),
+          ...(body.submit_selector !== undefined ? { submitSelector: body.submit_selector } : {}),
+          ...(body.success_selector !== undefined
+            ? { successSelector: body.success_selector }
+            : {}),
+          ...(body.timeout_seconds !== undefined ? { timeoutSeconds: body.timeout_seconds } : {}),
+        });
+        const parsed = DriverLoginResultSchema.safeParse(rawResult);
+        if (!parsed.success) {
+          // Never reflect schema diagnostics: a hostile remote result could put
+          // sensitive values in unknown fields. Classify the breach as a driver
+          // failure so the exact claimed browser is terminalized and reaped.
+          throw new DriverError('The browser driver returned an invalid login result.');
+        }
+        return parsed.data;
+      },
     );
     return result;
   }
@@ -1408,7 +1462,9 @@ export class SessionsService {
       // circuits 'errored' — so without this the real browser leaks forever
       // (cost-to-serve) on EVERY transient driver error (audit wxzlp9yiz P1).
       // Best-effort, mirroring create()'s orphan guard; the original error wins.
-      await this.deps.driver.destroy(session.driverSessionId).catch(() => {});
+      await destroyDriverSessionWithTimeout(() =>
+        this.deps.driver.destroy(session.driverSessionId),
+      ).catch(() => {});
       try {
         await this.deps.repo.recordEvent({
           sessionId: session.id,

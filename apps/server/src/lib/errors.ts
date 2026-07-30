@@ -358,7 +358,7 @@ export class DriverNotIntegratedError extends ApiError {
       type: PROBLEM_TYPES.DriverNotIntegrated,
       title: 'Driver not integrated',
       status: 503,
-      detail: 'The real WebKit driver is not yet integrated; this server is configured to use it.',
+      detail: 'The selected browser driver does not implement this operation in this deployment.',
     });
     this.name = 'DriverNotIntegratedError';
   }

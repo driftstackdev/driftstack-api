@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
 from pydantic import ValidationError
 
 from driftstack._generated import models
@@ -73,6 +74,132 @@ def test_models_module_has_expected_classes() -> None:
     actual = {name for name in dir(models) if not name.startswith("_")}
     missing = expected - actual
     assert not missing, f"missing models: {missing}"
+
+
+def test_search_response_preserves_both_strict_outcome_branches() -> None:
+    completed = models.SearchResponse.model_validate(
+        {
+            "submitted": False,
+            "query_truncated": False,
+            "results_visible": False,
+            "duration_ms": 8_420,
+        }
+    ).root
+    assert completed.submitted is False
+    assert completed.query_truncated is False
+    assert completed.results_visible is False
+
+    truncated = models.SearchResponse.model_validate(
+        {
+            "submitted": False,
+            "query_truncated": True,
+            "duration_ms": 600_000,
+        }
+    ).root
+    assert truncated.submitted is False
+    assert truncated.query_truncated is True
+    assert not hasattr(truncated, "results_visible")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"submitted": True, "query_truncated": True, "duration_ms": 1},
+        {
+            "submitted": False,
+            "query_truncated": True,
+            "results_visible": False,
+            "duration_ms": 1,
+        },
+        {"submitted": True, "query_truncated": False, "duration_ms": 600_001},
+        {
+            "submitted": True,
+            "query_truncated": False,
+            "duration_ms": 1,
+            "unexpected": True,
+        },
+        {"query_truncated": False, "duration_ms": 1},
+    ],
+)
+def test_search_response_rejects_contradictory_or_extra_payloads(
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        models.SearchResponse.model_validate(payload)
+
+
+def test_session_login_response_preserves_both_strict_outcome_branches() -> None:
+    """Generated OpenAPI models retain safe-refusal discrimination and bounds."""
+    submitted = models.SessionLoginResponse.model_validate(
+        {
+            "submitted": True,
+            "credentials_truncated": False,
+            "logged_in": False,
+            "post_login_url": "https://example.test/challenge",
+            "duration_ms": 12_450,
+        }
+    ).root
+    assert submitted.submitted is True
+    assert submitted.credentials_truncated is False
+    assert submitted.logged_in is False
+    assert submitted.post_login_url == "https://example.test/challenge"
+
+    truncated = models.SessionLoginResponse.model_validate(
+        {
+            "submitted": False,
+            "credentials_truncated": True,
+            "logged_in": False,
+            "duration_ms": 600_000,
+        }
+    ).root
+    assert truncated.submitted is False
+    assert truncated.credentials_truncated is True
+    assert truncated.logged_in is False
+    assert not hasattr(truncated, "post_login_url")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "submitted": True,
+            "credentials_truncated": True,
+            "logged_in": False,
+            "duration_ms": 1,
+        },
+        {
+            "submitted": False,
+            "credentials_truncated": True,
+            "logged_in": True,
+            "duration_ms": 1,
+        },
+        {
+            "submitted": False,
+            "credentials_truncated": True,
+            "logged_in": False,
+            "post_login_url": "https://example.test/leak",
+            "duration_ms": 1,
+        },
+        {
+            "submitted": True,
+            "credentials_truncated": False,
+            "logged_in": True,
+            "duration_ms": 600_001,
+        },
+        {
+            "submitted": True,
+            "credentials_truncated": False,
+            "logged_in": True,
+            "duration_ms": 1,
+            "unexpected": True,
+        },
+    ],
+)
+def test_session_login_response_rejects_contradictory_or_extra_payloads(
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        models.SessionLoginResponse.model_validate(payload)
 
 
 def test_agent_session_capability_report_preserves_degraded_states() -> None:

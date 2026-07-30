@@ -418,14 +418,14 @@ export type ExtractResponse = z.infer<typeof ExtractResponseSchema>;
 
 export const SearchRequestSchema = z.object({
   /** The search text, typed via the behavioural send-keys path. */
-  query: z.string().min(1),
+  query: z.string().min(1).max(10_000),
   /** Explicit search-input selector; omit → harness heuristic detection. */
-  search_selector: z.string().optional(),
+  search_selector: z.string().min(1).max(262_144).optional(),
   /** Submit (Return) after typing. Defaults to true. */
   submit: z.boolean().default(true),
   /** Optional selector to wait for after submit (results loaded); omit → a
    *  brief idle settle. When present, drives `results_visible` in the response. */
-  wait_for_results_selector: z.string().optional(),
+  wait_for_results_selector: z.string().min(1).max(262_144).optional(),
   /** Caps the `wait_for_results_selector` wait (seconds). Omit → harness
    *  default (10s). A timeout is `results_visible: false`, not an error. */
   timeout_seconds: z.number().int().min(1).max(120).optional(),
@@ -434,14 +434,38 @@ export type SearchRequest = z.infer<typeof SearchRequestSchema>;
 /** Caller-side shape: fields with server-side defaults are optional. */
 export type SearchRequestInput = z.input<typeof SearchRequestSchema>;
 
-export const SearchResponseSchema = z.object({
-  /** Whether the query was submitted (Return pressed / submit control clicked). */
-  submitted: z.boolean(),
-  /** Present only when `wait_for_results_selector` was given: whether that
-   *  selector became visible before the wait timed out (timeout → false, not
-   *  an error). */
-  results_visible: z.boolean().optional(),
-});
+const SearchDurationMsSchema = z.number().int().min(0).max(600_000);
+
+const SearchCompletedResponseSchema = z
+  .object({
+    /** Whether the caller-requested submission occurred. A complete search
+     *  may intentionally leave this false when `submit:false` was requested. */
+    submitted: z.boolean(),
+    query_truncated: z.literal(false),
+    /** Present only when `wait_for_results_selector` was given: whether that
+     *  selector became visible before the wait timed out (timeout → false, not
+     *  an error). */
+    results_visible: z.boolean().optional(),
+    /** Producer-observed duration under the activation-held 600-second fence. */
+    duration_ms: SearchDurationMsSchema,
+  })
+  .strict();
+
+const SearchTruncatedResponseSchema = z
+  .object({
+    /** Safe refusal: an incomplete query is never submitted. */
+    submitted: z.literal(false),
+    query_truncated: z.literal(true),
+    duration_ms: SearchDurationMsSchema,
+  })
+  .strict();
+
+/** Query truncation is an exact zero-submit terminal and cannot carry a
+ *  results assessment. */
+export const SearchResponseSchema = z.discriminatedUnion('query_truncated', [
+  SearchCompletedResponseSchema,
+  SearchTruncatedResponseSchema,
+]);
 export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -456,30 +480,61 @@ export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 // LoginRequest/LoginResponse for the account-login (email+password → session
 // token); this is the distinct in-browser credential-login driver op.
 export const SessionLoginRequestSchema = z.object({
-  username: z.string().min(1),
+  username: z.string().min(1).max(10_000),
   /** SENSITIVE — typed via the behavioural send-keys path; never logged. */
-  password: z.string().min(1),
+  password: z.string().min(1).max(10_000),
   /** Explicit username/email field selector; omit → harness heuristic detection. */
-  username_selector: z.string().optional(),
+  username_selector: z.string().min(1).max(262_144).optional(),
   /** Explicit password field selector; omit → heuristic. */
-  password_selector: z.string().optional(),
+  password_selector: z.string().min(1).max(262_144).optional(),
   /** Explicit submit control; omit → Return on the password field. */
-  submit_selector: z.string().optional(),
+  submit_selector: z.string().min(1).max(262_144).optional(),
   /** Optional selector whose post-submit presence means success; omit → the
    *  password-field-gone + URL heuristic. Robust for known / multi-step logins. */
-  success_selector: z.string().optional(),
+  success_selector: z.string().min(1).max(262_144).optional(),
   /** Caps the post-submit success wait (seconds). Omit → harness default (10s). */
   timeout_seconds: z.number().int().min(1).max(120).optional(),
 });
 export type SessionLoginRequest = z.infer<typeof SessionLoginRequestSchema>;
 
-export const SessionLoginResponseSchema = z.object({
-  /** Post-submit assessment: true only when login is judged successful (never a
-   *  false positive — a captcha / 2FA / login-required landing yields false). */
-  logged_in: z.boolean(),
-  /** The URL after the submit settled (lets the caller drive challenge/pause). */
-  post_login_url: z.string().optional(),
-});
+const SessionLoginDurationMsSchema = z.number().int().min(0).max(600_000);
+
+const SessionLoginSubmittedResponseSchema = z
+  .object({
+    submitted: z.literal(true),
+    credentials_truncated: z.literal(false),
+    /** Post-submit assessment. Callers must still handle a submitted login that
+     *  honestly reaches a captcha, 2FA step, or login-required page. */
+    logged_in: z.boolean(),
+    /** The session URL after submit settled, when the browser supplied one.
+     *  Not redacted or otherwise rewritten: an authorized `GET /state` already
+     *  returns the same URL. Keep it out of logs like any other session URL. */
+    post_login_url: z.string().optional(),
+    /** Producer-observed duration. The public contract caps this at the
+     *  intended 600-second whole-login fence; activation remains held until
+     *  the harness proves that bound at the result-publication boundary. */
+    duration_ms: SessionLoginDurationMsSchema,
+  })
+  .strict();
+
+const SessionLoginTruncatedResponseSchema = z
+  .object({
+    submitted: z.literal(false),
+    credentials_truncated: z.literal(true),
+    logged_in: z.literal(false),
+    /** Time spent before the safe zero-submit truncation terminal, subject to
+     *  the same activation-held 600-second result bound. */
+    duration_ms: SessionLoginDurationMsSchema,
+  })
+  .strict();
+
+/** A credential truncation is a safe refusal, never an ambiguous submitted
+ *  result. The discriminator prevents callers from accepting contradictory
+ *  combinations or a post-login URL on the zero-submit branch. */
+export const SessionLoginResponseSchema = z.discriminatedUnion('credentials_truncated', [
+  SessionLoginSubmittedResponseSchema,
+  SessionLoginTruncatedResponseSchema,
+]);
 export type SessionLoginResponse = z.infer<typeof SessionLoginResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────

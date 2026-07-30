@@ -18,7 +18,8 @@
 //   - Connection drop mid-intent → no result, not replayed → the timeout covers it.
 //   - Per-intent timeout = producer execution budget + 15s transport slack.
 //     Explicit post-action waits and aggregate behavioral pacing can legally
-//     consume 300s; search/login compose TWO such phases; navigation/history
+//     consume 300s; search/login each have an exact 600s producer-owned
+//     whole-intent wall deadline; navigation/history
 //     has a 55s WebDriver budget. fill_form/scroll now have an exact producer
 //     300s monotonic whole-intent fence, with at most 4s browser cleanup and the
 //     fixed 10s heartbeat result drain leaving 1s inside the 15s slack. Only
@@ -33,6 +34,8 @@
 import {
   IntentResultHeaderSchema,
   HARNESS_BEHAVIORAL_PAUSE_CAP_MS,
+  HARNESS_LOGIN_PRODUCER_DEADLINE_MS,
+  HARNESS_SEARCH_PRODUCER_DEADLINE_MS,
   HARNESS_WAIT_FOR_CAP_SECONDS,
   type IntentDispatch,
   type HarnessIntentName,
@@ -59,8 +62,6 @@ const SINGLE_CAP_LONG_INTENTS = new Set<HarnessIntentName>([
   'wait_for',
 ]);
 
-const COMPOSITE_LONG_INTENTS = new Set<HarnessIntentName>(['search', 'login']);
-
 const FENCED_COMPOSITE_INTENTS = new Set<HarnessIntentName>(['fill_form', 'scroll']);
 
 const NAVIGATION_INTENTS = new Set<HarnessIntentName>(['navigate', 'back', 'forward']);
@@ -71,12 +72,11 @@ const NAVIGATION_INTENTS = new Set<HarnessIntentName>(['navigate', 'back', 'forw
  *  that 15s. Short operations stay fail-fast instead of inheriting a blanket
  *  long timer. */
 export function dispatchTimeoutMs(intentName: HarnessIntentName): number {
-  if (COMPOSITE_LONG_INTENTS.has(intentName)) {
-    return (
-      HARNESS_BEHAVIORAL_PAUSE_CAP_MS +
-      HARNESS_WAIT_FOR_CAP_SECONDS * 1000 +
-      DISPATCH_TIMEOUT_SLACK_MS
-    );
+  if (intentName === 'search') {
+    return HARNESS_SEARCH_PRODUCER_DEADLINE_MS + DISPATCH_TIMEOUT_SLACK_MS;
+  }
+  if (intentName === 'login') {
+    return HARNESS_LOGIN_PRODUCER_DEADLINE_MS + DISPATCH_TIMEOUT_SLACK_MS;
   }
   if (SINGLE_CAP_LONG_INTENTS.has(intentName)) {
     const capMs =

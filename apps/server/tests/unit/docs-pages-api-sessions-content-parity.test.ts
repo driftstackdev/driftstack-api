@@ -98,6 +98,40 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).not.toMatch(/most recent `getState` \/ `capture` \/\s*\n?`navigate`/);
   });
 
+  it('documents login safe-refusal truth, strict branch fields and the explicit activation hold', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/The response is a strict two-branch result/);
+    expect(p).toMatch(/"submitted": true,[\s\S]*?"credentials_truncated": false/);
+    expect(p).toMatch(/"submitted": false,[\s\S]*?"credentials_truncated": true/);
+    expect(p).toMatch(/does not type the password after a truncated username/);
+    expect(p).toMatch(/does\s*\n?not expose a URL on this branch/);
+    expect(p).toMatch(/`duration_ms` is capped at 600,000ms/);
+    expect(p).toMatch(/separate 15,000ms for teardown and\s*\n?result delivery/);
+    expect(p).toMatch(/does not extend successful login work/);
+    expect(p).toMatch(/requires an explicitly real direct-driver login capability/);
+    expect(p).toMatch(/currently\s*\n?shipped driver reports non-real capability/);
+    expect(p).toMatch(/return\s*\n?the documented `503` before session lookup, operation claim/);
+    expect(p).toMatch(/Do not send customer credentials/);
+    expect(p).not.toMatch(
+      /logged_in` is the post-submit assessment and\s*\n?is \*\*never a false positive\*\*/,
+    );
+  });
+
+  it('documents search safe-refusal truth, the query bound and the real-capability 503 posture', () => {
+    const p = read(PAGE);
+    expect(p).toMatch(/`query` is required and capped at 10,000/);
+    expect(p).toMatch(/"query_truncated": false/);
+    expect(p).toMatch(/"query_truncated": true/);
+    expect(p).toMatch(/refuses safely before\s*\n?Return, settle, or the results wait/);
+    expect(p).toMatch(/refusal cannot carry\s*\n?`results_visible`/);
+    expect(p).toMatch(/`duration_ms` is capped at 600,000ms/);
+    expect(p).toMatch(/separate 15,000ms for teardown and result delivery/);
+    expect(p).toMatch(/does not\s*\n?extend successful search work/);
+    expect(p).toMatch(/requires an explicitly real\s*\n?direct-driver search capability/);
+    expect(p).toMatch(/There\s*\n?is no public `fill_form`/);
+  });
+
   it('CRITICAL LOCKED_ARCHETYPE_ID default + 3-purpose enum pinned. archetype defaults to iphone17_ios18_7_safari26_4; purpose defaults to production_customer with cumulative_rig_validation + test_domain_probe reserved internal.', () => {
     const p = read(PAGE);
 

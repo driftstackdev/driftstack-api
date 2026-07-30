@@ -138,6 +138,8 @@ describe('W985 drivers factory + WebKit cross-source invariant', () => {
   it("CRITICAL WebKitDriver implements Driver + all 11 methods throw DriverNotIntegratedError after no-op await Promise.resolve(). The require-await + throw pattern keeps ESLint happy + signals 'every method is stubbed'.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/webkit.ts'));
     expect(p).toMatch(/export class WebKitDriver implements Driver \{/);
+    expect(p).toContain("readonly searchCapability = 'unavailable' as const;");
+    expect(p).toContain("readonly loginCapability = 'unavailable' as const;");
     // Count throw DriverNotIntegratedError occurrences.
     const matches = p.match(/throw new DriverNotIntegratedError\(\);/g) ?? [];
     expect(matches.length).toBe(11);
@@ -166,6 +168,8 @@ describe('W985 drivers factory + WebKit cross-source invariant', () => {
       playwrightHeaded: false,
     });
     expect(d).toBeInstanceOf(MockDriver);
+    expect(d.searchCapability).toBe('simulation');
+    expect(d.loginCapability).toBe('simulation');
   });
 
   it('CRITICAL runtime — createDriver({driver:"webkit", ...}) returns WebKitDriver instance.', async () => {
@@ -177,6 +181,8 @@ describe('W985 drivers factory + WebKit cross-source invariant', () => {
       playwrightHeaded: false,
     });
     expect(d).toBeInstanceOf(WebKitDriver);
+    expect(d.searchCapability).toBe('unavailable');
+    expect(d.loginCapability).toBe('unavailable');
   });
 
   it('CRITICAL runtime — WebKitDriver.createSession throws DriverNotIntegratedError at call-time. The 8 throws keep the WebKitDriver-route-construction safe but every operation surfaces the integration gap.', async () => {

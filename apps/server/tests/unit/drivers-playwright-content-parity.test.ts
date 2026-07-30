@@ -115,6 +115,8 @@ describe('W454.C apps/server/src/drivers/playwright.ts content parity', () => {
     expect(body).toMatch(
       /\* V-333b — Playwright driver\.[\s\S]*?\*\s*Single shared `Browser` instance across all sessions; per-session\s*\n?\s*\*\s*`BrowserContext` for state isolation\. Context is closed on\s*\n?\s*\*\s*`destroy\(\)`\. The Browser itself is launched lazily on the first\s*\n?\s*\*\s*createSession \+ reused; never closed \(process exit reaps it\)\./,
     );
+    expect(body).toContain("readonly searchCapability = 'unavailable' as const;");
+    expect(body).toContain("readonly loginCapability = 'unavailable' as const;");
   });
 
   it('getBrowser: 3-branch ternary (chromium|firefox|webkit default); browserPromise lazy-init; HEADED-INVERSION GUARD: headless: this.config.headed !== true (dropping !== inverts behavior)', () => {

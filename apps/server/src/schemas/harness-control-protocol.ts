@@ -76,6 +76,12 @@ export const HARNESS_EXTRACTIONS_MAX = 100;
 export const HARNESS_PERCEIVE_MAX_ELEMENTS = 200;
 export const HARNESS_FILL_FORM_MAX_FIELDS = 50;
 export const HARNESS_FILL_FORM_MAX_TOTAL_VALUE_CHARS = 20_000;
+/** Exact producer-owned whole-search wall deadline. The control-plane
+ *  correlator adds its separate transport slack to this bound. */
+export const HARNESS_SEARCH_PRODUCER_DEADLINE_MS = 600_000;
+/** Exact producer-owned whole-login wall deadline. The control-plane
+ *  correlator adds its separate transport slack to this bound. */
+export const HARNESS_LOGIN_PRODUCER_DEADLINE_MS = 600_000;
 
 // Security-audit hardening (2026-06-30) — hard cap on Heartbeat.
 // activeSessionStates' key count. This map feeds the process-wide
@@ -611,39 +617,86 @@ const BehavioralPauseResultSchema = z
   })
   .strict();
 
-const FillFormResultSchema = z
+const FillFormCompleteResultSchema = z
   .object({
-    fields_filled: z.number().int().nonnegative(),
+    fields_filled: z.number().int().min(1).max(HARNESS_FILL_FORM_MAX_FIELDS),
     submitted: z.boolean(),
-    truncated: z.boolean(),
-    truncated_fields: z.array(z.number().int().nonnegative()).optional(),
+    truncated: z.literal(false),
   })
-  .strict()
+  .strict();
+
+const FillFormTruncatedResultSchema = z
+  .object({
+    fields_filled: z
+      .number()
+      .int()
+      .min(0)
+      .max(HARNESS_FILL_FORM_MAX_FIELDS - 1),
+    submitted: z.literal(false),
+    truncated: z.literal(true),
+    truncated_fields: z.tuple([
+      z
+        .number()
+        .int()
+        .min(0)
+        .max(HARNESS_FILL_FORM_MAX_FIELDS - 1),
+    ]),
+  })
+  .strict();
+
+const FillFormResultSchema = z
+  .discriminatedUnion('truncated', [FillFormCompleteResultSchema, FillFormTruncatedResultSchema])
   .superRefine((value, ctx) => {
-    if (value.truncated !== (value.truncated_fields !== undefined)) {
+    if (value.truncated && value.truncated_fields[0] !== value.fields_filled) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['truncated_fields'],
-        message: 'truncated_fields must be present exactly when truncated is true',
+        path: ['truncated_fields', 0],
+        message: 'the truncated field index must equal fields_filled',
       });
     }
   });
 
-const SearchResultSchema = z
+const SearchNormalResultSchema = z
   .object({
     submitted: z.boolean(),
-    query_truncated: z.boolean(),
+    query_truncated: z.literal(false),
     results_visible: z.boolean().optional(),
   })
   .strict();
 
-const LoginResultSchema = z
+const SearchTruncatedResultSchema = z
   .object({
-    logged_in: z.boolean(),
-    post_login_url: z.string(),
-    credentials_truncated: z.boolean(),
+    submitted: z.literal(false),
+    query_truncated: z.literal(true),
   })
   .strict();
+
+const SearchResultSchema = z.discriminatedUnion('query_truncated', [
+  SearchNormalResultSchema,
+  SearchTruncatedResultSchema,
+]);
+
+const LoginSubmittedResultSchema = z
+  .object({
+    submitted: z.literal(true),
+    credentials_truncated: z.literal(false),
+    logged_in: z.boolean(),
+    post_login_url: z.string().max(PAGE_STATE_URL_MAX_LENGTH).optional(),
+  })
+  .strict();
+
+const LoginTruncatedResultSchema = z
+  .object({
+    submitted: z.literal(false),
+    credentials_truncated: z.literal(true),
+    logged_in: z.literal(false),
+  })
+  .strict();
+
+const LoginResultSchema = z.discriminatedUnion('submitted', [
+  LoginSubmittedResultSchema,
+  LoginTruncatedResultSchema,
+]);
 
 export const HARNESS_INTENT_RESULT_SCHEMAS: Record<HarnessIntentName, z.ZodTypeAny> = {
   navigate: NavigateResultSchema,

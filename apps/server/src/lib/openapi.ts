@@ -604,7 +604,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/search',
     operationId: 'searchSession',
-    summary: 'Find the search field, type the query, and submit',
+    summary: 'Search a page (real direct-driver capability required)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -620,11 +620,17 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       200: {
-        description: 'Query typed and (optionally) submitted.',
+        description:
+          'Requires an explicitly real direct-driver search capability. All currently shipped drivers report non-real capability, so unavailable deployments return 503 before session lookup, operation claim, any driver call, or browser-side query handling. query_truncated=false means the complete query was typed and the caller-requested submit behavior was honored; query_truncated=true is an exact safe zero-submit refusal with no results assessment. duration_ms is capped at 600 seconds. The control plane may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.',
         content: {
           'application/json': {
             schema: SearchResponseSchema,
-            example: { submitted: true, results_visible: true },
+            example: {
+              submitted: true,
+              query_truncated: false,
+              results_visible: true,
+              duration_ms: 8_420,
+            },
           },
         },
       },
@@ -637,7 +643,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/login',
     operationId: 'loginSession',
-    summary: 'Heuristic credential login (type username + password, submit)',
+    summary: 'Credential login (real direct-driver capability required)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -657,11 +663,18 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       200: {
-        description: 'Credentials typed and submitted; logged_in is the post-submit assessment.',
+        description:
+          'Requires an explicitly real direct-driver login capability. All currently shipped drivers report non-real capability, so unavailable deployments return 503 before session lookup, operation claim, any driver call, or browser-side credential handling. submitted=true means complete credentials were submitted and assessed; credentials_truncated=true is a safe zero-submit refusal. duration_ms is capped at 600 seconds. The control plane may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.',
         content: {
           'application/json': {
             schema: SessionLoginResponseSchema,
-            example: { logged_in: true, post_login_url: 'https://example.com/account' },
+            example: {
+              submitted: true,
+              credentials_truncated: false,
+              logged_in: true,
+              post_login_url: 'https://example.com/account',
+              duration_ms: 12_450,
+            },
           },
         },
       },

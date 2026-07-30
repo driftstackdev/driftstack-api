@@ -648,8 +648,16 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         body,
         eff !== undefined ? { effectiveAccountId: eff } : {},
       );
+      if (result.queryTruncated) {
+        return {
+          submitted: false as const,
+          query_truncated: true as const,
+          duration_ms: result.durationMs,
+        };
+      }
       return {
         submitted: result.submitted,
+        query_truncated: false as const,
         ...(result.resultsVisible !== undefined ? { results_visible: result.resultsVisible } : {}),
         duration_ms: result.durationMs,
       };
@@ -675,7 +683,17 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         body,
         eff !== undefined ? { effectiveAccountId: eff } : {},
       );
+      if (!result.submitted) {
+        return {
+          submitted: false as const,
+          credentials_truncated: true as const,
+          logged_in: false as const,
+          duration_ms: result.durationMs,
+        };
+      }
       return {
+        submitted: true as const,
+        credentials_truncated: false as const,
         logged_in: result.loggedIn,
         ...(result.postLoginUrl !== undefined ? { post_login_url: result.postLoginUrl } : {}),
         duration_ms: result.durationMs,

@@ -56,19 +56,79 @@ describe('W583.B packages/sdk-python/src/driftstack/resources/sessions.py conten
     );
   });
 
-  it("Imports — 17 generated models (sorted alphabetical block) covering every verb's request/response shape. CRITICAL: drift to hand-rolled types in this file would diverge from @driftstack/api-types Zod single-source-of-truth and silently fragment the cross-language wire contract.", () => {
+  it('Imports — generated models cover every verb; search/login retain canonical RootModels plus strict branch types for validated direct-attribute results.', () => {
     expect(body).toMatch(/^from __future__ import annotations$/m);
     expect(body).toMatch(/^from collections\.abc import AsyncIterator, Iterator$/m);
     expect(body).toMatch(/^from typing import Any$/m);
     expect(body).toMatch(/^from urllib\.parse import quote$/m);
     expect(body).toMatch(/^from pydantic import BaseModel$/m);
     expect(body).toMatch(
-      /^from driftstack\._generated\.models import \(\s*\n\s*CaptureRequest,\s*\n\s*CaptureResponse,\s*\n\s*CreateSessionRequest,\s*\n\s*CreateSessionResponse,\s*\n\s*ExtractRequest,\s*\n\s*ExtractResponse,\s*\n\s*InteractRequest,\s*\n\s*InteractResponse,\s*\n\s*NavigateRequest,\s*\n\s*NavigateResponse,\s*\n\s*PaginationQuery,\s*\n\s*SearchRequest,\s*\n\s*SearchResponse,\s*\n\s*Session,\s*\n\s*SessionLoginRequest,\s*\n\s*SessionLoginResponse,\s*\n\s*SessionState,\s*\n\s*WaitRequest,\s*\n\s*WaitResponse,\s*\n\)$/m,
+      /^from driftstack\._generated\.models import \(\s*\n\s*CaptureRequest,\s*\n\s*CaptureResponse,\s*\n\s*CreateSessionRequest,\s*\n\s*CreateSessionResponse,\s*\n\s*ExtractRequest,\s*\n\s*ExtractResponse,\s*\n\s*InteractRequest,\s*\n\s*InteractResponse,\s*\n\s*NavigateRequest,\s*\n\s*NavigateResponse,\s*\n\s*PaginationQuery,\s*\n\s*SearchRequest,\s*\n\s*SearchResponse1,\s*\n\s*SearchResponse2,\s*\n\s*Session,\s*\n\s*SessionLoginRequest,\s*\n\s*SessionLoginResponse1,\s*\n\s*SessionLoginResponse2,\s*\n\s*SessionState,\s*\n\s*WaitRequest,\s*\n\s*WaitResponse,\s*\n\)\s*\nfrom driftstack\._generated\.models import \(\s*\n\s*SearchResponse as GeneratedSearchResponse,\s*\n\)\s*\nfrom driftstack\._generated\.models import \(\s*\n\s*SessionLoginResponse as GeneratedSessionLoginResponse,\s*\n\)$/m,
     );
     expect(body).toMatch(
       /^from driftstack\.pagination import aiterate_paginated, iterate_paginated$/m,
     );
     expect(body).toMatch(/^from driftstack\.resources\._common import coerce_body, coerce_query$/m);
+  });
+
+  it('raw primitive strictness — booleans are identity-checked (bool is an int subclass, so lax pydantic would coerce JSON 1/0/"false" into a fabricated submitted/logged_in verdict) and duration is an exact int inside the 600,000 ms producer budget, under ONE fixed schema-mismatch message so a hostile body cannot shape the exception', () => {
+    expect(body).toContain('from driftstack.errors import TransportError');
+    expect(body).toMatch(/^_DURATION_MS_MAX = 600_000$/m);
+    expect(body).toMatch(
+      /^def _schema_error\(\) -> TransportError:[\s\S]*?return TransportError\("response did not match expected schema", status=None\)$/m,
+    );
+    expect(body).toMatch(
+      /^def _exact_bool\(payload: dict\[str, Any\], key: str\) -> bool:[\s\S]*?value = payload\[key\]\s*\n\s*if type\(value\) is not bool:\s*\n\s*raise _schema_error\(\)\s*\n\s*return value$/m,
+    );
+    expect(body).toMatch(
+      /^def _exact_duration_ms\(payload: dict\[str, Any\]\) -> None:[\s\S]*?value = payload\["duration_ms"\][\s\S]*?if type\(value\) is not int or not 0 <= value <= _DURATION_MS_MAX:\s*\n\s*raise _schema_error\(\)$/m,
+    );
+    // isinstance(True, int) is True — an isinstance-based bool check would be
+    // silently unguarded, so the exact-type form is the load-bearing part.
+    expect(body).not.toMatch(/isinstance\(value, bool\)/);
+    expect(body).not.toMatch(/isinstance\(payload\[key\], bool\)/);
+  });
+
+  it('search validates raw primitives BEFORE the generated model can coerce them, pins the exact branch key sets, and keeps the refusal branch free of any results assessment', () => {
+    expect(body).toMatch(/SearchResponse = SearchResponse1 \| SearchResponse2/);
+    expect(body).toMatch(
+      /^_SEARCH_REQUIRED_KEYS = frozenset\(\{"submitted", "query_truncated", "duration_ms"\}\)$/m,
+    );
+    expect(body).toMatch(
+      /^def _validate_raw_search_response\(data: Any\) -> None:[\s\S]*?if not isinstance\(data, dict\) or not _SEARCH_REQUIRED_KEYS <= set\(data\):\s*\n\s*raise _schema_error\(\)\s*\n\s*submitted = _exact_bool\(data, "submitted"\)\s*\n\s*truncated = _exact_bool\(data, "query_truncated"\)\s*\n\s*_exact_duration_ms\(data\)/m,
+    );
+    expect(body).toMatch(
+      /if truncated:[\s\S]*?if submitted or set\(data\) != _SEARCH_REQUIRED_KEYS:\s*\n\s*raise _schema_error\(\)\s*\n\s*return\s*\n\s*if set\(data\) - _SEARCH_REQUIRED_KEYS - \{"results_visible"\}:\s*\n\s*raise _schema_error\(\)/,
+    );
+    expect(body).toMatch(
+      /if "results_visible" in data:\s*\n\s*_exact_bool\(data, "results_visible"\)/,
+    );
+    // Validation must run before parse_model, never after.
+    expect(body).toMatch(
+      /def _parse_session_search_response\(data: Any\) -> SearchResponse:[\s\S]*?_validate_raw_search_response\(data\)\s*\n\s*return parse_model\(GeneratedSearchResponse, data\)\.root/,
+    );
+    expect(body.match(/return _parse_session_search_response\(data\)/g)).toHaveLength(2);
+  });
+
+  it('login validates raw primitives before the generated RootModel, unwraps only its selected strict branch, keeps post_login_url absent-or-exact-string (never null), and keeps direct result attributes for sync and async callers', () => {
+    expect(body).toMatch(/SessionLoginResponse = SessionLoginResponse1 \| SessionLoginResponse2/);
+    expect(body).toMatch(
+      /^_LOGIN_REQUIRED_KEYS = frozenset\(\{"submitted", "credentials_truncated", "logged_in", "duration_ms"\}\)$/m,
+    );
+    expect(body).toMatch(
+      /^def _validate_raw_login_response\(data: Any\) -> None:[\s\S]*?if not isinstance\(data, dict\) or not _LOGIN_REQUIRED_KEYS <= set\(data\):\s*\n\s*raise _schema_error\(\)\s*\n\s*submitted = _exact_bool\(data, "submitted"\)\s*\n\s*truncated = _exact_bool\(data, "credentials_truncated"\)\s*\n\s*logged_in = _exact_bool\(data, "logged_in"\)\s*\n\s*_exact_duration_ms\(data\)/m,
+    );
+    expect(body).toMatch(
+      /if truncated:[\s\S]*?if submitted or logged_in or set\(data\) != _LOGIN_REQUIRED_KEYS:\s*\n\s*raise _schema_error\(\)\s*\n\s*return\s*\n\s*if not submitted or set\(data\) - _LOGIN_REQUIRED_KEYS - \{"post_login_url"\}:\s*\n\s*raise _schema_error\(\)/,
+    );
+    expect(body).toMatch(
+      /if "post_login_url" in data and type\(data\["post_login_url"\]\) is not str:\s*\n\s*raise _schema_error\(\)/,
+    );
+    expect(body).toMatch(
+      /def _parse_session_login_response\(data: Any\) -> SessionLoginResponse:[\s\S]*?_validate_raw_login_response\(data\)\s*\n\s*return parse_model\(GeneratedSessionLoginResponse, data\)\.root/,
+    );
+    expect(body.match(/return _parse_session_login_response\(data\)/g)).toHaveLength(2);
+    expect(body).not.toMatch(/return parse_model\(SessionLoginResponse, data\)/);
   });
 
   it('SessionsListPage envelope — 3-field cursor pagination (data: list[Session] + has_more: bool + next_cursor: str | None). Sessions are potentially unbounded per account so cursor pagination is load-bearing; drift to dropping has_more or making next_cursor non-nullable would break iterate() termination logic.', () => {

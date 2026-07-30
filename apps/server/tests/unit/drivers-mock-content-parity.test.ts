@@ -86,6 +86,13 @@ describe('W431.C apps/server/src/drivers/mock.ts content parity', () => {
     );
   });
 
+  it('login mock reports the complete submitted branch and never echoes credentials', () => {
+    expect(body).toMatch(
+      /async login\(sessionId: DriverSessionId, _input: LoginInput\): Promise<LoginResult> \{[\s\S]*?return \{\s*submitted: true,\s*credentialsTruncated: false,\s*loggedIn: true,\s*postLoginUrl: 'https:\/\/example\.com\/account',\s*durationMs: Date\.now\(\) - start,\s*\};/,
+    );
+    expect(body).not.toMatch(/return \{[^}]*password:/);
+  });
+
   it('InternalSession shape pinned: driverSessionId + archetype + V-169 purpose + behavioralProfile (both captured for test inspection; mock doesnt act on them) + currentUrl/Title (nullable) + destroyed + opSeq', () => {
     expect(body).toMatch(
       /interface InternalSession \{\s*\n?\s*driverSessionId: DriverSessionId;\s*\n?\s*archetype: string;\s*\n?\s*\/\*\* V-169 — captured for test inspection; mock doesn't act on it\. \*\/\s*\n?\s*purpose: 'production_customer' \| 'cumulative_rig_validation' \| 'test_domain_probe';\s*\n?\s*\/\*\* Behavioural persona — captured for test inspection; mock doesn't act on it\. \*\/\s*\n?\s*behavioralProfile: BehavioralProfile \| undefined;\s*\n?\s*currentUrl: string \| null;\s*\n?\s*currentTitle: string \| null;\s*\n?\s*destroyed: boolean;/,
@@ -106,7 +113,7 @@ describe('W431.C apps/server/src/drivers/mock.ts content parity', () => {
 
   it('MockDriver constructor defaults: navigateLatencyMs 120 + interactLatencyMs 40 + fastForward false; private sessions Map + nextId starts at 1', () => {
     expect(body).toMatch(
-      /export class MockDriver implements Driver \{\s*\n?\s*private readonly sessions = new Map<DriverSessionId, InternalSession>\(\);\s*\n?\s*private nextId = 1;/,
+      /export class MockDriver implements Driver \{\s*\n?\s*readonly searchCapability = 'simulation' as const;\s*\n?\s*readonly loginCapability = 'simulation' as const;\s*\n?\s*private readonly sessions = new Map<DriverSessionId, InternalSession>\(\);\s*\n?\s*private nextId = 1;/,
     );
     expect(body).toMatch(/this\.navigateLatencyMs = opts\.navigateLatencyMs \?\? 120;/);
     expect(body).toMatch(/this\.interactLatencyMs = opts\.interactLatencyMs \?\? 40;/);
