@@ -81,7 +81,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <td><code>no-store, private</code></td>
         </tr>
         <tr>
-          <td><code>/v1/status</code> (public)</td>
+          <td>
+            <code>/v1/status</code>, <code>/v1/status/incidents</code>,
+            <code>/v1/status/incidents/&#123;id&#125;</code>, and
+            <code>/v1/status/sla</code> (public JSON)
+          </td>
           <td><code>public, max-age=30</code></td>
         </tr>
         <tr>
@@ -92,10 +96,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </table>
     <p>
       Caller-private <code>/v1/*</code> responses default to
-      <code>no-store, private</code>. Authenticated event streams add
-      <code>no-cache</code> and <code>no-transform</code> while retaining
-      <code>no-store, private</code>; they also reflect only an allowed
-      <code>Origin</code> and send <code>Vary: Origin</code>. This is
+      <code>no-store, private</code>. The authenticated transcript and notification
+      streams listed above add <code>no-cache</code> and <code>no-transform</code>
+      while retaining <code>no-store, private</code>; they also reflect only an
+      allowed <code>Origin</code> and send <code>Vary: Origin</code>. This is
       defense-in-depth so shared / proxy caches can't hold onto private
       payloads and browser back-forward cache can't serve stale state
       after logout. Public status reads opt into the public policies

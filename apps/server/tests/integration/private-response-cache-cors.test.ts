@@ -5,7 +5,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
-const ALLOWED_ORIGIN = 'https://app.driftstack.dev';
+// Deliberately absent from cors-allow.ts's built-in product origins. This makes
+// buildApp's configured CORS authority → raw-SSE route handoff load-bearing:
+// dropping that handoff must turn both allowed-origin assertions red.
+const ALLOWED_ORIGIN = 'https://configured-console.example.test';
 const DISALLOWED_ORIGIN = 'https://cross-account.invalid';
 const PRIVATE_SSE_CACHE = 'no-cache, no-store, private, no-transform';
 

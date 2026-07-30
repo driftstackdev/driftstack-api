@@ -72,8 +72,18 @@ describe('W244.D api-security-headers doc parity', () => {
     expect(doc).toMatch(/\/v1\/\*<\/code> \(caller-private default\)/);
     expect(doc.match(/no-cache, no-store, private, no-transform/g)).toHaveLength(2);
     expect(doc).toMatch(/\/v1\/status\/subscribe\*<\/code> \(mailbox mutation\)/);
-    expect(doc).toMatch(/\/v1\/status<\/code> \(public\)/);
+    for (const publicPath of [
+      '/v1/status',
+      '/v1/status/incidents',
+      '/v1/status/incidents/&#123;id&#125;',
+      '/v1/status/sla',
+    ]) {
+      expect(doc).toContain(`<code>${publicPath}</code>`);
+    }
+    expect(doc).toMatch(/\/v1\/status\/sla<\/code> \(public JSON\)/);
     expect(doc).toMatch(/\/v1\/status\/stream<\/code> \(SSE\)/);
+    expect(doc).toMatch(/authenticated transcript and notification\s*\n?\s*streams listed above/);
+    expect(doc).not.toMatch(/Authenticated event streams add/);
     expect(doc).toMatch(/<code>Vary: Origin<\/code>/);
   });
 

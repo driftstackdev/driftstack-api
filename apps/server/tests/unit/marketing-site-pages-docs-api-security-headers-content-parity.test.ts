@@ -60,7 +60,7 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
     );
   });
 
-  it('Cache-Control posture: all caller-private /v1 responses default private no-store; authenticated transcript/notification SSE retain private no-store plus no-cache/no-transform; status mailbox mutations are private; public status reads/stream retain explicit policies', () => {
+  it('Cache-Control posture: all caller-private /v1 responses default private no-store; authenticated transcript/notification SSE retain private no-store plus no-cache/no-transform; status mailbox mutations are private; every public status JSON read and stream retain explicit policies', () => {
     expect(body).toMatch(
       /<td><code>\/v1\/\*<\/code> \(caller-private default\)<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
     );
@@ -74,7 +74,7 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
       /<td><code>\/v1\/status\/subscribe\*<\/code> \(mailbox mutation\)<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>\/v1\/status<\/code> \(public\)<\/td>\s*\n?\s*<td><code>public, max-age=30<\/code><\/td>/,
+      /<td>\s*<code>\/v1\/status<\/code>, <code>\/v1\/status\/incidents<\/code>,\s*<code>\/v1\/status\/incidents\/&#123;id&#125;<\/code>, and\s*<code>\/v1\/status\/sla<\/code> \(public JSON\)\s*<\/td>\s*<td><code>public, max-age=30<\/code><\/td>/,
     );
     expect(body).toMatch(
       /<td><code>\/v1\/status\/stream<\/code> \(SSE\)<\/td>\s*\n?\s*<td><code>no-cache, no-transform<\/code><\/td>/,
@@ -88,7 +88,11 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
   it('Defense-in-depth rationale pins authenticated SSE Origin variance and prevents public-status cache policy from reaching mailbox workflow responses', () => {
     expect(body).toMatch(/Caller-private <code>\/v1\/\*<\/code> responses default to/);
     expect(body).toMatch(
-      /reflect only an allowed\s*\n?\s*<code>Origin<\/code> and send <code>Vary: Origin<\/code>/,
+      /The authenticated transcript and notification\s*\n?\s*streams listed above add <code>no-cache<\/code> and <code>no-transform<\/code>/,
+    );
+    expect(body).not.toMatch(/Authenticated event streams add/);
+    expect(body).toMatch(
+      /reflect only an\s*\n?\s*allowed <code>Origin<\/code> and send <code>Vary: Origin<\/code>/,
     );
     expect(body).toMatch(
       /defense-in-depth so shared \/ proxy caches can't hold onto private\s*\n?\s*payloads and browser back-forward cache can't serve stale state\s*\n?\s*after logout\./,
