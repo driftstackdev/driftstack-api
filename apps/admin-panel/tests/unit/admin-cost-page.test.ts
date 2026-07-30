@@ -11,7 +11,7 @@
 // "driftstack:admin_token", so the page always showed "No admin token found";
 // the cross-page token-key guard now prevents that drift.)
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
@@ -19,6 +19,29 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'cost', 'index.html');
+const PAGE_SOURCE_DIR = resolve(HERE, '..', '..', 'src');
+
+/**
+ * These cases execute the BUILT page out of the gitignored `dist/`, so they are
+ * only as truthful as the last `astro build`. A stale artifact used to surface
+ * as a dozen unrelated assertion failures against markup the source no longer
+ * produces — which invites the worst possible repair: repinning the assertions
+ * onto stale HTML and locking in expectations the product does not have.
+ *
+ * So establish freshness FIRST and fail once, loudly, with the exact command.
+ */
+function newestSourceMtimeMs(dir: string): number {
+  let newest = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) {
+      newest = Math.max(newest, newestSourceMtimeMs(full));
+    } else {
+      newest = Math.max(newest, statSync(full).mtimeMs);
+    }
+  }
+  return newest;
+}
 const PAGE_URL = 'https://admin.driftstack.dev/cost/';
 
 interface MockFetchCall {
@@ -191,6 +214,23 @@ afterEach(() => {
 });
 
 describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
+  it('BUILD PRECONDITION: the dist artifact under test is newer than admin-panel source', () => {
+    expect(
+      existsSync(BUILT_PAGE),
+      `Missing ${BUILT_PAGE}. Build the admin panel first:\n` +
+        `  PUBLIC_API_BASE_URL=https://api.driftstack.dev npm run build --workspace @driftstack/admin-panel`,
+    ).toBe(true);
+    const builtMs = statSync(BUILT_PAGE).mtimeMs;
+    const sourceMs = newestSourceMtimeMs(PAGE_SOURCE_DIR);
+    expect(
+      builtMs >= sourceMs,
+      `Stale dist artifact: ${BUILT_PAGE} was built ${new Date(builtMs).toISOString()} but ` +
+        `admin-panel source changed ${new Date(sourceMs).toISOString()}. Every assertion below ` +
+        `runs against markup the source no longer produces — REBUILD, do not repin:\n` +
+        `  PUBLIC_API_BASE_URL=https://api.driftstack.dev npm run build --workspace @driftstack/admin-panel`,
+    ).toBe(true);
+  });
+
   it('keeps the deadline armed while response JSON is pending, then aborts the stalled body', async () => {
     let fireDeadline = () => undefined;
     let clearCalls = 0;
