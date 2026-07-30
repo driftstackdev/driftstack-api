@@ -458,8 +458,9 @@ selector, a challenge page that removes the password field can be assessed as
 logged in, so treat `logged_in` as an assessment rather than an authentication
 proof. `timeout_seconds` (1–120, default 10) caps the post-submit success wait.
 `post_login_url` lets you drive a challenge/pause flow when login didn't
-complete. Recipe-based login for a known site is the separate `execute_recipe`
-surface, not this intent.
+complete. Recipes are capture-only today — `/v1/recipes` supports create, list,
+read and delete, and the API exposes no recipe-execution surface — so this
+intent is the way to drive a login.
 
 The response is a strict two-branch result. Complete credentials are submitted
 and assessed only in the `submitted: true` branch:

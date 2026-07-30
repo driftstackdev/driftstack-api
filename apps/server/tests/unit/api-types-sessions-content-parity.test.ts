@@ -272,6 +272,13 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
+  it('CRITICAL the login schema comment must not name a recipe-execution surface. `execute_recipe` is not implemented anywhere; pointing at it from a shipped contract file is a fake-availability claim.', () => {
+    expect(body).toMatch(
+      /Recipes are capture-only today — there is no\s*\n\s*\/\/ recipe-execution surface/,
+    );
+    expect(body).not.toMatch(/execute_recipe/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

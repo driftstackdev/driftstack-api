@@ -118,6 +118,14 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
+  it('CRITICAL the login section must not point customers at a recipe-execution surface. `execute_recipe` exists NOWHERE in the codebase — `/v1/recipes` is create/list/read/delete only (apps/docs/src/pages/api/index.astro: "it does not expose recipe execution"), so naming it as "the separate execute_recipe surface" advertised availability the product does not have. Unguarded prose drifted into this page once; this pins the corrected truth and bans the phantom surface.', () => {
+    const p = read(PAGE);
+    expect(p).toMatch(
+      /Recipes are capture-only today — `\/v1\/recipes` supports create, list,\s*\n?read and delete, and the API exposes no recipe-execution surface/,
+    );
+    expect(p).not.toMatch(/execute_recipe/);
+  });
+
   it('documents search safe-refusal truth, the query bound and the real-capability 503 posture', () => {
     const p = read(PAGE);
     expect(p).toMatch(/`query` is required and capped at 10,000/);

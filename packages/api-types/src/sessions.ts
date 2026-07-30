@@ -472,8 +472,8 @@ export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 // Login (heuristic credential login) — harness intent, A3 (bus W244/W245).
 // POST /v1/sessions/:id/login. The password is SENSITIVE: it flows to the
 // harness send-keys path but is never logged (the service records only the
-// operation label on failure). Recipe-based login is the separate
-// execute_recipe surface, not this intent.
+// operation label on failure). Recipes are capture-only today — there is no
+// recipe-execution surface — so this intent is the way to drive a login.
 // ───────────────────────────────────────────────────────────────────────────
 
 // Named SessionLogin* (not Login*) — the auth module already owns
