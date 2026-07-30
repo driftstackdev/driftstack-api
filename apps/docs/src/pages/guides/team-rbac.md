@@ -128,6 +128,7 @@ Endpoints that honor the header:
 | ----------------- | ---------------------------------------------- |
 | Sessions          | GET / POST / DELETE + 5 action endpoints       |
 | Profiles          | GET / POST / PATCH / DELETE                    |
+| Profile taxonomy  | GET (member/admin), PUT (admin only)           |
 | API keys          | GET / POST / DELETE + `:id/rotate`             |
 | Webhooks          | GET / POST / DELETE + `:id/deliveries`, replay |
 | Audit log         | GET + `/export`                                |
@@ -138,18 +139,26 @@ Endpoints that do NOT honor the header (operate on the caller's
 own account regardless):
 
 - `/v1/team/*` — managing your own team is always per-caller.
-- `/v1/account/me` — always returns the caller's own profile + team
-  list.
+- Exact `/v1/account/me` — always returns the caller's own profile +
+  team list. Its nested `/v1/account/me/organization` profile
+  taxonomy is listed above and does honor the header.
 - `/v1/auth/*` — authentication is per-caller.
 
 ## Step 5 — Audit the team's actions (owner)
 
-Every action a member takes on the owner's resources writes an
-entry to the OWNER's audit log keyed by:
+When an endpoint emits an audit entry for a member's action on the
+owner's resources, that entry is written to the OWNER's audit log
+with:
 
 - `account_id`: the owner.
-- `actor_account_id`: the member who took the action.
-- `actor_key_id`: the member's API key id.
+- `actor_account_id`: the member when that endpoint propagates team
+  actor context.
+- `actor_key_id`: the member's API key id when that context is
+  propagated.
+
+Not every endpoint currently emits an audit entry or propagates team
+actor context. Treat these actor fields as endpoint-specific
+provenance, not as a complete record of every team action.
 
 So the owner sees, in their audit log, "Member alice@example.com
 (`acc_…`) created session `ses_…` on this account at 2026-05-08

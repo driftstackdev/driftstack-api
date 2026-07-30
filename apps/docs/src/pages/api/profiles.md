@@ -39,6 +39,23 @@ mirror `PROFILES_PER_TIER` in `@driftstack/api-types`:
 The cap on enterprise tier is negotiated; the API returns
 `profile_cap: null` on `/v1/account/me` for enterprise customers.
 
+## Account folder and tag taxonomy
+
+The GUI's empty folders (including optional icons) and reusable tags
+are stored as one account-level taxonomy at
+`GET /v1/account/me/organization` and
+`PUT /v1/account/me/organization`. The read requires
+`read:profiles`; the replacement write requires `write:profiles`.
+Broad `read` / `write` and `account_owner` credentials satisfy the
+corresponding granular gate.
+
+These nested organization routes honor `X-Driftstack-Account`.
+When a team workspace is selected, both `member` and `admin` can
+read the owner's taxonomy, but only `admin` can replace it. The
+server resolves that effective owner before body validation and
+stores the taxonomy under the same owner as the profile collection.
+With no header, the calling account remains the owner.
+
 ## Resource shape
 
 ```json

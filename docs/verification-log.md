@@ -29547,3 +29547,52 @@ top-level problem producers to this centralized boundary.
 No error-handler, route, response schema, OpenAPI, SDK, shared build/deploy,
 native, harness/Fleet, environment, customer, secret, package or foreign pnpm
 surface changed.
+
+---
+
+## V-707 — Profile taxonomy follows the selected effective account
+
+**Date:** 2026-07-30
+
+The GUI sends `X-Driftstack-Account` while organizing a selected team
+workspace, but both organization routes previously ignored it and addressed
+the authenticated actor directly. A member viewing owner B therefore received
+actor A's folders and tags as if they belonged to B; saving that B-looking
+state overwrote A while B remained unchanged. The write also had no team-role
+check.
+
+The nested organization resource now shares the profiles authorization
+boundary. GET requires `read:profiles`, resolves the effective account, and
+allows both team roles to read that owner's taxonomy. PUT requires
+`write:profiles`, resolves membership and requires team `admin` before body
+validation, then writes only the effective owner. Broad read/write and
+`account_owner` credentials retain the canonical granular-scope hierarchy;
+headerless and explicit-self requests retain personal-account behavior. Exact
+`/v1/account/me` identity and account-edit operations remain self-only.
+
+The integration proof seeds byte-distinct actor and owner taxonomies. It pins
+member/admin owner reads, admin owner replacement with actor bytes unchanged,
+malformed/nonmember/member rejection before organization-repo access, exact
+granular/broad scope acceptance and rejection, and headerless/explicit-self
+compatibility. Route and documentation guards make resolver ordering, role
+ordering, exact-owner repository calls, the nested `/me` exception, and all
+three public explanations load-bearing.
+
+The public OpenAPI operations and frozen Python OpenAPI snapshot now describe
+the same selected-owner, granular-scope, and team-role contract as the route.
+Two independent generation passes produced normalized OpenAPI SHA-256
+`a00a2bc19d798ffe3caa981f10899eec18465e2591ad1192e09b709ca5248e40`
+and normalized generated-model SHA-256
+`e4418e1c100100078f9a39c34a8a24f00e67ca2a65df28e6867c14b22b39b00c`.
+The generated model has no semantic change beyond its provenance timestamp.
+The team guide also now states the existing audit limitation honestly: emitted
+entries are owner-scoped, but actor attribution exists only where a route
+propagates the effective-account context.
+
+Expanded verification passes 20 files and 356/356 tests, including route,
+scope hierarchy, authorization-inventory, OpenAPI, frozen-spec, documentation,
+and cross-source invariants. Strict server source/test TypeScript, docs Astro
+checking (11 files, zero diagnostics), targeted lint/format and diff checks are
+green. No profile service, schema, SDK runtime/resource/model semantics,
+proxy/recipe/transfer surface, shared build/deploy, native, harness/Fleet,
+environment, customer, secret, package or foreign pnpm action was performed.

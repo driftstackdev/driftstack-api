@@ -39,11 +39,33 @@ describe('W770 docs /api/account content parity', () => {
     expect(AccountTierSchema.options).toHaveLength(8);
   });
 
-  it("CRITICAL /me-NEVER-honors-X-Driftstack-Account framing pinned. The 'it never honours the team-RBAC X-Driftstack-Account header — /me always operates on the caller\\'s own account, even when the caller has admin role on a team owner\\'s account' wording matches W766 /api/team non-honoring endpoint list.", () => {
+  it('CRITICAL exact identity /me stays self-only while nested profile organization explicitly honors the effective account.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /it never honours the team-RBAC\s*\n?`X-Driftstack-Account` header — `\/me` always operates on the\s*\n?caller's own account, even when the caller has admin role on a\s*\n?team owner's account\./,
+      /The exact `\/v1\/account\/me` identity resource is the calling\s*\n?account's self-edit surface\. It is bearer-authenticated and never\s*\n?honours the team-RBAC `X-Driftstack-Account` header/,
+    );
+    expect(p).toMatch(
+      /The nested\s*\n?`\/v1\/account\/me\/organization` profile-taxonomy resource is an\s*\n?explicit exception: it honours the selected effective account so\s*\n?folders and tags stay with the profiles they organize\./,
+    );
+  });
+
+  it('CRITICAL organization scopes, team roles, authorization order and exact-owner persistence are pinned.', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(
+      /`GET \/v1\/account\/me\/organization` reads the effective account's\s*\n?saved folder\/icon and tag taxonomy\. It requires `read:profiles`/,
+    );
+    expect(p).toMatch(/Both team `member` and `admin` roles may read/);
+    expect(p).toMatch(
+      /`PUT \/v1\/account\/me\/organization` replaces that complete taxonomy\s*\n?and requires `write:profiles`/,
+    );
+    expect(p).toMatch(/In team context, only `admin` may\s*\n?write\./);
+    expect(p).toMatch(
+      /The server resolves membership and role before validating\s*\n?or persisting the body, and writes only the account named by\s*\n?`X-Driftstack-Account`\./,
+    );
+    expect(p).toMatch(
+      /Without the header, both methods retain\s*\n?their original calling-account behavior\./,
     );
   });
 
@@ -224,16 +246,15 @@ describe('W770 docs /api/account content parity', () => {
     expect(p).not.toMatch(/subscription-cancellation|support-ack/);
   });
 
-  it("CRITICAL why-/me-ignores-team-RBAC framing pinned. The 'editing a team owner\\'s display name, slug, region, or avatar via a member\\'s bearer token would be surprising' wording is the canonical isolation rationale + the future-route-name signal '/v1/team/owners/:id/...'.", () => {
+  it('CRITICAL why identity-/me-ignores-team-RBAC framing stays narrow and names the nested taxonomy exception.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /editing a team owner's display name, slug, region, or\s*\n?avatar via a member's bearer token would be surprising\./,
+      /editing a team owner's display\s*\n?name, slug, region, or avatar via a member's bearer token would be\s*\n?surprising\./,
     );
     expect(p).toMatch(
-      /Account\s*\n?editing therefore stays bound to the authenticated account; the\s*\n?team act-as header never expands `\/me` mutation authority\./,
+      /Those account edits stay bound to the authenticated\s*\n?account\. This does not cover the nested profile taxonomy described\s*\n?above, whose owner must match the selected profile workspace\./,
     );
-    expect(p).not.toMatch(/needed in the future|\/v1\/team\/owners\/:id/);
   });
 
   it('CRITICAL 3-language SDK examples pinned — listWebSessions / list_web_sessions / ListWebSessions(ctx).', () => {

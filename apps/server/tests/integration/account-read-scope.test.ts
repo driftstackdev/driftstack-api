@@ -22,7 +22,6 @@ const OAUTH = {
 
 const ACCOUNT_READ_PATHS = [
   '/v1/account/me',
-  '/v1/account/me/organization',
   '/v1/account/mfa',
   '/v1/account/me/oauth-links',
   '/v1/account/web-sessions',
@@ -75,6 +74,82 @@ describe('broad read floor on sensitive account metadata', () => {
         const res = await get(path);
         expect(res.statusCode, `${path}: ${res.body}`).toBe(200);
       }
+    },
+  );
+});
+
+describe('profile-scoped account organization taxonomy', () => {
+  it.each([
+    ['zero-scope', []],
+    ['write-only', ['write']],
+    ['session-granular', ['read:sessions']],
+    ['GUI-control-only', ['gui_control']],
+  ] as const)('blocks a %s key from the organization read', async (_label, scopes) => {
+    fx = await build([...scopes]);
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/organization',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toBe(
+      'This action requires the "read:profiles" scope.',
+    );
+  });
+
+  it.each(['read:profiles', 'read', 'account_owner'] as const)(
+    'allows a %s key through the organization read',
+    async (scope) => {
+      fx = await build([scope]);
+
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: '/v1/account/me/organization',
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+      });
+      expect(res.statusCode, res.body).toBe(200);
+    },
+  );
+
+  it.each([
+    ['zero-scope', []],
+    ['read-only', ['read']],
+    ['profile-read-only', ['read:profiles']],
+    ['unrelated-write', ['write:sessions']],
+  ] as const)('blocks a %s key from the organization write', async (_label, scopes) => {
+    fx = await build([...scopes]);
+
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/me/organization',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+      },
+      payload: { folders: [], tags: [] },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json<{ detail: string }>().detail).toBe(
+      'This action requires the "write:profiles" scope.',
+    );
+  });
+
+  it.each(['write:profiles', 'write', 'account_owner'] as const)(
+    'allows a %s key through the organization write',
+    async (scope) => {
+      fx = await build([scope]);
+
+      const res = await fx.app.inject({
+        method: 'PUT',
+        url: '/v1/account/me/organization',
+        headers: {
+          authorization: `Bearer ${fx.plaintext}`,
+          'content-type': 'application/json',
+        },
+        payload: { folders: [{ name: 'Scoped' }], tags: ['profile'] },
+      });
+      expect(res.statusCode, res.body).toBe(200);
     },
   );
 });

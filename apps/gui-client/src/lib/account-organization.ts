@@ -90,10 +90,12 @@ export async function fetchOrganization(
   };
 }
 
-/** PUT the full taxonomy (account_owner-scoped server-side). Best-effort from
- *  the caller's perspective — a failure leaves the local cache as the source.
- *  Pass the active workspace (owner account id) or null for personal scope so
- *  the write lands on the SAME account the profiles do. */
+/** PUT the full taxonomy (`write:profiles` server-side; broad `write` and
+ *  `account_owner` also satisfy it). A selected team workspace additionally
+ *  requires team admin. Best-effort from the caller's perspective — a failure
+ *  leaves the local cache as the source. Pass the active workspace (owner
+ *  account id) or null for personal scope so the write lands on the SAME
+ *  account the profiles do. */
 async function saveOrganizationNow(
   baseUrl: string,
   apiKey: string,

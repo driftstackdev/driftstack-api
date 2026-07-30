@@ -148,12 +148,13 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     );
   });
 
-  it('CRITICAL 7-row header-honoring endpoint catalog pinned. Sessions/Profiles/API keys/Webhooks/Audit log/Email preferences/Usage. Matches W766 /api/team header-honoring inventory.', () => {
+  it('CRITICAL 8-row header-honoring endpoint catalog includes nested profile taxonomy with member-read/admin-write roles.', () => {
     const p = read(PAGE);
 
     for (const resource of [
       'Sessions',
       'Profiles',
+      'Profile taxonomy',
       'API keys',
       'Webhooks',
       'Audit log',
@@ -162,24 +163,36 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     ]) {
       expect(p, `header-honoring row ${resource}`).toMatch(new RegExp(`\\| ${resource}\\s+\\|`));
     }
+    expect(p).toMatch(/\| Profile taxonomy\s+\| GET \(member\/admin\), PUT \(admin only\)\s+\|/);
   });
 
-  it('CRITICAL 3-endpoint NON-honoring list pinned — /v1/team/* + /v1/account/me + /v1/auth/*. Matches W766 /api/team NON-honoring set.', () => {
+  it('CRITICAL non-honoring list narrows self-only identity /me and names the nested taxonomy exception.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`\/v1\/team\/\*` — managing your own team is always per-caller\./);
     expect(p).toMatch(
-      /`\/v1\/account\/me` — always returns the caller's own profile \+ team\s*\n?\s+list\./,
+      /Exact `\/v1\/account\/me` — always returns the caller's own profile \+\s*\n?\s+team list\. Its nested `\/v1\/account\/me\/organization` profile\s*\n?\s+taxonomy is listed above and does honor the header\./,
     );
     expect(p).toMatch(/`\/v1\/auth\/\*` — authentication is per-caller\./);
   });
 
-  it('CRITICAL audit-log shows-who-did-what framing pinned. The \'So the owner sees, in their audit log, "Member alice@example.com (acc_…) created session ses_… on this account at 2026-05-08 14:02 UTC"\' wording matches W768 /api/audit-log actor_account_id team-RBAC framing.', () => {
+  it('CRITICAL emitted team audit entries are owner-scoped and actor-attributed without claiming every endpoint emits one.', () => {
     const p = read(PAGE);
 
+    expect(p).toMatch(
+      /When an endpoint emits an audit entry for a member's action on the\s*\n?owner's resources, that entry is written to the OWNER's audit log\s*\n?with:/,
+    );
+    expect(p).not.toMatch(/Every action a member takes/);
     expect(p).toMatch(/`account_id`: the owner\./);
-    expect(p).toMatch(/`actor_account_id`: the member who took the action\./);
-    expect(p).toMatch(/`actor_key_id`: the member's API key id\./);
+    expect(p).toMatch(
+      /`actor_account_id`: the member when that endpoint propagates team\s*\n?\s+actor context\./,
+    );
+    expect(p).toMatch(
+      /`actor_key_id`: the member's API key id when that context is\s*\n?\s+propagated\./,
+    );
+    expect(p).toMatch(
+      /Not every endpoint currently emits an audit entry or propagates team\s*\n?actor context\. Treat these actor fields as endpoint-specific\s*\n?provenance, not as a complete record of every team action\./,
+    );
     expect(p).toMatch(
       /So the owner sees, in their audit log, "Member alice@example\.com\s*\n?\(`acc_…`\) created session `ses_…` on this account at 2026-05-08\s*\n?14:02 UTC"\./,
     );

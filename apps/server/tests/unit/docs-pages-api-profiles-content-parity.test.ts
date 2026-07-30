@@ -71,6 +71,25 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
+  it('CRITICAL account taxonomy uses profile scopes, effective-owner storage, member reads and admin-only team writes.', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(
+      /`GET \/v1\/account\/me\/organization` and\s*\n?`PUT \/v1\/account\/me\/organization`/,
+    );
+    expect(p).toMatch(
+      /The read requires\s*\n?`read:profiles`; the replacement write requires `write:profiles`\./,
+    );
+    expect(p).toMatch(/These nested organization routes honor `X-Driftstack-Account`\./);
+    expect(p).toMatch(
+      /both `member` and `admin` can\s*\n?read the owner's taxonomy, but only `admin` can replace it\./,
+    );
+    expect(p).toMatch(
+      /The\s*\n?server resolves that effective owner before body validation and\s*\n?stores the taxonomy under the same owner as the profile collection\./,
+    );
+    expect(p).toMatch(/With no header, the calling account remains the owner\./);
+  });
+
   it('CRITICAL 429 Tier limit error response body extension pinned — {limit, current, resource: "profile", tier}. Drift would let SDK consumers fail to surface the 4-field framing.', () => {
     const p = read(PAGE);
 

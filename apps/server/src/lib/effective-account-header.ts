@@ -1,16 +1,20 @@
 // V-326c — shared parser for the `X-Driftstack-Account` team-RBAC
 // header.
 //
-// 7 routes consume this header for team-RBAC effective-account
-// resolution:
+// 10 route modules currently contain 32 authorized reads of this header for
+// team-RBAC effective-account resolution (the AST invariant owns the exact
+// call-site count):
 //
-//   - apps/server/src/routes/admin.ts
-//   - apps/server/src/routes/webhooks.ts
-//   - apps/server/src/routes/profiles.ts
-//   - apps/server/src/routes/profile-snapshots.ts
 //   - apps/server/src/routes/account-audit.ts
-//   - apps/server/src/routes/sessions.ts
+//   - apps/server/src/routes/account-me.ts
+//   - apps/server/src/routes/admin.ts
+//   - apps/server/src/routes/agent-sessions.ts
+//   - apps/server/src/routes/billing.ts
 //   - apps/server/src/routes/email-preferences.ts
+//   - apps/server/src/routes/profile-snapshots.ts
+//   - apps/server/src/routes/profiles.ts
+//   - apps/server/src/routes/sessions.ts
+//   - apps/server/src/routes/webhooks.ts
 //
 // Previously each route hand-rolled an identical `readEffectiveAccountHeader`
 // helper. Extracted to one place so:

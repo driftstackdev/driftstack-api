@@ -6,11 +6,14 @@ description: Read + edit the calling account — name, timezone, slug , region p
 
 # Account
 
-`/v1/account/me` is the calling account's self-edit surface. The
-endpoint is bearer-authenticated; it never honours the team-RBAC
-`X-Driftstack-Account` header — `/me` always operates on the
-caller's own account, even when the caller has admin role on a
-team owner's account.
+The exact `/v1/account/me` identity resource is the calling
+account's self-edit surface. It is bearer-authenticated and never
+honours the team-RBAC `X-Driftstack-Account` header, even when the
+caller has admin role on a team owner's account. This self-only
+rule also covers its avatar mutations. The nested
+`/v1/account/me/organization` profile-taxonomy resource is an
+explicit exception: it honours the selected effective account so
+folders and tags stay with the profiles they organize.
 
 ## Get the calling account
 
@@ -177,11 +180,28 @@ login-time MFA exchange + step-up are on `client.auth.*` —
 `mfaChallenge` + `mfaStepUp` . Full walkthrough
 at [`/api/auth#mfa-challenge`](/api/auth/#mfa-challenge).
 
-## Why `/me` ignores team-RBAC
+## Profile organization taxonomy
+
+`GET /v1/account/me/organization` reads the effective account's
+saved folder/icon and tag taxonomy. It requires `read:profiles`;
+broad `read` and `account_owner` credentials satisfy that granular
+gate. Both team `member` and `admin` roles may read the selected
+owner's taxonomy.
+
+`PUT /v1/account/me/organization` replaces that complete taxonomy
+and requires `write:profiles`; broad `write` and `account_owner`
+credentials satisfy the gate. In team context, only `admin` may
+write. The server resolves membership and role before validating
+or persisting the body, and writes only the account named by
+`X-Driftstack-Account`. Without the header, both methods retain
+their original calling-account behavior.
+
+## Why identity `/me` ignores team-RBAC
 
 The `X-Driftstack-Account` header routes most `/v1/*`
-requests to a team owner's account. `/v1/account/me` is the
-exception: editing a team owner's display name, slug, region, or
-avatar via a member's bearer token would be surprising. Account
-editing therefore stays bound to the authenticated account; the
-team act-as header never expands `/me` mutation authority.
+requests to a team owner's account. The exact identity/edit route
+`/v1/account/me` is an exception: editing a team owner's display
+name, slug, region, or avatar via a member's bearer token would be
+surprising. Those account edits stay bound to the authenticated
+account. This does not cover the nested profile taxonomy described
+above, whose owner must match the selected profile workspace.

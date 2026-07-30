@@ -25,6 +25,8 @@ interface HeaderRead {
   file: string;
   line: number;
   authorized: boolean;
+  routeMethod: string | null;
+  routePath: string | null;
 }
 
 interface RouteScan {
@@ -83,6 +85,25 @@ function isImportBindingIdentifier(node: ts.Identifier): boolean {
   return ts.isImportSpecifier(node.parent) || ts.isNamespaceImport(node.parent);
 }
 
+function enclosingRoute(node: ts.Node): { method: string; path: string } | null {
+  for (let current = node.parent; current !== undefined; current = current.parent) {
+    if (
+      ts.isCallExpression(current) &&
+      ts.isPropertyAccessExpression(current.expression) &&
+      ts.isIdentifier(current.expression.expression) &&
+      current.expression.expression.text === 'app' &&
+      current.arguments[0] !== undefined &&
+      ts.isStringLiteral(current.arguments[0])
+    ) {
+      return {
+        method: current.expression.name.text.toUpperCase(),
+        path: current.arguments[0].text,
+      };
+    }
+  }
+  return null;
+}
+
 function scanRoute(file: string, source: string): RouteScan {
   const sourceFile = ts.createSourceFile(
     file,
@@ -137,8 +158,15 @@ function scanRoute(file: string, source: string): RouteScan {
         ts.isCallExpression(parent) &&
         isImportedCall(parent, resolvers, 'resolveEffectiveAccount') &&
         parent.arguments[1] === node;
+      const route = enclosingRoute(node);
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-      reads.push({ file, line: line + 1, authorized });
+      reads.push({
+        file,
+        line: line + 1,
+        authorized,
+        routeMethod: route?.method ?? null,
+        routePath: route?.path ?? null,
+      });
     }
 
     ts.forEachChild(node, visit);
@@ -168,12 +196,19 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
 
   it('discovers the complete current acting-as reader surface', () => {
     // Review tripwire, not the security assertion — the invariant below is what
-    // enforces authorization. Refreshed after confirming every one of the 30
+    // enforces authorization. Refreshed after confirming every one of the 32
     // reads is authorized (unvalidatedReads() is empty) and that the reader
-    // surface is still exactly these 9 route files. The 31st read disappeared
-    // through consolidation, not by an unsafe read escaping the resolver.
-    expect(reads).toHaveLength(30);
-    expect(new Set(reads.map((read) => read.file)).size).toBe(9);
+    // surface is exactly these 10 route files. The two new reads are the
+    // profile-taxonomy GET/PUT pair, both resolved before repository access.
+    expect(reads).toHaveLength(32);
+    expect(new Set(reads.map((read) => read.file)).size).toBe(10);
+
+    expect(
+      reads
+        .filter((read) => read.file === 'account-me.ts')
+        .map((read) => `${read.routeMethod} ${read.routePath}`)
+        .sort(),
+    ).toEqual(['GET /v1/account/me/organization', 'PUT /v1/account/me/organization']);
   });
 
   it('every header-parser call is the membership resolver acting-account argument', () => {
@@ -186,6 +221,25 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
 
   it('no route contains a raw X-Driftstack-Account header literal', () => {
     expect(scans.flatMap((scan) => scan.rawHeaderLiterals)).toEqual([]);
+  });
+
+  it('detects either organization method bypassing the membership resolver', () => {
+    const source = readFileSync(resolve(ROUTES_DIR, 'account-me.ts'), 'utf8');
+    const needle = 'resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request))';
+    expect(source.split(needle)).toHaveLength(3);
+
+    for (const bypassIndex of [0, 1]) {
+      let occurrence = -1;
+      const mutated = source.replaceAll(needle, (match) => {
+        occurrence += 1;
+        return occurrence === bypassIndex ? 'readEffectiveAccountHeader(request)' : match;
+      });
+      const scan = scanRoute('account-me.ts', mutated);
+      expect(
+        unvalidatedReads([scan]),
+        `organization resolver bypass ${bypassIndex.toString()} must be rejected`,
+      ).toHaveLength(1);
+    }
   });
 
   it('detects an unsafe parser imported under an alias', () => {

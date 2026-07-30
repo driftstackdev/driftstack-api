@@ -1748,12 +1748,14 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/account/me/organization',
     summary: 'Account organization taxonomy (empty folders + tags)',
+    description:
+      'Reads the selected effective account taxonomy. Requires `read:profiles`; broad `read` and `account_owner` credentials also satisfy the gate. Team `member` and `admin` roles may read. Without `X-Driftstack-Account`, the caller is the effective account.',
     tags: ['account'],
     security: auth,
     responses: {
       200: {
         description:
-          "The caller's folder/tag taxonomy. Empty arrays by default. Requires broad `read` or `account_owner`.",
+          "The selected effective account's folder/tag taxonomy. Empty arrays by default.",
         content: { 'application/json': { schema: AccountOrganizationOpenApi } },
       },
       ...errors4xx,
@@ -1762,7 +1764,9 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'put',
     path: '/v1/account/me/organization',
-    summary: 'Replace the account organization taxonomy (account_owner)',
+    summary: 'Replace the selected account organization taxonomy (write:profiles)',
+    description:
+      'Replaces only the selected effective account taxonomy. Requires `write:profiles`; broad `write` and `account_owner` credentials also satisfy the gate. A selected team workspace requires the `admin` role. Without `X-Driftstack-Account`, the caller is the effective account.',
     tags: ['account'],
     security: auth,
     request: {

@@ -720,8 +720,8 @@ describe('GET/PUT /v1/account/me/organization (per-account org-sync phase 3)', (
     expect(get.json()).toEqual(payload);
   });
 
-  it('PUT 403 without account_owner scope', async () => {
-    fx = await buildTestApp({ scopes: ['read', 'write'] });
+  it('PUT 403 without granular or broad profile-write authority', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write:sessions'] });
     const res = await fx.app.inject({
       method: 'PUT',
       url: '/v1/account/me/organization',

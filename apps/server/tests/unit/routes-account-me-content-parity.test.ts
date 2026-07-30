@@ -1,12 +1,11 @@
 // W420.C — drift guard for apps/server/src/routes/account-me.ts.
 // V-237 customer self-profile + V-352 PATCH basics + V-352b avatar
 // upload/clear + V-353h MFA enrollment surface + V-298a slug
-// uniqueness + V-298b region + V-326c teams memberships + V-330
-// effective-account NOT honored (always self-account by design).
-// Drift here either accidentally honors X-Driftstack-Account on
-// /v1/account/me (surprising semantics — acts on owner's name) or
-// drops the auth-cache invalidation on PATCH (stale dashboard until
-// TTL).
+// uniqueness + V-298b region + V-326c teams memberships + V-330.
+// Exact /v1/account/me identity/edit routes stay self-only, while the
+// nested /organization profile taxonomy honors the selected effective
+// account. Drift here can either grant surprising owner identity edits
+// or cross-write one workspace's taxonomy into another.
 //
 //   • V-237 framing pinned: GET /me identity + tier + concurrent-
 //     session + profile usage/caps; tier-aware enforcement display
@@ -48,13 +47,28 @@ function read(p: string): string {
 describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
   const body = read(LIB);
 
-  it('account-wide GET /me and /organization reads require broad read; account_owner satisfies it through the scope hierarchy', () => {
+  it('identity GET /me keeps broad read while nested organization uses profile-scoped read/write gates', () => {
     expect(body).toMatch(
       /'\/v1\/account\/me',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
     );
     expect(body).toMatch(
-      /'\/v1\/account\/me\/organization',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read'\), app\.rateLimit\('global'\)\] \}/,
+      /'\/v1\/account\/me\/organization',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('read:profiles'\), app\.rateLimit\('global'\)\] \}/,
     );
+    expect(body).toMatch(
+      /'\/v1\/account\/me\/organization',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('write:profiles'\), app\.rateLimit\('global'\)\] \}/,
+    );
+  });
+
+  it('organization resolves the exact effective owner; team writes authorize admin before parsing and write only that owner', () => {
+    expect(body).toMatch(
+      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*const org = await authRepo\.getOrganization\(effective\.accountId\);/,
+    );
+    expect(body).toMatch(
+      /const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*if \(effective\.kind === 'team' && effective\.role !== 'admin'\)[\s\S]+?const parsed = AccountOrganizationSchema\.safeParse\(request\.body \?\? \{\}\);/,
+    );
+    expect(body).toContain('await authRepo.setOrganization(effective.accountId, parsed.data);');
+    expect(body).not.toContain('authRepo.getOrganization(ctx.account.id)');
+    expect(body).not.toContain('authRepo.setOrganization(ctx.account.id, parsed.data)');
   });
 
   it('V-237 framing pinned: GET /v1/account/me identity + tier + concurrent-session usage/cap + profile usage/cap; file 128 spec mirror', () => {
@@ -205,7 +219,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     expect(body).toMatch(/mfaService\?: MfaService \| null;/);
   });
 
-  it('imports: FastifyInstance + AVATAR_MAX_BYTES/PROFILES_PER_TIER/PROXIES_PER_TIER/TIER_CONCURRENT_SESSION_LIMITS/UpdateAccountMe/UploadAvatar + AccountAuthRepo/AuthCache/SessionRepo/ProfilesRepo/MfaService + avatarKey/R2 + BadRequest/Conflict/FeatureUnavailable/NotFound errors', () => {
+  it('imports: FastifyInstance + account schemas/caps + effective-account resolver/header + route deps + complete error set', () => {
     expect(body).toMatch(/import \{ randomUUID \} from 'node:crypto';/);
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     // Audit emit for proxy lifecycle (proxy.created / proxy.deleted).
@@ -216,14 +230,19 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     expect(body).toMatch(
       /import \{\s*\n?\s*AccountOrganizationSchema,\s*\n?\s*AccountProxyInputSchema,\s*\n?\s*AccountProxyUpdateSchema,\s*\n?\s*AVATAR_MAX_BYTES,\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*PROXIES_PER_TIER,\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,\s*\n?\s*UpdateAccountMeRequestSchema,\s*\n?\s*UploadAvatarRequestSchema,\s*\n?\s*UuidSchema,\s*\n?\s*type AccountProxyMetadata,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
-    expect(body).toMatch(/import type \{ AccountAuthRepo \} from '\.\.\/services\/auth\.js';/);
+    expect(body).toMatch(
+      /import \{ resolveEffectiveAccount, type AccountAuthRepo \} from '\.\.\/services\/auth\.js';/,
+    );
+    expect(body).toMatch(
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
+    );
     expect(body).toMatch(/import type \{ AuthCache \} from '\.\.\/services\/auth-cache\.js';/);
     expect(body).toMatch(/import type \{ SessionRepo \} from '\.\.\/services\/sessions\.js';/);
     expect(body).toMatch(/import type \{ ProfilesRepo \} from '\.\.\/services\/profiles\.js';/);
     expect(body).toMatch(/import type \{ MfaService \} from '\.\.\/services\/mfa\.js';/);
     expect(body).toMatch(/import \{ avatarKey, type R2 \} from '\.\.\/lib\/r2\.js';/);
     expect(body).toMatch(
-      /import \{\s*\n?\s*BadRequestError,\s*\n?\s*ConflictError,\s*\n?\s*FeatureUnavailableError,\s*\n?\s*NotFoundError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*\n?\s*BadRequestError,\s*\n?\s*ConflictError,\s*\n?\s*FeatureUnavailableError,\s*\n?\s*ForbiddenError,\s*\n?\s*NotFoundError,\s*\n?\s*\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

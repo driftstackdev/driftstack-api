@@ -25,13 +25,14 @@ import {
   type AccountProxyMetadata,
   type AccountTier,
 } from '@driftstack/api-types';
-import type { AccountAuthRepo } from '../services/auth.js';
+import { resolveEffectiveAccount, type AccountAuthRepo } from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { MfaService } from '../services/mfa.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import { readClientIp } from '../lib/client-ip.js';
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import type {
   AccountProxiesRepo,
   AccountProxyRow,
@@ -48,6 +49,7 @@ import {
   BadRequestError,
   ConflictError,
   FeatureUnavailableError,
+  ForbiddenError,
   NotFoundError,
 } from '../lib/errors.js';
 
@@ -334,34 +336,45 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     },
   );
 
-  // Per-account org-sync (2026-06-16) — the calling account's organization
+  // Per-account org-sync (2026-06-16) — the effective account's organization
   // TAXONOMY: the empty folders (+icons) and tags defined in the GUI rail
-  // before assignment. Read requires the broad account read capability; the
-  // PUT is account_owner-scoped like PATCH /me. Stored as
-  // accounts.organization jsonb (0079). Not part of the cached AccountContext,
-  // so no auth-cache invalidation needed.
+  // before assignment. Unlike the identity/edit route at exact /v1/account/me,
+  // this nested profile resource honors X-Driftstack-Account so its taxonomy
+  // and the profiles it organizes always share an owner. Team members may read;
+  // team writes require admin. Stored as accounts.organization jsonb (0079).
+  // Not part of the cached AccountContext, so no auth-cache invalidation needed.
   app.get(
     '/v1/account/me/organization',
-    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
-      const org = await authRepo.getOrganization(ctx.account.id);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const org = await authRepo.getOrganization(effective.accountId);
       return org ?? { folders: [], tags: [] };
     },
   );
 
   app.put(
     '/v1/account/me/organization',
-    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      // Resolve and authorize the selected owner before parsing the body. A
+      // malformed payload must never turn a nonmember/member authorization
+      // failure into a body-validation oracle, and must never reach the repo.
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      if (effective.kind === 'team' && effective.role !== 'admin') {
+        throw new ForbiddenError(
+          'Team members need the admin role to change profile organization.',
+        );
+      }
       const parsed = AccountOrganizationSchema.safeParse(request.body ?? {});
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid organization.');
       }
-      await authRepo.setOrganization(ctx.account.id, parsed.data);
+      await authRepo.setOrganization(effective.accountId, parsed.data);
       return parsed.data;
     },
   );

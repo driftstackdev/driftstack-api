@@ -30,7 +30,6 @@ describe('OpenAPI spec generation', () => {
     const spec = generateOpenApiSpec();
     const accountReadPaths = [
       '/v1/account/me',
-      '/v1/account/me/organization',
       '/v1/account/mfa',
       '/v1/account/me/oauth-links',
       '/v1/account/web-sessions',
@@ -45,6 +44,28 @@ describe('OpenAPI spec generation', () => {
         'Requires broad `read` or `account_owner`',
       );
     }
+
+    const organizationGet = JSON.stringify(spec.paths?.['/v1/account/me/organization']?.get);
+    expect(organizationGet).toContain('selected effective account taxonomy');
+    expect(organizationGet).toContain('Requires `read:profiles`');
+    expect(organizationGet).toContain('broad `read` and `account_owner`');
+    expect(organizationGet).toContain('Team `member` and `admin` roles may read');
+    expect(organizationGet).toContain(
+      'Without `X-Driftstack-Account`, the caller is the effective account',
+    );
+    expect(organizationGet).not.toContain("The caller's folder/tag taxonomy");
+
+    const organizationPut = JSON.stringify(spec.paths?.['/v1/account/me/organization']?.put);
+    expect(organizationPut).toContain(
+      'Replace the selected account organization taxonomy (write:profiles)',
+    );
+    expect(organizationPut).toContain('Requires `write:profiles`');
+    expect(organizationPut).toContain('broad `write` and `account_owner`');
+    expect(organizationPut).toContain('selected team workspace requires the `admin` role');
+    expect(organizationPut).toContain(
+      'Without `X-Driftstack-Account`, the caller is the effective account',
+    );
+    expect(organizationPut).not.toContain('(account_owner)');
 
     const rateLimitOperation = JSON.stringify(spec.paths?.['/v1/account/rate-limits']?.get);
     for (const bucket of [
