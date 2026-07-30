@@ -51,15 +51,10 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     expect(existsSync(PY_CRYPTO), `missing ${PY_CRYPTO}`).toBe(true);
   });
 
-  it('CRITICAL V-666 anchor + customer-facing-only invariant pinned in all 3 SDKs. The "Customer-facing only; admin endpoints are not exposed in the public SDK" framing prevents admin verbs from leaking into the customer SDK surface. Drift would let customers call admin verbs (e.g. force-refund, override-state).', () => {
+  it('CRITICAL customer-facing-only invariant pinned in all 3 SDKs. The "Customer-facing only; admin endpoints are not exposed in the public SDK" framing prevents admin verbs from leaking into the customer SDK surface. Drift would let customers call admin verbs (e.g. force-refund, override-state). The internal "V-666" anchor is NOT asserted here: `9c53dd232` deliberately stripped rollout markers from the shipped Go SDK, so requiring the anchor in all three would pin a parity the product no longer has — the customer-facing contract is what must match.', () => {
     const ts = read(TS_CRYPTO);
     const go = read(GO_CRYPTO);
     const py = read(PY_CRYPTO);
-
-    // V-666 anchor.
-    expect(ts).toMatch(/V-666/);
-    expect(go).toMatch(/V-666/);
-    expect(py).toMatch(/V-666/);
 
     // Customer-facing-only framing.
     expect(ts).toMatch(/Customer-facing only; admin endpoints are not exposed in the public/);
@@ -79,17 +74,39 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     expect(py).toMatch(/Crypto payments are non-refundable/);
   });
 
-  it('CRITICAL V-666 sub-anchor coverage — H (quote) + C (createCheckout) + G (get) + Q (updateNote) + J (cancel) + M (receipt) + BU (cursor walker) all pinned in all 3 SDKs. Each sub-anchor threads a specific verb back to the V-666 changelog. Drift to dropping ANY sub-anchor would lose per-verb changelog provenance.', () => {
+  it('CRITICAL 7-verb coverage — quote + createCheckout + get + cursor walker + updateNote + cancel + receipt exist in all 3 SDKs. This replaces the old per-verb "V-666.X" anchor sweep: the anchors are internal provenance and no longer present in the Go SDK, whereas a MISSING VERB is the drift that actually breaks a customer, so the verb identifiers themselves are what is pinned.', () => {
     const ts = read(TS_CRYPTO);
     const go = read(GO_CRYPTO);
     const py = read(PY_CRYPTO);
 
-    const subAnchors = ['H', 'C', 'G', 'BU', 'Q', 'J', 'M'];
-    for (const sub of subAnchors) {
-      const anchor = new RegExp(`V-666\\.${sub}\\b`);
-      expect(ts, `sdk-typescript V-666.${sub}`).toMatch(anchor);
-      expect(go, `sdk-go V-666.${sub}`).toMatch(anchor);
-      expect(py, `sdk-python V-666.${sub}`).toMatch(anchor);
+    const verbs: ReadonlyArray<readonly [string, RegExp, RegExp, RegExp]> = [
+      ['quote', /\bquote\(/, /func \(r \*CryptoOrdersResource\) Quote\(/, /def quote\(/],
+      [
+        'createCheckout',
+        /\bcreateCheckout\(/,
+        /func \(r \*CryptoOrdersResource\) CreateCheckout\(/,
+        /def create_checkout\(/,
+      ],
+      ['get', /\bget\(/, /func \(r \*CryptoOrdersResource\) Get\(/, /def get\(/],
+      [
+        'cursor walker',
+        /\blistAll\(/,
+        /func \(r \*CryptoOrdersResource\) Iterate\(/,
+        /def iterate\(/,
+      ],
+      [
+        'updateNote',
+        /\bupdateNote\(/,
+        /func \(r \*CryptoOrdersResource\) UpdateNote\(/,
+        /def update_note\(/,
+      ],
+      ['cancel', /\bcancel\(/, /func \(r \*CryptoOrdersResource\) Cancel\(/, /def cancel\(/],
+      ['receipt', /\breceipt\(/, /func \(r \*CryptoOrdersResource\) Receipt\(/, /def receipt\(/],
+    ];
+    for (const [name, tsRe, goRe, pyRe] of verbs) {
+      expect(ts, `sdk-typescript ${name}`).toMatch(tsRe);
+      expect(go, `sdk-go ${name}`).toMatch(goRe);
+      expect(py, `sdk-python ${name}`).toMatch(pyRe);
     }
   });
 
@@ -109,7 +126,7 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     const py = read(PY_CRYPTO);
 
     expect(ts).toMatch(/abandon a pending order \(self-service\)/);
-    expect(go).toMatch(/abandons a pending order \(V-666\.J\)|abandon.*pending order/);
+    expect(go).toMatch(/abandon.*pending order/);
     expect(py).toMatch(/abandon a pending order \(self-service\)/);
   });
 
@@ -118,9 +135,13 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     const go = read(GO_CRYPTO);
     const py = read(PY_CRYPTO);
 
-    expect(ts).toMatch(/V-666\.BU.*async generator|async generator.*V-666\.BU/);
-    expect(go).toMatch(/V-666\.BU/);
-    expect(py).toMatch(/V-666\.BU/);
+    expect(ts).toMatch(/async generator/);
+    expect(go).toMatch(/func \(r \*CryptoOrdersResource\) Iterate\(/);
+    expect(py).toMatch(/def iterate\(/);
+    // The divergent envelope is the reason each SDK hand-rolls the walker.
+    for (const body of [ts, go, py]) {
+      expect(body).toMatch(/next_cursor/);
+    }
   });
 
   it('8-verb surface across all 3 SDKs — quote / createCheckout / list / iterate(or listAll) / get / updateNote / cancel / receipt. The 8 verbs cover the entire customer crypto-payment lifecycle. Drift to dropping any would break the customer-facing flow. NOTE: sdk-go uses different verb names (Quote / CreateCheckout / List / Iterate / Get / UpdateNote / Cancel / Receipt — PascalCase) — checked separately below; this block covers TS + Python only.', () => {
@@ -172,7 +193,7 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     expect(py).toMatch(/customer-facing free-text note/);
   });
 
-  it('Cross-SDK V-666 cluster — V-666 + customer-facing-only + non-refundable + 7 sub-anchors (H/C/G/BU/Q/J/M). Drift on any would fragment the cross-language crypto-payments contract.', () => {
+  it('Cross-SDK cluster — customer-facing-only + non-refundable disclosure + the crypto-orders surface identity hold in all 3 SDKs. Internal rollout anchors are excluded: they are not cross-SDK parity any more (the Go SDK dropped them in `9c53dd232`), and pinning them here is what kept this guard red at HEAD.', () => {
     const sdks = {
       'sdk-typescript': read(TS_CRYPTO),
       'sdk-go': read(GO_CRYPTO),
@@ -180,9 +201,11 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-666`).toMatch(/V-666/);
       expect(body, `${name} non-refundable`).toMatch(/non-refundable/);
       expect(body, `${name} Customer-facing`).toMatch(/[Cc]ustomer-facing/);
+      expect(body, `${name} crypto-orders surface`).toMatch(
+        /crypto-checkout|crypto_orders|cryptoOrders|CryptoOrders/,
+      );
     }
   });
 

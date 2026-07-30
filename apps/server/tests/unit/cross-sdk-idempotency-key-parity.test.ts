@@ -47,14 +47,14 @@ describe('W683 cross-SDK V-666.AO Idempotency-Key parity', () => {
     expect(existsSync(PY_CRYPTO), `missing ${PY_CRYPTO}`).toBe(true);
   });
 
-  it('CRITICAL V-666.AO anchor pinned in all 3 SDKs. The V-666.AO sub-anchor is the changelog reference for the Idempotency-Key feature. Drift to V-666 (no suffix) would conflate with the broader crypto-payments anchor.', () => {
+  it('CRITICAL the idempotency-key parameter is exposed by all 3 SDKs on checkout creation. This replaces the old "V-666.AO" anchor sweep — `9c53dd232` removed rollout markers from the shipped Go SDK, so the anchor is no longer a cross-SDK property, while a missing parameter is the drift that would actually let a retry mint a duplicate order.', () => {
     const ts = read(TS_CRYPTO);
     const go = read(GO_CRYPTO);
     const py = read(PY_CRYPTO);
 
-    expect(ts).toMatch(/V-666\.AO/);
-    expect(go).toMatch(/V-666\.AO/);
-    expect(py).toMatch(/V-666\.AO/);
+    expect(ts).toMatch(/idempotencyKey/);
+    expect(go).toMatch(/IdempotencyKey|WithIdempotencyKey/);
+    expect(py).toMatch(/idempotency_key/);
   });
 
   it('CRITICAL canonical header name "Idempotency-Key" pinned in all 3 SDKs. The mixed-case `Idempotency-Key` is the canonical Stripe-style convention; the SDKs send it as lowercase `idempotency-key` on the wire because HTTP headers are case-insensitive, but the canonical form is mixed-case. Drift to "X-Idempotency-Key" or "Request-Id" would break server-side dedup logic.', () => {

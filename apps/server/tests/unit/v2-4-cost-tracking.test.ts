@@ -141,14 +141,38 @@ describe('v2-#4 Q.1.e cost-tracking', () => {
 
   describe('AgentRuntime usage recording wire', () => {
     function makeFakeSessions(record: AgentSessionRecord): AgentSessionsRepo {
-      return {
+      // Typed as Partial<AgentSessionsRepo> before the cast: the double omits
+      // methods this suite never reaches, but every method it DOES define is
+      // now signature-checked against the repo. Without this the plain
+      // `as unknown as` cast let the repo grow new required calls
+      // (`getAuthoritySnapshot`, `appendTranscriptIfAuthorityRevision`) while
+      // the double silently went stale.
+      const fake: Partial<AgentSessionsRepo> = {
         get: (id: string) => Promise.resolve(id === record.id ? record : null),
         create: () => Promise.resolve(record),
         appendTranscript: () => Promise.resolve(record),
+        // Same epoch fence on the write side: the runtime appends only while
+        // the authority revision it admitted on is still current.
+        appendTranscriptIfAuthorityRevision: () => Promise.resolve(record),
         debitTokens: () => Promise.resolve(record),
+        debitTokensIfActive: () => Promise.resolve(record),
         listByAccount: () => Promise.resolve([]),
-        closeWithReason: () => Promise.resolve(undefined),
-      } as unknown as AgentSessionsRepo;
+        // The stricter typing immediately caught this returning `undefined`
+        // where the repo contract promises the closed record.
+        closeWithReason: () => Promise.resolve(record),
+        // `ebe37172a` fenced every turn to a control-authority epoch, so
+        // runTurn now re-reads the authority row and refuses the turn when the
+        // snapshot does not admit AI control. These cost-tracking cases are
+        // about the usage recorder, not about authority, so the double serves
+        // a stable ai-control snapshot for the session under test.
+        getAuthoritySnapshot: (id: string) =>
+          Promise.resolve(
+            id === record.id
+              ? { status: 'active' as const, mode: 'ai' as const, pairModeState: null, revision: 1 }
+              : null,
+          ),
+      };
+      return fake as AgentSessionsRepo;
     }
 
     function makeFakeExecutor(): AgentExecutor {
