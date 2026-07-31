@@ -79,7 +79,19 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
     metadata.agent_session_id = args.agentSessionId;
 
     try {
-      await this.database.db.insert(usageRecords).values({
+      // Idempotent on the caller-supplied row id. `recordUsageRowWithRetry`
+      // re-invokes this on any throw, and a write can throw AFTER the server
+      // committed (connection reset post-commit, client-side timeout on a
+      // statement that landed). Without this, that retry posts a SECOND flat
+      // $0.10 row for one turn and the monthly cap is consumed at 2x — the same
+      // customer harm as the per-row/per-turn bug fixed in f97cf1349. With a
+      // stable id the retry conflicts on the primary key and does nothing.
+      //
+      // When no id is supplied the database default applies and there is no
+      // conflict target to dedupe on, so the write keeps its previous
+      // behaviour rather than silently pretending to be retry-safe.
+      const insert = this.database.db.insert(usageRecords).values({
+        ...(args.recordId !== undefined ? { id: args.recordId } : {}),
         accountId: args.accountId,
         ...(args.driftstackSessionId !== null ? { sessionId: args.driftstackSessionId } : {}),
         recordType,
@@ -87,6 +99,7 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
         metadata,
         recordedAt: args.now,
       });
+      await (args.recordId !== undefined ? insert.onConflictDoNothing() : insert);
     } catch (err) {
       this.logger.error(
         {

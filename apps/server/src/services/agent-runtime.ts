@@ -11,6 +11,7 @@
 // a real backend. Each can be swapped (Deterministic→Claude;
 // Stub→Wired; InMemory→Drizzle) without changing the runtime.
 
+import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type {
   AgentDecomposer,
@@ -232,6 +233,23 @@ export type RunTurnResult =
 export interface AgentDecomposerUsageRecorder {
   record(args: {
     accountId: string;
+    /**
+     * Stable row identity, generated ONCE per row by the caller and reused on
+     * every retry attempt, so the write is idempotent.
+     *
+     * `recordUsageRowWithRetry` re-invokes this on any throw. Without a caller
+     * -supplied id the insert takes the `gen_random_uuid()` default, so a
+     * commit-that-appears-to-fail — connection reset after the server
+     * committed, or a client-side timeout on a statement that landed — posts a
+     * SECOND $0.10 row for one turn. That is the same harm as the per-row/per-
+     * turn bug fixed in f97cf1349: the monthly cap is consumed at 2x and the
+     * customer is hard-402'd after fewer turns than they were sold, while the
+     * turn's own response still reports 10.
+     *
+     * Optional so existing callers and fixtures stay source-compatible; when
+     * omitted the database default applies and the write is NOT retry-safe.
+     */
+    recordId?: string;
     /** Driftstack session id (NOT agent-session id) if the agent-
      *  session has one attached; null otherwise. */
     driftstackSessionId: string | null;
@@ -521,9 +539,13 @@ export class AgentRuntime {
   ): Promise<void> {
     let lastErr: unknown;
     let recorded = false;
+    // ONE identity for this row, reused by every attempt. A retry after a write
+    // that actually committed must be a no-op, not a second charge — see the
+    // `recordId` contract on AgentDecomposerUsageRecorder.
+    const attemptArgs = { ...recordArgs, recordId: recordArgs.recordId ?? randomUUID() };
     for (let attempt = 1; attempt <= SPEND_RECORD_MAX_ATTEMPTS; attempt++) {
       try {
-        await recorder.record(recordArgs);
+        await recorder.record(attemptArgs);
         recorded = true;
         break;
       } catch (err) {
