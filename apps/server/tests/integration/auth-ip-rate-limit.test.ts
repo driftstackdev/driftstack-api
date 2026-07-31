@@ -65,154 +65,174 @@ describe('V-251 — IP rate limit on auth endpoints', () => {
     expect(sixth.headers['retry-after']).toBeDefined();
   });
 
-  it('signup: absolute 25/IP/day ceiling still trips a perfectly-paced attacker the burst bucket alone would allow forever (security audit 2026-07-01)', async () => {
-    // The burst bucket alone (capacity=5, refill=5/60 tokens/sec) never
-    // denies a caller paced at >= 12s/request — that's the exact abuse
-    // this test proves is now closed. We pace every request 60s apart
-    // (via a faked `Date`, so the test itself stays fast) which is MORE
-    // than enough for the burst bucket to fully refill between every
-    // single call, so the burst bucket can never be the thing that denies
-    // request #26 below — only the new daily ceiling can.
-    fx = await buildTestApp();
-    const ip = '203.0.113.70';
-    const PACE_MS = 60_000;
+  // Same 25-round-trip budget as the headers case below — each signup does real
+  // password hashing, so this is load-sensitive against the 10s default.
+  it(
+    'signup: absolute 25/IP/day ceiling still trips a perfectly-paced attacker the burst bucket alone would allow forever (security audit 2026-07-01)',
+    { timeout: 60_000 },
+    async () => {
+      // The burst bucket alone (capacity=5, refill=5/60 tokens/sec) never
+      // denies a caller paced at >= 12s/request — that's the exact abuse
+      // this test proves is now closed. We pace every request 60s apart
+      // (via a faked `Date`, so the test itself stays fast) which is MORE
+      // than enough for the burst bucket to fully refill between every
+      // single call, so the burst bucket can never be the thing that denies
+      // request #26 below — only the new daily ceiling can.
+      fx = await buildTestApp();
+      const ip = '203.0.113.70';
+      const PACE_MS = 60_000;
 
-    vi.useFakeTimers({ toFake: ['Date'] });
-    try {
-      const start = Date.now();
-      // 25 paced signups from the same IP: none should be 429 — the daily
-      // ceiling (25/day) permits exactly this many, and the burst bucket
-      // was never at risk given the 60s pacing.
-      for (let i = 0; i < 25; i++) {
-        vi.setSystemTime(start + i * PACE_MS);
-        const res = await fx.app.inject({
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const start = Date.now();
+        // 25 paced signups from the same IP: none should be 429 — the daily
+        // ceiling (25/day) permits exactly this many, and the burst bucket
+        // was never at risk given the 60s pacing.
+        for (let i = 0; i < 25; i++) {
+          vi.setSystemTime(start + i * PACE_MS);
+          const res = await fx.app.inject({
+            method: 'POST',
+            url: '/v1/auth/signup',
+            headers,
+            remoteAddress: ip,
+            payload: {
+              email: `daily-ceiling-${i.toString()}@example.test`,
+              password: 'correct horse battery staple',
+            },
+          });
+          expect(res.statusCode, `request #${(i + 1).toString()} should not be 429`).not.toBe(429);
+        }
+
+        // The 26th paced signup (still 60s after the previous one — the
+        // burst bucket would happily allow it) is rejected by the daily
+        // ceiling alone.
+        vi.setSystemTime(start + 25 * PACE_MS);
+        const twentySixth = await fx.app.inject({
           method: 'POST',
           url: '/v1/auth/signup',
           headers,
           remoteAddress: ip,
           payload: {
-            email: `daily-ceiling-${i.toString()}@example.test`,
+            email: 'daily-ceiling-25@example.test',
             password: 'correct horse battery staple',
           },
         });
-        expect(res.statusCode, `request #${(i + 1).toString()} should not be 429`).not.toBe(429);
+        expect(twentySixth.statusCode).toBe(429);
+        expect(twentySixth.headers['retry-after']).toBeDefined();
+      } finally {
+        vi.useRealTimers();
       }
+    },
+  );
 
-      // The 26th paced signup (still 60s after the previous one — the
-      // burst bucket would happily allow it) is rejected by the daily
-      // ceiling alone.
-      vi.setSystemTime(start + 25 * PACE_MS);
-      const twentySixth = await fx.app.inject({
-        method: 'POST',
-        url: '/v1/auth/signup',
-        headers,
-        remoteAddress: ip,
-        payload: {
-          email: 'daily-ceiling-25@example.test',
-          password: 'correct horse battery staple',
-        },
-      });
-      expect(twentySixth.statusCode).toBe(429);
-      expect(twentySixth.headers['retry-after']).toBeDefined();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+  it(
+    'signup: the absolute ceiling does not replenish early inside its rolling 24-hour window',
+    { timeout: 60_000 },
+    async () => {
+      fx = await buildTestApp();
+      const ip = '203.0.113.73';
 
-  it('signup: the absolute ceiling does not replenish early inside its rolling 24-hour window', async () => {
-    fx = await buildTestApp();
-    const ip = '203.0.113.73';
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const start = Date.now();
+        for (let i = 0; i < 25; i++) {
+          vi.setSystemTime(start + i * 60_000);
+          const res = await fx.app.inject({
+            method: 'POST',
+            url: '/v1/auth/signup',
+            headers,
+            remoteAddress: ip,
+            payload: {
+              email: `rolling-ceiling-${i.toString()}@example.test`,
+              password: 'correct horse battery staple',
+            },
+          });
+          expect(res.statusCode).not.toBe(429);
+        }
 
-    vi.useFakeTimers({ toFake: ['Date'] });
-    try {
-      const start = Date.now();
-      for (let i = 0; i < 25; i++) {
-        vi.setSystemTime(start + i * 60_000);
-        const res = await fx.app.inject({
+        vi.setSystemTime(start + 23 * 60 * 60 * 1000);
+        const beforeExpiry = await fx.app.inject({
           method: 'POST',
           url: '/v1/auth/signup',
           headers,
           remoteAddress: ip,
           payload: {
-            email: `rolling-ceiling-${i.toString()}@example.test`,
+            email: 'rolling-ceiling-before-expiry@example.test',
             password: 'correct horse battery staple',
           },
         });
-        expect(res.statusCode).not.toBe(429);
-      }
+        expect(beforeExpiry.statusCode).toBe(429);
 
-      vi.setSystemTime(start + 23 * 60 * 60 * 1000);
-      const beforeExpiry = await fx.app.inject({
-        method: 'POST',
-        url: '/v1/auth/signup',
-        headers,
-        remoteAddress: ip,
-        payload: {
-          email: 'rolling-ceiling-before-expiry@example.test',
-          password: 'correct horse battery staple',
-        },
-      });
-      expect(beforeExpiry.statusCode).toBe(429);
-
-      vi.setSystemTime(start + 24 * 60 * 60 * 1000);
-      const atExpiry = await fx.app.inject({
-        method: 'POST',
-        url: '/v1/auth/signup',
-        headers,
-        remoteAddress: ip,
-        payload: {
-          email: 'rolling-ceiling-at-expiry@example.test',
-          password: 'correct horse battery staple',
-        },
-      });
-      expect(atExpiry.statusCode).not.toBe(429);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('signup: daily-ceiling headers surface remaining/reset independently of the burst-bucket headers, decrementing across 25 requests (security audit 2026-07-01 fix #2)', async () => {
-    fx = await buildTestApp();
-    const ip = '203.0.113.71';
-    const PACE_MS = 60_000;
-
-    vi.useFakeTimers({ toFake: ['Date'] });
-    try {
-      const start = Date.now();
-      let previousDailyRemaining = Infinity;
-      for (let i = 0; i < 25; i++) {
-        vi.setSystemTime(start + i * PACE_MS);
-        const res = await fx.app.inject({
+        vi.setSystemTime(start + 24 * 60 * 60 * 1000);
+        const atExpiry = await fx.app.inject({
           method: 'POST',
           url: '/v1/auth/signup',
           headers,
           remoteAddress: ip,
           payload: {
-            email: `daily-headers-${i.toString()}@example.test`,
+            email: 'rolling-ceiling-at-expiry@example.test',
             password: 'correct horse battery staple',
           },
         });
-        expect(res.statusCode).not.toBe(429);
-        // The daily ceiling's own headers must be present on every request
-        // once a daily ceiling is configured for the route — distinct from
-        // the burst bucket's `x-ratelimit-*` headers (which reset every
-        // ~60s and would misleadingly read "plenty left" at this pace).
-        const dailyRemaining = Number(res.headers['x-ratelimit-daily-remaining']);
-        const dailyReset = Number(res.headers['x-ratelimit-daily-reset']);
-        expect(res.headers['x-ratelimit-daily-remaining']).toBeDefined();
-        expect(res.headers['x-ratelimit-daily-reset']).toBeDefined();
-        expect(Number.isNaN(dailyRemaining)).toBe(false);
-        expect(Number.isNaN(dailyReset)).toBe(false);
-        // Strictly decrementing request-over-request (paced 60s apart, far
-        // slower than the daily bucket's ~1-token/57.6min refill, so it
-        // never has time to refill a whole token between calls).
-        expect(dailyRemaining).toBeLessThan(previousDailyRemaining);
-        previousDailyRemaining = dailyRemaining;
+        expect(atExpiry.statusCode).not.toBe(429);
+      } finally {
+        vi.useRealTimers();
       }
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+    },
+  );
+
+  // 25 sequential signup round trips, each doing real password hashing. That is
+  // comfortably under the 10s default when the file runs alone, but it timed out
+  // at 10,048ms once under parallel integration load — a budget problem, not a
+  // race. The per-test timeout is raised rather than trimming the loop, because
+  // the 25-request span is exactly what proves the daily ceiling keeps
+  // decrementing while the burst bucket refills.
+  it(
+    'signup: daily-ceiling headers surface remaining/reset independently of the burst-bucket headers, decrementing across 25 requests (security audit 2026-07-01 fix #2)',
+    { timeout: 60_000 },
+    async () => {
+      fx = await buildTestApp();
+      const ip = '203.0.113.71';
+      const PACE_MS = 60_000;
+
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        const start = Date.now();
+        let previousDailyRemaining = Infinity;
+        for (let i = 0; i < 25; i++) {
+          vi.setSystemTime(start + i * PACE_MS);
+          const res = await fx.app.inject({
+            method: 'POST',
+            url: '/v1/auth/signup',
+            headers,
+            remoteAddress: ip,
+            payload: {
+              email: `daily-headers-${i.toString()}@example.test`,
+              password: 'correct horse battery staple',
+            },
+          });
+          expect(res.statusCode).not.toBe(429);
+          // The daily ceiling's own headers must be present on every request
+          // once a daily ceiling is configured for the route — distinct from
+          // the burst bucket's `x-ratelimit-*` headers (which reset every
+          // ~60s and would misleadingly read "plenty left" at this pace).
+          const dailyRemaining = Number(res.headers['x-ratelimit-daily-remaining']);
+          const dailyReset = Number(res.headers['x-ratelimit-daily-reset']);
+          expect(res.headers['x-ratelimit-daily-remaining']).toBeDefined();
+          expect(res.headers['x-ratelimit-daily-reset']).toBeDefined();
+          expect(Number.isNaN(dailyRemaining)).toBe(false);
+          expect(Number.isNaN(dailyReset)).toBe(false);
+          // Strictly decrementing request-over-request (paced 60s apart, far
+          // slower than the daily bucket's ~1-token/57.6min refill, so it
+          // never has time to refill a whole token between calls).
+          expect(dailyRemaining).toBeLessThan(previousDailyRemaining);
+          previousDailyRemaining = dailyRemaining;
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('signup: daily-ceiling store error fails CLOSED (denies the request) instead of silently granting a fresh fallback allotment (security audit 2026-07-01 fix #1)', async () => {
     fx = await buildTestApp();
