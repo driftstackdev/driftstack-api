@@ -33,12 +33,24 @@ const DISCLOSURE_PAGES = [
   'apps/docs/src/pages/api/account-rate-limits.md',
 ];
 
-/** `global` is the catch-all; enumerating it would enumerate the API. */
-const DEDICATED_BUCKETS = [
-  'sessions:create',
-  'agent_sessions:message',
-  'agent_sessions:input_event',
-] as const;
+/**
+ * `global` is the catch-all; enumerating it would enumerate the API.
+ *
+ * DERIVED from the canonical enum rather than hand-listed. A hardcoded roster
+ * silently fails to cover a bucket added later — the same self-grading hole
+ * that let a deleted staff-scope gate pass its own generated table. The census
+ * assertion below pins the count so a NEW bucket is a deliberate decision.
+ */
+const CANONICAL_BUCKET_ENUM = resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts');
+
+function dedicatedBuckets(): string[] {
+  const src = readFileSync(CANONICAL_BUCKET_ENUM, 'utf8');
+  const block = /bucket_key: z\.enum\(\[([\s\S]*?)\]\)/.exec(src);
+  if (block === null) throw new Error('canonical bucket_key enum not found');
+  return [...block[1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!).filter((k) => k !== 'global');
+}
+
+const DEDICATED_BUCKETS = dedicatedBuckets();
 
 /**
  * Buckets whose consumers are deliberately not enumerated on customer pages.
@@ -46,7 +58,20 @@ const DEDICATED_BUCKETS = [
  * is internal-only on the admin-write surface; it is described by purpose
  * rather than by a route list.
  */
-const PURPOSE_DESCRIBED_ONLY = new Set<string>(['agent_sessions:input_event']);
+const PURPOSE_DESCRIBED_ONLY = new Set<string>([
+  // Emptied 2026-08-01. The shrink assertion below found this exemption was
+  // already stale: both disclosure pages DO name
+  // `POST /v1/agent-sessions/:id/input-event` right beside the bucket key, so
+  // the bucket was never "described by purpose rather than by a route list".
+  // It is now checked like every other dedicated bucket.
+]);
+
+/**
+ * The dedicated-bucket count, pinned. Derivation above means a new bucket is
+ * covered automatically; this makes it VISIBLE rather than silently absorbed,
+ * so adding one is a decision about customer disclosure, not a side effect.
+ */
+const EXPECTED_DEDICATED_BUCKET_COUNT = 3;
 
 function enforcedConsumers(): Map<string, string[]> {
   const out = new Map<string, string[]>();
@@ -106,6 +131,38 @@ function mentionTails(text: string, bucket: string): string[] {
 
 describe('customer pages name every route that consumes a dedicated rate-limit bucket', () => {
   const enforced = enforcedConsumers();
+
+  it('CRITICAL the dedicated-bucket roster is DERIVED from the canonical enum and its size is pinned. The previous hardcoded list would have silently excluded any bucket added later — the same self-grading hole that let a deleted staff gate pass its own generated table.', () => {
+    expect(DEDICATED_BUCKETS.length, 'dedicated buckets derived from the canonical enum').toBe(
+      EXPECTED_DEDICATED_BUCKET_COUNT,
+    );
+    expect(DEDICATED_BUCKETS, 'a known bucket must survive derivation').toContain(
+      'sessions:create',
+    );
+    expect(DEDICATED_BUCKETS, 'global is the catch-all and must be excluded').not.toContain(
+      'global',
+    );
+  });
+
+  it('CRITICAL the purpose-described exemption may only SHRINK — if a bucket gains a route list on a customer page, it must leave the list. An allowlist that only grows is a mute button with extra steps.', () => {
+    const pages = disclosurePages();
+    const stillExempt: string[] = [];
+    for (const bucket of PURPOSE_DESCRIBED_ONLY) {
+      // Live on the roster at all?
+      expect(DEDICATED_BUCKETS, `${bucket} is exempted but is not a dedicated bucket`).toContain(
+        bucket,
+      );
+      const consumers = enforced.get(bucket) ?? [];
+      const named = pages.some((page) =>
+        consumers.some((route) => mentionTails(page.text, bucket).join('\n').includes(route)),
+      );
+      if (named) stillExempt.push(bucket);
+    }
+    expect(
+      stillExempt.sort(),
+      'these buckets now name their routes on a customer page — remove them from PURPOSE_DESCRIBED_ONLY so they are checked:',
+    ).toEqual([]);
+  });
 
   it('the parse found real consumers for each dedicated bucket (a broken parse would make this vacuous)', () => {
     for (const bucket of DEDICATED_BUCKETS) {
