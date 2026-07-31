@@ -159,6 +159,21 @@ describe('SimulatorWindow — page tab strip', () => {
   });
 
   // Inject a page_state frame over the data channel (the box → GUI live path).
+  // Give this window a REAL tab space the way a user does: open a second tab and
+  // close it again. The strip is back to one tab, but the window now genuinely
+  // owns a tab space and has a renderer it no longer owns — which is the exact
+  // situation these cases describe in prose. It matters because a window still
+  // holding only the pristine seed id it minted cannot tell "closed renderer"
+  // from "this box was driven by an EARLIER window" (reattach to a live ai/pair
+  // session, where tabListRestore does not fire); there, an unknown tag is
+  // deliberately adopted rather than dropped, because going inert would kill the
+  // whole page-state pipeline including the logical dims taps depend on.
+  function establishOwnedTabSpace(container: HTMLElement): void {
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    const opened = tabEls(container);
+    fireEvent.click(within(opened[opened.length - 1]!).getByLabelText('Close tab'));
+  }
+
   function pushPageState(frame: Record<string, unknown>): void {
     act(() => {
       dataHandler?.(new TextEncoder().encode(JSON.stringify(frame)));
@@ -1113,6 +1128,7 @@ describe('SimulatorWindow — page tab strip', () => {
   it('(e) a present UNRECOGNISED tabId is metadata/chrome-inert while absent and current tags retain normal routing', () => {
     const { container } = renderSim();
     expect(dataHandler).not.toBeNull();
+    establishOwnedTabSpace(container);
     // Active tab loads site A (establishes a known active tab + its stored url).
     pushPageState({ state: 'loaded', url: 'https://active.example/', title: 'Active' });
     const activeId = (lastTabListCall().tabs[0] as { id: string }).id;
@@ -1181,11 +1197,74 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(addressInput.value).toBe('current.example');
   });
 
+  it('(e2) a window reattaching to a live session adopts the box tag it has never seen, instead of going deaf', () => {
+    // REGRESSION (founder "tab switching is still bad"). Tab ids ORIGINATE here and
+    // reach the box via activateTab, so a window that reattaches to a session an
+    // EARLIER window drove has never seen the id the box is stamping. Closing the
+    // Simulator on an ai/pair session deliberately leaves it running, and
+    // tabListRestore is the profile-reopen path, not a live-reattach sync — so this
+    // is the ordinary "quit and reopen onto a running session" flow, not an edge case.
+    // Treating that tag as a foreign renderer dropped the ENTIRE page-state frame at
+    // an early return: no url, no title, no loading/error chrome, no keyboard focus,
+    // and no logicalContent dims — which is the tap coordinate space, so taps silently
+    // mis-map. Going deaf is strictly worse than the contamination the fence prevents,
+    // and unlike a closed tab an unknown id here is not evidence of anything.
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+
+    pushPageState({
+      state: 'loaded',
+      tabId: 'box-tab-from-the-previous-window',
+      url: 'https://reattached.example/',
+      title: 'Reattached',
+      logicalContentWidth: 390,
+      logicalContentHeight: 844,
+    });
+
+    // The adopted frame is what publishes the strip, so read the seed id from it.
+    const seedId = (lastTabListCall().tabs[0] as { id: string }).id;
+    const byId = tabsById();
+    expect(byId.get(seedId)?.url).toBe('https://reattached.example/');
+    expect(byId.get(seedId)?.title).toBe('Reattached');
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    expect(addressInput.value).toBe('reattached.example');
+    // The dims taps depend on must survive too — this is the half that fails silently.
+    const panel = container.querySelector(
+      '[data-component="agent-session-panel-mock"]',
+    ) as HTMLElement;
+    expect(panel.getAttribute('data-logical-width')).toBe('390');
+    expect(panel.getAttribute('data-logical-height')).toBe('844');
+  });
+
+  it('(e3) stops adopting the moment the window owns a real tab space, so a closed renderer stays inert', () => {
+    // The relaxation above is bounded by ownership, NOT by tab count: after opening
+    // and closing a tab the strip is back to one, but a buffered frame from that
+    // closed renderer must still be rejected. This is the case that makes a plain
+    // "single tab => adopt" rule wrong.
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    establishOwnedTabSpace(container);
+    const seedId = (lastTabListCall().tabs[0] as { id: string }).id;
+    pushPageState({ state: 'loaded', url: 'https://owned.example/', title: 'Owned' });
+
+    pushPageState({
+      state: 'loaded',
+      tabId: 'renderer-this-window-closed',
+      url: 'https://stale.example/',
+      title: 'Stale',
+    });
+
+    const byId = tabsById();
+    expect(byId.get(seedId)?.url).toBe('https://owned.example/');
+    expect(byId.get(seedId)?.title).toBe('Owned');
+  });
+
   it('keeps an unknown-tagged 2s page-state poll fully inert across loading, error, freeze, and load-stall states', async () => {
     vi.useFakeTimers();
     try {
       const { container } = renderSim();
       expect(dataHandler).not.toBeNull();
+      establishOwnedTabSpace(container);
       pushPageState({ state: 'loaded', url: 'https://active.example/', title: 'Active' });
       const activeId = (lastTabListCall().tabs[0] as { id: string }).id;
       const addressInput = container.querySelector(

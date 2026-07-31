@@ -165,15 +165,34 @@ interface SimTab {
  * This is deliberately a tab-membership fence. Distinguishing two renderer
  * incarnations that reuse the same logical tab id requires an incarnation
  * token on the wire; membership alone cannot make that stronger claim.
+ *
+ * `tabSpaceEstablished` is the one narrow relaxation, and it is load-bearing.
+ * Tab ids ORIGINATE in this window and reach the box through activateTab /
+ * tabListUpdate, so a window that reattaches to a session an EARLIER window
+ * drove knows nothing about the id the box is stamping. Closing the Simulator
+ * on an ai/pair session deliberately leaves it running, and `tabListRestore`
+ * is the profile-reopen path, not a live-reattach sync — so the fresh window
+ * mints a random seed id and every box frame carries the previous window's.
+ * Treating that as a foreign renderer drops the ENTIRE page-state pipeline:
+ * no url, no title, no loading/error chrome, no keyboard focus, and no
+ * logicalContent dims, which is the tap coordinate space. Going deaf is worse
+ * than the contamination the fence exists to prevent, and unlike a closed tab
+ * an unknown id here is not evidence of anything. So while this window still
+ * holds only the pristine seed tab it minted and has never opened, closed or
+ * restored a tab, an unknown tag targets that seed. The moment the window owns
+ * a real tab space the fence is absolute again.
  */
 function resolvePageStateTabTarget(
   rawTabId: unknown,
   tabs: readonly SimTab[],
   activeTabId: string,
+  tabSpaceEstablished: boolean,
 ): string | null {
   if (rawTabId === undefined || rawTabId === null) return activeTabId;
   if (typeof rawTabId !== 'string' || rawTabId === '') return null;
-  return tabs.some((tab) => tab.id === rawTabId) ? rawTabId : null;
+  if (tabs.some((tab) => tab.id === rawTabId)) return rawTabId;
+  if (!tabSpaceEstablished && tabs.length === 1) return activeTabId;
+  return null;
 }
 
 interface SimulatorRoomBinding {
@@ -4104,6 +4123,14 @@ export function SimulatorWindow(): JSX.Element {
   // (no set-during-render). The seed tab's url is empty until liveUrl/page_state fills
   // it (synced by the effect below) — there's always exactly one tab on mount.
   const seedTabRef = useRef<SimTab>({ id: makeTabId(), url: '', scrollY: 0, title: '' });
+  // Latched true the first time this window authors or learns a real tab space
+  // (open / close / tabListRestore). Until then it holds only the seed id it
+  // minted, which a reattached box has never heard of — see
+  // resolvePageStateTabTarget. Reset with the seed on a session change. A ref,
+  // not derived state: after open-then-close the window is back to one tab, but
+  // it HAS established a space, and a buffered frame from the closed renderer
+  // must still be rejected.
+  const tabSpaceEstablishedRef = useRef(false);
   const [tabs, setTabs] = useState<SimTab[]>(() => [seedTabRef.current]);
   const [activeTabId, setActiveTabId] = useState<string>(() => seedTabRef.current.id);
   // Data-channel replies can arrive before React commits the state update that
@@ -4315,6 +4342,7 @@ export function SimulatorWindow(): JSX.Element {
         frame.tabId,
         tabsRef.current,
         activeTabIdRef.current,
+        tabSpaceEstablishedRef.current,
       );
       // A present tag is renderer ownership, not a compatibility hint. If that
       // renderer's tab is no longer listed (or the frame is malformed), drop the whole
@@ -4735,6 +4763,7 @@ export function SimulatorWindow(): JSX.Element {
           // in this same task routes against the restored set rather than the retired
           // seed/previous set.
           tabsRef.current = restored;
+          tabSpaceEstablishedRef.current = true;
           setTabs(restored);
           setActiveTabIdSynchronized(active.id);
           // Reflect the active tab's url in the address bar (the BrowserBar reads liveUrl).
@@ -4773,6 +4802,7 @@ export function SimulatorWindow(): JSX.Element {
           msg.tabId,
           tabsRef.current,
           activeTabIdRef.current,
+          tabSpaceEstablishedRef.current,
         );
         // Unknown/malformed tagged frames can be buffered after close/restore. They
         // own no tab in this window, so they must not mutate input dimensions, focus,
@@ -5063,6 +5093,7 @@ export function SimulatorWindow(): JSX.Element {
             ps.tabId,
             tabsRef.current,
             activeTabIdRef.current,
+            tabSpaceEstablishedRef.current,
           );
           // A tagged poll is scoped to that renderer. If its tab was closed or the
           // restored set replaced it, the stale response is inert rather than being
@@ -6017,6 +6048,8 @@ export function SimulatorWindow(): JSX.Element {
     // switches referencing the old tab ids.
     const seed: SimTab = { id: makeTabId(), url: '', scrollY: 0, title: '' };
     seedTabRef.current = seed;
+    // A different session's box has never heard of this id either.
+    tabSpaceEstablishedRef.current = false;
     setTabs([seed]);
     setActiveTabIdSynchronized(seed.id);
     setLiveTitle('');
@@ -6640,6 +6673,7 @@ export function SimulatorWindow(): JSX.Element {
     setTabs((prev) => {
       if (currentTabTransport(sessionId, room, authorityEpoch) === null) return prev;
       const next = [...prev, tab];
+      tabSpaceEstablishedRef.current = true;
       emitTabList(next, tab.id, authorityEpoch);
       return next;
     });
@@ -6756,6 +6790,7 @@ export function SimulatorWindow(): JSX.Element {
       // A buffered frame may be delivered in this same task; it must observe one
       // coherent post-close owner set without waiting for render/passive effects.
       tabsRef.current = next;
+      tabSpaceEstablishedRef.current = true;
       if (nextActive !== currentActiveTabId) setActiveTabIdSynchronized(nextActive);
       setTabs(next);
       emitTabList(next, nextActive, authorityEpoch);
