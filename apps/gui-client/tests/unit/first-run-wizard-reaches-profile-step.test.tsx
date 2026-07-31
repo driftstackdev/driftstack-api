@@ -15,6 +15,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 
+import { resetKeychainCache } from '../../src/lib/settings';
+
 const invokeStore = new Map<string, string>();
 const tauriStore = new Map<string, unknown>();
 let failSecretSave = false;
@@ -70,6 +72,10 @@ vi.mock('@sentry/browser', () => ({
 beforeEach(() => {
   invokeStore.clear();
   tauriStore.clear();
+  // Keychain reads are cached for the process lifetime so the OS asks the
+  // customer once, not once per call — clearing it is part of "fresh launch",
+  // exactly like clearing the fake credential store above.
+  resetKeychainCache();
   failSecretSave = false;
   // Boot with NO key (cloud baseUrl present, but no api_key) → first-run wizard.
   tauriStore.set('driftstack', {

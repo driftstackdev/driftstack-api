@@ -140,23 +140,70 @@ export async function loadBaseUrl(): Promise<string> {
     : DEFAULT_SETTINGS.baseUrl;
 }
 
+/**
+ * In-process cache of resolved keychain reads, keyed by entry name.
+ *
+ * Every `secret_load` is a real `SecItem` read, and on macOS each read the OS
+ * has not already authorized raises its own "allow access" prompt. Nothing
+ * memoized these, and `loadSettings()` runs on every bearer-path control call
+ * (`agent-session-control.ts`), so a single session could ask the customer for
+ * their login password over and over — reported from the running GUI.
+ *
+ * The cache holds the in-flight PROMISE so concurrent callers coalesce into one
+ * read rather than racing into two prompts. Scope is the process: nothing is
+ * written to disk, no OS credential is stored anywhere new, and the entry's ACL
+ * is untouched — the fix is strictly "stop asking the same question repeatedly".
+ * A relaunch re-reads, which is what makes revocation still take effect.
+ */
+const keychainReads = new Map<string, Promise<string | null>>();
+
+/** Drop a cached read so the next access goes back to the OS. */
+function invalidateKeychainCache(name: string): void {
+  keychainReads.delete(name);
+}
+
+/**
+ * Forget every cached read, so the next access goes back to the OS for all
+ * entries. The cache is process-lifetime state; this is what "a fresh launch"
+ * means, and it is what tests use to simulate one between cases.
+ */
+export function resetKeychainCache(): void {
+  keychainReads.clear();
+}
+
 async function keychainLoad(name: string): Promise<string | null> {
-  try {
-    const value = await invoke<string | null>('secret_load', { key: name });
-    return value;
-  } catch {
-    // Keychain access failed (user dismissed, locked, etc.) — fall
-    // back to null. Higher layers treat null as "not set" + prompt
-    // the customer in settings.
-    return null;
-  }
+  const inFlight = keychainReads.get(name);
+  if (inFlight !== undefined) return inFlight;
+
+  const read = (async () => {
+    try {
+      return await invoke<string | null>('secret_load', { key: name });
+    } catch {
+      // Keychain access failed (user dismissed, locked, etc.) — fall
+      // back to null. Higher layers treat null as "not set" + prompt
+      // the customer in settings.
+      //
+      // Deliberately NOT cached: a dismissed prompt or a locked keychain is a
+      // transient condition the customer can resolve mid-session, so the next
+      // caller must reach the OS again. Only a resolved read is remembered —
+      // including a genuine "no such entry", which is a real answer.
+      invalidateKeychainCache(name);
+      return null;
+    }
+  })();
+
+  keychainReads.set(name, read);
+  return read;
 }
 
 async function keychainSave(name: string, value: string): Promise<boolean> {
   try {
     await invoke('secret_save', { key: name, value });
+    // The entry now holds `value`; serve that instead of re-prompting for it.
+    keychainReads.set(name, Promise.resolve(value));
     return true;
   } catch (err) {
+    invalidateKeychainCache(name);
     // Soft-fail like keychainLoad/keychainDelete: a save failure (locked
     // keychain, user dismissed the prompt) must NOT throw — it propagates
     // through saveSettings → SettingsContext.update → a `void update(...)`
@@ -170,8 +217,12 @@ async function keychainSave(name: string, value: string): Promise<boolean> {
 async function keychainDelete(name: string): Promise<void> {
   try {
     await invoke('secret_delete', { key: name });
+    // Deletion is idempotent and authoritative: the entry is gone either way,
+    // so cache the absence rather than re-prompting to rediscover it.
+    keychainReads.set(name, Promise.resolve(null));
   } catch {
     /* idempotent — delete-when-absent is acceptable */
+    invalidateKeychainCache(name);
   }
 }
 

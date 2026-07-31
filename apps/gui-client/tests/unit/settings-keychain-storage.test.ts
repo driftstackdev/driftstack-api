@@ -7,8 +7,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const disk = new Map<string, unknown>();
 const keychain = new Map<string, string>();
 let failSaves = false;
+let failLoads = false;
 const invoke = vi.fn((command: string, args: { key: string; value?: string }): Promise<unknown> => {
-  if (command === 'secret_load') return Promise.resolve(keychain.get(args.key) ?? null);
+  if (command === 'secret_load') {
+    if (failLoads) return Promise.reject(new Error('credential store locked'));
+    return Promise.resolve(keychain.get(args.key) ?? null);
+  }
   if (command === 'secret_save') {
     if (failSaves) return Promise.reject(new Error('credential store locked'));
     keychain.set(args.key, args.value ?? '');
@@ -37,15 +41,25 @@ vi.mock('@tauri-apps/plugin-store', () => ({
   },
 }));
 
-const { DEFAULT_SETTINGS, loadBaseUrl, loadSettings, rememberedKeyFor, saveSettings } =
-  await import('../../src/lib/settings');
+const {
+  DEFAULT_SETTINGS,
+  loadBaseUrl,
+  loadSettings,
+  rememberedKeyFor,
+  resetKeychainCache,
+  saveSettings,
+} = await import('../../src/lib/settings');
 
 describe('settings API-key protected storage', () => {
   beforeEach(() => {
     disk.clear();
     keychain.clear();
     failSaves = false;
+    failLoads = false;
     invoke.mockClear();
+    // The read cache is process-lifetime state, so clearing it here is the same
+    // act as clearing the fake OS store above: each case starts a fresh launch.
+    resetKeychainCache();
   });
 
   it('saves a self-hosted key only to its scoped keychain entry, never settings.json', async () => {
@@ -156,5 +170,73 @@ describe('settings API-key protected storage', () => {
     expect(keychain.has('api_key:onprem.example.com')).toBe(false);
     expect(keychain.has('api_key')).toBe(false);
     expect(JSON.stringify(disk.get('driftstack'))).not.toContain('ds_live');
+  });
+
+  // The GUI asks the OS for a credential on every bearer-path control call
+  // (agent-session-control routes each one through loadSettings). Every one of
+  // those reads is a real SecItem access, and macOS raises its own password
+  // prompt for each access it has not already authorized — so an uncached read
+  // meant the customer was asked repeatedly during a single session. Reported
+  // from the running GUI, not hypothesised.
+  describe('the OS is asked once per launch, not once per call', () => {
+    const loadsOf = (name: string): number =>
+      invoke.mock.calls.filter(([cmd, args]) => cmd === 'secret_load' && args.key === name).length;
+
+    it('CRITICAL reads a credential entry ONCE no matter how many callers need it. Each uncached read is a separate OS access prompt, so this count IS the number of times the customer is asked for their password.', async () => {
+      keychain.set('api_key:api.driftstack.dev', 'ds_live_cached');
+      disk.set('driftstack', { baseUrl: 'https://api.driftstack.dev' });
+      invoke.mockClear();
+
+      for (let i = 0; i < 5; i += 1) {
+        await expect(loadSettings()).resolves.toMatchObject({ apiKey: 'ds_live_cached' });
+      }
+
+      expect(loadsOf('api_key:api.driftstack.dev')).toBe(1);
+    });
+
+    it('CRITICAL coalesces concurrent readers into a single OS access. Two callers racing on mount would otherwise raise two prompts for one credential.', async () => {
+      keychain.set('api_key:api.driftstack.dev', 'ds_live_cached');
+      disk.set('driftstack', { baseUrl: 'https://api.driftstack.dev' });
+      invoke.mockClear();
+
+      const results = await Promise.all([loadSettings(), loadSettings(), loadSettings()]);
+
+      expect(results.map((r) => r.apiKey)).toEqual([
+        'ds_live_cached',
+        'ds_live_cached',
+        'ds_live_cached',
+      ]);
+      expect(loadsOf('api_key:api.driftstack.dev')).toBe(1);
+    });
+
+    it('CRITICAL does NOT cache a dismissed prompt or a locked store. That is a transient state the customer fixes mid-session, so the next read must reach the OS again — caching it would strand them keyless until relaunch.', async () => {
+      keychain.set('api_key:api.driftstack.dev', 'ds_live_after_unlock');
+      disk.set('driftstack', { baseUrl: 'https://api.driftstack.dev' });
+
+      failLoads = true;
+      await expect(loadSettings()).resolves.toMatchObject({ apiKey: null });
+
+      failLoads = false;
+      await expect(loadSettings()).resolves.toMatchObject({ apiKey: 'ds_live_after_unlock' });
+    });
+
+    it('serves a just-saved key from memory and re-reads after the entry is deleted', async () => {
+      disk.set('driftstack', { baseUrl: 'https://api.driftstack.dev' });
+      await saveSettings({
+        ...DEFAULT_SETTINGS,
+        baseUrl: 'https://api.driftstack.dev',
+        apiKey: 'ds_live_just_saved',
+      });
+      invoke.mockClear();
+
+      await expect(loadSettings()).resolves.toMatchObject({ apiKey: 'ds_live_just_saved' });
+      expect(loadsOf('api_key:api.driftstack.dev')).toBe(0);
+
+      // A different launch must not inherit this process's memory.
+      resetKeychainCache();
+      keychain.delete('api_key:api.driftstack.dev');
+      await expect(loadSettings()).resolves.toMatchObject({ apiKey: null });
+      expect(loadsOf('api_key:api.driftstack.dev')).toBe(1);
+    });
   });
 });
