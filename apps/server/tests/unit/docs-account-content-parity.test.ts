@@ -29,9 +29,17 @@ describe('docs api/account content parity', () => {
 
   it("/me-ignores-team-RBAC invariant pinned: /me always operates on caller's own account, even when caller has admin role on team owner. Drift would silently route /me to the owner's data instead of the team member's own — a confidentiality leak in the team-RBAC contract", () => {
     expect(body).toMatch(
-      /never honours the team-RBAC\s+`X-Driftstack-Account` header — `\/me` always operates on the\s+caller's own account/,
+      /never\s+honours the team-RBAC `X-Driftstack-Account` header, even when the\s+caller has admin role on a team owner's account/,
     );
-    expect(body).toMatch(/even when the caller has admin role on a\s+team owner's account/);
+    expect(body).toMatch(/even when the\s+caller has admin role on a team owner's account/);
+  });
+
+  it('CRITICAL the /me self-only rule is SCOPED, not blanket. `98d767a73` made the nested `/v1/account/me/organization` resource honour the selected effective account, because folders and tags must stay with the profiles they organize. The identity resource and its avatar mutations remain self-only. Pinning either half alone lets the page drift into a confidentiality leak (identity routed to the owner) or a broken GUI (taxonomy stuck on the actor).', () => {
+    const body = read(PAGE);
+    expect(body).toMatch(/This self-only\s+rule also covers its avatar mutations\./);
+    expect(body).toMatch(
+      /The nested\s+`\/v1\/account\/me\/organization` profile-taxonomy resource is an\s+explicit exception: it honours the selected effective account/,
+    );
   });
 
   it('response-shape table covers the 14 surface fields (sampling the most-customer-cited ones to detect a row-drop): drift to dropping `mfa_enrolled` would orphan the security header indicator; drift to dropping `teams` would break team-RBAC UX in customer dashboards', () => {

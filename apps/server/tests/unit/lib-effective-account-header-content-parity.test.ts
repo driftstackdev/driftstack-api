@@ -29,17 +29,26 @@ describe('lib/effective-account-header content parity', () => {
     );
   });
 
-  it('7-route consumer catalog pinned: admin.ts + webhooks.ts + profiles.ts + profile-snapshots.ts + account-audit.ts + sessions.ts + email-preferences.ts. — pinned so the consolidation history + 7-route consumer list stays documented (drift to dropping a route from the consumer list would re-introduce per-route drift surface)', () => {
+  it('Consumer roster pinned, with the call-site COUNT deferred to the AST invariant. `98d767a73` grew this surface to 10 route modules and replaced the hand-maintained "7 routes" number with a roster that points at `effective-account-header-authz-invariant` for the exact count — the better design, because a duplicated count in a comment is precisely what went stale here. Drift to dropping a module from the roster would re-introduce per-route drift surface.', () => {
     expect(body).toMatch(
-      /\/\/ 7 routes consume this header for team-RBAC effective-account\s*\n?\s*\/\/ resolution:/,
+      /\/\/ 10 route modules currently contain 32 authorized reads of this header for\s*\n\/\/ team-RBAC effective-account resolution \(the AST invariant owns the exact\s*\n\/\/ call-site count\):/,
     );
-    expect(body).toMatch(/\/\/ {3}- apps\/server\/src\/routes\/admin\.ts/);
-    expect(body).toMatch(/\/\/ {3}- apps\/server\/src\/routes\/webhooks\.ts/);
-    expect(body).toMatch(/\/\/ {3}- apps\/server\/src\/routes\/profiles\.ts/);
-    expect(body).toMatch(/\/\/ {3}- apps\/server\/src\/routes\/profile-snapshots\.ts/);
-    expect(body).toMatch(/\/\/ {3}- apps\/server\/src\/routes\/account-audit\.ts/);
-    expect(body).toMatch(/\/\/ {3}- apps\/server\/src\/routes\/sessions\.ts/);
-    expect(body).toMatch(/\/\/ {3}- apps\/server\/src\/routes\/email-preferences\.ts/);
+    for (const routeModule of [
+      'account-audit',
+      'account-me',
+      'admin',
+      'agent-sessions',
+      'billing',
+      'email-preferences',
+      'profile-snapshots',
+      'profiles',
+      'sessions',
+      'webhooks',
+    ]) {
+      expect(body, `roster must list ${routeModule}.ts`).toMatch(
+        new RegExp(`// {3}- apps/server/src/routes/${routeModule}\\.ts`),
+      );
+    }
   });
 
   it("Extraction-rationale framing pinned: 'Previously each route hand-rolled an identical readEffectiveAccountHeader helper. Extracted to one place so: 1. Drift on any one route can be caught by a parity test. 2. Future safety improvements (e.g. the empty-string normalisation below) land everywhere at once.' — pinned so the extraction-rationale + parity-test-catches-drift + safety-improvements-land-everywhere contract all stay documented", () => {

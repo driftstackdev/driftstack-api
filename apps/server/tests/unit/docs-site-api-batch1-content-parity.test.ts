@@ -120,9 +120,16 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     const body = read(P('account.md'));
     expect(body).toMatch(/^title: Account$/m);
     expect(body).toMatch(/^# Account$/m);
-    expect(body).toMatch(/`\/v1\/account\/me` is the calling account's self-edit surface\./);
+    expect(body).toMatch(
+      /The exact `\/v1\/account\/me` identity resource is the calling\s+account's self-edit surface\./,
+    );
+    // Scoped, not blanket — the nested organization resource is an explicit
+    // exception since `98d767a73`.
+    expect(body).toMatch(/profile-taxonomy resource is an\s+explicit exception/);
     expect(body).toMatch(/The/);
-    expect(body).toMatch(/endpoint is bearer-authenticated; it never honours the team-RBAC/);
+    expect(body).toMatch(
+      /It is bearer-authenticated and never\s+honours the team-RBAC `X-Driftstack-Account` header/,
+    );
     expect(existsSync(P('account.md'))).toBe(true);
   });
 
