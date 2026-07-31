@@ -16,14 +16,13 @@
 // `/v1/admin/*` is excluded: it is staff-only, not published for customer
 // key-minting, and most of it has no OpenAPI operation at all.
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const ROUTES_DIR = resolve(REPO_ROOT, 'apps/server/src/routes');
 const OPENAPI = resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts');
 
 type RouteKey = string; // `${method} ${path}`
@@ -32,11 +31,34 @@ type RouteKey = string; // `${method} ${path}`
  * Scopes each route enforces, read from the route source. This is the source of
  * truth — the doc text is what we are checking AGAINST it.
  */
+/**
+ * Every `.ts` under `apps/server/src`, not just `src/routes`.
+ *
+ * Registration is not confined to that directory — `/v1/whoami` lives in
+ * `lib/app.ts` — and a scan limited to `routes/` silently exempts anything
+ * registered elsewhere. That is a FALSE NEGATIVE in a disclosure guard: the
+ * route would enforce a gate nobody checked. No such route exists today (the
+ * one outside `routes/` carries no scope and the `global` bucket), so this
+ * closes a latent hole rather than a live one.
+ */
+function serverSourceFiles(): string[] {
+  const out: string[] = [];
+  const stack = [resolve(REPO_ROOT, 'apps/server/src')];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    for (const entry of readdirSync(dir)) {
+      const full = resolve(dir, entry);
+      if (statSync(full).isDirectory()) stack.push(full);
+      else if (entry.endsWith('.ts')) out.push(full);
+    }
+  }
+  return out;
+}
+
 function enforcedScopes(): Map<RouteKey, string[]> {
   const out = new Map<RouteKey, string[]>();
-  for (const file of readdirSync(ROUTES_DIR)) {
-    if (!file.endsWith('.ts')) continue;
-    const src = readFileSync(resolve(ROUTES_DIR, file), 'utf8');
+  for (const file of serverSourceFiles()) {
+    const src = readFileSync(file, 'utf8');
     const regs = [
       ...src.matchAll(/\bapp\.(get|post|put|patch|delete)\b[^(]*\(\s*['"`](\/v1\/[^'"`]+)['"`]/g),
     ];
