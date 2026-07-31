@@ -136,32 +136,28 @@ function rateLimitPlugin(
   };
   type OwnerAuthority = { account: AccountRow; overrides: Record<string, RateLimitOverride> };
   /**
-   * Owner authority was read fresh on EVERY distinct-owner request: two
-   * uncached Postgres reads (account row + active overrides) before the token
-   * check, so the limiter amplified the database load it exists to cap. The
-   * blast radius is bounded — the actor bucket is charged first, and self /
-   * control-key traffic returns before ever reaching here — but a large team on
-   * a high tier can still drive thousands of extra reads per second.
+   * Owner authority is read fresh on every distinct-owner request: two Postgres
+   * reads (account row + active overrides) before the token check, so the
+   * limiter adds database load in order to decide admission. Bounded — the
+   * actor bucket is charged first, and self / control-key traffic returns on
+   * the receipt without reaching here — but a large team on a high tier still
+   * multiplies it by every member's budget.
    *
-   * Two mitigations, both plugin-local so every app instance (and every test)
-   * starts clean: single-flight, so a concurrent burst for one owner collapses
-   * to ONE read pair instead of one per request; and a short TTL, so steady
-   * traffic re-reads at most once per window.
+   * The mitigation is SINGLE-FLIGHT ONLY, deliberately not a TTL cache.
+   * services/auth.ts states the rule this plugin must not break: "Redis
+   * generation bumps are cache accelerators, not authority. Every positive hit
+   * re-reads the live account, exact credential, team grants, and active
+   * rate-limit overrides." The actor's own tier and overrides are therefore
+   * FRESH on every request — the 30s auth-cache TTL buys skipping scrypt, not
+   * stale authority. Holding owner authority for even a few seconds would make
+   * the owner's policy staler than the actor's and let a staff override cut, a
+   * tier downgrade or a suspension keep admitting traffic after it landed.
    *
-   * The staleness this introduces stays strictly INSIDE the contract the actor
-   * path already has. RedisAuthCache holds the actor's own tier and overrides
-   * for 30s, and revocation is documented to take effect within that window;
-   * 5s keeps owner policy fresher than the caller's own, so no request is ever
-   * limited by owner state older than its actor state. Failures are never
-   * cached, so a suspended owner that is restored recovers on the next request
-   * rather than after a window.
+   * Coalescing concurrent identical reads costs nothing in freshness: callers
+   * share one IN-FLIGHT read and every one of them still observes state read
+   * during its own request. This is the same shape as AuthCoalescer, for the
+   * same reason.
    */
-  const OWNER_AUTHORITY_TTL_MS = 5_000;
-  /** Bounded like the fallback store: a hostile spread of owner ids must not
-   *  grow this without limit. Insertion-ordered, so evicting the oldest key is
-   *  a first-entry delete. */
-  const OWNER_AUTHORITY_MAX_ENTRIES = 5_000;
-  const ownerAuthorityCache = new Map<string, { value: OwnerAuthority; expiresAtMs: number }>();
   const ownerAuthorityInFlight = new Map<string, Promise<OwnerAuthority>>();
 
   const readLiveOwnerAuthority = async (ownerAccountId: string): Promise<OwnerAuthority> => {
@@ -189,30 +185,15 @@ function rateLimitPlugin(
   };
 
   const loadLiveOwnerAuthority = async (ownerAccountId: string): Promise<OwnerAuthority> => {
-    const cached = ownerAuthorityCache.get(ownerAccountId);
-    if (cached !== undefined) {
-      if (cached.expiresAtMs > Date.now()) return cached.value;
-      ownerAuthorityCache.delete(ownerAccountId);
-    }
     const inFlight = ownerAuthorityInFlight.get(ownerAccountId);
     if (inFlight !== undefined) return inFlight;
-
     const pending = readLiveOwnerAuthority(ownerAccountId);
     ownerAuthorityInFlight.set(ownerAccountId, pending);
     try {
-      const value = await pending;
-      // Only a SUCCESSFUL read is cached; a rejection (missing/suspended owner,
-      // or an authority outage) must be re-decided on the next request.
-      if (ownerAuthorityCache.size >= OWNER_AUTHORITY_MAX_ENTRIES) {
-        const oldest = ownerAuthorityCache.keys().next();
-        if (!oldest.done) ownerAuthorityCache.delete(oldest.value);
-      }
-      ownerAuthorityCache.set(ownerAccountId, {
-        value,
-        expiresAtMs: Date.now() + OWNER_AUTHORITY_TTL_MS,
-      });
-      return value;
+      return await pending;
     } finally {
+      // Cleared on BOTH outcomes: a rejected lookup must never wedge an owner
+      // behind a permanently-settled failed promise.
       ownerAuthorityInFlight.delete(ownerAccountId);
     }
   };
@@ -346,14 +327,30 @@ function rateLimitPlugin(
         return;
       }
       const ctx = request.account;
-      // gui_control_key control-auth path: `request.account` is absent
-      // (the per-session control key isn't an account credential), but
-      // the route's auth preHandler stashed the session's OWNING
-      // account id. Charge that account's bucket at the conservative
-      // `free`-tier floor so a per-session control key still consumes
-      // rate-limit budget (never bypasses it) — and never sees a tier
-      // larger than the smallest. Overrides are intentionally NOT
-      // applied here (they're a per-account-key concept).
+      // gui_control_key control-auth path: `request.account` is absent (the
+      // per-session control key isn't an account credential), but the route's
+      // auth preHandler stashed the session's OWNING account id, and that
+      // account's bucket is what gets charged so a control key still consumes
+      // rate-limit budget rather than bypassing it.
+      //
+      // This used to charge it at a conservative `free`-tier floor with no
+      // overrides, which was actively DESTRUCTIVE rather than merely
+      // conservative. `storeKey` is `rl:<accountId>:<bucketKey>` with no tier
+      // in it, so the control key writes the SAME Redis bucket as the owner's
+      // account-authenticated traffic, and the token-bucket script persists
+      // `math.min(capacity, ...)`. Every control-key request therefore
+      // truncated a paid owner's live bucket to the free-tier capacity — an
+      // api_scale `global` bucket of 6000 collapsing to ~59 — and `overrides:
+      // {}` discarded any staff grant with it. The desktop Simulator polls
+      // page-state every ~2s, so a paying customer running it saw their
+      // purchased API limit silently pinned near free-tier for as long as the
+      // window was open. Charging budget and destroying budget are different
+      // things; only the first was intended.
+      //
+      // Two writers sharing one key MUST agree on its capacity, so the control
+      // key now resolves the owner's real tier and active overrides — the same
+      // live authority, through the same coalesced loader, that the
+      // effective-owner path already uses.
       const controlKeyAccountId = request.guiControlKeyRateLimitAccountId;
       if (!ctx && controlKeyAccountId === undefined) {
         // Rate limit only applies to authenticated requests. If we ever wire
@@ -361,12 +358,28 @@ function rateLimitPlugin(
         throw new UnauthorizedError('Rate limit requires an authenticated request.');
       }
 
+      let controlKeyAuthority: OwnerAuthority | undefined;
+      if (!ctx) {
+        controlKeyAuthority = await loadLiveOwnerAuthority(controlKeyAccountId!).catch(
+          (error: unknown) => {
+            if (error instanceof ForbiddenError) throw error;
+            request.log.warn(
+              { component: 'rate-limit', bucket: bucketKey, err: error },
+              'control-key owner authority lookup failed — failing CLOSED',
+            );
+            const retryAfterSec = 60;
+            reply.header('retry-after', retryAfterSec.toString());
+            throw new RateLimitedError(retryAfterSec);
+          },
+        );
+      }
+
       const consumeInput = {
-        accountId: ctx ? ctx.account.id : controlKeyAccountId!,
-        tier: ctx ? ctx.account.tier : ('free' as const),
+        accountId: ctx ? ctx.account.id : controlKeyAuthority!.account.id,
+        tier: ctx ? ctx.account.tier : controlKeyAuthority!.account.tier,
         bucketKey,
         cost,
-        overrides: ctx ? ctx.rateLimitOverrides : {},
+        overrides: ctx ? ctx.rateLimitOverrides : controlKeyAuthority!.overrides,
       };
       let result: ConsumeResultWithBucket;
       try {
@@ -447,8 +460,8 @@ function rateLimitPlugin(
       // Allowed → debug level (high-volume; avoid noise at default
       // info-level production logs). Exceeded → warn level (carries the
       // operational signal for capacity planning + abuse detection).
-      const effectiveAccountId = ctx ? ctx.account.id : controlKeyAccountId!;
-      const effectiveTier = ctx ? ctx.account.tier : 'free';
+      const effectiveAccountId = consumeInput.accountId;
+      const effectiveTier = consumeInput.tier;
       const logFields = {
         component: 'rate-limit',
         account_id: effectiveAccountId,

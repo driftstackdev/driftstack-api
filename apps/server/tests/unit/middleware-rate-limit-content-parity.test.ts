@@ -65,13 +65,16 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
     );
   });
 
-  it('rateLimitConsume args: accountId + tier + bucketKey + cost + overrides (account path from ctx; gui_control_key control-auth path charges the session-owner account at the free-tier floor with no overrides). Hoisted into a shared consumeInput so the same args feed the bounded fallback on a store error.', () => {
+  it('rateLimitConsume args: accountId + tier + bucketKey + cost + overrides (account path from ctx; the gui_control_key control-auth path (ctx absent) charges the session-owner account at that owners own live tier and overrides — a hardcoded free-tier floor wrote the SAME rl:accountId:bucketKey bucket at a smaller capacity, and the token bucket persists min(capacity, ...), so it truncated a paid owners live budget). Hoisted into a shared consumeInput so the same args feed the bounded fallback on a store error.', () => {
     expect(body).toContain('result = await rateLimitConsume(opts.store, consumeInput);');
-    expect(body).toContain('accountId: ctx ? ctx.account.id : controlKeyAccountId!,');
-    expect(body).toContain("tier: ctx ? ctx.account.tier : ('free' as const),");
+    expect(body).toContain('accountId: ctx ? ctx.account.id : controlKeyAuthority!.account.id,');
+    expect(body).toContain('tier: ctx ? ctx.account.tier : controlKeyAuthority!.account.tier,');
+    expect(body).not.toContain("('free' as const)");
     expect(body).toContain('bucketKey,');
     expect(body).toContain('cost,');
-    expect(body).toContain('overrides: ctx ? ctx.rateLimitOverrides : {},');
+    expect(body).toContain(
+      'overrides: ctx ? ctx.rateLimitOverrides : controlKeyAuthority!.overrides,',
+    );
   });
 
   it('W384 store-error degrade: primary failure uses bounded memory; dual failure denies with a retryable 429 instead of admitting unmetered work', () => {

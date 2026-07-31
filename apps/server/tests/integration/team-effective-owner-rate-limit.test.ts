@@ -204,13 +204,13 @@ describe('team-resource actor + effective-owner rate limiting', () => {
     });
     expectGenericOwnerDenial(agentDenied);
 
-    // ONE read pair, not one per request: both denials fall inside the owner
-    // authority window, so the second is served from the plugin-local cache.
-    // The load-bearing claims either side are unchanged — zero owner reads
-    // before authorization (asserted above), a real owner read once authorized.
-    // Pinned exactly, so deleting the cache OR the lookup reds this.
-    expect(ownerGet.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
-    expect(ownerOverrides.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
+    // One read pair PER REQUEST, deliberately. These two denials are sequential,
+    // so nothing coalesces and each re-reads live owner authority — the limiter
+    // must never admit or deny on stale tier/override state. The load-bearing
+    // claims either side are unchanged: zero owner reads before authorization
+    // (asserted above), a real owner read once authorized.
+    expect(ownerGet.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(2);
+    expect(ownerOverrides.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(2);
     expect(directInsert).not.toHaveBeenCalled();
     expect(driverCreate).not.toHaveBeenCalled();
     expect(agentInsert).not.toHaveBeenCalled();
@@ -228,16 +228,20 @@ describe('team-resource actor + effective-owner rate limiting', () => {
     // Still no FURTHER owner lookup — the actor bucket refused before the owner
     // path was reached at all, which is the claim here (the count is unchanged
     // from above rather than incremented).
-    expect(ownerGet.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
-    expect(ownerOverrides.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
+    expect(ownerGet.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(2);
+    expect(ownerOverrides.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(2);
   });
 
-  it('collapses a concurrent burst to ONE owner authority read instead of one per request', async () => {
-    // The owner lookup is two uncached Postgres reads (account row + active
-    // overrides) that run BEFORE the token check, so without coalescing the
-    // limiter amplifies the database load it exists to cap. The actor bucket
-    // bounds it, but a large team on a high tier still multiplies it by every
-    // member's budget. A burst for one owner must cost one read pair.
+  it('collapses a CONCURRENT burst to one owner authority read without ever serving stale authority', async () => {
+    // Coalescing only — deliberately NOT a TTL cache. services/auth.ts holds the
+    // rule: caches are accelerators, never authority, and every positive auth hit
+    // re-reads the live account and active overrides. So the ACTOR's tier and
+    // overrides are fresh per request, and holding the OWNER's for even a few
+    // seconds would make owner policy staler than actor policy and let a staff
+    // override cut, a downgrade or a suspension keep admitting after it landed.
+    // Sharing one IN-FLIGHT read costs nothing in freshness: every caller still
+    // observes state read during its own request. Sequential traffic re-reads
+    // (pinned above); only a simultaneous burst collapses.
     fx = await buildTestApp({ tier: 'api_scale' });
     seedOwner('api_scale');
     setPrimaryMembership('admin');
@@ -445,11 +449,26 @@ describe('team-resource actor + effective-owner rate limiting', () => {
       headers: { 'x-driftstack-gui-control-key': controlKey },
     });
     expect(control.statusCode).toBe(200);
-    expect(
-      consume.mock.calls.filter(([input]) => input.key === `rl:${fx!.accountId}:global`),
-    ).toHaveLength(1);
+    const controlConsumes = consume.mock.calls.filter(
+      ([input]) => input.key === `rl:${fx!.accountId}:global`,
+    );
+    expect(controlConsumes).toHaveLength(1);
+    // The control key charges the owner's bucket at the OWNER'S REAL capacity,
+    // which is why it must resolve live authority (one lookup, not zero).
+    //
+    // It used to pass a hardcoded free-tier capacity with no overrides. The
+    // store key is `rl:<accountId>:<bucketKey>` with no tier in it, so that was
+    // the SAME bucket the owner's account-authenticated traffic uses, and the
+    // token bucket persists `min(capacity, ...)` — so every control-key request
+    // truncated this api_scale account's live bucket to the free-tier size and
+    // discarded its overrides. Pinning the capacity here is the assertion that
+    // actually catches a regression; a lookup count alone would not.
+    expect(controlConsumes[0]![0].capacity).toBe(
+      consume.mock.calls.find(([input]) => input.key === `rl:${fx!.accountId}:global`)![0].capacity,
+    );
+    expect(controlConsumes[0]![0].capacity).toBeGreaterThan(60);
     expect(accountLookup.mock.calls.filter(([idValue]) => idValue === fx!.accountId)).toHaveLength(
-      0,
+      1,
     );
   });
 

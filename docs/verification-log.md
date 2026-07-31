@@ -29759,3 +29759,97 @@ two-admin capacity-one contention case, strict server source and test
 TypeScript, targeted ESLint and Prettier. No schema, route, OpenAPI, SDK,
 shared build/deploy, native, harness/Fleet, environment, customer, secret or
 package surface changed.
+
+---
+
+## V-710 — Correction to V-709: the owner-authority TTL cache was wrong and is removed
+
+**Date:** 2026-07-31
+
+V-709 justified holding owner authority for five seconds by claiming the actor
+path already tolerates thirty seconds of staleness, so owner state would still
+be the fresher of the two. **That claim is false, and the entry is superseded
+here rather than edited, because the reasoning is worth keeping visible.**
+
+`services/auth.ts` states the rule directly: "Redis generation bumps are cache
+accelerators, not authority. Every positive hit re-reads the live account, exact
+credential, team grants, and active rate-limit overrides in parallel, so a
+process crash or Redis failure after a PostgreSQL revoke/rotate/reset/MFA/
+status/membership/override mutation cannot extend stale authority to the cache
+TTL." The thirty-second TTL buys skipping scrypt. The actor's tier and overrides
+are read live on **every** request. There was no existing staleness window to
+sit inside, so the cache was a net-new freshness regression against an explicit
+architectural invariant — and its effects outlive its own window, because a
+decision made on stale capacity is not revisited when the entry expires.
+
+The concrete case: a tier downgrade, a staff override reduction, or a suspension
+lands in Postgres, and team traffic keeps being admitted against the previous
+policy until the entry expires. Small in wall-clock, but the limiter is the
+anti-abuse control, and "the limiter admitted traffic the current policy forbids"
+is not a defect worth trading for read volume.
+
+The TTL cache is removed. Single-flight coalescing is retained, because it costs
+nothing in freshness: concurrent callers share one **in-flight** read and each
+still observes state read during its own request — the same shape, and the same
+reason, as `AuthCoalescer`. A concurrent burst for one owner therefore still
+collapses to one read pair, while sequential traffic re-reads live, which is
+exactly what the actor path does and is the correct bar. The in-flight entry is
+cleared on both outcomes so a rejected lookup cannot wedge an owner behind a
+settled failed promise.
+
+Proof follows the corrected contract. A twelve-request concurrent burst performs
+one `getAccount` and one `findActiveRateLimitOverrides` with every response still
+succeeding on its own merits; two SEQUENTIAL denied requests now pin two read
+pairs, asserting that nothing is served from a cache between them. Both mutations
+are proved red: removing the single-flight lookup, and leaking the in-flight
+entry instead of clearing it.
+
+This was found by an adversarial audit of A3's own change, one commit after it
+landed. Verification: full server suite green, real-Redis rate-limit e2e 4/4
+including the two-admin capacity-one contention case, strict server source and
+test TypeScript, targeted ESLint and Prettier.
+
+---
+
+## V-711 — A control-key request no longer truncates the owner's purchased rate limit
+
+**Date:** 2026-07-31
+
+Found by an adversarial audit of the release candidate; pre-existing, and not
+caught by ~26,200 passing tests because the only assertion touching the line was
+a source-text parity pin that matched the expression verbatim and exercised no
+behaviour.
+
+The `gui_control_key` path has no account context, so it charged the session's
+owning account at a hardcoded `free` tier with no overrides — described in the
+code as a "conservative floor". It was not conservative; it was destructive.
+`storeKey` is `rl:<accountId>:<bucketKey>` with no tier in it, so a control-key
+request writes the SAME Redis bucket as the owner's account-authenticated
+traffic, and the token-bucket script persists `math.min(capacity, ...)` on both
+the allowed and denied branches. Every control-key request therefore truncated
+the owner's live bucket to the free-tier size — an `api_scale` `global` bucket
+of 6000 collapsing to ~59 — and `overrides: {}` discarded any staff grant with
+it. The desktop Simulator polls page-state roughly every two seconds, so a
+paying customer running the Simulator alongside SDK or dashboard traffic had
+their purchased API limit silently pinned near free-tier for as long as the
+window was open, while the response headers still advertised the tier they paid
+for. The same applies to `agent_sessions:message` via the composer and
+`agent_sessions:input_event` via the input stream.
+
+Charging budget and destroying budget are different things, and only the first
+was intended. Two writers sharing one key must agree on that key's capacity, so
+the control-key path now resolves the owner's real tier and active overrides
+through the same coalesced live-authority loader the effective-owner path
+already uses. A suspended or deleted owner keeps its exact non-retryable 403,
+and an authority outage still fails closed.
+
+Pinned behaviourally rather than by call count: the control-key consume must
+carry the same capacity as the owner's own account-authenticated consume, and a
+capacity above the free-tier floor. Reinstating the hardcoded free tier is
+proved red. The three source-text guards that pinned the retired expression now
+pin the corrected one and reject the old literal.
+
+Verification: full server suite 2479 files / 26,248 passing / 0 failing, strict
+server source and test TypeScript, targeted ESLint and Prettier. No schema,
+route, OpenAPI, SDK, shared build/deploy, native, harness/Fleet, environment,
+customer, secret or package surface changed.

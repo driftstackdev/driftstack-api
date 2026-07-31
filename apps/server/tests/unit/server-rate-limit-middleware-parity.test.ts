@@ -65,18 +65,21 @@ describe('W713 server-side rate-limit middleware parity', () => {
     expect(src).toMatch(/Rate limit only applies to authenticated requests/);
   });
 
-  it('CRITICAL rateLimitConsume 5-arg call shape pinned — accountId + tier + bucketKey + cost + overrides. The 5-field input is what threads the account-context + per-account override into the token-bucket consumer. Drift to dropping `overrides` would let admin-issued rate-limit overrides silently stop applying. On the gui_control_key control-auth path (ctx absent) the owner account is charged at the conservative free-tier floor with no overrides.', () => {
+  it('CRITICAL rateLimitConsume 5-arg call shape pinned — accountId + tier + bucketKey + cost + overrides. The 5-field input is what threads the account-context + per-account override into the token-bucket consumer. Drift to dropping `overrides` would let admin-issued rate-limit overrides silently stop applying. the gui_control_key control-auth path (ctx absent) charges the session-owner account at that owners own live tier and overrides — a hardcoded free-tier floor wrote the SAME rl:accountId:bucketKey bucket at a smaller capacity, and the token bucket persists min(capacity, ...), so it truncated a paid owners live budget.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
 
     // DoS hardening hoisted the consume input into a shared `consumeInput` so
     // the SAME args feed the bounded fallback store on a primary-store error.
     expect(src).toContain('const consumeInput = {');
     expect(src).toContain('result = await rateLimitConsume(opts.store, consumeInput);');
-    expect(src).toContain('accountId: ctx ? ctx.account.id : controlKeyAccountId!,');
-    expect(src).toContain("tier: ctx ? ctx.account.tier : ('free' as const),");
+    expect(src).toContain('accountId: ctx ? ctx.account.id : controlKeyAuthority!.account.id,');
+    expect(src).toContain('tier: ctx ? ctx.account.tier : controlKeyAuthority!.account.tier,');
+    expect(src).not.toContain("('free' as const)");
     expect(src).toContain('bucketKey,');
     expect(src).toContain('cost,');
-    expect(src).toContain('overrides: ctx ? ctx.rateLimitOverrides : {},');
+    expect(src).toContain(
+      'overrides: ctx ? ctx.rateLimitOverrides : controlKeyAuthority!.overrides,',
+    );
     // The fallback path reuses the same consumeInput.
     expect(src).toContain('result = await rateLimitConsume(fallbackStore, consumeInput);');
   });
