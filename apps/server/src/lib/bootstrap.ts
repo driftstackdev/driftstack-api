@@ -1515,6 +1515,13 @@ export async function createProductionDeps(
     const accountDeletionPurgeSweeper = new AccountDeletionPurgeSweeperService({
       repo: new DrizzleAccountDeletionPurgeRepo(dbHandle),
       byok: byokAnthropicService,
+      // privacy-policy.md §3.5 names "HTTP/SOCKS5 proxy credentials" as
+      // Customer-Provided Secrets, and §9 commits to erasing them within 30
+      // days of account termination. Before this they were retained
+      // indefinitely: the account delete is a soft status flip, the accounts
+      // row is never hard-deleted so ON DELETE CASCADE never fires, and the
+      // only other retention sweeper keys off a profile's own deletedAt.
+      proxySecrets: accountProxiesRepo,
       logger,
     });
     registerAccountDeletionPurgeJob({

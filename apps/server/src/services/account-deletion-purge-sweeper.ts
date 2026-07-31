@@ -49,9 +49,44 @@ export interface AccountDeletionPurgeRepo {
   findDeletedAccountIdsWithByokKeyBefore(cutoff: Date): Promise<string[]>;
 }
 
+/**
+ * The proxy half of the same retention promise.
+ *
+ * privacy-policy.md §3.5 defines Customer-Provided Secrets to include, in its
+ * own words, "HTTP/SOCKS5 proxy credentials", and the §9 retention table
+ * commits to deleting them "within 30 days of Customer Account termination".
+ * The BYOK key above was the only secret this sweeper purged, so a terminated
+ * account's wrapped proxy password and its wrapped OpenVPN config blob /
+ * WireGuard private key were retained indefinitely: `deleteAccount` is a SOFT
+ * delete (status flip) and reclaims sessions, web sessions, API keys and
+ * webhooks but touches no proxy row, the accounts row is never hard-deleted so
+ * the ON DELETE CASCADE never fires, and the only other retention sweeper keys
+ * off a PROFILE's own deletedAt rather than the account's.
+ *
+ * Self-limiting exactly like the BYOK query: once the columns are nulled the
+ * account drops out of the candidate set, so no bookkeeping column is needed.
+ */
+export interface AccountProxySecretPurgeRepo {
+  /**
+   * Account ids where accounts.status = 'deleted' AND accounts.deleted_at
+   * < cutoff AND the account still has at least one proxy row carrying a
+   * non-null wrapped_password or wrapped_secret.
+   */
+  findDeletedAccountIdsWithProxySecretsBefore(cutoff: Date): Promise<string[]>;
+  /** Null the wrapped secret columns on every proxy row for this account. */
+  clearProxySecretsForAccount(accountId: string): Promise<number>;
+}
+
 export interface AccountDeletionPurgeSweeperDeps {
   readonly repo: AccountDeletionPurgeRepo;
   readonly byok: BYOKAnthropicService;
+  /**
+   * Optional so existing constructions and service-test fixtures stay
+   * source-compatible. When absent the proxy half is skipped and the sweeper
+   * behaves exactly as before — it does not silently claim to have purged
+   * secrets it never looked at.
+   */
+  readonly proxySecrets?: AccountProxySecretPurgeRepo;
   /** Days after deletedAt before the purge fires. Defaults to 30 (privacy-policy.md §9). */
   readonly retentionDays?: number;
   readonly logger?: Logger;
@@ -59,6 +94,8 @@ export interface AccountDeletionPurgeSweeperDeps {
 
 export interface AccountDeletionPurgeResult {
   readonly purged: number;
+  /** Accounts whose wrapped proxy secrets were cleared this tick. */
+  readonly proxySecretsPurged: number;
 }
 
 export class AccountDeletionPurgeSweeperService {
@@ -86,7 +123,27 @@ export class AccountDeletionPurgeSweeperService {
         );
       }
     }
-    return { purged };
+    let proxySecretsPurged = 0;
+    if (this.deps.proxySecrets !== undefined) {
+      const proxyIds =
+        await this.deps.proxySecrets.findDeletedAccountIdsWithProxySecretsBefore(cutoff);
+      for (const accountId of proxyIds) {
+        try {
+          await this.deps.proxySecrets.clearProxySecretsForAccount(accountId);
+          proxySecretsPurged += 1;
+        } catch (err) {
+          // Same discipline as the BYOK arm: never throw. The account keeps its
+          // non-null columns, so it stays in the candidate set and the next
+          // sweep retries it.
+          this.deps.logger?.error?.(
+            { component: 'account-deletion-purge', accountId, err },
+            'failed to purge deleted account proxy secrets (will retry next sweep)',
+          );
+        }
+      }
+    }
+
+    return { purged, proxySecretsPurged };
   }
 }
 

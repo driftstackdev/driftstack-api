@@ -254,6 +254,55 @@ export class DrizzleAccountProxiesRepo implements AccountProxiesRepo {
     return rows.length > 0;
   }
 
+  /**
+   * Retention purge — account ids whose account is terminated past `cutoff`
+   * and that still hold a wrapped proxy secret.
+   *
+   * The account predicate is deliberately in SQL rather than resolved by the
+   * caller: this query is the only thing standing between a live account and a
+   * credential wipe, so the `status = 'deleted'` and `deleted_at < cutoff`
+   * conditions sit in the same statement as the delete target. A caller that
+   * passed the wrong id list could not widen it.
+   */
+  async findDeletedAccountIdsWithProxySecretsBefore(cutoff: Date): Promise<string[]> {
+    const rows = await this.database.client<Array<{ account_id: string }>>`
+      SELECT DISTINCT p.account_id
+      FROM account_proxies p
+      JOIN accounts a ON a.id = p.account_id
+      WHERE a.status = 'deleted'
+        AND a.deleted_at IS NOT NULL
+        AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
+        AND (p.wrapped_password IS NOT NULL OR p.wrapped_secret IS NOT NULL)`;
+    return rows.map((r) => r.account_id);
+  }
+
+  /**
+   * Null the wrapped secret columns for every proxy row on this account.
+   *
+   * Nulls the SECRETS, not the rows: privacy-policy.md §3.5 commits to erasing
+   * the credential, and the surrounding non-secret connection metadata is
+   * covered by a different retention line. Keeping the blast radius to exactly
+   * the two columns the promise names means this can never remove more than it
+   * was asked to.
+   *
+   * The `status = 'deleted'` predicate is repeated HERE as well as in the
+   * candidate query. It is not redundant: the candidate list is computed on one
+   * tick and consumed in a loop, so an account reinstated in between would
+   * otherwise have its credentials wiped by a decision that was already stale.
+   */
+  async clearProxySecretsForAccount(accountId: string): Promise<number> {
+    const rows = await this.database.client<Array<{ id: string }>>`
+      UPDATE account_proxies p
+      SET wrapped_password = NULL, wrapped_secret = NULL
+      FROM accounts a
+      WHERE a.id = p.account_id
+        AND p.account_id = ${accountId}::uuid
+        AND a.status = 'deleted'
+        AND (p.wrapped_password IS NOT NULL OR p.wrapped_secret IS NOT NULL)
+      RETURNING p.id`;
+    return rows.length;
+  }
+
   async migrateSecretEnvelopes(
     masterKey: Buffer,
     limit = MAX_PROXY_SECRET_MIGRATION_BATCH,
