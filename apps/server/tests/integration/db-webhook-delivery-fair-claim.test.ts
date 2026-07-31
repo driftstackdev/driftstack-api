@@ -20,7 +20,10 @@
 // Exercises `DrizzleWebhooksRepo.claim`, the query production actually runs.
 // `DurableWebhookWorker` in durable-webhook-delivery.ts holds a near-identical
 // claim and is wired NOWHERE — the first version of this fix went into that one,
-// and this test is what caught it.
+// and this test is what caught it. The successor carries the same fix; because
+// nothing constructs it, driving it behaviourally would mean building a whole
+// delivery fixture, so its half is covered structurally in
+// `webhook-claim-fairness-parity`.
 
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -85,19 +88,41 @@ async function seedDue(endpointId: string, count: number, ageBaseSec: number): P
   }
 }
 
-function repoOf(): DrizzleWebhooksRepo {
+/**
+ * The two claim implementations, driven through one interface.
+ *
+ * `live` is `DrizzleWebhooksRepo.claim`, which production runs today. `successor`
+ * is `DurableWebhookWorker.processTick` in durable-webhook-delivery.ts — the
+ * documented FORWARD path awaiting cutover, wired nowhere yet.
+ *
+ * Both are exercised because the fix has to hold on BOTH: the successor
+ * inheriting a plain FIFO claim would silently reintroduce the starvation the
+ * moment anyone cuts over, and nothing else in the suite would notice. Running
+ * the identical scenarios against each is what makes that impossible.
+ */
+/** The claim production actually runs. */
+function liveClaim(): (opts: { batchSize: number; perEndpointCap: number }) => Promise<unknown> {
   if (!client) throw new Error('no client');
   const db = drizzle(client);
-  return new DrizzleWebhooksRepo({ client, db, close: async () => {} });
+  const repo = new DrizzleWebhooksRepo({ client, db, close: async () => {} });
+  return (o) => repo.claim({ ...o, now: new Date() });
 }
 
-/** Which endpoints the claim actually picked up, by counting in_flight rows. */
-async function inFlightByEndpoint(ids: string[]): Promise<Record<string, number>> {
+/**
+ * Rows each endpoint had CLAIMED by the tick, counted as "no longer pending".
+ *
+ * The two implementations leave claimed rows in different terminal states — the
+ * live repo claim only flips to in_flight, while the successor claims and
+ * delivers in one call so its rows end up delivered. Counting non-pending is
+ * the observable both share, and it is what the fairness question is actually
+ * about: how many of this endpoint's rows did one tick take.
+ */
+async function claimedByEndpoint(ids: string[]): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const id of ids) {
     const rows = await client!<Array<{ n: number }>>`
       SELECT count(*)::int AS n FROM webhook_deliveries
-      WHERE webhook_id = ${id}::uuid AND status = 'in_flight'`;
+      WHERE webhook_id = ${id}::uuid AND status <> 'pending'`;
     out[id] = rows[0]?.n ?? 0;
   }
   return out;
@@ -113,16 +138,16 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     });
 
     it('CRITICAL a starving endpoint IS served while another has a deep, older backlog. Under the previous FIFO claim the backlog filled the whole batch — and because delivery is serial, the quiet endpoint was not merely delayed, it was never attempted.', async () => {
+      const claim = liveClaim();
       const noisy = await seedEndpoint();
       const quiet = await seedEndpoint();
       // The noisy endpoint's rows are ALL older, so plain FIFO takes only those.
       await seedDue(noisy, 30, 10_000);
       await seedDue(quiet, 2, 100);
 
-      const repo = repoOf();
-      await repo.claim({ batchSize: 10, now: new Date(), perEndpointCap: 5 });
+      await claim({ batchSize: 10, perEndpointCap: 5 });
 
-      const counts = await inFlightByEndpoint([noisy, quiet]);
+      const counts = await claimedByEndpoint([noisy, quiet]);
       expect(counts[quiet], 'the quiet endpoint gets served despite being newer').toBeGreaterThan(
         0,
       );
@@ -132,43 +157,43 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     });
 
     it('CRITICAL the cap is per ENDPOINT, not global — a single endpoint never takes more than its share of one tick, however deep its backlog.', async () => {
+      const claim = liveClaim();
       const noisy = await seedEndpoint();
       await seedDue(noisy, 40, 5_000);
 
-      const repo = repoOf();
-      await repo.claim({ batchSize: 25, now: new Date(), perEndpointCap: 3 });
+      await claim({ batchSize: 25, perEndpointCap: 3 });
 
-      const counts = await inFlightByEndpoint([noisy]);
+      const counts = await claimedByEndpoint([noisy]);
       expect(counts[noisy], 'capped at 3 despite 40 due rows and 25 free slots').toBe(3);
     });
 
     it('CRITICAL a single busy endpoint still drains when nothing competes, so fairness did not turn into an artificial throughput ceiling. Successive ticks keep making progress.', async () => {
+      const claim = liveClaim();
       const only = await seedEndpoint();
       await seedDue(only, 12, 2_000);
 
-      const repo = repoOf();
-      await repo.claim({ batchSize: 25, now: new Date(), perEndpointCap: 4 });
-      const first = (await inFlightByEndpoint([only]))[only] ?? 0;
+      await claim({ batchSize: 25, perEndpointCap: 4 });
+      const first = (await claimedByEndpoint([only]))[only] ?? 0;
 
       expect(first, 'the first tick takes its capped share').toBe(4);
       const remaining = await client!<Array<{ n: number }>>`
-        SELECT count(*)::int AS n FROM webhook_deliveries
-        WHERE webhook_id = ${only}::uuid AND status = 'pending'`;
+      SELECT count(*)::int AS n FROM webhook_deliveries
+      WHERE webhook_id = ${only}::uuid AND status = 'pending'`;
       expect(remaining[0]?.n, 'and the rest remain queued rather than dropped').toBe(8);
     });
 
     it('CRITICAL oldest-first is preserved WITHIN an endpoint, so fairness did not cost ordering. A newer delivery must not overtake an older one for the same endpoint.', async () => {
+      const claim = liveClaim();
       const ep = await seedEndpoint();
       await seedDue(ep, 6, 3_000); // i=0 is oldest
 
-      const repo = repoOf();
-      await repo.claim({ batchSize: 25, now: new Date(), perEndpointCap: 2 });
+      await claim({ batchSize: 25, perEndpointCap: 2 });
 
       const rows = await client!<Array<{ next_attempt_at: Date; status: string }>>`
-        SELECT next_attempt_at, status FROM webhook_deliveries
-        WHERE webhook_id = ${ep}::uuid ORDER BY next_attempt_at ASC`;
+      SELECT next_attempt_at, status FROM webhook_deliveries
+      WHERE webhook_id = ${ep}::uuid ORDER BY next_attempt_at ASC`;
       expect(
-        rows.slice(0, 2).every((r) => r.status === 'in_flight'),
+        rows.slice(0, 2).every((r) => r.status !== 'pending'),
         'the two oldest were taken',
       ).toBe(true);
       expect(

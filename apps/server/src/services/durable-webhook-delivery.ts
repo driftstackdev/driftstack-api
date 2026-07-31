@@ -102,7 +102,11 @@ export interface ProcessTickResult {
 export interface DurableWebhookDeliveryHandles {
   deliveries: DurableWebhookDeliveryService;
   dlq: DurableDlqManager;
-  processTick(opts?: { batchSize?: number; leaseDurationMs?: number }): Promise<ProcessTickResult>;
+  processTick(opts?: {
+    batchSize?: number;
+    leaseDurationMs?: number;
+    perEndpointCap?: number;
+  }): Promise<ProcessTickResult>;
 }
 
 export function createDurableWebhookDelivery(
@@ -403,9 +407,10 @@ export class DurableWebhookWorker {
    * concurrently without claiming the same delivery twice.
    */
   async processTick(
-    opts: { batchSize?: number; leaseDurationMs?: number } = {},
+    opts: { batchSize?: number; leaseDurationMs?: number; perEndpointCap?: number } = {},
   ): Promise<ProcessTickResult> {
     const batchSize = opts.batchSize ?? 25;
+    const perEndpointCap = opts.perEndpointCap ?? 5;
     const nowMs = this.now();
     const nowDate = new Date(nowMs);
     // Pre-serialize the Date param per the drizzle-orm 0.38.4
@@ -427,12 +432,34 @@ export class DurableWebhookWorker {
     // rows (V-173.R — a crashed/redeployed worker's stranded row) so a
     // delivery is never silently lost.
     const claimed = await this.database.db.transaction(async (tx) => {
+      // FAIRNESS — must match DrizzleWebhooksRepo.claim, which is the
+      // implementation production runs today. A plain FIFO
+      // ORDER BY next_attempt_at LIMIT n lets a DOWN endpoint fill every batch
+      // (its retries carry the oldest timestamps), and since the loop below
+      // delivers serially those rows also consume the tick timing out — other
+      // customers' webhooks are then not delayed but never attempted.
+      //
+      // This file is the documented FORWARD path awaiting cutover, so the fix
+      // has to live here too: cutting over to a version without it would
+      // silently reintroduce the starvation. `webhook-claim-fairness-parity`
+      // fails if the two implementations drift apart on this.
       const candidates = await tx.execute(sql`
+        WITH due AS (
+          SELECT id,
+                 row_number() OVER (PARTITION BY webhook_id ORDER BY next_attempt_at ASC) AS rn,
+                 next_attempt_at
+          FROM webhook_deliveries
+          WHERE (status = 'pending' AND next_attempt_at <= ${nowIso})
+             OR (status = 'in_flight' AND updated_at <= ${staleBeforeIso})
+        ),
+        fair AS (
+          SELECT id FROM due
+          WHERE rn <= ${perEndpointCap}
+          ORDER BY next_attempt_at ASC
+          LIMIT ${batchSize}
+        )
         SELECT id FROM webhook_deliveries
-        WHERE (status = 'pending' AND next_attempt_at <= ${nowIso})
-           OR (status = 'in_flight' AND updated_at <= ${staleBeforeIso})
-        ORDER BY next_attempt_at ASC
-        LIMIT ${batchSize}
+        WHERE id IN (SELECT id FROM fair)
         FOR UPDATE SKIP LOCKED
       `);
       // The postgres-js driver returns the RowList directly (array-like); the

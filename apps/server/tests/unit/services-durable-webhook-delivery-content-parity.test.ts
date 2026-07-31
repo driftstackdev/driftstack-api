@@ -73,9 +73,18 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(
       /const staleBeforeIso = new Date\(nowMs - RECLAIM_STALE_IN_FLIGHT_MS\)\.toISOString\(\);/,
     );
-    expect(body).toMatch(
-      /SELECT id FROM webhook_deliveries\s*\n?\s*WHERE \(status = 'pending' AND next_attempt_at <= \$\{nowIso\}\)\s*\n?\s*OR \(status = 'in_flight' AND updated_at <= \$\{staleBeforeIso\}\)\s*\n?\s*ORDER BY next_attempt_at ASC\s*\n?\s*LIMIT \$\{batchSize\}\s*\n?\s*FOR UPDATE SKIP LOCKED/,
-    );
+    // The claim is no longer a single FIFO select. It ranks per endpoint in a
+    // `due` CTE, caps and limits in `fair`, then takes the locks separately —
+    // PostgreSQL forbids FOR UPDATE alongside a window function. Plain FIFO let
+    // one DOWN endpoint fill every batch, and because the batch is delivered
+    // serially those rows also consumed the tick timing out, so other
+    // customers' webhooks were never attempted rather than merely delayed.
+    // Behaviourally proved on the live claim in `db-webhook-delivery-fair-claim`;
+    // held here and in `webhook-claim-fairness-parity` for this unwired path.
+    expect(body).toMatch(/WITH due AS \(/);
+    expect(body).toMatch(/row_number\(\) OVER \(PARTITION BY webhook_id/);
+    expect(body).toMatch(/rn <= \$\{perEndpointCap\}/);
+    expect(body).toMatch(/FOR UPDATE SKIP LOCKED/);
   });
 
   it('BACKOFF_MS_BY_ATTEMPT 5-entry ladder (60s / 5m / 15m / 30m / 60m); DEFAULT_TIMEOUT_MS=10_000; DEFAULT_MAX_ATTEMPTS=6', () => {
