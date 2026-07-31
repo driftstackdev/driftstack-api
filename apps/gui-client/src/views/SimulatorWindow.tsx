@@ -1948,13 +1948,21 @@ function TabStrip({
   // are -1 and reached via ← → (Home/End). Enter/Space activates the focused tab.
   // Refs let arrow keys move DOM focus without a full controlled-focus state.
   const tabRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // MANUAL activation (ARIA's pattern for tabs whose panel is expensive to show, and
+  // the contract this file already documents three lines up): arrows MOVE the focus
+  // ring, Enter/Space activates. This used to also call onActivate, so every arrow
+  // keypress performed a real correlated box switch — publishing activateTab, arming
+  // the switch cover, superseding the previous still-in-flight switch, and on a cold
+  // tab re-navigating the page and losing its scroll/form state. Holding the key down
+  // wrapped the strip and walked the box through every tab in the window. The
+  // Enter/Space branch below already performs the activation, so this was redundant
+  // as well as wrong.
   const focusTabAt = (index: number): void => {
     if (tabs.length === 0) return;
     const wrapped = ((index % tabs.length) + tabs.length) % tabs.length;
     const target = tabs[wrapped];
     if (target === undefined) return;
     tabRefs.current[target.id]?.focus();
-    if (inputEnabled) onActivate(target.id);
   };
   const label = (t: SimTab): string => {
     const url = t.url.trim();
@@ -4164,10 +4172,14 @@ export function SimulatorWindow(): JSX.Element {
   // tabs; this is only the black-cover backstop.)
   const [switchTakingLong, setSwitchTakingLong] = useState(false);
   useEffect(() => {
-    if (switchingTabId === null) {
-      setSwitchTakingLong(false);
-      return;
-    }
+    // Reset on EVERY target change, not only on clear. Superseding a slow switch to
+    // B by clicking C moves switchingTabId B→C without ever passing through null, so
+    // a `true` left from B's elapsed timer made C's cover announce a stall
+    // milliseconds after it began — and offered an escape whose "current page" is
+    // still B's. The timer below then restarts for C, so a genuine stall is reported
+    // 3s after the switch the user is actually waiting on.
+    setSwitchTakingLong(false);
+    if (switchingTabId === null) return;
     const t = setTimeout(() => setSwitchTakingLong(true), 3000);
     return () => clearTimeout(t);
   }, [switchingTabId]);
@@ -7913,9 +7925,20 @@ export function SimulatorWindow(): JSX.Element {
                     // (worker browser closed / destroyed / reaped), the panel stops all
                     // reconnect/resubscribe/rebuild machinery and shows "Session ended".
                     sessionEnded={sessionEnded}
-                    // #5 (founder 2026-06-30) — while a tab switch is in flight, blank the
-                    // video with an about:blank placeholder so the OLD tab doesn't linger.
-                    switching={switchingTabId !== null}
+                    // #5 (founder 2026-06-30) blanked the video here while a switch was in
+                    // flight, so the OLD tab didn't linger. W3020/#116 later gave this
+                    // window its own `simulator-switch-blank` cover doing the same job,
+                    // plus a spinner, the "Taking longer than usual…" hint and the
+                    // "Show current page" escape. Both then mounted on every switch — and
+                    // the panel's opaque z-20 white blank painted OVER this window's z-10
+                    // black cover in the same stacking context, so the user got a plain
+                    // white rectangle for the full 6s timeout: no spinner, no hint, and an
+                    // escape button that was both invisible and unclickable (the white
+                    // overlay swallowed the click). The window owns the switch cover, so
+                    // the panel's duplicate is deliberately NOT armed from here. Raising
+                    // this window's cover instead would have put it over the z-20
+                    // notice/error overlays, which must stay on top.
+                    switching={false}
                     onClose={() => void withCurrentWindow((w) => w.close())}
                   />
                   {/* iOS touch-point cursor — a soft fingertip dot that tracks the

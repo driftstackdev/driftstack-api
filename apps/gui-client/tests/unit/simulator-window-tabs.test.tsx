@@ -62,6 +62,7 @@ const fakeRoom = {
 };
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
+    switching?: boolean;
     onRoom?: (room: unknown, ownerRoom: unknown) => void;
     onStateChange?: (s: { kind: string }, room: unknown) => void;
     onPublisher?: (p: string, room: unknown) => void;
@@ -79,6 +80,10 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
         data-component="agent-session-panel-mock"
         data-logical-width={props.inputLogical?.width}
         data-logical-height={props.inputLogical?.height}
+        // The panel renders its OWN opaque white switch blank at z-20 when this is
+        // true, which paints over the window's z-10 cover. Exposed so the window's
+        // escape affordance can be pinned as actually reachable.
+        data-switching={props.switching ? 'true' : 'false'}
       />
     );
   },
@@ -1195,6 +1200,80 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(byId.get(activeId)?.url).toBe('https://current.example/');
     expect(byId.get(activeId)?.title).toBe('Current');
     expect(addressInput.value).toBe('current.example');
+  });
+
+  it('(f) the in-flight switch cover keeps its spinner and escape reachable — the panel must not arm a second blank over it', () => {
+    // REGRESSION. Two overlays covered the same switch from two authors: this
+    // window's `simulator-switch-blank` (z-10 black, spinner + "Taking longer than
+    // usual…" + a "Show current page" escape) and AgentSessionPanel's
+    // `data-overlay="tab-switching"` (z-20 opaque white, bare text). Nothing in the
+    // shared ancestor chain creates a stacking context, so the white one painted
+    // over the black one on EVERY switch: a plain white rectangle for the full 6s
+    // timeout, no spinner, no hint, and an escape button that was both invisible and
+    // unclickable because the white overlay swallowed the click. The window owns the
+    // cover, so it must not arm the panel's duplicate.
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    const tabs = tabEls(container);
+    fireEvent.click(tabs[0]!);
+
+    expect(container.querySelector('[data-component="simulator-switch-blank"]')).not.toBeNull();
+    const panel = container.querySelector(
+      '[data-component="agent-session-panel-mock"]',
+    ) as HTMLElement;
+    expect(panel.getAttribute('data-switching')).toBe('false');
+  });
+
+  it('(g) arrow keys rove the focus ring without performing a box switch; Enter activates', () => {
+    // REGRESSION. focusTabAt called onActivate as well as .focus(), so each arrow
+    // keypress was a full correlated switch: an activateTab publish, the switch cover
+    // re-arming, the previous in-flight switch superseded, and on a cold tab a real
+    // re-navigation that loses scroll/form state. Holding the key wrapped the strip
+    // and walked the box through every tab. ARIA manual activation (and the contract
+    // documented on the tab element itself) is arrows-move, Enter/Space-activates.
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    sendActivateTab.mockClear();
+
+    const strip = tabEls(container);
+    fireEvent.keyDown(strip[2]!, { key: 'ArrowLeft' });
+    fireEvent.keyDown(strip[1]!, { key: 'ArrowLeft' });
+    expect(sendActivateTab).not.toHaveBeenCalled();
+
+    // Enter on the focused tab is still a real activation.
+    fireEvent.keyDown(strip[0]!, { key: 'Enter' });
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
+  });
+
+  it('(h) superseding a slow switch clears the stale "taking longer" hint instead of inheriting it', () => {
+    // REGRESSION. The reset only ran when switchingTabId became null, but clicking a
+    // different tab moves it B→C directly — so C's cover inherited B's elapsed timer
+    // and claimed a stall milliseconds after it began, offering an escape whose
+    // "current page" was still B's.
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+      const strip = tabEls(container);
+
+      fireEvent.click(strip[0]!);
+      act(() => {
+        vi.advanceTimersByTime(3200);
+      });
+      expect(container.querySelector('[data-component="switch-blank-escape"]')).not.toBeNull();
+
+      // Give up on that one and switch somewhere else — the hint must not carry over.
+      fireEvent.click(strip[1]!);
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(container.querySelector('[data-component="simulator-switch-blank"]')).not.toBeNull();
+      expect(container.querySelector('[data-component="switch-blank-escape"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('(e2) a window reattaching to a live session adopts the box tag it has never seen, instead of going deaf', () => {
