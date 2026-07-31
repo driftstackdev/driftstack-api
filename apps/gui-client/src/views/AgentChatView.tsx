@@ -77,10 +77,14 @@ function pickProxyFor(
   profileId: string,
   bindings: ReadonlyArray<{ profileId: string; defaultProxyId: string | null }>,
   proxies: ReadonlyArray<ProxyConfig>,
-): ProxyConfig | null {
+): ProxyConfig | null | 'missing' {
   const binding = bindings.find((b) => b.profileId === profileId);
   if (binding?.defaultProxyId !== undefined && binding.defaultProxyId !== null) {
-    return proxies.find((p) => p.id === binding.defaultProxyId) ?? null;
+    // An EXPLICIT binding whose proxy is gone is 'missing', never 'none': the
+    // customer chose an exit for this profile, so launching on the operator
+    // default instead would leak their real IP under a setting they believe is
+    // active. Collapsing both into null is what let that through.
+    return proxies.find((p) => p.id === binding.defaultProxyId) ?? 'missing';
   }
   return proxies[0] ?? null;
 }
@@ -123,28 +127,81 @@ async function ensureServerProxyId(
   return created.id;
 }
 
+/** Outcome of resolving a profile's egress proxy.
+ *
+ *  `undefined` used to carry BOTH "this profile has no proxy, operator-default
+ *  egress is correct" AND "this profile HAS a proxy but we could not resolve
+ *  it" — and the second silently launched the session unproxied. These are
+ *  opposite outcomes and must not share a representation. */
+type ProxyResolution =
+  | { kind: 'none' }
+  | { kind: 'ready'; proxyId: string }
+  | { kind: 'blocked'; reason: string };
+
 /** Resolve the server proxy_id an AI session for `profileId` must exit through,
- *  by reading the LOCAL proxy + binding stores (where the GUI keeps them) and
- *  mirroring the manual-launch resolution. Returns undefined when the profile has
- *  no proxy (→ operator-default egress, unchanged behavior). Best-effort: a sync
- *  failure resolves to undefined (launch proceeds without proxy_id) rather than
- *  blocking the chat — exactly the fallback ProfilesView.handleLaunch keeps. */
+ *  by reading the LOCAL proxy + binding stores and mirroring the manual-launch
+ *  resolution.
+ *
+ *  FAILS CLOSED, matching ProfilesView.handleLaunch since the 2026-07-08 sweep.
+ *  This function used to swallow a sync failure and resolve `undefined` so the
+ *  chat could proceed — the comment even claimed that mirrored ProfilesView. It
+ *  no longer does: ProfilesView was hardened precisely because the server treats
+ *  an ABSENT proxy_id as operator-default egress, so omitting it sends the
+ *  session out through Driftstack's shared IP instead of the customer's proxy.
+ *  That is an egress-identity leak — the one thing an anti-detect product must
+ *  never do — and the server's own fail-closed guard only covers a
+ *  present-but-unresolvable proxy_id, never an omitted one. A bound-but-
+ *  unresolvable proxy therefore BLOCKS the send rather than downgrading it. */
 async function resolveProfileProxyId(
   profileId: string,
   baseUrl: string,
   apiKey: string | null,
-): Promise<string | undefined> {
+): Promise<ProxyResolution> {
+  let proxy: ReturnType<typeof pickProxyFor> = null;
   try {
     const [bindings, proxies] = await Promise.all([listBindings(), listProxies()]);
-    const proxy = pickProxyFor(profileId, bindings, proxies);
-    if (proxy === null) return undefined; // no proxy bound → operator-default egress
-    return await ensureServerProxyId(proxy, baseUrl, apiKey);
+    proxy = pickProxyFor(profileId, bindings, proxies);
   } catch (err) {
-    // Mirror ProfilesView's best-effort posture: a proxy-sync failure (offline /
-    // SSRF-rejected host / unauth) must NOT block the chat — warn + proceed
-    // without proxy_id (the session still runs, on operator-default egress).
-    console.warn('[ai-chat] proxy account-sync failed; launching without proxy_id', err);
-    return undefined;
+    // We cannot even tell whether a proxy is bound, so we cannot prove this
+    // profile is meant to exit on the operator default. Fail closed.
+    console.warn('[ai-chat] proxy binding read failed; blocking send to avoid an egress leak', err);
+    return {
+      kind: 'blocked',
+      reason:
+        'Couldn’t read this profile’s proxy settings, so the chat was not started — ' +
+        'running it could have sent traffic through Driftstack’s default IP instead of your proxy.',
+    };
+  }
+  if (proxy === 'missing') {
+    return {
+      kind: 'blocked',
+      reason:
+        'This profile is set to use a proxy that no longer exists, so the chat was not ' +
+        'started — running it would have sent traffic through Driftstack’s default IP. ' +
+        'Re-select a proxy for this profile in Profiles.',
+    };
+  }
+  if (proxy === null) return { kind: 'none' }; // genuinely no proxy bound
+  try {
+    const proxyId = await ensureServerProxyId(proxy, baseUrl, apiKey);
+    if (proxyId === undefined) {
+      return {
+        kind: 'blocked',
+        reason:
+          `Couldn’t set up the proxy “${proxy.label}” for this chat, so it was not started — ` +
+          'connect your API key in Settings and try again.',
+      };
+    }
+    return { kind: 'ready', proxyId };
+  } catch (err) {
+    console.warn('[ai-chat] proxy account-sync failed; blocking send to avoid an egress leak', err);
+    return {
+      kind: 'blocked',
+      reason:
+        `Couldn’t set up the proxy “${proxy.label}” for this chat, so it was not started — ` +
+        'starting it would have sent traffic through Driftstack’s default IP instead of your ' +
+        'proxy. Check the proxy and try again.',
+    };
   }
 }
 
@@ -200,7 +257,14 @@ export function AgentChatView({
   // operator-default egress (unchanged). Resolved BEFORE the first send creates the
   // session (the resolution effect runs while the picker is still editable); the
   // profile + session are locked together once a chat starts.
-  const [proxyId, setProxyId] = useState<string | undefined>(undefined);
+  // 'pending' until the resolution settles, so a send cannot race ahead of it —
+  // the create used to fire with whatever proxyId happened to be set, which for a
+  // deep-linked proxied profile was still undefined while the network round-trip
+  // was in flight.
+  const [proxyState, setProxyState] = useState<ProxyResolution | { kind: 'pending' }>({
+    kind: 'none',
+  });
+  const proxyId = proxyState.kind === 'ready' ? proxyState.proxyId : undefined;
   const chat = useAgentChat({
     model,
     ...(profileId !== '' ? { profileId } : {}),
@@ -273,12 +337,13 @@ export function AgentChatView({
   useEffect(() => {
     if (started) return undefined; // locked to the live session — don't re-resolve
     if (profileId === '') {
-      setProxyId(undefined);
+      setProxyState({ kind: 'none' }); // temporary profile → no proxy to honour
       return undefined;
     }
     let cancelled = false;
-    void resolveProfileProxyId(profileId, settings.baseUrl, settings.apiKey).then((id) => {
-      if (!cancelled) setProxyId(id);
+    setProxyState({ kind: 'pending' });
+    void resolveProfileProxyId(profileId, settings.baseUrl, settings.apiKey).then((resolution) => {
+      if (!cancelled) setProxyState(resolution);
     });
     return () => {
       cancelled = true;
@@ -492,6 +557,12 @@ export function AgentChatView({
     // dead-air then surface a server error. The Send button is disabled too;
     // this also guards the Enter-to-send path.
     if (text.length === 0 || chat.sending || !aiReady) return;
+    // Egress gate. Only a settled resolution may start a session: 'pending'
+    // means the proxy round-trip is still in flight, and 'blocked' means this
+    // profile HAS a proxy we could not resolve. Sending in either state would
+    // create the session with no proxy_id, which the server reads as
+    // operator-default egress — the customer's real exit IP.
+    if (proxyState.kind === 'pending' || proxyState.kind === 'blocked') return;
     setDraft('');
     // Retry-friendly: if the send fails, restore the draft so the user can
     // re-send without retyping (don't clobber a draft they've since started).
@@ -889,8 +960,21 @@ export function AgentChatView({
               <button
                 type="button"
                 onClick={submit}
-                disabled={draft.trim().length === 0 || !aiReady}
-                title={aiReady ? undefined : 'Connect your API key in Settings first'}
+                disabled={
+                  draft.trim().length === 0 ||
+                  !aiReady ||
+                  proxyState.kind === 'pending' ||
+                  proxyState.kind === 'blocked'
+                }
+                title={
+                  !aiReady
+                    ? 'Connect your API key in Settings first'
+                    : proxyState.kind === 'pending'
+                      ? 'Checking this profile’s proxy…'
+                      : proxyState.kind === 'blocked'
+                        ? proxyState.reason
+                        : undefined
+                }
                 className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
               >
                 Send

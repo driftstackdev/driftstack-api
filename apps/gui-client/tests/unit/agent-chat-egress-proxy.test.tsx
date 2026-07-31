@@ -6,7 +6,7 @@
 // account-proxies sync) and asserts the proxyId opt the view hands to the hook.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, screen, fireEvent } from '@testing-library/react';
 import type { UseAgentChatResult } from '../../src/lib/use-agent-chat';
 
 // Hoisted spies — vitest hoists vi.mock factories above the file, so anything they
@@ -155,7 +155,7 @@ describe('AgentChatView egress — resolve the profile proxy → proxyId opt', (
     expect(h.createAccountProxy).not.toHaveBeenCalled();
   });
 
-  it('best-effort: a proxy-sync failure does NOT block the chat — proxyId resolves undefined', async () => {
+  it('FAILS CLOSED: a proxy-sync failure blocks the send instead of launching unproxied', async () => {
     h.listBindings.mockResolvedValue([{ profileId: 'prof_x', defaultProxyId: 'lpx_1' }]);
     h.listProxies.mockResolvedValue([
       { id: 'lpx_1', label: 'Res US', host: '1.2.3.4', port: 1080, username: 'u', password: 'p' },
@@ -167,11 +167,35 @@ describe('AgentChatView egress — resolve the profile proxy → proxyId opt', (
 
     await waitFor(() => expect(lastOpts()?.profileId).toBe('prof_x'));
     await new Promise((r) => setTimeout(r, 0));
-    // The chat is not blocked: proxyId falls back to undefined (launch proceeds).
     expect(lastOpts()?.proxyId).toBeUndefined();
+
+    // The assertion that actually matters. Asserting only "proxyId is undefined"
+    // passes whether the chat is blocked OR silently launched unproxied, which
+    // is why this leak survived a green suite: the server reads an absent
+    // proxy_id as operator-default egress, so proceeding here would exit on
+    // Driftstack's IP instead of the customer's proxy. ProfilesView.handleLaunch
+    // aborts in exactly this case; this view must too.
+    const send = chatState.send as unknown as ReturnType<typeof vi.fn>;
+    send.mockClear();
+    fireEvent.change(screen.getByPlaceholderText(/Describe a task in plain English/i), {
+      target: { value: 'go to example.com' },
+    });
+    const sendBtn = screen.getByRole('button', { name: /^send$/i });
+    expect(sendBtn).toBeDisabled();
+    fireEvent.click(sendBtn);
+    expect(send).not.toHaveBeenCalled();
+
+    // Enter-to-send bypasses the button entirely, so the disabled attribute is
+    // not the guard here — submit()'s own egress check is. Without this case a
+    // mutation deleting that check stays green, because a disabled button
+    // swallows the click path on its own.
+    fireEvent.keyDown(screen.getByPlaceholderText(/Describe a task in plain English/i), {
+      key: 'Enter',
+    });
+    expect(send).not.toHaveBeenCalled();
   });
 
-  it('does NOT silently reroute when the explicitly-bound proxy was deleted (no proxyId, no fallback exit)', async () => {
+  it('FAILS CLOSED when the explicitly-bound proxy was deleted — no reroute AND no unproxied launch', async () => {
     // Binding points at a proxy that no longer exists in the local store.
     h.listBindings.mockResolvedValue([{ profileId: 'prof_x', defaultProxyId: 'lpx_deleted' }]);
     h.listProxies.mockResolvedValue([
@@ -189,9 +213,20 @@ describe('AgentChatView egress — resolve the profile proxy → proxyId opt', (
 
     await waitFor(() => expect(lastOpts()?.profileId).toBe('prof_x'));
     await new Promise((r) => setTimeout(r, 0));
-    // pickProxyFor returns null for a deleted EXPLICIT binding (never proxies[0]),
-    // so no proxy_id is sent — it does NOT leak a different exit than configured.
+    // Not rerouting to proxies[0] was only half of it: the customer explicitly
+    // chose an exit for this profile, so launching on the operator default
+    // instead leaks their real IP under a setting they believe is active.
     expect(lastOpts()?.proxyId).toBeUndefined();
     expect(h.createAccountProxy).not.toHaveBeenCalled();
+
+    const send = chatState.send as unknown as ReturnType<typeof vi.fn>;
+    send.mockClear();
+    fireEvent.change(screen.getByPlaceholderText(/Describe a task in plain English/i), {
+      target: { value: 'go to example.com' },
+    });
+    const sendBtn = screen.getByRole('button', { name: /^send$/i });
+    expect(sendBtn).toBeDisabled();
+    fireEvent.click(sendBtn);
+    expect(send).not.toHaveBeenCalled();
   });
 });
