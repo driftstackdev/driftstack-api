@@ -63,6 +63,16 @@ Idempotency: every delivery includes the same `<uuid>` id. Customers
 should dedup on this id — the same event may be re-delivered after a
 manual replay (admin tooling) or DLQ requeue.
 
+Ordering: deliveries are **not** ordered, and your handler must not
+assume they are. A failed delivery is rescheduled onto the backoff
+above, so it lands after events your account generated later — an event
+that first fails and succeeds on its 15m retry arrives well behind
+everything created in between. Delivery is also fair across endpoints
+rather than strictly oldest-first, so one endpoint with a backlog cannot
+hold up another's events. If ordering matters to your integration, use
+the `created_at` timestamp in the payload rather than arrival order, and
+treat an older event arriving after a newer one as normal.
+
 ## Event payloads
 
 ### `session.completed`

@@ -157,6 +157,32 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       );
     });
 
+    it('CRITICAL delivery is NOT ordered, and the docs now say so. A retry is rescheduled onto the backoff, so it lands behind events created later — an older event waiting while a newer one goes out is the normal case, not a defect. Proved here so the documented contract rests on behaviour rather than on a claim.', async () => {
+      const claim = liveClaim();
+      const ep = await seedEndpoint();
+      // `older` already failed once: its next_attempt_at sits in the FUTURE,
+      // exactly as recordRetry leaves it.
+      const older = randomUUID();
+      await client!`
+        INSERT INTO webhook_deliveries (id, webhook_id, event_id, event_type, payload, status, attempts, next_attempt_at)
+        VALUES (${older}, ${ep}, ${randomUUID()}, 'session.completed', '{}'::jsonb, 'pending', 1,
+                ${new Date(Date.now() + 60_000).toISOString()})`;
+      // `newer` was created afterwards but is due now.
+      const newer = randomUUID();
+      await client!`
+        INSERT INTO webhook_deliveries (id, webhook_id, event_id, event_type, payload, status, attempts, next_attempt_at)
+        VALUES (${newer}, ${ep}, ${randomUUID()}, 'session.completed', '{}'::jsonb, 'pending', 0,
+                ${new Date(Date.now() - 1_000).toISOString()})`;
+
+      await claim({ batchSize: 25, perEndpointCap: 5 });
+
+      const rows = await client!<Array<{ id: string; status: string }>>`
+        SELECT id, status FROM webhook_deliveries WHERE webhook_id = ${ep}::uuid`;
+      const byId = Object.fromEntries(rows.map((r) => [r.id, r.status]));
+      expect(byId[newer], 'the newer event goes out').not.toBe('pending');
+      expect(byId[older], 'while the older retry waits on its backoff').toBe('pending');
+    });
+
     it('CRITICAL the cap is per ENDPOINT, not global — a single endpoint never takes more than its share of one tick, however deep its backlog.', async () => {
       const claim = liveClaim();
       const noisy = await seedEndpoint();
