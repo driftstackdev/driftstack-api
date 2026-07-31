@@ -173,6 +173,18 @@ export const METRIC_NAMES = {
   // sweep interval; a promise that quietly stops running looks identical to one
   // with nothing to do, and only the counter tells them apart.
   retentionPurgeTotal: 'driftstack_retention_purge_total',
+  // Liveness of each self-re-arming job chain: 1 when a pending row exists for
+  // that job_type, 0 when none does.
+  //
+  // Every recurring sweep survives by enqueueing its own successor, and every
+  // register* helper carries a comment warning that a throw without a re-arm
+  // leaves the chain "dead until a process restart". Nothing detected that.
+  // Zero here IS that state, per job type, and it is the difference between a
+  // sweep that has nothing to do and a sweep that will never run again.
+  //
+  // Refreshed at SCRAPE time rather than from a job tick, deliberately: a
+  // watchdog that rides on a chain dies with the chain it watches.
+  scheduledJobChainPending: 'driftstack_scheduled_job_chain_pending',
   agentDecomposeTotal: 'driftstack_agent_decompose_total',
   // Arc 7 obs.4 — BYOK Anthropic /test endpoint outcome counter.
   // Labelled by outcome (ok / invalid / quota_exceeded / unknown

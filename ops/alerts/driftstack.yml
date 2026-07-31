@@ -47,6 +47,32 @@ groups:
             queue depth suggests AgentRuntime decompose latency is
             hurting interactive takeover responsiveness.
 
+      - alert: ScheduledJobChainDead
+        # Every recurring sweep survives by enqueueing its own successor, so
+        # one pending row is the steady state. Zero means the chain stopped
+        # and will not resume without a process restart — the failure each
+        # register* helper warns about in its own comments. The retention
+        # sweeps that keep three privacy-policy §9 commitments are among the
+        # chains that can die this way, so page on it.
+        #
+        # The gauge reports 0 rather than dropping the series precisely so
+        # this can alert on a VALUE. Alerting on an absent series would fire
+        # identically when the scrape target itself is down.
+        expr: |
+          driftstack_scheduled_job_chain_pending == 0
+        for: 15m
+        labels:
+          severity: critical
+          team: driftstack-runtime
+        annotations:
+          summary: 'Background job chain {{ $labels.job_type }} has stopped'
+          description: |
+            No pending row exists for {{ $labels.job_type }}. Recurring jobs
+            re-arm themselves, so this means the chain is broken and the work
+            is not happening — it will not recover on its own. Restart the
+            API process to re-seed the chain, then find out why the tick
+            stopped re-arming.
+
       - alert: RetentionPurgeArmNotRunning
         # An arm of the account-deletion sweep reported `skipped`, which
         # means it was never wired — not that it had nothing to purge.

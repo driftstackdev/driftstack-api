@@ -77,6 +77,16 @@ export interface ScheduledJobsRepo {
    * never claim the same row.
    */
   claimDue(opts: { batchSize: number; now: Date; workerId: string }): Promise<ScheduledJobRow[]>;
+  /**
+   * Job types that currently have at least one PENDING row (not completed, not
+   * failed). Used as a liveness probe on the self-re-arming chains.
+   *
+   * A recurring sweep survives by enqueueing its own successor, so exactly one
+   * pending row is its steady state. Zero pending rows means the chain is dead
+   * and stays dead until a process restart — the failure every register* helper
+   * warns about in its own comments — and nothing detects it today.
+   */
+  jobTypesWithPendingWork(): Promise<string[]>;
   markComplete(jobId: string, at: Date): Promise<void>;
   markRetry(jobId: string, opts: { lastError: string; nextRunAt: Date }): Promise<void>;
   markFailed(jobId: string, opts: { lastError: string; at: Date }): Promise<void>;

@@ -66,14 +66,15 @@ The current counter catalogue (all `driftstack_*` namespaced):
 
 ### Agent + LLM rails
 
-| Metric                                  | Labels           | What it tracks                                                                                                                                                              |
-| --------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `driftstack_agent_decompose_total`      | `result_kind`    | agent decompose() calls by result (plan / clarify / refuse)                                                                                                                 |
-| `driftstack_pair_mode_transition_total` | `from`, `to`     | pair-mode state-machine transitions                                                                                                                                         |
-| `driftstack_bundled_llm_request_total`  | `outcome`        | bundled-LLM decompose requests by outcome                                                                                                                                   |
-| `driftstack_bundled_llm_error_total`    | `kind`           | bundled-LLM decompose errors (consent_missing / budget_exhausted)                                                                                                           |
-| `driftstack_byok_anthropic_test_total`  | `outcome`        | BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / unknown; not_wired is a legacy pre-live-tester label)                                     |
-| `driftstack_retention_purge_total`      | `arm`, `outcome` | account-deletion retention purge by arm (byok / proxy_secrets / profiles / snapshots) and outcome (purged / failed / skipped); `skipped` means the arm was not wired at all |
+| Metric                                   | Labels           | What it tracks                                                                                                                                                              |
+| ---------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `driftstack_agent_decompose_total`       | `result_kind`    | agent decompose() calls by result (plan / clarify / refuse)                                                                                                                 |
+| `driftstack_pair_mode_transition_total`  | `from`, `to`     | pair-mode state-machine transitions                                                                                                                                         |
+| `driftstack_bundled_llm_request_total`   | `outcome`        | bundled-LLM decompose requests by outcome                                                                                                                                   |
+| `driftstack_bundled_llm_error_total`     | `kind`           | bundled-LLM decompose errors (consent_missing / budget_exhausted)                                                                                                           |
+| `driftstack_byok_anthropic_test_total`   | `outcome`        | BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / unknown; not_wired is a legacy pre-live-tester label)                                     |
+| `driftstack_retention_purge_total`       | `arm`, `outcome` | account-deletion retention purge by arm (byok / proxy_secrets / profiles / snapshots) and outcome (purged / failed / skipped); `skipped` means the arm was not wired at all |
+| `driftstack_scheduled_job_chain_pending` | `job_type`       | liveness of each self-re-arming background job chain: 1 while a pending row exists, 0 when the chain has stopped and will not resume without a restart                      |
 
 ### Webhook ingress
 

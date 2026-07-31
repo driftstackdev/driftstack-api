@@ -1,3 +1,10 @@
+// Accepts registerCounter OR registerGauge. The catalog was counter-only when
+// this guard was written, so it hardcoded registerCounter; the first gauge to
+// land (scheduledJobChainPending) would otherwise have failed a check that was
+// really asserting "is registered at boot", not "is a counter". Widened rather
+// than exempted — the property worth holding is registration, and a gauge that
+// is emitted but never registered fails exactly as badly as a counter.
+//
 // Arc 7 obs cross-cutting — every counter in METRIC_NAMES MUST be
 // pre-registered at BOTH the production bootstrap site AND the
 // integration-test fixture. A new counter that lands the catalog
@@ -39,7 +46,7 @@ describe('METRIC_NAMES ↔ bootstrap registration parity', () => {
       // file. Confirm by looking for `registerCounter(\n      METRIC_NAMES.foo,`
       // -ish; lenient on whitespace.
       expect(bootstrap).toMatch(
-        new RegExp(`registerCounter\\(\\s*METRIC_NAMES\\.${catalogKey}\\b`, 's'),
+        new RegExp(`register(?:Counter|Gauge)\\(\\s*METRIC_NAMES\\.${catalogKey}\\b`, 's'),
       );
     }
   });
@@ -52,7 +59,7 @@ describe('METRIC_NAMES ↔ bootstrap registration parity', () => {
         `build-test-app.ts must pre-register ${catalogKey} (${metricName})`,
       ).toBe(true);
       expect(testFixture).toMatch(
-        new RegExp(`registerCounter\\(\\s*METRIC_NAMES\\.${catalogKey}\\b`, 's'),
+        new RegExp(`register(?:Counter|Gauge)\\(\\s*METRIC_NAMES\\.${catalogKey}\\b`, 's'),
       );
     }
   });

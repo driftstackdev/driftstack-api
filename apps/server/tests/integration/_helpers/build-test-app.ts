@@ -747,6 +747,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // the registry at construction time. The same registration block
   // lives in bootstrap.ts (prod).
   const metricsRegistry = new MetricsRegistry();
+  metricsRegistry.registerGauge(
+    METRIC_NAMES.scheduledJobChainPending,
+    'Liveness of each self-re-arming job chain.',
+    ['job_type'],
+  );
   metricsRegistry.registerCounter(
     METRIC_NAMES.retentionPurgeTotal,
     'Account-deletion retention purge outcomes by arm.',

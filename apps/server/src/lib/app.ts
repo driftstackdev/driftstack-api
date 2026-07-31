@@ -279,6 +279,12 @@ export interface AppDeps {
    */
   metricsScrapeToken?: string;
   /**
+   * Optional scrape-time gauge refresh, forwarded to GET /metrics. Wired at
+   * bootstrap to report which self-re-arming job chains still have pending
+   * work; absent in tests and in deployments without a scheduled-jobs repo.
+   */
+  metricsRefreshGauges?: () => Promise<void>;
+  /**
    * Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
    * tracker. Routes record customer activity here so the
    * PairModeHeartbeatSweep (also driven by bootstrap) can fire the
@@ -1220,6 +1226,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerMetricsRoutes(app, {
       registry: deps.metricsRegistry,
       scrapeToken: deps.metricsScrapeToken ?? null,
+      ...(deps.metricsRefreshGauges !== undefined
+        ? { refreshGauges: deps.metricsRefreshGauges }
+        : {}),
     });
   }
   if (deps.authFlowsService !== undefined) {

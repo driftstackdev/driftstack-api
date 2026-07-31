@@ -22,6 +22,20 @@ import type { MetricsRegistry } from '../services/metrics-registry.js';
 export interface MetricsRoutesDeps {
   readonly registry: MetricsRegistry;
   readonly scrapeToken: string | null;
+  /**
+   * Optional scrape-time gauge refresh, run after auth and before render.
+   *
+   * Gauges that describe CURRENT state — how many chains are alive right now —
+   * cannot be maintained by incrementing at an event, because the event that
+   * matters is one that never happened. Computing them here also keeps them
+   * independent of the job chains themselves: a watchdog driven from a job tick
+   * dies with the chain it is watching.
+   *
+   * Never fatal. A refresh failure serves the counters we already have rather
+   * than failing the scrape, because losing all metrics is a worse outcome than
+   * losing one gauge, and a scraper that gets a 500 reports nothing at all.
+   */
+  readonly refreshGauges?: () => Promise<void>;
 }
 
 export function registerMetricsRoutes(app: FastifyInstance, deps: MetricsRoutesDeps): void {
@@ -44,6 +58,13 @@ export function registerMetricsRoutes(app: FastifyInstance, deps: MetricsRoutesD
     if (authzBuf.length !== expectedBuf.length || !timingSafeEqual(authzBuf, expectedBuf)) {
       reply.header('www-authenticate', 'Bearer realm="metrics"');
       throw new UnauthorizedError('Metrics scrape token missing or invalid.');
+    }
+    if (deps.refreshGauges !== undefined) {
+      try {
+        await deps.refreshGauges();
+      } catch (err) {
+        req.log.warn({ err }, 'metrics gauge refresh failed; serving counters only');
+      }
     }
     reply.header('content-type', 'text/plain; version=0.0.4; charset=utf-8');
     return deps.registry.render();

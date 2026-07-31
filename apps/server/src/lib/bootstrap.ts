@@ -98,6 +98,7 @@ import { RedisPairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import { InMemoryPairModeHeartbeatTracker } from '../services/agent-pair-mode-heartbeat.js';
 import { PairModeHeartbeatSweep } from '../services/agent-pair-mode-heartbeat-sweep.js';
 import { MetricsRegistry, METRIC_NAMES } from '../services/metrics-registry.js';
+import { refreshJobChainLiveness } from '../services/job-chain-liveness.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
@@ -497,6 +498,11 @@ export async function createProductionDeps(
       METRIC_NAMES.pairModeTransitionTotal,
       'Pair-mode state-machine transitions, labelled by from + to states.',
       ['from', 'to'],
+    );
+    metricsRegistry.registerGauge(
+      METRIC_NAMES.scheduledJobChainPending,
+      'Liveness of each self-re-arming job chain: 1 when a pending row exists for that job_type, 0 when the chain is dead and will not run again without a restart.',
+      ['job_type'],
     );
     metricsRegistry.registerCounter(
       METRIC_NAMES.retentionPurgeTotal,
@@ -2361,6 +2367,11 @@ export async function createProductionDeps(
       ? {
           metricsRegistry,
           metricsScrapeToken: config.metricsScrapeToken,
+          // Chain-liveness gauge, refreshed at scrape time. Deliberately NOT
+          // driven from a job tick: a watchdog that rides on a chain dies with
+          // the chain it is meant to be watching.
+          metricsRefreshGauges: () =>
+            refreshJobChainLiveness({ repo: scheduledJobsRepo, metrics: metricsRegistry }),
         }
       : {}),
     // Arc 2 sub-slice 8.4 (v2-#8) — gui_control_key encryption.

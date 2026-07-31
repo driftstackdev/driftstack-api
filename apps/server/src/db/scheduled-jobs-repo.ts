@@ -144,6 +144,14 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
     }));
   }
 
+  async jobTypesWithPendingWork(): Promise<string[]> {
+    const rows = await this.database.client<Array<{ job_type: string }>>`
+      SELECT DISTINCT job_type
+      FROM scheduled_jobs
+      WHERE completed_at IS NULL AND failed_at IS NULL`;
+    return rows.map((r) => r.job_type);
+  }
+
   async markComplete(jobId: string, at: Date): Promise<void> {
     await this.database.db
       .update(scheduledJobs)
