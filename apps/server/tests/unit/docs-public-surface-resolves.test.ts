@@ -233,6 +233,47 @@ describe('public docs reference only surfaces that actually exist', () => {
     ).toEqual([]);
   });
 
+  it('CRITICAL every `/v1/...` path our own first-party apps call resolves to a registered route. The customer dashboard, admin panel and desktop GUI call the API directly — a path that does not resolve is not a documentation typo, it is a broken feature the customer meets at runtime.', () => {
+    const registered = registeredRoutes();
+    const appRoots = ['apps/customer-dashboard/src', 'apps/admin-panel/src', 'apps/gui-client/src'];
+    const unresolved: string[] = [];
+
+    for (const root of appRoots) {
+      const base = resolve(REPO_ROOT, root);
+      if (!existsSync(base)) continue;
+      const stack = [base];
+      while (stack.length > 0) {
+        const dir = stack.pop()!;
+        for (const entry of readdirSync(dir)) {
+          const full = resolve(dir, entry);
+          if (statSync(full).isDirectory()) {
+            stack.push(full);
+            continue;
+          }
+          if (!/\.(astro|ts|tsx)$/.test(entry)) continue;
+          const body = readFileSync(full, 'utf8');
+          for (const m of body.matchAll(/['"`](\/v1\/[A-Za-z0-9_\-/:${}.]+)['"`]/g)) {
+            // Template and concatenated ids normalise to the `:id` form the
+            // route registry uses.
+            const path = normalisePath(
+              m[1]!.replace(/\$\{[^}]*\}/g, ':id').replace(/'\s*\+\s*[^+]+\+\s*'/g, ':id'),
+            ).replace(/\/$/, '');
+            const known = [...registered].some(
+              (route) =>
+                route === path || route.startsWith(`${path}/`) || path.startsWith(`${route}/`),
+            );
+            if (!known) unresolved.push(`${path}  (${rel(full)})`);
+          }
+        }
+      }
+    }
+
+    expect(
+      [...new Set(unresolved)].sort(),
+      'First-party app(s) call a path with no registered route:',
+    ).toEqual([]);
+  });
+
   it('every foreign-path exemption names whose API it is, so the list cannot quietly become a dumping ground', () => {
     for (const entry of FOREIGN_PATH_EXEMPTIONS) {
       expect(entry.path).toMatch(/^\/v1\//);
