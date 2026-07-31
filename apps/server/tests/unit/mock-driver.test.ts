@@ -62,13 +62,21 @@ describe('MockDriver — login result truth', () => {
       username: 'user@example.com',
       password: 'do-not-echo',
     });
-    expect(result).toEqual({
+    // `durationMs` is a MEASURED elapsed time, so pinning it to exactly 0 was a
+    // wall-clock assumption: it held on an idle machine and intermittently read
+    // 1ms when this file ran beside the rest of the suite. Assert the contract
+    // instead — every other field exactly, and the duration as a real integer
+    // inside the published 0..600,000ms budget.
+    const { durationMs, ...loginShape } = result;
+    expect(loginShape).toEqual({
       submitted: true,
       credentialsTruncated: false,
       loggedIn: true,
       postLoginUrl: 'https://example.com/account',
-      durationMs: 0,
     });
+    expect(Number.isInteger(durationMs)).toBe(true);
+    expect(durationMs).toBeGreaterThanOrEqual(0);
+    expect(durationMs).toBeLessThanOrEqual(600_000);
     expect(JSON.stringify(result)).not.toContain('user@example.com');
     expect(JSON.stringify(result)).not.toContain('do-not-echo');
   });
@@ -86,12 +94,15 @@ describe('MockDriver — search result truth', () => {
       submit: true,
       waitForResultsSelector: '#results',
     });
-    expect(result).toEqual({
+    const { durationMs, ...searchShape } = result;
+    expect(searchShape).toEqual({
       submitted: true,
       queryTruncated: false,
       resultsVisible: true,
-      durationMs: 0,
     });
+    expect(Number.isInteger(durationMs)).toBe(true);
+    expect(durationMs).toBeGreaterThanOrEqual(0);
+    expect(durationMs).toBeLessThanOrEqual(600_000);
     expect(JSON.stringify(result)).not.toContain('do-not-echo');
   });
 });
