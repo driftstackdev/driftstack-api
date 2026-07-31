@@ -362,8 +362,24 @@ describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
   it('rejects a tampered value under the correct nonce-scoped cookie name', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
     const flow = await startFlow(fx);
-    const last = flow.cookieValue.at(-1);
-    const tampered = `${flow.cookieValue.slice(0, -1)}${last === 'A' ? 'B' : 'A'}`;
+    // Tamper the FIRST signature character, never the last.
+    //
+    // The cookie is `verifier.nonce.sig`, and `sig` is a 32-byte HMAC in
+    // base64url: 43 chars x 6 bits = 258 bits carrying 256, so the FINAL char
+    // has 2 slack bits and four distinct characters decode to the same byte
+    // ('A','B','C','D' all decode alike, and so on in groups of four).
+    // Verification does Buffer.from(sig,'base64url') + timingSafeEqual, which
+    // compares the decoded BYTES — so flipping the last char left the signature
+    // valid whenever it fell in the same group, and this test failed to reject
+    // and went red. Measured over 20,000 real signatures: 6.16% of runs, which
+    // is exactly the predicted 4/64. That is the intermittent failure A2 had
+    // been carrying as an unexplained flake; it was never load-related.
+    //
+    // A leading char carries all 6 of its bits inside byte 0, so changing it
+    // always changes the decoded signature.
+    const [verifier, nonce, sig] = flow.cookieValue.split('.');
+    const tamperedSig = `${sig?.startsWith('A') === true ? 'B' : 'A'}${(sig ?? '').slice(1)}`;
+    const tampered = `${verifier}.${nonce}.${tamperedSig}`;
     const res = await fx.app.inject({
       method: 'GET',
       url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(flow.state)}`,
