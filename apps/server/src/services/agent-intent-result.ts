@@ -157,8 +157,15 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   intent_dispatch_error: 'the action could not be dispatched',
   intent_deadline_exceeded:
     'the action exceeded its whole-intent deadline and the browser session was terminated — start a new session; do not retry against this session',
+  // A1 `driftstack@16a94d0e5` — this code now has TWO harness emitters with
+  // DIFFERENT node state: exit-unconfirmed keeps a process-lifetime same-id
+  // tombstone and discards the in-progress profile, while lost-captured-browser
+  // installs no tombstone, discards no profile and ends no session. The old
+  // copy asserted "this session is permanently fenced", which is a MECHANISM
+  // claim true of only the first. Both are non-retryable for this session, so
+  // the guidance is unchanged and only the unprovable mechanism is dropped.
   intent_deadline_cleanup_unconfirmed:
-    'the action exceeded its whole-intent deadline but browser cleanup could not be confirmed — this session is permanently fenced; start a new session and do not retry against this session',
+    'the action exceeded its whole-intent deadline and browser cleanup could not be confirmed — start a new session and do not retry against this session',
   // A3 W227 — the harness caps inline result output at 8 MiB; an over-cap
   // result is a terminal client error (narrow the selector / paginate).
   result_too_large: 'the result was too large to return — narrow the selector or paginate',

@@ -404,7 +404,13 @@ describe('intentResultToCustomer — failure reasons', () => {
       fail('intent_deadline_cleanup_unconfirmed'),
     );
     if (cleanupUnconfirmed.kind !== 'failure') throw new Error('narrow');
-    expect(cleanupUnconfirmed.reason).toContain('permanently fenced');
+    // The copy must NOT assert a fencing mechanism: since A1's
+    // `driftstack@16a94d0e5` this code has two emitters, and the
+    // lost-captured-browser one installs no tombstone and ends no session.
+    // Guidance (non-retryable, start a new session) is what customers act on
+    // and is true for both; "permanently fenced" was true for only one.
+    expect(cleanupUnconfirmed.reason).not.toContain('permanently fenced');
+    expect(cleanupUnconfirmed.reason).toContain('cleanup could not be confirmed');
     expect(cleanupUnconfirmed.reason).toContain('start a new session');
     expect(cleanupUnconfirmed.reason).toContain('do not retry against this session');
     expect(cleanupUnconfirmed.diagnosis).toEqual({
