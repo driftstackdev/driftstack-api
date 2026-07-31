@@ -119,6 +119,13 @@ const ALLOW_LIST: Record<string, string[]> = {
     // Agent-turn receipt terminal-shape CHECK references this timestamp
     // COLUMN twice (IS NULL / IS NOT NULL); it is never a bound Date value.
     't.completedAt',
+    // session_operations retention-sweep partial index predicate
+    // `result_expires_at IS NOT NULL` — a column REFERENCE. Audited: the
+    // repository's own expiry comparison deliberately uses the typed
+    // `lte(sessionOperations.resultExpiresAt, now)` operator rather than a raw
+    // template, precisely so the Date never reaches a raw interpolation. This
+    // guard caught a real instance of that during slice 1.
+    't.resultExpiresAt',
   ],
   // MFA monotonic timestamp expressions bind pre-serialized nowIso strings.
   // The remaining Date-looking expressions are Drizzle COLUMN references,

@@ -2618,3 +2618,79 @@ export const cryptoEntitlements = pgTable(
       .where(sql`${t.expiredProcessedAt} IS NULL`),
   ],
 );
+
+/**
+ * Durable direct-operation resource (slice 1 — schema + fences; no route yet).
+ * Design: `docs/internal/durable-direct-operation-design.md`.
+ *
+ * `POST /v1/sessions/:id/login` and `/search` run to a 600,000 ms producer wall
+ * that no default public path survives (nginx `location /` 60 s, proxied edge
+ * ~100–120 s, TS SDK 30 s). The producer is not the problem — the RESPONSE is,
+ * and a client that disconnects mid-flight leaves a credential submission
+ * outcome-unknown, the one state we may never resolve by retrying. So the
+ * outcome becomes a row that outlives the connection.
+ *
+ * The DDL in `0108_session_operations.sql` is authoritative: it carries CHECK
+ * constraints (state machine, terminal shape, hash shapes) that Drizzle cannot
+ * express here, and a content-parity guard pins the two together.
+ */
+export const sessionOperations = pgTable(
+  'session_operations',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    /**
+     * Binds the operation to ONE driver lifetime, so a settled result can never
+     * be applied to a successor session that reused the driver id. NOT NULL
+     * because fence 3 (terminal CAS) compares against it on every terminal
+     * write — a nullable incarnation would silently disable that fence.
+     */
+    driverIncarnationId: uuid('driver_incarnation_id').notNull(),
+    kind: text('kind').notNull().$type<'login' | 'search'>(),
+    status: text('status')
+      .notNull()
+      .default('queued')
+      .$type<'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'expired'>(),
+    /** sha256 of the `Idempotency-Key` header. The raw key is never stored. */
+    idempotencyKeyHash: text('idempotency_key_hash'),
+    /** sha256 over the canonicalised request body; same key + different value ⇒ 409. */
+    requestFingerprint: text('request_fingerprint').notNull(),
+    /** Validated against the strict login/search response union before write. */
+    result: jsonb('result').$type<Record<string, unknown>>(),
+    /** RFC 7807, redaction-safe only — never a credential or reflected query. */
+    error: jsonb('error').$type<Record<string, unknown>>(),
+    /** accepted_at + the SAME 600,000 ms producer constant, never a local invention. */
+    deadlineAt: timestamp('deadline_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    resultExpiresAt: timestamp('result_expires_at', { withTimezone: true }),
+  },
+  (t) => [
+    // FENCE 1 — at most one LIVE operation per session. Partial, so a session's
+    // unbounded settled history never collides while liveness stays exclusive.
+    uniqueIndex('session_operations_one_live_per_session')
+      .on(t.sessionId)
+      .where(sql`${t.status} IN ('queued', 'running')`),
+    // FENCE 2 — a retry after a disconnect returns the SAME operation instead of
+    // submitting a second set of credentials. Account-scoped and partial.
+    uniqueIndex('session_operations_account_idempotency_key')
+      .on(t.accountId, t.idempotencyKeyHash)
+      .where(sql`${t.idempotencyKeyHash} IS NOT NULL`),
+    index('session_operations_account_created_idx').on(t.accountId, t.createdAt),
+    index('session_operations_result_expiry_idx')
+      .on(t.resultExpiresAt)
+      .where(sql`${t.resultExpiresAt} IS NOT NULL`),
+  ],
+);

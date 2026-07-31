@@ -757,6 +757,13 @@
       "when": 1784296800000,
       "tag": "0107_agent_sessions_authority_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1784383200000,
+      "tag": "0108_session_operations",
+      "breakpoints": true
     }
   ]
 }

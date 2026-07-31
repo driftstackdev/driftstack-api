@@ -1,10 +1,20 @@
 # Durable direct-operation resource — design (A2, 2026-07-30)
 
-Status: **DESIGN ONLY. Nothing here is implemented, and this document authorizes
-no activation.** Direct `login` / `search` remain capability-gated `503` on every
-shipped driver. This exists because §7 of the A2 handoff requires the durable
-transport to be _designed separately_ before any schema, route, SDK or OpenAPI
-slice is claimed.
+Status: **Slice 1 (schema + repository + the three fences) is IMPLEMENTED and
+proved against real Postgres. Everything else is design only, and this document
+authorizes no activation.** Direct `login` / `search` remain capability-gated
+`503` on every shipped driver; no route reads the new table yet, which is why
+slice 1 is independently releasable. This document exists because §7 of the A2
+handoff requires the durable transport to be _designed separately_ before any
+schema, route, SDK or OpenAPI slice is claimed.
+
+Slice 1 lands as `0108_session_operations.sql`, `sessionOperations` in
+`schema.ts`, `db/session-operations-repo.ts`, `tests/integration/db-session-
+operations-fences.test.ts` (11 cases against real Postgres) and
+`tests/unit/db-session-operations-content-parity.test.ts` (7 drift guards). Every
+fence was mutation-proved by disabling it — dropping each partial unique index,
+removing each CAS predicate, and reversing the admit branch order — and each
+reddened exactly the cases it should.
 
 Owner: A2 (control plane, API contracts, SDKs).
 
@@ -119,9 +129,16 @@ Three fences, all at the database, none in process memory:
    operation (`200`, not a second `202`). Different fingerprint ⇒ `409`. This is
    what makes a client-side retry after a disconnect safe.
 3. **Terminal CAS.** Every terminal write is
-   `UPDATE … SET status = $terminal … WHERE id = $id AND status = 'running' AND driver_incarnation_id = $incarnation`.
+   `UPDATE … SET status = $terminal … WHERE id = $id AND status IN ('queued','running') AND driver_incarnation_id = $incarnation`.
    Zero rows updated ⇒ another writer already settled it, or the incarnation
    changed ⇒ discard the result and quarantine, never overwrite.
+
+   **Corrected during slice 1.** This originally read `status = 'running'`,
+   which cannot express `expired` for an operation that never started: a row
+   still `queued` past its deadline would have been unsettleable forever. What
+   guarantees exactly-once is excluding the TERMINAL statuses, not naming one
+   live status, so admitting either live status is equally safe and strictly
+   more complete.
 
 The failure path commits the terminal row **and** the cleanup-outbox insert in
 ONE transaction. That is the specific gap A3 identified: today a failure can
@@ -215,7 +232,20 @@ posture already shipped. A retention sweeper follows the existing pattern
 
 Each slice is independently releasable and independently reviewable:
 
-1. Schema + repository + the three fences (no route).
+1. ~~Schema + repository + the three fences (no route).~~ **DONE.**
+
+   One finding worth carrying forward, because it would have shipped an
+   unproven fence. The obvious idempotency test — admit with a key, admit
+   again with the same key, expect a replay — **passes even with the
+   idempotency index dropped**, because the first operation is still live on
+   that session and fence 1 blocks the second insert on its own. The fences
+   overlap, so the natural test for the second one is satisfied by the first.
+   Proving fence 2 requires a case where fence 1 cannot help: retry the same
+   key AFTER the first operation settles, when the session is free again.
+   That is also the realistic scenario — a customer retrying a request whose
+   response they never received. Only that case reds when the index is
+   dropped, and it is now the test that carries the fence.
+
 2. Route: `202` factory + `GET`, behind the existing capability gate so behaviour
    is unchanged while a real driver is absent.
 3. Cleanup outbox + leased worker + `Driver.destroy` incarnation argument.
