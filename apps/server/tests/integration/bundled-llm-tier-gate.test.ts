@@ -17,7 +17,7 @@
 //   - BYOK settings live on routes/account-byok-anthropic.ts and are NOT
 //     gated by this change.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
@@ -96,6 +96,59 @@ describe('S42 bundled-LLM consent tier gate — PATCH /v1/account/me/bundled-llm
     });
     expect(patch.statusCode).toBe(200);
     expect(patch.json()).toEqual({ consent: false, monthly_cap_usd_cents: 2000 });
+  });
+
+  it('a TURN re-checks the tier, so stored consent on a downgraded account cannot draw on the deployment key', async () => {
+    // The PATCH gate above only runs when consent is SET. Nothing clears stored
+    // consent when the tier later falls — the Stripe past_due/unpaid/paused/
+    // canceled handlers move accounts.tier and emit an audit row, and no
+    // downgrade path resets bundled_llm_consent. Trusting the stored flag at
+    // turn time therefore let a downgraded (or lapsed-payment) account keep
+    // spending Driftstack's DEPLOYMENT Anthropic key indefinitely. Consent is
+    // the customer's permission; the tier is the entitlement.
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 200000 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json<{ id: string }>().id;
+
+    // Downgrade the plan the way a failed payment does — consent stays true.
+    const live = await fx.authRepo.getAccount(fx.accountId);
+    fx.authRepo.upsertAccount({ ...live!, tier: 'team_manual' });
+
+    // The soft-cap lookup lives INSIDE the bundled leg, so it is called only
+    // when a turn actually intends to spend the deployment key. Asserting on it
+    // is a direct read of "did this turn take the bundled path", rather than on
+    // a status code — a turn can still succeed through the separate generic
+    // decomposer fallback, and what this fix guarantees is precisely that a
+    // downgraded account stops drawing on the bundled DEPLOYMENT key.
+    const capLookup = vi.spyOn(fx.bundledLlmRepo, 'sumMonthlySpendCents');
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { user_message: 'open https://example.com and capture' },
+    });
+    expect(capLookup).not.toHaveBeenCalled();
+
+    // Control: restore the entitled tier and the same turn DOES take it, so the
+    // assertion above is about the downgrade and not about some unrelated skip.
+    const downgraded = await fx.authRepo.getAccount(fx.accountId);
+    fx.authRepo.upsertAccount({ ...downgraded!, tier: 'api_builder' });
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { user_message: 'open https://example.com and capture' },
+    });
+    expect(capLookup).toHaveBeenCalled();
   });
 
   it.each(['api_builder', 'api_scale', 'enterprise'] as const)(

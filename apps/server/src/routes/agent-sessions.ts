@@ -129,7 +129,7 @@ import {
   InternalError,
 } from '../lib/errors.js';
 // S42 2026-07-07 (founder-approved) — V-485 aiAgent tier gate (create path).
-import { requireTierFeature } from '../lib/errors-helpers.js';
+import { requireBundledLlmTier, requireTierFeature } from '../lib/errors-helpers.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
@@ -4335,6 +4335,9 @@ export function registerAgentSessionsRoutes(
     const cachedByokKey = byokKeyCache?.get(req.params.id);
     let bundledLlmKey: string | undefined;
     let bundledLlmConsentMissing = false;
+    /** Consent is stored and true, but the account's CURRENT tier no longer
+     *  includes bundled LLM billing (a downgrade or a failed payment). */
+    let bundledLlmTierIneligible = false;
     // Billing-integrity hardening — set true when this turn reserved a
     // bundled-LLM concurrency slot, so the finally below releases EXACTLY
     // one slot on every exit path (the turn throwing, a downstream 502,
@@ -4362,7 +4365,41 @@ export function registerAgentSessionsRoutes(
           /* swallow */
         }
       }
-      if (settings !== null && settings.consent) {
+      // Entitlement is re-checked at TURN time, not just at consent time.
+      // routes/account-bundled-llm.ts gates `consent = true` on
+      // requireBundledLlmTier, but nothing clears stored consent when the tier
+      // later falls: the Stripe past_due/unpaid/paused/canceled handlers move
+      // accounts.tier and emit an audit row, and no downgrade path resets
+      // bundled_llm_consent. Trusting the stored flag alone therefore let a
+      // downgraded (or lapsed-payment) account keep drawing on Driftstack's
+      // DEPLOYMENT Anthropic key indefinitely — Driftstack paying Anthropic for
+      // an account whose plan no longer includes bundled billing. Consent is the
+      // customer's permission; the tier is the entitlement, and only the live
+      // tier can say whether it still holds.
+      let bundledTierEntitled = true;
+      if (settings !== null && settings.consent && authRepo !== undefined) {
+        const owner = await settleProviderPreflight(() => authRepo.getAccount(turnAccountId));
+        // Reuse the exact predicate the consent PATCH gates on, so the two
+        // cannot drift apart. A vanished owner is not entitled.
+        bundledTierEntitled = false;
+        if (owner !== null) {
+          try {
+            requireBundledLlmTier(owner.tier);
+            bundledTierEntitled = true;
+          } catch {
+            bundledTierEntitled = false;
+          }
+        }
+        if (!bundledTierEntitled) {
+          bundledLlmTierIneligible = true;
+          try {
+            metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'tier_ineligible' });
+          } catch {
+            /* swallow */
+          }
+        }
+      }
+      if (settings !== null && settings.consent && bundledTierEntitled) {
         // Arc 1 sub-slice 6.5 (v2-#6) — soft-cap pre-turn check.
         // Sum bundled-LLM spend in the current calendar month and
         // refuse the turn when it has reached the cap. The customer
@@ -4462,6 +4499,16 @@ export function registerAgentSessionsRoutes(
         // hasn't opted in. Without this branch the customer would get
         // the generic ByokAnthropicRequired 502, which doesn't hint at
         // the simpler dashboard fix (flip consent).
+        if (bundledLlmTierIneligible) {
+          // Deliberately NOT the consent error: consent is on. The blocker is
+          // the plan, so say so rather than sending them to a toggle that is
+          // already ticked.
+          throw new ForbiddenError(
+            'Bundled-LLM billing is not available on this account\u2019s current plan. ' +
+              'Upgrade to a tier that includes it, or supply your own Anthropic key ' +
+              '(PUT /v1/account/me/byok-anthropic-key, or the x-byok-anthropic-api-key header).',
+          );
+        }
         if (bundledLlmConsentMissing) {
           throw new BundledLlmConsentRequiredError();
         }

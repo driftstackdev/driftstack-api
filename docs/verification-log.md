@@ -29980,3 +29980,45 @@ Verification: full server suite 2494 files / 26,305 passing / 0 failing, strict
 server source and test TypeScript, targeted ESLint and Prettier. No route,
 schema, OpenAPI, SDK, shared build/deploy, native, environment, customer or
 secret surface changed; the documented contract is unchanged and now true.
+
+---
+
+## V-715 — Bundled-LLM entitlement is re-checked at turn time, not only at consent time
+
+**Date:** 2026-07-31
+
+`routes/account-bundled-llm.ts` gates setting `consent = true` on
+`requireBundledLlmTier`, so a BYOK-only tier cannot arm bundled billing. Nothing
+re-checked it afterwards. The turn path tested only the stored flag, and no
+downgrade clears that flag: the Stripe `past_due` / `unpaid` / `paused` /
+`canceled` handlers move `accounts.tier` and emit an audit row, and
+`account-lifecycle` sends mail — none of them reset `bundled_llm_consent`. The
+PATCH's own comment concedes the design relied on the customer opting out
+voluntarily ("consent=false … stays open on every tier, so a downgraded account
+can always switch bundled billing off").
+
+So an account that downgraded, or simply stopped paying, kept drawing on
+Driftstack's DEPLOYMENT Anthropic key indefinitely — Driftstack paying Anthropic
+for an account whose plan no longer includes bundled billing. This is a revenue
+leak rather than customer harm, which is why it is P1 and not P0.
+
+Consent is the customer's permission; the tier is the entitlement, and only the
+live tier can say whether it still holds. The turn now resolves the owner and
+runs the same `requireBundledLlmTier` predicate the PATCH uses, so the two cannot
+drift apart, and a vanished owner is treated as not entitled. When it fails the
+turn does not take the bundled leg, and the refusal is deliberately NOT the
+consent error: consent is on, so sending the customer to an already-ticked toggle
+would be a dead end. They are told the plan is the blocker and offered BYOK.
+
+The proof asserts the soft-cap lookup, which lives inside the bundled leg and is
+therefore a direct read of "did this turn intend to spend the deployment key" —
+not the status code, because a turn can still succeed through the separate
+generic decomposer fallback, and what this change guarantees is precisely that a
+downgraded account stops drawing on the bundled key. A control case restores the
+entitled tier and asserts the same turn does take the leg, so the assertion is
+about the downgrade and not an unrelated skip. Bypassing the gate is proved red.
+
+Verification: full server suite 2494 files / 26,306 passing / 0 failing, strict
+server source and test TypeScript, targeted ESLint and Prettier. No schema,
+OpenAPI, SDK, pricing, shared build/deploy, environment, customer or secret
+surface changed.
