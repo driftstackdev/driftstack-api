@@ -103,6 +103,40 @@ async function waitForPageStateSubscriber(): Promise<void> {
   await waitFor(() => expect(dataReceivedSubscribers()).toHaveLength(2));
 }
 
+/**
+ * Deliver a data-channel frame until the element it should produce appears.
+ *
+ * `waitForPageStateSubscriber()` waits for a subscriber COUNT of 2, which is
+ * true on an idle machine but is not a guarantee that the page-state consumer
+ * is one of them: under load this file (run beside the other ~200 gui suites)
+ * intermittently fired into the latency hook alone and the overlay never
+ * arrived — observed 1 run in 3, while 5/5 passed in isolation. A one-shot fire
+ * plus a synchronous `querySelector` therefore encodes two timing assumptions.
+ *
+ * Redelivering inside the poll removes both, and is faithful rather than
+ * lenient: a real LiveKit data channel sends page-state frames repeatedly, and
+ * the consumer is idempotent on them. A component that never renders the
+ * element for a valid frame still fails — it just fails for the real reason
+ * instead of on a race.
+ */
+async function fireUntilRendered(
+  container: HTMLElement,
+  frame: unknown,
+  selector: string,
+): Promise<Element> {
+  return waitFor(() => {
+    act(() => {
+      fireDataFrame(frame);
+    });
+    const el = container.querySelector(selector);
+    expect(
+      el,
+      `expected ${selector} to render after a ${JSON.stringify(frame)} frame`,
+    ).not.toBeNull();
+    return el!;
+  });
+}
+
 describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () => {
   beforeEach(() => {
     fakeRoom.on.mockClear();
@@ -112,21 +146,22 @@ describe('SimulatorWindow — stalled (frozen-renderer) badge (A3 W2845)', () =>
   it('shows a non-black "Reconnecting — page unresponsive" badge on a pageState{state:stalled} data-channel frame', async () => {
     const { container } = renderSim();
     await waitForPageStateSubscriber();
-    act(() => {
-      fireDataFrame({ state: 'stalled', url: 'https://app.example' });
-    });
-    const badge = container.querySelector('[data-component="page-stalled-badge"]');
-    expect(badge).not.toBeNull();
+    const badge = await fireUntilRendered(
+      container,
+      { state: 'stalled', url: 'https://app.example' },
+      '[data-component="page-stalled-badge"]',
+    );
     expect(badge?.textContent).toMatch(/unresponsive/i);
   });
 
   it('clears the stalled badge when a subsequent non-stalled (loaded) frame arrives', async () => {
     const { container } = renderSim();
     await waitForPageStateSubscriber();
-    act(() => {
-      fireDataFrame({ state: 'stalled', url: 'https://app.example' });
-    });
-    expect(container.querySelector('[data-component="page-stalled-badge"]')).not.toBeNull();
+    await fireUntilRendered(
+      container,
+      { state: 'stalled', url: 'https://app.example' },
+      '[data-component="page-stalled-badge"]',
+    );
     act(() => {
       fireDataFrame({ state: 'loaded', url: 'https://app.example' });
     });
@@ -204,15 +239,15 @@ describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
   it('shows the error overlay with per-kind copy on a pageState{state:errored} frame', async () => {
     const { container } = renderSim();
     await waitForPageStateSubscriber();
-    act(() => {
-      fireDataFrame({
+    const overlay = await fireUntilRendered(
+      container,
+      {
         state: 'errored',
         url: 'https://nope.invalid/',
         error: { kind: 'dns', message: 'lookup failed' },
-      });
-    });
-    const overlay = container.querySelector('[data-component="page-error-overlay"]');
-    expect(overlay).not.toBeNull();
+      },
+      '[data-component="page-error-overlay"]',
+    );
     // DNS kind → the address-check copy (shared lib/page-error-copy).
     expect(overlay?.textContent).toMatch(/find this site/i);
     expect(overlay?.textContent).toMatch(/page failed to load/i);
@@ -236,10 +271,11 @@ describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
   it('clears the error overlay when a subsequent loading/loaded frame arrives', async () => {
     const { container } = renderSim();
     await waitForPageStateSubscriber();
-    act(() => {
-      fireDataFrame({ state: 'errored', url: 'https://x/', error: { kind: 'net', message: 'x' } });
-    });
-    expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
+    await fireUntilRendered(
+      container,
+      { state: 'errored', url: 'https://x/', error: { kind: 'net', message: 'x' } },
+      '[data-component="page-error-overlay"]',
+    );
     act(() => {
       fireDataFrame({ state: 'loaded', url: 'https://x/' });
     });
@@ -283,13 +319,14 @@ describe('SimulatorWindow — late sub-resource error does not nuke a loaded pag
     act(() => {
       fireDataFrame({ state: 'loading', url: 'https://nope.invalid/' });
     });
-    act(() => {
-      fireDataFrame({
+    await fireUntilRendered(
+      container,
+      {
         state: 'errored',
         url: 'https://nope.invalid/',
         error: { kind: 'dns', message: 'lookup failed' },
-      });
-    });
-    expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
+      },
+      '[data-component="page-error-overlay"]',
+    );
   });
 });
