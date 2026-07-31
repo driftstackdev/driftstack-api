@@ -4164,6 +4164,14 @@ export function SimulatorWindow(): JSX.Element {
   // a tab-routed page_state frame) or on a bounded timeout so it never hangs.
   const [switchingTabId, setSwitchingTabId] = useState<string | null>(null);
   const switchAffordanceOwnerRef = useRef<TabSwitchAffordanceOwner | null>(null);
+  // The tab of a switch that was ABANDONED without a terminal — a transport blip
+  // bumps the authority epoch, which runs clearAllActivationRetries and drops every
+  // owner plus the cover. activeTabId was already flipped optimistically, so the
+  // strip highlights the target while the video still shows the previous page, and
+  // onActivateTab's `id === activeTabId` guard made the tab un-re-clickable: the
+  // switch was unrecoverable without opening another tab. Holding the id lets that
+  // one tab be re-activated so a re-tap actually retries.
+  const unconfirmedSwitchTabRef = useRef<string | null>(null);
   // Cold-switch "taking longer than usual" escape: the switch-blank cover holds the
   // video black until the target tab's `loaded` frame (or the 6s affordance net drops
   // it). A cold reload can eat most of that window, so after 3s we surface a hint +
@@ -4260,6 +4268,8 @@ export function SimulatorWindow(): JSX.Element {
     [discardActivationOwner],
   );
   const beginSwitchAffordance = useCallback((tabId: string): void => {
+    // A newly admitted switch owns the outcome from here.
+    unconfirmedSwitchTabRef.current = null;
     const prior = switchAffordanceOwnerRef.current;
     if (prior?.timer !== null && prior?.timer !== undefined) window.clearTimeout(prior.timer);
     const owner: TabSwitchAffordanceOwner = { tabId, timer: null };
@@ -4272,6 +4282,7 @@ export function SimulatorWindow(): JSX.Element {
     }, SWITCH_AFFORDANCE_TIMEOUT_MS);
   }, []);
   const dismissSwitchAffordance = useCallback((tabId: string): void => {
+    if (unconfirmedSwitchTabRef.current === tabId) unconfirmedSwitchTabRef.current = null;
     const affordance = switchAffordanceOwnerRef.current;
     if (affordance?.tabId !== tabId) return;
     if (affordance.timer !== null) window.clearTimeout(affordance.timer);
@@ -4300,6 +4311,11 @@ export function SimulatorWindow(): JSX.Element {
   // tab set is replaced (tabListRestore / relaunch) and on unmount so no orphan timer
   // re-sends an activateTab for a tab that no longer exists. Functionless on []-deps.
   const clearAllActivationRetries = useCallback((): void => {
+    // Anything still in flight here is being abandoned WITHOUT a terminal result, so
+    // remember the target: the box may never have committed the switch.
+    if (switchAffordanceOwnerRef.current !== null) {
+      unconfirmedSwitchTabRef.current = switchAffordanceOwnerRef.current.tabId;
+    }
     for (const owner of activationOwnersRef.current.values()) owner.settled = true;
     activationOwnersRef.current.clear();
     pendingActivationsRef.current.clear();
@@ -7062,7 +7078,12 @@ export function SimulatorWindow(): JSX.Element {
         return;
       }
       const target = tabs.find((t) => t.id === id);
-      if (target === undefined || id === activeTabId) return;
+      if (target === undefined) return;
+      // Normally re-tapping the active tab is a no-op. The one exception is a switch
+      // to it that was abandoned unconfirmed (transport blip): activeTabId is
+      // optimistic, the box may still be showing the previous page, and refusing here
+      // is what made that state unrecoverable.
+      if (id === activeTabId && unconfirmedSwitchTabRef.current !== id) return;
       // A fresh tab click supersedes any same-Room activation waiting for readiness.
       deferredActivationUntilReadyRef.current = null;
       const prevActive = activeTabId;
@@ -7887,7 +7908,16 @@ export function SimulatorWindow(): JSX.Element {
                     onRoom={(nextRoom, ownerRoom) => handleRoom(sessionId, nextRoom, ownerRoom)}
                     onStateChange={(s, ownerRoom) => {
                       if (!ownsPanelRoom(sessionId, ownerRoom)) return;
-                      if (connStateRef.current !== s.kind) updateManualInputControl({}, true);
+                      if (connStateRef.current !== s.kind) {
+                        // The epoch bump abandons any in-flight switch. Say so rather
+                        // than just dropping the cover and leaving the strip pointing
+                        // at a tab the box may never have moved to.
+                        const hadUnconfirmed = unconfirmedSwitchTabRef.current !== null;
+                        updateManualInputControl({}, true);
+                        if (!hadUnconfirmed && unconfirmedSwitchTabRef.current !== null) {
+                          showNotice('Connection interrupted — tap the tab again to retry', 3000);
+                        }
+                      }
                       connStateRef.current = s.kind;
                       setConnState(s.kind);
                       resumeDeferredActivation(sessionId, ownerRoom);
@@ -7895,7 +7925,11 @@ export function SimulatorWindow(): JSX.Element {
                     onPublisher={(nextPublisher, ownerRoom) => {
                       if (!ownsPanelRoom(sessionId, ownerRoom)) return;
                       if (publisherStateRef.current !== nextPublisher) {
+                        const hadUnconfirmed = unconfirmedSwitchTabRef.current !== null;
                         updateManualInputControl({}, true);
+                        if (!hadUnconfirmed && unconfirmedSwitchTabRef.current !== null) {
+                          showNotice('Connection interrupted — tap the tab again to retry', 3000);
+                        }
                       }
                       publisherStateRef.current = nextPublisher;
                       setPublisherState(nextPublisher);

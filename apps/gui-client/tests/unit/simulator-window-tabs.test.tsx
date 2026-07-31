@@ -60,6 +60,9 @@ const fakeRoom = {
   off: vi.fn(),
   localParticipant: { publishData: vi.fn(() => Promise.resolve()) },
 };
+// Captured so a test can fire a transport blip (LiveKit Reconnecting / an
+// unexpected Disconnected) the way the real panel does.
+let panelStateChange: ((s: { kind: string }, room: unknown) => void) | null = null;
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
     switching?: boolean;
@@ -75,6 +78,7 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
       props.onStateChange?.({ kind: 'connected' }, fakeRoom);
       props.onPublisher?.('publishing', fakeRoom);
     }, [props]);
+    panelStateChange = props.onStateChange ?? null;
     return (
       <div
         data-component="agent-session-panel-mock"
@@ -1274,6 +1278,36 @@ describe('SimulatorWindow — page tab strip', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('(i) a transport blip mid-switch leaves the tab re-clickable and says so, instead of stranding it', () => {
+    // REGRESSION. A LiveKit Reconnecting / unexpected Disconnected bumps the
+    // authority epoch, which runs clearAllActivationRetries: every owner settled,
+    // every retry timer cleared, the cover dropped. But activeTabId was already
+    // flipped optimistically, so the strip highlighted the target while the video
+    // still showed the previous page — and onActivateTab's `id === activeTabId`
+    // guard refused a re-tap, so the switch was unrecoverable without opening
+    // another tab.
+    const { container } = renderSim();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    const strip = tabEls(container);
+    sendActivateTab.mockClear();
+
+    // Switch to the first tab, then blip the transport mid-flight.
+    fireEvent.click(strip[0]!);
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[data-component="simulator-switch-blank"]')).not.toBeNull();
+
+    act(() => {
+      panelStateChange?.({ kind: 'reconnecting' }, fakeRoom);
+    });
+    // The cover is gone and the switch was abandoned without a terminal.
+    expect(container.querySelector('[data-component="simulator-switch-blank"]')).toBeNull();
+
+    // The tab is still the optimistic active one, and re-tapping it must RETRY.
+    sendActivateTab.mockClear();
+    fireEvent.click(tabEls(container)[0]!);
+    expect(sendActivateTab).toHaveBeenCalledTimes(1);
   });
 
   it('(e2) a window reattaching to a live session adopts the box tag it has never seen, instead of going deaf', () => {
