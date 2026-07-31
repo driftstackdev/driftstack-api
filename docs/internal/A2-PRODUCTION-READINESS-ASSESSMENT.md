@@ -89,6 +89,52 @@ Branch coverage sits at 79.24% against a 75% floor. That is 4.24 points of
 headroom and it is the metric that drifts down as source is added, so it is
 worth watching rather than acting on.
 
+### 12. Agent transcripts and turn receipts are retained forever, including after account termination
+
+`agent_sessions` (encrypted transcripts) and `agent_turn_receipts`
+(`response_ciphertext` — the agent turn's response body) have **no purge of any
+kind**. Not a retention sweep, not a cutoff, not a cleanup job. Both tables grow
+without bound and both keep customer content indefinitely after an account is
+terminated.
+
+This is the third instance of one pattern, and the pattern is what matters:
+`deleteAccount` is a SOFT delete, so the `ON DELETE CASCADE` on
+`agent_turn_receipts.account_id` never fires — the accounts row is never
+hard-deleted. That is exactly why proxy credentials (`6671cde70`) and profiles
+plus snapshots (`1ef6d4229`) were both retained past their disclosed windows.
+Neither of those fixes generalised, because each added one arm for one table.
+The account-deletion purge sweeper now has three arms and these two tables are
+not among them.
+
+_Against the published policy:_ the retention table in `docs/legal/privacy-policy.md`
+caps "Session metadata" at "90 days operational" and permits indefinite
+retention only for "aggregated counters (no PII)". A transcript and a response
+body are neither. DPA §3.8 separately commits to deletion or return within 30
+days of termination.
+
+_Verified, not assumed:_ no `delete`/`purge` on either table anywhere in
+`apps/server/src`; the sweeper's three arms are byok, proxy secrets, and
+profiles+snapshots; and nothing nulls `transcript` on close or
+`response_ciphertext` on completion, so the content is live in the row rather
+than a husk.
+
+_Doing nothing:_ two unbounded tables, and a disclosed retention commitment that
+is not met for the richest customer content in the product.
+_Recommendation:_ a fourth and fifth sweeper arm on the established pattern —
+bounded per tick, independently optional, per-arm metric. Receipts are the
+simpler half (no blob side effects); `agent_sessions` needs a check for
+usage-record and LiveKit references first. **A2 did not implement this in the
+fire that found it:** it is two repo methods, two sweeper arms, metrics and
+guards, and starting it with little runway risks leaving a half-wired sweep,
+which for an erasure path is worse than none. It is the top item for the next
+fire.
+
+_Worth noting for whoever picks it up:_ the same soft-delete-vs-CASCADE question
+applies to every table with an `account_id` foreign key. Fixing these two by
+hand makes it four tables closed out of however many exist; a guard that
+enumerates `account_id`-bearing tables and asserts each is either purged or
+explicitly exempted would stop the fourth instance rather than find it.
+
 ### 11. One integration test can fail intermittently in CI, and the mechanism is proven
 
 Three cases in `db-webhooks-concurrency-drizzle.test.ts` assert on the result of
