@@ -7,8 +7,19 @@ transport to be _designed separately_ before any schema, route, SDK or OpenAPI
 slice is claimed.
 
 Owner: A2 (control plane, API contracts, SDKs).
-Prerequisites tracked elsewhere: A1's monotonic owner-deadline correction, a real
-direct driver, and A3's cleanup-durability finding (2026-07-17 20:51).
+
+Prerequisites, with current state as of 2026-07-31:
+
+- **MET** — A1's monotonic owner-deadline correction landed as `driftstack@16a94d0e5`.
+  The producer boundary is now an absolute `ContinuousClock` instant held by
+  `IntentMutationAuthority` with **latching** expiry, so a worker that wins the
+  actor turn after the boundary cannot publish ordinary success. §5 below
+  depends on exactly that property, and it is no longer an assumption.
+- **OPEN** — a real direct driver. Every shipped driver still reports non-real
+  capability, so the routes truthfully return `503`.
+- **OPEN** — durable cleanup (A3's 2026-07-17 20:51 finding), which §4 addresses
+  with the cleanup outbox but which also needs `Driver.destroy` to take an
+  incarnation argument.
 
 ---
 
@@ -126,9 +137,11 @@ already-absent success before the outbox can be trusted.
 - `deadline_at` is set at admission from the SAME 600,000 ms producer constant.
   The API must not invent its own number.
 - A worker that returns at or after `deadline_at` cannot publish ordinary
-  success — this is exactly A1's active monotonic owner-deadline correction, and
-  the operation row must not paper over it. If A1's terminal is not in, this
-  design does not ship.
+  success. This is no longer an assumption: `driftstack@16a94d0e5` makes the
+  authority's expiry latch, so once observed past the boundary it can never
+  report authorized again. The operation row must not paper over it — a row
+  that settles `succeeded` after `deadline_at` is a bug in this layer, not a
+  tolerable race.
 - The 615,000 ms correlation deadline stays where it is, internal to dispatch.
   It never appears in a customer-facing field.
 - `GET /v1/operations/:id` is a fast read: no driver call, no correlator wait.
