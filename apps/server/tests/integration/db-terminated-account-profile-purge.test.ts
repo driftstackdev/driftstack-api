@@ -175,6 +175,37 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(await counts(accountId)).toEqual({ profiles: 1, snapshots: 1 });
     });
 
+    it('CRITICAL a tick is BOUNDED and successive ticks converge. Without a cap the first sweep against a backlog of long-terminated accounts deletes every matching row in one statement and issues one serial R2 delete per profile in the same tick — correct, but not something an operator can watch. The sweep is self-limiting, so the remainder drains next tick.', async () => {
+      const { accountId } = await seedAccountWithProfile({
+        status: 'deleted',
+        deletedDaysAgo: 45,
+      });
+      // Four more profiles on the same terminated account, so one tick cannot
+      // take them all at a cap of 2.
+      for (let i = 0; i < 4; i += 1) {
+        await client!`
+          INSERT INTO profiles (id, account_id, name, archetype)
+          VALUES (${randomUUID()}, ${accountId}, ${`extra-${i}`}, 'iphone17_ios18_7_safari26_4')`;
+      }
+      const { profiles } = reposOf();
+
+      const first = await profiles.purgeForTerminatedAccountsBefore(cutoff(), 2);
+      expect(first.length, 'the tick takes exactly its cap').toBe(2);
+      expect((await counts(accountId)).profiles, 'the rest are left queued').toBe(3);
+
+      const second = await profiles.purgeForTerminatedAccountsBefore(cutoff(), 2);
+      expect(second.length, 'the next tick makes progress rather than stalling').toBe(2);
+      expect((await counts(accountId)).profiles).toBe(1);
+
+      // Drain what this case seeded. The purges are GLOBAL — they select every
+      // terminated account, not one — so a terminated fixture left half-purged
+      // is picked up by the next test's call and shows there as a phantom row.
+      // That is how this case first failed: the suspended-account test counted a
+      // snapshot this one had left behind.
+      await profiles.purgeForTerminatedAccountsBefore(cutoff());
+      await reposOf().snapshots.purgeForTerminatedAccountsBefore(cutoff());
+    });
+
     it('CRITICAL a SUSPENDED account keeps everything. Suspension is reversible and is not termination; conflating them would destroy the profiles of an account that gets reinstated.', async () => {
       const { accountId, profileId } = await seedAccountWithProfile({
         status: 'suspended',

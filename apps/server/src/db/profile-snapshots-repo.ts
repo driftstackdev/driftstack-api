@@ -42,15 +42,21 @@ export class DrizzleProfileSnapshotsRepo implements ProfileSnapshotsRepo {
    * Same shape as the profile purge: the account predicate lives in SQL beside
    * the delete target so a caller cannot widen it.
    */
-  async purgeForTerminatedAccountsBefore(cutoff: Date): Promise<number> {
+  async purgeForTerminatedAccountsBefore(cutoff: Date, maxPerTick = 500): Promise<number> {
+    // Bounded for the same reason as the profile purge: the sweep is
+    // self-limiting, so capping a tick costs nothing and keeps a first run
+    // against a backlog from deleting everything in one statement.
     const rows = await this.database.client<Array<{ id: string }>>`
-      DELETE FROM profile_snapshots s
-      USING accounts a
-      WHERE a.id = s.account_id
-        AND a.status = 'deleted'
-        AND a.deleted_at IS NOT NULL
-        AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
-      RETURNING s.id`;
+      DELETE FROM profile_snapshots
+      WHERE id IN (
+        SELECT s.id FROM profile_snapshots s
+        JOIN accounts a ON a.id = s.account_id
+        WHERE a.status = 'deleted'
+          AND a.deleted_at IS NOT NULL
+          AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
+        LIMIT ${maxPerTick}
+      )
+      RETURNING id`;
     return rows.length;
   }
 

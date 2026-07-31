@@ -523,15 +523,27 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
    * purpose: this one deletes profiles that are perfectly live, and its only
    * licence to do so is the account's terminated status.
    */
-  async purgeForTerminatedAccountsBefore(cutoff: Date): Promise<string[]> {
+  async purgeForTerminatedAccountsBefore(cutoff: Date, maxPerTick = 500): Promise<string[]> {
+    // BOUNDED. The sweep is self-limiting — purged rows stop matching, so what
+    // is left drains on the next tick — which means a per-tick cap costs
+    // nothing but bounds the first run. Without it, the first sweep against a
+    // production backlog of long-terminated accounts deletes every matching
+    // profile in ONE statement and then issues one serial R2 delete per profile
+    // in the same tick. Correct either way; this keeps the blast radius of a
+    // first run something an operator can watch.
+    //
+    // DELETE takes no LIMIT in PostgreSQL, so the bound goes on a subselect.
     const rows = await this.database.client<Array<{ id: string }>>`
-      DELETE FROM profiles p
-      USING accounts a
-      WHERE a.id = p.account_id
-        AND a.status = 'deleted'
-        AND a.deleted_at IS NOT NULL
-        AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
-      RETURNING p.id`;
+      DELETE FROM profiles
+      WHERE id IN (
+        SELECT p.id FROM profiles p
+        JOIN accounts a ON a.id = p.account_id
+        WHERE a.status = 'deleted'
+          AND a.deleted_at IS NOT NULL
+          AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
+        LIMIT ${maxPerTick}
+      )
+      RETURNING id`;
     return rows.map((r) => r.id);
   }
 

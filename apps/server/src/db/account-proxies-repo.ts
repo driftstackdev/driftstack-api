@@ -264,7 +264,10 @@ export class DrizzleAccountProxiesRepo implements AccountProxiesRepo {
    * conditions sit in the same statement as the delete target. A caller that
    * passed the wrong id list could not widen it.
    */
-  async findDeletedAccountIdsWithProxySecretsBefore(cutoff: Date): Promise<string[]> {
+  async findDeletedAccountIdsWithProxySecretsBefore(
+    cutoff: Date,
+    maxPerTick = 500,
+  ): Promise<string[]> {
     const rows = await this.database.client<Array<{ account_id: string }>>`
       SELECT DISTINCT p.account_id
       FROM account_proxies p
@@ -272,7 +275,8 @@ export class DrizzleAccountProxiesRepo implements AccountProxiesRepo {
       WHERE a.status = 'deleted'
         AND a.deleted_at IS NOT NULL
         AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
-        AND (p.wrapped_password IS NOT NULL OR p.wrapped_secret IS NOT NULL)`;
+        AND (p.wrapped_password IS NOT NULL OR p.wrapped_secret IS NOT NULL)
+      LIMIT ${maxPerTick}`;
     return rows.map((r) => r.account_id);
   }
 

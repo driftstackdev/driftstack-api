@@ -1,6 +1,6 @@
 # Production-readiness assessment — control plane, SDKs, docs (A2)
 
-Written 2026-08-01 after a full-day verification run. This is not a summary of
+Written 2026-08-01 after a full-day verification run, and kept current as work lands. This is not a summary of
 work done; it is a statement of **what is proven, what is assumed, and what is
 open**, so the remaining decisions can be made without re-deriving the evidence.
 
@@ -35,12 +35,22 @@ _don't_ write one — six lanes came back adequately covered and got no new code
 | AUP refusal               | Evasion-resistant: zero-width splitters and full-width confusables normalise before matching, and the normalize order itself is pinned.                                                                                                                                                                             |
 | SDK consistency           | Three SDKs expose the same 19 resources and the same methods modulo language idiom; two deliberate aliases are allowlisted with reasons.                                                                                                                                                                            |
 | Production dependencies   | `npm audit --omit=dev` is zero at any severity, now gated in CI. All 12 remaining advisories are build/lint tooling.                                                                                                                                                                                                |
+| Billing idempotency       | A retried usage write cannot charge a turn twice — one row id per row, reused across attempts, insert `onConflictDoNothing`. Both halves guarded because they fail independently: a stable id with a plain insert still double-writes, and a conflict-safe insert with a per-attempt id does too.                   |
+| Intent replay safety      | `intentReplayMayDuplicateEffect` fails safe: it enumerates the SAFE kinds and treats anything unrecognised as effectful, so a new intent kind is not auto-retried after an ambiguous WebDriver failure until someone says it can be.                                                                                |
+| Retention erasure         | Wrapped proxy credentials, profiles and snapshots are erased 30 days after account termination, with sealed R2 blobs dropped. Safety predicates live in SQL beside the delete target; an active account survives a direct clear call with its own id.                                                               |
+| Webhook fairness          | One broken endpoint cannot starve the rest — the claim ranks per endpoint rather than global FIFO. Held on BOTH implementations so the staged cutover cannot reintroduce it.                                                                                                                                        |
+| SDK retry safety          | A create is never auto-retried without an Idempotency-Key, in all three SDKs. Go had no coverage of the gate at all; PATCH was untested everywhere.                                                                                                                                                                 |
+| Observability             | Retention purge outcomes are labelled per arm with a `skipped` value, and a scrape-time gauge reports a dead job chain as 0 rather than as an absent series. Every emitted metric is registered at boot.                                                                                                            |
 
 ## Assumed, not proven
 
-- **Deploy-time behaviour.** Nothing here was deployed. Migration `0108` applied
-  cleanly to a populated local Postgres; production application is unverified by
-  A2.
+- **Deploy-time behaviour.** Nothing here was deployed, and nothing has been
+  pushed — see open item 1. Migration `0108` applied cleanly to a populated local
+  Postgres; production application is unverified by A2.
+- **First-run volume of the retention purges.** The three erasure paths shipped
+  today have no batch limit. On a production backlog of long-terminated accounts
+  the first run deletes everything past the cutoff in one pass. Correct, but
+  unmeasured at scale; the existing trash purge has the same shape.
 - **Observability.** Sentry, email and LiveKit activation flags are wired in
   config and untested against the real services from this repo.
 - **Performance under load.** The bench-regression job is advisory
@@ -52,23 +62,114 @@ _don't_ write one — six lanes came back adequately covered and got no new code
 
 ## Open — needs a decision, not more engineering
 
-1. **Free-tier OAuth consent.** A fresh signup lands on `free`, and consent is
-   gated behind `apiAccess`. Refusing is coherent — a third-party bearer _is_
-   programmatic access — but it means "Sign in with Driftstack" is unavailable
-   to free users. Current behaviour is pinned by its own test so it stays
-   visible; the OAuth mechanics are separately covered on a paid tier.
-2. **Free-tier API-key minting.** Unreachable by any path, including a dashboard
-   web session, because `createApiKey` gates on `apiAccess` unless the key being
-   minted is itself `cli_device`. Pinned as current behaviour.
-3. **GUI signing identity.** Both bundles are ad-hoc signed
-   (`TeamIdentifier=not set`), so every rebuild changes the cdhash that
-   "Always Allow" is pinned to and keychain grants are void after each install.
-   The per-call prompt storm is fixed in code; this half needs Developer ID or a
-   stable self-signed identity, and touches the founder's machine and the
-   release path.
+Ten items. Each states the evidence, what happens if nothing is decided, and a
+recommendation. None is blocked on more test coverage; every one is blocked on
+somebody choosing.
 
-Nothing in this list is blocked on more test coverage. Items 1 and 2 are product
-policy; item 3 is infrastructure A2 will not change unilaterally.
+**The list is ordered by what it costs to keep waiting**, not by effort.
+
+### 1. 1,022 commits have never reached CI
+
+`git rev-list --count @{u}..HEAD` = **1,022**. Upstream's tip is `6b3a856cd`,
+dated **2026-07-12** — nineteen days. Every "gates green" any agent has reported,
+including all of mine, is a LOCAL result.
+
+_Doing nothing:_ the divergence grows and the eventual push is a single
+high-risk event. _Evidence it would land:_ I ran CI's entire job list locally —
+build (all five Astro sites + server), SDK build, typecheck across eight
+workspaces, lint, format, `npm audit --omit=dev --audit-level=high` (0
+vulnerabilities), `vitest run --coverage` (lines 89.84 / statements 88.11 /
+functions 88.50 / branches 79.25, against 80/80/80/75), and Playwright e2e (199
+passed). _Recommendation:_ push. The standing rail forbids me from doing it, so
+it needs the founder or an agent with that grant.
+
+### 2. Three subsystems are built, tested, and have never run
+
+Recorded in code at `apps/server/tests/unit/tick-services-are-wired-invariant.test.ts`
+rather than only here, so they cannot go quiet again.
+
+- **`AuditArchiveService`** (ADR-006). Sweeps rows older than 90 days out of five
+  tables — `admin_audit_log`, `processed_stripe_events`, `legal_acceptances`,
+  `webhook_deliveries`, and the high-volume `session_events` action log — into R2,
+  then DELETEs them. `audit_archive_runs` has **zero rows**. _Doing nothing:_
+  those five tables have no retention bound, two are explicitly high-volume, and
+  the privacy policy's "Session metadata: 90 days operational" line has no
+  mechanism behind it. _Recommendation:_ wire it, but on a staging dataset first
+  — it deletes production rows after an R2 upload.
+- **`WebhookSecretForceRotationService`**. Rotates webhook signing secrets past
+  91 days and emails the customer a 7-day grace deadline. Its sibling
+  `WebhookGraceExpiringNoticeService` IS wired, so the half that warns about
+  expiring grace windows runs while the half that opens them does not.
+  _Doing nothing:_ signing secrets never rotate. _Recommendation:_ decide the
+  policy first — turning it on breaks any integration that ignores the grace
+  window.
+- **`DurableWebhookDeliveryService`**. The documented V-173 successor, awaiting
+  soak time. _Doing nothing:_ fine, this one is genuinely staged. Its claim query
+  is kept in step with the live one so a cutover cannot reintroduce the endpoint
+  starvation fixed in `84dc306b1`.
+
+### 3. Two retention-table lines cannot be honoured as written
+
+- **"Revoked API keys retained 90 days for audit then deleted."** Nothing deletes
+  `api_keys` rows and nothing can: `sessions.api_key_id` is **RESTRICT**, and
+  sessions are retained seven years under the Dutch tax-law line in the same
+  table. _Recommendation:_ reword to match reality (credential material zeroed,
+  metadata retained), or change the FK. It is a text-or-schema decision.
+- **"Session metadata: 90 days operational."** Coherent, and item 2's archiver is
+  the mechanism — it archives rather than deletes, so it does not conflict with
+  the seven-year billing line. Resolves itself once the archiver runs. _(This
+  corrects an earlier reading of mine that called the line ambiguous.)_
+
+### 4. Webhook delivery is capped near 25 deliveries/minute
+
+`POLLER_INTERVAL_MS = 60_000` with `batchSize` 25, and the batch is delivered
+serially. Per-endpoint fairness is fixed (`84dc306b1`), so one broken endpoint no
+longer starves the rest — but the global ceiling stands. _Doing nothing:_ the
+cap binds as soon as a real customer base generates events. _Recommendation:_
+give webhook delivery its own interval rather than the shared poller constant.
+A2 did not, because it changes outbound load on customer endpoints and our
+egress.
+
+### 5. An abandoned paid session bills indefinitely
+
+Billed minutes derive from the `sessions` table, and an `active` row with no
+`destroyed_at` accrues to `now()`. Only `free` is capped — the duration sweeper's
+own comment says "paid = null = never", and its suite pins that. A paid session
+ends only via customer DELETE, a failed operation, admin action, or suspension,
+and there is **no liveness signal on driver sessions**. _Doing nothing:_ a
+silently-dead driver keeps billing. _Recommendation:_ needs A1/A3 input on
+whether driver death reaches the control plane; A2 cannot verify that from here.
+
+### 6. Unrecognised request fields are silently dropped
+
+Zod strips unknown keys and the routes use `safeParse`. A customer who mistypes
+`archetype` on profile creation gets **201 Created** with the default archetype
+substituted. _Doing nothing:_ silent misconfiguration presented as success, in a
+product whose value is which device you appear to be. _Recommendation:_ product
+call — making the schemas strict is a breaking change for any client already
+sending extra fields. Current behaviour is pinned so a change is deliberate.
+
+### 7. Free-tier OAuth consent, and 8. free-tier API-key minting
+
+Unchanged from the original assessment: both are coherent product policy, both
+are pinned by their own tests so they stay visible, and neither is a defect.
+
+### 9. GUI signing identity
+
+Both bundles are ad-hoc signed (`TeamIdentifier=not set`), so every rebuild voids
+the keychain grants "Always Allow" pinned to the old cdhash. The per-call prompt
+storm is fixed in code; this half needs Developer ID or a stable self-signed
+identity, and touches the founder's machine and the release path.
+
+### 10. Prettier is declared `^3.4.0`
+
+A caret range on a formatter. The lockfile pins 3.8.3 and the installed copy only
+caught up on 2026-07-31, at which point the format gate went red on 24 files
+formatted under an older version — while `.husky/pre-push` runs `format:check`,
+so the next push would have failed. Fixed in `940cd90d7`. _Recommendation:_ pin
+exactly, so a future minor bump cannot reformat the repo silently. A2 did not,
+because it means editing `package.json` and the lockfile while A3 was actively
+working dependencies.
 
 ## What A2 deliberately did not do
 
