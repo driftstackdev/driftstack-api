@@ -102,7 +102,10 @@ import { refreshJobChainLiveness } from '../services/job-chain-liveness.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
-import { DrizzleAgentTurnReceiptsRepo } from '../db/agent-turn-receipts-repo.js';
+import {
+  DrizzleAgentTurnReceiptsRepo,
+  purgeTurnReceiptsForTerminatedAccountsBefore,
+} from '../db/agent-turn-receipts-repo.js';
 import { DrizzleAgentDecomposerUsageRecorder } from '../db/agent-decomposer-usage-recorder.js';
 import { AgentRuntime } from '../services/agent-runtime.js';
 import { resolveTaskRefusalConfig, type RefusalPattern } from '../services/task-refusal.js';
@@ -1596,11 +1599,24 @@ export async function createProductionDeps(
       purgeSnapshotsForTerminatedAccountsBefore: (cutoff) =>
         new DrizzleProfileSnapshotsRepo(dbHandle).purgeForTerminatedAccountsBefore(cutoff),
     },
+    // agent_turn_receipts.response_ciphertext is the response BODY of a
+    // customer's agent turn — content, not metadata — and NOTHING deleted it on
+    // any schedule. Same root cause as the two arms above: the account delete is
+    // a soft status flip, so the ON DELETE CASCADE on account_id never fires.
+    //
+    // Deliberately NOT wired to `agentTurnReceiptsRepo`, which exists only when
+    // MFA_ENCRYPTION_KEY is set. A DELETE decrypts nothing, so binding this arm
+    // to that key would make an unrelated flag switch off a fourth retention
+    // promise — the exact defect 2eeddefa7 fixed for the other three.
+    turnReceipts: {
+      purgeForTerminatedAccountsBefore: (cutoff, maxPerTick) =>
+        purgeTurnReceiptsForTerminatedAccountsBefore(dbHandle, cutoff, maxPerTick),
+    },
     // Drops each purged profile's sealed blob; a blob outliving its row is
     // the customer's data outliving the erasure we committed to.
     r2,
     logger,
-    // Three §9 commitments ride on this sweep and it emitted nothing until now.
+    // Four §9 commitments ride on this sweep and it emitted nothing until now.
     // The `skipped` label is what makes an unwired arm visible: a promise that
     // quietly stops running otherwise looks exactly like one with nothing to do.
     ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),

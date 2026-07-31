@@ -96,6 +96,23 @@ export interface TerminatedAccountProfilePurgeRepo {
   purgeSnapshotsForTerminatedAccountsBefore(cutoff: Date): Promise<number>;
 }
 
+/**
+ * The agent-turn half of the same commitment.
+ *
+ * `agent_turn_receipts.response_ciphertext` is the response BODY of a customer's
+ * agent turn, encrypted under the platform key — the key persists, so the
+ * content is readable, not inert. Nothing purged this table on any schedule:
+ * not at termination, not on a retention cutoff, not ever.
+ */
+export interface TerminatedAccountTurnReceiptPurgeRepo {
+  /**
+   * Hard-delete turn receipts of accounts terminated before `cutoff`; returns
+   * the row count. Bounded per tick on RECEIPT rows, because one account can
+   * own an unbounded number of them.
+   */
+  purgeForTerminatedAccountsBefore(cutoff: Date, maxPerTick?: number): Promise<number>;
+}
+
 export interface AccountDeletionPurgeSweeperDeps {
   readonly repo: AccountDeletionPurgeRepo;
   /**
@@ -125,6 +142,17 @@ export interface AccountDeletionPurgeSweeperDeps {
    */
   readonly profiles?: TerminatedAccountProfilePurgeRepo;
   /**
+   * Optional for the same reason as the two arms above.
+   *
+   * Agent-turn receipts hold `response_ciphertext` — the agent turn's response
+   * BODY, which is customer content rather than metadata. Nothing deleted them
+   * at all: the ON DELETE CASCADE on `account_id` never fires because
+   * `deleteAccount` is a soft delete, which is the identical root cause behind
+   * the proxy-secret and profile arms above. Three instances of one pattern is
+   * why this arm exists rather than another one-off patch.
+   */
+  readonly turnReceipts?: TerminatedAccountTurnReceiptPurgeRepo;
+  /**
    * Sealed-blob store for purged profiles. When wired, each purged profile's
    * `profiles/<id>.sealed` object is best-effort deleted so the encrypted bytes
    * do not outlive the row they belong to — the erasure promise is about the
@@ -150,6 +178,8 @@ export interface AccountDeletionPurgeResult {
   readonly profilesPurged: number;
   /** Profile snapshots hard-deleted for terminated accounts this tick. */
   readonly snapshotsPurged: number;
+  /** Agent-turn receipts hard-deleted for terminated accounts this tick. */
+  readonly turnReceiptsPurged: number;
 }
 
 export class AccountDeletionPurgeSweeperService {
@@ -270,7 +300,27 @@ export class AccountDeletionPurgeSweeperService {
       }
     }
 
-    return { purged, proxySecretsPurged, profilesPurged, snapshotsPurged };
+    let turnReceiptsPurged = 0;
+    if (this.deps.turnReceipts === undefined) {
+      count('turn_receipts', 'skipped');
+    }
+    if (this.deps.turnReceipts !== undefined) {
+      try {
+        turnReceiptsPurged = await this.deps.turnReceipts.purgeForTerminatedAccountsBefore(cutoff);
+        count('turn_receipts', 'purged');
+      } catch (err) {
+        // Same discipline as every arm above: never throw. The rows still match
+        // the candidate query, so the next sweep retries them, and a failure
+        // here must not stop the arms that already ran from being reported.
+        count('turn_receipts', 'failed');
+        this.deps.logger?.error?.(
+          { component: 'account-deletion-purge', err },
+          'failed to purge terminated-account agent-turn receipts (will retry next sweep)',
+        );
+      }
+    }
+
+    return { purged, proxySecretsPurged, profilesPurged, snapshotsPurged, turnReceiptsPurged };
   }
 }
 

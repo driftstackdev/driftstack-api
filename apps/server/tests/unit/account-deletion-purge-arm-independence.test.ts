@@ -135,11 +135,16 @@ describe('no purge arm can be disabled by another arm being unavailable', () => 
 
     const result = await sweeper.tickOnce(NOW);
 
+    // Exhaustive on purpose: `toEqual` fails when an arm is ADDED as well as
+    // when one is dropped, so a new erasure promise cannot be wired in without
+    // someone confirming it reports a count of its own. It caught the
+    // turn-receipts arm on the commit that introduced it.
     expect(result).toEqual({
       purged: 0,
       proxySecretsPurged: 0,
       profilesPurged: 0,
       snapshotsPurged: 0,
+      turnReceiptsPurged: 0,
     });
   });
 

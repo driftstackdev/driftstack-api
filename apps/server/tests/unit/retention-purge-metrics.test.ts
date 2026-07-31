@@ -67,11 +67,16 @@ describe('the retention purge reports what it did, and what it never ran', () =>
 
     await sweeper.tickOnce(NOW);
 
+    // The full arm roster, asserted exhaustively. A new arm added without a
+    // `skipped` emit would leave an erasure promise that looks identical on a
+    // dashboard whether it ran or was never wired — which is the failure this
+    // whole file exists for, so the list must fail on additions too.
     expect(samples(metrics)).toEqual([
       'byok/skipped=1',
       'profiles/skipped=1',
       'proxy_secrets/skipped=1',
       'snapshots/skipped=1',
+      'turn_receipts/skipped=1',
     ]);
   });
 

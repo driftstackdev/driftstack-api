@@ -149,4 +149,63 @@ export class DrizzleAgentTurnReceiptsRepo implements AgentTurnReceiptsRepo {
     }
     throw new Error('agent-turn receipt could not be completed atomically');
   }
+
+  /**
+   * Erase turn receipts belonging to accounts terminated before `cutoff`.
+   *
+   * `response_ciphertext` holds the agent turn's response BODY, which is
+   * customer content — not metadata. The published retention table caps
+   * "Session metadata" at 90 days operational and permits indefinite retention
+   * only for "aggregated counters (no PII)", and DPA §3.8 commits to deletion
+   * within 30 days of termination. Nothing deleted these rows at all.
+   *
+   * The ON DELETE CASCADE on `account_id` never helps: `deleteAccount` is a
+   * SOFT delete (a status flip), so the accounts row is never removed and the
+   * cascade never fires. That is the same reason proxy credentials and profiles
+   * were both retained past their windows, and the reason this needs its own
+   * arm rather than trusting the foreign key.
+   *
+   * BOUNDED on RECEIPT rows rather than on accounts: one terminated account can
+   * own an unbounded number of receipts, so a per-account bound would still let
+   * a single tick delete millions. The sweep is self-limiting — deleted rows
+   * stop matching — so what a tick leaves behind drains on the next one.
+   *
+   * The bound sits on a subselect because PostgreSQL's DELETE takes no LIMIT.
+   * The composite key `(account_id, idempotency_key)` is the table's primary
+   * key, so the IN-list targets exactly the scanned rows.
+   */
+  async purgeForTerminatedAccountsBefore(cutoff: Date, maxPerTick = 500): Promise<number> {
+    return await purgeTurnReceiptsForTerminatedAccountsBefore(this.database, cutoff, maxPerTick);
+  }
+}
+
+/**
+ * Standalone so the purge does NOT depend on the encryption key.
+ *
+ * `DrizzleAgentTurnReceiptsRepo` requires `MFA_ENCRYPTION_KEY`, because reading
+ * and writing a receipt means decrypting and encrypting the response body. A
+ * DELETE decrypts nothing. Wiring the sweeper to the class would therefore have
+ * made an unset key silently switch off a retention commitment that has no
+ * relationship to it — precisely the defect fixed in `2eeddefa7`, where one
+ * unrelated flag was found gating three separate §9 promises. Keeping the
+ * erasure path key-free means the arm runs on every deployment.
+ */
+export async function purgeTurnReceiptsForTerminatedAccountsBefore(
+  database: Database,
+  cutoff: Date,
+  maxPerTick = 500,
+): Promise<number> {
+  const rows = await database.client<Array<{ account_id: string }>>`
+    DELETE FROM agent_turn_receipts
+    WHERE (account_id, idempotency_key) IN (
+      SELECT r.account_id, r.idempotency_key
+      FROM agent_turn_receipts r
+      JOIN accounts a ON a.id = r.account_id
+      WHERE a.status = 'deleted'
+        AND a.deleted_at IS NOT NULL
+        AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
+      LIMIT ${maxPerTick}
+    )
+    RETURNING account_id`;
+  return rows.length;
 }
