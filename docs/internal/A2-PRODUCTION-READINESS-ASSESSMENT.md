@@ -105,23 +105,41 @@ converted: 1 }`. Six real-Postgres integration files insert legacy webhook
 secrets and vitest runs files in parallel, so any overlap between them and this
 one breaks it.
 
-_Observed:_ once, as three failures in a full-suite run with `DATABASE_URL` set;
-the same suite was green on two other runs and on four targeted runs of every
-webhook file. So the mechanism is certain and the trigger's timing is not. This
-matters for item 1 specifically because CI runs `vitest run --coverage` against
-a real Postgres service, which is the configuration that can hit it — most local
-runs skip these files entirely, because they are gated on `DATABASE_URL`.
+_Frequency, corrected upward:_ **three of six** full-suite runs with
+`DATABASE_URL` set, not the "once" first recorded. It is green in isolation
+every time and green on targeted runs of every webhook file, so it needs
+full-suite parallel load to appear. This matters for item 1 specifically because
+CI runs `vitest run --coverage` against a real Postgres service — the exact
+configuration that hits it. Most local runs skip these files entirely, because
+they are gated on `DATABASE_URL`.
+
+_One mechanism found and closed (`024eb4f6c`)._ The exact-total assertions were
+re-expressed as the sweep's real invariant — everything scanned was converted,
+nothing left legacy — which holds no matter who else has rows. That is not
+leniency and was proved so: an upgrader reporting `converted: 0` reds two cases,
+one misreporting `remaining` reds three, one dropping `secretPrev` from the
+write reds three, and one dropping the four-field CAS predicate reds one. With
+one and two seeded foreign legacy rows the file now passes where it previously
+failed deterministically.
+
+_Still open._ The same three cases failed once more under full-suite load after
+that fix, so at least one mechanism remains. The evidence now points at timing
+rather than data: the CAS case polls `pg_stat_activity` for only 100 × 10 ms
+before asserting the migrator reached its lock wait, and the suite's
+`testTimeout` is 10 s — both are load-sensitive in a way the data path is not.
+Confirming it needs the assertion text from a failing run, which requires
+catching one; the failures are not reproducible on demand.
 
 _Doing nothing:_ the push lands an intermittently red CI, and an intermittent
 red is the kind that gets re-run until green and then stops being read.
-_Not recommended:_ relaxing the assertions to `>=`. The invariant under test —
-"every legacy row is converted and none remain" — is genuinely global, and
-weakening it removes the coverage rather than fixing the race. _Recommendation:_
-isolate instead, either a dedicated database for the real-Postgres integration
-files or a session-scoped advisory lock held across the six that write legacy
-secrets. A2 deliberately did not ship this: a change that serializes six files
-cannot be verified against a failure that reproduces roughly once in three full
-runs, and an unverifiable fix to a flake is how a flake becomes permanent.
+_Not recommended:_ raising the poll budget until it stops failing. That tunes
+the symptom without establishing what the wait is competing with, and a timing
+constant chosen to make a test pass is one that will need raising again.
+_Recommendation:_ capture a failing run's assertion text first — a persistent
+reporter over repeated full-suite runs — then fix the mechanism that shows up.
+Isolating the real-Postgres files onto their own database remains the
+structural answer if the cause turns out to be contention rather than a thin
+timing budget.
 
 ### 2. Three subsystems are built, tested, and have never run
 
