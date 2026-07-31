@@ -57,16 +57,20 @@ def main() -> int:
     base_url = os.environ.get("DRIFTSTACK_BASE_URL", "https://api.driftstack.dev")
     client = Driftstack(api_key=api_key, base_url=base_url)
 
-    proxy_block = {"type": "openvpn", "openvpn": {"config_blob": config_blob}}
+    # Annotated so the example type-checks: an unannotated literal widens to
+    # dict[str, Collection[str]] and the nested assignments below become
+    # invalid to mypy even though they are correct at runtime.
+    openvpn_block: dict[str, str] = {"config_blob": config_blob}
+    proxy_block: dict[str, object] = {"type": "openvpn", "openvpn": openvpn_block}
 
     # Optional auth-user-pass — read from env to keep credentials out of
     # the script.
     ovpn_user = os.environ.get("DRIFTSTACK_OVPN_USERNAME")
     ovpn_pass = os.environ.get("DRIFTSTACK_OVPN_PASSWORD")
     if ovpn_user:
-        proxy_block["openvpn"]["username"] = ovpn_user
+        openvpn_block["username"] = ovpn_user
     if ovpn_pass:
-        proxy_block["openvpn"]["password"] = ovpn_pass
+        openvpn_block["password"] = ovpn_pass
 
     # The live account-proxies API stores the VPN endpoint as host:port, parsed
     # from the `remote <host> <port>` directive (defaults to 1194).

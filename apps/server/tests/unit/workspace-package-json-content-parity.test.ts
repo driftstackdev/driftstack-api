@@ -105,8 +105,13 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     );
     expect(pkg.scripts['sdk:python:generate']).toBe('bash packages/sdk-python/scripts/generate.sh');
     expect(pkg.scripts['sdk:python:test']).toBe('cd packages/sdk-python && .venv/bin/pytest');
+    // 2026-07-31 — mypy over `src examples` appended. The twelve example
+    // scripts are what a customer copies, and ruff only checks their syntax: a
+    // call to a renamed or removed SDK method lints clean and ships broken. The
+    // Go SDK gets this for free via `go build ./examples/...`; Python did not.
     expect(pkg.scripts['sdk:python:lint']).toBe(
-      'cd packages/sdk-python && .venv/bin/ruff check . && .venv/bin/ruff format --check .',
+      'cd packages/sdk-python && .venv/bin/ruff check . && .venv/bin/ruff format --check . && ' +
+        '.venv/bin/mypy src examples',
     );
   });
 

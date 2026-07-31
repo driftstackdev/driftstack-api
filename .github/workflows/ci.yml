@@ -210,7 +210,12 @@ jobs:
 
       - name: Mypy (strict on hand-written code)
         working-directory: packages/sdk-python
-        run: mypy src
+        # `examples` is included deliberately. Those twelve scripts are what a
+        # customer copies, and ruff only checks their syntax — a call to an SDK
+        # method that has been renamed or removed lints clean and ships broken.
+        # The Go SDK already gets this protection for free via
+        # `go build ./examples/...`; Python had no equivalent.
+        run: mypy src examples
 
       - name: Pytest
         working-directory: packages/sdk-python

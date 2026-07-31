@@ -112,7 +112,10 @@ describe('W541.A /.github/workflows/ci.yml content parity', () => {
     expect(body).toMatch(/python-version: '3\.10'/);
     expect(body).toMatch(/run: ruff check \./);
     expect(body).toMatch(/run: ruff format --check \./);
-    expect(body).toMatch(/run: mypy src/);
+    // `examples` is pinned explicitly, not just `mypy src`. The looser pattern
+    // matches either form, so dropping example coverage would leave this guard
+    // green while a renamed SDK method shipped in a script customers copy.
+    expect(body).toMatch(/run: mypy src examples/);
     expect(body).toMatch(/run: pytest -v/);
     expect(body).toMatch(/pip install build/);
     expect(body).toMatch(/python -m build/);

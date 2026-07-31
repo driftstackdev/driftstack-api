@@ -102,6 +102,15 @@ warn_unused_configs = true
 exclude = ["build/", "dist/"]
 
 [[tool.mypy.overrides]]
+module = "langchain_core.*"
+# Optional third-party integration used by examples/langchain_tool.py only.
+# The example imports it inside a try/except and raises an actionable message
+# when it is absent, so it must NOT be a hard dependency of this SDK — but
+# without this override mypy cannot type-check the examples directory at all,
+# and an example calling a renamed SDK method would ship broken to customers.
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "driftstack._generated.*"
 # Codegen output isn't always strict-clean — `conint(...)` /
 # `constr(...)` factory calls aren't valid type annotations to mypy

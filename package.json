@@ -46,7 +46,7 @@
     "sdk:python:dump-spec": "tsx apps/server/src/lib/dump-openapi.ts packages/sdk-python/openapi.json",
     "sdk:python:generate": "bash packages/sdk-python/scripts/generate.sh",
     "sdk:python:test": "cd packages/sdk-python && .venv/bin/pytest",
-    "sdk:python:lint": "cd packages/sdk-python && .venv/bin/ruff check . && .venv/bin/ruff format --check ."
+    "sdk:python:lint": "cd packages/sdk-python && .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/mypy src examples"
   },
   "overrides": {
     "sharp": "^0.35.3"
