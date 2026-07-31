@@ -98,7 +98,7 @@ account-wide limits or staff-applied override metadata.
 | Bucket key                   | Consumed by                                            | Why a separate bucket?                                                                                                    |
 | ---------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | `global`                     | Every authenticated `/v1/*` without a dedicated bucket | Coarse anti-abuse cap — protects against runaway scripts                                                                  |
-| `sessions:create`            | `POST /v1/sessions` only                               | Lower cap because session creation is the most expensive op (driver allocation)                                           |
+| `sessions:create`            | `POST /v1/sessions` and `POST /v1/profiles/:id/launch` | Lower cap because session creation is the most expensive op (driver allocation); a profile launch creates a session too   |
 | `agent_sessions:message`     | `POST /v1/agent-sessions/:id/message`                  | Isolated from `global` so an LLM-driven message loop can't drain the global cap                                           |
 | `agent_sessions:input_event` | `POST /v1/agent-sessions/:id/input-event`              | High-frequency live input (sized for ≤120Hz mouseMove / touchMove) — isolated so input streams can't drain the global cap |
 

@@ -171,8 +171,8 @@ These are separate systems that both answer `429`:
   `Retry-After`, and the SDKs hand it to your code.
 
 You can hit either one independently — a `POST /v1/sessions` draws
-from both the `global` and `sessions:create` rate buckets _and_
-checks the concurrency cap.
+from the `sessions:create` rate bucket (never `global`; each call uses
+exactly one bucket key) _and_ checks the concurrency cap.
 
 ## Raising the cap
 

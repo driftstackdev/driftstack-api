@@ -94,7 +94,7 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
       /\| `global`\s+\| Every authenticated `\/v1\/\*` without a dedicated bucket \| Coarse anti-abuse cap/,
     );
     expect(p).toMatch(
-      /\| `sessions:create`\s+\| `POST \/v1\/sessions` only\s+\| Lower cap because session creation is the most expensive op/,
+      /\| `sessions:create`\s+\| `POST \/v1\/sessions` and `POST \/v1\/profiles\/:id\/launch` \| Lower cap because session creation is the most expensive op/,
     );
     expect(p).toMatch(
       /Each call drains exactly one bucket\. A `POST \/v1\/sessions` consumes\s*\n?only from `sessions:create` — it never touches `global` — and\s*\n?hitting that bucket's cap returns 429\./,
