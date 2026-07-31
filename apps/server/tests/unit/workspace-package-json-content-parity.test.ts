@@ -74,8 +74,16 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     // PUBLIC_API_BASE_URL default so astro builds don't crash when
     // the env var is unset (pre-push gate guarantee per task #45);
     // assert the env-default literal + the trailing build command.
+    //
+    // 2026-07-31 — prefixed with the stale-vite-cache healer. A vite cache
+    // entry can embed an absolute path under the OS temp root, which macOS
+    // reaps; vitest then fails to COLLECT the affected files and the suite
+    // silently shrinks (measured: 26,400 tests to 645) with only a cryptic
+    // ENOENT to go on. The healer runs first so the build below, and the suite
+    // after it, start from a cache that is not pointing at a dead path.
     expect(pkg.scripts.pretest).toBe(
-      'PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-http://localhost:3000}" npm run build --workspaces --if-present',
+      'node scripts/clear-stale-vite-cache.mjs && ' +
+        'PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-http://localhost:3000}" npm run build --workspaces --if-present',
     );
     expect(pkg.scripts.test).toBe('vitest run');
     expect(pkg.scripts['test:watch']).toBe('vitest');
