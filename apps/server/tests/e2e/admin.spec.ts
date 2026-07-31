@@ -111,6 +111,13 @@ test('GET /v1/api-keys: lists keys, never includes plaintext', async ({ request 
     expect(k.plaintext).toBeUndefined();
     expect(k.id).toMatch(/^key_/);
   }
+  // Field-name absence is the weaker half. `k.plaintext === undefined` still
+  // holds if the key leaks under ANY other name — `key`, `token`, `secret`, or
+  // echoed inside a debug field — so assert the secret VALUE is absent from the
+  // whole response, which no rename can satisfy.
+  expect(await res.text(), 'the list response must not contain the key itself').not.toContain(
+    seed.plaintext,
+  );
 });
 
 // ── DELETE /v1/api-keys/:id ────────────────────────────────────────────────
