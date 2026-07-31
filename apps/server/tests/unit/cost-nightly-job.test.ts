@@ -43,6 +43,10 @@ class StubScheduledJobsRepo implements ScheduledJobsRepo {
   claimDue(): Promise<ScheduledJobRow[]> {
     return Promise.resolve([]);
   }
+  jobTypesWithPendingWork(): Promise<string[]> {
+    return Promise.resolve([]);
+  }
+
   markComplete(): Promise<void> {
     return Promise.resolve();
   }

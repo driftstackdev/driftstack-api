@@ -118,6 +118,18 @@ export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
     return Promise.resolve(claimed);
   }
 
+  /**
+   * Job types with a pending row. Mirrors the Drizzle repo: a recurring sweep
+   * re-arms itself, so one pending row is its steady state and zero means the
+   * chain is dead. The liveness gauge reads this.
+   */
+  jobTypesWithPendingWork(): Promise<string[]> {
+    const pending = Array.from(this.rows.values())
+      .filter((r) => r.completedAt === null && r.failedAt === null)
+      .map((r) => r.jobType);
+    return Promise.resolve([...new Set(pending)]);
+  }
+
   markComplete(jobId: string, at: Date): Promise<void> {
     const r = this.rows.get(jobId);
     if (!r) return Promise.resolve();

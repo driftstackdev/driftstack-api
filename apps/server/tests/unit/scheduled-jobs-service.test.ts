@@ -36,6 +36,7 @@ function makeRepo(initialDue: ScheduledJobRow[] = []): {
   };
   let due = [...initialDue];
   const repo: ScheduledJobsRepo = {
+    jobTypesWithPendingWork: () => Promise.resolve([]),
     enqueue: (input) => {
       state.enqueues.push(input);
       return Promise.resolve({ enqueued: true });

@@ -29,6 +29,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
+import type * as schema from '../../src/db/schema.js';
 
 import { DrizzleWebhooksRepo } from '../../src/db/webhooks-repo.js';
 
@@ -103,7 +104,7 @@ async function seedDue(endpointId: string, count: number, ageBaseSec: number): P
 /** The claim production actually runs. */
 function liveClaim(): (opts: { batchSize: number; perEndpointCap: number }) => Promise<unknown> {
   if (!client) throw new Error('no client');
-  const db = drizzle(client);
+  const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
   const repo = new DrizzleWebhooksRepo({ client, db, close: async () => {} });
   return (o) => repo.claim({ ...o, now: new Date() });
 }
