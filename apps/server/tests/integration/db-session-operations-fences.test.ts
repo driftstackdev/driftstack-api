@@ -117,9 +117,9 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
       expect(results.filter((r) => r.kind === 'admitted')).toHaveLength(1);
       expect(results.filter((r) => r.kind === 'session_busy')).toHaveLength(7);
-      const [{ count }] = await client`
+      const [row] = await client<{ count: number }[]>`
         SELECT count(*)::int AS count FROM session_operations WHERE session_id = ${sessionId}`;
-      expect(count).toBe(1);
+      expect(row?.count).toBe(1);
     });
 
     it('CRITICAL FENCE 1 — the exclusion is on LIVE operations only, so a session can run another operation once the first settles, and its history is unbounded.', async () => {
@@ -141,9 +141,9 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         expect(settled.kind).toBe('settled');
       }
 
-      const [{ count }] = await client`
+      const [row] = await client<{ count: number }[]>`
         SELECT count(*)::int AS count FROM session_operations WHERE session_id = ${sessionId}`;
-      expect(count).toBe(3);
+      expect(row?.count).toBe(3);
     });
 
     it('CRITICAL FENCE 2 — a retry with the same Idempotency-Key returns the SAME operation and creates no second row. This is the fence that makes retrying after a dropped connection safe.', async () => {
@@ -159,9 +159,9 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(retry.kind).toBe('replayed');
       if (first.kind !== 'admitted' || retry.kind !== 'replayed') return;
       expect(retry.operation.id).toBe(first.operation.id);
-      const [{ count }] = await client`
+      const [row] = await client<{ count: number }[]>`
         SELECT count(*)::int AS count FROM session_operations WHERE account_id = ${accountId}`;
-      expect(count).toBe(1);
+      expect(row?.count).toBe(1);
     });
 
     it('CRITICAL FENCE 2 in ISOLATION — a retry AFTER the first operation settled still replays instead of submitting the credentials a second time. This is the case that actually exercises the idempotency index: while the first operation is live, fence 1 blocks the insert on its own, so the test above would still pass with the idempotency index dropped. Verified by dropping it — only this case reds.', async () => {
@@ -189,9 +189,9 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       if (retry.kind !== 'replayed') return;
       expect(retry.operation.id).toBe(first.operation.id);
       expect(retry.operation.status).toBe('succeeded');
-      const [{ count }] = await client`
+      const [row] = await client<{ count: number }[]>`
         SELECT count(*)::int AS count FROM session_operations WHERE account_id = ${accountId}`;
-      expect(count).toBe(1);
+      expect(row?.count).toBe(1);
     });
 
     it('CRITICAL FENCE 2 — the same key with a DIFFERENT body is a conflict, never a silent replay of the wrong request. Returning the first result for a second, different login would report the wrong outcome.', async () => {
