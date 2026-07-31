@@ -88,14 +88,37 @@ describe('W678 cross-SDK webhook-signature format parity', () => {
     const go = read(GO_WSIG);
     const py = read(PY_WSIG);
 
-    // sdk-typescript: constantTimeHexEq custom function.
+    // 2026-07-31 — these three assertions used to check that a NAME appeared:
+    // /constantTimeHexEq/, /hmac\.Equal/, and /hmac\.compare_digest|hmac\.new/.
+    // All three passed while the property was gone. Verified by mutation:
+    // replacing sdk-python's `compare_digest` with `==` left this file 11/11
+    // green (the `|hmac\.new` alternative matched the still-present HMAC
+    // construction), and gutting sdk-typescript's comparison body to `a === b`
+    // while keeping the function name did the same. A guard whose own
+    // description says "drift to a regular ===/== would leak timing" has to
+    // fail when exactly that happens.
+
+    // sdk-typescript: the XOR difference accumulator itself, not its name.
     expect(ts).toMatch(/constantTimeHexEq/);
+    expect(ts, 'constantTimeHexEq must accumulate an XOR difference').toMatch(
+      /diff \|= \(ab\[i\] as number\) \^ \(bb\[i\] as number\);/,
+    );
+    expect(ts, 'and decide on that accumulator, not on string equality').toMatch(
+      /return diff === 0;/,
+    );
 
-    // sdk-go: hmac.Equal from crypto/hmac stdlib.
-    expect(go).toMatch(/hmac\.Equal/);
+    // sdk-go: hmac.Equal must be the thing the branch tests.
+    expect(go).toMatch(/if hmac\.Equal\(/);
 
-    // sdk-python: hmac.compare_digest (stdlib constant-time hex compare).
-    expect(py).toMatch(/hmac\.compare_digest|hmac\.new/);
+    // sdk-python: compare_digest specifically. `hmac.new` is the HMAC
+    // construction and says nothing about how the result is compared, so it is
+    // no longer accepted as evidence.
+    expect(py, 'python must compare with hmac.compare_digest').toMatch(
+      /hmac\.compare_digest\(expected, sig\)/,
+    );
+    expect(py, 'and must not fall back to a plain equality compare').not.toMatch(
+      /return any\(expected == sig/,
+    );
   });
 
   it('CRITICAL 5-minute default replay-tolerance pinned in all 3 SDKs. Drift to a longer default would widen the replay attack surface; drift to a shorter default would make legitimate webhooks fail on slow networks.', () => {
