@@ -86,6 +86,14 @@ describe('W541.A /.github/workflows/ci.yml content parity', () => {
     expect(body).toMatch(/run: npx vitest run --coverage/);
   });
 
+  it("CRITICAL production-dependency audit gate pinned: 'npm audit --omit=dev --audit-level=high'. Nothing else checks this — deploy.yml runs `npm ci --no-audit` — so dropping this step means a vulnerable RUNTIME dependency reaches production silently. The --omit=dev scope is equally load-bearing: the tree carries 12 advisories (5 high), every one build or lint tooling, so an unscoped gate would either block every PR or be permanently muted, and a muted gate catches nothing.", () => {
+    expect(body).toMatch(/name: Audit production dependencies/);
+    expect(body).toMatch(/run: npm audit --omit=dev --audit-level=high/);
+    // The scope flag specifically — losing it is the failure mode that turns
+    // this from a real gate into one somebody disables a week later.
+    expect(body).toMatch(/npm audit[^\n]*--omit=dev/);
+  });
+
   it("e2e job framing pinned: 'name: End-to-end (Playwright against real Postgres + Redis)' + 'needs: build-test' + 'CI: \\'true\\'' env var + 'working-directory: apps/server' + 'run: npm run test:e2e' + 'if: failure() + uses: actions/upload-artifact@v7' + 'name: playwright-report' + 'path: apps/server/playwright-report/' + 'retention-days: 7' — pinned so the e2e-needs-build-test + Playwright-against-real-DB+Redis (no mock) + CI-env-flag + failure-only-report-upload + 7-day-retention commitment survives (drift to retention-days: 30 would balloon artifact storage costs)", () => {
     expect(body).toMatch(/name: End-to-end \(Playwright against real Postgres \+ Redis\)/);
     expect(body).toMatch(/needs: build-test/);

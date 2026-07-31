@@ -81,6 +81,22 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      # Production dependency advisories. Scoped with --omit=dev on purpose:
+      # the tree currently carries 12 advisories (5 high) and every one is
+      # build or lint tooling — eslint, esbuild, drizzle-kit, autocannon —
+      # which never ships to the API. Gating on the whole tree would either
+      # block every PR or be permanently muted, and a muted gate catches
+      # nothing.
+      #
+      # Production deps are at ZERO advisories at any severity today, so this
+      # starts from a clean baseline rather than grandfathering debt. It is
+      # not vacuous: the identical command without --omit=dev exits 1 against
+      # this same lockfile, which is what proves the gate can fail.
+      #
+      # Deploy runs `npm ci --no-audit`, so nothing else checks this.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Migrate database schema
         # Without this the real-PG integration tests (db-*-keyset-drizzle)
         # probe `SELECT 1 FROM profiles`, find no schema, and silently
