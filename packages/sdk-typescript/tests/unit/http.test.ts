@@ -659,6 +659,34 @@ describe('HttpClient — retry-safety gate', () => {
     expect(cf.calls()).toBe(1);
   });
 
+  it('does NOT retry a keyless PATCH. PATCH is excluded from the idempotent set by omission and nothing asserted it: patch bodies are commonly relative rather than absolute, so a replayed PATCH can apply an increment twice.', async () => {
+    const cf = countingFetch(503);
+    const http = new HttpClient({
+      apiKey: 'k',
+      baseUrl: 'http://api.test',
+      fetch: cf.fetch,
+      retry: FAST_RETRY,
+    });
+    await expect(
+      http.request({ method: 'PATCH', path: '/v1/x', body: { a: 1 } }),
+    ).rejects.toBeInstanceOf(TransportError);
+    expect(cf.calls()).toBe(1);
+  });
+
+  it('retries a PATCH that carries an Idempotency-Key, so the exclusion above is about the missing key and not about PATCH being unretryable', async () => {
+    const cf = countingFetch(503);
+    const http = new HttpClient({
+      apiKey: 'k',
+      baseUrl: 'http://api.test',
+      fetch: cf.fetch,
+      retry: FAST_RETRY,
+    });
+    await expect(
+      http.request({ method: 'PATCH', path: '/v1/x', headers: { 'Idempotency-Key': 'k-1' } }),
+    ).rejects.toBeInstanceOf(TransportError);
+    expect(cf.calls()).toBe(3);
+  });
+
   it('retries a POST that carries an Idempotency-Key (server replays on the key)', async () => {
     const cf = countingFetch(503);
     const http = new HttpClient({

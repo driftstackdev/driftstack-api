@@ -20,6 +20,7 @@ import respx
 from driftstack import AsyncDriftstack, Driftstack
 from driftstack.errors import TransportError
 from driftstack.retry import RetryConfig
+from driftstack.http import _is_retry_safe
 
 API_KEY = "ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 BASE = "https://api.test"
@@ -91,3 +92,40 @@ async def test_async_keyless_post_is_not_retried() -> None:
             with pytest.raises(TransportError):
                 await client.crypto_orders.create_checkout({"tier": "api_builder", "asset": "usdc"})
         assert route.call_count == 1
+
+
+# ── PATCH, at the predicate level ──────────────────────────────────────
+#
+# The tests above drive the gate through resource methods, which reach it via
+# GET and POST only. PATCH is excluded from the idempotent set by OMISSION and
+# nothing asserted it — so adding "PATCH" to that set would change customer-
+# visible behaviour with the whole suite still green. PATCH matters as much as
+# POST here: patch bodies are commonly relative rather than absolute, so a
+# replayed PATCH can apply an increment twice.
+#
+# Asserted against `_is_retry_safe` directly because no resource method issues a
+# PATCH today; routing it through a resource would test the resource, not the
+# gate.
+
+
+def test_keyless_patch_is_not_retry_safe() -> None:
+    """PATCH without an Idempotency-Key must not be auto-retried."""
+    assert _is_retry_safe("PATCH", {}) is False
+    assert _is_retry_safe("PATCH", {"content-type": "application/json"}) is False
+
+
+def test_keyed_patch_is_retry_safe() -> None:
+    """The differential arm: with a key the server replays, so PATCH is safe.
+
+    Without this, the assertion above is equally satisfied by a gate that
+    refuses everything — which would disable retries entirely and turn every
+    transient blip into a customer-visible failure.
+    """
+    assert _is_retry_safe("PATCH", {"Idempotency-Key": "idem-abc123"}) is True
+
+
+def test_patch_key_match_is_case_insensitive() -> None:
+    """HTTP header names are case-insensitive; retry safety must not hinge on
+    how the caller capitalised the key."""
+    for spelling in ("idempotency-key", "IDEMPOTENCY-KEY", "Idempotency-Key"):
+        assert _is_retry_safe("PATCH", {spelling: "idem-abc123"}) is True
