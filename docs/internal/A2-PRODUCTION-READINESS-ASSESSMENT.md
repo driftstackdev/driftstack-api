@@ -68,20 +68,60 @@ somebody choosing.
 
 **The list is ordered by what it costs to keep waiting**, not by effort.
 
-### 1. 1,022 commits have never reached CI
+### 1. 1,031 commits have never reached CI
 
-`git rev-list --count @{u}..HEAD` = **1,022**. Upstream's tip is `6b3a856cd`,
-dated **2026-07-12** — nineteen days. Every "gates green" any agent has reported,
-including all of mine, is a LOCAL result.
+`git rev-list --count @{u}..HEAD` = **1,031** (was 1,022; 40 commits landed in
+the preceding six hours). Upstream's tip is `6b3a856cd`, dated **2026-07-12** —
+nineteen days. Every "gates green" any agent has reported, including all of
+mine, is a LOCAL result.
 
 _Doing nothing:_ the divergence grows and the eventual push is a single
-high-risk event. _Evidence it would land:_ I ran CI's entire job list locally —
-build (all five Astro sites + server), SDK build, typecheck across eight
-workspaces, lint, format, `npm audit --omit=dev --audit-level=high` (0
-vulnerabilities), `vitest run --coverage` (lines 89.84 / statements 88.11 /
-functions 88.50 / branches 79.25, against 80/80/80/75), and Playwright e2e (199
-passed). _Recommendation:_ push. The standing rail forbids me from doing it, so
-it needs the founder or an agent with that grant.
+high-risk event. _Evidence it would land:_ CI's entire job list re-run locally
+at 1,031 commits — build (all five Astro sites + server), SDK build, typecheck
+across eight workspaces, lint, format, `npm audit --omit=dev --audit-level=high`
+(0 vulnerabilities), `vitest run --coverage` (lines 89.83 / statements 88.11 /
+functions 88.51 / branches 79.24, against 80/80/80/75), Playwright e2e (199
+passed), Python SDK (337 passed, mypy clean over 43 files) and Go SDK (vet
+clean, tests ok). _Recommendation:_ push — but read item 11 first: there is one
+intermittent failure that CI can hit and local runs mostly do not.
+
+Branch coverage sits at 79.24% against a 75% floor. That is 4.24 points of
+headroom and it is the metric that drifts down as source is added, so it is
+worth watching rather than acting on.
+
+### 11. One integration test can fail intermittently in CI, and the mechanism is proven
+
+Three cases in `db-webhooks-concurrency-drizzle.test.ts` assert on the result of
+`encryptLegacySecrets`, which sweeps `webhook_endpoints` **globally** — it takes
+no account scope. They assert exact totals (`{scanned: 1, converted: 1,
+remaining: 0}` at line 184, `scanned: 3` at 243, `converted: 0` at 347), which
+is really an assertion that the whole table holds exactly the rows that test
+created.
+
+_Proven, not suspected:_ seeding one legacy-secret endpoint under an unrelated
+account and running the file in isolation reproduces the failure exactly —
+`expected { scanned: 2, converted: 2 } to deeply equal { scanned: 1,
+converted: 1 }`. Six real-Postgres integration files insert legacy webhook
+secrets and vitest runs files in parallel, so any overlap between them and this
+one breaks it.
+
+_Observed:_ once, as three failures in a full-suite run with `DATABASE_URL` set;
+the same suite was green on two other runs and on four targeted runs of every
+webhook file. So the mechanism is certain and the trigger's timing is not. This
+matters for item 1 specifically because CI runs `vitest run --coverage` against
+a real Postgres service, which is the configuration that can hit it — most local
+runs skip these files entirely, because they are gated on `DATABASE_URL`.
+
+_Doing nothing:_ the push lands an intermittently red CI, and an intermittent
+red is the kind that gets re-run until green and then stops being read.
+_Not recommended:_ relaxing the assertions to `>=`. The invariant under test —
+"every legacy row is converted and none remain" — is genuinely global, and
+weakening it removes the coverage rather than fixing the race. _Recommendation:_
+isolate instead, either a dedicated database for the real-Postgres integration
+files or a session-scoped advisory lock held across the six that write legacy
+secrets. A2 deliberately did not ship this: a change that serializes six files
+cannot be verified against a failure that reproduces roughly once in three full
+runs, and an unverifiable fix to a flake is how a flake becomes permanent.
 
 ### 2. Three subsystems are built, tested, and have never run
 
@@ -186,6 +226,14 @@ working dependencies.
 
 ## Current state
 
-Server suite **1,907 files / 21,042 passing**. e2e **199 / 0**, from 187/10 at
-the start of the run. Python SDK 330 tests + mypy strict; Go SDK vet, tests and
-examples build; all five Astro sites typecheck clean.
+Node suite **2,559 files / 26,548 passing** with `DATABASE_URL` set, so the
+real-Postgres integration files run rather than skip. e2e **199 / 0**, from
+187/10 at the start of the run. Python SDK 337 tests + mypy strict over 43
+files; Go SDK vet and tests clean; all five Astro sites typecheck clean;
+`npm audit --omit=dev` 0 vulnerabilities.
+
+One caveat on reading any of these numbers, including mine: a suite run without
+`DATABASE_URL` silently SKIPS every `db-*` integration file, and the totals it
+prints look like a full pass. The figures above are from a run with the database
+present. See item 11 for the one intermittent failure that configuration can
+surface.
