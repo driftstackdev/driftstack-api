@@ -28,6 +28,17 @@ const DOC_ROOTS = ['apps/docs/src/pages', 'apps/marketing-site/src/pages'];
 const DOC_EXTENSIONS = ['.md', '.astro'];
 
 /**
+ * The SDK READMEs ship to npm / PyPI / pkg.go.dev and are the first thing most
+ * customers read — a phantom call there breaks copy-paste for more people than
+ * any docs page. They live outside DOC_ROOTS, so they are added explicitly.
+ */
+const SHIPPED_READMES = [
+  'packages/sdk-typescript/README.md',
+  'packages/sdk-python/README.md',
+  'packages/sdk-go/README.md',
+];
+
+/**
  * Paths that legitimately appear in our docs but are NOT Driftstack routes.
  * Each entry must say whose API it is — an unexplained exemption here would
  * defeat the whole guard.
@@ -47,7 +58,10 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 function docFiles(): string[] {
-  return DOC_ROOTS.flatMap((root) => walk(resolve(REPO_ROOT, root)));
+  return [
+    ...DOC_ROOTS.flatMap((root) => walk(resolve(REPO_ROOT, root))),
+    ...SHIPPED_READMES.map((f) => resolve(REPO_ROOT, f)).filter((f) => existsSync(f)),
+  ];
 }
 
 function rel(path: string): string {
@@ -161,8 +175,13 @@ function resolvesIn(surface: Surface, resource: string, method: string): boolean
 describe('public docs reference only surfaces that actually exist', () => {
   const files = docFiles();
 
-  it('the doc corpus is non-empty (a broken walk would make every assertion vacuous)', () => {
+  it('the doc corpus is non-empty and includes the shipped SDK READMEs (a broken walk would make every assertion vacuous)', () => {
     expect(files.length).toBeGreaterThan(50);
+    for (const readme of SHIPPED_READMES) {
+      expect(files, `${readme} must be in the audited corpus`).toContain(
+        resolve(REPO_ROOT, readme),
+      );
+    }
   });
 
   it('CRITICAL every `/v1/...` path printed in customer docs resolves to a registered route. A documented endpoint that does not exist is a 404 for a paying customer following our own reference.', () => {
