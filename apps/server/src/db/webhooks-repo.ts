@@ -784,7 +784,17 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     return rows.map((row) => toEndpointRow(row, this.secretEncryptionKeyBase64));
   }
 
-  async claim(opts: { batchSize: number; now: Date }): Promise<WebhookDeliveryRow[]> {
+  async claim(opts: {
+    batchSize: number;
+    now: Date;
+    /**
+     * Most deliveries taken per ENDPOINT per claim. Default 5, so a batch of 25
+     * always reaches at least five distinct endpoints however deep any single
+     * endpoint's backlog runs.
+     */
+    perEndpointCap?: number;
+  }): Promise<WebhookDeliveryRow[]> {
+    const perEndpointCap = opts.perEndpointCap ?? 5;
     // Atomic claim: SELECT ... FOR UPDATE SKIP LOCKED → UPDATE status = in_flight
     // → RETURNING. ISO-string the timestamp because postgres-js's
     // tagged-template binder rejects raw Date in this position.
@@ -800,12 +810,39 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     // event-id-dedupable). No new column needed — `updated_at` is the anchor.
     const staleBeforeIso = new Date(opts.now.getTime() - RECLAIM_STALE_IN_FLIGHT_MS).toISOString();
     const rows = await this.database.client<Record<string, unknown>[]>`
-      WITH claimed AS (
-        SELECT id FROM webhook_deliveries
+      WITH due AS (
+        -- FAIRNESS. A plain ORDER BY next_attempt_at LIMIT n is FIFO across the
+        -- whole table, and an endpoint that is DOWN is the worst possible
+        -- neighbour under that rule: its retries carry the OLDEST
+        -- next_attempt_at, so they sort first and fill the batch. The worker
+        -- then delivers the batch SERIALLY, so those rows also consume the
+        -- tick's wall clock timing out. One broken endpoint therefore does not
+        -- merely delay every other customer's webhooks — it stops them being
+        -- attempted at all.
+        --
+        -- Ranking within each endpoint and taking at most perEndpointCap per
+        -- claim bounds that. A backlogged endpoint still drains, one capped
+        -- slice per tick, but never at the cost of starving the rest.
+        SELECT id,
+               row_number() OVER (PARTITION BY webhook_id ORDER BY next_attempt_at ASC) AS rn,
+               next_attempt_at
+        FROM webhook_deliveries
         WHERE (status = 'pending' AND next_attempt_at <= ${nowIso}::timestamptz)
            OR (status = 'in_flight' AND updated_at <= ${staleBeforeIso}::timestamptz)
+      ),
+      fair AS (
+        SELECT id FROM due
+        WHERE rn <= ${perEndpointCap}
         ORDER BY next_attempt_at ASC
         LIMIT ${opts.batchSize}
+      ),
+      claimed AS (
+        -- The lock is taken in a separate step because PostgreSQL forbids FOR
+        -- UPDATE alongside a window function. SKIP LOCKED still applies, so a
+        -- row another worker already holds is skipped rather than double-claimed
+        -- — the multi-instance guarantee is unchanged.
+        SELECT id FROM webhook_deliveries
+        WHERE id IN (SELECT id FROM fair)
         FOR UPDATE SKIP LOCKED
       )
       UPDATE webhook_deliveries

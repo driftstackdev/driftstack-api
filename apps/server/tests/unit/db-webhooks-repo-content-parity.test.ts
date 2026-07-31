@@ -160,7 +160,16 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
       /\/\/ Atomic claim: SELECT \.\.\. FOR UPDATE SKIP LOCKED → UPDATE status = in_flight\s*\n?\s*\/\/ → RETURNING\. ISO-string the timestamp because postgres-js's\s*\n?\s*\/\/ tagged-template binder rejects raw Date in this position\./,
     );
     expect(body).toMatch(/const nowIso = opts\.now\.toISOString\(\);/);
-    expect(body).toMatch(/WITH claimed AS \(/);
+    // The claim is now three CTEs: `due` ranks per endpoint, `fair` caps and
+    // limits, `claimed` takes the locks. Split because a single FIFO
+    // `ORDER BY next_attempt_at LIMIT n` let one down endpoint fill every batch
+    // and — since delivery is serial — stop other customers' webhooks being
+    // attempted at all. The lock is separate because PostgreSQL forbids FOR
+    // UPDATE alongside a window function; SKIP LOCKED still applies.
+    expect(body).toMatch(/WITH due AS \(/);
+    expect(body).toMatch(/row_number\(\) OVER \(PARTITION BY webhook_id/);
+    expect(body).toMatch(/claimed AS \(/);
+    expect(body).toMatch(/FOR UPDATE SKIP LOCKED/);
     expect(body).toMatch(/SELECT id FROM webhook_deliveries/);
     // V-173.R — claim covers due-pending AND stale-in_flight reclaim (discrete
     // pins; the WHERE grew past the safe \s*\n? chain length).
