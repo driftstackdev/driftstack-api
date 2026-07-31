@@ -97,7 +97,20 @@ export interface TerminatedAccountProfilePurgeRepo {
 
 export interface AccountDeletionPurgeSweeperDeps {
   readonly repo: AccountDeletionPurgeRepo;
-  readonly byok: BYOKAnthropicService;
+  /**
+   * Optional. Absent means this deployment has no BYOK key storage
+   * (MFA_ENCRYPTION_KEY unset), so there is nothing to purge on that arm — NOT
+   * that the sweeper should stand down.
+   *
+   * It used to be required, and the whole sweeper was gated on it in bootstrap.
+   * That was defensible when the BYOK key was the only thing purged here. It
+   * stopped being defensible the moment two more retention promises were hung
+   * off this sweeper: proxy secrets are wrapped under PROFILE_MASTER_KEY and
+   * the profile/snapshot purge needs no key at all, so an unset
+   * MFA_ENCRYPTION_KEY silently switched off THREE §9 commitments, two of them
+   * unrelated to the flag.
+   */
+  readonly byok?: BYOKAnthropicService | null;
   /**
    * Optional so existing constructions and service-test fixtures stay
    * source-compatible. When absent the proxy half is skipped and the sweeper
@@ -142,11 +155,16 @@ export class AccountDeletionPurgeSweeperService {
 
   async tickOnce(now: Date): Promise<AccountDeletionPurgeResult> {
     const cutoff = new Date(now.getTime() - this.retentionMs);
-    const ids = await this.deps.repo.findDeletedAccountIdsWithByokKeyBefore(cutoff);
+    const byok = this.deps.byok;
+    // Skip the query entirely rather than fetching candidates we cannot act on.
+    const ids =
+      byok === undefined || byok === null
+        ? []
+        : await this.deps.repo.findDeletedAccountIdsWithByokKeyBefore(cutoff);
     let purged = 0;
     for (const accountId of ids) {
       try {
-        await this.deps.byok.clearKey({ accountId, now });
+        await byok!.clearKey({ accountId, now });
         purged += 1;
       } catch (err) {
         // Never throw — a per-account clear failure is logged and retried

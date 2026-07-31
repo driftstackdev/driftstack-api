@@ -1507,14 +1507,22 @@ export async function createProductionDeps(
   await enqueueNextProfileTrashPurge({ scheduledJobs: scheduledJobsService });
   // 2026-07-01 — account-deletion retention purge (GDPR Article 17 close-out).
   // Daily 05:00 UTC sweep (staggered an hour after the 04:00 profile-trash
-  // sweep) that clears a deleted account's BYOK Anthropic key once its
-  // deleted_at is more than 30 days old (privacy-policy.md §3.5/§9). Gated
-  // on byokAnthropicService being wired (MFA_ENCRYPTION_KEY configured) —
-  // without it there's no BYOK key storage to purge in the first place.
-  if (byokAnthropicService) {
+  // sweep) over everything privacy-policy.md §9 promises to erase 30 days after
+  // account termination: the BYOK Anthropic key, the wrapped proxy credentials,
+  // and the account's profiles + snapshots.
+  //
+  // Deliberately NOT gated on byokAnthropicService any more. It was, back when
+  // the BYOK key was the only thing purged here and "no key storage configured"
+  // genuinely meant "nothing to do". Two more §9 commitments now hang off this
+  // sweeper — proxy secrets are wrapped under PROFILE_MASTER_KEY, and the
+  // profile/snapshot purge needs no key at all — so that gate had quietly become
+  // "an unset MFA_ENCRYPTION_KEY switches off three retention promises, two of
+  // them unrelated to it". The BYOK arm now no-ops on its own when unwired,
+  // which is the narrow, correct scope for that flag.
+  {
     const accountDeletionPurgeSweeper = new AccountDeletionPurgeSweeperService({
       repo: new DrizzleAccountDeletionPurgeRepo(dbHandle),
-      byok: byokAnthropicService,
+      ...(byokAnthropicService ? { byok: byokAnthropicService } : {}),
       // privacy-policy.md §3.5 names "HTTP/SOCKS5 proxy credentials" as
       // Customer-Provided Secrets, and §9 commits to erasing them within 30
       // days of account termination. Before this they were retained
