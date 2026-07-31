@@ -506,6 +506,35 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
   // can never be reached: isNotNull(deletedAt) AND deletedAt < cutoff. Removing
   // the row also drops its wrapped DEK. Returns the purged IDs so the caller can
   // best-effort delete each profile's orphaned R2 sealed blob (count = .length).
+  /**
+   * Retention purge — hard-delete every profile belonging to an account
+   * terminated before `cutoff`, returning the ids so the caller can drop each
+   * sealed blob from R2.
+   *
+   * privacy-policy.md §9 commits to deleting Profile metadata and Profile
+   * Snapshots "within 30 days of Customer Account termination". Nothing did:
+   * `deleteAccount` is a soft status flip that touches no profile row, the
+   * accounts row is never hard-deleted so the ON DELETE CASCADE never fires,
+   * and `purgeTrashedBefore` above keys off the PROFILE's own deletedAt — a
+   * profile the customer never trashed has none, so it was retained forever.
+   *
+   * The account predicate is in SQL, in the same statement as the delete
+   * target, so a caller cannot widen it. Distinct from the trashed purge on
+   * purpose: this one deletes profiles that are perfectly live, and its only
+   * licence to do so is the account's terminated status.
+   */
+  async purgeForTerminatedAccountsBefore(cutoff: Date): Promise<string[]> {
+    const rows = await this.database.client<Array<{ id: string }>>`
+      DELETE FROM profiles p
+      USING accounts a
+      WHERE a.id = p.account_id
+        AND a.status = 'deleted'
+        AND a.deleted_at IS NOT NULL
+        AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
+      RETURNING p.id`;
+    return rows.map((r) => r.id);
+  }
+
   async purgeTrashedBefore(cutoff: Date): Promise<string[]> {
     const result = await this.database.db
       .delete(profiles)

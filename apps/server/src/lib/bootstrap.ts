@@ -1522,6 +1522,20 @@ export async function createProductionDeps(
       // row is never hard-deleted so ON DELETE CASCADE never fires, and the
       // only other retention sweeper keys off a profile's own deletedAt.
       proxySecrets: accountProxiesRepo,
+      // The other half of the same §9 line: "Profile metadata + Profile
+      // Snapshots ... All deleted within 30 days of Customer Account
+      // termination." Snapshots are listed separately because purging profiles
+      // does not reach them — parent_profile_id is ON DELETE SET NULL, so they
+      // survive with a null parent still holding the captured state inline.
+      profiles: {
+        purgeProfilesForTerminatedAccountsBefore: (cutoff) =>
+          profilesRepo.purgeForTerminatedAccountsBefore(cutoff),
+        purgeSnapshotsForTerminatedAccountsBefore: (cutoff) =>
+          new DrizzleProfileSnapshotsRepo(dbHandle).purgeForTerminatedAccountsBefore(cutoff),
+      },
+      // Drops each purged profile's sealed blob; a blob outliving its row is
+      // the customer's data outliving the erasure we committed to.
+      r2,
       logger,
     });
     registerAccountDeletionPurgeJob({

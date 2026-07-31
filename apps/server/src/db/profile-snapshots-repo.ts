@@ -30,6 +30,30 @@ function toRow(r: typeof profileSnapshots.$inferSelect): ProfileSnapshotRecord {
 export class DrizzleProfileSnapshotsRepo implements ProfileSnapshotsRepo {
   constructor(private readonly database: Database) {}
 
+  /**
+   * Retention purge — hard-delete every snapshot belonging to an account
+   * terminated before `cutoff`.
+   *
+   * Snapshots are NOT reached by purging profiles: `parent_profile_id` is ON
+   * DELETE SET NULL, so a deleted profile leaves its snapshots behind with a
+   * null parent. They carry the captured state inline in `state_blob`, so the
+   * row IS the data and deleting it is the erasure — no blob store to chase.
+   *
+   * Same shape as the profile purge: the account predicate lives in SQL beside
+   * the delete target so a caller cannot widen it.
+   */
+  async purgeForTerminatedAccountsBefore(cutoff: Date): Promise<number> {
+    const rows = await this.database.client<Array<{ id: string }>>`
+      DELETE FROM profile_snapshots s
+      USING accounts a
+      WHERE a.id = s.account_id
+        AND a.status = 'deleted'
+        AND a.deleted_at IS NOT NULL
+        AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
+      RETURNING s.id`;
+    return rows.length;
+  }
+
   async insert(input: NewSnapshotInput): Promise<ProfileSnapshotRecord> {
     const [row] = await this.database.db
       .insert(profileSnapshots)

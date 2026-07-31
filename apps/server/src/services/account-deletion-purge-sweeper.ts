@@ -27,6 +27,7 @@
 
 import type { BYOKAnthropicService } from './byok-anthropic.js';
 import type { ScheduledJobsService, ScheduledJobRow } from './scheduled-jobs.js';
+import { profileSealedBlobKey, type R2 } from '../lib/r2.js';
 import type { Logger } from '../lib/logger.js';
 
 export const ACCOUNT_DELETION_PURGE_JOB_TYPE = 'account_deletion.purge';
@@ -77,6 +78,23 @@ export interface AccountProxySecretPurgeRepo {
   clearProxySecretsForAccount(accountId: string): Promise<number>;
 }
 
+/**
+ * The profile half of the same §9 retention promise: "Profile metadata +
+ * Profile Snapshots ... All deleted within 30 days of Customer Account
+ * termination."
+ *
+ * Snapshots are listed separately because deleting profiles does NOT reach
+ * them — `profile_snapshots.parent_profile_id` is ON DELETE SET NULL, so a
+ * purged profile leaves its snapshots behind with a null parent, still holding
+ * the captured state inline.
+ */
+export interface TerminatedAccountProfilePurgeRepo {
+  /** Hard-delete profiles of accounts terminated before `cutoff`; returns ids. */
+  purgeProfilesForTerminatedAccountsBefore(cutoff: Date): Promise<string[]>;
+  /** Hard-delete snapshots of accounts terminated before `cutoff`; returns the count. */
+  purgeSnapshotsForTerminatedAccountsBefore(cutoff: Date): Promise<number>;
+}
+
 export interface AccountDeletionPurgeSweeperDeps {
   readonly repo: AccountDeletionPurgeRepo;
   readonly byok: BYOKAnthropicService;
@@ -87,6 +105,19 @@ export interface AccountDeletionPurgeSweeperDeps {
    * secrets it never looked at.
    */
   readonly proxySecrets?: AccountProxySecretPurgeRepo;
+  /**
+   * Optional for the same reason as `proxySecrets`: absent means the profile
+   * half is skipped entirely rather than half-run.
+   */
+  readonly profiles?: TerminatedAccountProfilePurgeRepo;
+  /**
+   * Sealed-blob store for purged profiles. When wired, each purged profile's
+   * `profiles/<id>.sealed` object is best-effort deleted so the encrypted bytes
+   * do not outlive the row they belong to — the erasure promise is about the
+   * data, and a blob left in R2 is still the customer's profile. Null/undefined
+   * → DB-only purge, and the leftover object is logged.
+   */
+  readonly r2?: R2 | null;
   /** Days after deletedAt before the purge fires. Defaults to 30 (privacy-policy.md §9). */
   readonly retentionDays?: number;
   readonly logger?: Logger;
@@ -96,6 +127,10 @@ export interface AccountDeletionPurgeResult {
   readonly purged: number;
   /** Accounts whose wrapped proxy secrets were cleared this tick. */
   readonly proxySecretsPurged: number;
+  /** Profiles hard-deleted for terminated accounts this tick. */
+  readonly profilesPurged: number;
+  /** Profile snapshots hard-deleted for terminated accounts this tick. */
+  readonly snapshotsPurged: number;
 }
 
 export class AccountDeletionPurgeSweeperService {
@@ -143,7 +178,46 @@ export class AccountDeletionPurgeSweeperService {
       }
     }
 
-    return { purged, proxySecretsPurged };
+    let profilesPurged = 0;
+    let snapshotsPurged = 0;
+    if (this.deps.profiles !== undefined) {
+      try {
+        // Snapshots FIRST. If the profile delete succeeds and the snapshot
+        // delete then throws, the snapshots are stranded with a null parent and
+        // no longer reachable from a profile — still purgeable on the next tick
+        // (they are selected by ACCOUNT, not by parent), but the ordering keeps
+        // the more fragile row set from depending on the other having run.
+        snapshotsPurged =
+          await this.deps.profiles.purgeSnapshotsForTerminatedAccountsBefore(cutoff);
+        const purgedProfileIds =
+          await this.deps.profiles.purgeProfilesForTerminatedAccountsBefore(cutoff);
+        profilesPurged = purgedProfileIds.length;
+
+        const r2 = this.deps.r2;
+        if (r2 !== undefined && r2 !== null) {
+          for (const profileId of purgedProfileIds) {
+            try {
+              await r2.deleteObject(profileSealedBlobKey(profileId));
+            } catch (err) {
+              // The row is already gone and the blob is opaque + inert, so this
+              // never throws — but it IS logged, because an undeleted blob is
+              // the customer's data outliving the erasure we committed to.
+              this.deps.logger?.error?.(
+                { component: 'account-deletion-purge', profileId, err },
+                'failed to delete purged profile sealed-blob from R2 (orphan left behind)',
+              );
+            }
+          }
+        }
+      } catch (err) {
+        this.deps.logger?.error?.(
+          { component: 'account-deletion-purge', err },
+          'failed to purge terminated-account profiles/snapshots (will retry next sweep)',
+        );
+      }
+    }
+
+    return { purged, proxySecretsPurged, profilesPurged, snapshotsPurged };
   }
 }
 
