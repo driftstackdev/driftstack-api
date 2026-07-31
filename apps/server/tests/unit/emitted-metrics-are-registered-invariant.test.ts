@@ -55,6 +55,28 @@ function registered(): string[] {
   return [...found].sort();
 }
 
+/**
+ * Service files the application never constructs. Kept in step with
+ * `tick-services-are-wired-invariant`, which is the guard that establishes the
+ * roster; this one only needs to know that emitting from these files does not
+ * count as emitting at all.
+ */
+const UNWIRED_SOURCES = ['services/durable-webhook-delivery.ts'];
+
+/** Metric keys emitted from at least one file the application actually runs. */
+function emittedFromLiveCode(): Set<string> {
+  const found = new Set<string>();
+  for (const file of tsFilesUnder(SERVER_SRC)) {
+    if (file === REGISTRY || file === BOOTSTRAP) continue;
+    if (UNWIRED_SOURCES.some((u) => file.endsWith(u))) continue;
+    const src = readFileSync(file, 'utf8');
+    for (const m of src.matchAll(/\.(?:inc|observe|set)\(\s*METRIC_NAMES\.(\w+)/g)) {
+      found.add(m[1]!);
+    }
+  }
+  return found;
+}
+
 describe('every emitted metric is registered at boot', () => {
   const emits = emitted();
   const regs = registered();
@@ -70,6 +92,15 @@ describe('every emitted metric is registered at boot', () => {
     expect(
       unregistered.sort(),
       'metric(s) emitted but never registered in bootstrap — add a registerCounter/Gauge call:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL no metric is emitted ONLY from code the application never runs. Both webhook delivery counters were registered at boot and emitted solely from DurableWebhookWorker, which is wired nowhere — so in production they could never increment. A dashboard showed a flat zero, which reads exactly like "no webhooks are configured", and a total delivery outage would have produced no signal at all.', () => {
+    const live = emittedFromLiveCode();
+    const deadOnly = regs.filter((name) => emits.includes(name) && !live.has(name)).sort();
+    expect(
+      deadOnly,
+      'metric(s) whose only emit site is in an unwired service — emit them from the code that actually runs:',
     ).toEqual([]);
   });
 

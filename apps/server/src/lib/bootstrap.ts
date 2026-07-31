@@ -2818,7 +2818,13 @@ export async function createProductionDeps(
   // and the failure-response read is size-capped. Without this poller, every
   // configured webhook enqueues but is never delivered (and replay routes that
   // re-set 'pending' never re-fire).
-  const webhookDeliveryWorker = new WebhookDeliveryWorker({ repo: webhooksRepo, logger });
+  const webhookDeliveryWorker = new WebhookDeliveryWorker({
+    repo: webhooksRepo,
+    logger,
+    // Both delivery counters were registered at boot and emitted only from the
+    // unwired successor, so they could never increment in production.
+    ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
+  });
   const webhookDeliveryTimer = setInterval(() => {
     void (async () => {
       try {

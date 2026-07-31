@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createTestLogger } from '../../src/lib/logger.js';
 import { WebhookDeliveryWorker } from '../../src/services/webhook-worker.js';
+import { MetricsRegistry, METRIC_NAMES } from '../../src/services/metrics-registry.js';
 import { InMemoryWebhooksRepo } from '../integration/_helpers/in-memory-webhooks-repo.js';
 import type { WebhookEndpointRow } from '../../src/services/webhooks.js';
 
@@ -42,6 +43,86 @@ async function setupRepoWithEndpoint(): Promise<{
   });
   return { repo, endpoint };
 }
+
+/**
+ * A registry wired as bootstrap wires it. `inc` throws on an unregistered
+ * counter, so registering here is what makes the assertions below exercise the
+ * real path rather than the throwing one.
+ */
+function registryOf(): MetricsRegistry {
+  const m = new MetricsRegistry();
+  m.registerCounter(METRIC_NAMES.webhookDeliveryAttemptTotal, 'test', ['outcome']);
+  m.registerCounter(METRIC_NAMES.webhookDeliveryTerminalTotal, 'test', ['terminal_state']);
+  return m;
+}
+
+/** `metric{label}=value` for the two delivery counters. */
+function deliverySamples(metrics: MetricsRegistry): string[] {
+  return metrics
+    .render()
+    .split('\n')
+    .filter(
+      (l) =>
+        l.startsWith(METRIC_NAMES.webhookDeliveryAttemptTotal) ||
+        l.startsWith(METRIC_NAMES.webhookDeliveryTerminalTotal),
+    )
+    .map((l) => {
+      const label = /\{([^}]*)\}/.exec(l)?.[1] ?? '';
+      const value = l.trim().split(/\s+/).pop() ?? '?';
+      const short = l.startsWith(METRIC_NAMES.webhookDeliveryAttemptTotal) ? 'attempt' : 'terminal';
+      return `${short}{${label}}=${value}`;
+    })
+    .sort();
+}
+
+describe('WebhookDeliveryWorker delivery counters', () => {
+  it('CRITICAL a successful tick increments BOTH counters. They were registered at boot and emitted only from DurableWebhookWorker, which is wired nowhere — so in production they could never increment, and a dashboard showed a flat zero indistinguishable from "no webhooks configured".', async () => {
+    const { repo } = await setupRepoWithEndpoint();
+    const metrics = registryOf();
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 200 }),
+      now: constNow,
+      metrics,
+    });
+
+    await worker.tickOnce();
+
+    expect(deliverySamples(metrics)).toEqual([
+      'attempt{outcome="success"}=1',
+      'terminal{terminal_state="delivered"}=1',
+    ]);
+  });
+
+  it('CRITICAL a failing delivery that will be RETRIED counts an attempt but no terminal. Counting a retry as terminal would make the DLQ rate read high while nothing had actually been given up on.', async () => {
+    const { repo } = await setupRepoWithEndpoint();
+    const metrics = registryOf();
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 500 }),
+      now: constNow,
+      metrics,
+    });
+
+    await worker.tickOnce();
+
+    expect(deliverySamples(metrics)).toEqual(['attempt{outcome="http_error"}=1']);
+  });
+
+  it('CRITICAL the worker runs without a metrics registry. Observability must never be load-bearing for the delivery it observes.', async () => {
+    const { repo } = await setupRepoWithEndpoint();
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 200 }),
+      now: constNow,
+    });
+
+    await expect(worker.tickOnce()).resolves.toMatchObject({ claimed: 1 });
+  });
+});
 
 describe('WebhookDeliveryWorker.tickOnce', () => {
   it('claims one delivery, posts it, marks delivered on 2xx', async () => {

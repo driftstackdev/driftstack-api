@@ -339,9 +339,14 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
   });
 
   it('Webhook delivery worker IS wired (drift-guard against the original unwired-in-prod gap): constructed with the webhooks repo + logger, driven by a 60s tickOnce poller, .unref()-ed, and clearInterval-ed in teardown — without this the worker would never run and configured webhooks would never deliver', () => {
-    expect(body).toMatch(
-      /const webhookDeliveryWorker = new WebhookDeliveryWorker\(\{ repo: webhooksRepo, logger \}\);/,
-    );
+    // Re-pinned when the worker gained a metrics dependency. Both delivery
+    // counters were registered at boot and emitted only from the unwired
+    // DurableWebhookWorker, so in production they could never increment.
+    // Asserted as the construction and its wiring rather than one exact
+    // argument rendering, which reformatting breaks while proving nothing.
+    expect(body).toMatch(/const webhookDeliveryWorker = new WebhookDeliveryWorker\(\{/);
+    expect(body).toMatch(/repo: webhooksRepo,/);
+    expect(body).toMatch(/metrics: metricsRegistry/);
     expect(body).toMatch(/await webhookDeliveryWorker\.tickOnce\(\);/);
     expect(body).toMatch(/webhookDeliveryTimer\.unref\(\);/);
     expect(body).toMatch(/clearInterval\(webhookDeliveryTimer\);/);

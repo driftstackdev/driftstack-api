@@ -14,6 +14,7 @@
 // (already in DrizzleWebhooksRepo.claim).
 
 import type { Logger } from '../lib/logger.js';
+import { METRIC_NAMES } from './metrics-registry.js';
 import { redactText } from '../lib/redact-url.js';
 import { signWebhookPayload } from '../lib/webhook-signing.js';
 import { ssrfGuardedFetch } from '../lib/ssrf-guarded-fetch.js';
@@ -28,6 +29,18 @@ export interface WebhookWorkerConfig {
   sleep?: (ms: number) => Promise<void>;
   /** Override "now" — useful for deterministic backoff tests. */
   now?: () => Date;
+  /**
+   * Optional metrics registry.
+   *
+   * The webhook delivery counters were registered at boot and emitted ONLY from
+   * DurableWebhookWorker, which is wired nowhere — so in production they could
+   * never increment. A dashboard showed a flat zero, which is indistinguishable
+   * from "no webhooks are configured", and a total delivery outage would have
+   * produced no signal at all. This is the worker bootstrap actually runs.
+   */
+  metrics?: {
+    inc: (name: string, labels?: Readonly<Record<string, string>>, delta?: number) => void;
+  };
   /** Per-attempt delivery timeout (ms). Default 10s. */
   deliveryTimeoutMs?: number;
   /** Empty-claim sleep (ms). Default 2s. */
@@ -110,7 +123,35 @@ export class WebhookDeliveryWorker {
       now: this.now(),
     });
     const outcomes = await Promise.all(claimed.map((d) => this.deliver(d)));
+    // Counted HERE rather than at each recordDelivered/recordRetry/recordDlq
+    // call: every delivery funnels through this array exactly once, so one site
+    // cannot drift out of step with another as the delivery paths change.
+    for (const outcome of outcomes) this.countOutcome(outcome);
     return { claimed: claimed.length, outcomes };
+  }
+
+  /**
+   * Record one delivery outcome on both counters.
+   *
+   * `attempt` carries every attempt; `terminal` only the states a delivery
+   * stops in, so a DLQ rate can be read without subtracting retries from
+   * attempts. Never throws — telemetry must not break delivery.
+   */
+  private countOutcome(outcome: DeliveryOutcome): void {
+    const metrics = this.config.metrics;
+    if (metrics === undefined) return;
+    try {
+      const attemptOutcome = outcome.kind === 'delivered' ? 'success' : 'http_error';
+      metrics.inc(METRIC_NAMES.webhookDeliveryAttemptTotal, { outcome: attemptOutcome });
+      if (outcome.kind !== 'retry') {
+        metrics.inc(METRIC_NAMES.webhookDeliveryTerminalTotal, {
+          terminal_state: outcome.kind === 'delivered' ? 'delivered' : 'dlq',
+        });
+      }
+    } catch {
+      // Observability is allowed to be missing; it is not allowed to be
+      // load-bearing for the delivery it observes.
+    }
   }
 
   private async deliver(delivery: WebhookDeliveryRow): Promise<DeliveryOutcome> {
