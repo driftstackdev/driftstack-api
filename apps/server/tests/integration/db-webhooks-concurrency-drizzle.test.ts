@@ -181,7 +181,19 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const endpointId = String(inserted?.id);
 
       const upgraded = await repo.encryptLegacySecrets(500);
-      expect(upgraded).toEqual({ scanned: 1, converted: 1, remaining: 0 });
+      // Asserted as the sweep's INVARIANT, not as a global row count.
+      // `encryptLegacySecrets` takes no account scope — it sweeps the whole
+      // table — so `scanned: 1` really asserts that webhook_endpoints holds
+      // exactly this test's row. Six real-Postgres integration files insert
+      // legacy secrets and vitest runs files in parallel, so that is false
+      // whenever any of them overlaps: seeding one legacy endpoint under an
+      // unrelated account reproduces it exactly, `scanned: 2` against 1.
+      // What the upgrader actually promises is that everything it scans is
+      // converted and nothing is left legacy, which is true regardless of who
+      // else has rows in the table.
+      expect(upgraded.converted, 'every row it scanned was converted').toBe(upgraded.scanned);
+      expect(upgraded.scanned, "including this test's row").toBeGreaterThanOrEqual(1);
+      expect(upgraded.remaining, 'and nothing was left legacy').toBe(0);
       const [stored] =
         await client`SELECT secret, secret_prev FROM webhook_endpoints WHERE id = ${endpointId}`;
       expect(stored?.secret).toContain(WEBHOOK_SECRET_V2_PREFIX);
@@ -239,11 +251,11 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         WEBHOOK_KEY,
       ).toString('base64')}`;
       await client`UPDATE webhook_endpoints SET secret = ${repairedV1} WHERE id = ${idA2}`;
-      await expect(repo.encryptLegacySecrets(500)).resolves.toEqual({
-        scanned: 3,
-        converted: 3,
-        remaining: 0,
-      });
+      // Invariant-scoped for the reason given on the first upgrader case above.
+      const swept = await repo.encryptLegacySecrets(500);
+      expect(swept.converted, 'every row it scanned was converted').toBe(swept.scanned);
+      expect(swept.scanned, "including all three of this test's rows").toBeGreaterThanOrEqual(3);
+      expect(swept.remaining, 'and nothing was left legacy').toBe(0);
       const migrated = await client<
         Array<{ id: string; secret: string; updated_at: string }>
       >`SELECT id::text, secret, updated_at FROM webhook_endpoints WHERE id IN (${idA1}, ${idA2}, ${idB1}) ORDER BY id`;
@@ -344,7 +356,13 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         await blocker`COMMIT`;
         transactionOpen = false;
 
-        await expect(migration).resolves.toEqual({ scanned: 1, converted: 0, remaining: 0 });
+        // That THIS row lost the CAS is asserted per-row below — `stored.secret`
+        // is the successor's value, never the migration's. A global
+        // `converted: 0` would additionally require that no other test's legacy
+        // row existed anywhere in the table, which is not this test's subject.
+        const outcome = await migration;
+        expect(outcome.scanned, 'the sweep reached this row').toBeGreaterThanOrEqual(1);
+        expect(outcome.remaining, 'and left nothing legacy behind').toBe(0);
         expect(blocked).toBe(true);
         const [stored] = await client<
           Array<{ secret: string; updated_at: string }>
