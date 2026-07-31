@@ -47,6 +47,56 @@ groups:
             queue depth suggests AgentRuntime decompose latency is
             hurting interactive takeover responsiveness.
 
+      - alert: SecurityCriticalEmailFailing
+        # signup-verification, password-reset and oauth-pending-verification are
+        # the three templates a customer CANNOT route around. If they stop
+        # landing, new signups cannot complete and locked-out customers cannot
+        # recover — and the failure is invisible from our side, because email is
+        # deliberately fire-and-forget so a send failure never breaks a request.
+        # The only trace is a warn log nobody is watching for.
+        #
+        # Fires on any sustained non-ok outcome for those three, rather than on
+        # a ratio: one customer permanently unable to reset their password is
+        # already the incident, and low volume makes a ratio meaningless.
+        expr: |
+          sum(increase(driftstack_email_send_total{template=~"signup-verification|password-reset|oauth-pending-verification",outcome!="ok"}[15m])) by (template, outcome) > 0
+        for: 10m
+        labels:
+          severity: critical
+          team: driftstack-runtime
+        annotations:
+          summary: 'Account-recovery email {{ $labels.template }} is failing ({{ $labels.outcome }})'
+          description: |
+            Sends of {{ $labels.template }} are failing with outcome
+            {{ $labels.outcome }}. Customers cannot complete signup or recover
+            access while this holds, and nothing surfaces it to them — the send
+            is fire-and-forget, so the request they made appears to succeed.
+            Check the Postmark account state first: pending-approval,
+            account-inactive and rate-limited are provider-side and affect every
+            template at once.
+
+      - alert: EmailSendFailureRateHigh
+        # The broad signal, deliberately separate and quieter. Non-critical
+        # templates failing is a delivery problem, not a lockout, so it warns
+        # rather than pages — but a provider-wide outage shows up here first and
+        # across every template at once.
+        expr: |
+          (
+            sum(rate(driftstack_email_send_total{outcome!="ok"}[30m]))
+            /
+            clamp_min(sum(rate(driftstack_email_send_total[30m])), 0.0001)
+          ) > 0.25
+        for: 15m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'More than 25% of outbound email is failing'
+          description: |
+            Over a quarter of outbound sends in the last 30 minutes returned a
+            non-ok outcome. If SecurityCriticalEmailFailing is also firing this
+            is provider-wide rather than template-specific.
+
       - alert: ScheduledJobChainDead
         # Every recurring sweep survives by enqueueing its own successor, so
         # one pending row is the steady state. Zero means the chain stopped
