@@ -58,7 +58,7 @@ describe('W526.C apps/customer-dashboard/package.json content parity', () => {
     expect(pkg.dependencies).toMatchObject({ autoprefixer: '10.5.2', postcss: '8.5.19' });
     expect(pkg.dependencies).toHaveProperty('@driftstack/api-types');
     expect(pkg.dependencies).toHaveProperty('@sentry/astro');
-    expect(pkg.dependencies.astro).toBe('7.0.7');
+    expect(pkg.dependencies.astro).toBe('7.1.6');
     expect(pkg.dependencies.tailwindcss).toBe('3.4.19');
     expect(pkg.dependencies).toHaveProperty('typescript');
   });

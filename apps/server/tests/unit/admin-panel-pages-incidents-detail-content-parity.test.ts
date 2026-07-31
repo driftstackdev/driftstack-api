@@ -27,9 +27,16 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+// `\s*\n?\s*` is AMBIGUOUS: `\s` already matches `\n`, so each group offers the
+// engine many ways to split one whitespace run, and chaining seven of them made
+// this single assertion backtrack for ~1.9s against a file every sibling
+// assertion scans in under 1ms. Under suite load it blew the 10s timeout and
+// reddened the whole run intermittently — a false red, not a real drift. A plain
+// `\s*` matches exactly the same language with no ambiguity, so the check is
+// unchanged and now linear.
 function hasSafeMutationErrorBoundary(source: string): boolean {
   return (
-    /return r\s*\n?\s*\.json\(\)\s*\n?\s*\.catch\(function \(\) \{\s*\n?\s*return \{\};\s*\n?\s*\}\)\s*\n?\s*\.then\(function \(b\) \{\s*\n?\s*return Promise\.reject\(window\.driftstackResponseError\(r, b\)\);\s*\n?\s*\}\);/.test(
+    /return r\s*\.json\(\)\s*\.catch\(function \(\) \{\s*return \{\};\s*\}\)\s*\.then\(function \(b\) \{\s*return Promise\.reject\(window\.driftstackResponseError\(r, b\)\);\s*\}\);/.test(
       source,
     ) && !/new Error\(b\.(?:detail|title)/.test(source)
   );

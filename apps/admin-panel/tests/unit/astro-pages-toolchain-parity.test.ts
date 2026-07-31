@@ -31,7 +31,11 @@ function packageJson(app: (typeof ASTRO_APPS)[number]): {
 describe('Astro Pages toolchain parity', () => {
   it('all five Pages apps use the patched Astro 7 line and preserve legacy whitespace', () => {
     for (const app of ASTRO_APPS) {
-      expect(packageJson(app).dependencies.astro, app).toBe('7.0.7');
+      // Exact-pinned and identical across all five so a security bump moves them
+      // together. 7.1.6 closes the reflected-XSS via unescaped View Transition
+      // animation properties, and carries the sharp/svgo ranges whose old
+      // resolutions were the libvips CVEs and the SVGO removeScripts bypass.
+      expect(packageJson(app).dependencies.astro, app).toBe('7.1.6');
       expect(read(`apps/${app}/astro.config.mjs`), app).toMatch(/compressHTML:\s*true/);
     }
   });

@@ -48,6 +48,9 @@
     "sdk:python:test": "cd packages/sdk-python && .venv/bin/pytest",
     "sdk:python:lint": "cd packages/sdk-python && .venv/bin/ruff check . && .venv/bin/ruff format --check ."
   },
+  "overrides": {
+    "sharp": "^0.35.3"
+  },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
     "@types/node": "^22.10.0",

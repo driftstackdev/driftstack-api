@@ -47,7 +47,7 @@ describe('W537.C apps/status-site/package.json content parity', () => {
     expect(pkg.dependencies).toEqual({
       '@astrojs/check': '0.9.9',
       '@tailwindcss/vite': '4.3.2',
-      astro: '7.0.7',
+      astro: '7.1.6',
       tailwindcss: '^4.3.0',
       typescript: '^5.7.0',
     });
