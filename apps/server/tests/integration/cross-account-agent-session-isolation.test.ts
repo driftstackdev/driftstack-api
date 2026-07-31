@@ -36,6 +36,7 @@ const AGENT_ROUTES: ReadonlyArray<{
   payload?: Record<string, unknown>;
 }> = [
   { method: 'GET', suffix: '' },
+  { method: 'POST', suffix: '/message', payload: { user_message: 'hello from B' } },
   { method: 'DELETE', suffix: '' },
   { method: 'GET', suffix: '/transcript' },
   { method: 'GET', suffix: '/page-state' },
@@ -87,43 +88,4 @@ describe("account B cannot reach account A's agent session on any route", () => 
       ).toBe(404);
     },
   );
-
-  /**
-   * `POST /:id/message` is the ONE route here not proven by mutation, and that
-   * is stated plainly rather than papered over.
-   *
-   * It answers 400 before reaching the ownership check — and to the OWNER too,
-   * for every body shape probed, so the rejection is not simple field
-   * validation; the route carries durable at-most-once receipts and most likely
-   * wants an `Idempotency-Key`. Because it 400s either way, disabling ownership
-   * does not red this case, so it contributes nothing to the 11-of-12 mutation
-   * result below.
-   *
-   * What IS established: the handler does call `callerCanAccessAgentSession`
-   * (verified by reading it — roughly 150 lines into the handler, past the
-   * window a short scan would cover), and an unrelated account receives neither
-   * a 2xx nor any session content. Proving it by mutation needs the accepted
-   * request shape, which is worth a follow-up.
-   */
-  it('CRITICAL POST /:id/message never returns another account’s session content, even though body validation answers before the ownership check', async () => {
-    fx = await buildTestApp({ tier: 'api_builder', enableAgentRuntime: true });
-    const agentSessionId = await createAgentSessionForAccountA(fx);
-    const other = await seedAdditionalAccount(fx, {
-      email: 'b@agent-isolation.test',
-      tier: 'api_builder',
-      scopes: [...FULL_SCOPES],
-    });
-
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: `/v1/agent-sessions/${agentSessionId}/message`,
-      headers: { authorization: `Bearer ${other.plaintext}` },
-      payload: { message: 'hello from B' },
-    });
-
-    expect(res.statusCode, 'an unrelated account must never get a 2xx here').toBeGreaterThanOrEqual(
-      400,
-    );
-    expect(res.body).not.toContain('owned by A');
-  });
 });
