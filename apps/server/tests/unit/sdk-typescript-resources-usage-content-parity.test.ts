@@ -79,4 +79,11 @@ describe('W429.B packages/sdk-typescript/src/resources/usage.ts content parity',
     expect(body).toMatch(/path: '\/v1\/usage'/);
     expect(body).toMatch(/path: '\/v1\/usage\/series'/);
   });
+
+  it('CRITICAL exposes `currentPeriod` as a cross-SDK alias for `current`. Python names this `current_period` and Go names it `CurrentPeriod`; without the alias a customer porting between SDKs hits a silent rename on the same endpoint. Same pattern as `cryptoOrders.iterate` — the alias must delegate, never re-implement, so the two can never diverge.', () => {
+    expect(body).toMatch(
+      /currentPeriod\(\): Promise<UsagePeriodSummary> \{\s*\n\s*return this\.current\(\);\s*\n\s*\}/,
+    );
+    expect(body).toMatch(/Cross-SDK naming alias for \{@link current\}/);
+  });
 });
