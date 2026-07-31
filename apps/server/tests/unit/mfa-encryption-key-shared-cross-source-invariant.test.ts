@@ -16,6 +16,10 @@ const BYOK = resolve(REPO_ROOT, 'apps/server/src/lib/byok-anthropic-encryption.t
 const GCK = resolve(REPO_ROOT, 'apps/server/src/lib/gui-control-key-encryption.ts');
 const LK = resolve(REPO_ROOT, 'apps/server/src/lib/livekit-secret-encryption.ts');
 const MFA = resolve(REPO_ROOT, 'apps/server/src/lib/mfa-totp.ts');
+// The four library files above document the shared key; the SHARING itself
+// happens where they are wired.
+const BOOTSTRAP = resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts');
+const CONFIG = resolve(REPO_ROOT, 'apps/server/src/lib/config.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -57,5 +61,34 @@ describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
     expect(gck).toMatch(
       /AES-256-GCM uses a\s*\n?\s*\/\/ versioned `\[magic \| IV \| tag \| ciphertext\]` envelope and canonical\s*\n?\s*\/\/ additional authenticated data \(AAD\) that binds the ciphertext to its\s*\n?\s*\/\/ purpose, owning account, and one agent-session\. Re-uses\s*\n?\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
     );
+  });
+
+  it("CRITICAL every encryption consumer is wired from config.mfaEncryptionKey at the BOOTSTRAP site, and no second key source exists. The assertions above read the four library files, where `MFA_ENCRYPTION_KEY` appears only in comments and error strings for at least livekit-secret-encryption — so they pass on prose. Verified by mutation: giving LiveKit `process.env.LIVEKIT_ENCRYPTION_KEY ?? config.mfaEncryptionKey` in bootstrap left this file 5/5 GREEN, which is verbatim the refactor the header says it prevents. Breaking this makes 'one rotation rotates all four ciphertexts' silently false.", () => {
+    const bootstrap = read(BOOTSTRAP);
+    const config = read(CONFIG);
+
+    // Every consumer draws from the one config field.
+    const wirings = bootstrap.match(/config\.mfaEncryptionKey/g) ?? [];
+    expect(wirings.length, 'bootstrap must wire the shared key to every consumer').toBeGreaterThan(
+      5,
+    );
+
+    // And no consumer may reach around it to a second env var. `config.ts` is
+    // the only place an *_ENCRYPTION_KEY env may be read at all.
+    const rogueEnvReads = [...bootstrap.matchAll(/process\.env\.([A-Z_]*ENCRYPTION_KEY)/g)].map(
+      (m) => m[1]!,
+    );
+    expect(
+      [...new Set(rogueEnvReads)].sort(),
+      'bootstrap must not read an encryption key directly from the environment:',
+    ).toEqual([]);
+
+    // config.ts itself must expose exactly one encryption-key env.
+    const configEnvKeys = [
+      ...new Set([...config.matchAll(/env\.([A-Z_]*ENCRYPTION_KEY)/g)].map((m) => m[1]!)),
+    ];
+    expect(configEnvKeys.sort(), 'exactly one encryption-key env may exist').toEqual([
+      'MFA_ENCRYPTION_KEY',
+    ]);
   });
 });
