@@ -1,7 +1,11 @@
 // V-307 — customer self-service webhook delivery replay.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import {
+  buildTestApp,
+  seedAdditionalAccount,
+  type TestAppFixture,
+} from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
 
@@ -189,6 +193,26 @@ describe('POST /v1/webhook-deliveries/:deliveryId/replay', () => {
     });
     expect(res.statusCode).toBe(403);
     expect(res.json<{ detail: string }>().detail).toContain('admin role');
+  });
+
+  it('CRITICAL 404 when an UNRELATED account replays the delivery. This file covered the owner, a team admin acting-as, a non-admin member, a missing id and a malformed id — but never a different account, which is the case the account-scope check exists for. Replay RE-FIRES the delivery, so a gap here lets a stranger resend another customer’s payload.', async () => {
+    fx = await buildTestApp();
+    const deliveryPublicId = await enqueueDelivery(fx);
+    const other = await seedAdditionalAccount(fx, {
+      email: 'b@replay-isolation.test',
+      tier: 'api_builder',
+      scopes: ['read', 'write', 'account_owner'],
+    });
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/webhook-deliveries/${deliveryPublicId}/replay`,
+      headers: { ...headers, authorization: `Bearer ${other.plaintext}` },
+    });
+
+    expect(res.statusCode).toBe(404);
+    // The refusal must be indistinguishable from a delivery that never existed.
+    expect(res.body).not.toContain('example.test');
   });
 
   it('404 when delivery does not exist', async () => {
