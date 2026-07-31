@@ -103,7 +103,8 @@ describe('OpenAPI spec generation', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();
     const schema = spec.components?.schemas?.LaunchProfileRequest as
-      Record<string, unknown> | undefined;
+      | Record<string, unknown>
+      | undefined;
     expect(schema).toMatchObject({
       type: 'object',
       additionalProperties: false,
@@ -449,7 +450,8 @@ describe('OpenAPI spec generation', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();
     const logout = (spec.paths ?? {})['/v1/auth/logout'] as
-      Record<string, { responses?: Record<string, unknown> }> | undefined;
+      | Record<string, { responses?: Record<string, unknown> }>
+      | undefined;
     expect(logout?.post?.responses?.['200']).toBeDefined();
     expect(logout?.post?.responses?.['204']).toBeUndefined();
   });
@@ -557,7 +559,8 @@ describe('OpenAPI spec generation', () => {
     expect(schemas).toBeDefined();
     expect(Object.keys(schemas ?? {})).toContain('LiveKitInfo');
     const lki = schemas?.LiveKitInfo as
-      { type?: string; properties?: Record<string, unknown>; required?: string[] } | undefined;
+      | { type?: string; properties?: Record<string, unknown>; required?: string[] }
+      | undefined;
     expect(lki?.type).toBe('object');
     expect(Object.keys(lki?.properties ?? {}).sort()).toEqual(
       ['expires_at', 'participant_identity', 'room', 'token', 'ws_url'].sort(),
@@ -589,14 +592,16 @@ describe('OpenAPI spec generation', () => {
     expect(names).toContain('BundledLlmStatus');
 
     const settings = schemas?.BundledLlmSettings as
-      { type?: string; properties?: Record<string, unknown> } | undefined;
+      | { type?: string; properties?: Record<string, unknown> }
+      | undefined;
     expect(settings?.type).toBe('object');
     expect(Object.keys(settings?.properties ?? {}).sort()).toEqual(
       ['consent', 'monthly_cap_usd_cents'].sort(),
     );
 
     const status = schemas?.BundledLlmStatus as
-      { type?: string; properties?: Record<string, unknown> } | undefined;
+      | { type?: string; properties?: Record<string, unknown> }
+      | undefined;
     expect(status?.type).toBe('object');
     expect(Object.keys(status?.properties ?? {}).sort()).toEqual(
       [
@@ -643,12 +648,14 @@ describe('OpenAPI spec generation', () => {
     expect(names).toContain('RegisterMacNodeResponse');
 
     const req = schemas?.RegisterMacNodeRequest as
-      { type?: string; properties?: Record<string, unknown>; required?: string[] } | undefined;
+      | { type?: string; properties?: Record<string, unknown>; required?: string[] }
+      | undefined;
     expect(req?.type).toBe('object');
     expect(Object.keys(req?.properties ?? {}).sort()).toEqual(['livekit', 'mac_node_id'].sort());
 
     const res = schemas?.RegisterMacNodeResponse as
-      { type?: string; properties?: Record<string, unknown>; required?: string[] } | undefined;
+      | { type?: string; properties?: Record<string, unknown>; required?: string[] }
+      | undefined;
     expect(res?.type).toBe('object');
     expect(Object.keys(res?.properties ?? {}).sort()).toEqual(
       ['livekit_registered_at', 'mac_node_id', 'ws_url'].sort(),
@@ -689,7 +696,8 @@ describe('OpenAPI HTTP routes', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();
     const op = spec.paths?.['/v1/billing/crypto-checkout'] as
-      Record<string, { responses?: Record<string, unknown> }> | undefined;
+      | Record<string, { responses?: Record<string, unknown> }>
+      | undefined;
     expect(op?.post?.responses?.['201']).toBeDefined();
   });
 

@@ -425,7 +425,8 @@ describe('ProfilesView organization management', () => {
 
     it('does not let an older taxonomy GET overwrite a newer local rail mutation', async () => {
       let releasePull:
-        ((value: { folders: Array<{ name: string }>; tags: string[] }) => void) | undefined;
+        | ((value: { folders: Array<{ name: string }>; tags: string[] }) => void)
+        | undefined;
       const heldPull = new Promise<{ folders: Array<{ name: string }>; tags: string[] }>(
         (resolve) => {
           releasePull = resolve;

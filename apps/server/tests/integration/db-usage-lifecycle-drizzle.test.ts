@@ -128,7 +128,11 @@ async function insertAgent(args: {
 async function insertUsage(args: {
   accountId: string;
   recordType:
-    'session_minute' | 'navigate' | 'interact' | 'agent_decomposer' | 'agent_decomposer_bundled';
+    | 'session_minute'
+    | 'navigate'
+    | 'interact'
+    | 'agent_decomposer'
+    | 'agent_decomposer_bundled';
   quantity: number;
   recordedAt: string;
 }): Promise<void> {

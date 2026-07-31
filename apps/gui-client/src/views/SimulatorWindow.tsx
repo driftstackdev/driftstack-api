@@ -1130,7 +1130,8 @@ const MODE_OPTIONS: { value: SessionMode; label: string }[] = [
 ];
 
 export type SessionControlAction =
-  { kind: 'mode'; target: SessionMode } | { kind: 'takeover' | 'handback' | 'message' | 'end' };
+  | { kind: 'mode'; target: SessionMode }
+  | { kind: 'takeover' | 'handback' | 'message' | 'end' };
 
 type OwnedSessionControlAction = SessionControlAction & {
   sessionId: string;

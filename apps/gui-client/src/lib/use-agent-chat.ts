@@ -80,7 +80,10 @@ function friendlyChatError(err: unknown): ChatError {
 }
 
 export type ChatModel =
-  'claude-opus-4-8' | 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
+  | 'claude-opus-4-8'
+  | 'claude-opus-4-7'
+  | 'claude-sonnet-4-6'
+  | 'claude-haiku-4-5';
 
 export interface ChatTurn {
   /** Stable, monotonic id for React keys (turns are append-only). */

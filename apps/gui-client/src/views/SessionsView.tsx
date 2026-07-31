@@ -170,12 +170,14 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
             ? client.agentSessions
                 .list()
                 .then((p) =>
-                  p.data.map((s): AgentSessionLite => ({
-                    id: s.id,
-                    status: s.status,
-                    created_at: s.created_at,
-                    mode: s.mode,
-                  })),
+                  p.data.map(
+                    (s): AgentSessionLite => ({
+                      id: s.id,
+                      status: s.status,
+                      created_at: s.created_at,
+                      mode: s.mode,
+                    }),
+                  ),
                 )
                 .catch(() => null)
             : Promise.resolve(null),

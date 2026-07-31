@@ -17,16 +17,17 @@ function mockNowpayments(): {
   client: NowPaymentsApiClient;
   createPayment: ReturnType<typeof vi.fn>;
 } {
-  const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
-    Promise.resolve({
-      paymentId: 'pay_test_1',
-      payAddress: '0xPAYADDRESS',
-      payCurrency: 'btc',
-      payAmount: 0.0012,
-      priceAmount: 79,
-      priceCurrency: 'usd',
-      paymentStatus: 'waiting',
-    }),
+  const createPayment = vi.fn(
+    (): Promise<CreatePaymentResult> =>
+      Promise.resolve({
+        paymentId: 'pay_test_1',
+        payAddress: '0xPAYADDRESS',
+        payCurrency: 'btc',
+        payAmount: 0.0012,
+        priceAmount: 79,
+        priceCurrency: 'usd',
+        paymentStatus: 'waiting',
+      }),
   );
   return { client: { createPayment } as unknown as NowPaymentsApiClient, createPayment };
 }
@@ -88,8 +89,8 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
   });
 
   it('above-floor product but NowPayments createPayment throws → soft-fails to stub, order still persists (V-666.D)', async () => {
-    const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
-      Promise.reject(new Error('nowpayments 502')),
+    const createPayment = vi.fn(
+      (): Promise<CreatePaymentResult> => Promise.reject(new Error('nowpayments 502')),
     );
     const client = { createPayment } as unknown as NowPaymentsApiClient;
     fx = await buildTestApp({ nowpaymentsClient: client });
@@ -195,16 +196,17 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
   });
 
   it('idempotency REPLAY does NOT re-mint a NowPayments payment; echoes the ORIGINAL address via getPayment (Fable billing re-audit 2026-07-02)', async () => {
-    const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
-      Promise.resolve({
-        paymentId: 'pay_orig',
-        payAddress: '0xORIGADDR',
-        payCurrency: 'btc',
-        payAmount: 0.0012,
-        priceAmount: 79,
-        priceCurrency: 'usd',
-        paymentStatus: 'waiting',
-      }),
+    const createPayment = vi.fn(
+      (): Promise<CreatePaymentResult> =>
+        Promise.resolve({
+          paymentId: 'pay_orig',
+          payAddress: '0xORIGADDR',
+          payCurrency: 'btc',
+          payAmount: 0.0012,
+          priceAmount: 79,
+          priceCurrency: 'usd',
+          paymentStatus: 'waiting',
+        }),
     );
     const getPayment = vi.fn(() =>
       Promise.resolve({
@@ -264,16 +266,17 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
   });
 
   it('C7 — a replay whose bound payment is no longer waiting (expired/dead) is NOT re-surfaced as payable', async () => {
-    const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
-      Promise.resolve({
-        paymentId: 'pay_c7',
-        payAddress: '0xLIVEADDR',
-        payCurrency: 'btc',
-        payAmount: 0.0012,
-        priceAmount: 79,
-        priceCurrency: 'usd',
-        paymentStatus: 'waiting',
-      }),
+    const createPayment = vi.fn(
+      (): Promise<CreatePaymentResult> =>
+        Promise.resolve({
+          paymentId: 'pay_c7',
+          payAddress: '0xLIVEADDR',
+          payCurrency: 'btc',
+          payAmount: 0.0012,
+          priceAmount: 79,
+          priceCurrency: 'usd',
+          paymentStatus: 'waiting',
+        }),
     );
     // By the time of the replay the bound payment has EXPIRED — its address
     // is dead. NowPayments reports it as such.
@@ -323,16 +326,17 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     'a %s replay is non-minting and never exposes either the old or a newly orphaned address',
     async (expectedStatus, providerStatus) => {
       const paymentId = `pay_terminal_${expectedStatus}`;
-      const createPayment = vi.fn((): Promise<CreatePaymentResult> =>
-        Promise.resolve({
-          paymentId,
-          payAddress: '0xTERMINAL_OLD_ADDRESS',
-          payCurrency: 'btc',
-          payAmount: 0.0012,
-          priceAmount: 79,
-          priceCurrency: 'usd',
-          paymentStatus: 'waiting',
-        }),
+      const createPayment = vi.fn(
+        (): Promise<CreatePaymentResult> =>
+          Promise.resolve({
+            paymentId,
+            payAddress: '0xTERMINAL_OLD_ADDRESS',
+            payCurrency: 'btc',
+            payAmount: 0.0012,
+            priceAmount: 79,
+            priceCurrency: 'usd',
+            paymentStatus: 'waiting',
+          }),
       );
       const getPayment = vi.fn(() =>
         Promise.resolve({

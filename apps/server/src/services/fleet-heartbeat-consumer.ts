@@ -18,7 +18,10 @@ interface FleetHeartbeatConsumerDeps {
 }
 
 type HeartbeatOperation =
-  'persist_snapshot' | 'record_liveness' | 'reconcile_worker_orphans' | 'reconcile_node_boot';
+  | 'persist_snapshot'
+  | 'record_liveness'
+  | 'reconcile_worker_orphans'
+  | 'reconcile_node_boot';
 
 async function runIsolated(
   operation: HeartbeatOperation,

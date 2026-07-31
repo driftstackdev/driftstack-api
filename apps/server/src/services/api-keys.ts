@@ -94,7 +94,8 @@ export interface RevokeApiKeyInput {
 }
 
 export type RevokeApiKeyRepoResult =
-  { kind: 'revoked' | 'already_revoked'; key: ApiKeyRow } | { kind: 'not_found' };
+  | { kind: 'revoked' | 'already_revoked'; key: ApiKeyRow }
+  | { kind: 'not_found' };
 
 export interface ApiKeysRepo {
   insertApiKey(input: NewApiKeyInput): Promise<ApiKeyRow>;

@@ -108,7 +108,9 @@ Response (`200`):
 
 ```json
 {
-  "incident": {/* same shape as the list entry */},
+  "incident": {
+    /* same shape as the list entry */
+  },
   "updates": [
     {
       "id": "incu_<uuid>",

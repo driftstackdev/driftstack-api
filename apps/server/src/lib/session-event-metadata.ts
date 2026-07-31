@@ -26,10 +26,17 @@ const sessionEventTypeCoverage: Exclude<
 void sessionEventTypeCoverage;
 
 export type SessionFailureClass =
-  'session_timeout' | 'driver_error' | 'driver_unavailable' | 'unknown';
+  | 'session_timeout'
+  | 'driver_error'
+  | 'driver_unavailable'
+  | 'unknown';
 
 export type SessionDestroyReasonCode =
-  'customer_request' | 'duration_limit' | 'account_suspended' | 'admin_forced' | 'unspecified';
+  | 'customer_request'
+  | 'duration_limit'
+  | 'account_suspended'
+  | 'admin_forced'
+  | 'unspecified';
 
 export type ProjectedSessionEvent = Omit<SessionEventInput, 'sessionId'>;
 

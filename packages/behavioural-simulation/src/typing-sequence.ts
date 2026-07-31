@@ -31,7 +31,8 @@ export interface GenerateTypingSequenceOpts extends GenerateKeyboardCadenceOpts 
 
 /** One physical keystroke in a typing sequence. */
 export type KeystrokeEvent =
-  { kind: 'char'; char: string; delayMs: number } | { kind: 'backspace'; delayMs: number };
+  | { kind: 'char'; char: string; delayMs: number }
+  | { kind: 'backspace'; delayMs: number };
 
 export interface TypingSequence {
   /** The intended final text (what the events reproduce when replayed). */

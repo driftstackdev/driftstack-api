@@ -54,7 +54,11 @@ describe('root webhook-event catalog parity', () => {
     expect(root).toContain('"id": "<uuid>"');
     expect(root).toContain('"type": "<event-type>"');
     expect(root).toContain('"created_at": "2026-05-05T12:34:56.789Z"');
-    expect(root).toContain('"data": {/* per-event-type shape, see below */}');
+    // Prettier 3.8.3 broke the inline `{/* ... */}` onto separate lines. The
+    // promise is that the envelope documents a per-event-type `data` object, so
+    // the two halves are asserted rather than one exact rendering of them.
+    expect(root).toContain('"data": {');
+    expect(root).toContain('per-event-type shape, see below');
     expect(root).not.toMatch(/"(?:account_id|emitted_at)":/);
 
     expect(root).toContain('X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>');

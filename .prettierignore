@@ -4,6 +4,12 @@ build/
 coverage/
 *.tsbuildinfo
 package-lock.json
+# pnpm lockfile + workspace manifest. Mirrors the package-lock.json line above:
+# a lockfile is generated, nobody hand-edits it, and reformatting one produces a
+# large meaningless diff. Without this the format gate goes red the moment a
+# pnpm lockfile exists in the tree — on a file no one is supposed to touch.
+pnpm-lock.yaml
+pnpm-workspace.yaml
 LICENSE
 
 # Drizzle generated artifacts

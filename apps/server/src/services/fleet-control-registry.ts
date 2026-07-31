@@ -94,7 +94,9 @@ import {
 export type FleetNodeSocketSend = (data: string) => void;
 
 export type FleetInboundAdmission =
-  'accepted' | 'uncorrelated-large-frame' | 'parse-budget-exhausted';
+  | 'accepted'
+  | 'uncorrelated-large-frame'
+  | 'parse-budget-exhausted';
 
 /**
  * One authenticated fleet-node connection. Owns the node's dispatch correlator

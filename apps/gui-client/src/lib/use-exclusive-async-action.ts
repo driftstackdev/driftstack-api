@@ -3,7 +3,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const SAFE_MAPPER_FALLBACK = "Couldn't complete that action. Try again.";
 
 export type ExclusiveAsyncActionResult<T> =
-  { status: 'success'; value: T } | { status: 'error'; error: string } | { status: 'busy' };
+  | { status: 'success'; value: T }
+  | { status: 'error'; error: string }
+  | { status: 'busy' };
 
 export interface ExclusiveAsyncActionOptions {
   mapError: (error: unknown) => string;

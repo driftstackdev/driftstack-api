@@ -64,7 +64,8 @@ interface LegacyEncryptedRecipeTranscriptSnapshot {
 
 export type StoredRecipeIntentLog = ReadonlyArray<AgentIntent> | EncryptedRecipeIntentLog;
 export type StoredRecipeTranscriptSnapshot =
-  ReadonlyArray<TranscriptEntry> | EncryptedRecipeTranscriptSnapshot;
+  | ReadonlyArray<TranscriptEntry>
+  | EncryptedRecipeTranscriptSnapshot;
 
 const RecipeIntentLogSchema = z.array(AgentIntentSchema);
 

@@ -274,7 +274,8 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
 
   it('labels a long poll as refreshing while retaining the last good cookie jar', async () => {
     let resolveRefresh:
-      ((value: { status: 'ok'; cookies: Array<Record<string, unknown>> }) => void) | undefined;
+      | ((value: { status: 'ok'; cookies: Array<Record<string, unknown>> }) => void)
+      | undefined;
     cookiesMock
       .mockResolvedValueOnce({
         status: 'ok',

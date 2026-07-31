@@ -14,7 +14,12 @@ import { sessionOperations } from './schema.js';
 
 export type SessionOperationKind = 'login' | 'search';
 export type SessionOperationStatus =
-  'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'expired';
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'expired';
 
 /** Statuses from which a terminal write is legal. Terminal is terminal. */
 const LIVE_STATUSES = ['queued', 'running'] as const;

@@ -273,7 +273,9 @@ JSON envelope:
   "account_id": "acc_abc",
   "row_count": 142,
   "truncated": false,
-  "data": [/* up to 10,000 audit-log entries — same shape as the read endpoint */]
+  "data": [
+    /* up to 10,000 audit-log entries — same shape as the read endpoint */
+  ]
 }
 ```
 

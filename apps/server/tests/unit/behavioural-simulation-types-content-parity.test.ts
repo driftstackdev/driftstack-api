@@ -47,9 +47,17 @@ describe('W595.A packages/behavioural-simulation/src/types.ts content parity', (
     expect(body).toMatch(
       /\/\*\*\s*\n \* The DOM element class a touch interaction targets\. Distributions differ\s*\n \* per class — a `button` tap is short and central; a `video` tap may dwell\s*\n \* longer and bias toward the play affordance; a `scroll-container` touch\s*\n \* begins a swipe rather than completing a tap\.\s*\n \*\s*\n \* V-530\.A — per-element-class distributions\. Sub-slices B \(scroll velocity\),\s*\n \* C \(dwell \+ click-position\), D \(idle jitter \+ multi-touch\) ship later\./m,
     );
-    expect(body).toMatch(
-      /^export type ElementClass =\s*\n\s*'button' \| 'link' \| 'input' \| 'image' \| 'video' \| 'scroll-container' \| 'generic';/m,
-    );
+    // Prettier 3.8.3 reformatted this union onto leading-pipe lines. The first
+    // re-pin used a repeated-alternation regex and was WEAKER than what it
+    // replaced: it matched any SUBSET, so deleting a member kept it green.
+    // Caught by mutation. What matters is the exact value set, so the members
+    // are extracted from the declaration and compared as a set — independent of
+    // layout, and it fails the moment one is added or removed.
+    const elementClassDecl = /export type ElementClass =([\s\S]*?);/.exec(body)?.[1] ?? '';
+    expect(
+      [...elementClassDecl.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]),
+      'ElementClass members, exact set and order',
+    ).toEqual(['button', 'link', 'input', 'image', 'video', 'scroll-container', 'generic']);
     expect(body).toMatch(/^export interface ElementBounds \{$/m);
     expect(body).toMatch(/\/\*\* Width \(CSS px\)\. Must be > 0\. \*\//);
     expect(body).toMatch(/^export interface TouchSample \{$/m);

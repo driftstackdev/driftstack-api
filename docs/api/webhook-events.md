@@ -27,7 +27,9 @@ with the following envelope:
   "id": "<uuid>",
   "type": "<event-type>",
   "created_at": "2026-05-05T12:34:56.789Z",
-  "data": {/* per-event-type shape, see below */}
+  "data": {
+    /* per-event-type shape, see below */
+  }
 }
 ```
 

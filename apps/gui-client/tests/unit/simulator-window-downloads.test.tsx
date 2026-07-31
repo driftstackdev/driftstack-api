@@ -104,7 +104,8 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
 
   it('labels a long poll as refreshing while retaining the last good download list', async () => {
     let resolveRefresh:
-      ((value: { status: 'ok'; files: Array<Record<string, unknown>> }) => void) | undefined;
+      | ((value: { status: 'ok'; files: Array<Record<string, unknown>> }) => void)
+      | undefined;
     listMock
       .mockResolvedValueOnce({
         status: 'ok',

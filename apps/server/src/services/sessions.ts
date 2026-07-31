@@ -58,7 +58,9 @@ export const SESSION_DESTROY_DRIVER_TIMEOUT_MS = 30_000;
 export const SESSION_POST_SUCCESS_PERSISTENCE_TIMEOUT_MS = 5_000;
 
 type PostSuccessPersistenceOutcome =
-  { kind: 'succeeded' } | { kind: 'failed' } | { kind: 'timed_out' };
+  | { kind: 'succeeded' }
+  | { kind: 'failed' }
+  | { kind: 'timed_out' };
 
 export async function destroyDriverSessionWithTimeout(
   destroy: () => Promise<void>,

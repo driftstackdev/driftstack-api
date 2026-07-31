@@ -54,7 +54,13 @@ export interface ScrollPattern {
  * C (dwell + click-position), D (idle jitter + multi-touch) ship later.
  */
 export type ElementClass =
-  'button' | 'link' | 'input' | 'image' | 'video' | 'scroll-container' | 'generic';
+  | 'button'
+  | 'link'
+  | 'input'
+  | 'image'
+  | 'video'
+  | 'scroll-container'
+  | 'generic';
 
 /** Rectangular DOM bounds for the touched element (CSS-pixel coordinates). */
 export interface ElementBounds {
