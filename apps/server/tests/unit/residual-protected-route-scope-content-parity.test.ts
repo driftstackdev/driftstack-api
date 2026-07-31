@@ -71,12 +71,18 @@ describe('residual protected-route API-key scope contract', () => {
   it('keeps the generated OpenAPI snapshot scope summaries in sync', () => {
     const source = read('apps/server/src/lib/openapi.ts');
     const snapshot = read('packages/sdk-python/openapi.json');
+    // Disclosures are now stated in the exact form the satisfaction rules imply
+    // (`scopesSatisfy` in lib/errors-helpers.ts): a granular scope is also
+    // satisfied by its broad verb and by `account_owner`, and a bare verb by
+    // `account_owner`. The loose prose these previously pinned ("requires broad
+    // read") understated what actually works, which is its own kind of wrong
+    // answer for a customer minting a least-privilege key.
     for (const summary of [
-      'List pending invites for the calling owner (requires broad read)',
-      'Accept a pending team invite (requires account_owner)',
-      'List confirmed team members for the calling owner (requires broad read)',
-      'List owner accounts the caller is a member of (requires broad read)',
-      'Preview a crypto-checkout price (requires read:billing)',
+      'List pending invites for the calling owner (requires broad `read` or `account_owner`)',
+      'Accept a pending team invite (requires `account_owner`)',
+      'List confirmed team members for the calling owner (requires broad `read` or `account_owner`)',
+      'List owner accounts the caller is a member of (requires broad `read` or `account_owner`)',
+      'Preview a crypto-checkout price (requires `read:billing`, broad `read`, or `account_owner`)',
     ]) {
       expect(source).toContain(summary);
       expect(snapshot).toContain(summary);

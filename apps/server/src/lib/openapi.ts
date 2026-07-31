@@ -345,7 +345,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions',
     operationId: 'createSession',
-    summary: 'Create a session',
+    summary: 'Create a session (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -368,7 +368,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/sessions',
     operationId: 'listSessions',
-    summary: 'List sessions for the calling account',
+    summary:
+      'List sessions for the calling account (requires `read:sessions`, broad `read`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: { query: PaginationQuerySchema },
@@ -847,7 +848,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/usage',
-    summary: 'Current-period usage totals + tier quotas',
+    summary: 'Current-period usage totals + tier quotas (requires broad `read` or `account_owner`)',
     tags: ['usage'],
     security: auth,
     responses: {
@@ -873,7 +874,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/usage/series',
-    summary: 'Daily-bucketed usage time series for the calling account',
+    summary:
+      'Daily-bucketed usage time series for the calling account (requires broad `read` or `account_owner`)',
     tags: ['usage'],
     security: auth,
     request: {
@@ -937,7 +939,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/team/invites',
-    summary: 'Invite an email to join the calling owner’s team',
+    summary: 'Invite an email to join the calling owner’s team (requires `account_owner`)',
     tags: ['team'],
     security: auth,
     request: {
@@ -966,7 +968,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/team/invites',
-    summary: 'List pending invites for the calling owner (requires broad read)',
+    summary:
+      'List pending invites for the calling owner (requires broad `read` or `account_owner`)',
     tags: ['team'],
     security: auth,
     responses: {
@@ -981,7 +984,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/team/invites/accept',
-    summary: 'Accept a pending team invite (requires account_owner)',
+    summary: 'Accept a pending team invite (requires `account_owner`)',
     tags: ['team'],
     security: auth,
     request: {
@@ -1013,7 +1016,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/team/members',
-    summary: 'List confirmed team members for the calling owner (requires broad read)',
+    summary:
+      'List confirmed team members for the calling owner (requires broad `read` or `account_owner`)',
     tags: ['team'],
     security: auth,
     responses: {
@@ -1028,7 +1032,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/team/owners',
-    summary: 'List owner accounts the caller is a member of (requires broad read)',
+    summary:
+      'List owner accounts the caller is a member of (requires broad `read` or `account_owner`)',
     tags: ['team'],
     security: auth,
     responses: {
@@ -1466,7 +1471,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me',
-    summary: 'Read the calling account (full self-visible state)',
+    summary:
+      'Read the calling account (full self-visible state) (requires broad `read` or `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -1481,7 +1487,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'patch',
     path: '/v1/account/me',
-    summary: 'Partial update of name / timezone / slug / region',
+    summary: 'Partial update of name / timezone / slug / region (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -1511,7 +1517,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/me/avatar',
-    summary: 'Upload (or replace) the calling account avatar (V-352b)',
+    summary: 'Upload (or replace) the calling account avatar (V-352b) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -1536,7 +1542,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/account/me/avatar',
-    summary: 'Clear the calling account avatar pointer (V-352b)',
+    summary: 'Clear the calling account avatar pointer (V-352b) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -1559,7 +1565,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/oauth-links',
-    summary: 'List OAuth-client identity links for the calling account (V-667.C)',
+    summary:
+      'List OAuth-client identity links for the calling account (V-667.C) (requires broad `read` or `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -1609,7 +1616,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/byok-anthropic-key',
-    summary: 'BYOK Anthropic key metadata (no plaintext)',
+    summary:
+      'BYOK Anthropic key metadata (no plaintext) (requires broad `read` or `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -1629,7 +1637,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'put',
     path: '/v1/account/me/byok-anthropic-key',
-    summary: 'Set or rotate the BYOK Anthropic key',
+    summary: 'Set or rotate the BYOK Anthropic key (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -1647,7 +1655,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/account/me/byok-anthropic-key',
-    summary: 'Clear the stored BYOK Anthropic key',
+    summary: 'Clear the stored BYOK Anthropic key (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -1659,7 +1667,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/me/byok-anthropic-key/test',
-    summary: 'Test the stored BYOK Anthropic key against the Anthropic API',
+    summary:
+      'Test the stored BYOK Anthropic key against the Anthropic API (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -1699,7 +1708,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/bundled-llm-settings',
-    summary: 'Bundled-LLM consent + monthly cap (v2-#6)',
+    summary: 'Bundled-LLM consent + monthly cap (v2-#6) (requires broad `read` or `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -1714,7 +1723,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'patch',
     path: '/v1/account/me/bundled-llm-settings',
-    summary: 'Update bundled-LLM consent and/or monthly cap',
+    summary: 'Update bundled-LLM consent and/or monthly cap (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -1747,7 +1756,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/organization',
-    summary: 'Account organization taxonomy (empty folders + tags)',
+    summary:
+      'Account organization taxonomy (empty folders + tags) (requires `read:profiles`, broad `read`, or `account_owner`)',
     description:
       'Reads the selected effective account taxonomy. Requires `read:profiles`; broad `read` and `account_owner` credentials also satisfy the gate. Team `member` and `admin` roles may read. Without `X-Driftstack-Account`, the caller is the effective account.',
     tags: ['account'],
@@ -1764,7 +1774,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'put',
     path: '/v1/account/me/organization',
-    summary: 'Replace the selected account organization taxonomy (write:profiles)',
+    summary:
+      'Replace the selected account organization taxonomy (write:profiles) (requires `write:profiles`, broad `write`, or `account_owner`)',
     description:
       'Replaces only the selected effective account taxonomy. Requires `write:profiles`; broad `write` and `account_owner` credentials also satisfy the gate. A selected team workspace requires the `admin` role. Without `X-Driftstack-Account`, the caller is the effective account.',
     tags: ['account'],
@@ -1827,7 +1838,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/proxies',
-    summary: 'List the account’s customer proxies (account_owner; no secrets)',
+    summary:
+      'List the account’s customer proxies (account_owner; no secrets) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -1841,7 +1853,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/me/proxies',
-    summary: 'Create a customer proxy (account_owner)',
+    summary: 'Create a customer proxy (account_owner) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -1906,7 +1918,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/bundled-llm-status',
-    summary: 'Bundled-LLM month-to-date spend + remaining headroom',
+    summary:
+      'Bundled-LLM month-to-date spend + remaining headroom (requires broad `read` or `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -2122,7 +2135,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/rate-limits',
-    summary: 'Effective rate-limit config for the calling account',
+    summary:
+      'Effective rate-limit config for the calling account (requires broad `read` or `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -2308,7 +2322,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/cost',
-    summary: 'Read the calling account operational cost estimate for a UTC month',
+    summary:
+      'Read the calling account operational cost estimate for a UTC month (requires `read:billing`, broad `read`, or `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -3318,7 +3333,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/mfa',
-    summary: 'MFA enrollment status for the calling account',
+    summary:
+      'MFA enrollment status for the calling account (requires broad `read` or `account_owner`)',
     tags: ['account', 'mfa'],
     security: auth,
     responses: {
@@ -3333,7 +3349,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/mfa/enroll',
-    summary: 'Start MFA TOTP enrollment (returns otpauth URI + base32 secret)',
+    summary:
+      'Start MFA TOTP enrollment (returns otpauth URI + base32 secret) (requires `account_owner`)',
     tags: ['account', 'mfa'],
     security: auth,
     responses: {
@@ -3348,7 +3365,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/mfa/verify',
-    summary: 'Confirm enrollment with first 6-digit code; returns 10 single-use recovery codes',
+    summary:
+      'Confirm enrollment with first 6-digit code; returns 10 single-use recovery codes (requires `account_owner`)',
     tags: ['account', 'mfa'],
     security: auth,
     request: { body: { content: { 'application/json': { schema: MfaVerifyRequestOpenApi } } } },
@@ -3363,7 +3381,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/account/mfa',
-    summary: 'Disable MFA. Step-up gated (requires fresh MFA proof).',
+    summary: 'Disable MFA. Step-up gated (requires fresh MFA proof). (requires `account_owner`)',
     tags: ['account', 'mfa'],
     security: auth,
     request: { body: { content: { 'application/json': { schema: MfaDisableRequestOpenApi } } } },
@@ -3375,7 +3393,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/mfa/disable',
-    summary: 'POST alias for DELETE /v1/account/mfa. Same step-up gate.',
+    summary: 'POST alias for DELETE /v1/account/mfa. Same step-up gate. (requires `account_owner`)',
     tags: ['account', 'mfa'],
     security: auth,
     request: { body: { content: { 'application/json': { schema: MfaDisableRequestOpenApi } } } },
@@ -3387,7 +3405,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/mfa/recovery-codes/regenerate',
-    summary: 'Mint 10 fresh recovery codes; old codes invalidated',
+    summary: 'Mint 10 fresh recovery codes; old codes invalidated (requires `account_owner`)',
     tags: ['account', 'mfa'],
     security: auth,
     responses: {
@@ -3596,7 +3614,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/billing/checkout-session',
-    summary: 'Start a Stripe Checkout session for a tier subscription',
+    summary:
+      'Start a Stripe Checkout session for a tier subscription (requires `admin:billing`, broad `admin`, or `account_owner`)',
     tags: ['billing'],
     security: auth,
     request: {
@@ -3613,7 +3632,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/billing/portal-session',
-    summary: 'Mint a Stripe Customer Portal one-time URL for subscription self-service',
+    summary:
+      'Mint a Stripe Customer Portal one-time URL for subscription self-service (requires `admin:billing`, broad `admin`, or `account_owner`)',
     tags: ['billing'],
     security: auth,
     responses: {
@@ -3631,7 +3651,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/billing-portal',
-    summary: 'Redirect to a one-time Stripe Customer Portal URL (302)',
+    summary:
+      'Redirect to a one-time Stripe Customer Portal URL (302) (requires `admin:billing`, broad `admin`, or `account_owner`)',
     tags: ['billing'],
     security: auth,
     responses: {
@@ -3651,7 +3672,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing',
-    summary: 'Read the calling account billing state (subscription)',
+    summary:
+      'Read the calling account billing state (subscription) (requires `read:billing`, broad `read`, or `account_owner`)',
     tags: ['billing'],
     security: auth,
     responses: {
@@ -3751,7 +3773,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions',
-    summary: 'Create a new agent chat session',
+    summary: 'Create a new agent chat session (requires broad `write` or `account_owner`)',
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -3818,7 +3840,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/agent-sessions',
-    summary: "List the account's agent chat sessions (newest first, capped at 100)",
+    summary:
+      "List the account's agent chat sessions (newest first, capped at 100) (requires `read:sessions`, broad `read`, or `account_owner`)",
     tags: ['agent-chat'],
     security: auth,
     responses: {
@@ -4605,7 +4628,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/mac-nodes/register',
-    summary: 'Register per-Mac LiveKit credentials on the fleet_nodes row (LK.2)',
+    summary:
+      'Register per-Mac LiveKit credentials on the fleet_nodes row (LK.2) (requires `driftstack_internal_admin` (Driftstack staff))',
     tags: ['admin'],
     security: auth,
     request: {
@@ -4674,7 +4698,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/recipes',
-    summary: 'Snapshot an agent session as a replayable recipe',
+    summary:
+      'Snapshot an agent session as a replayable recipe (requires broad `write` or `account_owner`)',
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -4720,7 +4745,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/recipes',
-    summary: 'List saved recipes (newest first, keyset-paginated)',
+    summary:
+      'List saved recipes (newest first, keyset-paginated) (requires broad `read` or `account_owner`)',
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -4847,7 +4873,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/billing/crypto-checkout/quote',
-    summary: 'Preview a crypto-checkout price (requires read:billing)',
+    summary:
+      'Preview a crypto-checkout price (requires `read:billing`, broad `read`, or `account_owner`)',
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
@@ -4865,7 +4892,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/billing/crypto-checkout',
-    summary: 'Mint a new crypto-payment order',
+    summary:
+      'Mint a new crypto-payment order (requires `admin:billing`, broad `admin`, or `account_owner`)',
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
@@ -4902,7 +4930,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing/crypto-orders',
-    summary: "List the caller account's crypto orders (newest first)",
+    summary:
+      "List the caller account's crypto orders (newest first) (requires `read:billing`, broad `read`, or `account_owner`)",
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
@@ -5607,7 +5636,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/web-sessions',
-    summary: 'Active dashboard sign-ins for the calling account',
+    summary:
+      'Active dashboard sign-ins for the calling account (requires broad `read` or `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -5640,7 +5670,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/account/web-sessions',
-    summary: 'Bulk-revoke every dashboard sign-in except the calling one (?keep=current)',
+    summary:
+      'Bulk-revoke every dashboard sign-in except the calling one (?keep=current) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -5913,7 +5944,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/legal/accept',
-    summary: 'Record acceptance of a (document, version, content_hash) tuple',
+    summary:
+      'Record acceptance of a (document, version, content_hash) tuple (requires `account_owner`)',
     tags: ['legal'],
     security: auth,
     request: {
@@ -6203,7 +6235,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/profiles',
     operationId: 'createProfile',
-    summary: 'Create a profile',
+    summary: 'Create a profile (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: {
@@ -6225,7 +6257,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/profiles',
     operationId: 'listProfiles',
-    summary: 'List profiles for the calling account',
+    summary:
+      'List profiles for the calling account (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: { query: PaginationQuerySchema },
@@ -6383,7 +6416,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/profiles/trash',
     operationId: 'listTrashedProfiles',
-    summary: 'List trashed (soft-deleted) profiles, newest-deleted first',
+    summary:
+      'List trashed (soft-deleted) profiles, newest-deleted first (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     responses: {
@@ -6463,7 +6497,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/profiles/import',
     operationId: 'importProfile',
-    summary: 'Import a profile from a v1 export envelope (mints a fresh profile)',
+    summary:
+      'Import a profile from a v1 export envelope (mints a fresh profile) (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: {
@@ -6645,7 +6680,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/profile-snapshots',
     operationId: 'listSnapshots',
-    summary: 'List every snapshot owned by the calling account (cross-profile)',
+    summary:
+      'List every snapshot owned by the calling account (cross-profile) (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['snapshots'],
     security: auth,
     request: { query: PaginationQuerySchema },
