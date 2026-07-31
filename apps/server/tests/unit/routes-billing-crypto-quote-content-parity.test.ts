@@ -16,7 +16,8 @@
 //     letter uppercase ISO with regex validator.
 //   • Defensive 400 (not 500) when product not in TIER_PRICE_CENTS
 //     — "schema-vs-table desync" guard rationale.
-//   • Reply shape: {product, price_cents, price_currency (default EUR)}.
+//   • Reply shape: {product, price_cents, price_currency = the USD
+//     settlement currency; a caller-supplied value is ignored}.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -81,9 +82,9 @@ describe('W411.C apps/server/src/routes/billing-crypto-quote.ts content parity',
     );
   });
 
-  it('Reply shape is exactly product + price_cents + price_currency default EUR', () => {
+  it('Reply shape is exactly product + price_cents + price_currency = the USD settlement currency', () => {
     expect(body).toMatch(
-      /return reply\.send\(\{\s*\n?\s*product,\s*\n?\s*price_cents: priceCents,\s*\n?\s*price_currency: parsed\.data\.price_currency \?\? 'EUR',\s*\n?\s*\}\);/,
+      /return reply\.send\(\{\s*\n?\s*product,\s*\n?\s*price_cents: priceCents,\s*\n?\s*price_currency: CRYPTO_SETTLEMENT_CURRENCY,\s*\n?\s*\}\);/,
     );
   });
 

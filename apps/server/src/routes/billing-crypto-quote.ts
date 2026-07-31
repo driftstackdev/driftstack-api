@@ -35,6 +35,10 @@ const SUPPORTED_PRODUCTS: AccountTier[] = [
   'api_scale',
 ];
 
+/** Settlement currency for crypto orders. Mirrors `serverPriceCurrency` in
+ *  routes/billing-crypto.ts, which is where the charge is actually priced. */
+const CRYPTO_SETTLEMENT_CURRENCY = 'USD';
+
 const QuoteSchema = z.object({
   product: z.enum(SUPPORTED_PRODUCTS as [AccountTier, ...AccountTier[]]),
   price_currency: z
@@ -75,10 +79,19 @@ export function registerCryptoQuoteRoutes(app: FastifyInstance, deps: CryptoQuot
           formErrors: [],
         });
       }
+      // The quote MUST state the currency the charge actually settles in.
+      // billing-crypto.ts locks `serverPriceCurrency = 'USD'` ("we never settle
+      // in EUR / GBP / etc.") and ignores any client-supplied currency, but this
+      // route defaulted to 'EUR' and echoed whatever the caller sent — so a
+      // dashboard or SDK quoting api_scale rendered "€1,499.00" for an order
+      // that then charged $1,499 USD. The request field is still accepted for
+      // compatibility and still ignored, exactly as the checkout route ignores
+      // it; the response now reports the settlement currency rather than a
+      // caller-chosen label.
       return reply.send({
         product,
         price_cents: priceCents,
-        price_currency: parsed.data.price_currency ?? 'EUR',
+        price_currency: CRYPTO_SETTLEMENT_CURRENCY,
       });
     },
   );

@@ -120,12 +120,15 @@ describe('W1038 routes/account-web-sessions V-355 cross-source invariant', () =>
     expect(p).toMatch(/return id\.slice\('wsk_'\.length\);/);
   });
 
-  it("CRITICAL uuidFromPublicSessionId — strips 'wsess_' prefix + UUID-shape regex /^[0-9a-fA-F-]{36}$/ + BadRequestError 'Invalid session id.' on miss.", () => {
+  it("CRITICAL uuidFromPublicSessionId — strips 'wsess_' prefix + STRICT UUID-shape regex + BadRequestError 'Invalid session id.' on miss.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-web-sessions.ts'));
     expect(p).toMatch(/if \(!input\.startsWith\('wsess_'\)\) \{/);
     expect(p).toMatch(/throw new BadRequestError\('Invalid session id\.'\);/);
     expect(p).toMatch(/const id = input\.slice\('wsess_'\.length\);/);
-    expect(p).toMatch(/if \(!\/\^\[0-9a-fA-F-\]\{36\}\$\/\.test\(id\)\) \{/);
+    // Strict UUID shape. The old `[0-9a-fA-F-]{36}` accepted 36 hex-or-dash characters in any arrangement and passed them to a Postgres uuid column, so a malformed customer id 500'd instead of 400ing.
+    expect(p).toMatch(
+      /if \(!\/\^\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\$\/i\.test\(id\)\) \{/,
+    );
   });
 
   it('CRITICAL publicSession 6-field — id (wsess_ prefix) + os + browser + last_used_at (ISO) + expires_at (ISO) + current boolean.', () => {

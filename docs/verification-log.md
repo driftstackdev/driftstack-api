@@ -30022,3 +30022,45 @@ Verification: full server suite 2494 files / 26,306 passing / 0 failing, strict
 server source and test TypeScript, targeted ESLint and Prettier. No schema,
 OpenAPI, SDK, pricing, shared build/deploy, environment, customer or secret
 surface changed.
+
+---
+
+## V-716 — Crypto quotes state the settlement currency; malformed ids 400 instead of 500
+
+**Date:** 2026-07-31
+
+Two smaller customer-facing corrections from the same audit.
+
+**The crypto quote misstated the currency.** `routes/billing-crypto.ts` locks
+`serverPriceCurrency = 'USD'` with the comment "we never settle in EUR / GBP /
+etc." and ignores any client-supplied currency. The quote route defaulted to
+`'EUR'` and echoed back whatever the caller sent, so a dashboard or SDK quoting
+`api_scale` rendered "€1,499.00" for an order that then charged $1,499 USD. The
+request field is still accepted for compatibility and still ignored — exactly as
+the checkout route ignores it — but the response now reports the settlement
+currency instead of a caller-chosen label, so the price a customer is shown is
+the price they are charged.
+
+**Malformed ids returned 500.** `profile-snapshots.ts` and
+`account-web-sessions.ts` validated ids with `[0-9a-fA-F-]{36}`, which accepts 36
+hex-or-dash characters in ANY arrangement — including 36 hex digits with no
+dashes at all — and handed them straight to a Postgres `uuid` column. Any
+authenticated caller could turn a malformed id into a 500: a poor answer to the
+customer, and log noise that masks real faults. Both now use the strict UUID
+shape `routes/sessions.ts` already used, so the two paths cannot drift, and the
+same input returns the intended 400.
+
+Both are pinned behaviourally and mutation-proved: reinstating the EUR default
+reddens the quote case, and reinstating the loose id regex reddens the
+malformed-id case.
+
+Five source-text guards pinned the old expressions and moved with them. One was
+a single chained regex that could not span an explanatory comment inserted
+between two of its segments — a guard that breaks on a comment is pinning layout
+rather than behaviour, so it is now discrete pins, which is the convention the
+repo states elsewhere ("Discrete pins avoid a backtracking mega-regex").
+
+Verification: full server suite 2496 files / 26,316 passing / 0 failing,
+workspace typecheck and lint clean, production `npm audit` 0 vulnerabilities. No
+schema, OpenAPI, SDK, pricing-table, shared build/deploy, environment, customer
+or secret surface changed.

@@ -111,7 +111,10 @@ describe('W1048 routes/profile-snapshots V-312 + V-326e cross-source invariant',
 
   it("CRITICAL PUBLIC_ID_RE — '^[a-z]+_(uuid)$'. Note: laxer than admin-incidents (3-char floor) because profile-snapshots use 5-char prefix (psnap_).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profile-snapshots.ts'));
-    expect(p).toMatch(/const PUBLIC_ID_RE = \/\^\[a-z\]\+_\(\[0-9a-fA-F-\]\{36\}\)\$\//);
+    // Strict UUID shape. The old `[0-9a-fA-F-]{36}` accepted 36 hex-or-dash characters in any arrangement and passed them to a Postgres uuid column, so a malformed customer id 500'd instead of 400ing.
+    expect(p).toMatch(
+      /const PUBLIC_ID_RE = \/\^\[a-z\]\+_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\//,
+    );
   });
 
   // ─── publicSnapshot envelope ─────────────────────────────────

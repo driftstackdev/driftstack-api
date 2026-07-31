@@ -104,7 +104,10 @@ function uuidFromPublicSessionId(input: string): string {
     throw new BadRequestError('Invalid session id.');
   }
   const id = input.slice('wsess_'.length);
-  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
+  // Strict UUID shape: the old `[0-9a-fA-F-]{36}` accepted 36 hex-or-dash
+  // characters in any arrangement and passed them to a Postgres `uuid`
+  // column, so a malformed id 500'd rather than 400'd.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     throw new BadRequestError('Invalid session id.');
   }
   return id;

@@ -565,4 +565,24 @@ describe('profile-snapshot write ops require write:profiles scope', () => {
     // S46 2026-07-07 — capture now returns 201 Created.
     expect(res.statusCode).toBe(201);
   });
+
+  it('400s a well-formed-looking but non-UUID snapshot id instead of 500ing on the uuid column', async () => {
+    // PUBLIC_ID_RE was `[a-z]+_([0-9a-fA-F-]{36})`, which accepts 36 characters
+    // of hex-or-dash in ANY arrangement — including 36 hex digits with no dashes
+    // — and handed them straight to a Postgres `uuid` column. Any authenticated
+    // caller could turn a malformed id into a 500, which is both a bad customer
+    // response and noise that masks real faults.
+    const fx2 = await buildTestApp();
+    try {
+      const res = await fx2.app.inject({
+        method: 'GET',
+        url: '/v1/profile-snapshots/psnap_0123456789abcdef0123456789abcdef0123',
+        headers: { authorization: `Bearer ${fx2.plaintext}` },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).not.toBe(500);
+    } finally {
+      await fx2.cleanup();
+    }
+  });
 });

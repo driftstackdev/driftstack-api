@@ -64,8 +64,11 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
     );
   });
 
-  it('PUBLIC_ID_RE permissive (allows mixed-case hex) + uuidFromPrefixedId expectedPrefix check', () => {
-    expect(body).toMatch(/const PUBLIC_ID_RE = \/\^\[a-z\]\+_\(\[0-9a-fA-F-\]\{36\}\)\$\/;/);
+  it('PUBLIC_ID_RE is a STRICT uuid shape (case-insensitive) + uuidFromPrefixedId expectedPrefix check', () => {
+    // Strict UUID shape. The old `[0-9a-fA-F-]{36}` accepted 36 hex-or-dash characters in any arrangement and passed them to a Postgres uuid column, so a malformed customer id 500'd instead of 400ing.
+    expect(body).toMatch(
+      /const PUBLIC_ID_RE = \/\^\[a-z\]\+_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/i;/,
+    );
     expect(body).toMatch(
       /function uuidFromPrefixedId\(value: string, expectedPrefix: string\): string \{\s*\n?\s*const m = PUBLIC_ID_RE\.exec\(value\);\s*\n?\s*if \(!m \|\| !m\[1\] \|\| !value\.startsWith\(`\$\{expectedPrefix\}_`\)\) \{\s*\n?\s*throw new BadRequestError\(`Invalid id format\. Expected "\$\{expectedPrefix\}_<uuid>"\.`\);\s*\n?\s*\}\s*\n?\s*return m\[1\];\s*\n?\s*\}/,
     );

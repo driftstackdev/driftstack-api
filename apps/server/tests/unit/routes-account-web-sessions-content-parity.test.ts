@@ -100,10 +100,19 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
     expect(body).toMatch(/current: row\.id === currentId,/);
   });
 
-  it('uuidFromPublicSessionId: wsess_ prefix strip + 36-char uuid regex; BadRequestError "Invalid session id." on either shape mismatch', () => {
+  it('uuidFromPublicSessionId: wsess_ prefix strip + STRICT uuid regex; BadRequestError "Invalid session id." on either shape mismatch', () => {
+    // Discrete pins rather than one chained mega-regex: the chained form could
+    // not span an explanatory comment added between two of its segments, and a
+    // guard that breaks on a comment is pinning layout, not behaviour.
+    expect(body).toMatch(/function uuidFromPublicSessionId\(input: string\): string \{/);
+    expect(body).toMatch(/if \(!input\.startsWith\('wsess_'\)\) \{/);
+    expect(body).toMatch(/const id = input\.slice\('wsess_'\.length\);/);
+    // STRICT uuid shape — the old [0-9a-fA-F-]{36} accepted 36 hex-or-dash
+    // characters in any arrangement and 500'd on the Postgres uuid column.
     expect(body).toMatch(
-      /function uuidFromPublicSessionId\(input: string\): string \{\s*\n?\s*if \(!input\.startsWith\('wsess_'\)\) \{\s*\n?\s*throw new BadRequestError\('Invalid session id\.'\);\s*\n?\s*\}\s*\n?\s*const id = input\.slice\('wsess_'\.length\);\s*\n?\s*if \(!\/\^\[0-9a-fA-F-\]\{36\}\$\/\.test\(id\)\) \{\s*\n?\s*throw new BadRequestError\('Invalid session id\.'\);/,
+      /if \(!\/\^\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\$\/i\.test\(id\)\) \{/,
     );
+    expect(body).toMatch(/throw new BadRequestError\('Invalid session id\.'\);/);
   });
 
   it("DELETE per-id: requireAuth + requireScope('account_owner') (W492) + rateLimit('global'); 204 on success; NotFoundError 'Session not found.' when service returns false", () => {

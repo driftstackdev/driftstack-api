@@ -60,7 +60,7 @@ describe('V-666.H POST /v1/billing/crypto-checkout/quote', () => {
     },
   );
 
-  it('returns the tier price + EUR default on happy path', async () => {
+  it('quotes in the SETTLEMENT currency (USD), which is what the order actually charges', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'POST',
@@ -72,24 +72,30 @@ describe('V-666.H POST /v1/billing/crypto-checkout/quote', () => {
     const body = res.json<QuoteResponse>();
     expect(body.product).toBe('solo_manual');
     expect(body.price_cents).toBe(7900);
-    expect(body.price_currency).toBe('EUR');
+    // billing-crypto.ts locks serverPriceCurrency = 'USD' and never settles in
+    // EUR/GBP. Quoting EUR meant a dashboard or SDK rendered "€79.00" for an
+    // order that then charged $79 USD — a misstated price, not a display nit.
+    expect(body.price_currency).toBe('USD');
     expect(body).toEqual({
       product: 'solo_manual',
       price_cents: 7900,
-      price_currency: 'EUR',
+      price_currency: 'USD',
     });
   });
 
-  it('honours an explicit price_currency override', async () => {
+  it('IGNORES a caller-supplied price_currency — the charge cannot be relabelled', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/billing/crypto-checkout/quote',
       headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { product: 'team_manual', price_currency: 'USD' },
+      payload: { product: 'team_manual', price_currency: 'EUR' },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<QuoteResponse>();
+    // The field is still accepted for compatibility and still ignored, exactly
+    // as the checkout route ignores it. Echoing it back was what let a caller
+    // put a currency label on a price it does not control.
     expect(body.price_currency).toBe('USD');
     expect(body.price_cents).toBe(24900);
   });

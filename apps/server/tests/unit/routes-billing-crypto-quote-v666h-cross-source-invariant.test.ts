@@ -96,10 +96,10 @@ describe('W1021 routes/billing-crypto-quote V-666.H cross-source invariant', () 
     );
   });
 
-  it("CRITICAL response 3-field shape — product + price_cents + price_currency (?? 'EUR').", () => {
+  it('CRITICAL response 3-field shape — product + price_cents + price_currency = the USD settlement currency the order actually charges.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto-quote.ts'));
     expect(p).toMatch(
-      /return reply\.send\(\{\s*\n?\s*product,\s*\n?\s*price_cents: priceCents,\s*\n?\s*price_currency: parsed\.data\.price_currency \?\? 'EUR',\s*\n?\s*\}\);/,
+      /return reply\.send\(\{\s*\n?\s*product,\s*\n?\s*price_cents: priceCents,\s*\n?\s*price_currency: CRYPTO_SETTLEMENT_CURRENCY,\s*\n?\s*\}\);/,
     );
   });
 

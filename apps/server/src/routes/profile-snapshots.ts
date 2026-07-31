@@ -46,7 +46,11 @@ function effectiveAccountIdForWrite(
   return eff.accountId;
 }
 
-const PUBLIC_ID_RE = /^[a-z]+_([0-9a-fA-F-]{36})$/;
+// Strict UUID shape, matching routes/sessions.ts. `[0-9a-fA-F-]{36}` accepted
+// any 36 characters of hex-or-dash — including 36 hex digits with no dashes
+// at all — and handed them straight to a Postgres `uuid` column, turning a
+// malformed customer id into a 500 instead of the intended 400.
+const PUBLIC_ID_RE = /^[a-z]+_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
   const m = PUBLIC_ID_RE.exec(value);
