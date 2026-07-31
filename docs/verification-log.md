@@ -29853,3 +29853,43 @@ Verification: full server suite 2479 files / 26,248 passing / 0 failing, strict
 server source and test TypeScript, targeted ESLint and Prettier. No schema,
 route, OpenAPI, SDK, shared build/deploy, native, harness/Fleet, environment,
 customer, secret or package surface changed.
+
+---
+
+## V-712 — A suspended account cannot keep driving a live session by control key
+
+**Date:** 2026-07-31
+
+Surfaced by the same adversarial audit as V-711, and closed by it — this entry
+records the property explicitly, because the enforcement point is not where a
+reader would look for it.
+
+`validateGuiControlKey` is a pure function over the session row, the ciphertext
+and the clock. It takes no repository, so it never sees the owning account: a
+key that decrypts, matches and has not hit its 24h TTL authorizes, regardless of
+what has happened to the account since it was minted. Suspending an account does
+not close that gap either, because the admin reclaimer walks DRIVER sessions,
+not agent sessions. A fraud or chargeback suspension therefore left the customer
+in full control of a live browser for up to a day.
+
+V-711 closed it as a side effect: to charge the owner's real capacity, the
+control-key path now resolves live owner authority, and that same read refuses a
+missing, suspended or deleted owner. Correct, but surprising — "the rate limiter
+enforces account suspension" is not a property anyone would assume, and removing
+the limiter from a control-key route's preHandler while thinking only about rate
+limiting would silently reopen it.
+
+So the coupling is now stated at both ends rather than left implicit: the
+control-key branch of `controlKeyOrAccountAuth` documents that the limiter
+handoff is also the status gate and must not be removed, and the
+`validateGuiControlKey` doc states its own scope — that it cannot check account
+status and that anything authorizing on its result alone, without a downstream
+authority read, is incomplete.
+
+The property is pinned behaviourally: a control key that works while the account
+is healthy is refused once the account is flipped to `suspended`, with the key
+itself untouched and unexpired. Deleting the control-key authority lookup reds
+that case.
+
+Verification: full server suite 26,257 passing / 0 failing, strict server source
+and test TypeScript, targeted ESLint and Prettier.

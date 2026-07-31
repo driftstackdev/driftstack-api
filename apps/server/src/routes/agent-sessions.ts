@@ -1823,10 +1823,22 @@ export function registerAgentSessionsRoutes(
       const result = await validateControlKey(req, sessionId);
       if (result.authorized) {
         req.guiControlKeyAuthorized = true;
-        // The rate-limit middleware that follows in the preHandler
-        // chain keys off `request.account`, which is absent here.
-        // Stash the owning account so it charges that account's
-        // bucket (conservative `free`-tier floor) instead of 401ing.
+        // The rate-limit middleware that follows in the preHandler chain keys
+        // off `request.account`, which is absent here. Stash the owning account
+        // so it charges that account's bucket instead of 401ing.
+        //
+        // That handoff is also where the owning account's STATUS is enforced,
+        // and it is load-bearing rather than incidental. `validateGuiControlKey`
+        // is a pure function over the session row and an HMAC — it never sees
+        // the account — so a key minted before a suspension would otherwise stay
+        // usable for its full 24h TTL, and suspending an account does not
+        // reclaim agent sessions (the admin reclaimer walks DRIVER sessions).
+        // The limiter resolves live owner authority to get the real tier, and
+        // that same read refuses a missing, suspended or deleted owner. Do not
+        // remove the limiter from a control-key route's preHandler chain
+        // expecting only a rate-limit change; a suspended account would regain
+        // control of a live browser. Pinned by the suspension case in
+        // tests/integration/team-effective-owner-rate-limit.test.ts.
         req.guiControlKeyRateLimitAccountId = result.ownerAccountId;
         return;
       }

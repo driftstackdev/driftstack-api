@@ -472,6 +472,51 @@ describe('team-resource actor + effective-owner rate limiting', () => {
     );
   });
 
+  it('refuses a per-session control key once the owning account is suspended', async () => {
+    // A gui_control_key is validated against the SESSION record and an HMAC only
+    // — validateGuiControlKey is pure and never consults the owning account. So
+    // a key minted before a fraud/chargeback suspension stayed usable for its
+    // full 24h TTL, and suspension does not reclaim agent sessions (the admin
+    // reclaimer walks DRIVER sessions). A suspended account must not keep
+    // driving a live browser.
+    fx = await buildTestApp({ tier: 'api_scale', enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual' },
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json<{ id: string }>().id;
+    const minted = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/gui-control-key`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(minted.statusCode).toBe(200);
+    const controlKey = minted.json<{ gui_control_key: string }>().gui_control_key;
+
+    // Works while the account is healthy.
+    const before = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { 'x-driftstack-gui-control-key': controlKey },
+    });
+    expect(before.statusCode).toBe(200);
+
+    // Staff suspend the account. The key itself is untouched and unexpired.
+    const live = await fx.authRepo.getAccount(fx.accountId);
+    fx.authRepo.upsertAccount({ ...live!, status: 'suspended' });
+
+    const after = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { 'x-driftstack-gui-control-key': controlKey },
+    });
+    expect(after.statusCode).not.toBe(200);
+    expect([401, 403]).toContain(after.statusCode);
+  });
+
   it('rejects owner-limited SSE messages before headers, transcript, LLM usage, tokens, or activity mutate', async () => {
     fx = await buildTestApp({
       tier: 'api_scale',

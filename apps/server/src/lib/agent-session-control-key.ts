@@ -55,6 +55,15 @@ export interface ValidateControlKeyArgs {
  * Validate a presented per-session gui_control_key against the bound session.
  * Throws UnauthorizedError on any failure once a header is present; returns
  * `{ authorized: false }` only when no header was offered.
+ *
+ * SCOPE: this is a pure function over the session row, the ciphertext and the
+ * clock. It deliberately takes no repository, so it cannot and does not check
+ * the OWNING ACCOUNT's status — a key minted before a suspension still passes
+ * here. Account status is enforced downstream, where the owner's live authority
+ * is already being read: see the control-key branch of `controlKeyOrAccountAuth`
+ * in routes/agent-sessions.ts and the owner-authority load in
+ * middleware/rate-limit.ts. Anything that authorizes on this result alone, with
+ * no such downstream read, is incomplete.
  */
 export function validateGuiControlKey(args: ValidateControlKeyArgs): ControlKeyValidation {
   const { headerRaw, session, encryptionKey } = args;
