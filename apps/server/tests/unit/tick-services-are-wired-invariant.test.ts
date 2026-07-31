@@ -23,7 +23,6 @@ import { describe, expect, it } from 'vitest';
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
 const SERVICES = resolve(SRC, 'services');
-const BOOTSTRAP = resolve(SRC, 'lib', 'bootstrap.ts');
 
 /**
  * Services that are built and tested but deliberately not running, each with
@@ -42,6 +41,21 @@ const NOT_WIRED_PENDING_DECISION: Record<string, string> = {
     'them does not. Turning it on rotates live customer secrets and breaks any ' +
     'integration that does not update inside the grace window, so it is an outward-facing ' +
     'call rather than a wiring fix.',
+  AuditArchiveService:
+    'ADR-006 90-day archiver. Sweeps rows older than 90 days out of five tables ' +
+    '(admin_audit_log, processed_stripe_events, legal_acceptances, webhook_deliveries ' +
+    'and the high-volume session_events action log) into R2 as gzipped JSON Lines, ' +
+    'then DELETEs them. Complete and tested, and audit_archive_runs exists with ZERO ' +
+    'rows — it has never run, so those tables have no retention bound and the ' +
+    'privacy-policy line about session metadata being 90-day operational has no ' +
+    'mechanism behind it. Turning it on deletes production rows after an R2 upload, ' +
+    'which is a data-movement decision rather than a wiring fix.',
+  DurableWebhookDeliveryService:
+    'The V-173 FORWARD path for webhook delivery. Its own header describes replacing ' +
+    'the live service as "a separate future V-NNN once V-173 has soak time", so being ' +
+    'unconstructed is the intended state until that cutover. Its claim query is kept ' +
+    'in step with the live one by webhook-claim-fairness-parity, so cutting over ' +
+    'cannot silently reintroduce the endpoint starvation fixed in 84dc306b1.',
 };
 
 interface TickService {
@@ -49,26 +63,58 @@ interface TickService {
   readonly file: string;
 }
 
-/** Exported service classes that expose a `tickOnce` — the sweep shape. */
-function tickServices(): TickService[] {
+/**
+ * Service classes that are supposed to be constructed by the application.
+ *
+ * Two shapes, because one alone was not enough. A `tickOnce` method is the
+ * sweep shape and was the original signal — but `AuditArchiveService` enforces
+ * a 90-day retention across five tables through `archiveTable()`, has no
+ * `tickOnce`, and had never run. A tick-only check could not see it. The
+ * broader property is simply "a *Service the app never constructs", and 51 of
+ * the 54 exported services satisfy it, so the signal stays tight.
+ */
+function candidateServices(): TickService[] {
   const out: TickService[] = [];
   for (const entry of readdirSync(SERVICES)) {
     if (!entry.endsWith('.ts')) continue;
     const src = readFileSync(resolve(SERVICES, entry), 'utf8');
-    if (!/\n\s+(?:async )?tickOnce\s*\(/.test(src)) continue;
+    const tickShaped = /\n\s+(?:async )?tickOnce\s*\(/.test(src);
     for (const m of src.matchAll(/^export class (\w+)/gm)) {
-      out.push({ name: m[1]!, file: entry });
+      const name = m[1]!;
+      if (tickShaped || name.endsWith('Service')) out.push({ name, file: entry });
     }
   }
   return out;
 }
 
-function wiredInBootstrap(name: string): boolean {
-  return new RegExp(`\\bnew ${name}\\s*\\(`).test(readFileSync(BOOTSTRAP, 'utf8'));
+/**
+ * Is this service constructed anywhere the application actually runs?
+ *
+ * Deliberately NOT "constructed in bootstrap". Wiring happens in more than one
+ * place — `OAuthService` is built in `lib/app.ts` — and a bootstrap-only check
+ * reported it as orphaned when it is perfectly live. Its own file is excluded
+ * because a class constructed only by its own factory is not wired by anything:
+ * that is exactly `DurableWebhookDeliveryService`, whose sole construction is
+ * inside a factory nothing calls.
+ */
+function wiredInApplication(name: string, ownFile: string): boolean {
+  const needle = new RegExp(`\\bnew ${name}\\s*\\(`);
+  const stack: string[] = [SRC];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else if (entry.name.endsWith('.ts') && full !== resolve(SERVICES, ownFile)) {
+        if (needle.test(readFileSync(full, 'utf8'))) return true;
+      }
+    }
+  }
+  return false;
 }
 
 describe('every tick-driven service is wired, or recorded as deliberately not', () => {
-  const services = tickServices();
+  const services = candidateServices();
 
   it('CRITICAL the scan found the tick-service surface. An empty scan would make the check below vacuous — and the failure it guards is itself an absence, so a broken scan would hide the same thing twice.', () => {
     expect(services.length, 'service classes exposing tickOnce()').toBeGreaterThan(8);
@@ -84,7 +130,7 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
 
   it('CRITICAL no tick-driven service is unwired without a stated reason. A service nothing constructs throws nothing, logs nothing, and keeps every one of its own tests green — it looks shipped from every angle except the one nobody checks.', () => {
     const orphaned = services
-      .filter((s) => !wiredInBootstrap(s.name))
+      .filter((s) => !wiredInApplication(s.name, s.file))
       .filter((s) => NOT_WIRED_PENDING_DECISION[s.name] === undefined)
       .map((s) => `${s.name} (${s.file})`);
 
@@ -96,7 +142,7 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
 
   it('CRITICAL the pending-decision list may only SHRINK — a service that becomes wired must leave it, and an entry naming a service that no longer exists must go too. Otherwise the list stops meaning "decided" and starts meaning "ignored".', () => {
     const nowWired = Object.keys(NOT_WIRED_PENDING_DECISION)
-      .filter((name) => wiredInBootstrap(name))
+      .filter((name) => services.some((s) => s.name === name && wiredInApplication(s.name, s.file)))
       .sort();
     expect(nowWired, 'these are wired now — remove them from NOT_WIRED_PENDING_DECISION:').toEqual(
       [],
@@ -110,7 +156,11 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
   });
 
   it('records the current split, so the one unwired service is a visible number rather than a thing someone has to go looking for', () => {
-    const unwired = services.filter((s) => !wiredInBootstrap(s.name)).map((s) => s.name);
-    expect(unwired.sort()).toEqual(['WebhookSecretForceRotationService']);
+    const unwired = services.filter((s) => !wiredInApplication(s.name, s.file)).map((s) => s.name);
+    expect(unwired.sort()).toEqual([
+      'AuditArchiveService',
+      'DurableWebhookDeliveryService',
+      'WebhookSecretForceRotationService',
+    ]);
   });
 });
