@@ -178,15 +178,22 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     );
   });
 
-  it("recordDelivered: tx-bracketed; delivery set status='delivered' + endpoint counter RESET (consecutiveFailures:0 + lastSuccessAt); recordRetry: status='pending' + consecutiveFailures+=1 + lastFailureAt:new Date(); recordDlq: status='dlq' + consecutiveFailures+=1 + lastFailureAt:opts.at", () => {
+  it("recordDelivered: tx-bracketed; delivery set status='delivered' + endpoint counter RESET (consecutiveFailures:0 + lastSuccessAt); recordRetry: status='pending' + lastFailureAt only (the per-DELIVERY counter is NOT advanced by a retry attempt); recordDlq: status='dlq' + consecutiveFailures+=1 + lastFailureAt:opts.at", () => {
     expect(body).toMatch(
       /\.set\(\{\s*\n?\s*status: 'delivered',\s*\n?\s*lastResponseStatus: opts\.responseStatus,\s*\n?\s*deliveredAt: opts\.at,\s*\n?\s*updatedAt: new Date\(\),\s*\n?\s*\}\)/,
     );
     expect(body).toMatch(
       /\.set\(\{\s*\n?\s*consecutiveFailures: 0,\s*\n?\s*lastSuccessAt: opts\.at,\s*\n?\s*updatedAt: new Date\(\),\s*\n?\s*\}\)/,
     );
-    expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*consecutiveFailures: sql`\$\{webhookEndpoints\.consecutiveFailures\} \+ 1`,\s*\n?\s*lastFailureAt: new Date\(\),\s*\n?\s*updatedAt: new Date\(\),\s*\n?\s*\}\)/,
+    // recordRetry must NOT advance consecutiveFailures. That counter is the
+    // per-DELIVERY signal the docs tell customers to monitor ("increments on
+    // each failed delivery"; "auto-disabled after 50 consecutive failed
+    // deliveries"), and MAX_ATTEMPTS is 6 — counting attempts tombstoned an
+    // endpoint after ~9 failed deliveries instead of 50, irreversibly. The
+    // behavioural proof is db-webhooks-repo-consecutive-failures-drizzle.
+    expect(body).toMatch(/\.set\(\{\s*\n?\s*\/\/ NOT consecutiveFailures\./);
+    expect(body).not.toMatch(
+      /\.set\(\{\s*\n?\s*consecutiveFailures: sql`\$\{webhookEndpoints\.consecutiveFailures\} \+ 1`,\s*\n?\s*lastFailureAt: new Date\(\),/,
     );
     expect(body).toMatch(
       /\.set\(\{\s*\n?\s*status: 'dlq',\s*\n?\s*lastResponseStatus: opts\.responseStatus,\s*\n?\s*lastError: opts\.lastError,\s*\n?\s*updatedAt: opts\.at,\s*\n?\s*\}\)/,

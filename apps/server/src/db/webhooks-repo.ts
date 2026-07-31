@@ -883,7 +883,19 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       await tx
         .update(webhookEndpoints)
         .set({
-          consecutiveFailures: sql`${webhookEndpoints.consecutiveFailures} + 1`,
+          // NOT consecutiveFailures. That counter is a per-DELIVERY signal:
+          // `consecutive_failures` "increments on each failed delivery"
+          // (webhooks/endpoints.md) and the endpoint "is auto-disabled after 50
+          // consecutive failed deliveries" (webhooks/events.md), which also tells
+          // customers to monitor the field to catch a drifting endpoint before it
+          // trips. A retry is an ATTEMPT within one delivery, and MAX_ATTEMPTS is
+          // 6, so incrementing here counted one failed delivery up to six times —
+          // the endpoint tombstoned after ~9 failed deliveries rather than 50, and
+          // the tombstone is sticky (a new endpoint must be minted). A customer
+          // watching the documented signal during a brief receiver outage lost the
+          // endpoint permanently, roughly 6x sooner than the headroom they were
+          // told they had. recordDlq owns the increment: that is the point at
+          // which a DELIVERY has definitively failed.
           lastFailureAt: new Date(),
           updatedAt: new Date(),
         })

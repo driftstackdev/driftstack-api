@@ -29940,3 +29940,43 @@ Verification: full server suite 2487 files / 26,276 passing / 0 failing, strict
 server source and test TypeScript, targeted ESLint and Prettier. No schema,
 route, OpenAPI, SDK, pricing, shared build/deploy, native, environment, customer
 or secret surface changed.
+
+---
+
+## V-714 — Webhook auto-disable counts failed deliveries, not failed attempts
+
+**Date:** 2026-07-31
+
+`webhook_endpoints.consecutive_failures` is a customer-facing signal with a
+stated meaning in two places: `webhooks/endpoints.md` says it "increments on each
+failed delivery + zeros on the next success", and `webhooks/events.md` says the
+endpoint "is auto-disabled after 50 consecutive failed deliveries" and tells
+customers to "monitor the `consecutive_failures` field on `GET /v1/webhooks` to
+catch a drifting endpoint before it trips the auto-disable threshold."
+
+Both `recordRetry` and `recordDlq` incremented it. A retry is an ATTEMPT inside
+one delivery and `MAX_ATTEMPTS` is 6, so a single failed delivery advanced the
+counter up to six times. The endpoint therefore tombstoned after roughly nine
+failed deliveries rather than fifty — and the tombstone is sticky by design, so
+the customer must mint a new endpoint to resume delivery. A customer watching
+exactly the field the docs point them at, through a brief outage of their own
+receiver, lost the endpoint permanently and about six times sooner than the
+headroom they were told they had.
+
+`recordRetry` no longer touches the counter; it still stamps `lastFailureAt`,
+which is a real failure event. `recordDlq` owns the increment, because that is
+the point at which a DELIVERY has definitively failed, and success still zeroes
+it. Fifty now means fifty failed deliveries, as published.
+
+The behavioural proof runs against real Postgres, deliberately: the increment is
+SQL inside the repo, so the worker's fake-repo unit tests structurally cannot
+observe it — all twenty passed both before and after the change. The new suite
+seeds a real endpoint and delivery and asserts that a retried attempt leaves the
+counter at zero, that exhausting a delivery advances it exactly once, that a
+whole five-retries-then-DLQ lifecycle counts as ONE, and that a later success
+still zeroes it. Reinstating the per-attempt increment is proved red.
+
+Verification: full server suite 2494 files / 26,305 passing / 0 failing, strict
+server source and test TypeScript, targeted ESLint and Prettier. No route,
+schema, OpenAPI, SDK, shared build/deploy, native, environment, customer or
+secret surface changed; the documented contract is unchanged and now true.
