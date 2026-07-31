@@ -134,9 +134,37 @@ function rateLimitPlugin(
     for (const row of rows) indexed[row.bucketKey] = row;
     return indexed;
   };
-  const loadLiveOwnerAuthority = async (
-    ownerAccountId: string,
-  ): Promise<{ account: AccountRow; overrides: Record<string, RateLimitOverride> }> => {
+  type OwnerAuthority = { account: AccountRow; overrides: Record<string, RateLimitOverride> };
+  /**
+   * Owner authority was read fresh on EVERY distinct-owner request: two
+   * uncached Postgres reads (account row + active overrides) before the token
+   * check, so the limiter amplified the database load it exists to cap. The
+   * blast radius is bounded — the actor bucket is charged first, and self /
+   * control-key traffic returns before ever reaching here — but a large team on
+   * a high tier can still drive thousands of extra reads per second.
+   *
+   * Two mitigations, both plugin-local so every app instance (and every test)
+   * starts clean: single-flight, so a concurrent burst for one owner collapses
+   * to ONE read pair instead of one per request; and a short TTL, so steady
+   * traffic re-reads at most once per window.
+   *
+   * The staleness this introduces stays strictly INSIDE the contract the actor
+   * path already has. RedisAuthCache holds the actor's own tier and overrides
+   * for 30s, and revocation is documented to take effect within that window;
+   * 5s keeps owner policy fresher than the caller's own, so no request is ever
+   * limited by owner state older than its actor state. Failures are never
+   * cached, so a suspended owner that is restored recovers on the next request
+   * rather than after a window.
+   */
+  const OWNER_AUTHORITY_TTL_MS = 5_000;
+  /** Bounded like the fallback store: a hostile spread of owner ids must not
+   *  grow this without limit. Insertion-ordered, so evicting the oldest key is
+   *  a first-entry delete. */
+  const OWNER_AUTHORITY_MAX_ENTRIES = 5_000;
+  const ownerAuthorityCache = new Map<string, { value: OwnerAuthority; expiresAtMs: number }>();
+  const ownerAuthorityInFlight = new Map<string, Promise<OwnerAuthority>>();
+
+  const readLiveOwnerAuthority = async (ownerAccountId: string): Promise<OwnerAuthority> => {
     if (opts.authRepo === undefined) {
       throw new Error('effective-owner rate-limit authority is unavailable');
     }
@@ -158,6 +186,35 @@ function rateLimitPlugin(
     }
     const rows = await opts.authRepo.findActiveRateLimitOverrides(ownerAccountId, new Date());
     return { account, overrides: indexOverrides(rows) };
+  };
+
+  const loadLiveOwnerAuthority = async (ownerAccountId: string): Promise<OwnerAuthority> => {
+    const cached = ownerAuthorityCache.get(ownerAccountId);
+    if (cached !== undefined) {
+      if (cached.expiresAtMs > Date.now()) return cached.value;
+      ownerAuthorityCache.delete(ownerAccountId);
+    }
+    const inFlight = ownerAuthorityInFlight.get(ownerAccountId);
+    if (inFlight !== undefined) return inFlight;
+
+    const pending = readLiveOwnerAuthority(ownerAccountId);
+    ownerAuthorityInFlight.set(ownerAccountId, pending);
+    try {
+      const value = await pending;
+      // Only a SUCCESSFUL read is cached; a rejection (missing/suspended owner,
+      // or an authority outage) must be re-decided on the next request.
+      if (ownerAuthorityCache.size >= OWNER_AUTHORITY_MAX_ENTRIES) {
+        const oldest = ownerAuthorityCache.keys().next();
+        if (!oldest.done) ownerAuthorityCache.delete(oldest.value);
+      }
+      ownerAuthorityCache.set(ownerAccountId, {
+        value,
+        expiresAtMs: Date.now() + OWNER_AUTHORITY_TTL_MS,
+      });
+      return value;
+    } finally {
+      ownerAuthorityInFlight.delete(ownerAccountId);
+    }
   };
 
   const consumeEffectiveOwner = async (

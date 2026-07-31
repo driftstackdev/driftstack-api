@@ -29711,3 +29711,51 @@ budget on owner-scoped reads — deliberate, since the alternative lets members
 bypass the owner cap entirely, and documented as shared. No schema, OpenAPI,
 SDK, shared build/deploy, native, harness/Fleet, environment, customer, secret,
 package or foreign pnpm surface changed.
+
+---
+
+## V-709 — The effective-owner limiter stops amplifying the database it protects
+
+**Date:** 2026-07-31
+
+V-708 shipped an honest residual: every distinct-owner request performed two
+uncached Postgres reads — the owner's account row and its active overrides —
+and both ran BEFORE the token check. A rate limiter that reads the database
+twice per request in order to decide whether to admit that request amplifies
+exactly the load it exists to cap. The blast radius was bounded, since the
+actor bucket is charged first and self / control-key traffic returns on the
+receipt before reaching the owner path at all, but a large team on a high tier
+still multiplies the cost by every member's budget.
+
+Owner authority is now resolved through a plugin-local single-flight map and a
+short-TTL cache. Concurrent requests for one owner share a single lookup rather
+than racing into one each, so a burst costs one read pair; steady traffic
+re-reads at most once per window. Both structures are created inside the plugin,
+so every app instance — and every test — starts clean, and the cache is bounded
+and evicts its oldest entry rather than growing on a hostile spread of owner ids.
+
+The staleness this introduces stays strictly inside the contract the actor path
+already has. RedisAuthCache holds the actor's own tier and overrides for 30
+seconds and revocation is documented to take effect within that window, so the
+previous per-request fresh read made owner policy _stricter_ than actor policy
+rather than equally fresh. Five seconds keeps owner state fresher than the
+caller's own, so no request can be limited by owner policy older than the actor
+policy already applied to it. Failures are never cached: a missing, suspended or
+deleted owner, and an authority outage, are re-decided on the next request, so
+restoring an account recovers immediately instead of after a window.
+
+Proof is behavioural, not structural. A twelve-request concurrent burst against
+one owner now performs exactly one `getAccount` and one
+`findActiveRateLimitOverrides`, while every response still succeeds on its own
+merits — this is a read-cost change, never an admission shortcut. The existing
+denial case pins one read pair across two separate denied requests, with the
+zero-reads-before-authorization claim either side of it unchanged. Two mutations
+are each proved red: deleting the single-flight map, and caching failures
+alongside successes.
+
+Verification: full server suite 2477 files / 26,236 passing / 0 failing, the
+real-Redis rate-limit e2e 4/4 against live Postgres and Redis including the
+two-admin capacity-one contention case, strict server source and test
+TypeScript, targeted ESLint and Prettier. No schema, route, OpenAPI, SDK,
+shared build/deploy, native, harness/Fleet, environment, customer, secret or
+package surface changed.

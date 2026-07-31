@@ -204,8 +204,13 @@ describe('team-resource actor + effective-owner rate limiting', () => {
     });
     expectGenericOwnerDenial(agentDenied);
 
-    expect(ownerGet.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(2);
-    expect(ownerOverrides.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(2);
+    // ONE read pair, not one per request: both denials fall inside the owner
+    // authority window, so the second is served from the plugin-local cache.
+    // The load-bearing claims either side are unchanged — zero owner reads
+    // before authorization (asserted above), a real owner read once authorized.
+    // Pinned exactly, so deleting the cache OR the lookup reds this.
+    expect(ownerGet.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
+    expect(ownerOverrides.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
     expect(directInsert).not.toHaveBeenCalled();
     expect(driverCreate).not.toHaveBeenCalled();
     expect(agentInsert).not.toHaveBeenCalled();
@@ -220,8 +225,40 @@ describe('team-resource actor + effective-owner rate limiting', () => {
       headers: { authorization: `Bearer ${fx.plaintext}`, ...TEAM_HEADER },
     });
     expect(actorDenied.statusCode).toBe(429);
-    expect(ownerGet.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(2);
-    expect(ownerOverrides.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(2);
+    // Still no FURTHER owner lookup — the actor bucket refused before the owner
+    // path was reached at all, which is the claim here (the count is unchanged
+    // from above rather than incremented).
+    expect(ownerGet.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
+    expect(ownerOverrides.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
+  });
+
+  it('collapses a concurrent burst to ONE owner authority read instead of one per request', async () => {
+    // The owner lookup is two uncached Postgres reads (account row + active
+    // overrides) that run BEFORE the token check, so without coalescing the
+    // limiter amplifies the database load it exists to cap. The actor bucket
+    // bounds it, but a large team on a high tier still multiplies it by every
+    // member's budget. A burst for one owner must cost one read pair.
+    fx = await buildTestApp({ tier: 'api_scale' });
+    seedOwner('api_scale');
+    setPrimaryMembership('admin');
+    const ownerGet = vi.spyOn(fx.authRepo, 'getAccount');
+    const ownerOverrides = vi.spyOn(fx.authRepo, 'findActiveRateLimitOverrides');
+
+    const responses = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        fx!.app.inject({
+          method: 'GET',
+          url: '/v1/sessions',
+          headers: { authorization: `Bearer ${fx!.plaintext}`, ...TEAM_HEADER },
+        }),
+      ),
+    );
+
+    // Every request still succeeded on its own merits — this is a read-cost
+    // optimisation, never an admission shortcut.
+    for (const response of responses) expect(response.statusCode).toBe(200);
+    expect(ownerGet.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
+    expect(ownerOverrides.mock.calls.filter(([id]) => id === OWNER_ID)).toHaveLength(1);
   });
 
   it('aggregates two distinct admins into the selected owner capacity using the live owner override', async () => {
