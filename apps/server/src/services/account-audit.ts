@@ -165,15 +165,41 @@ export class AccountAuditService {
   }
 
   async record(input: RecordAccountAuditInput): Promise<AccountAuditEntryRow> {
-    const row = await this.repo.insert(input);
+    const labels = {
+      prefix: auditActionPrefix(input.action),
+      actor_type: input.actorType,
+    };
+    let row: AccountAuditEntryRow;
+    try {
+      row = await this.repo.insert(input);
+    } catch (err) {
+      // A FAILED audit write must leave a trace. Callers deliberately swallow
+      // this — an audit failure must not break the customer's operation — and
+      // several do so with a completely empty catch, so before this the only
+      // evidence was a success counter that quietly stopped incrementing. The
+      // audit trail could stop recording while every dashboard looked healthy,
+      // which for a compliance trail is the one failure you cannot afford to
+      // discover late.
+      //
+      // Counted and logged HERE rather than at the call sites, because a signal
+      // that depends on 60-odd callers each remembering to log is a signal that
+      // will be missing exactly where someone forgot. Re-thrown so caller
+      // behaviour is unchanged.
+      try {
+        this.metrics?.inc(METRIC_NAMES.accountAuditEmitTotal, {
+          ...labels,
+          outcome: 'error',
+        });
+      } catch {
+        // Metrics are best-effort even on the failure path.
+      }
+      throw err;
+    }
     // Arc 7 obs.10 — bump the audit-emit counter labelled by the
     // top-level action prefix + actor type. Best-effort; metrics
     // failures never break the customer-visible operation.
     try {
-      this.metrics?.inc(METRIC_NAMES.accountAuditEmitTotal, {
-        prefix: auditActionPrefix(input.action),
-        actor_type: input.actorType,
-      });
+      this.metrics?.inc(METRIC_NAMES.accountAuditEmitTotal, { ...labels, outcome: 'ok' });
     } catch {
       // Swallow.
     }

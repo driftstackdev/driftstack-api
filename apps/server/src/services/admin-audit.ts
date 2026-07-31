@@ -127,16 +127,28 @@ export class AdminAuditService {
    * audit fails the request (D-025).
    */
   async record(input: NewAdminAuditLogInput): Promise<AdminAuditLogRow> {
-    const row = await this.repo.insert(input);
+    const labels = { prefix: auditActionPrefix(input.action) };
+    let row;
+    try {
+      row = await this.repo.insert(input);
+    } catch (err) {
+      // Same reasoning as AccountAuditService.record: a failed staff-action
+      // audit write is the one that matters most and was the least visible.
+      // Counted here, re-thrown unchanged.
+      try {
+        this.metrics?.inc(METRIC_NAMES.adminAuditEmitTotal, { ...labels, outcome: 'error' });
+      } catch {
+        // Metrics are best-effort even on the failure path.
+      }
+      throw err;
+    }
     // Arc 7 obs.11 — admin-audit emission counter, labelled by the
     // top-level admin-action prefix (account / webhook_delivery /
     // rate_limit_override / session / api_key / audit_note / refund /
     // incident / status_subscriber). Bounded cardinality. Best-effort;
     // a metric failure must not break the admin-action persistence.
     try {
-      this.metrics?.inc(METRIC_NAMES.adminAuditEmitTotal, {
-        prefix: auditActionPrefix(input.action),
-      });
+      this.metrics?.inc(METRIC_NAMES.adminAuditEmitTotal, { ...labels, outcome: 'ok' });
     } catch {
       // Swallow.
     }

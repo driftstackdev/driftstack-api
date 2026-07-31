@@ -138,12 +138,19 @@ describe('W399.A apps/server/src/services/account-audit.ts content parity', () =
     );
     // Arc 7 obs.10 added a best-effort metrics bump labelled by
     // action prefix + actor type after the insert.
-    expect(body).toMatch(
-      /async record\(input: RecordAccountAuditInput\): Promise<AccountAuditEntryRow> \{\s*\n?\s*const row = await this\.repo\.insert\(input\);[\s\S]*?return row;\s*\n?\s*\}/,
-    );
-    expect(body).toMatch(
-      /this\.metrics\?\.inc\(METRIC_NAMES\.accountAuditEmitTotal, \{\s*\n?\s*prefix: auditActionPrefix\(input\.action\),\s*\n?\s*actor_type: input\.actorType,\s*\n?\s*\}\);/,
-    );
+    // Re-pinned when the counter gained an `outcome` dimension so a FAILED
+    // audit write is counted instead of showing up only as a success rate that
+    // quietly stops rising. Asserted as the PROPERTIES that matter — the insert
+    // is awaited inside a try, a failure is counted as error and re-thrown so
+    // callers keep swallowing it, and success is counted as ok — rather than as
+    // one exact rendering of the method, which a formatter or a refactor breaks
+    // while proving nothing.
+    expect(body).toMatch(/row = await this\.repo\.insert\(input\);/);
+    expect(body).toMatch(/outcome: 'error',/);
+    expect(body).toMatch(/throw err;/);
+    expect(body).toMatch(/\.\.\.labels, outcome: 'ok'/);
+    expect(body).toMatch(/prefix: auditActionPrefix\(input\.action\)/);
+    expect(body).toMatch(/actor_type: input\.actorType/);
   });
 
   it('imports: AccountAuditAction + AccountAuditActorType from api-types + AccountContext + requireScope alias', () => {

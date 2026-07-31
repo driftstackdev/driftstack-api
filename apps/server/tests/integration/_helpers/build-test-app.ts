@@ -824,13 +824,13 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   metricsRegistry.registerCounter(
     METRIC_NAMES.accountAuditEmitTotal,
     'Customer-facing audit log emissions, labelled by action prefix + actor type.',
-    ['prefix', 'actor_type'],
+    ['prefix', 'actor_type', 'outcome'],
   );
   // Arc 7 obs.11 — admin audit log emission counter.
   metricsRegistry.registerCounter(
     METRIC_NAMES.adminAuditEmitTotal,
     'Admin audit log emissions, labelled by action prefix.',
-    ['prefix'],
+    ['prefix', 'outcome'],
   );
   // Arc 7 obs.12 — LiveKit token mint outcome counter.
   metricsRegistry.registerCounter(

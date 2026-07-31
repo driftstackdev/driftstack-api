@@ -14,6 +14,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { METRIC_NAMES } from '../../src/services/metrics-registry.js';
 
+// The counter gained an `outcome` dimension so a FAILED audit write is
+// counted rather than showing up only as a success rate that quietly stops
+// rising. These lookups therefore ask for outcome="ok" — the success path they
+// were always asserting; without it they match nothing and read as a
+// regression when the behaviour is unchanged.
 describe('Arc 7 obs.10 — account_audit_emit_total counter (integration)', () => {
   let fx: TestAppFixture;
 
@@ -26,6 +31,7 @@ describe('Arc 7 obs.10 — account_audit_emit_total counter (integration)', () =
     const before = fx.metricsRegistry.getValue(METRIC_NAMES.accountAuditEmitTotal, {
       prefix: 'api_key',
       actor_type: 'customer',
+      outcome: 'ok',
     });
     const res = await fx.app.inject({
       method: 'POST',
@@ -38,6 +44,7 @@ describe('Arc 7 obs.10 — account_audit_emit_total counter (integration)', () =
       fx.metricsRegistry.getValue(METRIC_NAMES.accountAuditEmitTotal, {
         prefix: 'api_key',
         actor_type: 'customer',
+        outcome: 'ok',
       }),
     ).toBe(before + 1);
   });
@@ -47,6 +54,7 @@ describe('Arc 7 obs.10 — account_audit_emit_total counter (integration)', () =
     const before = fx.metricsRegistry.getValue(METRIC_NAMES.accountAuditEmitTotal, {
       prefix: 'api_key',
       actor_type: 'customer',
+      outcome: 'ok',
     });
     for (let i = 0; i < 3; i++) {
       await fx.app.inject({
@@ -60,6 +68,7 @@ describe('Arc 7 obs.10 — account_audit_emit_total counter (integration)', () =
       fx.metricsRegistry.getValue(METRIC_NAMES.accountAuditEmitTotal, {
         prefix: 'api_key',
         actor_type: 'customer',
+        outcome: 'ok',
       }),
     ).toBe(before + 3);
   });
@@ -75,7 +84,7 @@ describe('Arc 7 obs.10 — account_audit_emit_total counter (integration)', () =
     const rendered = fx.metricsRegistry.render();
     expect(rendered).toContain('# TYPE driftstack_account_audit_emit_total counter');
     expect(rendered).toMatch(
-      /driftstack_account_audit_emit_total\{prefix="api_key",actor_type="customer"\} \d+/,
+      /driftstack_account_audit_emit_total\{prefix="api_key",actor_type="customer",outcome="ok"\} \d+/,
     );
   });
 });

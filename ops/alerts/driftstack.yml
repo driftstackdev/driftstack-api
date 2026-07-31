@@ -47,6 +47,32 @@ groups:
             queue depth suggests AgentRuntime decompose latency is
             hurting interactive takeover responsiveness.
 
+      - alert: AuditTrailWriteFailing
+        # An audit write that fails is swallowed at the call site by design —
+        # losing the audit row must not break the customer's operation — and
+        # several call sites swallow it with a completely empty catch. Before
+        # this counter had an `error` outcome the only evidence was a success
+        # counter that quietly stopped incrementing, so the trail could stop
+        # recording while every dashboard looked healthy.
+        #
+        # For a compliance trail that is the one failure you cannot afford to
+        # find late: you cannot reconstruct who did what, and you do not know
+        # you cannot. Any sustained failure pages.
+        expr: |
+          sum(increase(driftstack_account_audit_emit_total{outcome="error"}[15m]))
+          + sum(increase(driftstack_admin_audit_emit_total{outcome="error"}[15m])) > 0
+        for: 10m
+        labels:
+          severity: critical
+          team: driftstack-runtime
+        annotations:
+          summary: 'Audit-trail writes are failing'
+          description: |
+            Account or admin audit rows are failing to persist. The operations
+            themselves are still succeeding — callers swallow the failure on
+            purpose — so the only symptom is a gap in the trail. Treat as a
+            compliance incident and check database write health first.
+
       - alert: PaymentWebhookSignatureFailing
         # A signature failure means we are REJECTING events the provider
         # believes it delivered. Stripe and NowPayments retry, then give up —
@@ -304,8 +330,6 @@ groups:
 # Alert-backed (defined above):
 #
 # Dashboard-only (drift-guard reference; no paging rule yet). Checked by
-#   - driftstack_account_audit_emit_total
-#   - driftstack_admin_audit_emit_total
 #   - driftstack_agent_decompose_total
 #   - driftstack_auth_total
 #   - driftstack_byok_anthropic_test_total

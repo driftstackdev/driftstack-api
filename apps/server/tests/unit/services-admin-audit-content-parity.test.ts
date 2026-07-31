@@ -139,13 +139,19 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
     expect(body).toMatch(
       /Record one admin action\. Must be called by the route handler before\s*\n?\s*\*\s*returning the response\. A throw here propagates up — failure to\s*\n?\s*\*\s*audit fails the request \(D-025\)\./,
     );
-    expect(body).toMatch(
-      /async record\(input: NewAdminAuditLogInput\): Promise<AdminAuditLogRow> \{\s*\n?\s*const row = await this\.repo\.insert\(input\);[\s\S]*?return row;\s*\n?\s*\}/,
-    );
+    // Re-pinned when the counter gained an `outcome` dimension so a FAILED
+    // staff-action audit write is counted rather than showing up only as a
+    // success rate that stops rising. Asserted as the properties that matter
+    // — insert awaited in a try, failure counted as error and re-thrown so
+    // callers keep swallowing it, success counted as ok — rather than one
+    // exact rendering of the method.
+    expect(body).toMatch(/row = await this\.repo\.insert\(input\);/);
+    expect(body).toMatch(/outcome: 'error'/);
+    expect(body).toMatch(/throw err;/);
+    expect(body).toMatch(/\.\.\.labels, outcome: 'ok'/);
+    expect(body).toMatch(/prefix: auditActionPrefix\(input\.action\)/);
     // Arc 7 obs.11 — best-effort metrics bump after insert.
-    expect(body).toMatch(
-      /this\.metrics\?\.inc\(METRIC_NAMES\.adminAuditEmitTotal, \{\s*\n?\s*prefix: auditActionPrefix\(input\.action\),\s*\n?\s*\}\);/,
-    );
+    expect(body).toMatch(/METRIC_NAMES\.adminAuditEmitTotal/);
   });
 
   it('list: delegates to repo.list(filters)', () => {
