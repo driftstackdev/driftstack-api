@@ -42,20 +42,37 @@ function safeResultText(value: string, maxLength: number): string {
 }
 
 /**
+ * Intent kinds whose replay CANNOT duplicate an effect, each with the reason.
+ *
+ * This is an allowlist rather than a blocklist, and the direction is the whole
+ * point. Listing the effectful kinds means an intent kind added later is
+ * classified "safe to replay" by omission, and the executor will auto-retry it
+ * after an ambiguous WebDriver or dispatch failure — the exact failure class
+ * that cannot distinguish "never applied" from "applied, result lost". For a
+ * product that drives a real browser on a customer's behalf, that is a second
+ * form submission, a second purchase, a second transfer. Listing the SAFE kinds
+ * instead means a new kind is effectful until someone says otherwise.
+ *
+ * Both entries are read-only or self-limiting: a capture reads page state, and a
+ * wait carries its own internal timeout, so replaying either changes nothing
+ * about the page.
+ */
+const REPLAY_SAFE_INTENT_KINDS: ReadonlySet<AgentIntent['kind']> = new Set(['capture', 'wait']);
+
+/**
  * A navigation or browser mutation can commit before its result is lost. The
  * harness and correlator intentionally use coarse failure codes that cannot
  * distinguish that case from a pre-application failure, so replaying these
  * intents with a fresh id could repeat navigation, an action, relative movement,
  * or human pacing. Keep this shared with the executor so customer retry guidance
  * and automatic replay can never disagree.
+ *
+ * Fails safe on an unrecognised kind: unknown means "may duplicate". Today's
+ * union is classified identically to the previous explicit list — this changes
+ * nothing now and changes the default for whatever is added next.
  */
 export function intentReplayMayDuplicateEffect(intent: AgentIntent): boolean {
-  return (
-    intent.kind === 'navigate' ||
-    intent.kind === 'interact' ||
-    intent.kind === 'scroll' ||
-    intent.kind === 'behavioral_pause'
-  );
+  return !REPLAY_SAFE_INTENT_KINDS.has(intent.kind);
 }
 
 /** Map a decoded harness result + its originating intent → customer IntentResult. */
