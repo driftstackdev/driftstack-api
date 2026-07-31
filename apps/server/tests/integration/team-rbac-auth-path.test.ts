@@ -332,13 +332,10 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
 
   it('GET /v1/sessions returns owner sessions when caller is a member + sets X-Driftstack-Account', async () => {
     fx = await buildTestApp();
-    fx.authRepo.setTeamMemberships(fx.accountId, [
-      {
-        membershipId: MEMBERSHIP_ID,
-        ownerAccountId: OWNER_ACCOUNT_ID,
-        role: 'admin',
-      },
-    ]);
+    // This fixture performs both a self read and a selected-owner read. Seed a
+    // real api_scale owner deliberately so the new owner limiter has ample
+    // test headroom; this is fixture budget, not a widened production limit.
+    seedUsageOwner('admin');
     // Seed sessions: 1 for caller + 2 for the owner.
     await fx.sessionsRepo.insertSession({
       accountId: fx.accountId,

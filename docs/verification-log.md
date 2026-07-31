@@ -29596,3 +29596,118 @@ checking (11 files, zero diagnostics), targeted lint/format and diff checks are
 green. No profile service, schema, SDK runtime/resource/model semantics,
 proxy/recipe/transfer surface, shared build/deploy, native, harness/Fleet,
 environment, customer, secret, package or foreign pnpm action was performed.
+
+---
+
+## V-708 — Team session traffic is charged to the actor and the effective owner
+
+**Date:** 2026-07-31
+
+A team member acting under `X-Driftstack-Account` spent only their own rate
+limit while doing work owned by, and billed against, someone else. Adding
+admins therefore multiplied the owner's effective session capacity: N admins
+could open N times the intended create/message/input volume on one owner, and
+the owner's own tier and staff override never entered the decision. Session
+routes also resolved the owner's tier per route, so the authority that decided
+capacity was duplicated in the routes rather than owned by the limiter.
+
+Both budgets are now charged in a fixed order. The existing per-actor
+preHandler always consumes first and records a plugin-local receipt keyed by
+the exact bucket and cost; the owner consume is unreachable without a matching
+allowed actor receipt, so no path can charge an owner without first charging
+the caller. Self-scoped requests and per-session GUI control-key requests take
+the receipt's early return and consume exactly once. Only a distinct selected
+owner consumes a second time, after the route's own membership and role checks,
+and against the owner's fresh active account row and active overrides rather
+than the actor's cached tier. Actor capacity is never refunded when the owner
+denies. Primary-store failure degrades to the bounded in-process fallback, both
+stores failing rejects closed, and there is exactly one fallback consume in the
+actor path and one in the owner path.
+
+Owner denial discloses nothing about the owner. The four `x-ratelimit-*` and
+three IETF policy headers are removed, `Retry-After` remains, and the body stays
+the generic `Rate limit exceeded.` problem, so a member cannot probe another
+account's tier, capacity, remaining tokens or override. Owner _availability_ is
+kept distinct from owner _capacity_: a missing, suspended or deleted owner
+answers an exact non-retryable 403, because `db/auth-repo.ts` already filters
+memberships to active owners and the only way to reach the branch is a member's
+cached cross-account context. Publishing that permanent state as a 429 would
+have handed the SDK a `Retry-After` it honours — it retries 429 and no other
+4xx — so a caller would have spun for the whole cache window instead of reading
+the real reason. Genuine authority-infrastructure failure still fails closed
+with the generic 429.
+
+Coverage is exactly 14 direct-session and 21 agent-session routes. The
+dedicated buckets are unchanged: `sessions:create` for session create and
+profile launch, `agent_sessions:message`, `agent_sessions:input_event`, and
+`global` for every other active session route. Transcript SSE concurrency is
+keyed and released by the authoritative `session.accountId`, so multiple team
+admins aggregate into one owner slot instead of each holding a private cap.
+Agent-message owner admission resolves before either lane does work, while the
+SSE lane keeps the terminal `event: response` envelope for an invalid body or
+an unknown session — only a rate-limit denial skips a representation, exactly
+as the actor preHandler always did. `/mode` retains its separate fresh
+entitlement-tier lookup.
+
+An AST guard pins the inventory rather than a count: it scopes discovery to the
+three live registration functions so disabled stubs cannot satisfy or inflate
+it, requires one actor limiter and one authority-bound owner consume per route
+with identical bucket and cost, pins the message route's `prepareAgentMessage`
+indirection, and pins exactly two fallback call sites. Five mutations are proved
+red — a dropped owner consume, a diverged bucket, an unclassified new route,
+telemetry published before owner admission, and a bypassed message helper.
+Seven further mutations were each proved red on their exact defect: removed
+`authRepo` wiring, a dropped `getState` owner consume, a restored route-local
+`authRepo` destructure, actor-keyed transcript concurrency, a reverted team
+fixture budget, and both documentation guards against copy that leaks the
+owner's capacity. The worktree diff hash was byte-identical before and after
+the mutation run.
+
+Two customer-facing claims were corrected rather than pinned as written. The
+dual consume is scoped to the session and agent-session routes; the other
+header-honouring families still charge the acting member only, and the
+reference page now says so instead of promising an owner-aggregate cap that
+profiles, webhooks, audit and billing do not enforce. `sessions:create` is
+named as both `POST /v1/sessions` and `POST /v1/profiles/:id/launch`, which the
+page previously described as the first call only.
+
+Four further guards moved with the change rather than around it. Two import
+rosters gained `ForbiddenError`, pinned as the single canonical import line —
+mutation-proved by splitting the symbol onto a second `../lib/errors.js` import,
+which the guard still rejects, so the pin cannot be satisfied by hiding the
+change. A third guard duplicated the two corrected `rate-limits.md` sentences. The
+fourth was a fixture: the DEK owner-boundary case built a membership with no
+owner account row, which production cannot produce, and it only ever passed
+because nothing read the owner row — the same reason recorded in that file's own
+`seedTeamOwnerAccount` comment, now true one step further out since the limiter
+reads the owner on every team-scoped route.
+
+Verification: full server suite 2515 files / 26,146 tests — **25,993 passing, 0
+failing**, 153 skipped — strict server source and test TypeScript, docs Astro
+check (11 files, zero diagnostics), targeted ESLint and Prettier, and
+`git diff --check`, all green. The focused proofs are the new integration file
+and the AST guard.
+
+The real-Redis E2E now actually runs. `apps/server/tests/e2e/rate-limit.spec.ts`
+is **4/4 green** against real Postgres and real Redis, isolated to a dedicated
+`driftstack_e2e_a3` database and Redis db 9 so the shared local `driftstack`
+database was never truncated. That includes the new two-admin case: one owner
+override of capacity 1, two distinct admins issuing owner-scoped list calls
+concurrently, resolving to exactly one 200 and one generic 429 with every
+policy header absent, through the production Redis Lua path. Running it also
+revealed that the spec's three original tests had been silently unrunnable
+since Free became an interactive desktop tier (`3202fdb17` / `e9b6cd91d`): an
+ordinary free-tier key is refused 403 `apiAccess` at the auth boundary before
+the limiter, so all three asserted a status produced by a gate they were not
+testing. They now seed a paid tier, and the atomicity proof pins capacity 60 /
+refill 1 with an explicit override instead of inheriting a tier default that
+has already moved once.
+
+Honest residuals. A distinct-owner request costs two uncached Postgres reads
+before the token check; this is bounded by the actor bucket, which is charged
+first, and self and control-key requests read nothing, but it belongs in a
+follow-up caching lane. A read-only team `member` can consume the owner's shared
+budget on owner-scoped reads — deliberate, since the alternative lets members
+bypass the owner cap entirely, and documented as shared. No schema, OpenAPI,
+SDK, shared build/deploy, native, harness/Fleet, environment, customer, secret,
+package or foreign pnpm surface changed.

@@ -958,6 +958,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   await app.register(rateLimitPlugin, {
     store: deps.rateLimitStore,
+    authRepo: deps.authRepo,
     ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
   });
 

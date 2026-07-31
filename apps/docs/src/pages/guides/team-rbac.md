@@ -104,7 +104,9 @@ the owner by passing `X-Driftstack-Account: acc_<owner-uuid>`:
 
 ```bash
 # create a session OWNED by the team owner; counts against the
-# OWNER's concurrent cap; tier-derived caps use the OWNER's tier.
+# OWNER's concurrent cap. The request consumes sessions:create
+# for the member first, then the same bucket for the OWNER using
+# the owner's current tier/override.
 curl -X POST https://api.driftstack.dev/v1/sessions \
   -H "Authorization: Bearer $MEMBER_KEY" \
   -H "X-Driftstack-Account: acc_owner-uuid" \
@@ -121,6 +123,13 @@ Role gating:
   `403` before any session or driver mutation.
 - **Write endpoints** (POST / PATCH / DELETE / api-keys rotate):
   `admin` role only. `member` gets `403`.
+
+Team-resource session and agent-session routes use dual rate-limit
+accounting after those role checks. The member first spends from their
+own bucket. A distinct selected owner then spends from the same bucket
+key and cost, using the owner's current tier and active override.
+Owner exhaustion returns a generic 429 with `Retry-After`; it does not
+reveal the owner's policy or refund the member's already-consumed token.
 
 Endpoints that honor the header:
 
@@ -212,6 +221,11 @@ the caller's own team (as noted above, `/v1/team/*` never honors
 inviting people to their _own_ team, not the owner's). The owner
 is always implicitly "admin" on their own team (no separate
 membership row).
+
+Each admin retains an independent actor budget, but all admins targeting
+the same owner share that owner's budget. For example, simultaneous
+session creates by two admins contend on one owner
+`sessions:create` bucket; adding admins never multiplies owner capacity.
 
 ### Read-only collaborators
 

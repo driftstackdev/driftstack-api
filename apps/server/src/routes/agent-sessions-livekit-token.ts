@@ -30,6 +30,7 @@ import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { FeatureUnavailableError } from '../lib/errors.js';
 import { GUI_CONTROL_KEY_HEADER, validateGuiControlKey } from '../lib/agent-session-control-key.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
+import { consumeEffectiveOwnerRateLimit } from '../middleware/rate-limit.js';
 
 const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -160,6 +161,7 @@ export function registerAgentSessionsLivekitTokenRoute(
         bump('not_found');
         throw new NotFoundError(`Agent session "${sessionId}" not found.`);
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, session.accountId, 'global');
       if (session.status !== 'active') {
         // 403 rather than 404 — the customer DID own this session,
         // they just can't mint a token for a closed one. Matches the

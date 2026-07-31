@@ -62,6 +62,7 @@ function captureTranscriptHandler(
       dashboardOrigin?: string;
       corsAllowedOrigins?: string[];
     };
+    sessionOwners?: Readonly<Record<string, string>>;
   } = {},
 ): {
   handler: CapturedHandler;
@@ -90,10 +91,10 @@ function captureTranscriptHandler(
   registerAgentSessionsRoutes(app as unknown as FastifyInstance, {
     runtime: {} as never,
     sessions: {
-      get: () =>
+      get: (id: string) =>
         Promise.resolve({
-          id: 'agt_test',
-          accountId: 'acc_owner',
+          id,
+          accountId: opts.sessionOwners?.[id] ?? 'acc_owner',
           transcript: [
             { at: '2026-07-15T00:00:00.000Z', role: 'user', body: 'first' },
             { at: '2026-07-15T00:00:01.000Z', role: 'agent', body: 'second' },
@@ -117,6 +118,7 @@ function makeConnection(
     writableLength?: number;
     failWriteHead?: boolean;
     origin?: string;
+    sessionId?: string;
   } = {},
 ): {
   request: CapturedRequest;
@@ -137,7 +139,7 @@ function makeConnection(
   if (opts.lastEventId !== undefined) requestHeaders['last-event-id'] = opts.lastEventId;
   if (opts.origin !== undefined) requestHeaders.origin = opts.origin;
   const request: CapturedRequest = {
-    params: { id: 'agt_test' },
+    params: { id: opts.sessionId ?? 'agt_test' },
     headers: requestHeaders,
     raw: new EventEmitter(),
     account: {
@@ -265,8 +267,10 @@ describe('agent transcript SSE captured lifecycle', () => {
     disallowed.request.raw.emit('close');
   });
 
-  it('caps one authenticated account at ten streams, isolates another account, and reuses a released slot', async () => {
-    const { handler, bus } = captureTranscriptHandler();
+  it('shares one resource-owner cap across team actors, isolates a different owner, and reuses the released owner slot', async () => {
+    const { handler, bus } = captureTranscriptHandler({
+      sessionOwners: { agt_other: 'acc_other' },
+    });
     const ownerConnections = Array.from({ length: 10 }, () => makeConnection());
     for (const connection of ownerConnections) {
       await handler(connection.request, connection.reply);
@@ -279,18 +283,29 @@ describe('agent transcript SSE captured lifecycle', () => {
     expect(denied.hijackCount).toBe(0);
 
     const teamAdmin = makeConnection({ accountId: 'acc_team_admin', ownerTeamRole: 'admin' });
-    await handler(teamAdmin.request, teamAdmin.reply);
-    expect(teamAdmin.hijackCount).toBe(1);
+    await expect(handler(teamAdmin.request, teamAdmin.reply)).rejects.toMatchObject({
+      status: 429,
+    });
+    expect(teamAdmin.hijackCount).toBe(0);
+
+    const otherOwner = makeConnection({ accountId: 'acc_other', sessionId: 'agt_other' });
+    await handler(otherOwner.request, otherOwner.reply);
+    expect(otherOwner.hijackCount).toBe(1);
+    expect(bus.subscriberCount('agt_other')).toBe(1);
 
     ownerConnections[0]!.request.raw.emit('close');
-    const replacement = makeConnection();
+    const replacement = makeConnection({
+      accountId: 'acc_team_admin',
+      ownerTeamRole: 'admin',
+    });
     await handler(replacement.request, replacement.reply);
     expect(replacement.hijackCount).toBe(1);
 
     for (const connection of ownerConnections.slice(1)) connection.request.raw.emit('close');
-    teamAdmin.request.raw.emit('close');
+    otherOwner.request.raw.emit('close');
     replacement.request.raw.emit('close');
     expect(bus.subscriberCount('agt_test')).toBe(0);
+    expect(bus.subscriberCount('agt_other')).toBe(0);
   });
 
   it('does not consume capacity when synchronous stream setup fails', async () => {

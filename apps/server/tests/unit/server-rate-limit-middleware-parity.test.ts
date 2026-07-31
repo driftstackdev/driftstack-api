@@ -158,10 +158,10 @@ describe('W713 server-side rate-limit middleware parity', () => {
     );
   });
 
-  it("CRITICAL imports pinned — RateLimitedError + UnauthorizedError from ../lib/errors.js (canonical taxonomy). Drift to importing from elsewhere would let the middleware diverge from W710's canonical roster.", () => {
+  it("CRITICAL imports pinned — ForbiddenError + RateLimitedError + UnauthorizedError from ../lib/errors.js (canonical taxonomy). Drift to importing from elsewhere would let the middleware diverge from W710's canonical roster.", () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
     expect(src).toMatch(
-      /import \{ RateLimitedError, UnauthorizedError \} from '\.\.\/lib\/errors\.js'/,
+      /import \{ ForbiddenError, RateLimitedError, UnauthorizedError \} from '\.\.\/lib\/errors\.js'/,
     );
   });
 

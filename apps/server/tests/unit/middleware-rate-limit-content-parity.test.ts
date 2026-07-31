@@ -167,12 +167,17 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
     );
   });
 
-  it('imports: rateLimitConsume + RateLimitStore type + RateLimitedError + UnauthorizedError', () => {
+  it('imports: rateLimitConsume + RateLimitStore type + ForbiddenError + RateLimitedError + UnauthorizedError', () => {
     expect(body).toMatch(/import \{[\s\S]*?rateLimitConsume,/);
     expect(body).toMatch(/type ConsumeResultWithBucket,/);
     expect(body).toMatch(/type RateLimitStore,?\s*\n?\s*\} from '\.\.\/services\/rate-limit\.js';/);
+    // ForbiddenError joined the roster with the effective-owner limiter: owner
+    // AVAILABILITY (missing / suspended / deleted) is a deterministic
+    // authorization outcome and must not be published as a retryable 429,
+    // which the SDK honours via Retry-After. Owner CAPACITY denial is still
+    // RateLimitedError.
     expect(body).toMatch(
-      /import \{ RateLimitedError, UnauthorizedError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ ForbiddenError, RateLimitedError, UnauthorizedError \} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

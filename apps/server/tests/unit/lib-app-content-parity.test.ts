@@ -128,7 +128,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/maxAge: 600,/);
   });
 
-  it('Auth + rate-limit plugins ordered correctly + Sentry hooks installed BEFORE auth/rate-limit (V-117 framing pinned)', () => {
+  it('Auth + rate-limit plugins ordered correctly; limiter receives live account authority; Sentry hooks install before both (V-117 framing pinned)', () => {
     expect(body).toMatch(
       /\/\/ V-117: install Sentry hooks BEFORE auth\/rate-limit so breadcrumbs\s*\n?\s*\/\/ capture every request — including ones that fail at the auth or\s*\n?\s*\/\/ rate-limit gate\./,
     );
@@ -139,7 +139,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
       /await app\.register\(authPlugin, \{\s*\n?\s*authRepo: deps\.authRepo,\s*\n?\s*authCache: deps\.authCache,\s*\n?\s*authCoalescer: deps\.authCoalescer,/,
     );
     expect(body).toMatch(
-      /await app\.register\(rateLimitPlugin, \{\s*\n?\s*store: deps\.rateLimitStore,\s*\n?\s*\.\.\.\(deps\.metricsRegistry !== undefined \? \{ metrics: deps\.metricsRegistry \} : \{\}\),\s*\n?\s*\}\);/,
+      /await app\.register\(rateLimitPlugin, \{\s*\n?\s*store: deps\.rateLimitStore,\s*\n?\s*authRepo: deps\.authRepo,\s*\n?\s*\.\.\.\(deps\.metricsRegistry !== undefined \? \{ metrics: deps\.metricsRegistry \} : \{\}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/registerErrorHandler\(app\);/);
   });

@@ -58,12 +58,19 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(
       /- \*\*`global`\*\* — every authenticated `\/v1\/\*` call that doesn't\s*\n?\s*have a dedicated bucket below\./,
     );
-    expect(body).toMatch(/- \*\*`sessions:create`\*\* — `POST \/v1\/sessions` only\./);
+    // Both session-creating calls draw on this bucket — routes/sessions.ts
+    // registers POST /v1/sessions AND POST /v1/profiles/:id/launch with
+    // app.rateLimit('sessions:create').
+    expect(body).toMatch(
+      /- \*\*`sessions:create`\*\* — the two session-creating calls,\s*\n?\s*`POST \/v1\/sessions` and `POST \/v1\/profiles\/:id\/launch`\./,
+    );
     expect(body).toMatch(
       /- \*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/message` only/,
     );
+    // "uses" rather than "drains", because a team request drains that one key
+    // TWICE — once for the acting member, once for the selected owner.
     expect(body).toMatch(
-      /Each call drains exactly one bucket: a `POST \/v1\/sessions`\s*\n?consumes from `sessions:create` only \(never `global`\)/,
+      /Each call uses only that named bucket key: a `POST \/v1\/sessions`\s*\n?uses `sessions:create` \(never `global`\)/,
     );
     expect(body).toMatch(/\| `free`\s+\| 60\s+\| 1\s+\|/);
     expect(body).toMatch(/\| `api_starter`\s+\| 240\s+\| 4\s+\|/);

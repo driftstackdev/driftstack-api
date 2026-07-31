@@ -33,6 +33,7 @@ import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import { callerCanAccessAgentSession } from './agent-sessions.js';
 import { NotFoundError, ValidationError } from '../lib/errors.js';
 import { GUI_CONTROL_KEY_HEADER, validateGuiControlKey } from '../lib/agent-session-control-key.js';
+import { consumeEffectiveOwnerRateLimit } from '../middleware/rate-limit.js';
 
 const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -157,6 +158,7 @@ export function registerAgentSessionsTransportReportRoute(
       if (!controlKeyAuthorized && (!ctx || !callerCanAccessAgentSession(ctx, session.accountId))) {
         throw new NotFoundError(`Agent session "${sessionId}" not found.`);
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, session.accountId, 'global');
 
       const body = parsed.data;
       // STRUCTURED-LOG the report (no DB). The `ice-transport-telemetry`

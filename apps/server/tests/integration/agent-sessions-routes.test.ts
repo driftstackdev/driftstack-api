@@ -850,6 +850,13 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
 
   it('Teams member-launch (DEK owner-only boundary): an admin launching under the owner with a well-formed profile_id the OWNER does NOT own → 404 (owner-scoped profile validation rejects before any DEK reach)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
+    // Same reason as the seedTeamOwnerAccount comment above, one step further:
+    // the effective-owner rate limiter reads the owner's live row on EVERY
+    // team-scoped route, so a fabricated membership with no owner account no
+    // longer skates through to the profile check. Production cannot produce
+    // that state anyway — findTeamMemberships innerJoins accounts on
+    // status='active' — so seeding the owner is what makes this fixture real.
+    seedTeamOwnerAccount(fx);
     fx.authRepo.setTeamMemberships(fx.accountId, [
       { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'admin' },
     ]);

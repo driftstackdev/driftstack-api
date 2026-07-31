@@ -10,9 +10,10 @@ import {
   type ConsumeResultWithBucket,
   type RateLimitStore,
 } from '../services/rate-limit.js';
-import { RateLimitedError, UnauthorizedError } from '../lib/errors.js';
+import { ForbiddenError, RateLimitedError, UnauthorizedError } from '../lib/errors.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import { BoundedMemoryRateLimitStore } from '../lib/bounded-memory-rate-limit-store.js';
+import type { AccountAuthRepo, AccountRow, RateLimitOverride } from '../services/auth.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -29,6 +30,59 @@ export interface RateLimitPluginOptions {
    *  plugin increments `driftstack_rate_limit_total{bucket,outcome}`
    *  on every consume. outcome ∈ { allowed | exceeded }. */
   metrics?: MetricsRegistry;
+  /**
+   * Live owner/tier/override authority for effective-owner enforcement.
+   * Optional only for isolated middleware tests that never call that
+   * decorator; production always wires it.
+   */
+  authRepo?: AccountAuthRepo;
+}
+
+interface EffectiveOwnerInvocation {
+  ownerAccountId: string;
+  bucketKey: string;
+  cost: number;
+  resolvedTier?: AccountRow['tier'];
+}
+
+const effectiveOwnerInvocations = new WeakMap<FastifyRequest, EffectiveOwnerInvocation>();
+
+/**
+ * Consume the route's existing actor bucket a second time for an authorized,
+ * distinct effective owner. The plugin-local actor receipt makes actor-first
+ * ordering and exact bucket/cost parity mandatory. Isolated route fakes keep
+ * using their existing no-op `app.rateLimit()` seam.
+ */
+export async function consumeEffectiveOwnerRateLimit(
+  app: FastifyInstance,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  ownerAccountId: string,
+  bucketKey: string,
+  cost = 1,
+): Promise<AccountRow['tier']> {
+  if (effectiveOwnerInvocations.has(request)) {
+    throw new RateLimitedError(60);
+  }
+  const invocation: EffectiveOwnerInvocation = {
+    ownerAccountId,
+    bucketKey,
+    cost,
+  };
+  effectiveOwnerInvocations.set(request, invocation);
+  try {
+    await app.rateLimit(bucketKey, cost)(request, reply);
+    if (invocation.resolvedTier === undefined) {
+      // A production app always has the real plugin. A fake route app may
+      // intentionally no-op the limiter; no owner tier is available there.
+      return request.account?.account.tier ?? 'free';
+    }
+    return invocation.resolvedTier;
+  } finally {
+    if (effectiveOwnerInvocations.get(request) === invocation) {
+      effectiveOwnerInvocations.delete(request);
+    }
+  }
 }
 
 function rateLimitPlugin(
@@ -43,8 +97,197 @@ function rateLimitPlugin(
   // limiting platform-wide. Created once per plugin instance so the
   // fallback buckets persist across requests during the outage.
   const fallbackStore = new BoundedMemoryRateLimitStore();
+  type ActorReceipt = {
+    accountId: string;
+    tier: AccountRow['tier'];
+    bucketKey: string;
+    cost: number;
+  };
+  const actorReceipts = new WeakMap<FastifyRequest, Map<string, ActorReceipt>>();
+  const ownerReceipts = new WeakMap<FastifyRequest, Map<string, AccountRow['tier']>>();
+  const policyHeaders = [
+    'x-ratelimit-bucket',
+    'x-ratelimit-limit',
+    'x-ratelimit-remaining',
+    'x-ratelimit-reset',
+    'ratelimit-limit',
+    'ratelimit-remaining',
+    'ratelimit-reset',
+  ] as const;
+  const receiptKey = (bucketKey: string, cost: number): string =>
+    `${bucketKey}\u0000${cost.toString()}`;
+  const rememberActorReceipt = (request: FastifyRequest, receipt: ActorReceipt): void => {
+    const receipts = actorReceipts.get(request) ?? new Map<string, ActorReceipt>();
+    receipts.set(receiptKey(receipt.bucketKey, receipt.cost), receipt);
+    actorReceipts.set(request, receipts);
+  };
+  const rejectEffectiveOwner = (reply: FastifyReply, retryAfterSeconds: number): never => {
+    // The actor's successful policy headers must not be mistaken for details
+    // about the selected owner's lower capacity/override. Owner denial exposes
+    // only a generic problem plus the actionable Retry-After.
+    for (const name of policyHeaders) reply.removeHeader(name);
+    reply.header('retry-after', retryAfterSeconds.toString());
+    throw new RateLimitedError(retryAfterSeconds);
+  };
+  const indexOverrides = (rows: RateLimitOverride[]): Record<string, RateLimitOverride> => {
+    const indexed: Record<string, RateLimitOverride> = {};
+    for (const row of rows) indexed[row.bucketKey] = row;
+    return indexed;
+  };
+  const loadLiveOwnerAuthority = async (
+    ownerAccountId: string,
+  ): Promise<{ account: AccountRow; overrides: Record<string, RateLimitOverride> }> => {
+    if (opts.authRepo === undefined) {
+      throw new Error('effective-owner rate-limit authority is unavailable');
+    }
+    const account = await opts.authRepo.getAccount(ownerAccountId);
+    // A missing or non-active owner is a DETERMINISTIC authorization outcome,
+    // not a capacity outcome. Reporting it as 429 would hand the caller a
+    // Retry-After the SDK honours forever (packages/sdk-typescript/src/retry.ts
+    // retries 429 and no other 4xx), so a suspended or deleted owner would turn
+    // every team member's request into an infinite retry loop against a
+    // permanent condition. Accounts are soft-deleted (`account_status` is
+    // active|suspended|deleted), so the reachable case is `status`, not a null
+    // row. Mirrors routes/admin.ts, profiles.ts and profile-snapshots.ts, which
+    // already answer 403 on exactly this condition.
+    if (account === null || account.status === 'deleted') {
+      throw new ForbiddenError('Owner account no longer exists.');
+    }
+    if (account.status !== 'active') {
+      throw new ForbiddenError('Owner account is suspended.');
+    }
+    const rows = await opts.authRepo.findActiveRateLimitOverrides(ownerAccountId, new Date());
+    return { account, overrides: indexOverrides(rows) };
+  };
+
+  const consumeEffectiveOwner = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    ownerAccountId: string,
+    bucketKey: string,
+    cost: number,
+  ): Promise<AccountRow['tier']> => {
+    const key = receiptKey(bucketKey, cost);
+    const actorReceipt = actorReceipts.get(request)?.get(key);
+    if (actorReceipt === undefined) {
+      request.log.warn(
+        { component: 'rate-limit', bucket: bucketKey },
+        'effective-owner limiter has no allowed actor receipt — failing CLOSED',
+      );
+      return rejectEffectiveOwner(reply, 60);
+    }
+
+    // Self and the exact per-session control key were already charged to
+    // this owner by the actor preHandler. Never double-consume them.
+    if (actorReceipt.accountId === ownerAccountId) return actorReceipt.tier;
+
+    // Defense in depth: a distinct owner must still be one of the actor's
+    // live memberships. Exact member/admin role remains route-specific and
+    // must be checked before this decorator is called.
+    const ctx = request.account;
+    if (
+      ctx == null ||
+      !ctx.teams.some((membership) => membership.ownerAccountId === ownerAccountId)
+    ) {
+      request.log.warn(
+        { component: 'rate-limit', bucket: bucketKey },
+        'effective-owner limiter received an unauthorized owner — failing CLOSED',
+      );
+      return rejectEffectiveOwner(reply, 60);
+    }
+
+    const ownerReceiptKey = `${ownerAccountId}\u0000${key}`;
+    const priorOwnerTier = ownerReceipts.get(request)?.get(ownerReceiptKey);
+    if (priorOwnerTier !== undefined) return priorOwnerTier;
+
+    const authority = await loadLiveOwnerAuthority(ownerAccountId).catch((error: unknown) => {
+      // Owner availability is decided above and keeps its exact non-retryable
+      // 403. Only genuine authority-infrastructure failure (no repo wired, or a
+      // rejected account/override read) degrades to the generic closed 429.
+      if (error instanceof ForbiddenError) throw error;
+      request.log.warn(
+        { component: 'rate-limit', bucket: bucketKey, err: error },
+        'effective-owner authority lookup failed — failing CLOSED',
+      );
+      return rejectEffectiveOwner(reply, 60);
+    });
+
+    const consumeInput = {
+      accountId: authority.account.id,
+      tier: authority.account.tier,
+      bucketKey,
+      cost,
+      overrides: authority.overrides,
+    };
+    const result = await rateLimitConsume(opts.store, consumeInput).catch(async (err: unknown) => {
+      request.log.warn(
+        { component: 'rate-limit', bucket: bucketKey, err },
+        'effective-owner rate-limit store error — degrading to bounded in-process fallback',
+      );
+      try {
+        opts.metrics?.inc(METRIC_NAMES.rateLimitStoreFallbackTotal, {
+          limiter: 'account',
+        });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
+      try {
+        return await rateLimitConsume(fallbackStore, consumeInput);
+      } catch (fallbackErr) {
+        request.log.warn(
+          { component: 'rate-limit', bucket: bucketKey, err: fallbackErr },
+          'effective-owner rate-limit fallback error — failing CLOSED',
+        );
+        return rejectEffectiveOwner(reply, 60);
+      }
+    });
+
+    try {
+      opts.metrics?.inc(METRIC_NAMES.rateLimitTotal, {
+        bucket: bucketKey,
+        outcome: result.allowed ? 'allowed' : 'exceeded',
+      });
+    } catch {
+      // Swallow; metrics are best-effort.
+    }
+    const logFields = {
+      component: 'rate-limit',
+      account_id: ownerAccountId,
+      tier: authority.account.tier,
+      bucket_key: bucketKey,
+      cost,
+      tokens_remaining: Math.floor(result.remaining),
+      allowed: result.allowed,
+      retry_after_ms: result.retryAfterMs,
+      authority: 'effective_owner',
+    };
+    if (!result.allowed) {
+      request.log.warn(logFields, 'effective-owner rate-limit exceeded');
+      return rejectEffectiveOwner(reply, Math.max(1, Math.ceil(result.retryAfterMs / 1000)));
+    }
+    request.log.debug(logFields, 'effective-owner rate-limit consumed');
+    const receipts = ownerReceipts.get(request) ?? new Map<string, AccountRow['tier']>();
+    receipts.set(ownerReceiptKey, authority.account.tier);
+    ownerReceipts.set(request, receipts);
+    return authority.account.tier;
+  };
+
   app.decorate('rateLimit', (bucketKey: string, cost = 1) => {
     return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const ownerInvocation = effectiveOwnerInvocations.get(request);
+      if (ownerInvocation !== undefined) {
+        if (ownerInvocation.bucketKey !== bucketKey || ownerInvocation.cost !== cost) {
+          rejectEffectiveOwner(reply, 60);
+        }
+        ownerInvocation.resolvedTier = await consumeEffectiveOwner(
+          request,
+          reply,
+          ownerInvocation.ownerAccountId,
+          bucketKey,
+          cost,
+        );
+        return;
+      }
       const ctx = request.account;
       // gui_control_key control-auth path: `request.account` is absent
       // (the per-session control key isn't an account credential), but
@@ -180,6 +423,12 @@ function rateLimitPlugin(
         );
       }
       request.log.debug(logFields, 'rate-limit consumed');
+      rememberActorReceipt(request, {
+        accountId: effectiveAccountId,
+        tier: effectiveTier,
+        bucketKey,
+        cost,
+      });
     };
   });
 

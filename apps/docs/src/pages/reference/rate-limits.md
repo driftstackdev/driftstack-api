@@ -13,28 +13,48 @@ not the pricing meter. Pricing is concurrent-only per ADR-004.
 
 ## Four bucket keys
 
-Every authenticated request consumes from exactly one bucket:
+Every authenticated request selects exactly one bucket key:
 
 - **`global`** — every authenticated `/v1/*` call that doesn't
   have a dedicated bucket below.
-- **`sessions:create`** — `POST /v1/sessions` only. Lower cap
-  because session creation is the most expensive op in the
+- **`sessions:create`** — the two session-creating calls,
+  `POST /v1/sessions` and `POST /v1/profiles/:id/launch`. Lower
+  cap because session creation is the most expensive op in the
   system (driver allocation, archetype hydration, fingerprint
-  pinning).
+  pinning); a profile launch creates a session too, so it draws
+  on the same cap rather than a separate one.
 - **`agent_sessions:message`** —
   `POST /v1/agent-sessions/:id/message` only. Isolated from
   `global` so an LLM-driven message loop can't drain the
-  global cap, so an LLM-driven message loop cannot exhaust unrelated API capacity.
+  global cap and exhaust unrelated API capacity.
 - **`agent_sessions:input_event`** —
   `POST /v1/agent-sessions/:id/input-event` only. Sized for
   high-frequency live input (≤120Hz `mouseMove` / `touchMove`); isolated so an
   input stream can't drain the `global` cap.
 
-Each call drains exactly one bucket: a `POST /v1/sessions`
-consumes from `sessions:create` only (never `global`), and a
-`POST /v1/agent-sessions/:id/message` consumes from
-`agent_sessions:message` only — hitting the bucket's cap
-returns 429.
+Each call uses only that named bucket key: a `POST /v1/sessions`
+uses `sessions:create` (never `global`), and a
+`POST /v1/agent-sessions/:id/message` uses
+`agent_sessions:message`.
+
+The account scope depends on who owns the resource:
+
+- A self-scoped request consumes that bucket once for the caller.
+- A per-session GUI control key consumes it once for the session owner.
+- A **session or agent-session** request made with `X-Driftstack-Account`
+  first consumes the actor's bucket, then consumes the **same bucket key and
+  cost** for the selected owner. This keeps every member accountable for their
+  own traffic while all members share the owner's session budget.
+
+The second consume is scoped to the session and agent-session routes — the
+resources that hold a live browser. Other endpoints that honour
+`X-Driftstack-Account` (profiles, profile snapshots, webhooks, API keys, audit
+log, email preferences, usage and billing) currently charge the acting member
+only, so their owner-scoped reads and writes do not aggregate into one shared
+budget.
+
+The owner consume uses the owner's current tier and active staff override.
+Authorization and role checks happen before the owner bucket is read.
 
 ## Per-tier defaults
 
@@ -60,7 +80,8 @@ RPS for a default-cost call is the `refill` column.
 
 ## What happens when you hit the cap
 
-The API returns HTTP 429 with an RFC 9457 problem-details body
+When the caller's actor bucket is exhausted, the API returns HTTP 429
+with an RFC 9457 problem-details body
 (`application/problem+json`):
 
 ```json
@@ -76,6 +97,13 @@ The API returns HTTP 429 with an RFC 9457 problem-details body
 The standard `Retry-After` HTTP header carries the same value as
 `retry_after_seconds`. SDK clients honour it automatically with
 exponential backoff capped at 10s.
+
+When a distinct selected owner's bucket is exhausted, the request also
+returns 429, but the problem remains generic (`"Rate limit exceeded."`).
+The generic body retains `retry_after_seconds`; among rate-limit headers,
+only `Retry-After` remains. The owner's tier, capacity, remaining tokens,
+override, and reset policy are not disclosed. The actor token was already
+consumed and is not refunded.
 
 ## Per-account overrides
 
@@ -127,8 +155,8 @@ reads.
 
 ## Response headers
 
-Every authenticated `/v1/*` response carries four `x-ratelimit-*`
-headers reflecting the bucket consumed:
+Allowed authenticated `/v1/*` responses and actor-bucket denials carry
+four `x-ratelimit-*` headers reflecting the actor bucket:
 
 | Header                  | Meaning                                                                     |
 | ----------------------- | --------------------------------------------------------------------------- |
@@ -137,8 +165,9 @@ headers reflecting the bucket consumed:
 | `x-ratelimit-remaining` | Tokens left in the bucket _after_ this call (integer, floor of fractional). |
 | `x-ratelimit-reset`     | Unix-seconds timestamp when the bucket refills to full capacity.            |
 
-The headers are emitted on every status code (including `429`), so
-retry loops can read them without an extra round-trip — combine
+For a distinct effective-owner denial, these policy headers are removed
+to avoid disclosing another account's capacity. That response carries
+`Retry-After` only. For an actor-bucket 429, retry loops can combine
 `x-ratelimit-remaining=0` with `Retry-After` to drive a back-off.
 
 The IETF draft-standard names are emitted alongside the `x-` set, for
@@ -149,6 +178,9 @@ gateways and generic client libraries that read the un-prefixed form:
 | `ratelimit-limit`     | Same value as `x-ratelimit-limit`.                                                  |
 | `ratelimit-remaining` | Same value as `x-ratelimit-remaining`.                                              |
 | `ratelimit-reset`     | Seconds **from now** until full refill (relative, per the draft — NOT a timestamp). |
+
+On successful team requests, these values describe the actor bucket;
+the selected owner's remaining budget is intentionally not exposed.
 
 Note the one semantic difference: `ratelimit-reset` is relative
 delta-seconds, while `x-ratelimit-reset` is an absolute unix-seconds

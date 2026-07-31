@@ -123,11 +123,26 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     );
   });
 
-  it("CRITICAL act-as-creates-session counts-owner's-cap framing pinned. The 'create a session OWNED by the team owner; counts against the OWNER\\'s concurrent cap; tier-derived caps use the OWNER\\'s tier' wording matches W769 /api/usage owner-tier-is-cap-source contract.", () => {
+  it("CRITICAL act-as session framing pins the owner's concurrent cap plus actor-first/effective-owner rate-limit accounting", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /# create a session OWNED by the team owner; counts against the\s*\n?# OWNER's concurrent cap; tier-derived caps use the OWNER's tier\./,
+      /# create a session OWNED by the team owner; counts against the\s*\n?# OWNER's concurrent cap\. The request consumes sessions:create\s*\n?# for the member first, then the same bucket for the OWNER using\s*\n?# the owner's current tier\/override\./,
+    );
+    expect(p).toMatch(
+      /Team-resource session and agent-session routes use dual rate-limit\s*\n?accounting after those role checks\. The member first spends from their\s*\n?own bucket\. A distinct selected owner then spends from the same bucket\s*\n?key and cost, using the owner's current tier and active override\./,
+    );
+    expect(p).toMatch(
+      /Owner exhaustion returns a generic 429 with `Retry-After`; it does not\s*\n?reveal the owner's policy or refund the member's already-consumed token\./,
+    );
+    expect(p).toMatch(
+      /Each admin retains an independent actor budget, but all admins targeting\s*\n?the same owner share that owner's budget\./,
+    );
+    expect(p).toMatch(
+      /simultaneous\s*\n?session creates by two admins contend on one owner\s*\n?`sessions:create` bucket; adding admins never multiplies owner capacity\./,
+    );
+    expect(p).not.toMatch(
+      /Owner exhaustion[^.]*\b(?:reveals?|returns?|includes?|reports?)\b[^.]*\b(?:tier|capacity|remaining|override)\b/i,
     );
   });
 

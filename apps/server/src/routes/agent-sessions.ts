@@ -27,7 +27,6 @@ import {
   ResumeSessionRequestSchema,
   PaginationQuerySchema,
   type AgentModel,
-  type AccountTier,
   type ApiKeyScope,
 } from '@driftstack/api-types';
 import {
@@ -131,13 +130,14 @@ import {
 } from '../lib/errors.js';
 // S42 2026-07-07 (founder-approved) — V-485 aiAgent tier gate (create path).
 import { requireTierFeature } from '../lib/errors-helpers.js';
-import { resolveEffectiveAccount, type EffectiveAccount } from '../services/auth.js';
+import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 import { customerSafeNodeDiagnostic } from '../services/scrub-node-diagnostics.js';
+import { consumeEffectiveOwnerRateLimit } from '../middleware/rate-limit.js';
 
 // gui_control_key control-auth (separate-simulator-app support). The
 // stand-alone "Driftstack Simulator" macOS app can't read the main
@@ -627,13 +627,9 @@ export interface AgentSessionsRoutesDeps {
    */
   profilesService?: ProfilesService;
   /**
-   * doc-150 item 6 — account-auth repo, used to resolve the OWNER's tier for the
-   * per-account storage-quota gate on a profile-backed create. Mirrors how
-   * routes/sessions.ts obtains the owner tier: self-scoped uses the caller's own
-   * tier (ctx.account.tier), team-scoped (X-Driftstack-Account) looks the owner
-   * account up here. Wired alongside `profilesService`; when absent (or no
-   * profile_id on the create) the gate is skipped — a no-profile launch never
-   * grows persisted state, so it's never gated (parity with /v1/sessions).
+   * Account authority for the paid-feature tier check when a per-session
+   * control key changes mode. Rate-limit tier/override authority itself is
+   * centralized in the effective-owner limiter.
    */
   authRepo?: AccountAuthRepo;
   /**
@@ -1687,30 +1683,6 @@ export function registerAgentSessionsRoutes(
     sessionUploadMaxLifetimeCount = 500,
   } = deps;
 
-  /**
-   * doc-150 item 6 — resolve the OWNER's tier for the storage-quota gate, mirroring
-   * routes/sessions.ts: self-scoped uses the caller's own tier; team-scoped (an
-   * admin acting under X-Driftstack-Account) looks the owner account up via authRepo,
-   * since the stored profiles + their quota belong to the owner. A missing owner (or
-   * no authRepo wired) is a Forbidden — we can't safely meter an account we can't read.
-   */
-  async function resolveOwnerTier(
-    ctx: NonNullable<FastifyRequest['account']>,
-    effective: EffectiveAccount,
-  ): Promise<AccountTier> {
-    if (effective.kind !== 'team') {
-      return ctx.account.tier;
-    }
-    if (authRepo === undefined) {
-      throw new ForbiddenError('Owner account tier is unavailable.');
-    }
-    const owner = await authRepo.getAccount(effective.accountId);
-    if (!owner) {
-      throw new ForbiddenError('Owner account no longer exists.');
-    }
-    return owner.tier;
-  }
-
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
    *  replayed) agent session. Returns undefined when:
    *   - the fleet repo or encryption key isn't wired
@@ -1940,6 +1912,13 @@ export function registerAgentSessionsRoutes(
         );
       }
       const ownerAccountId = effective.accountId;
+      const ownerTier = await consumeEffectiveOwnerRateLimit(
+        app,
+        req,
+        reply,
+        ownerAccountId,
+        'global',
+      );
       // Profile-backed (file 57): a supplied profile_id MUST reference an owned
       // profile — validate before create/dispatch so an unknown/foreign id is a
       // clean 404, not a silent best-effort skip in the dispatch. (404 also when
@@ -2073,9 +2052,9 @@ export function registerAgentSessionsRoutes(
       // Sits with the other create-time gates AFTER the idempotency replay
       // (replaying an already-succeeded 201 must never newly 403). Self-scoped
       // reads the tier already loaded on ctx (no extra lookup); team-scoped
-      // resolves the owner tier via authRepo like the storage-quota gate below.
+      // uses the live tier resolved by the effective-owner limiter above.
       if ((parsed.data.mode ?? 'ai') !== 'manual') {
-        requireTierFeature(await resolveOwnerTier(ctx, effective), 'aiAgent');
+        requireTierFeature(ownerTier, 'aiAgent');
       }
 
       // Founder directive #63 — TEST THE PROXY LIVE before we create a session row
@@ -2128,11 +2107,11 @@ export function registerAgentSessionsRoutes(
       // the dispatch mints the R2 sealed-blob save-back URL → bumps size_bytes, so we
       // refuse (409 storage_quota_exceeded) when the OWNER's aggregate size_bytes has
       // hit the tier hard cap. Owner-scoped (self = caller tier, team = owner's tier
-      // via authRepo; enterprise soft-only — in the helper). The profilesService check
+      // through the effective-owner limiter; enterprise soft-only — in the helper).
+      // The profilesService check
       // is structurally redundant (profileBareId is only set after the unwired 404
       // above) — it is for TS narrowing across the idempotency block.
       if (profileBareId !== undefined && profilesService !== undefined) {
-        const ownerTier = await resolveOwnerTier(ctx, effective);
         await profilesService.assertWithinStorageQuotaForLaunch({
           accountId: ownerAccountId,
           tier: ownerTier,
@@ -2412,7 +2391,7 @@ export function registerAgentSessionsRoutes(
   app.get(
     '/v1/agent-sessions',
     { preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const ctx = requireCtx(req);
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
       if (effective.kind === 'team' && effective.role !== 'admin') {
@@ -2420,6 +2399,7 @@ export function registerAgentSessionsRoutes(
           'Reading agent sessions on a team owner requires admin role on that team.',
         );
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, effective.accountId, 'global');
       const query = PaginationQuerySchema.parse(req.query ?? {});
       const page = await sessions.listPageByAccount(effective.accountId, {
         limit: query.limit,
@@ -2442,7 +2422,7 @@ export function registerAgentSessionsRoutes(
     // read:sessions is the floor for the account path here (#122 —
     // granular; broad `read` / `account_owner` still satisfy it).
     { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -2457,6 +2437,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       return publicAgentSession(rec, undefined, sessionLivenessStore, sessionCapabilityReportStore);
     },
   );
@@ -2476,7 +2457,7 @@ export function registerAgentSessionsRoutes(
     // (was app.requireAuth → every poll from the standalone Simulator 401'd → the
     // live URL never appeared). read:sessions is the floor for the account path.
     { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -2490,6 +2471,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       // Audit 2026-07-01 (MEDIUM) — a session that ended via a path OTHER than
       // the customer DELETE (worker-disconnect grace / 12h orphan backstop —
       // see those services' own comments) may never have had its cached
@@ -2542,7 +2524,7 @@ export function registerAgentSessionsRoutes(
     // has only a per-session gui_control_key, not an account Bearer key.
     // read:sessions is the floor for the account path.
     { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -2555,6 +2537,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       // Control plane not wired (stateless deploy / no fleet registry).
       if (fleetControlRegistry === undefined) {
         return {
@@ -2702,7 +2685,7 @@ export function registerAgentSessionsRoutes(
       preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')],
       bodyLimit: SET_COOKIES_MAX_BODY_BYTES,
     },
-    async (req) => {
+    async (req, reply) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -2715,6 +2698,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       const parsed = SetCookiesBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       // Control plane not wired (stateless deploy / no fleet registry).
@@ -2793,7 +2777,7 @@ export function registerAgentSessionsRoutes(
     {
       preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')],
     },
-    async (req) => {
+    async (req, reply) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -2806,6 +2790,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       const parsed = NavigateHistoryBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       // Control plane not wired (stateless deploy / no fleet registry).
@@ -2935,7 +2920,7 @@ export function registerAgentSessionsRoutes(
       preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')],
       bodyLimit: UPLOAD_MAX_BODY_BYTES,
     },
-    async (req) => {
+    async (req, reply) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -2948,6 +2933,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       const parsed = UploadFileBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       // Founder safeguard + hardening: reject when this upload would push the
@@ -3100,7 +3086,7 @@ export function registerAgentSessionsRoutes(
   app.get<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/downloads',
     { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -3111,6 +3097,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       if (fleetControlRegistry === undefined) {
         return {
           files: null,
@@ -3194,6 +3181,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       if (fleetControlRegistry === undefined) {
         return {
           file: null,
@@ -3295,8 +3283,12 @@ export function registerAgentSessionsRoutes(
         if (session === null || !callerCanAccessAgentSession(ctx, session.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
-        const authenticatedAccountId = ctx.account.id;
-        const active = activeTranscriptStreamsByAccount.get(authenticatedAccountId) ?? 0;
+        await consumeEffectiveOwnerRateLimit(app, req, reply, session.accountId, 'global');
+        // Capacity belongs to the resource owner, not whichever team admin
+        // happened to open the stream. Multiple admins therefore share one
+        // aggregate and cleanup always releases that captured owner.
+        const transcriptOwnerAccountId = session.accountId;
+        const active = activeTranscriptStreamsByAccount.get(transcriptOwnerAccountId) ?? 0;
         if (active >= transcriptMaxStreamsPerAccount) {
           throw new RateLimitedError(
             30,
@@ -3323,9 +3315,9 @@ export function registerAgentSessionsRoutes(
           if (acquired) {
             acquired = false;
             const remaining =
-              (activeTranscriptStreamsByAccount.get(authenticatedAccountId) ?? 1) - 1;
-            if (remaining <= 0) activeTranscriptStreamsByAccount.delete(authenticatedAccountId);
-            else activeTranscriptStreamsByAccount.set(authenticatedAccountId, remaining);
+              (activeTranscriptStreamsByAccount.get(transcriptOwnerAccountId) ?? 1) - 1;
+            if (remaining <= 0) activeTranscriptStreamsByAccount.delete(transcriptOwnerAccountId);
+            else activeTranscriptStreamsByAccount.set(transcriptOwnerAccountId, remaining);
           }
           reply.raw.end();
         };
@@ -3409,7 +3401,7 @@ export function registerAgentSessionsRoutes(
           }, transcriptHeartbeatMs);
           heartbeat.unref();
 
-          activeTranscriptStreamsByAccount.set(authenticatedAccountId, active + 1);
+          activeTranscriptStreamsByAccount.set(transcriptOwnerAccountId, active + 1);
           acquired = true;
           reply.hijack();
         } catch (error) {
@@ -3436,12 +3428,13 @@ export function registerAgentSessionsRoutes(
       // out is write-equivalent, so a read-only key must NOT be able to fetch it and
       // escalate to full write+destroy (audit wxzlp9yiz P1 auth-bypass).
       { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
-      async (req) => {
+      async (req, reply) => {
         const ctx = requireCtx(req);
         const rec = await sessions.get(req.params.id);
         if (rec === null || !callerCanAccessAgentSession(ctx, rec.accountId)) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
+        await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
         if (rec.status !== 'active') {
           throw new ConflictError(
             `AgentSession ${req.params.id} is ${rec.status}; GUI control keys require an active session.`,
@@ -3551,6 +3544,13 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(
+        app,
+        req,
+        reply,
+        rec.accountId,
+        'agent_sessions:input_event',
+      );
       // Audit / breadcrumb attribution: the session's owning account.
       // Identical to ctx.account.id on the account path, and the only
       // meaningful account on the control-key path (which has no
@@ -3763,7 +3763,7 @@ export function registerAgentSessionsRoutes(
     // Control-auth path (b): the separate simulator app's mode toggle
     // (ai / manual / pair) presents the per-session gui_control_key.
     { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const parsed = SetModeRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       const rec = await sessions.get(req.params.id);
@@ -3776,6 +3776,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       if (rec.status !== 'active') {
         throw new ConflictError(
           `AgentSession ${req.params.id} is ${rec.status}; mode can only be changed on active sessions.`,
@@ -3886,6 +3887,7 @@ export function registerAgentSessionsRoutes(
             throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
           }
         }
+        await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
         if (rec.mode !== 'pair') {
           throw new ConflictError(
             `AgentSession is in mode='${rec.mode}'; takeover requires mode='pair'.`,
@@ -4012,6 +4014,7 @@ export function registerAgentSessionsRoutes(
             throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
           }
         }
+        await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
         if (rec.mode !== 'pair') {
           throw new ConflictError(
             `AgentSession is in mode='${rec.mode}'; handback requires mode='pair'.`,
@@ -4604,12 +4607,10 @@ export function registerAgentSessionsRoutes(
     error?: unknown;
   }
 
-  const handleAgentMessage = async (
+  const prepareAgentMessage = async (
     req: FastifyRequest<{ Params: { id: string } }>,
-  ): Promise<AgentMessageTerminal> => {
-    // Authenticate ownership and validate the exact canonical body before
-    // reserving a key. Invalid/foreign requests must not poison the account's
-    // durable idempotency namespace.
+    reply: FastifyReply,
+  ): Promise<AgentSessionRecord> => {
     const parsed = RunTurnRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
     const pre = await sessions.get(req.params.id);
@@ -4620,6 +4621,19 @@ export function registerAgentSessionsRoutes(
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
     }
+    await consumeEffectiveOwnerRateLimit(app, req, reply, pre.accountId, 'agent_sessions:message');
+    return pre;
+  };
+
+  const handleAgentMessage = async (
+    req: FastifyRequest<{ Params: { id: string } }>,
+    pre: AgentSessionRecord,
+  ): Promise<AgentMessageTerminal> => {
+    // Authenticate ownership and validate the exact canonical body before
+    // reserving a key. Invalid/foreign requests must not poison the account's
+    // durable idempotency namespace.
+    const parsed = RunTurnRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
     const idempotency = readIdempotencyKey(req);
     if (idempotency.kind === 'invalid') {
@@ -4744,13 +4758,32 @@ export function registerAgentSessionsRoutes(
     },
     async (req, reply) => {
       const accept = req.headers.accept ?? '';
-      if (
-        !accept
-          .toLowerCase()
-          .split(',')
-          .some((value) => value.trim().split(';', 1)[0]?.trim() === 'text/event-stream')
-      ) {
-        const terminal = await handleAgentMessage(req);
+      const wantsEventStream = accept
+        .toLowerCase()
+        .split(',')
+        .some((value) => value.trim().split(';', 1)[0]?.trim() === 'text/event-stream');
+      // Resolve exact session ownership and the owner budget before either the
+      // JSON lane starts receipt/provider work or the SSE lane commits a 200.
+      let pre: AgentSessionRecord | undefined;
+      let admissionError: unknown;
+      try {
+        pre = await prepareAgentMessage(req, reply);
+      } catch (err) {
+        // A rate-limit denial never gets a representation: the actor bucket's
+        // preHandler has always answered a hard 429 before any body exists, and
+        // owner admission is that same decision one layer down. Every OTHER
+        // typed problem keeps the representation its lane has always had — a
+        // plain RFC 7807 status on the JSON lane, and on the SSE lane the one
+        // terminal `event: response` envelope, which is where an invalid body
+        // or an unknown/foreign session has always been reported.
+        if (err instanceof RateLimitedError || !wantsEventStream) throw err;
+        admissionError = err;
+      }
+      if (!wantsEventStream) {
+        if (pre === undefined) {
+          throw new InternalError('Agent message admission did not resolve.');
+        }
+        const terminal = await handleAgentMessage(req, pre);
         if (terminal.error !== undefined) {
           reportAgentMessageError(req, terminal.error, terminal.status, terminal.body);
         }
@@ -4809,7 +4842,17 @@ export function registerAgentSessionsRoutes(
       let status = 200;
       let body: unknown;
       try {
-        const terminal = await handleAgentMessage(req);
+        // Replay a deferred admission problem through the same terminal
+        // envelope the rest of this lane uses. Rethrown verbatim rather than
+        // normalised first, so the catch below reports the exact object
+        // prepareAgentMessage produced — identical to when this work still ran
+        // inside handleAgentMessage.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- replaying a caught unknown
+        if (admissionError !== undefined) throw admissionError;
+        if (pre === undefined) {
+          throw new InternalError('Agent message admission did not resolve.');
+        }
+        const terminal = await handleAgentMessage(req, pre);
         status = terminal.status;
         body = terminal.body;
         if (terminal.error !== undefined) {
@@ -4857,6 +4900,7 @@ export function registerAgentSessionsRoutes(
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
         }
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, pre.accountId, 'global');
       // Fast sequential idempotency path. The atomic close outcome below is
       // still authoritative because concurrent DELETEs can all pre-read this
       // same active row. A 'paused' session is closeable; only closed stops.
@@ -4942,6 +4986,7 @@ export function registerAgentSessionsRoutes(
       if (rec === null || !callerCanAccessAgentSession(ctx, rec.accountId)) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       // A harness challenge-pause leaves the server status 'active' (the pause is
       // harness-internal); only a terminal session can't be resumed. Mirrors the
       // input-event route's active-session guard.

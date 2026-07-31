@@ -34,6 +34,7 @@ import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { parseProfileId } from '../lib/profile-id.js';
+import { consumeEffectiveOwnerRateLimit } from '../middleware/rate-limit.js';
 
 /**
  * Resolves the effective account for a live driver operation and enforces
@@ -110,9 +111,8 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
 export interface SessionRoutesOptions {
   service: SessionsService;
   /**
-   * V-326e1 — needed to look up the OWNER's account row (for tier
-   * resolution) when a team member creates a session via
-   * X-Driftstack-Account.
+   * V-326e1 — retained as the route-registration authority seam while
+   * effective-owner tier/override consumption is centralized in the limiter.
    */
   authRepo: AccountAuthRepo;
   /**
@@ -163,7 +163,7 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
 }
 
 export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesOptions): void {
-  const { service, authRepo } = opts;
+  const { service } = opts;
   const profilesService = opts.profilesService;
   const egressProxyRequired = opts.egressProxyRequired ?? false;
 
@@ -238,21 +238,20 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       // concurrent-cap tier use the owner's tier. The admin-role check + owner-
       // existence guard move up here too so they run before any owner-scoped
       // side effect. Self-scoped uses the caller's own tier.
-      let ownerTier: AccountTier;
       if (effective.kind === 'team') {
         if (effective.role !== 'admin') {
           throw new ForbiddenError(
             'Creating a session on a team owner requires admin role on that team.',
           );
         }
-        const owner = await authRepo.getAccount(effective.accountId);
-        if (!owner) {
-          throw new ForbiddenError('Owner account no longer exists.');
-        }
-        ownerTier = owner.tier;
-      } else {
-        ownerTier = ctx.account.tier;
       }
+      const ownerTier: AccountTier = await consumeEffectiveOwnerRateLimit(
+        app,
+        request,
+        reply,
+        ownerAccountId,
+        'sessions:create',
+      );
       // Accept the canonical prof_<uuid> the profiles API returns OR a bare uuid
       // (parseProfileId normalizes + 400s on bad) → the bare uuid used by the
       // repo/touch. Matches /v1/agent-sessions (W335); resolves the divergence.
@@ -339,21 +338,20 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       // the binding so they run before any owner-scoped side effect — mirrors
       // POST /v1/sessions. A profile launch is ALWAYS profile-backed, so the
       // doc-150 item 6 storage gate inside resolveProfileBinding always runs.
-      let ownerTier: AccountTier;
       if (effective.kind === 'team') {
         if (effective.role !== 'admin') {
           throw new ForbiddenError(
             'Launching a profile on a team owner requires admin role on that team.',
           );
         }
-        const owner = await authRepo.getAccount(effective.accountId);
-        if (!owner) {
-          throw new ForbiddenError('Owner account no longer exists.');
-        }
-        ownerTier = owner.tier;
-      } else {
-        ownerTier = ctx.account.tier;
       }
+      const ownerTier: AccountTier = await consumeEffectiveOwnerRateLimit(
+        app,
+        request,
+        reply,
+        ownerAccountId,
+        'sessions:create',
+      );
       const binding = await resolveProfileBinding(profileId, ownerAccountId, ownerTier);
       const body = {
         archetype: binding.archetype,
@@ -388,12 +386,13 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   app.get(
     '/v1/sessions',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')],
     },
-    async (request: FastifyRequest) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = requireCtx(request);
       const query = PaginationQuerySchema.parse(request.query ?? {});
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      await consumeEffectiveOwnerRateLimit(app, request, reply, effective.accountId, 'global');
       const page = await service.list(ctx, {
         limit: query.limit,
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
@@ -415,11 +414,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     {
       preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = NavigateRequestSchema.parse(request.body ?? {});
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
+      await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.navigate(
         ctx,
         id,
@@ -442,11 +442,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     {
       preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = InteractRequestSchema.parse(request.body ?? {});
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
+      await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.interact(
         ctx,
         id,
@@ -468,11 +469,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     {
       preHandler: [app.requireAuth, app.requireScope('gui_control'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = GUIInputRequestSchema.parse(request.body ?? {});
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
+      await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.guiInput(
         ctx,
         id,
@@ -493,11 +495,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       // navigate/interact, NOT a read. A read-only scope must NOT drive sessions.
       preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = WaitRequestSchema.parse(request.body ?? {});
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
+      await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.wait(
         ctx,
         id,
@@ -530,10 +533,11 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     {
       preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      await consumeEffectiveOwnerRateLimit(app, request, reply, effective.accountId, 'global');
       const session = await service.describe(
         ctx,
         id,
@@ -554,10 +558,11 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     {
       preHandler: [app.requireAuth, app.requireScope('read:sessions'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
+      await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const state = await service.getState(
         ctx,
         id,
@@ -584,11 +589,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     {
       preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = CaptureRequestSchema.parse(request.body ?? {});
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
+      await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.capture(
         ctx,
         id,
@@ -614,11 +620,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     {
       preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = ExtractRequestSchema.parse(request.body ?? {});
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
+      await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.extract(
         ctx,
         id,
@@ -637,11 +644,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     {
       preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = SearchRequestSchema.parse(request.body ?? {});
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
+      await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.search(
         ctx,
         id,
@@ -672,11 +680,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     {
       preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = SessionLoginRequestSchema.parse(request.body ?? {});
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
+      await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.login(
         ctx,
         id,
@@ -718,6 +727,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
           'Destroying a session on a team owner requires admin role on that team.',
         );
       }
+      await consumeEffectiveOwnerRateLimit(app, request, reply, effective.accountId, 'global');
       await service.destroy(
         ctx,
         id,

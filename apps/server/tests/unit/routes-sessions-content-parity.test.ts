@@ -153,13 +153,18 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('SessionRoutesOptions: service + V-326e1 authRepo (owner tier resolution when team member creates session via X-Driftstack-Account) + EG-API-1.4 egressProxyRequired?: boolean (egress safeguard at API layer)', () => {
+  it('SessionRoutesOptions retains the authRepo registration seam while live owner tier/override authority is centralized in the limiter', () => {
     expect(body).toMatch(
-      /\*\s*V-326e1 — needed to look up the OWNER's account row \(for tier\s*\n?\s*\*\s*resolution\) when a team member creates a session via\s*\n?\s*\*\s*X-Driftstack-Account\./,
+      /\*\s*V-326e1 — retained as the route-registration authority seam while\s*\n?\s*\*\s*effective-owner tier\/override consumption is centralized in the limiter\./,
     );
     expect(body).toMatch(
       /export interface SessionRoutesOptions \{\s*\n?\s*service: SessionsService;[\s\S]*?authRepo: AccountAuthRepo;[\s\S]*?egressProxyRequired\?: boolean;\s*\n?\s*\}/,
     );
+    expect(body).toMatch(
+      /import \{ consumeEffectiveOwnerRateLimit \} from '\.\.\/middleware\/rate-limit\.js';/,
+    );
+    expect(body).toContain('const { service } = opts;');
+    expect(body).not.toMatch(/authRepo\.getAccount/);
   });
 
   it('direct-session egress boundary rejects raw proxy and required-egress posture before either request parser or side effects', () => {
@@ -248,12 +253,18 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
 
   it('getState retains read:sessions but requires team-admin live-operation authority before service/driver contact', () => {
     expect(body).toMatch(
-      /app\.get<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/sessions\/:id\/state',[\s\S]{0,300}?preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\],[\s\S]{0,300}?const eff = effectiveAccountIdForLiveOperation\(request, ctx\);\s*\n?\s*const state = await service\.getState\(\s*\n?\s*ctx,\s*\n?\s*id,\s*\n?\s*eff !== undefined \? \{ effectiveAccountId: eff \} : \{\},\s*\n?\s*\);/,
+      /app\.get<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/sessions\/:id\/state',[\s\S]{0,300}?preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\],[\s\S]{0,300}?const eff = effectiveAccountIdForLiveOperation\(request, ctx\);\s*\n?\s*await consumeEffectiveOwnerRateLimit\(app, request, reply, eff \?\? ctx\.account\.id, 'global'\);\s*\n?\s*const state = await service\.getState\(\s*\n?\s*ctx,\s*\n?\s*id,\s*\n?\s*eff !== undefined \? \{ effectiveAccountId: eff \} : \{\},\s*\n?\s*\);/,
     );
     expect(body).toMatch(
       // W615 — page_state (lifecycle for pollers) sits between local_storage
       // and captured_at; the comment line is matched loosely.
       /return \{\s*\n?\s*url: state\.url,\s*\n?\s*title: state\.title,\s*\n?\s*cookies: state\.cookies,\s*\n?\s*local_storage: state\.localStorage,[\s\S]{0,200}?page_state: state\.pageState,\s*\n?\s*captured_at: state\.capturedAt\.toISOString\(\),\s*\n?\s*\};/,
+    );
+  });
+
+  it('session list rejects insufficient scope before actor or selected-owner rate-limit consumption', () => {
+    expect(body).toMatch(
+      /app\.get\(\s*\n?\s*'\/v1\/sessions',\s*\n?\s*\{\s*\n?\s*preHandler: \[app\.requireAuth, app\.requireScope\('read:sessions'\), app\.rateLimit\('global'\)\],\s*\n?\s*\},[\s\S]{0,300}?const effective = resolveEffectiveAccount\(ctx, readEffectiveAccountHeader\(request\)\);\s*\n?\s*await consumeEffectiveOwnerRateLimit\(app, request, reply, effective\.accountId, 'global'\);/,
     );
   });
 
