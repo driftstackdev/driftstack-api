@@ -43,6 +43,27 @@ async function seedTeamAdmin(ownerAccountId: string, memberAccountId: string): P
   `;
 }
 
+/**
+ * Drain a bucket so it STAYS drained for the rest of the test.
+ *
+ * `last_ms` is stamped in the future on purpose. The limiter computes
+ * `elapsed = math.max(0, (now_ms - last_ms) / 1000)`, so a future stamp clamps
+ * elapsed to 0 and no tokens refill. Writing `Date.now()` instead — which these
+ * tests used to do — starts the refill clock immediately, and under load the
+ * gap between this write and the request arriving is enough for a token to
+ * return: the request then legitimately succeeds and the assertion reds. That
+ * is a timing assumption in the test, not a limiter bug, and it reproduced here
+ * at load 21.9 while passing 2/2 in isolation.
+ *
+ * This is not leniency. The assertion is still "a drained bucket refuses"; the
+ * drain simply holds long enough for the request to be made.
+ */
+const DRAIN_HOLD_MS = 60_000;
+
+async function drainBucket(redis: TestServer['redis'], key: string, tokens = '0'): Promise<void> {
+  await redis.hmset(key, 'tokens', tokens, 'last_ms', (Date.now() + DRAIN_HOLD_MS).toString());
+}
+
 test('429 RateLimited via real Redis Lua when bucket drained', async ({ request }) => {
   // Paid tier deliberately: `3202fdb17` / `e9b6cd91d` made Free an interactive
   // DESKTOP tier with no programmatic API access, so an ordinary free-tier key
@@ -51,7 +72,7 @@ test('429 RateLimited via real Redis Lua when bucket drained', async ({ request 
   // The bucket is force-drained below, so the tier's own capacity is irrelevant.
   const seed = await seedAccount(server.client, { tier: 'api_starter' });
   const key = `rl:${seed.accountId}:global`;
-  await server.redis.hmset(key, 'tokens', '0', 'last_ms', Date.now().toString());
+  await drainBucket(server.redis, key);
   await server.redis.expire(key, 120);
 
   const res = await request.get(`${server.baseUrl}/v1/sessions`, {
@@ -136,13 +157,7 @@ test('different accounts have independent buckets', async ({ request }) => {
   const b = await seedAccount(server.client, { tier: 'api_starter', email: 'b@bucket.test' });
 
   // Drain account A's bucket via direct Redis.
-  await server.redis.hmset(
-    `rl:${a.accountId}:global`,
-    'tokens',
-    '0',
-    'last_ms',
-    Date.now().toString(),
-  );
+  await drainBucket(server.redis, `rl:${a.accountId}:global`);
 
   const aRes = await request.get(`${server.baseUrl}/v1/sessions`, {
     headers: authHeader(a.plaintext),
@@ -196,7 +211,7 @@ test('two admins contend atomically on one capacity-one effective-owner bucket',
     )
   `;
   const ownerKey = `rl:${owner.accountId}:global`;
-  await server.redis.hmset(ownerKey, 'tokens', '1', 'last_ms', Date.now().toString());
+  await drainBucket(server.redis, ownerKey, '1');
   await server.redis.expire(ownerKey, 120);
 
   const headersFor = (plaintext: string) => ({

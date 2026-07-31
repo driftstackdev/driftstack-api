@@ -96,6 +96,16 @@ export interface TestServer {
   client: ReturnType<typeof postgres>;
   redis: Redis;
   webhookWorker: WebhookDeliveryWorker;
+  /**
+   * A worker wired to plain fetch instead of `ssrfGuardedFetch`.
+   *
+   * The guarded worker above is production-faithful and REFUSES loopback, which
+   * is correct and is asserted by its own spec. That makes the signed-payload
+   * path unreachable end-to-end against a local receiver, so this seam exists
+   * solely to exercise signature generation and payload shape over a real HTTP
+   * hop. It must never be used to assert delivery POLICY — only plumbing.
+   */
+  unguardedWebhookWorker: WebhookDeliveryWorker;
   /** V-540.B-15 — Stripe stub state for billing-write spec assertions. */
   billingProvider: InMemoryBillingProvider;
   /**
@@ -242,6 +252,13 @@ export async function startTestServer(): Promise<TestServer> {
     repo: webhooksRepo,
     logger,
     deliveryTimeoutMs: 5_000,
+  });
+  // See the interface comment: plumbing-only seam, never policy.
+  const unguardedWebhookWorker = new WebhookDeliveryWorker({
+    repo: webhooksRepo,
+    logger,
+    deliveryTimeoutMs: 5_000,
+    fetch: globalThis.fetch,
   });
 
   const authCoalescer = new AuthCoalescer(logger);
@@ -472,6 +489,7 @@ export async function startTestServer(): Promise<TestServer> {
     client,
     redis,
     webhookWorker,
+    unguardedWebhookWorker,
     billingProvider,
     costUsageByAccount,
     cleanup,
