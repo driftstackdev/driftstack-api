@@ -47,6 +47,49 @@ groups:
             queue depth suggests AgentRuntime decompose latency is
             hurting interactive takeover responsiveness.
 
+      - alert: RetentionPurgeArmNotRunning
+        # An arm of the account-deletion sweep reported `skipped`, which
+        # means it was never wired — not that it had nothing to purge.
+        # Three privacy-policy.md §9 erasure commitments ride on this
+        # sweep, and this is exactly how they stop silently: the sweeper
+        # was once gated on an unrelated feature flag, so an unset
+        # MFA_ENCRYPTION_KEY switched all three off while every tick
+        # still reported success. A skipped arm is a live compliance
+        # gap, so page on any of it.
+        expr: |
+          sum(increase(driftstack_retention_purge_total{outcome="skipped"}[24h])) by (arm) > 0
+        for: 1h
+        labels:
+          severity: critical
+          team: driftstack-runtime
+        annotations:
+          summary: 'Retention purge arm {{ $labels.arm }} is not wired'
+          description: |
+            The account-deletion retention sweep reported `skipped` for
+            the {{ $labels.arm }} arm. That arm is not wired, so the
+            erasure it performs is not happening and the 30-day
+            privacy-policy §9 commitment it covers is not being kept.
+            Check the sweeper's dependency wiring in bootstrap.
+
+      - alert: RetentionPurgeFailing
+        # Distinct from the above on purpose: `failed` means the arm IS
+        # wired and is throwing every tick. Same end state — data that
+        # should be erased is not — but a different fix, so it gets its
+        # own rule rather than being folded into one "purge unhealthy".
+        expr: |
+          sum(increase(driftstack_retention_purge_total{outcome="failed"}[6h])) by (arm) > 0
+        for: 30m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'Retention purge arm {{ $labels.arm }} is failing'
+          description: |
+            The {{ $labels.arm }} arm of the account-deletion retention
+            sweep is erroring. It retries next tick and the candidate
+            rows stay selected, so this is recoverable — but sustained
+            failure means the 30-day erasure window is being missed.
+
       - alert: PairModeHeartbeatTimeoutSpike
         # Auto-handback events should be rare. A spike means clients
         # are dropping mid-pair-mode — network issue or dashboard bug.

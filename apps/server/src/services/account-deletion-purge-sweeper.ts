@@ -29,6 +29,7 @@ import type { BYOKAnthropicService } from './byok-anthropic.js';
 import type { ScheduledJobsService, ScheduledJobRow } from './scheduled-jobs.js';
 import { profileSealedBlobKey, type R2 } from '../lib/r2.js';
 import type { Logger } from '../lib/logger.js';
+import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
 
 export const ACCOUNT_DELETION_PURGE_JOB_TYPE = 'account_deletion.purge';
 
@@ -134,6 +135,11 @@ export interface AccountDeletionPurgeSweeperDeps {
   /** Days after deletedAt before the purge fires. Defaults to 30 (privacy-policy.md §9). */
   readonly retentionDays?: number;
   readonly logger?: Logger;
+  /**
+   * Optional. Absent means the deployment has no metrics registry, not that the
+   * purge should be unobservable — every emit below is guarded, never required.
+   */
+  readonly metrics?: MetricsRegistry;
 }
 
 export interface AccountDeletionPurgeResult {
@@ -161,15 +167,34 @@ export class AccountDeletionPurgeSweeperService {
       byok === undefined || byok === null
         ? []
         : await this.deps.repo.findDeletedAccountIdsWithByokKeyBefore(cutoff);
+    const metrics = this.deps.metrics;
+    const count = (arm: string, outcome: string): void => {
+      // Never let telemetry break the erasure. `inc` throws on an unregistered
+      // counter or a label-shape mismatch, and these calls sit on the purge
+      // path — so a metrics misconfiguration would take down the §9 promise
+      // this counter exists to watch. Observability is allowed to be missing;
+      // it is not allowed to be load-bearing.
+      try {
+        metrics?.inc(METRIC_NAMES.retentionPurgeTotal, { arm, outcome });
+      } catch {
+        /* a counter that cannot record is not a reason to stop erasing */
+      }
+    };
+    // `skipped` is emitted ONCE per absent arm per tick. It is what makes an
+    // unwired promise visible: without it a sweeper missing an arm and a
+    // sweeper with nothing to purge produce identical (empty) telemetry.
+    if (byok === undefined || byok === null) count('byok', 'skipped');
     let purged = 0;
     for (const accountId of ids) {
       try {
         await byok!.clearKey({ accountId, now });
         purged += 1;
+        count('byok', 'purged');
       } catch (err) {
         // Never throw — a per-account clear failure is logged and retried
         // on the next sweep (the account stays in the candidate set since
         // its ciphertext was never nulled).
+        count('byok', 'failed');
         this.deps.logger?.error?.(
           { component: 'account-deletion-purge', accountId, err },
           'failed to purge deleted account BYOK Anthropic key (will retry next sweep)',
@@ -177,6 +202,7 @@ export class AccountDeletionPurgeSweeperService {
       }
     }
     let proxySecretsPurged = 0;
+    if (this.deps.proxySecrets === undefined) count('proxy_secrets', 'skipped');
     if (this.deps.proxySecrets !== undefined) {
       const proxyIds =
         await this.deps.proxySecrets.findDeletedAccountIdsWithProxySecretsBefore(cutoff);
@@ -184,10 +210,12 @@ export class AccountDeletionPurgeSweeperService {
         try {
           await this.deps.proxySecrets.clearProxySecretsForAccount(accountId);
           proxySecretsPurged += 1;
+          count('proxy_secrets', 'purged');
         } catch (err) {
           // Same discipline as the BYOK arm: never throw. The account keeps its
           // non-null columns, so it stays in the candidate set and the next
           // sweep retries it.
+          count('proxy_secrets', 'failed');
           this.deps.logger?.error?.(
             { component: 'account-deletion-purge', accountId, err },
             'failed to purge deleted account proxy secrets (will retry next sweep)',
@@ -198,6 +226,10 @@ export class AccountDeletionPurgeSweeperService {
 
     let profilesPurged = 0;
     let snapshotsPurged = 0;
+    if (this.deps.profiles === undefined) {
+      count('profiles', 'skipped');
+      count('snapshots', 'skipped');
+    }
     if (this.deps.profiles !== undefined) {
       try {
         // Snapshots FIRST. If the profile delete succeeds and the snapshot
@@ -210,6 +242,8 @@ export class AccountDeletionPurgeSweeperService {
         const purgedProfileIds =
           await this.deps.profiles.purgeProfilesForTerminatedAccountsBefore(cutoff);
         profilesPurged = purgedProfileIds.length;
+        count('snapshots', 'purged');
+        count('profiles', 'purged');
 
         const r2 = this.deps.r2;
         if (r2 !== undefined && r2 !== null) {
@@ -228,6 +262,7 @@ export class AccountDeletionPurgeSweeperService {
           }
         }
       } catch (err) {
+        count('profiles', 'failed');
         this.deps.logger?.error?.(
           { component: 'account-deletion-purge', err },
           'failed to purge terminated-account profiles/snapshots (will retry next sweep)',

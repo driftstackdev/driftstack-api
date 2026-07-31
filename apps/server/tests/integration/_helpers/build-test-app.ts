@@ -748,6 +748,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // lives in bootstrap.ts (prod).
   const metricsRegistry = new MetricsRegistry();
   metricsRegistry.registerCounter(
+    METRIC_NAMES.retentionPurgeTotal,
+    'Account-deletion retention purge outcomes by arm.',
+    ['arm', 'outcome'],
+  );
+  metricsRegistry.registerCounter(
     METRIC_NAMES.pairModeTransitionTotal,
     'Pair-mode state-machine transitions, labelled by from + to states.',
     ['from', 'to'],

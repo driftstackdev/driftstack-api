@@ -499,6 +499,11 @@ export async function createProductionDeps(
       ['from', 'to'],
     );
     metricsRegistry.registerCounter(
+      METRIC_NAMES.retentionPurgeTotal,
+      'Account-deletion retention purge outcomes by arm. `skipped` means the arm was not wired at all — the signal for a §9 erasure promise that has silently stopped running.',
+      ['arm', 'outcome'],
+    );
+    metricsRegistry.registerCounter(
       METRIC_NAMES.bundledLlmRequestTotal,
       'Bundled-LLM decompose requests, labelled by outcome.',
       ['outcome'],
@@ -1544,6 +1549,10 @@ export async function createProductionDeps(
     // the customer's data outliving the erasure we committed to.
     r2,
     logger,
+    // Three §9 commitments ride on this sweep and it emitted nothing until now.
+    // The `skipped` label is what makes an unwired arm visible: a promise that
+    // quietly stops running otherwise looks exactly like one with nothing to do.
+    ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
   });
   registerAccountDeletionPurgeJob({
     scheduledJobs: scheduledJobsService,

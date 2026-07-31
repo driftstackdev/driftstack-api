@@ -159,6 +159,20 @@ export const METRIC_NAMES = {
   // (clarify + refuse). Mirrors the agent.decompose.* audit-log
   // surface but at metrics-cardinality (bounded) rather than
   // per-call audit rows.
+  // Retention purge outcome counter, labelled by `arm` (byok |
+  // proxy_secrets | profiles | snapshots) and `outcome` (purged |
+  // failed | skipped).
+  //
+  // The account-deletion sweep carries three separate privacy-policy.md §9
+  // erasure commitments on one 30-day clock, and until now it emitted nothing:
+  // if a tick started failing, or an arm was never wired, the only trace was a
+  // log line nobody is watching for. `skipped` is the load-bearing label — it
+  // is the signal for the failure mode that actually happened, an arm switched
+  // off by an unrelated flag while the sweeper still reported success. Alert on
+  // `skipped`, or on the ABSENCE of `purged` over a window longer than the
+  // sweep interval; a promise that quietly stops running looks identical to one
+  // with nothing to do, and only the counter tells them apart.
+  retentionPurgeTotal: 'driftstack_retention_purge_total',
   agentDecomposeTotal: 'driftstack_agent_decompose_total',
   // Arc 7 obs.4 — BYOK Anthropic /test endpoint outcome counter.
   // Labelled by outcome (ok / invalid / quota_exceeded / unknown
