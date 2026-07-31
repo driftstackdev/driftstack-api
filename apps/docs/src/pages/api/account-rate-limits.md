@@ -23,8 +23,8 @@ Returns the rate-limit config that's actually being applied to
 this account. Four bucket keys exist: `global` (every
 authenticated `/v1/*` call that doesn't have a dedicated bucket
 below), `sessions:create`
-(`POST /v1/sessions` only — lower cap because session creation is
-expensive), `agent_sessions:message`
+(`POST /v1/sessions` and `POST /v1/profiles/:id/launch` — lower cap
+because session creation is expensive), `agent_sessions:message`
 (`POST /v1/agent-sessions/:id/message` — separate cap so an
 LLM-driven message loop can't drain the global bucket), and
 `agent_sessions:input_event`

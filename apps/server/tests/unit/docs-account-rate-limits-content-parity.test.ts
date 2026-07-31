@@ -33,7 +33,11 @@ describe('docs api/account-rate-limits content parity', () => {
     expect(body).toMatch(/sessions:create/);
     expect(body).toMatch(/agent_sessions:message/);
     expect(body).toMatch(/agent_sessions:input_event/);
-    expect(body).toMatch(/lower cap because session creation is\s*\n?expensive/);
+    // Whitespace-tolerant: this pins the RATIONALE, not one prose line-break.
+    // The old `is\s*\n?expensive` form encoded the exact wrap position, so
+    // naming the second sessions:create route above re-flowed the paragraph and
+    // reddened a guard whose claim had not changed.
+    expect(body).toMatch(/lower cap\s+because session creation is\s+expensive/);
     expect(body).toMatch(/LLM-driven message loop can't drain the global bucket/);
   });
 

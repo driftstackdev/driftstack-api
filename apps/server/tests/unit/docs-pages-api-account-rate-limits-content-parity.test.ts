@@ -52,7 +52,15 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Four bucket keys exist: `global`/);
-    expect(p).toMatch(/`sessions:create`\s*\n?\(`POST \/v1\/sessions` only/);
+    // The intro prose and the bucket table further down describe the SAME
+    // bucket, so they must name the same routes. This pin said "only" while the
+    // table already named both calls, which let the page contradict itself —
+    // routes/sessions.ts registers app.rateLimit('sessions:create') on both
+    // POST /v1/sessions and POST /v1/profiles/:id/launch.
+    expect(p).toMatch(
+      /`sessions:create`\s*\n?\(`POST \/v1\/sessions` and `POST \/v1\/profiles\/:id\/launch`/,
+    );
+    expect(p).not.toMatch(/`sessions:create`\s*\n?\(`POST \/v1\/sessions` only/);
     expect(p).toMatch(/`agent_sessions:message`\s*\n?\(`POST \/v1\/agent-sessions\/:id\/message`/);
     expect(p).toMatch(
       /`agent_sessions:input_event`\s*\n?\(`POST \/v1\/agent-sessions\/:id\/input-event`/,
