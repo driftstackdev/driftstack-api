@@ -45,8 +45,6 @@ const EXTERNAL_CONSUMERS: Record<string, string> = {
     'Template-literal registration; the identity provider redirects here.',
   '/v1/whoami':
     'No consumer anywhere — kept because removing a public authenticated route is a customer-visible contract change, not a cleanup. Documented here so it stays visible instead of quietly ageing.',
-  '/v1/account/me/billing-portal':
-    'Documented by NAME in api/billing.md ("checkout-session, portal-session, billing-portal") but not by full path, so the path scan misses it. A docs-path gap, not dead surface.',
 };
 
 function filesUnder(dir: string, exts: Set<string>): string[] {
@@ -99,6 +97,17 @@ describe('every customer-facing route has a consumer or a named exemption', () =
       .filter((r) => !corpus.includes(r.split(':')[0]!.replace(/\/$/, '')))
       .filter((r) => EXTERNAL_CONSUMERS[r] === undefined);
     expect(orphans, 'Route(s) nothing documents or calls:').toEqual([]);
+  });
+
+  it('CRITICAL the exemption list may only SHRINK — a route that becomes documented must leave it. Without this the list rots into a permanent excuse, and the second entry to go stale would be indistinguishable from the first.', () => {
+    const nowReferenced = Object.keys(EXTERNAL_CONSUMERS)
+      .filter((r) => routes.includes(r))
+      .filter((r) => corpus.includes(r.split(':')[0]!.replace(/\/$/, '')))
+      .sort();
+    expect(
+      nowReferenced,
+      'these routes are documented or consumed now — remove them from EXTERNAL_CONSUMERS so they are checked:',
+    ).toEqual([]);
   });
 
   it('every exemption still names a live route, so the list cannot outlive the surface it excuses', () => {

@@ -88,6 +88,20 @@ account's `subscription` row updates.
 The portal URL is single-use and short-lived. Mint a fresh one
 each time the customer clicks "Manage subscription" — don't cache.
 
+### Redirect variant (no JavaScript required)
+
+`GET /v1/account/me/billing-portal`
+
+Mints the same single-use portal URL and answers `302` with it in the
+`Location` header, so a plain `<a>` or form POST can send the customer
+straight to the portal without any client-side code. A fetch client that
+does not follow redirects can read `Location` itself.
+
+Requires the same `admin:billing` scope as the POST above, and returns the
+same `503` when billing is not wired in the deployment. Unlike `GET
+/v1/billing`, this route does **not** honour `X-Driftstack-Account` — only
+the owner manages the owner's billing.
+
 ## Webhook events from Stripe → Driftstack → Customer
 
 When Stripe fires `customer.subscription.updated` (or any of the
