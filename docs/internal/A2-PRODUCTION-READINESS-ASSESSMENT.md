@@ -135,6 +135,24 @@ hand makes it four tables closed out of however many exist; a guard that
 enumerates `account_id`-bearing tables and asserts each is either purged or
 explicitly exempted would stop the fourth instance rather than find it.
 
+_Scale of it, measured:_ **34 tables carry an `account_id` column. 21 have no
+delete path anywhere in `apps/server/src`** — no `.delete(table)`, no
+`DELETE FROM`. That detector is crude and the 21 is an upper bound, not a
+finding: several of those tables SHOULD retain. `subscriptions`,
+`usage_records`, `crypto_orders` and `billing_email_sends` are billing data the
+policy holds for 7 years; `account_audit_log` is the compliance trail; the
+token tables may be cleared by expiry sweeps this detector cannot see. The list
+is a work-list, not a defect list, and treating it as the latter would be the
+same mistake as trusting the stale dashboard-only list in item 11's cousin.
+
+That is exactly why the guard should be a ROSTER — each `account_id`-bearing
+table classified as purged, retained-by-policy with the policy line quoted, or
+operationally ephemeral — and why A2 did not write it in this fire. Classifying
+34 tables at speed produces a guard that asserts "this one is fine" for tables
+nobody checked, which reads as coverage and is worse than the gap. It needs
+per-table verification against the published retention table, and it should be
+built alongside the sweeper arms above rather than bolted on after.
+
 ### 11. One integration test can fail intermittently in CI, and the mechanism is proven
 
 Three cases in `db-webhooks-concurrency-drizzle.test.ts` assert on the result of
