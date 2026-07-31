@@ -43,8 +43,6 @@ const EXTERNAL_CONSUMERS: Record<string, string> = {
     'The Swift harness in the driftstack repo connects here; the consumer is not in this repo.',
   '/v1/auth/oauth/${provider}/callback':
     'Template-literal registration; the identity provider redirects here.',
-  '/v1/whoami':
-    'No consumer anywhere — kept because removing a public authenticated route is a customer-visible contract change, not a cleanup. Documented here so it stays visible instead of quietly ageing.',
 };
 
 function filesUnder(dir: string, exts: Set<string>): string[] {

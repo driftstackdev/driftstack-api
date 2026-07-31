@@ -111,6 +111,30 @@ The detail string names the exact scope required so you can
 mint a correctly-scoped replacement key (or extend the
 existing one).
 
+### Checking what your key actually has
+
+`GET /v1/whoami`
+
+Answers the other half of a scope mismatch — not what the route
+wanted, but what the key you are holding actually carries:
+
+```json
+{
+  "account_id": "acc_...",
+  "api_key_id": "key_...",
+  "tier": "api_builder",
+  "scopes": ["read", "write:sessions"]
+}
+```
+
+Useful when a 403 is surprising: it confirms **which** key the request
+authenticated with, which matters when an environment has several
+configured. `GET /v1/account/me` reports the account and its caps but
+says nothing about the key in your hand.
+
+Requires only a valid key — no particular scope — so a zero-scope key
+can still call it to discover that it has no scopes.
+
 ## Picking scopes for a new key
 
 When you mint a key from the dashboard or via

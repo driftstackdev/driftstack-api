@@ -74,10 +74,20 @@ function normalisePath(route: string): string {
 }
 
 function registeredRoutes(): Set<string> {
-  const dir = resolve(REPO_ROOT, 'apps/server/src/routes');
+  // Scans ALL of src, not just src/routes. Registration is not confined to
+  // that directory — `/v1/whoami` is registered in lib/app.ts — and a scan
+  // limited to routes/ reports a correctly-documented route as "documented
+  // but not registered". That is a FALSE failure that blocks documenting the
+  // route at all, which is how /v1/whoami stayed undocumented.
   let src = '';
-  for (const file of readdirSync(dir)) {
-    if (file.endsWith('.ts')) src += readFileSync(resolve(dir, file), 'utf8');
+  const stack = [resolve(REPO_ROOT, 'apps/server/src')];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    for (const entry of readdirSync(dir)) {
+      const full = resolve(dir, entry);
+      if (statSync(full).isDirectory()) stack.push(full);
+      else if (entry.endsWith('.ts')) src += readFileSync(full, 'utf8');
+    }
   }
   const found = new Set<string>();
   const re = /\.(get|post|put|patch|delete)\b[^(]*\(\s*['"`](\/v1\/[^'"`]+)['"`]/g;
