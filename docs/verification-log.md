@@ -29893,3 +29893,50 @@ that case.
 
 Verification: full server suite 26,257 passing / 0 failing, strict server source
 and test TypeScript, targeted ESLint and Prettier.
+
+---
+
+## V-713 — Bundled-LLM turns are charged once per turn, not once per usage row
+
+**Date:** 2026-07-31
+
+The bundled flat charge is defined per TURN. Migration 0051 states the invariant
+— "one row of this type per bundled-LLM-served agent-session turn with a flat
+$0.10 posted cost" — and the customer docs, the dashboard settings page and the
+pricing page all promise "a flat $0.10 per agent turn".
+
+It was written per ROW. A read-intent turn posts two usage rows, the decompose
+pass and the #140 read-back, and the recorder stamped the flat amount on both.
+One turn therefore debited $0.20. The monthly cap is summed from exactly those
+values, so a bundled customer's budget was consumed at twice the documented rate
+and they were hard-402'd after half the turns they were sold — while the turn's
+own API response still reported 10, so their own reconciliation disagreed with
+their cap by 2x with nothing to explain it.
+
+The two-row shape itself is correct, and correct for BYOK, where each row
+carries a real upstream cost. The runtime's comment acknowledged the two rows
+but reasoned only about Driftstack's upstream spend and the concurrency
+limiter's overshoot; it never addressed the customer-facing flat-per-turn
+contract. Only the first row of a turn now carries the charge; the read-back row
+posts 0 and keeps the documented `cost_basis`, so the turn still posts a flat
+$0.10 on that basis and the customer-visible claim stays true.
+
+Why a fully green suite did not see it. The only guard on the recorder was a
+source-text parity test that pins `const POSTED_BUNDLED_COST_CENTS = 10;` as a
+string: it asserts the constant's spelling, exercises no behaviour, and
+structurally cannot count how many rows a turn writes or what they sum to. The
+runtime's own two-row assertions exist but run the BYOK path, where two costed
+rows are correct — they blessed the shape precisely where it is not a bug. No
+test anywhere combined a bundled key source with a read-back-triggering turn.
+
+Both layers are now pinned behaviourally and both mutations are proved red. A
+new recorder test drives the real recorder against a captured insert and asserts
+the turn TOTALS 10 with the second row at 0, and that a BYOK turn still carries
+its real per-row cost on both rows. Separately the runtime wiring is pinned,
+because the recorder-level guard cannot see what the runtime passes — removing
+the flag from the read-back call sites was green until that assertion existed.
+
+Verification: full server suite 2487 files / 26,276 passing / 0 failing, strict
+server source and test TypeScript, targeted ESLint and Prettier. No schema,
+route, OpenAPI, SDK, pricing, shared build/deploy, native, environment, customer
+or secret surface changed.

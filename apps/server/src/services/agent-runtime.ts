@@ -248,6 +248,21 @@ export interface AgentDecomposerUsageRecorder {
      * v2-#4 metadata.cost_usd_cents Anthropic-derived value.
      */
     keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
+    /**
+     * True for the SECOND usage row of a single turn (the #140 read-back).
+     *
+     * The bundled flat charge is per TURN, not per row — migration 0051 states
+     * the invariant ("one row of this type per bundled-LLM-served agent-session
+     * turn with a flat $0.10 posted cost") and the customer docs, dashboard and
+     * pricing page all promise "a flat $0.10 per agent turn". A read-intent turn
+     * posts two rows, so writing the flat amount on both charged the customer
+     * $0.20 for one turn: their monthly cap was consumed at 2x and they were
+     * hard-402'd after half the turns they were sold, while the turn's own API
+     * response still reported 10. The two-row shape is right for BYOK, where
+     * each row carries a real upstream cost; for bundled only the first row
+     * carries the turn's flat charge and this one posts 0.
+     */
+    bundledFlatCostAlreadyPosted?: boolean;
   }): Promise<void>;
 }
 
@@ -1149,7 +1164,8 @@ export class AgentRuntime {
     // transcript — only the model's own answer does (correctly agent-framed).
     let sessionAfter = updated;
     let latestReadbackEvidence:
-      { usage?: DecomposeUsage; tokensConsumed?: number; executor: ExecutorRunResult } | undefined;
+      | { usage?: DecomposeUsage; tokensConsumed?: number; executor: ExecutorRunResult }
+      | undefined;
     const observe = this.deps.executor.observe?.bind(this.deps.executor);
     const answerFromObservation = this.deps.decomposer.answerFromObservation?.bind(
       this.deps.decomposer,
@@ -1203,6 +1219,9 @@ export class AgentRuntime {
                 tokensConsumed: answer.tokensConsumed,
                 now: args.now ?? new Date(),
                 ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+                // Second row of THIS turn — the turn's flat bundled charge was
+                // already posted by the decompose row.
+                bundledFlatCostAlreadyPosted: true,
               },
               { accountId: session.accountId, agentSessionId: session.id, label: 'readback' },
             );
@@ -1290,6 +1309,9 @@ export class AgentRuntime {
                 tokensConsumed: error.tokensConsumed,
                 now: args.now ?? new Date(),
                 ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+                // Second row of THIS turn — the turn's flat bundled charge was
+                // already posted by the decompose row.
+                bundledFlatCostAlreadyPosted: true,
               },
               { accountId: session.accountId, agentSessionId: session.id, label: 'readback' },
             );

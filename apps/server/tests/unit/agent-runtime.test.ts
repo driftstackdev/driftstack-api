@@ -424,6 +424,15 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       tokensConsumed: 40,
     });
     expect(usageRows).toHaveLength(2);
+    // A turn's SECOND row must declare that the turn's flat bundled charge was
+    // already posted by the first. That charge is per TURN, not per row
+    // (migration 0051; docs, dashboard and pricing all say "flat $0.10 per
+    // agent turn"), so without this the read-back posts another $0.10 and a
+    // bundled customer is debited 2x for one turn. Asserted on the WIRING here
+    // because the recorder-level guard cannot see what the runtime passes.
+    const flags = usageRows.map((r) => r as { bundledFlatCostAlreadyPosted?: boolean });
+    expect(flags[0]?.bundledFlatCostAlreadyPosted).toBeUndefined();
+    expect(flags.at(-1)?.bundledFlatCostAlreadyPosted).toBe(true);
     expect(usageRows.at(-1)).toMatchObject({ tokensConsumed: 40 });
     expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(
       (remainingBeforeAnswer ?? 0) - 40,

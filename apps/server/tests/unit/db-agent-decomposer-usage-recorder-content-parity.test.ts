@@ -48,6 +48,17 @@ describe('db/agent-decomposer-usage-recorder content parity', () => {
       /\/\/ Arc 1 sub-slice 6\.4 \(v2-#6\) — bundled-LLM turns post a flat\s*\n?\s*\/\/ \$0\.10\/turn \(Q5=A hide actual upstream Anthropic cost\) under a\s*\n?\s*\/\/ distinct record_type so the soft-cap sweep \(sub-slice 6\.5\) can\s*\n?\s*\/\/ sum only bundled rows\./,
     );
     expect(body).toMatch(/const POSTED_BUNDLED_COST_CENTS = 10;/);
+    // The flat charge is per TURN, not per row. A read-intent turn posts two
+    // rows (decompose + #140 read-back), so writing the constant unconditionally
+    // debited a bundled customer twice for one turn. The behavioural proof lives
+    // in db-agent-decomposer-usage-recorder-bundled-flat-cost.test.ts — this
+    // source pin only stops the unconditional form coming back, and it is
+    // exactly the kind of guard that could NOT catch the original bug.
+    expect(body).toMatch(
+      /metadata\.cost_usd_cents =\s*\n?\s*args\.bundledFlatCostAlreadyPosted === true \? 0 : POSTED_BUNDLED_COST_CENTS;/,
+    );
+    expect(body).not.toMatch(/metadata\.cost_usd_cents = POSTED_BUNDLED_COST_CENTS;/);
+    expect(body).toMatch(/metadata\.cost_basis = 'bundled_flat_per_turn';/);
     expect(body).toMatch(
       /const recordType = isBundled \? 'agent_decomposer_bundled' : 'agent_decomposer';/,
     );
@@ -55,7 +66,7 @@ describe('db/agent-decomposer-usage-recorder content parity', () => {
 
   it("Q5=A upstream-cost-NOT-written-to-metadata framing pinned: 'surface the POSTED flat cost; the upstream Anthropic-derived cost in args.usage.costUsdCents is intentionally NOT written to metadata so a leaked DB snapshot can't reveal it.' + metadata.cost_usd_cents = POSTED_BUNDLED_COST_CENTS + metadata.cost_basis = 'bundled_flat_per_turn' — pinned so the Q5=A no-upstream-cost-in-metadata + cost_basis='bundled_flat_per_turn' contract stays documented (drift to writing args.usage.costUsdCents on bundled rows would leak the upstream Anthropic margin in a DB snapshot)", () => {
     expect(body).toMatch(
-      /\/\/ Q5=A — surface the POSTED flat cost; the upstream Anthropic-\s*\n?\s*\/\/ derived cost in args\.usage\.costUsdCents is intentionally NOT\s*\n?\s*\/\/ written to metadata so a leaked DB snapshot can't reveal it\.\s*\n?\s*metadata\.cost_usd_cents = POSTED_BUNDLED_COST_CENTS;\s*\n?\s*metadata\.cost_basis = 'bundled_flat_per_turn';/,
+      /\/\/ Q5=A — surface the POSTED flat cost; the upstream Anthropic-\s*\n?\s*\/\/ derived cost in args\.usage\.costUsdCents is intentionally NOT\s*\n?\s*\/\/ written to metadata so a leaked DB snapshot can't reveal it\./,
     );
   });
 

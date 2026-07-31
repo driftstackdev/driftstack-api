@@ -61,7 +61,13 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
       // Q5=A — surface the POSTED flat cost; the upstream Anthropic-
       // derived cost in args.usage.costUsdCents is intentionally NOT
       // written to metadata so a leaked DB snapshot can't reveal it.
-      metadata.cost_usd_cents = POSTED_BUNDLED_COST_CENTS;
+      // Flat charge is per TURN, not per ROW. A read-intent turn posts two
+      // rows (decompose + #140 read-back); only the first carries the turn's
+      // $0.10 so the monthly cap totals what the customer was sold and what the
+      // turn's own response reports. cost_basis stays the documented value on
+      // both rows — the turn still posts a flat $0.10 on that basis.
+      metadata.cost_usd_cents =
+        args.bundledFlatCostAlreadyPosted === true ? 0 : POSTED_BUNDLED_COST_CENTS;
       metadata.cost_basis = 'bundled_flat_per_turn';
     } else if (args.usage.costUsdCents !== undefined) {
       metadata.cost_usd_cents = args.usage.costUsdCents;
