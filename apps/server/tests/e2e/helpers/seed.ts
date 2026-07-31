@@ -26,6 +26,17 @@ export interface SeedAccountInput {
   status?: 'active' | 'suspended' | 'deleted';
   /** Skip seeding legal acceptances. For tests that exercise the V-049 gate. */
   skipLegalAcceptance?: boolean;
+  /**
+   * Mint the key with device-code provenance.
+   *
+   * Required for any test that exercises `free`-tier behaviour. Free is a
+   * DESKTOP tier: `requireProgrammaticApiAccess` refuses every ordinary API key
+   * on a free account with 403 `apiAccess` at AUTH, before any route gate runs,
+   * and only a `cli_device`-provenance credential reaches the free-desktop
+   * allowlisted routes. A free-tier spec without this is not testing the route
+   * it names — it is measuring the tier boundary and calling it something else.
+   */
+  provenance?: 'cli_device';
 }
 
 export interface SeededAccount {
@@ -77,6 +88,7 @@ export async function seedAccount(
       keyPrefix,
       keyHash,
       scopes: input.scopes ?? ['read', 'write', 'admin'],
+      ...(input.provenance === undefined ? {} : { provenance: input.provenance }),
     })
     .returning({ id: apiKeys.id });
   if (!key) throw new Error('failed to seed api key');

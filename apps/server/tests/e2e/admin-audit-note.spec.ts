@@ -42,8 +42,21 @@ interface AuditLogEntry {
 }
 
 test('admin support-note: dual-write reaches customer audit slice', async ({ request }) => {
-  const admin = await seedAccount(server.client, { tier: 'api_builder' });
-  const target = await seedAccount(server.client, { tier: 'free' });
+  const admin = await seedAccount(server.client, {
+    tier: 'api_builder',
+    // The staff scope, explicitly. seedAccount defaults to the legacy `admin`
+    // customer alias, which by design NEVER satisfies a staff gate — so
+    // without this the ADMIN's own call 403s and the dual-write under test is
+    // never reached.
+    scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+  });
+  // Free target reads its OWN audit log, which is free-desktop allowlisted —
+  // but only for a device-provenance credential. An ordinary free key is
+  // refused at auth before the dual-write under test is ever reached.
+  const target = await seedAccount(server.client, {
+    tier: 'free',
+    provenance: 'cli_device',
+  });
 
   // 1. Admin records a support note.
   const noteRes = await request.post(
@@ -74,8 +87,21 @@ test('admin support-note: dual-write reaches customer audit slice', async ({ req
 test('admin refund-record: dual-write + Stripe ref preserved on target_resource_id', async ({
   request,
 }) => {
-  const admin = await seedAccount(server.client, { tier: 'api_builder' });
-  const target = await seedAccount(server.client, { tier: 'free' });
+  const admin = await seedAccount(server.client, {
+    tier: 'api_builder',
+    // The staff scope, explicitly. seedAccount defaults to the legacy `admin`
+    // customer alias, which by design NEVER satisfies a staff gate — so
+    // without this the ADMIN's own call 403s and the dual-write under test is
+    // never reached.
+    scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+  });
+  // Free target reads its OWN audit log, which is free-desktop allowlisted —
+  // but only for a device-provenance credential. An ordinary free key is
+  // refused at auth before the dual-write under test is ever reached.
+  const target = await seedAccount(server.client, {
+    tier: 'free',
+    provenance: 'cli_device',
+  });
 
   // 1. Admin records a refund (audit-only — no Stripe call).
   const refundRes = await request.post(
@@ -119,7 +145,13 @@ test('admin support-note: 403 when caller lacks driftstack_internal_admin scope'
     tier: 'api_builder',
     scopes: ['read', 'write'],
   });
-  const target = await seedAccount(server.client, { tier: 'free' });
+  // Free target reads its OWN audit log, which is free-desktop allowlisted —
+  // but only for a device-provenance credential. An ordinary free key is
+  // refused at auth before the dual-write under test is ever reached.
+  const target = await seedAccount(server.client, {
+    tier: 'free',
+    provenance: 'cli_device',
+  });
 
   const res = await request.post(
     `${server.baseUrl}/v1/admin/accounts/acc_${target.accountId}/audit-note`,

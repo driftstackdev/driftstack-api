@@ -56,7 +56,15 @@ for (const { tier, limit } of TIER_LIMITS) {
   test(`tier=${tier}: allows ${limit.toString()} concurrent sessions, denies the (${(limit + 1).toString()})th`, async ({
     request,
   }) => {
-    const seed = await seedAccount(server.client, { tier });
+    // Free is a DESKTOP tier: an ordinary API key is refused 403 `apiAccess` at
+    // AUTH, before the concurrency cap is ever consulted, so this row measured
+    // the tier boundary rather than the cap it names. `POST /v1/sessions` is on
+    // the free-desktop allowlist, so a device-provenance credential reaches the
+    // real cap.
+    const seed = await seedAccount(server.client, {
+      tier,
+      ...(tier === 'free' ? { provenance: 'cli_device' as const } : {}),
+    });
 
     // Need a fresh rate-limit bucket so we don't run into a sessions:create
     // RL cap before hitting the concurrency cap. Free tier has 5 capacity on
@@ -120,7 +128,12 @@ test('tier=api_scale: 25th concurrent session denied (spot-check)', async ({ req
 });
 
 test('destroying a session frees a slot', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'free' });
+  // Free is a DESKTOP tier — see the table above. POST/DELETE /v1/sessions are
+  // free-desktop allowlisted, so this exercises the real slot accounting.
+  const seed = await seedAccount(server.client, {
+    tier: 'free',
+    provenance: 'cli_device',
+  });
   await clearRateLimits(server.redis);
 
   // Free tier allows 1 concurrent.

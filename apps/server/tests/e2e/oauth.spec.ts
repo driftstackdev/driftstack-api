@@ -77,6 +77,65 @@ test('POST /v1/admin/oauth/clients — requires internal-admin scope', async ({ 
   expect([401, 403]).toContain(res.status());
 });
 
+/**
+ * Signup lands every new account on `free`, and `oauth.ts` gates consent behind
+ * `requireTierFeature(tier, 'apiAccess')` — "Free browser sessions cannot mint
+ * independently-lived third-party bearer authority". So an interactive signup
+ * cannot complete consent, and these specs measured that boundary instead of
+ * the OAuth mechanics they are named for: consent → code → token → API auth →
+ * revocation had NO end-to-end coverage at all.
+ *
+ * Tier is moved through the real admin route rather than a direct UPDATE, so
+ * the auth cache is invalidated the way production does it.
+ *
+ * ⚠️ OPEN PRODUCT QUESTION, deliberately not answered here: SHOULD a free-tier
+ * user be able to complete OAuth consent? Refusing is coherent — a third-party
+ * bearer is API access, and free has none — but it means "Sign in with
+ * Driftstack" is unavailable to free users. The refusal is pinned as current
+ * behaviour by its own test below; changing it is a founder decision.
+ */
+async function upgradeToApiTier(
+  request: APIRequestContext,
+  accountId: string,
+  staffKey: string,
+): Promise<void> {
+  const res = await request.post(`${server.baseUrl}/v1/admin/accounts/acc_${accountId}/tier`, {
+    headers: authHeader(staffKey),
+    data: { tier: 'api_builder', reason: 'e2e oauth mechanics' },
+  });
+  expect(res.status(), 'tier upgrade must succeed or the flow below tests nothing').toBe(200);
+}
+
+test('a free-tier account CANNOT complete OAuth consent (current documented behaviour)', async ({
+  request,
+}) => {
+  const admin = await seedAccount(server.client, {
+    scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+  });
+  const reg = await request.post(`${server.baseUrl}/v1/admin/oauth/clients`, {
+    headers: authHeader(admin.plaintext),
+    data: { label: 'Free Consent Probe', redirect_uris: ['https://app.example/cb'] },
+  });
+  expect(reg.status()).toBe(201);
+  const client = (await reg.json()) as { client_id: string };
+
+  // A fresh interactive signup lands on `free`.
+  const user = await interactiveAuth(request, `free-consent-${Date.now().toString(36)}@d.test`);
+  const res = await request.post(`${server.baseUrl}/v1/oauth/authorize/complete`, {
+    headers: user.headers,
+    data: {
+      client_id: client.client_id,
+      redirect_uri: 'https://app.example/cb',
+      scope: 'read',
+      state: 'st',
+      code_challenge: s256('f'.repeat(64)),
+      code_challenge_method: 'S256',
+    },
+  });
+  // Free has no `apiAccess`, and an OAuth bearer IS programmatic access.
+  expect(res.status()).toBe(403);
+});
+
 test('OAuth happy path: persistent consent → token → real read/write API auth → revocation', async ({
   request,
 }) => {
@@ -85,6 +144,7 @@ test('OAuth happy path: persistent consent → token → real read/write API aut
     scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
   });
   const customer = await interactiveAuth(request, 'oauth-customer@driftstack.test');
+  await upgradeToApiTier(request, customer.accountId, admin.plaintext);
 
   // 1. Register OAuth client.
   const reg = await request.post(`${server.baseUrl}/v1/admin/oauth/clients`, {
@@ -300,6 +360,7 @@ test('pending consent survives a fresh service/store instance', async ({ request
     scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
   });
   const customer = await interactiveAuth(request, 'oauth-replica@driftstack.test');
+  await upgradeToApiTier(request, customer.accountId, admin.plaintext);
   const reg = await request.post(`${server.baseUrl}/v1/admin/oauth/clients`, {
     headers: authHeader(admin.plaintext),
     data: { label: 'Replica App', redirect_uris: ['https://replica.example/cb'] },
@@ -355,7 +416,9 @@ test('account-bound OAuth approval rejects foreign consent and atomically create
     scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
   });
   const customer = await interactiveAuth(request, 'oauth-consent-race@driftstack.test');
+  await upgradeToApiTier(request, customer.accountId, admin.plaintext);
   const foreign = await interactiveAuth(request, 'oauth-consent-foreign@driftstack.test');
+  await upgradeToApiTier(request, foreign.accountId, admin.plaintext);
   const reg = await request.post(`${server.baseUrl}/v1/admin/oauth/clients`, {
     headers: authHeader(admin.plaintext),
     data: {
@@ -422,6 +485,7 @@ test('OAuth /token serializes concurrent exchange of one persistent code', async
     scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
   });
   const customer = await interactiveAuth(request, 'oauth-replay@driftstack.test');
+  await upgradeToApiTier(request, customer.accountId, admin.plaintext);
   const reg = await request.post(`${server.baseUrl}/v1/admin/oauth/clients`, {
     headers: authHeader(admin.plaintext),
     data: { label: 'App', redirect_uris: ['https://app.example/cb'] },

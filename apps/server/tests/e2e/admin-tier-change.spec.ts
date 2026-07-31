@@ -27,11 +27,26 @@ test.beforeEach(async () => {
 
 test('admin tier-change: full stack — auth, cache, rate-limit, audit', async ({ request }) => {
   // Two distinct accounts: A (admin) and B (target).
-  const admin = await seedAccount(server.client, { tier: 'api_builder' });
-  const target = await seedAccount(server.client, { tier: 'free' });
+  const admin = await seedAccount(server.client, {
+    tier: 'api_builder',
+    // The staff scope, explicitly. seedAccount defaults to the legacy `admin`
+    // customer alias, which by design NEVER satisfies a staff gate — so
+    // without this the ADMIN's own call 403s and the dual-write under test is
+    // never reached.
+    scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+  });
+  // Free is a DESKTOP tier, so B needs a device-provenance credential to reach
+  // the API at all; an ordinary free key is refused 403 `apiAccess` at auth.
+  const target = await seedAccount(server.client, {
+    tier: 'free',
+    provenance: 'cli_device',
+  });
 
-  // 1. Sanity: B is on free tier (whoami reflects tier from cached ctx).
-  const beforeWhoami = await request.get(`${server.baseUrl}/v1/whoami`, {
+  // 1. Sanity: B is on free tier. Read through /v1/account/me rather than
+  // /v1/whoami: whoami has zero consumers anywhere in the product and is not on
+  // the free-desktop allowlist, while account/me is, returns the same `tier`,
+  // and passes through the same requireAuth cache this test is asserting on.
+  const beforeWhoami = await request.get(`${server.baseUrl}/v1/account/me`, {
     headers: authHeader(target.plaintext),
   });
   expect(beforeWhoami.status()).toBe(200);
@@ -54,7 +69,7 @@ test('admin tier-change: full stack — auth, cache, rate-limit, audit', async (
   // 3. Cache invalidation propagated: B's next request sees new tier.
   // (D-020 invalidateAccount bumped the version; B's cached ctx misses
   // and re-loads with tier='scale'.)
-  const afterWhoami = await request.get(`${server.baseUrl}/v1/whoami`, {
+  const afterWhoami = await request.get(`${server.baseUrl}/v1/account/me`, {
     headers: authHeader(target.plaintext),
   });
   expect(afterWhoami.status()).toBe(200);
@@ -62,7 +77,7 @@ test('admin tier-change: full stack — auth, cache, rate-limit, audit', async (
   expect(afterBody.tier).toBe('api_scale');
 
   // 4. Admin A's tier is unchanged (cross-account isolation).
-  const adminWhoami = await request.get(`${server.baseUrl}/v1/whoami`, {
+  const adminWhoami = await request.get(`${server.baseUrl}/v1/account/me`, {
     headers: authHeader(admin.plaintext),
   });
   expect(adminWhoami.status()).toBe(200);

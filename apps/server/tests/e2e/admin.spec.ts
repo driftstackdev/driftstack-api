@@ -56,15 +56,39 @@ test('POST /v1/api-keys: 400 with empty scopes', async ({ request }) => {
   expect(res.status()).toBe(400);
 });
 
-test('POST /v1/api-keys: free tier returns ds_test_ prefix', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'free' });
+test('POST /v1/api-keys: a free account cannot mint an ordinary API key at all', async ({
+  request,
+}) => {
+  // This test used to assert that a free account minting a key got a `ds_test_`
+  // prefix. That premise is retired and unreachable by ANY path:
+  // `createApiKey` calls requireTierFeature(tier, 'apiAccess') unless the key
+  // BEING MINTED carries `cli_device` provenance, so free can only ever produce
+  // a device credential — not through an API key (refused at auth), not through
+  // the free-desktop allowlist (POST /v1/api-keys is not on it), and not
+  // through a dashboard web session (the service gate is independent of auth).
+  //
+  // Asserting the refusal is the honest replacement. The `ds_test_` prefix rule
+  // itself still exists and is exercised where it is actually reachable, via
+  // the device-code flow.
+  const signup = await request.post(`${server.baseUrl}/v1/auth/signup`, {
+    data: {
+      email: `free-key-${Date.now().toString(36)}@driftstack.test`,
+      password: 'correct horse battery staple',
+    },
+  });
+  expect(signup.status()).toBe(200);
+  const token = ((await signup.json()) as { debug_token: string }).debug_token;
+  const verify = await request.post(`${server.baseUrl}/v1/auth/verify-email`, {
+    data: { token },
+  });
+  expect(verify.status()).toBe(200);
+  const session = ((await verify.json()) as { session: { token: string } }).session;
+
   const res = await request.post(`${server.baseUrl}/v1/api-keys`, {
-    headers: authHeader(seed.plaintext),
+    headers: authHeader(session.token),
     data: { name: 'free-key', scopes: ['read'] },
   });
-  expect(res.status()).toBe(201);
-  const body = (await res.json()) as { plaintext: string };
-  expect(body.plaintext.startsWith('ds_test_')).toBe(true);
+  expect(res.status()).toBe(403);
 });
 
 // ── GET /v1/api-keys ───────────────────────────────────────────────────────
