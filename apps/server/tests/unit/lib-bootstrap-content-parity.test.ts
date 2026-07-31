@@ -361,7 +361,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
-  it('Teardown framing pinned: one shared first-call promise; no new poller ticks after cleanup starts; sentry flush+close 2s; swallow errors on redis.quit + dbHandle.close', () => {
+  it('Teardown framing pinned: one shared first-call promise; no new poller ticks after cleanup starts; the three independent closes run CONCURRENTLY via allSettled (sentry flush+close 2s, a deadline-bounded redis.quit, dbHandle.close) so their budgets no longer add and one hung client cannot starve the others', () => {
     expect(body).toMatch(
       /\/\/ V-232 — stop pollers BEFORE other teardown so no new tick is admitted\s*\n?\s*\/\/ while Redis\/Postgres close\. clearInterval cannot cancel a tick that\s*\n?\s*\/\/ already started;/,
     );
@@ -369,9 +369,14 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
       /const teardown = shareFirstAsyncCall\(async \(\) => \{\s*\n?\s*logger\.info\(\{ component: 'bootstrap' \}, 'tearing down'\);/,
     );
     expect(body).toContain('owner ??= Promise.resolve().then(() => operation(...args));');
+    // Sentry's own two calls stay sequential with each other inside one arm;
+    // it is the three ARMS that are concurrent. The budget arithmetic in
+    // shutdown-budget-fits-systemd-stop-window depends on exactly that shape.
     expect(body).toMatch(
-      /try \{\s*\n?\s*await sentry\.flush\(2000\);\s*\n?\s*await sentry\.close\(2000\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* swallow \*\/\s*\n?\s*\}/,
+      /await Promise\.allSettled\(\[\s*\n?\s*\(async \(\) => \{\s*\n?\s*await sentry\.flush\(2000\);\s*\n?\s*await sentry\.close\(2000\);\s*\n?\s*\}\)\(\),/,
     );
+    expect(body).toContain('withTeardownDeadline(REDIS_QUIT_DEADLINE_MS, () => redis.quit()),');
+    expect(body).toContain('export const REDIS_QUIT_DEADLINE_MS = 2_000;');
   });
 
   it('v2-#17 rotation-reminder daily sweeps framing pinned: pure-sweep nags (no auto-rotation); 24h cadence matches the V-295c3-tombstone status-purge poller; default-on; DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 opts out; both timers .unref()-ed; clearInterval in teardown', () => {

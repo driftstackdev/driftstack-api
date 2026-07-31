@@ -254,6 +254,51 @@ export function shareFirstAsyncCall<TArgs extends unknown[]>(
 }
 
 /**
+ * Longest `redis.quit()` may take before teardown gives up on it.
+ *
+ * A clean quit is milliseconds. This bound exists for the unreachable-Redis
+ * case, where quit waits on a socket that will never answer. 2s is comfortably
+ * above any healthy quit and small enough that the whole teardown still fits
+ * inside the systemd stop window with the request drain ahead of it.
+ */
+export const REDIS_QUIT_DEADLINE_MS = 2_000;
+
+/**
+ * Run one teardown step with a deadline, resolving either way.
+ *
+ * Never rejects: teardown runs on the way to `process.exit(0)`, and a step that
+ * throws there would abort the steps after it — turning one unreachable
+ * dependency into a leaked one. Mirrors `destroyDriverSessionWithTimeout`,
+ * including the `unref()` so a pending timer cannot itself hold the process
+ * open, and the `clearTimeout` so the fast path leaves nothing behind.
+ */
+export async function withTeardownDeadline(
+  timeoutMs: number,
+  step: () => Promise<unknown>,
+): Promise<{ timedOut: boolean }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), timeoutMs);
+    timer.unref();
+  });
+  try {
+    const outcome = await Promise.race([
+      step().then(
+        () => 'done' as const,
+        () => 'done' as const,
+      ),
+      deadline,
+    ]);
+    return { timedOut: outcome === 'timeout' };
+  } catch {
+    // `step()` throwing synchronously lands here; same contract as a rejection.
+    return { timedOut: false };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
  * Build the request-serving app after production dependencies are live. A
  * construction failure owns fatal cleanup: teardown must settle before exit,
  * and `null` tells the entrypoint to return before handlers or listen wiring.
@@ -2928,22 +2973,33 @@ export async function createProductionDeps(
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
     clearInterval(pairModeHeartbeatSweepTimer);
     clearInterval(webhookDeliveryTimer);
-    try {
-      await sentry.flush(2000);
-      await sentry.close(2000);
-    } catch {
-      /* swallow */
-    }
-    try {
-      await redis.quit();
-    } catch {
-      /* swallow */
-    }
-    try {
-      await dbHandle.close();
-    } catch {
-      /* swallow */
-    }
+    // The three closes are INDEPENDENT — a Redis client, a Postgres pool and
+    // the Sentry transport share nothing — so they run CONCURRENTLY. In series
+    // their budgets add, and the sum did not fit: index.ts already spends up to
+    // CLOSE_DEADLINE_MS (10s) draining in-flight requests before teardown even
+    // starts, and TimeoutStopSec is 20s.
+    //
+    // The sharper bug was that `redis.quit()` carried NO timeout and ran BEFORE
+    // the Postgres close. An unreachable Redis — precisely the condition during
+    // an incident deploy — blocked teardown indefinitely, so systemd SIGKILLed
+    // the process before `dbHandle.close()` ever ran, leaking the Postgres
+    // connections server-side until the backend timed them out. The bounded
+    // close race in index.ts guarantees teardown STARTS inside the stop window;
+    // it says nothing about teardown FINISHING, which is what this fixes.
+    //
+    // Concurrency also means one hung client can no longer starve the others:
+    // the worst case is the LONGEST step, not the sum. Errors stay swallowed —
+    // allSettled never rejects — because a failed close must not prevent
+    // process.exit(0); a teardown that throws is a teardown that leaves the
+    // deploy hanging.
+    await Promise.allSettled([
+      (async () => {
+        await sentry.flush(2000);
+        await sentry.close(2000);
+      })(),
+      withTeardownDeadline(REDIS_QUIT_DEADLINE_MS, () => redis.quit()),
+      dbHandle.close(),
+    ]);
     logger.info({ component: 'bootstrap' }, 'teardown complete');
   });
 
