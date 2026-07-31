@@ -1,0 +1,34 @@
+-- Index support for the retention purge sweeps.
+--
+-- All three arms of AccountDeletionPurgeSweeper (byok, proxy secrets,
+-- profiles + snapshots) begin the same way: find accounts that are `deleted`
+-- and whose deleted_at is older than the retention cutoff. `accounts` carried
+-- no index on either column, so every arm on every tick did a full sequential
+-- scan of the accounts table.
+--
+-- Proved rather than assumed: with enable_seqscan forced off — a cost of 1e10
+-- per scan — the planner still chose a sequential scan, which means no
+-- existing index could serve the predicate at all, not merely that it
+-- preferred not to.
+--
+-- The cost profile is the bad one for a background sweep. In steady state the
+-- query matches nothing (almost no account is both deleted and past its
+-- retention window), so the work is pure overhead that grows linearly with
+-- total signups, forever, to return zero rows. It is also the shape that stays
+-- invisible: nothing is slow enough to page, the sweep just quietly costs more
+-- every week.
+--
+-- Partial on `status = 'deleted'`, because deleted accounts are a small
+-- fraction of the table and a partial index only stores and maintains those
+-- rows — no write amplification on the ordinary signup path, and the index
+-- stays small enough to remain cached. deleted_at is the indexed column since
+-- the cutoff comparison is the selective part once status is fixed.
+--
+-- Built non-concurrently: the drizzle postgres-js migrator wraps each file in
+-- a transaction, and CREATE INDEX CONCURRENTLY cannot run inside one. At
+-- present scale the build is sub-second. If accounts ever grows to where a
+-- brief write lock during deploy is unacceptable, this needs to move out of
+-- the migrator and run as a standalone CONCURRENTLY statement instead.
+CREATE INDEX IF NOT EXISTS "accounts_deleted_purge_idx"
+  ON "accounts" ("deleted_at")
+  WHERE "status" = 'deleted' AND "deleted_at" IS NOT NULL;

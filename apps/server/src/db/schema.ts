@@ -408,6 +408,15 @@ export const accounts = pgTable(
     // unique indexes by default, so multiple unset slugs coexist;
     // the constraint only fires once a slug is set.
     uniqueIndex('accounts_slug_unique').on(t.slug),
+    // Migration 0109 — every arm of the retention purge sweeper starts by
+    // finding deleted accounts past their cutoff, and nothing indexed either
+    // column: each arm full-scanned accounts on every tick to return, in
+    // steady state, no rows. Partial so only deleted accounts are stored and
+    // maintained, keeping the ordinary signup path free of write
+    // amplification.
+    index('accounts_deleted_purge_idx')
+      .on(t.deletedAt)
+      .where(sql`${t.status} = 'deleted' AND ${t.deletedAt} IS NOT NULL`),
   ],
 );
 
