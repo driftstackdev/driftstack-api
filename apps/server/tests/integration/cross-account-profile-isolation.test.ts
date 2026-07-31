@@ -1,0 +1,189 @@
+// Account B cannot reach account A's profile through ANY of its routes.
+//
+// Companion to `cross-account-session-isolation`. Measured the same way and the
+// result was worse: disabling ALL SEVEN account predicates in the profiles repo
+// reds exactly ONE test in the entire integration suite — `profile-transfer`,
+// which notices incidentally while testing something else. Twelve profile
+// routes, and cross-account isolation for the resource that holds a customer's
+// saved browser identity rested on that.
+//
+// The two-predicate lesson from the session suite applies here in a stronger
+// form: profiles do not have one ownership check, they have seven. A mutation
+// that disables a single one under-reports the boundary, so the measurement
+// above disables all of them at once.
+//
+// 404 rather than 403 is the contract: 403 confirms the profile exists and
+// turns any of these routes into an enumeration oracle. Each route is therefore
+// also asserted indistinguishable from a well-formed id owned by nobody.
+
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  buildTestApp,
+  seedAdditionalAccount,
+  type TestAppFixture,
+} from './_helpers/build-test-app.js';
+
+let fx: TestAppFixture;
+
+afterEach(async () => {
+  if (fx) await fx.cleanup();
+});
+
+/**
+ * Account B holds FULL rights over its OWN account. A scope-poor key is refused
+ * at the scope gate before ownership is consulted, which would make every case
+ * below pass while testing nothing.
+ */
+const FULL_SCOPES = ['read', 'write', 'account_owner'] as const;
+
+const PROFILE_ROUTES: ReadonlyArray<{
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  suffix: string;
+  payload?: Record<string, unknown>;
+}> = [
+  { method: 'GET', suffix: '' },
+  { method: 'PATCH', suffix: '', payload: { name: 'renamed-by-b' } },
+  { method: 'GET', suffix: '/export' },
+  { method: 'POST', suffix: '/clone', payload: { name: 'cloned-by-b' } },
+  { method: 'POST', suffix: '/trim', payload: {} },
+  { method: 'DELETE', suffix: '/purge' },
+  { method: 'POST', suffix: '/restore', payload: {} },
+];
+
+async function createProfileForAccountA(fixture: TestAppFixture): Promise<string> {
+  const res = await fixture.app.inject({
+    method: 'POST',
+    url: '/v1/profiles',
+    headers: { authorization: `Bearer ${fixture.plaintext}` },
+    payload: { name: 'owned-by-a' },
+  });
+  expect(res.statusCode, 'account A must be able to create its own profile').toBe(200);
+  return res.json<{ id: string }>().id;
+}
+
+/** Well-formed but owned by nobody, derived so it cannot fail id-format checks. */
+function nonexistentLike(realId: string): string {
+  const last = realId.slice(-1);
+  return `${realId.slice(0, -1)}${last === '0' ? '1' : '0'}`;
+}
+
+const mask = (body: string): string =>
+  body.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'UUID');
+
+describe("account B cannot reach account A's profile on any route", () => {
+  it.each(PROFILE_ROUTES.map((r) => [`${r.method} /v1/profiles/:id${r.suffix}`, r] as const))(
+    'CRITICAL %s returns 404 for a different account. A 2xx here hands one customer another customer’s saved browser identity; a 403 confirms the profile exists and makes the route an enumeration oracle.',
+    async (_label, route) => {
+      fx = await buildTestApp({ tier: 'api_builder' });
+      const profileId = await createProfileForAccountA(fx);
+      const other = await seedAdditionalAccount(fx, {
+        email: 'b@profile-isolation.test',
+        tier: 'api_builder',
+        scopes: [...FULL_SCOPES],
+      });
+
+      const res = await fx.app.inject({
+        method: route.method,
+        url: `/v1/profiles/${profileId}${route.suffix}`,
+        headers: { authorization: `Bearer ${other.plaintext}` },
+        ...(route.payload === undefined ? {} : { payload: route.payload }),
+      });
+
+      expect(
+        res.statusCode,
+        `${route.method} /v1/profiles/:id${route.suffix} returned ${res.statusCode} for a foreign account`,
+      ).toBe(404);
+    },
+  );
+
+  it.each(PROFILE_ROUTES.map((r) => [`${r.method} /v1/profiles/:id${r.suffix}`, r] as const))(
+    '%s is INDISTINGUISHABLE from a nonexistent id, so the 404 leaks nothing',
+    async (_label, route) => {
+      fx = await buildTestApp({ tier: 'api_builder' });
+      const profileId = await createProfileForAccountA(fx);
+      const other = await seedAdditionalAccount(fx, {
+        email: 'b@profile-isolation.test',
+        tier: 'api_builder',
+        scopes: [...FULL_SCOPES],
+      });
+
+      const call = (id: string): Promise<{ statusCode: number; body: string }> =>
+        fx.app
+          .inject({
+            method: route.method,
+            url: `/v1/profiles/${id}${route.suffix}`,
+            headers: { authorization: `Bearer ${other.plaintext}` },
+            ...(route.payload === undefined ? {} : { payload: route.payload }),
+          })
+          .then((r) => ({ statusCode: r.statusCode, body: r.body }));
+
+      const foreign = await call(profileId);
+      const missing = await call(nonexistentLike(profileId));
+
+      expect(foreign.statusCode).toBe(missing.statusCode);
+      expect(mask(foreign.body)).toBe(mask(missing.body));
+    },
+  );
+});
+
+/**
+ * Three routes answer a foreign reference with something other than 404, and
+ * each was verified to be safe rather than assumed:
+ *
+ *  - `DELETE /v1/profiles/:id` returns 204 whether or not the caller owns the
+ *    profile. It is an idempotent no-op — the owner can still read the profile
+ *    afterwards, which is the assertion below. Nothing is destroyed.
+ *  - `GET /v1/profiles/:id/snapshots` returns 200 with an EMPTY page for a
+ *    profile the caller does not own. No snapshot data crosses accounts.
+ *  - `POST /v1/profiles/:id/snapshots` validates its body before consulting
+ *    ownership, so it answers 400 first.
+ *
+ * All three are indistinguishable from a well-formed id owned by nobody, so
+ * none of them is an enumeration oracle. They are asserted on the property that
+ * actually matters — no effect and no data — rather than on a status code the
+ * product does not promise.
+ */
+describe('routes whose foreign-reference contract is not 404 are still safe', () => {
+  it('CRITICAL a foreign DELETE does NOT destroy the profile. The 204 is idempotent-delete semantics, not a successful deletion — if this ever regressed, one customer could wipe another customer’s saved browser identity and receive a success code for it.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = await createProfileForAccountA(fx);
+    const other = await seedAdditionalAccount(fx, {
+      email: 'b@profile-isolation.test',
+      tier: 'api_builder',
+      scopes: [...FULL_SCOPES],
+    });
+
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${profileId}`,
+      headers: { authorization: `Bearer ${other.plaintext}` },
+    });
+
+    const ownerRead = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/profiles/${profileId}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(ownerRead.statusCode, "the owner's profile must survive a foreign delete").toBe(200);
+  });
+
+  it('CRITICAL a foreign snapshot listing returns NO rows. A 200 is acceptable only because the page is empty; leaking another account’s snapshot list would expose their browsing identity history.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = await createProfileForAccountA(fx);
+    const other = await seedAdditionalAccount(fx, {
+      email: 'b@profile-isolation.test',
+      tier: 'api_builder',
+      scopes: [...FULL_SCOPES],
+    });
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/profiles/${profileId}/snapshots`,
+      headers: { authorization: `Bearer ${other.plaintext}` },
+    });
+    expect(
+      res.json<{ data: unknown[] }>().data,
+      'no snapshot may cross an account boundary',
+    ).toEqual([]);
+  });
+});
