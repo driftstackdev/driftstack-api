@@ -224,6 +224,17 @@ posture already shipped. A retention sweeper follows the existing pattern
 7. Cross-account `GET` ⇒ `404`, and no row field leaks into the body.
 8. No password or raw query appears in any row, log line, or problem detail —
    asserted with a synthetic credential and a marker scan.
+   **Repository half closed by construction (slice 1).** A marker scan cannot be
+   written at this layer: `admit` takes a request FINGERPRINT, never a body, so
+   the credential never crosses into the repository and a row scan there passes
+   no matter what the schema does. Attempting it produced a test that survived a
+   deliberately leaky extra column, which is why it was replaced. What is proven
+   instead is the mechanism — both caller-supplied fields are constrained to a
+   sha256 digest by a database CHECK, so a raw password is refused by Postgres
+   rather than merely not-sent, with a differential arm proving the digested call
+   still succeeds. **The marker scan itself belongs to the route slice**, where a
+   body exists to leak: assert it over the response, the problem detail and the
+   log line, not the row.
 9. Result TTL elapses ⇒ payload gone, status retained.
 10. TS/Python/Go all round-trip the operation envelope and reject a contradictory
     or out-of-budget terminal, exactly as they now do for the synchronous union.

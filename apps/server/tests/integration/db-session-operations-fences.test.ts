@@ -346,6 +346,71 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(purged?.settledAt).not.toBeNull();
     });
 
+    it('CRITICAL §10.8 (repository half) — the admit API cannot RECEIVE a credential. It accepts a request FINGERPRINT constrained to a sha256 digest, never a request body, so no column can capture a password even by mistake. Asserted structurally because it cannot be asserted behaviourally: a row-scan test at this layer passes no matter what, since the credential never crosses into the repository. The behavioural half belongs to slice 2, where the request body actually exists.', async () => {
+      if (!dbReachable || !client) return;
+      const repo = repoOf();
+      const { accountId, sessionId } = await seedSession();
+
+      const CREDENTIAL = 'pw-zq7marker4secret9body';
+      const base = {
+        accountId,
+        sessionId,
+        kind: 'login' as const,
+        deadlineAt: new Date(Date.now() + PRODUCER_DEADLINE_MS),
+      };
+
+      // The driver error is wrapped by the query layer, so the constraint name
+      // is on the cause rather than the message. Reading it by NAME matters:
+      // "it rejected" alone would also be satisfied by a bad session id, which
+      // is how a security test ends up vacuous.
+      const constraintFrom = async (p: Promise<unknown>): Promise<string> => {
+        try {
+          await p;
+        } catch (err) {
+          const cause: unknown = (err as { cause?: unknown }).cause ?? err;
+          return String((cause as { constraint_name?: string }).constraint_name ?? '');
+        }
+        throw new Error('expected the write to be refused, but it succeeded');
+      };
+
+      // The digest CHECK is the mechanism: anything that is not a sha256 hex
+      // string — a raw password among them — is refused by Postgres itself.
+      expect(
+        await constraintFrom(
+          repo.admit({
+            ...base,
+            driverIncarnationId: randomUUID(),
+            idempotencyKeyHash: null,
+            requestFingerprint: CREDENTIAL,
+          }),
+        ),
+      ).toBe('session_operations_request_fingerprint_shape');
+
+      // Same for the idempotency key: the raw header value can never be stored.
+      expect(
+        await constraintFrom(
+          repo.admit({
+            ...base,
+            driverIncarnationId: randomUUID(),
+            idempotencyKeyHash: `Idempotency-Key: ${CREDENTIAL}`,
+            requestFingerprint: sha256(CREDENTIAL),
+          }),
+        ),
+      ).toBe('session_operations_idempotency_key_hash_shape');
+
+      // DIFFERENTIAL, and the reason this is not the vacuous test it replaced:
+      // the SAME call with both values digested must succeed. Without this arm
+      // the two refusals above would still pass if admit were broken outright.
+      const ok = await repo.admit({
+        ...base,
+        driverIncarnationId: randomUUID(),
+        idempotencyKeyHash: sha256(`idem:${CREDENTIAL}`),
+        requestFingerprint: sha256(CREDENTIAL),
+      });
+      expect(ok.operation.requestFingerprint).toBe(sha256(CREDENTIAL));
+      expect(ok.operation.requestFingerprint).not.toContain(CREDENTIAL);
+    });
+
     describe('the database rejects states the repository must never be able to write', () => {
       it('CRITICAL refuses a terminal row with no settled_at, and a live row carrying a result. These CHECKs are what make "unsettled success" unrepresentable rather than merely unwritten.', async () => {
         if (!dbReachable || !client) return;
