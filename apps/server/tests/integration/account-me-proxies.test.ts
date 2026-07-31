@@ -390,6 +390,60 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
     expect(list.body).not.toContain(WG_PRIV);
   });
 
+  it('CRITICAL the UPDATE and TEST responses never echo a secret either. api/proxies.md promises secrets are "never returned in ANY response"; create and list were checked, PUT and /test were not — and PUT is the route that ACCEPTS a new password, so it is the one most likely to hand it straight back.', async () => {
+    fx = await buildTestApp();
+    const UPDATED_PW = 'rotated-secret-marker-9f3a';
+
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        scheme: 'socks5',
+        label: 'rotating',
+        host: '1.2.3.4',
+        port: 1080,
+        username: 'u',
+        password: 'original-secret',
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json<ProxyMeta & { id: string }>().id;
+
+    const update = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: auth(fx),
+      payload: {
+        scheme: 'socks5',
+        label: 'rotating',
+        host: '1.2.3.4',
+        port: 1080,
+        username: 'u',
+        password: UPDATED_PW,
+      },
+    });
+    expect(update.statusCode, `PUT returned ${update.statusCode}`).toBeLessThan(400);
+    expect(update.body, 'PUT echoed the new password').not.toContain(UPDATED_PW);
+    // …and the update must actually have applied, or the absence proves nothing.
+    expect(update.json<ProxyMeta>().has_password).toBe(true);
+
+    const test = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test`,
+      headers: auth(fx),
+      payload: {},
+    });
+    expect(test.body, '/test echoed the password').not.toContain(UPDATED_PW);
+
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    expect(list.body, 'list echoed the rotated password').not.toContain(UPDATED_PW);
+  });
+
   it('creates an OpenVPN proxy — config_blob is NEVER echoed (has_secret=true)', async () => {
     fx = await buildTestApp();
     const create = await fx.app.inject({
