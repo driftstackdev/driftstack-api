@@ -61,7 +61,12 @@ describe('byok-anthropic active storage routes (GET/PUT/DELETE)', () => {
     expect(meta.has_key).toBe(true);
     expect(meta.set_at).not.toBeNull();
     // The raw key is NEVER echoed back — only metadata.
-    expect(JSON.stringify(meta)).not.toContain('sk-ant');
+    //
+    // Asserted against the KEY, not against 'sk-ant'. The prefix
+    // `sk-ant-api03-` is public — it is in Anthropic's own docs — so a
+    // response echoing everything after it would satisfy a prefix check while
+    // leaking the entire secret. The entropy is what must be absent.
+    expect(JSON.stringify(meta)).not.toContain(VALID_KEY);
   });
 
   it('PUT emits an account.byok_anthropic_key_set audit row', async () => {
