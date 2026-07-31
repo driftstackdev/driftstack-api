@@ -1519,40 +1519,38 @@ export async function createProductionDeps(
   // "an unset MFA_ENCRYPTION_KEY switches off three retention promises, two of
   // them unrelated to it". The BYOK arm now no-ops on its own when unwired,
   // which is the narrow, correct scope for that flag.
-  {
-    const accountDeletionPurgeSweeper = new AccountDeletionPurgeSweeperService({
-      repo: new DrizzleAccountDeletionPurgeRepo(dbHandle),
-      ...(byokAnthropicService ? { byok: byokAnthropicService } : {}),
-      // privacy-policy.md §3.5 names "HTTP/SOCKS5 proxy credentials" as
-      // Customer-Provided Secrets, and §9 commits to erasing them within 30
-      // days of account termination. Before this they were retained
-      // indefinitely: the account delete is a soft status flip, the accounts
-      // row is never hard-deleted so ON DELETE CASCADE never fires, and the
-      // only other retention sweeper keys off a profile's own deletedAt.
-      proxySecrets: accountProxiesRepo,
-      // The other half of the same §9 line: "Profile metadata + Profile
-      // Snapshots ... All deleted within 30 days of Customer Account
-      // termination." Snapshots are listed separately because purging profiles
-      // does not reach them — parent_profile_id is ON DELETE SET NULL, so they
-      // survive with a null parent still holding the captured state inline.
-      profiles: {
-        purgeProfilesForTerminatedAccountsBefore: (cutoff) =>
-          profilesRepo.purgeForTerminatedAccountsBefore(cutoff),
-        purgeSnapshotsForTerminatedAccountsBefore: (cutoff) =>
-          new DrizzleProfileSnapshotsRepo(dbHandle).purgeForTerminatedAccountsBefore(cutoff),
-      },
-      // Drops each purged profile's sealed blob; a blob outliving its row is
-      // the customer's data outliving the erasure we committed to.
-      r2,
-      logger,
-    });
-    registerAccountDeletionPurgeJob({
-      scheduledJobs: scheduledJobsService,
-      sweeper: accountDeletionPurgeSweeper,
-      logger,
-    });
-    await enqueueNextAccountDeletionPurge({ scheduledJobs: scheduledJobsService });
-  }
+  const accountDeletionPurgeSweeper = new AccountDeletionPurgeSweeperService({
+    repo: new DrizzleAccountDeletionPurgeRepo(dbHandle),
+    ...(byokAnthropicService ? { byok: byokAnthropicService } : {}),
+    // privacy-policy.md §3.5 names "HTTP/SOCKS5 proxy credentials" as
+    // Customer-Provided Secrets, and §9 commits to erasing them within 30
+    // days of account termination. Before this they were retained
+    // indefinitely: the account delete is a soft status flip, the accounts
+    // row is never hard-deleted so ON DELETE CASCADE never fires, and the
+    // only other retention sweeper keys off a profile's own deletedAt.
+    proxySecrets: accountProxiesRepo,
+    // The other half of the same §9 line: "Profile metadata + Profile
+    // Snapshots ... All deleted within 30 days of Customer Account
+    // termination." Snapshots are listed separately because purging profiles
+    // does not reach them — parent_profile_id is ON DELETE SET NULL, so they
+    // survive with a null parent still holding the captured state inline.
+    profiles: {
+      purgeProfilesForTerminatedAccountsBefore: (cutoff) =>
+        profilesRepo.purgeForTerminatedAccountsBefore(cutoff),
+      purgeSnapshotsForTerminatedAccountsBefore: (cutoff) =>
+        new DrizzleProfileSnapshotsRepo(dbHandle).purgeForTerminatedAccountsBefore(cutoff),
+    },
+    // Drops each purged profile's sealed blob; a blob outliving its row is
+    // the customer's data outliving the erasure we committed to.
+    r2,
+    logger,
+  });
+  registerAccountDeletionPurgeJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: accountDeletionPurgeSweeper,
+    logger,
+  });
+  await enqueueNextAccountDeletionPurge({ scheduledJobs: scheduledJobsService });
   // Orphaned agent-session backstop (2026-06-19) — agent sessions only flip to
   // 'closed' on explicit DELETE or budget exhaustion, so a session orphaned by
   // a dead worker would linger status='active' forever. Hourly wall-clock sweep
