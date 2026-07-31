@@ -21,8 +21,6 @@
     "@driftstack/api-types": "*",
     "@fastify/cors": "^10.0.0",
     "@fastify/helmet": "^13.0.0",
-    "@fastify/swagger": "^9.4.0",
-    "@fastify/swagger-ui": "^5.2.0",
     "@fastify/websocket": "^11.2.0",
     "@scalar/fastify-api-reference": "^1.58.0",
     "@sentry/node": "10.65.0",

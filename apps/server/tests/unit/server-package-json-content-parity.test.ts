@@ -63,13 +63,21 @@ describe('W530.A apps/server/package.json content parity', () => {
     expect(pkg.scripts['db:seed']).toBe('tsx src/db/seed.ts');
   });
 
-  it("Fastify + plugin stack framing pinned: 'fastify' + 'fastify-plugin' + '@fastify/cors' + '@fastify/helmet' + '@fastify/swagger' + '@fastify/swagger-ui' + '@scalar/fastify-api-reference' (Scalar API ref alternative to swagger-ui) + '@asteasolutions/zod-to-openapi' — pinned so the Fastify v5 + plugin-decoration + CORS + Helmet + dual-API-docs (Swagger + Scalar) + Zod-to-OpenAPI commitment survives (drift to dropping fastify-plugin would break every plugin's decoration wiring)", () => {
+  it("Fastify + plugin stack framing pinned: 'fastify' + 'fastify-plugin' + '@fastify/cors' + '@fastify/helmet' + '@scalar/fastify-api-reference' (the ONLY API-reference renderer — Scalar serves /docs, and the spec comes from '@asteasolutions/zod-to-openapi' via /openapi.json) — pinned so the Fastify v5 + plugin-decoration + CORS + Helmet + Zod-to-OpenAPI commitment survives (drift to dropping fastify-plugin would break every plugin's decoration wiring)", () => {
     expect(pkg.dependencies).toHaveProperty('fastify');
     expect(pkg.dependencies).toHaveProperty('fastify-plugin');
     expect(pkg.dependencies).toHaveProperty('@fastify/cors');
     expect(pkg.dependencies).toHaveProperty('@fastify/helmet');
-    expect(pkg.dependencies).toHaveProperty('@fastify/swagger');
-    expect(pkg.dependencies).toHaveProperty('@fastify/swagger-ui');
+    // There is no "dual API docs" stack. '@fastify/swagger' and
+    // '@fastify/swagger-ui' were declared but never registered anywhere in
+    // src — routes/openapi.ts serves /openapi.json from generateOpenApiSpec()
+    // and mounts Scalar at /docs. Their only cost was carrying vulnerable
+    // '@fastify/static' (authorization bypass via non-canonical URL paths +
+    // route guard bypass via path traversal). Removed rather than overridden,
+    // since an override would have kept an unused package on the dependency
+    // graph. Negative pins so the phantom stack cannot drift back in.
+    expect(pkg.dependencies).not.toHaveProperty('@fastify/swagger');
+    expect(pkg.dependencies).not.toHaveProperty('@fastify/swagger-ui');
     expect(pkg.dependencies).toHaveProperty('@scalar/fastify-api-reference');
     expect(pkg.dependencies).toHaveProperty('@asteasolutions/zod-to-openapi');
     // V-820 — @fastify/websocket backs the /v1/fleet/events control-plane WS.
