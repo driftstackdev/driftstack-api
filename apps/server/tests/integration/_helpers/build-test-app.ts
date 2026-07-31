@@ -7,6 +7,7 @@
 // Returns the app, plain-text key, and helpers for direct repo manipulation.
 
 import { buildApp } from '../../../src/lib/app.js';
+import { InMemoryOAuthStore } from '../../../src/services/oauth.js';
 import type { NowPaymentsApiClient } from '../../../src/lib/nowpayments-api.js';
 import type { R2 } from '../../../src/lib/r2.js';
 import { createTestLogger } from '../../../src/lib/logger.js';
@@ -240,6 +241,14 @@ export interface TestAppOptions {
    * gate runs, so a free-tier route test must opt into this.
    */
   keyProvenance?: 'cli_device';
+  /**
+   * Register the OAuth provider surface, including the staff-only
+   * `/v1/admin/oauth/clients*` routes. `buildApp` gates that whole surface on
+   * `deps.oauthStore`, so without this the routes 404 in tests and their
+   * `driftstack_internal_admin` gates cannot be exercised at all — which is
+   * precisely why they had no refusal coverage.
+   */
+  withOauthStore?: boolean;
   /**
    * Optional override for the seeded account id. Default is the
    * historical hardcoded value. Tests that need two distinct accounts
@@ -1461,6 +1470,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   const app = await buildApp({
     logger: testLogger,
+    // Gates the whole OAuth provider surface in buildApp, including the
+    // staff-only client routes. Off by default so existing fixtures are
+    // unchanged.
+    ...(opts.withOauthStore === true ? { oauthStore: new InMemoryOAuthStore() } : {}),
     trustProxy: opts.trustProxy ?? false,
     authRepo,
     authCache,
