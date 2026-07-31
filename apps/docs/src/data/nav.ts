@@ -351,6 +351,14 @@ export const DOC_NAV: DocNavSection[] = [
             method: 'PATCH',
           },
           { href: '/api/account/#avatar-upload', label: 'Avatar upload', method: 'POST' },
+          {
+            // `98d767a73` added the selected-workspace organization resource to
+            // api/account.md; without a nav child the section was unreachable
+            // from the sidebar and the endpoint-children integrity guard failed.
+            href: '/api/account/#profile-organization-taxonomy',
+            label: 'Profile organization taxonomy',
+            method: 'GET',
+          },
         ],
       },
       {

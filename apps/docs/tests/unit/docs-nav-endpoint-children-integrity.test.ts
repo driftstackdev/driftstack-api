@@ -185,13 +185,17 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     expect(offenders).toEqual([]);
   });
 
-  it('the tree carries a substantial endpoint census (132 API + 8 webhooks; includes the public archetype catalog endpoint)', () => {
+  it('the tree carries a substantial endpoint census (133 API + 8 webhooks; includes the public archetype catalog endpoint)', () => {
     const apiTotal = (apiSection?.items ?? []).reduce((n, i) => n + (i.children?.length ?? 0), 0);
     const webhooksTotal = (webhooksSection?.items ?? []).reduce(
       (n, i) => n + (i.children?.length ?? 0),
       0,
     );
-    expect(apiTotal).toBe(132);
+    // Census tripwire, refreshed only after the EXACTNESS test above passed:
+    // nav children match each page's h2 endpoint set byte-for-byte. The +1 is
+    // `/api/account/#profile-organization-taxonomy`, the resource `98d767a73`
+    // added to api/account.md without a sidebar entry.
+    expect(apiTotal).toBe(133);
     expect(webhooksTotal).toBe(8);
   });
 });
