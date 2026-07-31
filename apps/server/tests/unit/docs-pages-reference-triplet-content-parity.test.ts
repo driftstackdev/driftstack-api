@@ -174,7 +174,15 @@ describe('W786 docs reference/ triplet content parity', () => {
       /`POST \/v1\/agent-sessions\/:id\/message` uses\s*\n?`agent_sessions:message`\./,
     );
     expect(p).toMatch(/A self-scoped request consumes that bucket once for the caller\./);
-    expect(p).toMatch(/A per-session GUI control key consumes it once for the session owner\./);
+    // Re-pinned when the control-key scope line gained its tier and shared-budget
+    // detail. Asserted as the two CLAIMS rather than one exact sentence: the
+    // capacity a control key draws on is the owner's own tier (V-711 fixed it
+    // charging a free-tier floor and truncating a paid owner's live bucket), and
+    // it shares one bucket with that account's API traffic. A single-sentence
+    // regex would break on any rewording while proving nothing about either.
+    expect(p).toMatch(/A per-session GUI control key consumes it once for the session owner/);
+    expect(p).toMatch(/owner's own tier and active overrides/);
+    expect(p).toMatch(/same bucket\*\* as that account's API traffic/);
     expect(p).toMatch(
       /A \*\*session or agent-session\*\* request made with `X-Driftstack-Account`\s*\n?\s*first consumes the actor's bucket, then consumes the \*\*same bucket key and\s*\n?\s*cost\*\* for the selected owner\./,
     );

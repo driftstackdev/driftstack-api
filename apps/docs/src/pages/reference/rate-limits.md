@@ -40,7 +40,11 @@ uses `sessions:create` (never `global`), and a
 The account scope depends on who owns the resource:
 
 - A self-scoped request consumes that bucket once for the caller.
-- A per-session GUI control key consumes it once for the session owner.
+- A per-session GUI control key consumes it once for the session owner, at the
+  owner's own tier and active overrides — not a reduced desktop allowance. It
+  draws on the **same bucket** as that account's API traffic, so a desktop
+  Simulator left open (it polls page state roughly every 2s) and your SDK or
+  dashboard calls share one budget. Size for the total, not for either alone.
 - A **session or agent-session** request made with `X-Driftstack-Account`
   first consumes the actor's bucket, then consumes the **same bucket key and
   cost** for the selected owner. This keeps every member accountable for their
