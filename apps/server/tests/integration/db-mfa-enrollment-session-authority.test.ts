@@ -83,8 +83,10 @@ interface Pending {
   updatedAt: Date;
 }
 
-/** An active account with a PENDING mfa secret and one live web session. */
-async function seedPendingEnrollment(): Promise<Pending> {
+/** An account with a PENDING mfa secret and one live web session. */
+async function seedPendingEnrollment(
+  status: 'active' | 'suspended' | 'deleted' = 'active',
+): Promise<Pending> {
   if (!client) throw new Error('no client');
   const accountId = randomUUID();
   const sessionId = randomUUID();
@@ -93,7 +95,7 @@ async function seedPendingEnrollment(): Promise<Pending> {
 
   await client`
     INSERT INTO accounts (id, email, status, auth_epoch)
-    VALUES (${accountId}, ${`mfa-enroll-${accountId}@test.local`}, 'active', 1)`;
+    VALUES (${accountId}, ${`mfa-enroll-${accountId}@test.local`}, ${status}::account_status, 1)`;
   await client`
     INSERT INTO account_mfa (account_id, totp_secret_ciphertext, totp_secret_iv, totp_secret_tag, enrolled_at, created_at, updated_at)
     VALUES (${accountId}, 'ct', 'iv', 'tag', NULL, ${updatedAt.toISOString()}::timestamptz, ${updatedAt.toISOString()}::timestamptz)`;
@@ -169,6 +171,25 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       await client!`UPDATE web_sessions SET expires_at = ${new Date(
         NOW.getTime() - HOUR_MS,
       ).toISOString()}::timestamptz WHERE id = ${p.sessionId}`;
+
+      expect(await complete(p), 'refused').toBe(false);
+      expect(await isEnrolled(p.accountId), 'and nothing was activated').toBe(false);
+    });
+
+    it('CRITICAL a SUSPENDED account cannot activate MFA. Suspension is an enforcement state — billing lapse or abuse — and an account under enforcement must not still be reconfiguring its own authentication.', async () => {
+      // Added after the FIRST version of this file shipped. The five session
+      // conditions were guarded here, but the authority lock's own
+      // `eq(accounts.status, 'active')` was not: deleting it left the full suite
+      // green at 2,568 files / 26,613 tests. Guarding a method is not the same
+      // as guarding every predicate in it, and only the mutation said which.
+      const p = await seedPendingEnrollment('suspended');
+
+      expect(await complete(p), 'refused').toBe(false);
+      expect(await isEnrolled(p.accountId), 'and nothing was activated').toBe(false);
+    });
+
+    it('CRITICAL a DELETED account cannot activate MFA. The row survives a soft delete, so without the status check a terminated account keeps a live path to change its authentication configuration.', async () => {
+      const p = await seedPendingEnrollment('deleted');
 
       expect(await complete(p), 'refused').toBe(false);
       expect(await isEnrolled(p.accountId), 'and nothing was activated').toBe(false);
