@@ -45,7 +45,60 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..', '..');
 
 const APP_ROOTS = ['apps/status-site/src', 'apps/customer-dashboard/src', 'apps/admin-panel/src'];
-const ESCAPERS = new Set(['escapeHtml', 'escapeHTML', 'esc', 'encodeURIComponent', 'dsQrSvg']);
+/**
+ * Names whose output is treated as safe to place in markup.
+ *
+ * This is a TRUST LIST inside a security guard: anything passed through one of
+ * these is credited as escaped and never reported. It previously held two names
+ * that earn nothing. `escapeHTML` (capital HTML) is used zero times. `esc`
+ * appears once in these apps, as the text inside a `<kbd>esc</kbd>` label —
+ * never as an identifier. That one is worse than dead weight: it is a standing
+ * rule that ANY future variable named `esc` is an escaper, and `esc` is short
+ * and generic enough to be reached for as a loop alias or a parameter.
+ *
+ * `dsQrSvg` stays, and the reason was read rather than assumed: it feeds its
+ * input to a QR encoder and builds the SVG only from a numeric dimension and a
+ * path of integer coordinates, so the input never reaches the markup at all.
+ *
+ * The arm below asserts every entry is actually used, so this cannot silently
+ * accumulate names that widen the trust boundary without buying anything.
+ */
+const ESCAPERS = new Set(['escapeHtml', 'encodeURIComponent', 'dsQrSvg']);
+/**
+ * Built-ins a page may call without the guard knowing them. Anything else that
+ * is neither declared in the page nor in ESCAPERS is UNKNOWN, and an unknown
+ * callee wrapping a value on its way into markup is the case that quietly
+ * escaped this guard: swapping `escapeHtml(k.name)` for `myOwnEscaper(k.name)`
+ * used to produce no finding at all, because a call operand was out of scope
+ * and an unrecognised name credits nothing either way.
+ */
+const JS_GLOBALS = new Set([
+  'String',
+  'Number',
+  'Boolean',
+  'Array',
+  'Object',
+  'JSON',
+  'Math',
+  'Date',
+  'RegExp',
+  'parseInt',
+  'parseFloat',
+  'isFinite',
+  'isNaN',
+  'encodeURI',
+  'decodeURI',
+  'decodeURIComponent',
+  'URL',
+  'URLSearchParams',
+  'btoa',
+  'atob',
+  'structuredClone',
+  'fetch',
+  'setTimeout',
+  'clearTimeout',
+]);
+
 const HTML_TAG = /<\/?[a-zA-Z][\s\S]*?>|<\/?[a-zA-Z]$|<[a-zA-Z][\w-]*\s/;
 
 /**
@@ -199,6 +252,7 @@ interface Scan {
   readonly perApp: Record<string, number>;
   readonly parseFailures: string[];
   readonly rawDataAccess: string[];
+  readonly unknownCallees: string[];
 }
 
 function scan(): Scan {
@@ -208,6 +262,7 @@ function scan(): Scan {
   const perApp: Record<string, number> = {};
   const parseFailures: string[] = [];
   const rawDataAccess: string[] = [];
+  const unknownCallees: string[] = [];
 
   for (const file of astroFiles()) {
     const rel = relative(REPO, file);
@@ -385,6 +440,15 @@ function scan(): Scan {
             // A helper call or a bare local is a different question — does the
             // helper escape what it is handed? — and is out of scope above.
             if (
+              ts.isCallExpression(part) &&
+              ts.isIdentifier(part.expression) &&
+              !fns.has(part.expression.text) &&
+              !ESCAPERS.has(part.expression.text) &&
+              !JS_GLOBALS.has(part.expression.text)
+            ) {
+              unknownCallees.push(`${rel}: ${part.expression.text}()`);
+            }
+            if (
               (ts.isPropertyAccessExpression(part) || ts.isElementAccessExpression(part)) &&
               isDataAccess(part)
             )
@@ -404,6 +468,7 @@ function scan(): Scan {
     perApp,
     parseFailures,
     rawDataAccess,
+    unknownCallees,
   };
 }
 
@@ -411,6 +476,17 @@ describe('server data reaching browser-parsed markup is escaped', () => {
   it('CRITICAL every client script parses cleanly. A body captured from a frontmatter comment still yields an error-tolerant AST, so this fails quietly: it under-reports instead of erroring, and a security scan that silently examines less than it claims is worse than none. This exact bug hid 40% of the surface.', () => {
     const { parseFailures } = scan();
     expect(parseFailures, 'client <script> bodies that did not parse').toEqual([]);
+  });
+
+  it('CRITICAL every name in the trust list is actually used. This set decides what counts as escaped, so an entry that matches nothing is not harmless — it is a standing rule waiting for a name collision, and `esc` (which sat here while appearing only as the text in a <kbd>esc</kbd> label) is exactly the kind of short, generic identifier a future loop alias or parameter would reuse and be silently trusted for.', () => {
+    const sources = astroFiles().map((f) => readFileSync(f, 'utf8'));
+    const unused = [...ESCAPERS].filter(
+      (name) =>
+        !sources.some((src) =>
+          new RegExp(`\\b${name}\\s*\\(|\\.\\s*map\\(\\s*${name}\\s*\\)`).test(src),
+        ),
+    );
+    expect(unused, 'trusted name(s) never called or passed by reference — remove them').toEqual([]);
   });
 
   it('CRITICAL the scan reaches all three apps, and reaches the dashboard in particular. Every assertion here reports an absence, so a scan that collected nothing reports every page safe. The dashboard is the specific trap: it builds markup by concatenation, so an earlier check written for `${...}` interpolation found 44 sinks there and judged zero operands.', () => {
@@ -423,6 +499,14 @@ describe('server data reaching browser-parsed markup is escaped', () => {
       40,
     );
     expect(perApp['admin-panel'], 'admin-panel markup expressions').toBeGreaterThan(70);
+  });
+
+  it('CRITICAL no markup operand calls a helper this guard does not recognise. A call operand is otherwise out of scope entirely — neither credited as escaping nor reported — so renaming the escaper to something unrecognised made the value vanish from coverage rather than fail. There are zero such calls today, which is what makes an exact-empty assertion the right shape: page-local formatters are resolved by name, so anything left is genuinely unknown.', () => {
+    const { unknownCallees } = scan();
+    expect(
+      [...new Set(unknownCallees)].sort(),
+      'markup built by a callee that is neither declared in the page, trusted as an escaper, nor a JS built-in:',
+    ).toEqual([]);
   });
 
   it('CRITICAL no server-supplied value is written into markup unescaped. The status page is unauthenticated and its incident feed is operator-authored; the dashboard renders customer-authored key names into HTML attributes. Deleting either escape today fails nothing.', () => {
