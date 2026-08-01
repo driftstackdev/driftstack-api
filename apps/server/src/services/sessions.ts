@@ -578,15 +578,22 @@ export class SessionsService {
     } catch (err) {
       if (err instanceof SessionDestroyedError) throw err;
       // Release the reserved slot so it stops counting against the cap.
-      // Best-effort; a release failure must not mask the original error.
-      await this.deps.repo
+      // Best-effort; a release failure must not mask the original error. It is
+      // still REPORTED: a slot that was not released counts against the cap
+      // forever, and discarding the outcome is what made that invisible.
+      const slotReleased = await this.deps.repo
         .updateSessionStatus(reserved.id, 'errored', { destroyedAt: new Date() })
-        .catch(() => {});
+        .then(() => true)
+        .catch(() => false);
       // Tear down the orphaned live worker (the row is now a tombstone, so
-      // nothing else will ever destroy it). Best-effort.
-      await destroyDriverSessionWithTimeout(() =>
+      // nothing else will ever destroy it). Best-effort, reported for the same
+      // reason: a worker that survives this is a real browser billing us with
+      // nothing left that will ever reap it.
+      const workerDestroyed = await destroyDriverSessionWithTimeout(() =>
         this.deps.driver.destroy(driverResult.driverSessionId),
-      ).catch(() => {});
+      )
+        .then(() => true)
+        .catch(() => false);
       try {
         this.deps.logger?.error?.(
           {
@@ -595,9 +602,17 @@ export class SessionsService {
             account_id: accountId,
             session_id: reserved.id,
             driver_session_id: driverResult.driverSessionId,
+            slot_released: slotReleased,
+            worker_destroyed: workerDestroyed,
             err,
           },
-          'session post-dispatch DB write failed — released the leaked concurrency slot + tore down the orphaned worker',
+          // The old message asserted both cleanups succeeded, which the code
+          // never checked. Reading "released … + tore down …" during an
+          // incident rules out the leaked slot and the orphaned browser —
+          // precisely the two states most likely to be true at that moment.
+          slotReleased && workerDestroyed
+            ? 'session post-dispatch DB write failed — released the leaked concurrency slot + tore down the orphaned worker'
+            : 'session post-dispatch DB write failed AND cleanup did not fully succeed — see slot_released / worker_destroyed',
         );
       } catch {
         // Swallow; logging is best-effort.

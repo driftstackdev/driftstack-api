@@ -1639,12 +1639,18 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     expect(loggedErrors[0]?.obj.event).toBe('post_dispatch_bind_failed');
     expect(loggedErrors[0]?.obj.account_id).toBe('acc-uuid-test');
     expect(loggedErrors[0]?.obj.session_id).toBe('sess-0000');
+    // Both cleanups are reported as measured OUTCOMES. They used to be asserted
+    // by the wording alone while the code discarded each result, so the line
+    // read identically when neither had happened.
+    expect(loggedErrors[0]?.obj.slot_released).toBe(true);
+    expect(loggedErrors[0]?.obj.worker_destroyed).toBe(true);
+    expect(loggedErrors[0]?.msg).toContain('released the leaked concurrency slot');
   });
 
-  it('create: a hung cleanup after activation-store failure is bounded and preserves the original store error', async () => {
+  it('create: a hung cleanup after activation-store failure is bounded, preserves the original store error, and does NOT report the orphaned worker as torn down', async () => {
     vi.useFakeTimers();
     try {
-      const { service, repo, driver } = buildService();
+      const { service, repo, driver, loggedErrors } = buildService();
       const ctx = buildCtx();
       const writeErr = new Error('activation store failed');
       repo.throwOnActivateSessionReservation = writeErr;
@@ -1657,6 +1663,17 @@ describe('SessionsService — V-090 driver-failure capture', () => {
       await rejection;
 
       expect(repo.read('sess-0000')).toMatchObject({ status: 'errored' });
+
+      // The teardown timed out, so the real browser is still running with
+      // nothing left that will ever reap it — the row is already a tombstone.
+      // This is the case the old message misreported: it claimed the worker had
+      // been torn down, which is the one thing an operator would use the log to
+      // rule out while paying for it.
+      expect(loggedErrors).toHaveLength(1);
+      expect(loggedErrors[0]?.obj.slot_released).toBe(true);
+      expect(loggedErrors[0]?.obj.worker_destroyed).toBe(false);
+      expect(loggedErrors[0]?.msg).toContain('cleanup did not fully succeed');
+      expect(loggedErrors[0]?.msg).not.toContain('tore down the orphaned worker');
     } finally {
       vi.useRealTimers();
     }
