@@ -10,6 +10,8 @@
 // against `key_hash` (scrypt-kdf encoded).
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { TIER_FEATURES } from '@driftstack/api-types';
+import type { AccountTier } from '@driftstack/api-types';
 import scryptKdf from 'scrypt-kdf';
 
 const PREFIX_PUBLIC_LEN = 16;
@@ -17,6 +19,23 @@ const RANDOM_BODY_BYTES = 20; // 20 bytes -> 32 base32 chars
 const BASE32_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';
 
 export type ApiKeyEnv = 'live' | 'test';
+
+/**
+ * The key environment a tier mints in.
+ *
+ * Reads `TIER_FEATURES`, which declares itself the source of truth for this
+ * ("Stripe environment for API-key minting"). It was not: both mint paths
+ * computed `tier === 'free' ? 'test' : 'live'` inline, so the table field was
+ * read by no runtime code at all. The two agreed for all eight tiers, which is
+ * why nothing was visibly wrong — but a tier added with
+ * `apiKeyEnvironment: 'test'` would have minted `ds_live_…` keys regardless,
+ * and three test files assert the field's values as though it decided
+ * something. A setting that varies and drives nothing is a lie in the shape of
+ * a setting.
+ */
+export function apiKeyEnvForTier(tier: AccountTier): ApiKeyEnv {
+  return TIER_FEATURES[tier].apiKeyEnvironment;
+}
 
 export function generateApiKey(env: ApiKeyEnv): string {
   const buf = randomBytes(RANDOM_BODY_BYTES);

@@ -177,9 +177,22 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
 
   it('CRITICAL imports 3 lib/api-keys primitives — generateApiKey + hashApiKey + keyPrefixFromPlaintext. The 3-primitive import bridges service-layer coordination to lib/ crypto primitives (matches W912 api-key-generation invariant).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
-    expect(p).toMatch(
-      /import \{ generateApiKey, hashApiKey, keyPrefixFromPlaintext \} from '\.\.\/lib\/api-keys\.js';/,
-    );
+    // Four now: `apiKeyEnvForTier` joined them when the test/live decision
+    // moved out of an inline `tier === 'free' ? …` ternary and into
+    // TIER_FEATURES, which had declared itself the source of truth for that
+    // while being read by no runtime code.
+    for (const primitive of [
+      'apiKeyEnvForTier',
+      'generateApiKey',
+      'hashApiKey',
+      'keyPrefixFromPlaintext',
+    ]) {
+      expect(p, `${primitive} imported from lib/api-keys`).toMatch(
+        new RegExp(
+          `import \\{[\\s\\S]*?\\b${primitive}\\b[\\s\\S]*?\\} from '\\.\\./lib/api-keys\\.js';`,
+        ),
+      );
+    }
   });
 
   // ─── Error class imports ─────────────────────────────────────

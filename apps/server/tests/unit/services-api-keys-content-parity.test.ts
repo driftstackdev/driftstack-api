@@ -118,7 +118,17 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
   });
 
   it("create: tier 'free' → 'test' env else 'live'; generateApiKey + hashApiKey + keyPrefixFromPlaintext; emits api_key.minted audit", () => {
-    expect(body).toMatch(/const env = tier === 'free' \? 'test' : 'live';/);
+    // The environment is read from TIER_FEATURES, not decided here. This
+    // deliberately does NOT pin the old `tier === 'free' ? 'test' : 'live'`
+    // ternary: pinning it rewarded the weaker mechanism, since a hardcoded
+    // branch that ignores the tier table satisfied the pin while the table it
+    // claims to follow drove nothing. Whether the table actually decides is
+    // checked by minting through the service in
+    // api-key-env-follows-tier-features.test.ts; a source pin never could.
+    expect(body).toMatch(/const env = apiKeyEnvForTier\(tier\);/);
+    expect(body, 'the inline test/live branch is gone from both mint paths').not.toMatch(
+      /tier === 'free' \? 'test' : 'live'/,
+    );
     expect(body).toMatch(/const plaintext = generateApiKey\(env\);/);
     expect(body).toMatch(/const keyHash = await hashApiKey\(plaintext\);/);
     expect(body).toMatch(/const keyPrefix = keyPrefixFromPlaintext\(plaintext\);/);
@@ -128,8 +138,22 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
   });
 
   it('rotate requires apiAccess on the effective tier before key generation or repository mutation', () => {
-    expect(body).toMatch(
-      /const accountId = opts\.effectiveAccountId \?\? ctx\.account\.id;\s*\n?\s*const tier = opts\.effectiveTier \?\? ctx\.account\.tier;\s*\n?[\s\S]*?requireTierFeature\(tier, 'apiAccess'\);\s*\n?\s*const env = tier === 'free' \? 'test' : 'live';/,
+    // Stated as an ORDERING rather than one long chained regex. The chain
+    // ended in the inline `tier === 'free' ? …` ternary, so replacing that
+    // expression broke a pin whose actual subject is "the tier gate runs
+    // first" — and a regex that long fails for reasons unrelated to what it
+    // is guarding.
+    const rotate = body.slice(body.indexOf('  async rotate('));
+    expect(rotate.length, 'the rotate() body was located').toBeGreaterThan(200);
+
+    const gate = rotate.indexOf("requireTierFeature(tier, 'apiAccess');");
+    const env = rotate.indexOf('const env =');
+    expect(gate, 'rotate gates on the apiAccess tier feature').toBeGreaterThan(-1);
+    expect(env, 'rotate derives a key environment').toBeGreaterThan(-1);
+    expect(gate, 'the tier gate runs BEFORE any key material is generated').toBeLessThan(env);
+
+    expect(rotate.slice(0, env)).toMatch(
+      /const tier = opts\.effectiveTier \?\? ctx\.account\.tier;/,
     );
   });
 
@@ -212,9 +236,23 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(/import type \{ AccountContext \} from '\.\/auth\.js';/);
     expect(body).toMatch(/import type \{ ApiKeyRow \} from '\.\/auth\.js';/);
     expect(body).toMatch(/import type \{ AuthCache \} from '\.\/auth-cache\.js';/);
-    expect(body).toMatch(
-      /import \{ generateApiKey, hashApiKey, keyPrefixFromPlaintext \} from '\.\.\/lib\/api-keys\.js';/,
-    );
+    // Named individually rather than as one exact-order import line:
+    // `apiKeyEnvForTier` joined these when the test/live decision moved out of
+    // an inline ternary and into TIER_FEATURES, and a pin on the literal
+    // three-symbol line fails for the arrival of a fourth symbol rather than
+    // for anything going missing.
+    for (const primitive of [
+      'apiKeyEnvForTier',
+      'generateApiKey',
+      'hashApiKey',
+      'keyPrefixFromPlaintext',
+    ]) {
+      expect(body, `${primitive} imported from lib/api-keys`).toMatch(
+        new RegExp(
+          `import \\{[\\s\\S]*?\\b${primitive}\\b[\\s\\S]*?\\} from '\\.\\./lib/api-keys\\.js';`,
+        ),
+      );
+    }
     expect(body).toMatch(
       /import \{ BadRequestError, ForbiddenError, LegalAcceptanceRequiredError \} from '\.\.\/lib\/errors\.js';/,
     );

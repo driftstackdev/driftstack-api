@@ -19,7 +19,12 @@ import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import type { ApiKeyRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
-import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../lib/api-keys.js';
+import {
+  apiKeyEnvForTier,
+  generateApiKey,
+  hashApiKey,
+  keyPrefixFromPlaintext,
+} from '../lib/api-keys.js';
 import { BadRequestError, ForbiddenError, LegalAcceptanceRequiredError } from '../lib/errors.js';
 import {
   NotFoundError,
@@ -321,7 +326,7 @@ export class ApiKeysService {
       }
     }
 
-    const env = tier === 'free' ? 'test' : 'live';
+    const env = apiKeyEnvForTier(tier);
     // Insert with a bounded regenerate-retry on a key_prefix collision
     // (23505) so a rare prefix birthday-clash is resolved by minting a
     // fresh key rather than surfacing an opaque 500.
@@ -429,7 +434,7 @@ export class ApiKeysService {
     // not be refreshed into new programmatic authority.
     requireTierFeature(tier, 'apiAccess');
 
-    const env = tier === 'free' ? 'test' : 'live';
+    const env = apiKeyEnvForTier(tier);
     const gracePeriodMs = opts.gracePeriodMs ?? 24 * 60 * 60 * 1000;
     const now = new Date();
     let rotated: Extract<RotateApiKeyRepoResult, { kind: 'rotated' }> | null = null;
