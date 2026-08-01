@@ -1103,6 +1103,51 @@ filter has to be shown to include the covering suite.
 No route-coverage finding exists. The instrument is not sound for this repo and
 should not be rebuilt from scratch by the next person.
 
+### 35. The cross-SDK bug was the ONLY instance of its class
+
+Having found that `revokeAllOtherWebSessions` omitted the `?keep=current` the
+endpoint requires, the obvious question is how many more like it exist. Swept
+three ways; the answer is none.
+
+**Required query parameters.** Exactly one query field in `api-types` is required
+(no `.optional()`, no `.default()`): `ClearQuotaOverrideQuerySchema.bucket_key`.
+It belongs to an admin route with no SDK surface at all.
+
+**Inline query requirements.** The first sweep only looked at `*QuerySchema`
+definitions — and would have missed the original bug, which was an inline
+`request.query?.keep` check with no schema behind it. Redone for that shape:
+**exactly one** such requirement exists in the entire route surface, and it is
+the one already fixed.
+
+**Required bodies.** Four SDK write-methods send an empty or absent body
+(`testByokAnthropicKey`, `createPortalSession`, MFA `enroll` and
+`regenerateRecoveryCodes`). None of those four routes reads `request.body`.
+
+**Method-and-path agreement, all three SDKs.** 124 TypeScript, 206 Python and 125
+Go method+path pairs, every one matching a registered server route with that
+exact verb. The Go measurement first reported 35 mismatches; that was my parser
+failing to rebuild `"/v1/agent-sessions/" + url.PathEscape(id) + "/message"` in
+order, not a finding.
+
+**And the reverse direction is guarded.** Changing a SERVER route's verb —
+`/v1/account/mfa/enroll` from POST to PUT, which would 404 every SDK call — reds
+`openapi-route-coverage` and the route's own cross-source invariant.
+
+So the gap that produced the bug was genuinely narrow: an **absent** query
+parameter is invisible to a source-text pin, which can only see what the source
+says, not what it fails to say. Nothing else in the wire surface has that shape.
+
+### 36. Go BYOK credential handling now driven
+
+Fourteen of `AccountResource`'s fifteen methods had no test reference. The four
+carrying the customer's own Anthropic key now assert credential-handling
+properties rather than plumbing: the key must travel in the request **body**,
+because a credential in a path or query string ends up in access logs, proxy logs
+and browser history — the request succeeding is not enough, it has to succeed the
+right way. The read path is fed a response containing an `api_key` the server
+would never send, and the value handed back is re-encoded and checked for it, so
+a struct that later grows a field able to hold the key fails there.
+
 ## What A2 deliberately did not do
 
 - No suite where measurement showed the boundary already covered — webhooks and
