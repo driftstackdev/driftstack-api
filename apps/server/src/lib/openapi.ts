@@ -1877,6 +1877,7 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: AccountProxyInputOpenApi } } },
     },
     responses: {
+      404: { description: 'Not found (or owned by another account).', content: problemContent },
       200: {
         description: 'The updated proxy (metadata only).',
         content: { 'application/json': { schema: AccountProxyMetadataOpenApi } },
@@ -1891,6 +1892,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['account'],
     security: auth,
     responses: {
+      404: { description: 'Not found (or owned by another account).', content: problemContent },
       204: { description: 'Deleted.' },
       ...errors4xx,
     },
@@ -1908,6 +1910,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['account'],
     security: auth,
     responses: {
+      404: { description: 'Not found (or owned by another account).', content: problemContent },
       200: {
         description: 'Reachability result (ok=true + latency_ms, or ok=false + reason).',
         content: { 'application/json': { schema: AccountProxyTestResultOpenApi } },
@@ -2704,6 +2707,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
+      404: { description: 'Not found.', content: problemContent },
       200: {
         description: 'Exact same-id request replayed without duplicate timeline or audit effects.',
         content: { 'application/json': { schema: PutIncidentResponseSchema } },
@@ -6669,6 +6673,7 @@ function buildRegistry(): OpenAPIRegistry {
       query: PaginationQuerySchema,
     },
     responses: {
+      404: { description: 'Not found (or owned by another account).', content: problemContent },
       200: {
         description: 'Snapshots for this profile.',
         content: { 'application/json': { schema: ListSnapshotsResponseOpenApi } },
