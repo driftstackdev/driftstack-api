@@ -17,6 +17,9 @@
 // missing series reads as healthy on every dashboard. So these cases attack the
 // absent case, not the present one.
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -102,7 +105,7 @@ describe('a dead job chain is reported as 0, not as an absent series', () => {
     expect(s['auth_tokens.sweep'], 'while the rest are still reported').toBe(0);
   });
 
-  it('CRITICAL the roster covers every recurring sweep the server registers. A chain missing from the roster is a chain nobody is watching, which is the same blind spot in a different place.', () => {
+  it('CRITICAL no chain is silently DROPPED from the roster. This is a literal pin, and that is all it is — it cannot tell you the roster matches what the server registers, only that nobody removed an entry. The derived check below is the other half; the two are not interchangeable, because a list restated from itself agrees with itself.', () => {
     expect([...EXPECTED_RECURRING_JOB_TYPES].sort()).toEqual([
       'account_deletion.purge',
       'agent_session.orphan_reap',
@@ -114,5 +117,34 @@ describe('a dead job chain is reported as 0, not as an absent series', () => {
       'scheduled_jobs.prune',
       'sessions.duration_sweep',
     ]);
+  });
+
+  it('CRITICAL the roster covers every recurring sweep the server actually registers. Each sweeper exports its own `*_JOB_TYPE` constant, so that set is what the server really schedules — a new sweeper added without a roster entry is a chain nobody is watching, and the literal pin above cannot see it because a list restated from itself is always in agreement.', () => {
+    const servicesDir = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      'src',
+      'services',
+    );
+    const declared = new Set<string>();
+    for (const entry of readdirSync(servicesDir)) {
+      if (!entry.endsWith('.ts')) continue;
+      const src = readFileSync(resolve(servicesDir, entry), 'utf8');
+      for (const m of src.matchAll(
+        /export const [A-Z_]*JOB_TYPE[A-Z_]*\s*(?::[^=]*)?=\s*'([a-z_.]+)'/g,
+      )) {
+        declared.add(m[1]!);
+      }
+    }
+
+    // Vacuity: a scan that found nothing would make the comparison below pass
+    // by matching an empty set against an empty set.
+    expect(declared.size, 'sweeper modules exporting a *_JOB_TYPE constant').toBeGreaterThan(5);
+
+    expect(
+      [...declared].sort(),
+      'job types the server schedules but the liveness roster does not watch (or vice versa):',
+    ).toEqual([...EXPECTED_RECURRING_JOB_TYPES].sort());
   });
 });
