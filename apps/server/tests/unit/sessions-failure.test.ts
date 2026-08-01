@@ -1633,7 +1633,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     // The slot is reserved, then driver.createSession throws. The reservation
     // row must be released (status errored + destroyedAt) so it stops counting
     // against the cap; the dispatch error propagates.
-    const { service, repo, driver } = buildService();
+    const { service, repo, driver, loggedErrors } = buildService();
     const ctx = buildCtx();
     const driverThrow = new Error('worker dispatch failed');
     driver.primeCreateThrow(driverThrow);
@@ -1650,6 +1650,47 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     const reserved = repo.read('sess-0000');
     expect(reserved?.status).toBe('errored');
     expect(reserved?.destroyedAt).toBeInstanceOf(Date);
+    // A release that SUCCEEDED stays quiet, so the signal below means something.
+    expect(
+      loggedErrors.filter((l) => l.obj.event === 'dispatch_failure_slot_release_failed'),
+    ).toEqual([]);
+  });
+
+  it('create: a worker-DISPATCH failure whose slot release ALSO fails reports the permanently held slot', async () => {
+    // Both writes fail: dispatch throws, then the release that would free the
+    // reserved slot throws too. The row stays 'creating' with destroyedAt NULL
+    // — no worker is live for the disconnect reaper to notice, and on a tier
+    // with no minute cap the duration sweeper never reaps it either. That slot
+    // counts against the account's cap indefinitely, and while the release
+    // outcome was discarded it looked exactly like a clean release.
+    const { service, repo, driver, loggedErrors } = buildService();
+    const ctx = buildCtx();
+    const driverThrow = new Error('worker dispatch failed');
+    driver.primeCreateThrow(driverThrow);
+    repo.throwOnUpdateSessionStatus = {
+      status: 'errored',
+      error: new Error('release write failed'),
+    };
+
+    let caught: unknown;
+    try {
+      await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    } catch (e) {
+      caught = e;
+    }
+    // The dispatch error still wins — the release failure must not mask it.
+    expect(caught).toBe(driverThrow);
+
+    // The slot really is still held: not released, not destroyed.
+    const reserved = repo.read('sess-0000');
+    expect(reserved?.status).not.toBe('errored');
+    expect(reserved?.destroyedAt).toBeNull();
+
+    const held = loggedErrors.find((l) => l.obj.event === 'dispatch_failure_slot_release_failed');
+    expect(held, 'a permanently held concurrency slot must not be silent').toBeDefined();
+    expect(held?.obj.session_id).toBe('sess-0000');
+    expect(held?.obj.account_id).toBe('acc-uuid-test');
+    expect(held?.msg).toContain('counts against the account cap');
   });
 
   it('create: a POST-dispatch DB-write failure releases the slot + tears down the orphaned worker + loud-logs', async () => {

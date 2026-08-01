@@ -520,10 +520,31 @@ export class SessionsService {
       // reservation row so it stops counting against the cap (mark destroyed,
       // not delete — keeps an auditable trail + matches the duration-sweep /
       // countActiveSessions destroyedAt semantics). Best-effort; a failure to
-      // release must not mask the original dispatch error.
-      await this.deps.repo
+      // release must not mask the original dispatch error — but it is reported.
+      // A release that fails leaves the row 'creating' with destroyedAt NULL:
+      // no worker is live for the disconnect reaper to notice, and on tiers
+      // with no minute cap the duration sweeper never reaps it either. The slot
+      // then counts against the account's cap indefinitely, and while the
+      // outcome was discarded that was indistinguishable from a clean release.
+      const slotReleased = await this.deps.repo
         .updateSessionStatus(reserved.id, 'errored', { destroyedAt: new Date() })
-        .catch(() => {});
+        .then(() => true)
+        .catch(() => false);
+      if (!slotReleased) {
+        try {
+          this.deps.logger?.error?.(
+            {
+              component: 'sessions-service',
+              event: 'dispatch_failure_slot_release_failed',
+              account_id: accountId,
+              session_id: reserved.id,
+            },
+            'worker dispatch failed and the reserved concurrency slot could not be released — it counts against the account cap until reconciled',
+          );
+        } catch {
+          // Swallow; logging is best-effort and must not mask the dispatch error.
+        }
+      }
       throw err;
     }
 
