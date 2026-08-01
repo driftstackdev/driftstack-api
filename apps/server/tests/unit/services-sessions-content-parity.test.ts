@@ -261,7 +261,15 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     // duration sweep + suspension reclaim + driver-operation failure cleanup.
     expect(boundedCalls).toHaveLength(7);
     expect(body).toMatch(
-      /const failed = await this\.deps\.repo\.failSessionOperation\([\s\S]+?await destroyDriverSessionWithTimeout\(\(\) =>\s*this\.deps\.driver\.destroy\(session\.driverSessionId\),\s*\)\.catch\(\(\) => \{\}\);/,
+      /const failed = await this\.deps\.repo\.failSessionOperation\([\s\S]+?const workerDestroyed = await destroyDriverSessionWithTimeout\(\(\) =>\s*this\.deps\.driver\.destroy\(session\.driverSessionId\),\s*\)\s*\.then\(\(\) => true\)\s*\.catch\(\(\) => false\);/,
+    );
+    // The teardown OUTCOME must stay captured. This is the only thing that ever
+    // reaps the browser on this path — the row is already a tombstone, the
+    // duration sweeper reaps only ACTIVE statuses, and destroy() short-circuits
+    // 'errored'. While the result was discarded, a permanent leak produced the
+    // same signal as a clean teardown: none.
+    expect(body).toMatch(
+      /if \(!workerDestroyed\) \{[\s\S]{0,600}?event: 'errored_session_worker_teardown_failed',/,
     );
   });
 

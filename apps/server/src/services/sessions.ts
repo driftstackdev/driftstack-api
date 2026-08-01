@@ -1479,9 +1479,33 @@ export class SessionsService {
       // circuits 'errored' — so without this the real browser leaks forever
       // (cost-to-serve) on EVERY transient driver error (audit wxzlp9yiz P1).
       // Best-effort, mirroring create()'s orphan guard; the original error wins.
-      await destroyDriverSessionWithTimeout(() =>
+      // The outcome is captured rather than discarded: this teardown is the ONLY
+      // thing that ever reaps the browser on this path, so a failure here is the
+      // permanent leak the comment above describes — and discarding the result
+      // made that leak indistinguishable from the healthy case in every signal
+      // we have.
+      const workerDestroyed = await destroyDriverSessionWithTimeout(() =>
         this.deps.driver.destroy(session.driverSessionId),
-      ).catch(() => {});
+      )
+        .then(() => true)
+        .catch(() => false);
+      if (!workerDestroyed) {
+        try {
+          this.deps.logger?.error?.(
+            {
+              component: 'sessions-service',
+              event: 'errored_session_worker_teardown_failed',
+              account_id: session.accountId,
+              session_id: session.id,
+              driver_session_id: session.driverSessionId,
+              operation,
+            },
+            'session operation errored and the live worker could not be torn down — the browser is unreaped and nothing else will ever destroy it',
+          );
+        } catch {
+          // Swallow; logging is best-effort and must not mask the driver error.
+        }
+      }
       try {
         await this.deps.repo.recordEvent({
           sessionId: session.id,

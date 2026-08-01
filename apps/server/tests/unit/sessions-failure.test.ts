@@ -775,7 +775,7 @@ function buildService(
 
 describe('SessionsService — V-090 driver-failure capture', () => {
   it('navigate driver throw → session.errored + session.failed webhook + re-throw', async () => {
-    const { service, repo, driver, webhookEvents } = buildService();
+    const { service, repo, driver, webhookEvents, loggedErrors } = buildService();
     const ctx = buildCtx();
     const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
 
@@ -813,6 +813,49 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     expect(JSON.stringify({ events: repo.events, webhookEvents })).not.toContain(
       'WebKit handle gone',
     );
+    // A teardown that SUCCEEDED must stay quiet — otherwise the leak signal
+    // below is just noise on every transient driver error.
+    expect(driver.destroyedIds).toEqual([session.driverSessionId]);
+    expect(
+      loggedErrors.filter((l) => l.obj.event === 'errored_session_worker_teardown_failed'),
+    ).toEqual([]);
+  });
+
+  it('an errored operation whose worker teardown times out reports the unreaped browser instead of absorbing it', async () => {
+    // This teardown is the ONLY thing that ever reaps the browser on this path:
+    // the row is already a tombstone, the duration sweeper reaps only ACTIVE
+    // statuses, and destroy() short-circuits 'errored'. Its result used to be
+    // discarded, so a permanent leak produced exactly the same signal — none —
+    // as a clean teardown, on every transient driver error (audit wxzlp9yiz P1).
+    vi.useFakeTimers();
+    try {
+      const { service, repo, driver, loggedErrors } = buildService();
+      const ctx = buildCtx();
+      const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+
+      driver.primeNextThrow({ name: 'DriverError', message: 'WebKit handle gone' });
+      driver.primeDestroyHang();
+
+      const rejection = expect(
+        service.navigate(ctx, session.id, { url: 'https://example.com', wait_until: 'load' }),
+      ).rejects.toThrow('WebKit handle gone');
+      await vi.advanceTimersByTimeAsync(SESSION_DESTROY_DRIVER_TIMEOUT_MS);
+      await rejection;
+
+      // The original driver error still wins and the row is still closed out.
+      expect(repo.read(session.id)?.status).toBe('errored');
+
+      const leak = loggedErrors.find(
+        (l) => l.obj.event === 'errored_session_worker_teardown_failed',
+      );
+      expect(leak, 'a leaked browser must not be silent').toBeDefined();
+      expect(leak?.obj.session_id).toBe(session.id);
+      expect(leak?.obj.driver_session_id).toBe(session.driverSessionId);
+      expect(leak?.obj.operation).toBe('navigate');
+      expect(leak?.msg).toContain('unreaped');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('retains only closed failure metadata while rethrowing the original diagnostic unchanged', async () => {
