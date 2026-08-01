@@ -9,6 +9,7 @@
 // schemas), since Postgres enum types aren't schema-scoped — V-009 captures
 // the empirical finding that drove this design choice.
 
+import { assertLocalDestructiveTarget } from './destructive-target-guard.js';
 import type { AddressInfo } from 'node:net';
 import { Redis } from 'ioredis';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -146,6 +147,13 @@ const TRUNCATE_SQL = `
 export async function startTestServer(): Promise<TestServer> {
   const dbUrl = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
   const redisUrl = process.env.REDIS_URL ?? DEFAULT_REDIS_URL;
+
+  // Before ANY connection is opened: this function drops the public schema a few
+  // lines below, and resetState() truncates every account table. Both targets
+  // must be a local throwaway. Checked here rather than at the DROP because a
+  // caller that has already connected has pointed real credentials at a real
+  // host.
+  assertLocalDestructiveTarget(dbUrl, redisUrl, process.env);
 
   const client = postgres(dbUrl, { max: 5 });
   const db = drizzle(client, { schema });
