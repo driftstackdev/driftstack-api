@@ -17788,6 +17788,16 @@
               }
             }
           },
+          "404": {
+            "description": "OAuth client not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -21350,6 +21360,16 @@
           },
           "403": {
             "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No proxy config for this session.",
             "content": {
               "application/problem+json": {
                 "schema": {

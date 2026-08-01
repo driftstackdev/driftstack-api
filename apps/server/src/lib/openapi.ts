@@ -2913,6 +2913,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin', 'oauth'],
     security: auth,
     responses: {
+      404: { description: 'OAuth client not found.', content: problemContent },
       204: { description: 'OAuth client revoked.' },
       ...errors4xx,
     },
@@ -3710,6 +3711,7 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: SessionEgressConfigSchema } } },
     },
     responses: {
+      404: { description: 'No proxy config for this session.', content: problemContent },
       200: {
         description: 'Proxy configured; safeguards applied.',
         content: {
