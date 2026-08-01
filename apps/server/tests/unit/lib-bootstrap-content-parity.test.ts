@@ -338,7 +338,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/scheduledJobsTimer\.unref\(\);/);
   });
 
-  it('Webhook delivery worker IS wired (drift-guard against the original unwired-in-prod gap): constructed with the webhooks repo + logger, driven by a 60s tickOnce poller, .unref()-ed, and clearInterval-ed in teardown — without this the worker would never run and configured webhooks would never deliver', () => {
+  it('Webhook delivery worker IS wired (drift-guard against the original unwired-in-prod gap): constructed with the webhooks repo + logger, driven by a 60s draining poller, .unref()-ed, and clearInterval-ed in teardown — without this the worker would never run and configured webhooks would never deliver', () => {
     // Re-pinned when the worker gained a metrics dependency. Both delivery
     // counters were registered at boot and emitted only from the unwired
     // DurableWebhookWorker, so in production they could never increment.
@@ -347,7 +347,13 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/const webhookDeliveryWorker = new WebhookDeliveryWorker\(\{/);
     expect(body).toMatch(/repo: webhooksRepo,/);
     expect(body).toMatch(/metrics: metricsRegistry/);
-    expect(body).toMatch(/await webhookDeliveryWorker\.tickOnce\(\);/);
+    // The poller now DRAINS rather than running a single tick: `claim` caps at
+    // 5 rows per endpoint, so one tick left a single backlogged endpoint
+    // delivering 5/minute. The loop and its stop condition live in
+    // drainWebhookDeliveries so they are behaviourally testable — pinned
+    // here only as the wiring.
+    expect(body).toMatch(/await drainWebhookDeliveries\(\{/);
+    expect(body).toMatch(/tick: \(\) => webhookDeliveryWorker\.tickOnce\(\),/);
     expect(body).toMatch(/webhookDeliveryTimer\.unref\(\);/);
     // The drain loop (a469de115) has no behavioural coverage anywhere — it lives
     // inline in a setInterval closure that no test constructs, so these are
@@ -364,11 +370,26 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // The latch itself: without the early return, ticks overlap and a slow drain
     // stacks on the next interval.
     expect(body).toMatch(/if \(webhookDeliveryRunning\) return;/);
-    // Both bounds. Without the partial-batch break the loop always runs its full
-    // batch count; without the wall-clock break a slow receiver can push a tick
-    // past the poll interval it is supposed to fit inside.
-    expect(body).toMatch(/if \(claimed < WEBHOOK_DELIVERY_BATCH_SIZE\) break;/);
-    expect(body).toMatch(/if \(Date\.now\(\) - startedAt >= WEBHOOK_DRAIN_BUDGET_MS\) break;/);
+    // Both bounds must reach the drain, but this pins that they are WIRED, not
+    // where the loop lives. The first version asserted the `break` statements
+    // inline — which promptly failed the moment the loop was extracted into a
+    // testable `drainWebhookDeliveries`, i.e. a guard of mine blocking someone
+    // else's strictly better refactor. Pinning a structure dictates an
+    // implementation; pinning that bootstrap supplies both bounds does not, and
+    // holds whether the loop is inline or delegated.
+    // Counted, not merely present. `toContain` matched the DECLARATION even
+    // after the constant stopped being passed anywhere — found by mutation, and
+    // it is the same "a pin proves the line exists, not that it does anything"
+    // trap this file warns about elsewhere. A declared-but-unused constant
+    // appears once; a wired one appears at least twice.
+    for (const name of [
+      'WEBHOOK_DRAIN_MAX_BATCHES',
+      'WEBHOOK_DRAIN_BUDGET_MS',
+      'WEBHOOK_DELIVERY_BATCH_SIZE',
+    ]) {
+      const uses = body.split(name).length - 1;
+      expect(uses, `${name} must be declared AND used, not just declared`).toBeGreaterThan(1);
+    }
     // The budget must stay inside the poll interval, or a tick can still be
     // draining when the next one is due. Computed, not pinned as a literal.
     const drainBudget = Number(
