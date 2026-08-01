@@ -909,6 +909,51 @@ closes.
 Determinism and injectivity are separate properties and are covered separately;
 a single "contains the id" assertion satisfies neither.
 
+### 28. Two parity guards degraded to a skip when their directory moved
+
+The Python-to-server and Go-to-server path-parity guards each opened with
+`it.skip('… SDK not present')`. Neither SDK is optional — 21 and 64 git-tracked
+files in workspace packages, and the repo has no submodules — so that branch
+could only fire when a directory was renamed, moved, or deleted, which is
+precisely when the guard mattered.
+
+Measured: pointing the path at a non-existent directory left the run green at
+"1 passed | 1 skipped". The parity assertion's own vacuity guard was already
+correct and failed on a zero-literal scan, so only the presence path was silent.
+A missing directory is now a failing case.
+
+### 29. Eight tests had been skipped unconditionally, with no explanation
+
+Four in the customer-dashboard webhooks page parity file, four in marketing
+trust/security-overview. Every full run reported "22 passed | 8 skipped".
+
+Un-skipping resolved it: **3 passed immediately** — idle coverage — and **5
+failed because the page copy had been rewritten into plain customer language with
+the internal V-numbers stripped**, and the pins were skipped rather than updated.
+
+Four of those five properties were still true on the page and their pins are
+re-anchored on the claim rather than the sentence: the MFA step-up gate on
+destructive admin paths; the per-provider inbound webhook algorithms plus the
+shared raw-body guarantee; the four drilled chaos failure modes plus
+dry-run-by-default; and the signing-secret shown-ONCE posture, which now also
+pins the DOM wipe that makes it true rather than only the sentence claiming it.
+
+The fifth was genuinely obsolete and is the one worth remembering. It pinned
+"Delivery counts coming soon" and the claim that `/v1/webhooks` carries no
+aggregate `delivery_counts`. V-185 shipped the counts and the cards render them,
+so un-skipping it would have re-pinned a claim the product had outgrown. **A
+skipped test is not a paused test — it is a decision to stop checking something,
+recorded nowhere, that decays into a false claim about the product.**
+
+A guard now forbids unconditional `it.skip` / `describe.skip` / `test.skip`
+anywhere under `apps/` or `packages/`, with a deliberately empty exemption map.
+Conditional skips are untouched; `describe.skipIf` on a missing `DATABASE_URL` is
+a real re-evaluated condition and ~63 of those remain.
+
+The first version of this sweep was scoped to `apps/server/tests` and found
+**zero** — all eight offenders were in other apps. Narrowing the guard's root
+back to that is one of the four mutations proving it.
+
 ## What A2 deliberately did not do
 
 - No suite where measurement showed the boundary already covered — webhooks and
