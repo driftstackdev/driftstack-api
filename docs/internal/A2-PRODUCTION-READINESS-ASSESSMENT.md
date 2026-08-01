@@ -227,52 +227,52 @@ scheduled-jobs migration the source comment already anticipates happens, make
 durability the reason for it rather than throughput. Throughput is the visible
 problem; silently notifying half the list is the one that matters.
 
-### 18. There is no key-rotation path — rotating either encryption key today prevents boot
+### 18. CORRECTED — key rotation is deliberately fail-closed; what is missing is the runbook
 
-Found by generalising the flake in item 11. That failure was a global envelope
-migration throwing on one malformed row; the same shape exists **nine times** in
-`bootstrap.ts`, and none of them is wrapped:
+**This item's first version was wrong about the mechanism and unfair to the
+design. Corrected here rather than quietly edited, because the wrong version was
+published to the bus.**
 
-| migration                                        | key                  |
-| ------------------------------------------------ | -------------------- |
-| `encryptLegacySecrets` (webhook secrets)         | `MFA_ENCRYPTION_KEY` |
-| `migrateValueEnvelopes` (platform secrets)       | `MFA_ENCRYPTION_KEY` |
-| `migrateLivekitSecretEnvelopes`                  | `MFA_ENCRYPTION_KEY` |
-| `migrateTotpSecretEnvelopes` (MFA TOTP)          | `MFA_ENCRYPTION_KEY` |
-| `migrateCiphertextEnvelopes` (BYOK Anthropic)    | `MFA_ENCRYPTION_KEY` |
-| `migratePayloadEnvelopes` (recipes)              | `MFA_ENCRYPTION_KEY` |
-| `migrateTranscriptEnvelopes` (agent transcripts) | `MFA_ENCRYPTION_KEY` |
-| `migrateWrappedDekEnvelopes` (profiles)          | `PROFILE_MASTER_KEY` |
-| `migrateSecretEnvelopes` (proxy secrets)         | `PROFILE_MASTER_KEY` |
+_What I originally wrote:_ nine unwrapped boot migrations decrypt to validate,
+so a malformed or undecryptable row prevents boot — framed as an oversight
+generalised from the item-11 flake.
 
-Each converter DECRYPTS to validate. A throw propagates out of `buildApp` into
-`buildAppWithFatalTeardown`, which logs fatal and exits. So **if either key is
-rotated while any legacy row remains, the server does not start** — and the
-operation that triggers it is a planned maintenance action, not an incident.
+_What is actually true, established by running it rather than reading it:_
 
-_`MFA_ENCRYPTION_KEY` is wired at 33 points in bootstrap_ and gates webhook
-secrets, platform secrets, TOTP secrets, BYOK Anthropic keys, recipe payloads,
-agent transcripts and turn receipts. One key, seven customer-facing subsystems.
+- A **legacy plaintext** row converts fine under a new key — no decryption is
+  involved, so it does NOT block boot. My stated mechanism was wrong.
+- A **v2** row read with a rotated key throws `unable to authenticate data`.
+- v2 rows are excluded from the conversion sweep, so that alone would let the
+  server boot and then fail per-request at use time — silently, which would be
+  worse.
+- **It does not, because every one of the nine migrations opens with an explicit
+  key-verification probe:** it reads back one existing v2 row with the current
+  key and throws if it cannot. All nine. That is a deliberate, consistently
+  implemented "can I still read my own secrets?" check.
 
-_Not calling the design wrong._ Failing closed at boot is defensible for a
-security system: serving with unreadable secrets is worse than refusing to
-serve. Three things make it worth a decision anyway:
+So the conclusion — rotating a key prevents boot — stands, but it is **intended
+behaviour, not a defect**. The system fails loudly at boot instead of quietly at
+request time, which is the correct trade for a credential store.
 
-1. **No rotation runbook exists.** Searched `docs/`; nothing covers it.
-2. **The compartmentalisation question was already raised and never answered.**
+_What remains genuinely open, and it is narrower than the original item claimed:_
+
+1. **No rotation runbook.** The probe tells an operator the key is wrong; nothing
+   tells them how to roll one. Recovery needs re-encryption by a process that
+   will not start, so the procedure has to exist before it is needed.
+2. **The compartmentalisation question is still unanswered.**
    `byok-anthropic-key-storage-design.md:78` weighs reusing `MFA_ENCRYPTION_KEY`
-   against a dedicated `BYOK_ENCRYPTION_KEY` — "dedicated wins on key-rotation
-   independence" — and ends with an unanswered "Founder verdict?".
-3. **The failure mode is total and the recovery needs DB surgery**, because the
-   process that would re-encrypt the rows is the one that cannot start.
+   against a dedicated key — "dedicated wins on key-rotation independence" — and
+   ends with "Founder verdict?". One key is wired at 33 points across seven
+   customer-facing subsystems, so today rotation is all-or-nothing.
 
-_Recommendation, for the founder rather than for me:_ decide compartmentalisation
-first (one key or per-subsystem keys), then either a documented rotation
-procedure with a pre-flight "zero legacy rows" assertion, or dual-key reads
-(accept old key, write new) so rotation is not a stop-the-world event. **A2 did
-not implement any of this:** it is a security-design decision with a
-customer-data blast radius, and picking one unilaterally is exactly the kind of
-call that should not be made by whoever happens to notice it.
+_Recommendation:_ unchanged in substance — decide compartmentalisation, then
+write the runbook or add dual-key reads. But the framing matters: this is
+finishing a deliberate design, not repairing a broken one.
+
+_Lesson for my own method:_ I generalised from a test-fixture flake to a
+production claim without running the production path. The probe was ten lines
+above the code I had already read twice. **Reading further beats reasoning
+faster**, and a claim about behaviour should be executed before it is published.
 
 ## Assumed, not proven
 
