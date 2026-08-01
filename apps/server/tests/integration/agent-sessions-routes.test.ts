@@ -848,6 +848,40 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).not.toBe(201);
   });
 
+  it('caps concurrent agent sessions at the OWNER TIER entitlement, not a flat 100', async () => {
+    // The cap used to be a literal 100 on the only surface that dispatches a
+    // real fleet browser. /v1/sessions enforces the ladder but its production
+    // driver throws DriverNotIntegrated on every method, so the entire ADR-004
+    // concurrency ladder was unenforced in practice: every tier got 100 live
+    // browsers against entitlements of 1..32. Worst case was FREE — a cli_device
+    // desktop credential is exempt from the apiAccess gate and this route is on
+    // the free-desktop allowlist — so a free account (entitlement 1) could hold
+    // 100 fleet browsers while other tenants failed to launch at_capacity.
+    fx = await buildTestApp({ tier: 'solo_manual', enableAgentRuntime: true });
+
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, mode: 'manual' },
+    });
+    expect(first.statusCode).toBe(201);
+
+    // solo_manual is sold as exactly 1 concurrent session.
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, mode: 'manual' },
+    });
+    expect(second.statusCode).toBe(429);
+    const body = second.json<{ type: string; limit?: number }>();
+    expect(body.type).toBe(PROBLEM_TYPES.ConcurrencyLimit);
+    // The reported limit must be the entitlement the customer was sold, not an
+    // internal ceiling — it is what tells them what to upgrade for.
+    expect(body.limit).toBe(1);
+  });
+
   it('Teams member-launch (DEK owner-only boundary): an admin launching under the owner with a well-formed profile_id the OWNER does NOT own → 404 (owner-scoped profile validation rejects before any DEK reach)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     // Same reason as the seedTeamOwnerAccount comment above, one step further:

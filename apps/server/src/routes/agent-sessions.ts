@@ -55,6 +55,7 @@ import type {
   ProxyConnectivityProbe,
   ProbeProxyDescriptor,
 } from '../services/proxy-connectivity-probe.js';
+import { concurrentSessionLimitFor } from '../services/sessions.js';
 import type { SessionRepo } from '../services/sessions.js';
 import { buildAssignProfileBlock } from '../services/profile-store.js';
 import type { R2 } from '../lib/r2.js';
@@ -2133,14 +2134,28 @@ export function registerAgentSessionsRoutes(
       // #8 — per-account active-session cap. Placed AFTER the idempotency replay above
       // (a retry of an existing session already returned 201), so only a genuinely NEW
       // create is gated — bounds unbounded row creation + one account monopolising fleet
-      // slots. Conservative fixed v1 ceiling; tier-derivation is a follow-up.
+      // slots.
+      //
+      // The cap is the OWNER'S TIER ENTITLEMENT, resolved through the same
+      // `concurrentSessionLimitFor` helper /v1/sessions uses so the two surfaces
+      // cannot drift. It used to be a flat literal 100 with a "tier-derivation is
+      // a follow-up" note, which left the concurrency ladder — the entire basis
+      // of ADR-004's pricing — unenforced on the ONLY surface that dispatches a
+      // real fleet browser: /v1/sessions enforces it but its production driver
+      // throws DriverNotIntegrated on every method. So every tier got 100 live
+      // browsers against entitlements of 1 to 32. Worst case was not a paid tier
+      // downgrade path but FREE: a cli_device desktop credential is exempt from
+      // the apiAccess gate and this route is on the free-desktop allowlist, so a
+      // free account (entitlement 1) could hold 100 fleet browsers — Driftstack
+      // paying for the fleet, and other tenants failing to launch at_capacity
+      // behind it.
       //
       // Atomicity (audit #8 TOCTOU): the cap is enforced INSIDE
       // createIfUnderActiveCap — it counts active + inserts under a per-account
       // advisory xact lock, so N concurrent creates can't all read a stale count
       // and overshoot the cap. A null return means "already at/over the cap" →
       // the same 429 ConcurrencyLimitError shape as before.
-      const MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT = 100;
+      const MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT = concurrentSessionLimitFor(ownerTier);
       let created: AgentSessionRecord;
       try {
         const maybeCreated = await sessions.createIfUnderActiveCap(

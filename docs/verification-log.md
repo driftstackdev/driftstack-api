@@ -30141,3 +30141,45 @@ partial-batch stop is proved red.
 Verification: full server suite 2510 files / 26,384 passing / 0 failing, strict
 server source TypeScript, targeted ESLint and Prettier. Delivery semantics,
 signature, retry schedule and auto-disable behaviour remain unchanged.
+
+---
+
+## V-719 — Agent-session concurrency is capped at the tier entitlement, not a flat 100
+
+**Date:** 2026-08-01
+
+`POST /v1/agent-sessions` capped active sessions at a literal
+`MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT = 100`, with an in-code note conceding
+"tier-derivation is a follow-up". That left the concurrency ladder — the entire
+basis of ADR-004's pricing — unenforced on the **only surface that dispatches a
+real fleet browser**. `/v1/sessions` does enforce it via
+`concurrentSessionLimitFor`, but its production driver throws
+`DriverNotIntegrated` on every method, so the ladder was enforced only where a
+session cannot be created and absent where one can.
+
+Every tier therefore received 100 live browsers against entitlements of 1 to 32.
+The worst case is not a paid tier: a `cli_device` desktop credential is exempt
+from the `apiAccess` gate and this route is on the free-desktop allowlist, so a
+**free** account — entitlement 1 — could hold 100 fleet browsers. That is
+Driftstack paying for the fleet, and other tenants failing to launch
+`at_capacity` behind an account that pays nothing.
+
+The cap now resolves through the same `concurrentSessionLimitFor` helper
+`/v1/sessions` uses, so the two surfaces cannot drift and the tier table stays
+the single source of truth. The 429 reports the entitlement rather than an
+internal ceiling, because that number is what tells a customer what to upgrade
+for. Enterprise moves from the flat 100 to its table value of 32; if a bespoke
+enterprise agreement needs more, the table is the place that changes, not a
+per-route constant — and the same change now applies to both surfaces at once.
+
+Existing coverage could not catch this: the active-cap tests inject an arbitrary
+cap argument and prove the _mechanism_, never that the cap equals the owner's
+entitlement, and the tier cross-source guard is a source-text drift check that
+exercises no request path. The new proof creates one session on a `solo_manual`
+account, asserts the second is refused 429, and asserts the reported limit is 1.
+Reinstating the flat 100 is proved red.
+
+Verification: full server suite 2510 files / 26,385 passing / 0 failing, strict
+server source TypeScript, targeted ESLint and Prettier. No schema, OpenAPI, SDK,
+pricing-table, environment, customer or secret surface changed — only which
+number the existing gate compares against.
