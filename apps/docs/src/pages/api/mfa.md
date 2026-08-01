@@ -196,9 +196,17 @@ factor; it never replaces the enrolled second factor.
 
 Password reset changes the password and invalidates predecessor web
 sessions before returning that challenge, so the successful MFA
-exchange is the only successor session. Email verification is the
-signup-activation flow and does not challenge an existing enrolled
-factor; a new account cannot enroll MFA before it is active.
+exchange is the only successor session.
+
+Email verification challenges an enrolled factor too. A verification
+link proves control of the mailbox, not possession of the second
+factor, so `POST /v1/auth/verify-email` returns the same
+`mfa_required` challenge rather than a session when the account has
+one enrolled. The email is marked verified either way — only the
+session waits for the second factor. This is reachable because
+consuming a magic link marks the email verified and issues a session
+of its own, so an account can enroll MFA while its original
+signup-verification link is still live.
 
 ## Step-up reauth
 

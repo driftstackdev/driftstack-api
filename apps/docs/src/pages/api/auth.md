@@ -248,7 +248,7 @@ Same no-enumeration semantics as magic-link: always `200`.
 `POST /v1/auth/password-reset/confirm`:
 
 ```json
-{ "token": "<from email>", "password": "<new password>" }
+{ "token": "<from email>", "new_password": "<new password>" }
 ```
 
 Changes the password and invalidates ALL prior sessions for the

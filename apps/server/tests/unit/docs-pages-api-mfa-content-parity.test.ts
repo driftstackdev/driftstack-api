@@ -152,8 +152,20 @@ describe('W767 docs /api/mfa content parity', () => {
     expect(p).toMatch(
       /Password reset changes the password and invalidates predecessor web\s*\n?sessions before returning that challenge/,
     );
+    // V-731 — this pin previously required the sentence "Email verification is
+    // the signup-activation flow and does not challenge an existing enrolled
+    // factor". V-720 made that false: verify-email was the ONE session-minting
+    // flow with no MFA branch, and now returns the same challenge as its
+    // siblings. The guard was holding the pre-fix claim in place — the same
+    // failure mode as V-724 and V-728, on the page whose entire subject is that
+    // MFA cannot be bypassed.
+    expect(p).toMatch(/Email verification challenges an enrolled factor too\./);
     expect(p).toMatch(
-      /Email verification is the\s*\n?signup-activation flow and does not challenge an existing enrolled\s*\n?factor/,
+      /returns the same\s*`mfa_required` challenge rather than a session when the account has\s*one enrolled/,
+    );
+    // The reachability, so nobody "simplifies" this back out as impossible.
+    expect(p).toMatch(
+      /consuming a magic link marks the email verified and issues a session\s*of its own/,
     );
   });
 

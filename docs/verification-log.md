@@ -30815,3 +30815,43 @@ ESLint and Prettier. Two content-parity pins updated (the cache's method surface
 and its TTL/LRU shape) because the entry now carries an account id and removals
 funnel through `forget`. No schema, OpenAPI, SDK, pricing, environment or secret
 surface changed, and no response shape or status code moved.
+
+## V-731 — Two more docs claims the server never honoured, one of them mine
+
+**Date:** 2026-08-01
+
+Both surfaced by the same adversarial docs-versus-behaviour audit as V-730, and
+both verified against source before anything moved.
+
+**The password-reset confirm snippet was unusable.** `api/auth.md` documented
+`{ "token": ..., "password": ... }`, while the schema field is `new_password`
+(`packages/api-types/src/auth.ts:251`). Every integrator who copied the
+documented body got a `400` on the final step of a password reset — a dead end
+on a recovery flow, reached by a customer who is already locked out and least
+placed to debug it. Nothing pinned the snippet, so it could drift back; a pin
+now requires `new_password` and forbids the bare-`password` shape returning.
+
+**`api/mfa.md` still described the pre-V-720 world, and that one is mine.** The
+page asserted "Email verification is the signup-activation flow and does not
+challenge an existing enrolled factor; a new account cannot enroll MFA before it
+is active." V-720 made the first clause false — verify-email was the ONE
+session-minting flow with no MFA branch and now returns the same challenge as
+its siblings — and the V-720 analysis had already established the second clause
+false too, since consuming a magic link marks the email verified and issues a
+session, so an account can enroll MFA while its original signup link is still
+live. The page now says email verification challenges an enrolled factor, and
+states that reachability so it does not get "simplified" back out as impossible.
+
+This is the third consumer of V-720 found after the fact, following the API docs
+and the dashboard in V-728, and the third parity pin this session discovered
+holding a false claim in place — here on the page whose entire subject is that
+MFA cannot be bypassed. The pattern is consistent enough to name: a source-text
+pin records what the text said when it was written, which is evidence of nothing
+about whether it was ever true. When a pin and the server disagree, the pin is
+as likely to be the thing that is wrong.
+
+Verification: canonical full suite 2757 files / 28,145 passing, with the single
+remaining failure being `openapi.test.ts` — a peer's in-flight schema change to
+the webhook target guard whose `packages/sdk-python/openapi.json` has not been
+regenerated, unrelated to this entry, which touches no schema. Prettier clean.
+No server, SDK, environment or secret surface changed.

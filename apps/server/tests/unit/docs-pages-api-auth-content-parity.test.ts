@@ -79,6 +79,19 @@ describe('W764 docs /api/auth content parity', () => {
     expect(body).toMatch(/The email is\s*marked verified either way/);
   });
 
+  // V-731 — the password-reset confirm snippet showed `password`, but the
+  // schema field is `new_password` (packages/api-types/src/auth.ts). Every
+  // integrator who copied the documented body got a 400 on the last step of a
+  // password reset — a dead end on a recovery flow, where the customer is
+  // already locked out and least able to debug it.
+  it('CRITICAL password-reset confirm documents new_password, the field the schema actually requires', () => {
+    const body = read(PAGE);
+
+    expect(body).toMatch(/\{ "token": "<from email>", "new_password": "<new password>" \}/);
+    // And must not drift back: no reset snippet keyed on a bare `password`.
+    expect(body).not.toMatch(/\{ "token": "<from email>", "password":/);
+  });
+
   it('CRITICAL signup 12-char-min password pinned. Matches W737 dashboard signup-form minlength=12 + W736 reset-password.', () => {
     const p = read(PAGE);
 
