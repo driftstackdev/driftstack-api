@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SUB_PROCESSORS } from '../../src/data/sub-processors';
+import { unnamedIn } from './_sub-processor-matching';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -21,20 +22,23 @@ function read(p: string): string {
 describe('W283.A SUB_PROCESSORS ↔ legal/dpa.md parity', () => {
   const dpa = read(DPA);
 
+  it('CRITICAL the roster is non-empty and the matcher still reports a name the DPA omits. The assertion below reports an ABSENCE of missing entries, so an empty or shortened SUB_PROCESSORS makes it true while Annex 3 silently stops naming somebody who processes customer data — the disclosure a customer audits this contract surface for.', () => {
+    expect(SUB_PROCESSORS.length, 'sub-processors to check against Annex 3').toBeGreaterThan(10);
+    expect(
+      unnamedIn(dpa, ['Definitely Not A Real Sub-Processor']),
+      'a name the DPA does not contain is reported by the same matcher used below',
+    ).toEqual(['Definitely Not A Real Sub-Processor']);
+  });
+
   it('every SUB_PROCESSORS entry is named in the DPA Annex 3 table', () => {
-    // The DPA table may use the longer legal-entity name (e.g.
-    // "Hetzner Online GmbH" for "Hetzner Cloud"). Accept either the
-    // exact name or the leading vendor word (e.g. "Hetzner") as a
-    // match — the leading word is invariant across short/legal forms.
-    const missing: string[] = [];
-    for (const sp of SUB_PROCESSORS) {
-      if (dpa.includes(sp.name)) continue;
-      const leadingWord = sp.name.split(/\s+/)[0]!;
-      const wordRe = new RegExp(`\\b${leadingWord}\\b`);
-      if (!wordRe.test(dpa)) {
-        missing.push(sp.name);
-      }
-    }
-    expect(missing).toEqual([]);
+    // `namedIn` accepts the longer legal-entity name via the leading vendor
+    // word — "Hetzner Online GmbH" for "Hetzner Cloud" — which is invariant
+    // across the short and legal forms.
+    expect(
+      unnamedIn(
+        dpa,
+        SUB_PROCESSORS.map((sp) => sp.name),
+      ),
+    ).toEqual([]);
   });
 });
