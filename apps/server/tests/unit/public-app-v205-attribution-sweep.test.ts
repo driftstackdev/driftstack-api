@@ -1,10 +1,12 @@
 // W844 — public-app V-205 attribution sweep. One-hundred-seventieth
-// in the drift-guard series. Pins that public-visible apps
-// (marketing-site + docs + customer-dashboard + admin-panel +
-// status-site) contain ZERO V-205 attribution-leak tokens (Claude/
+// in the drift-guard series. Pins that public-visible apps — the roster
+// DERIVED from scripts/deploy-frontend.sh, because listing five names inline
+// is how errors-site sat outside this sweep while it claimed to cover the
+// public apps — contain ZERO V-205 attribution-leak tokens (Claude/
 // Anthropic/Copilot/GPT Co-Authored-By trailers + 🤖 robot + Generated
 // with [Claude + noreply@anthropic.com + noreply@github.com).
 
+import { PUBLIC_APP_EXTS, publicAppDirs } from './_helpers/public-apps';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
@@ -55,17 +57,15 @@ const V205_PATTERNS = [
 describe('W844 public-app V-205 attribution sweep', () => {
   // ─── Public-app source scan ──────────────────────────────────
 
-  it('CRITICAL ZERO V-205 attribution-leak tokens in public-visible apps (marketing-site + docs + customer-dashboard + admin-panel + status-site). Public apps SHIP customer-facing content — attribution to AI tooling would publish that fact to every customer who loads the page. Matches V-527 hook (W807) + W842 SDK sweep.', () => {
-    const dirs = [
-      resolve(REPO_ROOT, 'apps/marketing-site'),
-      resolve(REPO_ROOT, 'apps/docs'),
-      resolve(REPO_ROOT, 'apps/customer-dashboard'),
-      resolve(REPO_ROOT, 'apps/admin-panel'),
-      resolve(REPO_ROOT, 'apps/status-site'),
-    ];
+  it('CRITICAL ZERO V-205 attribution-leak tokens in every publicly deployed app, the roster derived from the deploy script. Public apps SHIP customer-facing content — attribution to AI tooling would publish that fact to every customer who loads the page. Matches V-527 hook (W807) + W842 SDK sweep.', () => {
+    // Derived from the deploy script, not listed here: a hand-listed roster is
+    // exactly how errors-site — deployed, and linked from every problem+json
+    // the API emits — sat outside this sweep while it claimed to cover the
+    // public apps.
+    const dirs = publicAppDirs();
     const files: string[] = [];
     for (const d of dirs) {
-      files.push(...listFiles(d, ['.md', '.astro', '.ts', '.tsx', '.css', '.html']));
+      files.push(...listFiles(d, [...PUBLIC_APP_EXTS]));
     }
 
     for (const f of files) {

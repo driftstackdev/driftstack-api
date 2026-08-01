@@ -1,14 +1,19 @@
 // W843 — public-facing app V-211 personal-name sweep. One-hundred-
 // sixty-ninth in the drift-guard series. Pins that public-visible
-// apps (marketing-site + docs + customer-dashboard + admin-panel +
-// status-site) contain ZERO personal-name strings (Joel /
-// Theunissen / Joeltheunissen) anywhere in their source.
+// apps contain ZERO personal-name strings (Joel / Theunissen /
+// Joeltheunissen) anywhere in their source.
+//
+// The app roster is DERIVED from scripts/deploy-frontend.sh rather than
+// listed here. It was listed here, as five names, and errors-site — deployed
+// to errors.driftstack.dev and linked from every problem+json the API emits —
+// was not among them. Nothing was wrong in it; nothing was checking either.
 //
 // Note: 'founder' as a role descriptor (not personal name) is
 // allowed in internal-team code (gui-client, server, scripts). The
 // V-527 commit-msg hook DOES catch 'founder' in commits, but here
 // we focus on the public-app source where the rule is strictest.
 
+import { PUBLIC_APP_EXTS, publicAppDirs } from './_helpers/public-apps';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
@@ -56,16 +61,14 @@ describe('W843 public-app V-211 personal-name sweep', () => {
   // ─── Public-app source scan ──────────────────────────────────
 
   it('CRITICAL ZERO personal-name strings (Joel / Theunissen / Joeltheunissen) in public-visible apps. Public apps SHIP customer-facing content — drift would silently publish founder identity to every customer who loads the page. Word-boundary regex allows compounds like Joeline through.', () => {
-    const dirs = [
-      resolve(REPO_ROOT, 'apps/marketing-site'),
-      resolve(REPO_ROOT, 'apps/docs'),
-      resolve(REPO_ROOT, 'apps/customer-dashboard'),
-      resolve(REPO_ROOT, 'apps/admin-panel'),
-      resolve(REPO_ROOT, 'apps/status-site'),
-    ];
+    // Derived from the deploy script, not listed here: a hand-listed roster is
+    // exactly how errors-site — deployed, and linked from every problem+json
+    // the API emits — sat outside this sweep while it claimed to cover the
+    // public apps.
+    const dirs = publicAppDirs();
     const files: string[] = [];
     for (const d of dirs) {
-      files.push(...listFiles(d, ['.md', '.astro', '.ts', '.tsx', '.css', '.html']));
+      files.push(...listFiles(d, [...PUBLIC_APP_EXTS]));
     }
 
     for (const f of files) {
