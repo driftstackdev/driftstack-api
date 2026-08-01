@@ -485,7 +485,7 @@ nobody checked, which reads as coverage and is worse than the gap. It needs
 per-table verification against the published retention table, and it should be
 built alongside the sweeper arms above rather than bolted on after.
 
-### 11. ROOT-CAUSED; my first fix REGRESSED it, second fix narrows it — not closed
+### 11. CLOSED STRUCTURALLY — the global-sweep file now has its own database
 
 Three cases in `db-webhooks-concurrency-drizzle.test.ts` assert on the result of
 `encryptLegacySecrets`, which sweeps `webhook_endpoints` **globally** — it takes
@@ -564,6 +564,26 @@ unrelated files seen failing once — `account-byok-anthropic-active`,
 recurred. What changed is the prior: what I called "ambient flakiness across the
 suite" was partly a real defect I had introduced, so the remaining unexplained
 rate is lower than this item originally claimed and may be zero.
+
+**CLOSED, structurally rather than by fixture discipline.** The file that calls
+the global sweep now runs against **its own database**, created and migrated on
+demand. No other file's rows can exist in what the sweep sees, so the property
+holds BY CONSTRUCTION.
+
+_Proved that way too._ Both historical poisons were seeded into the SHARED
+database simultaneously — an unconvertible legacy secret AND a fake v2 row, each
+of which previously made this file throw — and it passed three consecutive runs.
+That is a stronger result than any number of green runs on a clean database.
+
+_Why the two fixture fixes were not enough, stated once:_ a row is always in
+exactly one of two sets — the sweep selects NOT-v2, the probe selects v2 — so no
+fixture value is invisible to both. Each fix stopped one mechanism and left the
+other reachable. Choosing better values was always one clever fixture away from
+the next variant; removing the shared state is not.
+
+Only this file needed it: it is the only integration file that calls the sweep.
+The earlier fixture fixes are kept as hygiene, now backed by a guard rather than
+load-bearing.
 
 **CORRECTION — that fix regressed it, and I called it closed too early
 (`4768e03a5`).** Making the fixtures v2-SHAPED moved them out of the legacy
