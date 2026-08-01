@@ -47,13 +47,10 @@ _don't_ write one — six lanes came back adequately covered and got no new code
 - **Deploy-time behaviour.** Nothing here was deployed, and nothing has been
   pushed — see open item 1. Migration `0108` applied cleanly to a populated local
   Postgres; production application is unverified by A2.
-- **First-run volume of the BYOK arm.** Five of the six erasure paths are now
-  bounded per tick (500 rows). `findDeletedAccountIdsWithByokKeyBefore` is the
-  exception and still takes no limit, so on a production backlog its first run
-  loads every matching account id in one query and clears them in a loop. Less
-  severe than an unbounded DELETE — it is one key per account rather than an
-  unbounded row count — but it is the last unbounded arm and worth closing for
-  symmetry.
+- ~~First-run volume of the BYOK arm.~~ **Closed.** All six erasure paths are
+  now bounded at 500 rows per tick, and the BYOK candidate query — which had no
+  test coverage of any kind, only in-memory doubles — is now exercised against
+  real Postgres.
 - **Observability.** Sentry, email and LiveKit activation flags are wired in
   config and untested against the real services from this repo.
 - **Performance under load.** The bench-regression job is advisory
@@ -217,14 +214,29 @@ but "what fraction of CI runs go red for reasons unrelated to the change under
 test". Observed across this session: roughly 1 in 4 full-suite runs shows at
 least one failure that does not reproduce in isolation.
 
-_Not recommended:_ chasing each file individually. Three unrelated files failing
-the same way points at a shared cause — most plausibly contention on the single
-local Postgres, since every failing test so far touches it. _Recommendation:_
-establish whether CI sees the same rate before treating it as a local artefact.
-CI runs the same command against a containerised Postgres service with different
-CPU and connection limits, so the rate there may differ in either direction, and
-that measurement decides whether this blocks the push or is an artefact of a
-developer machine running other work.
+_Two hypotheses tested and BOTH FALSIFIED._ Postgres was sampled throughout two
+full-suite runs:
+
+- **Connection exhaustion: no.** Peak was **8 concurrent connections against a
+  `max_connections` of 100**. Not close.
+- **Lock contention: not observed.** A second run sampled `pg_locks` for
+  ungranted locks every 2s and captured **zero** blocked backends. An earlier
+  single sample had shown 8 backends waiting simultaneously, which is what
+  prompted the check; it did not recur, and the likeliest explanation is the CAS
+  test's deliberate `FOR UPDATE` block, which is by design and brief.
+
+Four consecutive green full-suite runs followed, so the failure did not
+reproduce this session at all. Sampling cannot characterise a rare event without
+catching a failing run, and this approach has now been tried and did not.
+
+_Recommendation, revised:_ stop sampling and capture instead. The next step that
+would actually settle it is a persistent reporter over repeated runs that
+preserves the assertion text of any failure — the three non-webhook failures
+were only ever seen as test NAMES, never as messages, which is why the cause is
+still open. Establishing CI's own rate remains worthwhile, since its
+containerised Postgres has different CPU and connection limits, and that
+measurement decides whether this blocks the push or is a developer-machine
+artefact.
 
 _Doing nothing:_ the push lands an intermittently red CI, and an intermittent
 red is the kind that gets re-run until green and then stops being read.
