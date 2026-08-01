@@ -30064,3 +30064,42 @@ Verification: full server suite 2496 files / 26,316 passing / 0 failing,
 workspace typecheck and lint clean, production `npm audit` 0 vulnerabilities. No
 schema, OpenAPI, SDK, pricing-table, shared build/deploy, environment, customer
 or secret surface changed.
+
+---
+
+## V-717 — Webhook delivery drains its queue instead of trickling at 25/minute
+
+**Date:** 2026-08-01
+
+`WebhookDeliveryWorker.tickOnce` claims at most one batch — the default is 25 —
+and bootstrap drove exactly one tick per 60-second poll. Global webhook delivery
+was therefore capped near **25 per minute for the whole deployment**. That is not
+a per-account ceiling that scales with anything: a backlog from one busy account,
+or a brief outage of any single receiver, could never drain, and every other
+customer's events queued behind it.
+
+The tick now DRAINS. It keeps claiming while the previous batch comes back full,
+which is the signal that more work is waiting, and stops immediately on a partial
+batch because that means the queue is clear. It is bounded twice — a maximum
+number of batches per tick and a wall-clock budget well inside the poll interval
+— so a hot queue cannot monopolise the process. `tickOnce` delivers its batch
+concurrently, so one batch costs about one delivery's latency rather than the sum
+of them, and the per-attempt timeout bounds that.
+
+A re-entrancy guard was added with it. `setInterval` does not await the previous
+tick, so a slow drain could overlap itself and multiply in-flight deliveries.
+`claim` is fenced on `in_flight` so overlap was never corrupting, but it was
+unbounded concurrency aimed at customer endpoints, which is its own problem. The
+batch size is now pinned at the call site rather than left to the worker's
+default, because the drain loop's stop condition depends on being able to tell a
+full batch from a partial one.
+
+The poll interval is deliberately unchanged. The ceiling was the single-batch
+tick, not the cadence, and shortening the interval as well would have compounded
+a throughput change with an overlap change in one step.
+
+Verification: full server suite 2509 files / 26,380 passing / 0 failing, strict
+server source TypeScript, targeted ESLint and Prettier. No route, schema,
+OpenAPI, SDK, customer-visible delivery semantics, signature, retry schedule or
+auto-disable behaviour changed — only how much of the existing queue one poll
+works through.

@@ -2892,17 +2892,50 @@ export async function createProductionDeps(
   // and the failure-response read is size-capped. Without this poller, every
   // configured webhook enqueues but is never delivered (and replay routes that
   // re-set 'pending' never re-fire).
+  // Pinned here rather than left to the worker's default so the drain loop
+  // below can tell a FULL batch (more work waiting) from a partial one.
+  const WEBHOOK_DELIVERY_BATCH_SIZE = 25;
   const webhookDeliveryWorker = new WebhookDeliveryWorker({
     repo: webhooksRepo,
+    batchSize: WEBHOOK_DELIVERY_BATCH_SIZE,
     logger,
     // Both delivery counters were registered at boot and emitted only from the
     // unwired successor, so they could never increment in production.
     ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
   });
+  // Throughput. `tickOnce` claims at most DEFAULT_BATCH_SIZE (25) rows, so a
+  // single tick on the 60s poller capped GLOBAL webhook delivery at ~25 per
+  // minute across the whole deployment — a backlog from one busy account, or a
+  // brief receiver outage anywhere, could never drain, and every other
+  // customer's events queued behind it. That is a deployment-wide ceiling, not
+  // a per-account one, so it does not scale with anything.
+  //
+  // The tick now DRAINS: it keeps claiming while the previous batch came back
+  // full, which is the signal that more work is waiting. Bounded twice so a
+  // hot queue cannot monopolise the process — a maximum number of batches per
+  // tick, and a wall-clock budget well inside the poll interval. `tickOnce`
+  // delivers its batch concurrently (Promise.all), so one batch costs about one
+  // delivery's latency rather than the sum, and the per-attempt timeout bounds
+  // that. A partial batch means the queue is drained, so we stop immediately.
+  const WEBHOOK_DRAIN_MAX_BATCHES = 20;
+  const WEBHOOK_DRAIN_BUDGET_MS = 30_000;
+  // setInterval does not await the previous tick, so a slow drain could
+  // otherwise overlap itself and multiply in-flight deliveries. `claim` is
+  // fenced on in_flight so overlap is not corrupting, but it is unbounded
+  // concurrency against customer endpoints, which is its own problem.
+  let webhookDeliveryRunning = false;
   const webhookDeliveryTimer = setInterval(() => {
     void (async () => {
+      if (webhookDeliveryRunning) return;
+      webhookDeliveryRunning = true;
       try {
-        await webhookDeliveryWorker.tickOnce();
+        const startedAt = Date.now();
+        for (let batch = 0; batch < WEBHOOK_DRAIN_MAX_BATCHES; batch++) {
+          const { claimed } = await webhookDeliveryWorker.tickOnce();
+          // Fewer than a full batch (or nothing) → the queue is drained.
+          if (claimed < WEBHOOK_DELIVERY_BATCH_SIZE) break;
+          if (Date.now() - startedAt >= WEBHOOK_DRAIN_BUDGET_MS) break;
+        }
       } catch (err) {
         logger.warn(
           {
@@ -2914,6 +2947,8 @@ export async function createProductionDeps(
           },
           'webhook-delivery tickOnce threw unexpectedly (interval continues)',
         );
+      } finally {
+        webhookDeliveryRunning = false;
       }
     })();
   }, POLLER_INTERVAL_MS);
