@@ -32,6 +32,23 @@ log_step "Scenario $SCENARIO ($NAME) — starting in CHAOS_MODE=$CHAOS_MODE"
 # 1. Block Postmark DNS resolution.
 run_or_describe "echo '127.0.0.1 api.postmarkapp.com' | sudo tee -a /etc/hosts"
 
+# Undo it on EVERY exit path, not just the happy one.
+#
+# The restore used to be step 5 at the bottom of the script, which the three
+# failure branches below jump past with `exit 1`, and which `set -e` skips
+# entirely if any command aborts. So a rehearsal that went wrong left
+# `127.0.0.1 api.postmarkapp.com` in /etc/hosts: outbound transactional email
+# — signup verification, password reset, invoices — silently dead on this host
+# until somebody noticed and edited the file by hand. Scenario 01 also runs
+# FIRST, so it poisoned the rest of the run as well.
+#
+# `sed -i.bak '/api.postmarkapp.com/d'` deletes matching lines and is a no-op
+# when there are none, so firing on an already-clean exit is harmless.
+restore_postmark_dns() {
+  run_or_describe "sudo sed -i.bak '/api.postmarkapp.com/d' /etc/hosts"
+}
+trap restore_postmark_dns EXIT
+
 # 2. Signup.
 if ! assert_http_status 200 "$API_BASE/v1/auth/signup" \
     -X POST -H 'content-type: application/json' \
@@ -61,7 +78,7 @@ if [[ "$CHAOS_MODE" == "execute" ]]; then
   log_ok "pending_emails row present"
 fi
 
-# 5. Restore Postmark.
-run_or_describe "sudo sed -i.bak '/api.postmarkapp.com/d' /etc/hosts"
+# 5. Restore Postmark — handled by the EXIT trap installed after step 1, so it
+#    runs on the failure paths above too.
 
 emit_pass "$SCENARIO" "$NAME"

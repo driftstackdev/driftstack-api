@@ -189,14 +189,14 @@ describe('W803 chaos rehearsal scripts content parity', () => {
     );
   });
 
-  it('CRITICAL 06-redis-down docker stop redis + 200 /health + 200 /version + restore-on-fail pinned. Each fail-branch restores Redis before exit so the host is left clean even on failure.', () => {
+  it('CRITICAL 06-redis-down docker stop redis + 200 /health + 200 /version + restore-via-EXIT-trap pinned. Restoring Redis is now the job of one EXIT trap rather than a copy in each fail branch, so it also covers an abort that reaches no branch at all. This pin deliberately no longer counts restore lines: it counted three, and counting them rewarded the weaker mechanism — three copies that each had to be remembered — while a single trap that always runs would have failed it. Whether the restore actually RUNS on the failure and abort paths is checked by executing the script in chaos-scenarios-restore-on-every-exit.test.ts; a count of occurrences never could.', () => {
     const p = read(S06);
     expect(p).toMatch(/run_or_describe "\$DOCKER stop redis"/);
     expect(p).toMatch(/assert_http_status 200 "\$API_BASE\/health"/);
     expect(p).toMatch(/assert_http_status 200 "\$API_BASE\/version"/);
-    // restore-on-fail and restore-at-end.
-    const restoreCount = (p.match(/run_or_describe "\$DOCKER start redis"/g) ?? []).length;
-    expect(restoreCount).toBeGreaterThanOrEqual(3);
+    expect(p, 'the restore is installed as an EXIT trap').toMatch(
+      /restore_redis\(\)\s*\{[\s\S]*?run_or_describe "\$DOCKER start redis"[\s\S]*?\}\s*\ntrap restore_redis EXIT/,
+    );
   });
 
   // ─── run-all.sh ───────────────────────────────────────────────

@@ -21,17 +21,24 @@ log_step "Scenario $SCENARIO ($NAME) — starting in CHAOS_MODE=$CHAOS_MODE"
 # 1. Stop Redis.
 run_or_describe "$DOCKER stop redis"
 
+# Restart it on EVERY exit path. The failure branches below each restarted it
+# themselves, which covered the checks but not an unexpected abort: `set -e`
+# firing on any command in between, or a Ctrl-C, left Redis stopped and every
+# later scenario in the run probing a control plane with no cache.
+restore_redis() {
+  run_or_describe "$DOCKER start redis"
+}
+trap restore_redis EXIT
+
 # 2. /health should still return 200 (liveness — process-up only).
 if ! assert_http_status 200 "$API_BASE/health"; then
   emit_fail "$SCENARIO" "$NAME" "health-degraded-during-redis-outage"
-  run_or_describe "$DOCKER start redis"
   exit 1
 fi
 
 # 3. /version should still return 200 (no Redis dependency).
 if ! assert_http_status 200 "$API_BASE/version"; then
   emit_fail "$SCENARIO" "$NAME" "version-degraded-during-redis-outage"
-  run_or_describe "$DOCKER start redis"
   exit 1
 fi
 
@@ -40,7 +47,7 @@ fi
 #    traffic, but existing traffic should still work via fail-open.
 log_step "Note: /ready may correctly return 503 during this outage."
 
-# 5. Restore Redis.
-run_or_describe "$DOCKER start redis"
+# 5. Restore Redis — handled by the EXIT trap installed after step 1, so it
+#    runs on the failure paths above and on an unexpected abort too.
 
 emit_pass "$SCENARIO" "$NAME"
