@@ -789,7 +789,12 @@ export interface AppDeps {
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app: FastifyInstance = Fastify({
     loggerInstance: deps.logger as unknown as FastifyBaseLogger,
-    disableRequestLogging: false,
+    // `disableRequestLogging: false` was passed here explicitly and removed:
+    // Fastify defaults it to false already (config-validator fills it in when
+    // undefined), so it changed nothing — while FSTDEP023 fires on every app
+    // construction where the option is merely PRESENT, whatever its value. That
+    // is one deprecation per server boot and per test that builds an app, and a
+    // call site a future Fastify major removes. Request logging stays on.
     // req.ip / X-Forwarded-For resolution. Default false (dev/test = socket
     // peer); prod injects deps.trustProxy=1 so req.ip is the real client behind
     // Cloudflare→nginx (per-IP rate-limit + audit-IP correctness).
