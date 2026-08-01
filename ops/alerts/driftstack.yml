@@ -317,6 +317,28 @@ groups:
             degraded to the bounded per-instance memory fallback. Investigate
             Redis health; shared rate limiting resumes when it recovers.
 
+      - alert: UnhandledRejectionsAdvancing
+        # The process backstop deliberately keeps the control plane ALIVE when a
+        # fire-and-forget promise rejects, so one missed .catch() cannot take the
+        # API down. The cost of that choice is silence: the process keeps serving
+        # and looks healthy while a code path loses every error it produces.
+        # Warning rather than critical — nothing is customer-visible yet, but a
+        # sustained rate means a path is failing and nobody would otherwise know.
+        expr: |
+          increase(driftstack_unhandled_rejection_total[15m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'Unhandled promise rejections are being swallowed by the backstop'
+          description: |
+            driftstack_unhandled_rejection_total is advancing. A fire-and-forget
+            promise is rejecting and the process backstop is keeping the service
+            alive rather than crashing — correct, but it means an error path is
+            being lost silently. The log line for each rejection carries name,
+            message and stack; find it and give that path its own .catch().
+
 # ────────────────────────────────────────────────────────────────────
 # Metric inventory — drift-guard satisfaction
 #

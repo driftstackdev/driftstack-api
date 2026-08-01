@@ -753,6 +753,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ['job_type'],
   );
   metricsRegistry.registerCounter(
+    METRIC_NAMES.unhandledRejectionTotal,
+    'Unhandled promise rejections swallowed by the process backstop.',
+  );
+  metricsRegistry.registerCounter(
     METRIC_NAMES.retentionPurgeTotal,
     'Account-deletion retention purge outcomes by arm.',
     ['arm', 'outcome'],

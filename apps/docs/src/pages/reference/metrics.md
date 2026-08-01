@@ -73,6 +73,7 @@ The current counter catalogue (all `driftstack_*` namespaced):
 | `driftstack_bundled_llm_request_total`   | `outcome`        | bundled-LLM decompose requests by outcome                                                                                                                                   |
 | `driftstack_bundled_llm_error_total`     | `kind`           | bundled-LLM decompose errors (consent_missing / budget_exhausted)                                                                                                           |
 | `driftstack_byok_anthropic_test_total`   | `outcome`        | BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / unknown; not_wired is a legacy pre-live-tester label)                                     |
+| `driftstack_unhandled_rejection_total`   | —                | unhandled promise rejections swallowed by the process backstop; the service stays up by design, so a rising rate is the only sign a code path is losing its errors          |
 | `driftstack_retention_purge_total`       | `arm`, `outcome` | account-deletion retention purge by arm (byok / proxy_secrets / profiles / snapshots) and outcome (purged / failed / skipped); `skipped` means the arm was not wired at all |
 | `driftstack_scheduled_job_chain_pending` | `job_type`       | liveness of each self-re-arming background job chain: 1 while a pending row exists, 0 when the chain has stopped and will not resume without a restart                      |
 

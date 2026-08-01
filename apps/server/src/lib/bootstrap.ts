@@ -19,6 +19,7 @@
 //   - readinessChecks fire every /ready hit. /ready 503 on any
 //     reachable-but-failing dep. Health checks are decoupled.
 
+import { attachUnhandledRejectionMetric } from './unhandled-rejection-backstop.js';
 import { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
@@ -555,6 +556,16 @@ export async function createProductionDeps(
       'Liveness of each self-re-arming job chain: 1 when a pending row exists for that job_type, 0 when the chain is dead and will not run again without a restart.',
       ['job_type'],
     );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.unhandledRejectionTotal,
+      'Unhandled promise rejections swallowed by the process backstop. The backstop keeps the control plane ALIVE rather than crashing, so a path that starts rejecting on every request is otherwise invisible — this is the only signal that it is happening.',
+    );
+    // Replays anything counted before the registry existed: the backstop is
+    // installed before any async wiring so a rejection during bootstrap is
+    // caught, which is earlier than this point.
+    attachUnhandledRejectionMetric((delta) => {
+      metricsRegistry.inc(METRIC_NAMES.unhandledRejectionTotal, undefined, delta);
+    });
     metricsRegistry.registerCounter(
       METRIC_NAMES.retentionPurgeTotal,
       'Account-deletion retention purge outcomes by arm. `skipped` means the arm was not wired at all — the signal for a §9 erasure promise that has silently stopped running.',

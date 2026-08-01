@@ -227,6 +227,19 @@ export const METRIC_NAMES = {
   // (NOWPayments traffic volume) are different from Stripe — mixing
   // them under one label set would hide the per-provider signal.
   nowpaymentsWebhookTotal: 'driftstack_nowpayments_webhook_total',
+  // Process-level unhandled-rejection backstop counter.
+  //
+  // The backstop deliberately keeps the process ALIVE when a fire-and-forget
+  // promise rejects, so one missed .catch() cannot take the control plane down.
+  // The cost of that choice is silence: the only trace was a log line, and the
+  // counter it already kept was exported for "a future metrics scrape" that was
+  // never wired. A path that starts rejecting on every request therefore looked
+  // identical to a healthy one on every dashboard.
+  //
+  // Unlabelled on purpose. The rejection reason is unbounded text and would be
+  // unbounded cardinality; the log line carries name + message + stack for
+  // diagnosis, and this exists to make the RATE visible enough to go look.
+  unhandledRejectionTotal: 'driftstack_unhandled_rejection_total',
   // Arc 7 obs.10 — customer-audit-log emission counter. Labelled by
   // the AccountAuditAction's top-level prefix (`api_key`, `session`,
   // `agent_session`, `billing`, `team`, etc.) and the actor type

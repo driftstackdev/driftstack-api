@@ -10,6 +10,17 @@
 
 let unhandledRejectionCount = 0;
 
+/**
+ * Metric sink, attached AFTER install.
+ *
+ * The backstop is installed before any async wiring — deliberately, so a
+ * rejection during bootstrap is caught — which is earlier than the metrics
+ * registry exists. Rather than reorder that (and lose the bootstrap window), the
+ * sink attaches later and is REPLAYED the count accumulated before it arrived,
+ * so a rejection during bootstrap still reaches the metric.
+ */
+let sink: ((delta: number) => void) | null = null;
+
 /** Count of unhandled rejections the backstop has swallowed (for tests + a
  *  future metrics scrape). The backstop logs each occurrence too. */
 export function getUnhandledRejectionCount(): number {
@@ -19,6 +30,7 @@ export function getUnhandledRejectionCount(): number {
 /** Reset the counter — test helper only. */
 export function resetUnhandledRejectionCount(): void {
   unhandledRejectionCount = 0;
+  sink = null;
 }
 
 export interface BackstopLogger {
@@ -30,9 +42,22 @@ export interface BackstopLogger {
  * rejection instead of letting the default behaviour crash the process. Idempotent
  * is NOT guaranteed — call once at bootstrap.
  */
+/**
+ * Attach the metric sink and replay anything counted before now.
+ *
+ * Idempotent in the sense that re-attaching replaces the sink; the replay uses
+ * the running total, so a second attach would double-count. Call once, from
+ * bootstrap, after the counter is registered.
+ */
+export function attachUnhandledRejectionMetric(emit: (delta: number) => void): void {
+  sink = emit;
+  if (unhandledRejectionCount > 0) emit(unhandledRejectionCount);
+}
+
 export function installUnhandledRejectionBackstop(logger: BackstopLogger): void {
   process.on('unhandledRejection', (reason: unknown) => {
     unhandledRejectionCount += 1;
+    sink?.(1);
     logger.error(
       {
         component: 'process',
