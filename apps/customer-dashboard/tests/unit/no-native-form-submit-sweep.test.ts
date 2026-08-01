@@ -30,26 +30,55 @@ function read(p: string): string {
 
 const pages = walk(PAGES).filter((f) => /\.astro$/.test(f));
 
+/**
+ * Native form submissions in `text` — an `action` plus a mutating `method`.
+ *
+ * Shared with the reachability check below deliberately: this guard hunts a
+ * VIOLATION, so zero matches across the pages is the expected, correct state.
+ * That makes a subject count useless as a floor — it would read zero forever —
+ * and a synthetic known-bad the only thing that can show the matcher still
+ * works.
+ */
+function nativeSubmittingForms(text: string): string[] {
+  // Strip frontmatter so doc-comment examples don't trip.
+  const stripped = text.replace(/^---[\s\S]*?\n---\n/, '');
+  return [...stripped.matchAll(/<form\b([^>]*)>/gi)]
+    .filter(
+      (m) =>
+        /\baction=["'][^"']+["']/.test(m[1]!) &&
+        /\bmethod=["'](post|put|patch|delete)["']/i.test(m[1]!),
+    )
+    .map((m) => m[0].slice(0, 100));
+}
+
 describe('W289.C customer-dashboard <form action="..." method="POST"> sweep', () => {
+  it('CRITICAL the sweep read real pages and the matcher still recognises a native submit. This hunts a violation, so it is GREEN when it finds nothing — which is also exactly what it looks like when the pattern has stopped matching or the walk has stopped walking. A count of offenders can never tell those apart; a known-bad input can.', () => {
+    expect(pages.length, '.astro pages under dashboard pages/').toBeGreaterThan(15);
+
+    expect(
+      nativeSubmittingForms('<form action="/v1/account" method="POST"><input/></form>'),
+      'a native POST form is detected',
+    ).toHaveLength(1);
+    expect(
+      nativeSubmittingForms('<form action="/v1/account" method="DELETE"></form>'),
+      'and so is a DELETE, case-insensitively',
+    ).toHaveLength(1);
+    expect(
+      nativeSubmittingForms('<form id="filters"><input/></form>'),
+      'while a form with no action/method is not — those are the ones the dashboard actually uses',
+    ).toEqual([]);
+    expect(
+      nativeSubmittingForms(
+        '---\nconst example = \'<form action="/x" method="POST">\';\n---\n<p>ok</p>',
+      ),
+      'and a frontmatter example is still ignored, so the strip has not become a blanket',
+    ).toEqual([]);
+  });
+
   it('no .astro page declares a native form action+method POST/DELETE/PATCH', () => {
-    const offenders: string[] = [];
-    for (const f of pages) {
-      const body = read(f);
-      // Strip frontmatter so doc-comment examples don't trip.
-      const stripped = body.replace(/^---[\s\S]*?\n---\n/, '');
-      // Look for <form ... action="..." ... method="POST">
-      const formRe = /<form\b([^>]*)>/gi;
-      for (const m of stripped.matchAll(formRe)) {
-        const attrs = m[1]!;
-        if (
-          /\baction=["'][^"']+["']/.test(attrs) &&
-          /\bmethod=["'](post|put|patch|delete)["']/i.test(attrs)
-        ) {
-          offenders.push(f.slice(REPO_ROOT.length + 1));
-          break;
-        }
-      }
-    }
+    const offenders = pages
+      .filter((f) => nativeSubmittingForms(read(f)).length > 0)
+      .map((f) => f.slice(REPO_ROOT.length + 1));
     expect(offenders).toEqual([]);
   });
 });
