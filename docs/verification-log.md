@@ -30306,3 +30306,62 @@ The mutated file was restored and re-hashed byte-identical.
 Verification: canonical full suite 2744 files / 28,039 passing / 0 failing, both halves of the server typecheck clean, targeted
 ESLint and Prettier. No schema, OpenAPI, SDK, environment, customer or secret
 surface changed, and no cap value moved — only when the counter is written.
+
+## V-722 — A blank Idempotency-Key no longer switches SDK auto-retry on
+
+**Date:** 2026-08-01
+
+All three SDKs decided whether a non-idempotent request could be transparently
+retried by checking only that a header _named_ `Idempotency-Key` was present:
+
+- TypeScript — `Object.keys(headers).some((k) => k.toLowerCase() === 'idempotency-key')`
+- Go — `for k := range headers { if strings.EqualFold(k, "Idempotency-Key") }`
+- Python — `any(k.lower() == "idempotency-key" for k in headers)`
+
+The value was never examined. The server, meanwhile, treats an empty or
+whitespace-only key as **absent** — `readIdempotencyKey` trims and returns
+`{ kind: 'absent' }` for a zero-length result, so no dedup record is written and
+nothing is ever replayed. The customer docs commit to exactly that, in
+`reference/idempotency.md`: "Empty string is treated as **absent** (so a stray
+`Idempotency-Key:` header from an overeager proxy doesn't collapse every request
+to the same phantom-keyed row)."
+
+So a blank key was the worst of both worlds, and precisely inverted: it bought
+no server-side protection while switching the client's retry-on-5xx behaviour
+on. A keyless POST was correctly sent exactly once; the same POST with
+`Idempotency-Key: ''` was retried up to the full attempt budget against a server
+that had no idea the attempts were related. Every retry that landed after a
+partially-applied create minted a duplicate.
+
+Reaching it takes no unusual code — `{'Idempotency-Key': key ?? ''}`, an unset
+environment variable, or the very proxy-inserted empty header the docs call out.
+The docs already anticipated the stray-header case for the server; the SDKs were
+the half that did not honour it.
+
+All three now require a usable value — header name matched case-insensitively,
+value non-blank after trimming — mirroring the server's own rule. Surrounding
+whitespace around a real key still counts, because the server trims before
+keying on it, so the client and server agree on exactly which requests are
+protected. Behaviour for a valid key and for no key at all is unchanged.
+
+Coverage existed in all three SDKs and missed this in all three, for the same
+reason: every test passed a realistic key (`idem-abc123`) or no key at all, so
+the presence-only check and a value-aware check were indistinguishable. The new
+tests pin the blank cases (empty, space, tab, newline) plus a padded-but-real
+differential arm so the gate cannot regress into refusing everything. The
+TypeScript tests assert at the transport layer — a blank-keyed POST must produce
+exactly one `fetch` call — rather than calling the predicate directly.
+
+All three are proved red against the original presence-only check: TypeScript 3
+failures, Go and Python 1 each. The three mutated sources were restored and
+re-hashed byte-identical.
+
+Verification: canonical full suite 2744 files / 28,043 passing / 0 failing; Go `go test ./...` and `go vet` clean; Python 339
+pytest passing with `ruff check`, `ruff format --check` and `mypy` clean;
+targeted ESLint and Prettier. The 110 SDK source-text parity files all pass
+untouched — they pin the retry gate's call sites, not the predicate's body. One
+pre-existing unsorted-import error in the Python retry-gate test, which had the
+`sdk:python:lint` gate failing before this change, is corrected in passing. No
+schema, OpenAPI, server, environment, customer or secret surface changed, and no
+documentation needed amending — the docs were already correct and the SDKs
+disagreed with them.

@@ -395,14 +395,24 @@ const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS', '
 
 /**
  * Whether a request may be transparently retried by the SDK. True for
- * idempotent methods, or for any method carrying an `Idempotency-Key`
- * header (case-insensitive). Guards against double-submitting a
- * non-idempotent create on a transient 5xx / network error.
+ * idempotent methods, or for any method carrying a USABLE `Idempotency-Key`
+ * header (case-insensitive name, non-blank value). Guards against
+ * double-submitting a non-idempotent create on a transient 5xx / network error.
+ *
+ * The value check is load-bearing, not defensive tidying. The server treats an
+ * empty or whitespace-only `Idempotency-Key` as ABSENT — it stores no dedup
+ * record and replays nothing (see the server's `readIdempotencyKey`). So a
+ * header present with a blank value is the WORST case: it buys no server-side
+ * protection while, before this check, it switched retries on. An unset
+ * variable reaching the header map as `''` turned a single POST into an
+ * auto-retried one that could mint duplicates.
  */
 function isRetrySafe(method: string, headers?: Record<string, string>): boolean {
   if (IDEMPOTENT_METHODS.has(method.toUpperCase())) return true;
   if (headers === undefined) return false;
-  return Object.keys(headers).some((k) => k.toLowerCase() === 'idempotency-key');
+  return Object.entries(headers).some(
+    ([k, v]) => k.toLowerCase() === 'idempotency-key' && typeof v === 'string' && v.trim() !== '',
+  );
 }
 
 /**

@@ -101,16 +101,26 @@ _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRA
 def _is_retry_safe(method: str, headers: dict[str, str]) -> bool:
     """Whether a request may be transparently retried by the SDK.
 
-    True for idempotent methods, or for any method carrying an
-    ``Idempotency-Key`` header (case-insensitive). A non-idempotent
-    POST/PATCH without a key is NOT retried: a transient 5xx / network
-    blip on a create may already have been applied server-side, so a
-    retry would mint a duplicate. With a key the server replays the
-    original response, so the retry is safe.
+    True for idempotent methods, or for any method carrying a USABLE
+    ``Idempotency-Key`` header (case-insensitive name, non-blank value). A
+    non-idempotent POST/PATCH without a key is NOT retried: a transient 5xx /
+    network blip on a create may already have been applied server-side, so a
+    retry would mint a duplicate. With a key the server replays the original
+    response, so the retry is safe.
+
+    The value check is load-bearing, not defensive tidying. The server treats an
+    empty or whitespace-only ``Idempotency-Key`` as ABSENT — it stores no dedup
+    record and replays nothing. A header present with a blank value is therefore
+    the worst case: it buys no server-side protection while, before this check,
+    it switched retries on. An unset variable reaching the header map as ``""``
+    turned a single POST into an auto-retried one that could mint duplicates.
     """
     if method.upper() in _IDEMPOTENT_METHODS:
         return True
-    return any(k.lower() == "idempotency-key" for k in headers)
+    return any(
+        k.lower() == "idempotency-key" and isinstance(v, str) and v.strip() != ""
+        for k, v in headers.items()
+    )
 
 
 def _build_headers(

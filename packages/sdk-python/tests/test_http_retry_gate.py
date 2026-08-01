@@ -19,8 +19,8 @@ import respx
 
 from driftstack import AsyncDriftstack, Driftstack
 from driftstack.errors import TransportError
-from driftstack.retry import RetryConfig
 from driftstack.http import _is_retry_safe
+from driftstack.retry import RetryConfig
 
 API_KEY = "ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 BASE = "https://api.test"
@@ -129,3 +129,23 @@ def test_patch_key_match_is_case_insensitive() -> None:
     how the caller capitalised the key."""
     for spelling in ("idempotency-key", "IDEMPOTENCY-KEY", "Idempotency-Key"):
         assert _is_retry_safe("PATCH", {spelling: "idem-abc123"}) is True
+
+
+def test_blank_key_is_not_retry_safe() -> None:
+    """A present-but-blank key must not switch retries on.
+
+    The server treats an empty / whitespace-only ``Idempotency-Key`` as ABSENT:
+    it stores no dedup record and replays nothing. A blank key is therefore the
+    worst case — no server-side protection, yet a header-name-only check read it
+    as licence to retry, so an unset variable arriving as ``""`` turned a single
+    POST into an auto-retried one that could mint duplicates.
+    """
+    for blank in ("", " ", "\t", "\n", "   "):
+        for method in ("POST", "PATCH"):
+            assert _is_retry_safe(method, {"Idempotency-Key": blank}) is False
+
+
+def test_padded_but_real_key_is_retry_safe() -> None:
+    """The differential arm: the server trims before keying, so surrounding
+    whitespace around a real key must not disable retries."""
+    assert _is_retry_safe("POST", {"Idempotency-Key": "  idem-abc123  "}) is True

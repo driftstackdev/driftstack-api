@@ -719,4 +719,51 @@ describe('HttpClient — retry-safety gate', () => {
     ).rejects.toBeInstanceOf(TransportError);
     expect(cf.calls()).toBe(3);
   });
+
+  // The server treats an empty / whitespace-only Idempotency-Key as ABSENT — it
+  // stores no dedup record and replays nothing. A blank key is therefore the
+  // worst case: no server-side protection, yet a header-name-only check read it
+  // as licence to retry. An unset variable arriving as '' turned a single POST
+  // into an auto-retried one that could mint duplicates.
+  it.each([
+    ['empty', ''],
+    ['single space', ' '],
+    ['tab', '\t'],
+  ])('sends a POST carrying a %s Idempotency-Key exactly once', async (_label, blank) => {
+    const cf = countingFetch(503);
+    const http = new HttpClient({
+      apiKey: 'k',
+      baseUrl: 'http://api.test',
+      fetch: cf.fetch,
+      retry: FAST_RETRY,
+    });
+    await expect(
+      http.request({
+        method: 'POST',
+        path: '/v1/x',
+        body: { a: 1 },
+        headers: { 'Idempotency-Key': blank },
+      }),
+    ).rejects.toBeInstanceOf(TransportError);
+    expect(cf.calls()).toBe(1);
+  });
+
+  it('still retries a POST whose Idempotency-Key is padded but real (the server trims before keying)', async () => {
+    const cf = countingFetch(503);
+    const http = new HttpClient({
+      apiKey: 'k',
+      baseUrl: 'http://api.test',
+      fetch: cf.fetch,
+      retry: FAST_RETRY,
+    });
+    await expect(
+      http.request({
+        method: 'POST',
+        path: '/v1/x',
+        body: { a: 1 },
+        headers: { 'Idempotency-Key': '  k-1  ' },
+      }),
+    ).rejects.toBeInstanceOf(TransportError);
+    expect(cf.calls()).toBe(3);
+  });
 });

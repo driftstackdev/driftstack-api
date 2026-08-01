@@ -321,8 +321,14 @@ func isRetrySafe(method string, headers map[string]string) bool {
 		http.MethodOptions, http.MethodTrace:
 		return true
 	}
-	for k := range headers {
-		if strings.EqualFold(k, "Idempotency-Key") {
+	// The VALUE check is load-bearing, not defensive tidying. The server treats
+	// an empty or whitespace-only Idempotency-Key as ABSENT — it stores no dedup
+	// record and replays nothing. A header present with a blank value is the
+	// worst case: no server-side protection, yet it used to switch retries on,
+	// so an unset variable reaching the map as "" turned a single POST into an
+	// auto-retried one that could mint duplicates.
+	for k, v := range headers {
+		if strings.EqualFold(k, "Idempotency-Key") && strings.TrimSpace(v) != "" {
 			return true
 		}
 	}

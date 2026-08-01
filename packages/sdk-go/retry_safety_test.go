@@ -70,3 +70,24 @@ func TestIsRetrySafeHeaderNameCaseInsensitive(t *testing.T) {
 		}
 	}
 }
+
+func TestIsRetrySafeRejectsBlankKey(t *testing.T) {
+	t.Parallel()
+	// The server treats an empty / whitespace-only Idempotency-Key as ABSENT: it
+	// stores no dedup record and replays nothing. A blank key is therefore the
+	// worst case — no server-side protection, but a header-name-only check read
+	// it as licence to retry, so an unset variable reaching the map as "" turned
+	// a single POST into an auto-retried one that could mint duplicates.
+	for _, blank := range []string{"", " ", "\t", "\n", "   "} {
+		for _, method := range []string{"POST", "PATCH"} {
+			if isRetrySafe(method, map[string]string{"Idempotency-Key": blank}) {
+				t.Fatalf("%s with a blank Idempotency-Key %q must NOT be retry-safe", method, blank)
+			}
+		}
+	}
+	// A key with surrounding whitespace but real content is still usable: the
+	// server trims before keying on it.
+	if !isRetrySafe("POST", map[string]string{"Idempotency-Key": "  idem-abc123  "}) {
+		t.Fatal("a padded but non-blank Idempotency-Key must remain retry-safe")
+	}
+}
