@@ -58,7 +58,15 @@ function rel(p: string): string {
 // e.g. a hypothetical escapeRegex, aren't falsely required to emit HTML
 // entities).
 function definesHtmlEscaper(src: string): boolean {
-  return /function\s+\w*[eE]sc\w*\s*\(/.test(src) && src.includes('&amp;');
+  // Both declaration forms. Every escaper today is a `function` statement, so
+  // matching only that finds all 24 — but an arrow-assigned copy
+  // (`const escapeHtml = (s) => …`) is the same hand-duplication with the same
+  // charset risk, and the selector would silently skip it. A guard that
+  // verifies a subset it chooses by pattern is only as complete as the pattern.
+  const declaresEscaper =
+    /function\s+\w*[eE]sc\w*\s*\(/.test(src) ||
+    /(?:const|let|var)\s+\w*[eE]sc\w*\s*=\s*(?:function\b|\(|[A-Za-z_$])/.test(src);
+  return declaresEscaper && src.includes('&amp;');
 }
 
 describe('client inline-escaper charset completeness (XSS drift guard)', () => {
