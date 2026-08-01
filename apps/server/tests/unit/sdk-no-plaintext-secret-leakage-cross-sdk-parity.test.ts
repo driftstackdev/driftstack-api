@@ -78,7 +78,54 @@ const REAL_SECRET_PATTERNS = [
 // ever contain exceptions that genuinely do something.
 const ALLOWED_PLACEHOLDERS: string[] = [];
 
+/**
+ * The SDK runtime sources this sweep is responsible for, across all three
+ * languages. Named once so the reachability check below counts exactly what the
+ * scan reads, rather than a second list that could drift away from it.
+ */
+function sdkProductionFiles(): string[] {
+  const dirs = [
+    resolve(REPO_ROOT, 'packages/sdk-typescript/src'),
+    resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack'),
+    resolve(REPO_ROOT, 'packages/sdk-go'),
+  ];
+  const files: string[] = [];
+  for (const d of dirs) {
+    files.push(...listFiles(d, ['.ts', '.py', '.go']));
+  }
+  // Skip test files — they use intentional fake-but-real-looking fixtures.
+  return files.filter(
+    (f) => !f.endsWith('_test.go') && !/[/]tests[/]/.test(f) && !/\.test\.[a-z]+$/.test(f),
+  );
+}
+
 describe('W840 cross-SDK no plaintext-secret leakage', () => {
+  it('CRITICAL the scan read real SDK sources and the patterns can still match a secret. The scan asserts per-file INSIDE a loop, so a collection that came back empty makes it vacuously true — reporting all three SDKs clean because it read none. Neutralising the directory read left this file green.', () => {
+    const files = sdkProductionFiles();
+    expect(files.length, 'SDK runtime sources scanned across TS, Python and Go').toBeGreaterThan(
+      50,
+    );
+    // Every language must actually be represented: two of three roots going
+    // missing would still clear a total-count floor.
+    for (const ext of ['.ts', '.py', '.go']) {
+      expect(
+        files.filter((f) => f.endsWith(ext)).length,
+        `${ext} runtime sources scanned`,
+      ).toBeGreaterThan(5);
+    }
+
+    // The patterns, against a synthetic secret and a near-miss. Assembled from
+    // fragments rather than written as one literal so this file never contains
+    // anything a credential scanner would have to judge.
+    const syntheticLive = `sk_${'live_'}${'A1b2C3d4E5f6G7h8I9j0'}`;
+    const stripePattern = REAL_SECRET_PATTERNS.find((p) => p.name.startsWith('sk_live_'))!;
+    expect(stripePattern.regex.test(syntheticLive), 'a full-length live key is matched').toBe(true);
+    expect(
+      stripePattern.regex.test(`sk_${'live_'}short`),
+      'and a too-short lookalike is not, so the pattern is not matching everything',
+    ).toBe(false);
+  });
+
   it('CRITICAL every allow-listed placeholder can actually match a pattern. An entry that matches nothing exempts nothing — it is dead text that reads as a reviewed exception. All five original entries were in exactly that state, which is how a list nobody re-derives ends up sitting next to a check that has a hole in it.', () => {
     const unreachable = ALLOWED_PLACEHOLDERS.filter(
       (ph) => !REAL_SECRET_PATTERNS.some(({ regex }) => regex.test(ph)),
@@ -92,21 +139,7 @@ describe('W840 cross-SDK no plaintext-secret leakage', () => {
   // ─── SDK runtime source scan ─────────────────────────────────
 
   it('CRITICAL no SDK runtime source contains real-looking plaintext secrets (sk_live_ / pk_live_ / whsec_<32hex> / ds_live_<24chars> / GitHub PAT / AWS access key). Only placeholder/ellipsis values allowed. Defense against accidental commits of real keys per credential-handling memory rule + AGENTS.md trust pattern.', () => {
-    const dirs = [
-      resolve(REPO_ROOT, 'packages/sdk-typescript/src'),
-      resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack'),
-      resolve(REPO_ROOT, 'packages/sdk-go'),
-    ];
-    const files: string[] = [];
-    for (const d of dirs) {
-      files.push(...listFiles(d, ['.ts', '.py', '.go']));
-    }
-    // Skip test files — they use intentional fake-but-real-looking fixtures.
-    const productionFiles = files.filter(
-      (f) => !f.endsWith('_test.go') && !/[/]tests[/]/.test(f) && !/\.test\.[a-z]+$/.test(f),
-    );
-
-    for (const f of productionFiles) {
+    for (const f of sdkProductionFiles()) {
       const p = read(f);
       const rel = relative(REPO_ROOT, f);
       for (const { name, regex } of REAL_SECRET_PATTERNS) {

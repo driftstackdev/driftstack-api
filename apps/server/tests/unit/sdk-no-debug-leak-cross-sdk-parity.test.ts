@@ -59,16 +59,68 @@ function stripGoComments(src: string): string {
   return stripCommentsAndStrings(src);
 }
 
+// The three detectors, named once and used both by the sweeps below and by the
+// reachability check. A floor that re-implemented these would prove its own
+// copy works, which is not the question being asked of it.
+
+/** Bare `console.*` calls in TS source, ignoring comments. */
+function tsDebugLeaks(src: string): string[] {
+  // Allow logger.debug(...) but flag bare console.*.
+  return stripCommentsAndStrings(src).match(/\bconsole\.(log|debug|info|warn|error)\s*\(/g) ?? [];
+}
+
+/** Bare `print(` calls in Python source, ignoring comments and docstrings. */
+function pyDebugLeaks(src: string): string[] {
+  // bare `print(` (not preceded by . — to allow self.print or similar method names).
+  return stripPythonCommentsAndDocstrings(src).match(/(?<![a-zA-Z_.])print\s*\(/g) ?? [];
+}
+
+/** Bare print/log calls in Go source, ignoring comments. */
+function goDebugLeaks(src: string): string[] {
+  return (
+    stripGoComments(src).match(/\b(fmt\.Println|log\.Println|fmt\.Printf|log\.Printf)\s*\(/g) ?? []
+  );
+}
+
+/** Top-level, non-test Go sources — the runtime surface customers compile. */
+function goRuntimeFiles(): string[] {
+  const goSrcDir = resolve(REPO_ROOT, 'packages/sdk-go');
+  // Only scan top-level Go files; skip examples/ + tests/.
+  return readdirSync(goSrcDir)
+    .filter((f) => f.endsWith('.go') && !f.endsWith('_test.go'))
+    .map((f) => resolve(goSrcDir, f));
+}
+
 describe('W839 cross-SDK no debug-leak parity', () => {
+  it('CRITICAL each language scan read real files, and each detector can still see a leak. Every assertion in this file runs INSIDE a `for (const f of files)` loop, so a scan that collected nothing makes all three vacuously true — reporting all three SDKs clean because it read none. Neutralising the directory read left this file green, which is how the gap was found rather than guessed.', () => {
+    expect(
+      listFiles(resolve(REPO_ROOT, 'packages/sdk-typescript/src'), '.ts').length,
+      'TypeScript runtime sources scanned',
+    ).toBeGreaterThan(15);
+    expect(
+      listFiles(resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack'), '.py').length,
+      'Python runtime sources scanned',
+    ).toBeGreaterThan(15);
+    expect(goRuntimeFiles().length, 'Go runtime sources scanned').toBeGreaterThan(15);
+
+    // Each detector against input it must catch, and input it must ignore. The
+    // strippers are naive by design, and one that over-stripped would silence
+    // its sweep completely while still looking like it ran.
+    expect(tsDebugLeaks('console.log(x);'), 'TS detector sees a bare console.log').toHaveLength(1);
+    expect(tsDebugLeaks('// console.log(x);'), 'and not one inside a comment').toEqual([]);
+    expect(pyDebugLeaks('print(x)'), 'Python detector sees a bare print()').toHaveLength(1);
+    expect(pyDebugLeaks('"""\nprint(x)\n"""'), 'and not one inside a docstring').toEqual([]);
+    expect(goDebugLeaks('fmt.Println(x)'), 'Go detector sees a bare fmt.Println').toHaveLength(1);
+    expect(goDebugLeaks('// fmt.Println(x)'), 'and not one inside a comment').toEqual([]);
+  });
+
   // ─── TS runtime source: no console.log outside docstrings ─────
 
   it('CRITICAL TS runtime sources have NO console.log / console.debug / console.info / console.warn / console.error outside comments + docstring examples. Drift would let production SDK code spam customer stdout. Resource-method docstrings DO use console.log to show example usage — those are stripped before the assertion.', () => {
     const tsSrcDir = resolve(REPO_ROOT, 'packages/sdk-typescript/src');
     const files = listFiles(tsSrcDir, '.ts');
     for (const f of files) {
-      const stripped = stripCommentsAndStrings(read(f));
-      // Allow logger.debug(...) but flag bare console.*.
-      const matches = stripped.match(/\bconsole\.(log|debug|info|warn|error)\s*\(/g) ?? [];
+      const matches = tsDebugLeaks(read(f));
       expect(matches.length, `${f} has debug-leak: ${matches.join(', ')}`).toBe(0);
     }
   });
@@ -79,9 +131,7 @@ describe('W839 cross-SDK no debug-leak parity', () => {
     const pySrcDir = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack');
     const files = listFiles(pySrcDir, '.py');
     for (const f of files) {
-      const stripped = stripPythonCommentsAndDocstrings(read(f));
-      // bare `print(` (not preceded by . — to allow self.print or similar method names).
-      const matches = stripped.match(/(?<![a-zA-Z_.])print\s*\(/g) ?? [];
+      const matches = pyDebugLeaks(read(f));
       expect(matches.length, `${f} has print()-leak: ${matches.length} occurrences`).toBe(0);
     }
   });
@@ -89,16 +139,8 @@ describe('W839 cross-SDK no debug-leak parity', () => {
   // ─── Go runtime source: no fmt.Println / log.Println in non-example ─
 
   it('CRITICAL Go runtime sources (client.go + resource .go files; NOT examples/) have NO fmt.Println or log.Println outside comments. Drift would let SDK code spam customer stdout. examples/ folder is exempt by definition (examples MUST print to be useful).', () => {
-    const goSrcDir = resolve(REPO_ROOT, 'packages/sdk-go');
-    // Only scan top-level Go files; skip examples/ + tests/.
-    const files = readdirSync(goSrcDir)
-      .filter((f) => f.endsWith('.go') && !f.endsWith('_test.go'))
-      .map((f) => resolve(goSrcDir, f));
-
-    for (const f of files) {
-      const stripped = stripGoComments(read(f));
-      const matches =
-        stripped.match(/\b(fmt\.Println|log\.Println|fmt\.Printf|log\.Printf)\s*\(/g) ?? [];
+    for (const f of goRuntimeFiles()) {
+      const matches = goDebugLeaks(read(f));
       expect(matches.length, `${f} has print-leak: ${matches.join(', ')}`).toBe(0);
     }
   });
