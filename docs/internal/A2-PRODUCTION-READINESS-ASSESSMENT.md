@@ -120,6 +120,41 @@ straight into a brand-new guard.** Worth stating plainly: writing this kind of
 test does not confer immunity to the mistake it exists to catch. Only the
 mutation showed it.
 
+### 16. CLOSED — a suspended or deleted account could activate MFA; plus two clean sweeps
+
+Fourth and fifth predicate sweeps.
+
+**Status predicates (34).** The `eq(accounts.status, 'active')` check inside
+`completeEnrollmentIfPending`'s authority lock could be deleted with a clean
+typecheck and the full suite green at 2,568 files / 26,613 tests. A suspended
+account — an enforcement state, billing lapse or abuse — or a soft-deleted one
+could still activate MFA. Closed by `20af122eb`.
+
+The uncomfortable part is where it was: **the same method guarded one commit
+earlier.** Item 15's guard closed the five session conditions and never touched
+the authority lock's own status check, three lines above them. Guarding a
+method is not guarding every predicate in it, and nothing but the mutation said
+which was which.
+
+**Single-use predicates (9): CLEAN.** Every `isNull(consumedAt)` /
+`isNull(usedAt)` across auth-flow tokens, MFA recovery codes and OAuth pending
+links reacts — including both atomic consume-CAS forms that the bulk pattern
+missed and that were therefore mutated individually. Replay protection on magic
+links, password resets and recovery codes is genuinely covered.
+
+_Sweep scoreboard so far_ — five classes, 205 predicates measured:
+
+| class             | predicates | unproven |
+| ----------------- | ---------- | -------- |
+| account ownership | 120        | 17       |
+| expiry            | 17         | 4        |
+| revocation        | 25         | 3        |
+| single-use        | 9          | **0**    |
+| status            | 34         | 1        |
+
+All 25 closed. The two clean classes are worth as much as the findings: they say
+where NOT to spend the next sweep.
+
 ### 15. CLOSED — MFA activation authority, and a flake I introduced
 
 Third sweep, revocation predicates (25 across six repos). Five repos reacted;
