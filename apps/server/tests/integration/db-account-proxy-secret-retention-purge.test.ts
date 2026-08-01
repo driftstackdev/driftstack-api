@@ -21,11 +21,18 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzleAccountProxiesRepo } from '../../src/db/account-proxies-repo.js';
 import type { Database } from '../../src/db/client.js';
 
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+// Runs against its OWN database: every purge here is GLOBAL — it selects and
+// DELETES by cutoff across all accounts, so on a shared database it reaches
+// other test files' fixtures and they reach its. See
+// _helpers/isolated-database.ts; the agent-session purge already destroyed the
+// receipt test's rows once via ON DELETE CASCADE, and that was patched with a
+// fixture workaround, which is the fix that does not hold.
+const ISOLATED_DB_NAME = 'driftstack_iso_purge_proxy';
+let DB_URL = '';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 let dbReachable = false;
@@ -33,6 +40,9 @@ let client: ReturnType<typeof postgres> | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1 FROM account_proxies LIMIT 0`;

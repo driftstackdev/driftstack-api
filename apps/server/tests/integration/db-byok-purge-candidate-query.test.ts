@@ -24,11 +24,18 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzleAccountDeletionPurgeRepo } from '../../src/db/account-deletion-purge-repo.js';
 import * as schema from '../../src/db/schema.js';
 
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+// Runs against its OWN database: every purge here is GLOBAL — it selects and
+// DELETES by cutoff across all accounts, so on a shared database it reaches
+// other test files' fixtures and they reach its. See
+// _helpers/isolated-database.ts; the agent-session purge already destroyed the
+// receipt test's rows once via ON DELETE CASCADE, and that was patched with a
+// fixture workaround, which is the fix that does not hold.
+const ISOLATED_DB_NAME = 'driftstack_iso_purge_byok';
+let DB_URL = '';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = new Date('2026-08-01T12:00:00.000Z');
 const CUTOFF = new Date(NOW.getTime() - 30 * DAY_MS);
@@ -39,6 +46,9 @@ let repo: DrizzleAccountDeletionPurgeRepo | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1 FROM accounts LIMIT 0`;
