@@ -47,12 +47,29 @@ describe('W448.C apps/server/src/db/team-members-repo.ts content parity', () => 
     expect(body).toMatch(/\/\/ V-298c — Drizzle-backed TeamMembersRepo\./);
   });
 
-  it('imports: and/desc/eq/isNull from drizzle-orm; 4 service types (TeamInviteRow + TeamMemberRow + TeamMembersRepo + TeamRole); Database; 3 schema tables (accounts + teamInvites + teamMembers)', () => {
+  // V-726 — apiKeys joins the schema imports and RemoveMemberResult the service
+  // types: removeMemberWithInvites now revokes, in its own transaction, the keys
+  // the departing member minted on the owner.
+  it('imports: and/desc/eq/isNull from drizzle-orm; 5 service types (RemoveMemberResult + TeamInviteRow + TeamMemberRow + TeamMembersRepo + TeamRole); Database; 4 schema tables (accounts + apiKeys + teamInvites + teamMembers)', () => {
     expect(body).toMatch(/import \{ and, desc, eq, isNull \} from 'drizzle-orm';/);
     expect(body).toMatch(
-      /import type \{\s*\n?\s*TeamInviteRow,\s*\n?\s*TeamMemberRow,\s*\n?\s*TeamMembersRepo,\s*\n?\s*TeamRole,\s*\n?\s*\} from '\.\.\/services\/team-members\.js';/,
+      /import type \{\s*RemoveMemberResult,\s*TeamInviteRow,\s*TeamMemberRow,\s*TeamMembersRepo,\s*TeamRole,\s*\} from '\.\.\/services\/team-members\.js';/,
     );
-    expect(body).toMatch(/import \{ accounts, teamInvites, teamMembers \} from '\.\/schema\.js';/);
+    expect(body).toMatch(
+      /import \{ accounts, apiKeys, teamInvites, teamMembers \} from '\.\/schema\.js';/,
+    );
+  });
+
+  // The revocation itself. Its predicate is the whole security property: the
+  // owner's account, keys attributed to THIS member, and only ones still live.
+  // Losing the createdByAccountId term would revoke every key on the owner.
+  it('V-726 removeMemberWithInvites revokes the departing member keys inside the same transaction', () => {
+    expect(body).toMatch(
+      /const revoked = await tx\s*\.update\(apiKeys\)\s*\.set\(\{ revokedAt: now \}\)\s*\.where\(\s*and\(\s*eq\(apiKeys\.accountId, ownerAccountId\),\s*eq\(apiKeys\.createdByAccountId, memberAccountId\),\s*isNull\(apiKeys\.revokedAt\),\s*\),\s*\)/,
+    );
+    expect(body).toMatch(
+      /return \{ memberAccountId, revokedApiKeyIds: revoked\.map\(\(r\) => r\.id\) \};/,
+    );
   });
 
   it('toInviteRow: 9-field TeamInviteRow (id + ownerAccountId + inviteeEmail + role + inviteTokenHash + inviteExpiresAt + invitedByAccountId + acceptedAt + createdAt)', () => {

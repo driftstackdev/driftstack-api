@@ -56,6 +56,24 @@ export interface TeamInviteRow {
   createdAt: Date;
 }
 
+/**
+ * V-726 — outcome of an atomic member removal. `revokedApiKeyIds` are the keys
+ * this member had minted on the OWNER's account, revoked in the same
+ * transaction as the membership delete.
+ *
+ * They have to go together. A key authenticates as its `accountId` — the owner —
+ * and never re-checks whether the account that minted it is still a member, so
+ * deleting the membership alone left an offboarded member holding a live
+ * credential with full owner authority. Doing the revocation outside the
+ * transaction would be worse than useless: a failure after a committed removal
+ * reports success while the credential lives on, and the obvious retry 404s on
+ * the now-missing membership, so it never self-heals.
+ */
+export interface RemoveMemberResult {
+  memberAccountId: string;
+  revokedApiKeyIds: string[];
+}
+
 export interface TeamMembersRepo {
   /** Insert or refresh a pending invite (deduped by owner + email). */
   upsertInvite(input: {
@@ -118,7 +136,10 @@ export interface TeamMembersRepo {
    * delete and the invite delete serialize against a concurrent
    * acceptInviteAtomic on the shared invite row.
    */
-  removeMemberWithInvites(membershipId: string, ownerAccountId: string): Promise<string | null>;
+  removeMemberWithInvites(
+    membershipId: string,
+    ownerAccountId: string,
+  ): Promise<RemoveMemberResult | null>;
   /**
    * Delete ALL invites (pending or accepted) for an (owner, invitee-email) pair.
    * Called on member removal so a removed member cannot re-join by accepting a
@@ -314,11 +335,15 @@ export class TeamMembersService {
     // removal can no longer slip its membership upsert between the membership
     // delete and the invite delete, because both delete statements and the
     // accept's compare-and-swap consume of the same invite row now serialize.
-    const removedMemberAccountId = await this.repo.removeMemberWithInvites(
+    // V-726 — the same transaction also revokes every live key this member
+    // minted on the owner's account (see RemoveMemberResult for why it cannot be
+    // a separate step).
+    const removed = await this.repo.removeMemberWithInvites(
       input.membershipId,
       input.ownerAccountId,
     );
-    if (removedMemberAccountId === null) return false;
+    if (removed === null) return false;
+    const removedMemberAccountId = removed.memberAccountId;
     await this.invalidateAuthCache(removedMemberAccountId);
     if (this.accountAudit) {
       try {
@@ -329,7 +354,10 @@ export class TeamMembersService {
           actorKeyId: null,
           action: 'team.member_removed',
           targetResourceId: `mem_${input.membershipId}`,
-          payload: {},
+          // V-726 — record WHICH credentials the removal revoked. An offboarding
+          // that silently invalidates keys the owner's systems were using needs
+          // to be answerable afterwards from the audit log alone.
+          payload: { revoked_api_key_ids: removed.revokedApiKeyIds },
         });
       } catch {
         /* swallow */

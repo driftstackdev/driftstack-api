@@ -28,6 +28,7 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
         keyHash: input.keyHash,
         expiresAt: input.expiresAt,
         provenance: input.provenance ?? null,
+        createdByAccountId: input.createdByAccountId ?? null,
       })
       .returning();
     if (!row) throw new Error('insertApiKey returned no row');

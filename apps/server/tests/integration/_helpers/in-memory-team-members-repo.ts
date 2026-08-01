@@ -2,6 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type {
+  RemoveMemberResult,
   TeamInviteRow,
   TeamMemberRow,
   TeamMembersRepo,
@@ -187,7 +188,7 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
   async removeMemberWithInvites(
     membershipId: string,
     ownerAccountId: string,
-  ): Promise<string | null> {
+  ): Promise<RemoveMemberResult | null> {
     // TOCTOU fix mirror — delete the membership + that member's invites in one
     // logical step (replicates removeMember + deleteInvitesForEmail). Sequential
     // here (no real concurrency), but the atomic Drizzle sibling is what closes
@@ -210,7 +211,40 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
         }
       }
     }
-    return memberAccountId;
+    // V-726 — mirror the Drizzle sibling: revoke the keys this member minted on
+    // the owner's account. The real atomicity lives in the transaction there;
+    // this twin only has to agree on WHICH keys are revoked.
+    const revokedApiKeyIds: string[] = [];
+    for (const key of this.mintedApiKeys) {
+      if (
+        key.accountId === ownerAccountId &&
+        key.createdByAccountId === memberAccountId &&
+        !key.revoked
+      ) {
+        key.revoked = true;
+        revokedApiKeyIds.push(key.id);
+      }
+    }
+    return { memberAccountId, revokedApiKeyIds };
+  }
+
+  /**
+   * V-726 — stand-in for the api_keys rows a member minted on the owner's
+   * account, so a test can prove removal revokes them without a real database.
+   */
+  readonly mintedApiKeys: {
+    id: string;
+    accountId: string;
+    createdByAccountId: string | null;
+    revoked: boolean;
+  }[] = [];
+
+  seedMintedApiKey(input: {
+    id: string;
+    accountId: string;
+    createdByAccountId: string | null;
+  }): void {
+    this.mintedApiKeys.push({ ...input, revoked: false });
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await

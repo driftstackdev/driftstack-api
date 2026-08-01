@@ -52,9 +52,14 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
     expect(body).toMatch(/import \{ apiKeys \} from '\.\/schema\.js';/);
   });
 
-  it("insertApiKey: 7-field values (accountId + name + scopes + keyPrefix + keyHash + expiresAt + provenance); returning(); throws 'insertApiKey returned no row'", () => {
+  // V-726 — an 8th field: createdByAccountId, the account that MINTED the key
+  // (the acting member on a team-scoped mint, while accountId stays the owner).
+  // It is what removeMember revokes against, so dropping it from the insert
+  // would silently restore the offboarding hole — every key would land
+  // unattributed and removal would find nothing to revoke.
+  it("insertApiKey: 8-field values (accountId + name + scopes + keyPrefix + keyHash + expiresAt + provenance + createdByAccountId); returning(); throws 'insertApiKey returned no row'", () => {
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*name: input\.name,\s*\n?\s*scopes: input\.scopes,\s*\n?\s*keyPrefix: input\.keyPrefix,\s*\n?\s*keyHash: input\.keyHash,\s*\n?\s*expiresAt: input\.expiresAt,\s*\n?\s*provenance: input\.provenance \?\? null,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);\s*\n?\s*if \(!row\) throw new Error\('insertApiKey returned no row'\);/,
+      /\.values\(\{\s*accountId: input\.accountId,\s*name: input\.name,\s*scopes: input\.scopes,\s*keyPrefix: input\.keyPrefix,\s*keyHash: input\.keyHash,\s*expiresAt: input\.expiresAt,\s*provenance: input\.provenance \?\? null,\s*createdByAccountId: input\.createdByAccountId \?\? null,\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('insertApiKey returned no row'\);/,
     );
   });
 

@@ -36,12 +36,25 @@ function makeRepo(): {
     invites: TeamInviteRow[];
     members: TeamMemberRow[];
     emailByAccount: Map<string, string>;
+    mintedApiKeys: {
+      id: string;
+      accountId: string;
+      createdByAccountId: string | null;
+      revoked: boolean;
+    }[];
   };
 } {
   const state = {
     invites: [] as TeamInviteRow[],
     members: [] as TeamMemberRow[],
     emailByAccount: new Map<string, string>(),
+    /** V-726 — api_keys stand-in: keys minted on an owner by some account. */
+    mintedApiKeys: [] as {
+      id: string;
+      accountId: string;
+      createdByAccountId: string | null;
+      revoked: boolean;
+    }[],
   };
   let inviteCounter = 0;
   let memberCounter = 0;
@@ -171,7 +184,21 @@ function makeRepo(): {
           (i) => !(i.ownerAccountId === ownerAccountId && i.inviteeEmail === norm),
         );
       }
-      return Promise.resolve(memberAccountId);
+      // V-726 — the real repo revokes, in the same transaction, every live key
+      // this member minted on the owner's account. Mirrored here so the service
+      // sees the same shape; `state.mintedApiKeys` lets a test assert it.
+      const revokedApiKeyIds: string[] = [];
+      for (const key of state.mintedApiKeys) {
+        if (
+          key.accountId === ownerAccountId &&
+          key.createdByAccountId === memberAccountId &&
+          !key.revoked
+        ) {
+          key.revoked = true;
+          revokedApiKeyIds.push(key.id);
+        }
+      }
+      return Promise.resolve({ memberAccountId, revokedApiKeyIds });
     },
     deleteInvitesForEmail: (ownerAccountId, email) => {
       const norm = email.trim().toLowerCase();
@@ -195,10 +222,15 @@ function makeEmail(): { service: EmailService; captures: CapturedInvite[] } {
   return { service, captures };
 }
 
-function makeAudit(): { audit: AccountAuditService; calls: { action: string }[] } {
-  const calls: { action: string }[] = [];
+function makeAudit(): {
+  audit: AccountAuditService;
+  // V-726 — payload captured too, so a test can assert WHICH keys a removal
+  // revoked rather than only that an entry was written.
+  calls: { action: string; payload?: unknown }[];
+} {
+  const calls: { action: string; payload?: unknown }[] = [];
   const audit = {
-    record: (args: { action: string }) => {
+    record: (args: { action: string; payload?: unknown }) => {
       calls.push(args);
       return Promise.resolve();
     },
@@ -580,6 +612,88 @@ describe('V-553.B-13 TeamMembersService.removeMember', () => {
     expect(result).toBe(true);
     expect(spy).toHaveBeenCalledWith('acc_b');
     expect(calls.map((c) => c.action)).toEqual(['team.member_removed']);
+  });
+
+  // V-726 — offboarding has to take the member's CREDENTIALS with it, not just
+  // their seat. An admin-role member can mint API keys on the OWNER's account
+  // (POST /v1/api-keys with X-Driftstack-Account); such a key is stored with
+  // account_id = the owner and authenticates as the owner, and nothing in the
+  // auth path re-checks whether the minter is still a member. Deleting the
+  // membership therefore left the departed member holding a working credential
+  // with full owner authority, for as long as the key existed — and, with no
+  // record of who minted what, the owner could not even find it to revoke.
+  it('revokes the keys the removed member had minted on the owner account', async () => {
+    const { repo, state } = makeRepo();
+    const { service: email } = makeEmail();
+    state.emailByAccount.set('acc_b', 'b@e.test');
+    state.members.push({
+      id: 'mem_1',
+      ownerAccountId: 'acc_owner',
+      memberAccountId: 'acc_b',
+      memberEmail: 'b@e.test',
+      role: 'admin',
+      invitedAt: new Date(),
+      acceptedAt: new Date(),
+      invitedByAccountId: 'acc_owner',
+      createdAt: new Date(),
+    });
+    // Two live keys the departing admin minted on the owner, plus keys that
+    // must survive: the owner's own, another member's, an already-revoked one,
+    // and one with no recorded minter (pre-migration-0111).
+    state.mintedApiKeys.push(
+      { id: 'key_b1', accountId: 'acc_owner', createdByAccountId: 'acc_b', revoked: false },
+      { id: 'key_b2', accountId: 'acc_owner', createdByAccountId: 'acc_b', revoked: false },
+      { id: 'key_own', accountId: 'acc_owner', createdByAccountId: 'acc_owner', revoked: false },
+      { id: 'key_c', accountId: 'acc_owner', createdByAccountId: 'acc_c', revoked: false },
+      { id: 'key_b_old', accountId: 'acc_owner', createdByAccountId: 'acc_b', revoked: true },
+      { id: 'key_legacy', accountId: 'acc_owner', createdByAccountId: null, revoked: false },
+    );
+
+    const svc = new TeamMembersService(repo, email, CONFIG);
+    expect(await svc.removeMember({ membershipId: 'mem_1', ownerAccountId: 'acc_owner' })).toBe(
+      true,
+    );
+
+    const revoked = state.mintedApiKeys
+      .filter((k) => k.revoked)
+      .map((k) => k.id)
+      .sort();
+    expect(revoked).toEqual(['key_b1', 'key_b2', 'key_b_old']);
+    // Nothing belonging to the owner, another member, or an unattributed key is
+    // touched — revoking on a guess would break the owner's own integrations.
+    expect(state.mintedApiKeys.find((k) => k.id === 'key_own')?.revoked).toBe(false);
+    expect(state.mintedApiKeys.find((k) => k.id === 'key_c')?.revoked).toBe(false);
+    expect(state.mintedApiKeys.find((k) => k.id === 'key_legacy')?.revoked).toBe(false);
+  });
+
+  it('records the revoked key ids on the removal audit entry so a silent offboarding is answerable afterwards', async () => {
+    const { repo, state } = makeRepo();
+    const { service: email } = makeEmail();
+    const { audit, calls } = makeAudit();
+    state.emailByAccount.set('acc_b', 'b@e.test');
+    state.members.push({
+      id: 'mem_1',
+      ownerAccountId: 'acc_owner',
+      memberAccountId: 'acc_b',
+      memberEmail: 'b@e.test',
+      role: 'admin',
+      invitedAt: new Date(),
+      acceptedAt: new Date(),
+      invitedByAccountId: 'acc_owner',
+      createdAt: new Date(),
+    });
+    state.mintedApiKeys.push({
+      id: 'key_b1',
+      accountId: 'acc_owner',
+      createdByAccountId: 'acc_b',
+      revoked: false,
+    });
+
+    const svc = new TeamMembersService(repo, email, CONFIG, audit);
+    await svc.removeMember({ membershipId: 'mem_1', ownerAccountId: 'acc_owner' });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.payload).toEqual({ revoked_api_key_ids: ['key_b1'] });
   });
 
   it('cancels the removed member OUTSTANDING invites so they cannot re-join via a pending invite (Fable auth re-audit 2026-07-02)', async () => {

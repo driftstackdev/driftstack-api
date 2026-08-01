@@ -2,13 +2,14 @@
 
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type {
+  RemoveMemberResult,
   TeamInviteRow,
   TeamMemberRow,
   TeamMembersRepo,
   TeamRole,
 } from '../services/team-members.js';
 import type { Database } from './client.js';
-import { accounts, teamInvites, teamMembers } from './schema.js';
+import { accounts, apiKeys, teamInvites, teamMembers } from './schema.js';
 
 type InviteDb = typeof teamInvites.$inferSelect;
 type MemberDb = typeof teamMembers.$inferSelect;
@@ -237,7 +238,7 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
   async removeMemberWithInvites(
     membershipId: string,
     ownerAccountId: string,
-  ): Promise<string | null> {
+  ): Promise<RemoveMemberResult | null> {
     // TOCTOU fix (2026-07-10 audit) — delete the membership AND cancel that
     // member's invites in one transaction, so a concurrent acceptInviteAtomic
     // can't slip its membership upsert between the membership delete and the
@@ -245,6 +246,7 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
     // row serialize, so a just-removed member can't resurrect their seat. Same
     // owner-scoped WHERE as removeMember (id + ownerAccountId); same normalized
     // (owner, email) predicate as deleteInvitesForEmail.
+    const now = new Date();
     return this.database.db.transaction(async (tx) => {
       const result = await tx
         .delete(teamMembers)
@@ -269,7 +271,31 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
             ),
           );
       }
-      return memberAccountId;
+      // V-726 — revoke, in the SAME transaction, every live key this member
+      // minted on the owner's account. It must be atomic with the membership
+      // delete: a key authenticates as its `account_id` (the owner) and never
+      // re-checks the minter's membership, so a revocation that failed after a
+      // committed removal would leave an offboarded member holding full owner
+      // authority while the API reported the removal as successful — and the
+      // natural retry 404s on the already-deleted membership, so it would never
+      // self-heal.
+      //
+      // Scoped to keys positively ATTRIBUTED to this member. A NULL
+      // created_by_account_id (minted before migration 0111) is left alone
+      // rather than guessed at: revoking on a guess would break the owner's own
+      // integrations.
+      const revoked = await tx
+        .update(apiKeys)
+        .set({ revokedAt: now })
+        .where(
+          and(
+            eq(apiKeys.accountId, ownerAccountId),
+            eq(apiKeys.createdByAccountId, memberAccountId),
+            isNull(apiKeys.revokedAt),
+          ),
+        )
+        .returning({ id: apiKeys.id });
+      return { memberAccountId, revokedApiKeyIds: revoked.map((r) => r.id) };
     });
   }
 

@@ -63,6 +63,14 @@ export interface NewApiKeyInput {
   /** C1 — provisioning origin. Omit / null for an ordinary key;
    *  `'cli_device'` for a CLI/GUI device-code key (deny-gated). */
   provenance?: string | null;
+  /**
+   * V-726 — the account that MINTED this key. Equals `accountId` for a
+   * self-minted key; for a team-scoped mint it is the acting MEMBER while
+   * `accountId` stays the owner. Recorded so removing a member can revoke the
+   * credentials they created — a key authenticates as `accountId` and never
+   * re-checks the minter's membership, so removal alone left them live.
+   */
+  createdByAccountId?: string | null;
 }
 
 export interface RotateApiKeyInput {
@@ -316,6 +324,10 @@ export class ApiKeysService {
       scopes: input.scopes,
       expiresAt: input.expiresAt,
       provenance: input.provenance ?? null,
+      // V-726 — the ACTING account, which is the member on a team-scoped mint
+      // (accountId above is the owner). This is the only record of who created
+      // the credential, and what removeMember revokes against.
+      createdByAccountId: ctx.account.id,
     });
 
     // V-216 — record customer-facing audit entry. Best-effort; never

@@ -1153,6 +1153,24 @@ export const apiKeys = pgTable(
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
+    // V-726 — which account MINTED this key. For a self-minted key that is the
+    // owner; for a team-scoped mint (POST /v1/api-keys with
+    // X-Driftstack-Account, admin role) it is the acting MEMBER, while
+    // `accountId` stays the owner.
+    //
+    // Without this there was no link at all between a key and the member who
+    // created it, so removing that member left their credential live with full
+    // owner authority — a key authenticates as `accountId` and never re-checks
+    // the minter's membership (services/auth.ts) — and the owner could not even
+    // tell which keys to revoke by hand.
+    //
+    // ON DELETE SET NULL, not CASCADE: if the member's account is deleted the
+    // key must survive (the owner may depend on it) and merely lose its
+    // attribution. NULL therefore means "unknown minter", which covers every
+    // row written before this column existed.
+    createdByAccountId: uuid('created_by_account_id').references(() => accounts.id, {
+      onDelete: 'set null',
+    }),
     // C1 — how this key was provisioned. NULL (the default for every
     // existing row) = an ordinary key. `'cli_device'` = minted by the
     // CLI/GUI device-code (cli-authorize) flow; such keys are barred

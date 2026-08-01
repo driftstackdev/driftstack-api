@@ -188,6 +188,22 @@ Requires broad `read` or `account_owner`.
 `DELETE /v1/team/members/:id` — owner-scoped. 404 if the membership
 isn't owned by the calling account.
 
+**Removal also revokes the API keys that member minted on your account.**
+An `admin` member can mint keys against your workspace, and such a key
+authenticates as _your_ account — it does not stop working when their
+membership ends. So removal revokes every live key created by that member,
+in the same transaction as the membership delete.
+
+Two consequences worth planning for:
+
+- If one of those keys is used by your own systems, it stops working at
+  removal. Mint a replacement under your own account first, then remove the
+  member. The `team.member_removed` audit entry lists the revoked key ids, so
+  you can always see afterwards exactly what was invalidated.
+- Keys created before this behaviour shipped have no recorded creator and are
+  **not** revoked, because there is nothing to attribute them to. Review
+  `GET /v1/api-keys` when offboarding a long-standing member.
+
 ## SDK examples
 
 **TypeScript:**

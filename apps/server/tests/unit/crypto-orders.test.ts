@@ -2996,7 +2996,7 @@ describe('V-725 createIdempotent body fingerprint across a restart (repo-served 
     };
     const repo: CryptoOrdersRepo = {
       upsert: () => Promise.resolve(),
-      getById: (id) => Promise.resolve(id === 'ord_legacy' ? existing : null),
+      getById: (id: string) => Promise.resolve(id === 'ord_legacy' ? existing : null),
       insertWithIdempotencyKey: () =>
         Promise.resolve({ order: existing, replayed: true, storedFingerprint: null }),
       withOrderLock: () => Promise.resolve(null),

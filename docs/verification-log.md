@@ -30531,3 +30531,76 @@ partial-index integration test run against it; both halves of the server
 typecheck clean; targeted ESLint and Prettier. No OpenAPI, SDK, pricing,
 environment, customer or secret surface changed, and no cap, status or response
 shape moved.
+
+## V-726 — Removing a team member now revokes the credentials they minted
+
+**Date:** 2026-08-01
+
+A team member with the `admin` role can mint API keys on the OWNER's account:
+`POST /v1/api-keys` with `X-Driftstack-Account`, which the route explicitly
+supports and which stores the key with `account_id` = the owner. Authentication
+resolves the account straight from that column — `auth.ts` does
+`getAccount(apiKey.accountId)` — and never re-checks whether the account that
+minted the key is still a member of anything.
+
+So `removeMember` deleted the membership, cancelled the invites, and
+invalidated the auth cache, and the departed member's key kept working with full
+owner authority for as long as the key existed. This is the credential-shaped
+half of offboarding, and it was entirely missing. Worse, it was also invisible:
+nothing linked a key to the member who created it, so an owner could not have
+revoked them by hand even knowing to try.
+
+Migration 0111 adds `api_keys.created_by_account_id`, recorded on every mint as
+the ACTING account — the member on a team-scoped mint, the owner on a self-mint.
+`removeMemberWithInvites` then revokes, in the transaction that already deletes
+the membership and invites, every live key on that owner attributed to that
+member, and returns their ids.
+
+The atomicity is not incidental. A revocation performed after a committed
+removal could fail and leave the offboarded member holding owner authority while
+the API reported success — and the natural retry 404s on the now-deleted
+membership, so it would never self-heal. Same transaction, or the guarantee is
+not a guarantee.
+
+Two deliberate limits on the blast radius. `ON DELETE SET NULL` rather than
+`CASCADE`: if the minter's account is later deleted, the key SURVIVES and only
+loses its attribution, because turning an unrelated account closure into an
+outage on someone else's workspace would be a worse bug than the one being
+fixed. And a NULL `created_by_account_id` — every row written before this
+migration — is never revoked: unattributed is not the same as attributable, and
+revoking on a guess would break the owner's own integrations.
+
+This IS a customer-visible behaviour change, and the honest framing is that it
+can interrupt an owner's own automation: if the departing member minted the key
+that the owner's production integration uses, that integration stops at removal.
+That is the correct trade — a live credential in the hands of someone you have
+just offboarded is the worse failure — but it must be discoverable, so
+`api/team.md` now documents it, tells owners to mint a replacement under their
+own account before removing a member, and notes that pre-migration keys are not
+covered. The `team.member_removed` audit entry carries `revoked_api_key_ids`, so
+an owner can always establish afterwards exactly which credentials a removal
+invalidated.
+
+Existing coverage could not catch this: there was no column, no revocation, and
+therefore nothing to assert against — the absence was structural, not a missed
+case. The new service test proves that removal revokes both of the departing
+member's live keys while leaving the owner's own key, another member's key, and
+an unattributed key untouched, and that the audit entry names what it revoked.
+Removing the revocation is proved red.
+
+Because it is a schema change on the credential table, the SQL is proved against
+real Postgres and not only the in-memory twin: the predicate revokes exactly the
+departing member's live keys and nothing else, the membership really is gone in
+the same transaction, the supporting partial index exists, and deleting the
+minter's account leaves the key alive with a NULL attribution. A twin that
+filters the same fields in JavaScript proves the intent; only Postgres proves
+the statement and the foreign-key rule.
+
+Verification: canonical full suite 2748 files / 28,071 passing / 0 failing; migrations 0110 and 0111 applied against real
+Postgres with the new integration tests run against it; both halves of the
+server typecheck clean; targeted ESLint and Prettier. Three source-text parity
+pins were updated to the new shapes — the api-keys insert field list, the
+team-members repo imports plus the revocation predicate itself, and the service's
+removeMember body plus its audit payload — because the predicate is the security
+property and should be pinned, not merely the fact that some update happens. No
+OpenAPI, SDK, pricing, environment or secret surface changed.

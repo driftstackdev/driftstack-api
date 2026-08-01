@@ -171,12 +171,18 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     // stops the re-join-via-pending-invite path from the Fable auth re-audit
     // 2026-07-02). removeMemberWithInvites is the single atomic call — a
     // just-removed member can't resurrect their seat via an accept-in-flight.
+    // V-726 — the same call now also revokes, in its transaction, the keys this
+    // member minted on the owner, and returns their ids.
     expect(body).toMatch(
-      /async removeMember\(input: \{ membershipId: string; ownerAccountId: string \}\): Promise<boolean> \{[\s\S]+?const removedMemberAccountId = await this\.repo\.removeMemberWithInvites\(\s*\n?\s*input\.membershipId,\s*\n?\s*input\.ownerAccountId,\s*\n?\s*\);[\s\S]+?if \(removedMemberAccountId === null\) return false;[\s\S]+?await this\.invalidateAuthCache\(removedMemberAccountId\);/,
+      /async removeMember\(input: \{ membershipId: string; ownerAccountId: string \}\): Promise<boolean> \{[\s\S]+?const removed = await this\.repo\.removeMemberWithInvites\(\s*input\.membershipId,\s*input\.ownerAccountId,\s*\);[\s\S]+?if \(removed === null\) return false;\s*const removedMemberAccountId = removed\.memberAccountId;\s*await this\.invalidateAuthCache\(removedMemberAccountId\);/,
     );
     expect(body).toMatch(
-      /action: 'team\.member_removed',\s*\n?\s*targetResourceId: `mem_\$\{input\.membershipId\}`,/,
+      /action: 'team\.member_removed',\s*targetResourceId: `mem_\$\{input\.membershipId\}`,/,
     );
+    // V-726 — the audit entry names the revoked credentials. An offboarding that
+    // silently invalidates keys the owner's systems used must be answerable from
+    // the audit log alone.
+    expect(body).toMatch(/payload: \{ revoked_api_key_ids: removed\.revokedApiKeyIds \},/);
   });
 
   it('TeamMembersRepo: 8-method interface (upsertInvite / findInviteByTokenHash / findAccountEmail / upsertMembership / markInviteAccepted / listMembers / listPendingInvites / removeMember returning accountId|null / deleteInvitesForEmail)', () => {

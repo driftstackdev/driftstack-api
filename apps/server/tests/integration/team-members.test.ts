@@ -386,11 +386,10 @@ describe('TeamMembersService.listMembers + listPendingInvites + removeMember', (
 
     // Owner removes the member (atomically drops the membership + that
     // member's invites).
-    const removedMemberAccountId = await repo.removeMemberWithInvites(
-      accepted.membership.id,
-      OWNER,
-    );
-    expect(removedMemberAccountId).toBe(INVITEE_ACCOUNT);
+    const removed = await repo.removeMemberWithInvites(accepted.membership.id, OWNER);
+    expect(removed?.memberAccountId).toBe(INVITEE_ACCOUNT);
+    // V-726 — this member minted nothing, so nothing is revoked.
+    expect(removed?.revokedApiKeyIds).toEqual([]);
     expect(await service.listMembers(OWNER)).toHaveLength(0);
     expect(repo.getAllInvites()).toHaveLength(0);
 
