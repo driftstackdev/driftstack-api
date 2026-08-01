@@ -275,13 +275,15 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
           effectiveAccountId: ownerAccountId,
           effectiveTier: ownerTier,
           ...(profileBinding !== null ? { inheritedProfileArchetype: true } : {}),
+          // V-732 — the validated binding, so the single-live-session guard
+          // never keys on customer-writable metadata.
+          ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
         });
       } else {
-        created = await service.create(
-          ctx,
-          bodyWithProfile,
-          profileBinding !== null ? { inheritedProfileArchetype: true } : {},
-        );
+        created = await service.create(ctx, bodyWithProfile, {
+          ...(profileBinding !== null ? { inheritedProfileArchetype: true } : {}),
+          ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
+        });
       }
       // Fire-and-forget touch on the profile — if it fails the customer
       // still gets their session (the binding is recorded in metadata).
@@ -365,9 +367,14 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
           effectiveAccountId: ownerAccountId,
           effectiveTier: ownerTier,
           inheritedProfileArchetype: true,
+          // V-732 — launch is always profile-backed; pass the resolved id.
+          profileId,
         });
       } else {
-        created = await service.create(ctx, body, { inheritedProfileArchetype: true });
+        created = await service.create(ctx, body, {
+          inheritedProfileArchetype: true,
+          profileId,
+        });
       }
       if (profilesService) {
         void profilesService

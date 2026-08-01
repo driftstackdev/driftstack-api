@@ -204,7 +204,11 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     // references ownerAccountId + ownerTier (the owner lookup moved ahead of
     // the binding).
     expect(body).toMatch(
-      /created = await service\.create\(ctx, bodyWithProfile, \{\s*\n?\s*effectiveAccountId: ownerAccountId,\s*\n?\s*effectiveTier: ownerTier,\s*\n?\s*\.\.\.\(profileBinding !== null \? \{ inheritedProfileArchetype: true \} : \{\}\),\s*\n?\s*\}\);/,
+      // V-732 — the create opts now also carry the ROUTE's validated
+      // `profileBareId`. The single-live-session guard used to key on
+      // customer-writable `metadata.profile_id`; dropping this argument silently
+      // restores that, so it is pinned alongside the ownership framing.
+      /created = await service\.create\(ctx, bodyWithProfile, \{\s*effectiveAccountId: ownerAccountId,\s*effectiveTier: ownerTier,\s*\.\.\.\(profileBinding !== null \? \{ inheritedProfileArchetype: true \} : \{\}\),[\s\S]{0,220}?\.\.\.\(profileBareId !== undefined \? \{ profileId: profileBareId \} : \{\}\),\s*\}\);/,
     );
     expect(body).toMatch(/return reply\.code\(201\)\.send\(publicSession\(created\)\);/);
   });
@@ -213,13 +217,11 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toContain(
       '...(profileBinding !== null ? { inheritedProfileArchetype: true } : {}),',
     );
-    expect(body).toContain('profileBinding !== null ? { inheritedProfileArchetype: true } : {},');
+    expect(body).toContain('...(profileBareId !== undefined ? { profileId: profileBareId } : {}),');
     expect(body).toMatch(
-      /created = await service\.create\(ctx, body, \{\s*effectiveAccountId: ownerAccountId,\s*effectiveTier: ownerTier,\s*inheritedProfileArchetype: true,\s*\}\);/,
+      /created = await service\.create\(ctx, body, \{\s*effectiveAccountId: ownerAccountId,\s*effectiveTier: ownerTier,\s*inheritedProfileArchetype: true,[\s\S]{0,160}?profileId,\s*\}\);/,
     );
-    expect(body).toContain(
-      'created = await service.create(ctx, body, { inheritedProfileArchetype: true });',
-    );
+    expect(body).toContain('inheritedProfileArchetype: true,');
   });
 
   it('V-326d GET /v1/sessions framing pinned: honors X-Driftstack-Account — team member with valid membership sees owner sessions; without header behaves identically to pre-V-326d; response data + has_more (nextCursor !== null) + next_cursor', () => {

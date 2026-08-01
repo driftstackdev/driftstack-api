@@ -30855,3 +30855,48 @@ remaining failure being `openapi.test.ts` — a peer's in-flight schema change t
 the webhook target guard whose `packages/sdk-python/openapi.json` has not been
 regenerated, unrelated to this entry, which touches no schema. Prettier clean.
 No server, SDK, environment or secret surface changed.
+
+## V-732 — A control-plane guard was keyed on customer-writable metadata
+
+**Date:** 2026-08-01
+
+`POST /v1/sessions` enforces one live session per profile. The service took the
+profile it guards on by lifting `body.metadata['profile_id']` back out of the
+request — and `metadata` is customer-writable free-form data: the page says "an
+arbitrary JSON object for the customer's own bookkeeping", and
+`SessionMetadataSchema` is `z.record(z.unknown())`, accepting any key.
+
+So a customer who never touched Driftstack profiles, but happened to keep their
+own `profile_id` in metadata for their own bookkeeping, got a hard
+`409 profile-in-use` on every session create after the first. Their second
+session was refused on the strength of a field the docs invited them to use
+however they liked, and nothing in the error would have explained why.
+
+The blast radius is bounded and worth stating precisely: the guard matches only
+non-terminal sessions on the SAME account, so this is self-inflicted and not a
+cross-tenant hazard. It is a correctness bug, not an isolation one.
+
+The route already had the trustworthy value — `profileBareId`, which it parsed,
+validated and resolved against an owned profile row — and then discarded it,
+letting the service recover a weaker version from the request body. The service
+now takes it as an explicit `profileId` opt from all four create call sites.
+Metadata is still stamped with the binding for display; it just no longer
+decides anything. The profile-backed path is unchanged — this narrows an
+over-broad guard rather than weakening it.
+
+Existing coverage could not catch it: every profile-guard test creates sessions
+through the real profile binding, where the lifted value and the validated one
+agree. The case that breaks is the one nobody wrote, because it does not look
+like a profile test at all — a customer using a metadata key. The new tests
+create two sessions carrying a customer's own `profile_id` and assert both
+succeed, and assert the metadata still round-trips untouched. Restoring the
+metadata lift is proved red.
+
+Two route parity pins were updated to require the new opt, because dropping that
+argument is exactly how this would silently come back.
+
+Verification: canonical full suite 2763 files / 28,201 passing / 0 failing —
+fully green, including the peer openapi drift noted in V-730 and V-731, now
+resolved upstream. Both halves of the server typecheck, targeted ESLint and
+Prettier. No schema, OpenAPI, SDK, environment or secret surface changed, and no
+status code or response shape moved on the profile-backed path.

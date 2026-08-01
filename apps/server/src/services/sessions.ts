@@ -442,6 +442,21 @@ export class SessionsService {
       effectiveTier?: AccountTier;
       /** Internal: the route resolved this value from an existing owned profile row. */
       inheritedProfileArchetype?: boolean;
+      /**
+       * V-732 — the bare profile uuid the ROUTE validated and resolved to an
+       * owned profile row. The single-live-session-per-profile guard keys on
+       * this.
+       *
+       * It used to be lifted back out of `body.metadata.profile_id`, which is
+       * customer-writable: `metadata` is documented as "an arbitrary JSON object
+       * for the customer's own bookkeeping" and its schema is
+       * `z.record(z.unknown())`. So a customer who never touched Driftstack
+       * profiles but happened to keep their own `profile_id` key in metadata got
+       * a hard `409 profile-in-use` on every session create after the first.
+       * Round-tripping a control-plane decision through customer-controlled
+       * input is the bug; the route already has the trustworthy value.
+       */
+      profileId?: string;
     } = {},
   ): Promise<SessionRecord> {
     // V-326e1 — when effectiveAccountId is set (route layer resolved
@@ -479,12 +494,17 @@ export class SessionsService {
     // dispatch failure the reservation row is marked destroyed so it stops
     // counting against the cap (and a DB-tracked row means even a missed
     // teardown is reapable, unlike the old orphan).
-    // A3 finding #7 (W2979/W2980) — the route stamps the resolved profile binding
-    // into metadata.profile_id (a bare uuid). Lift it out so the atomic reserve
-    // can ALSO enforce the single-active-session-per-profile guard under the same
-    // per-profile advisory lock. Absent (no profile-backed create) → no guard.
-    const profileIdMeta = body.metadata?.['profile_id'];
-    const profileId = typeof profileIdMeta === 'string' ? profileIdMeta : undefined;
+    // A3 finding #7 (W2979/W2980) — the atomic reserve ALSO enforces the
+    // single-active-session-per-profile guard, under the same per-profile
+    // advisory lock. Absent (no profile-backed create) → no guard.
+    //
+    // V-732 — taken from the ROUTE's validated binding, not from
+    // `body.metadata.profile_id`. Metadata is customer-writable free-form
+    // bookkeeping, so the old lift let a customer's own unrelated `profile_id`
+    // key trigger a 409 profile-in-use on their second session. The route still
+    // stamps metadata.profile_id for display; it just no longer decides
+    // anything.
+    const profileId = opts.profileId;
     const reservationDriverId = `reserving:${randomUUID()}`;
     const reserved = await this.deps.repo.insertSessionIfUnderLimit(
       {

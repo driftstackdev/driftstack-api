@@ -43,6 +43,48 @@ async function createSession(
   return res.json<CreatedSession>();
 }
 
+// V-732 — the single-live-session-per-profile guard must key on the profile
+// binding the ROUTE validated, never on `metadata`.
+//
+// `metadata` is documented as "an arbitrary JSON object for the customer's own
+// bookkeeping" and its schema is `z.record(z.unknown())`. The service used to
+// lift `metadata.profile_id` back out and hand it to the atomic reserve, so a
+// customer who never touched Driftstack profiles but happened to keep their own
+// `profile_id` key got a hard `409 profile-in-use` on every session create
+// after the first — a control-plane decision made from customer-controlled
+// input.
+describe('POST /v1/sessions — the profile guard ignores customer metadata', () => {
+  it('allows a second session when the customer stores their own profile_id in metadata', async () => {
+    fx = await buildTestApp();
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { metadata: { profile_id: 'my-own-crm-id' } },
+    });
+    expect(first.statusCode).toBe(201);
+
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { metadata: { profile_id: 'my-own-crm-id' } },
+    });
+
+    // Never a 409: no Driftstack profile is involved in either create.
+    expect(second.statusCode).toBe(201);
+  });
+
+  it('still stamps the customer metadata through unchanged', async () => {
+    // The guard stops reading it; the field is still the customer's to use.
+    fx = await buildTestApp();
+    const created = await createSession(fx, { metadata: { profile_id: 'my-own-crm-id' } });
+    expect((created as unknown as { metadata: Record<string, unknown> }).metadata).toMatchObject({
+      profile_id: 'my-own-crm-id',
+    });
+  });
+});
+
 describe('POST /v1/sessions', () => {
   it('201 with full session shape', async () => {
     fx = await buildTestApp();
