@@ -136,11 +136,20 @@ describe('W585.C packages/sdk-python/src/driftstack/http.py content parity', () 
     expect(body).toMatch(/def _declares_oversized_body\(response: httpx\.Response\) -> bool:/);
     expect(body).toMatch(/response\.headers\.get\("content-length"\)/);
     expect(body).toMatch(/int\(declared\) > MAX_RESPONSE_BODY_BYTES/);
-    expect(body).toMatch(/def _read_bounded_response\(response: httpx\.Response\) -> bytes:/);
-    expect(body).toMatch(/for chunk in response\.iter_bytes\(chunk_size=_RESPONSE_CHUNK_BYTES\):/);
+    // V-723 — both readers now take an absolute wall-clock `deadline` and read
+    // through _iter_chunks/_aiter_chunks, which pick the granularity: fixed
+    // 64 KiB for ordinary responses, ARRIVAL-granular for a deadline-bounded
+    // event stream. That split is load-bearing — buffering 15s heartbeat
+    // comments into 64 KiB chunks would defer the deadline check for hours.
     expect(body).toMatch(
-      /async for chunk in response\.aiter_bytes\(chunk_size=_RESPONSE_CHUNK_BYTES\):/,
+      /def _read_bounded_response\(response: httpx\.Response, deadline: float \| None = None\) -> bytes:/,
     );
+    expect(body).toMatch(/for chunk in _iter_chunks\(response, deadline\):/);
+    expect(body).toMatch(/async for chunk in _aiter_chunks\(response, deadline\):/);
+    expect(
+      body.match(/return response\.a?iter_bytes\(chunk_size=_RESPONSE_CHUNK_BYTES\)/g),
+    ).toHaveLength(2);
+    expect(body.match(/return response\.a?iter_bytes\(\)/g)).toHaveLength(2);
     expect(body.match(/if len\(body\) \+ len\(chunk\) > MAX_RESPONSE_BODY_BYTES:/g)).toHaveLength(
       2,
     );

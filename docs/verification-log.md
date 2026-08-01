@@ -30365,3 +30365,64 @@ pre-existing unsorted-import error in the Python retry-gate test, which had the
 schema, OpenAPI, server, environment, customer or secret surface changed, and no
 documentation needed amending — the docs were already correct and the SDKs
 disagreed with them.
+
+## V-723 — The Python SDK's agent stream now has an absolute backstop
+
+**Date:** 2026-08-01
+
+One agent turn is a heartbeat-backed SSE stream: the server emits keep-alive
+comments every ~15s and a terminal `event: response` when the work finishes. The
+TypeScript SDK caps a turn at `AGENT_MESSAGE_STREAM_TIMEOUT_MS` (50 minutes) and
+the Go SDK at `AgentMessageStreamTimeout`. The Python SDK had no equivalent, and
+could block a caller **indefinitely**.
+
+Nothing else bounded it. The code comment in `request_event_stream` already
+stated the hazard precisely — "httpx's 30s default is a per-read idle deadline,
+not one absolute wall-clock deadline. The server's 15s comments keep it alive
+while this bounded reader waits for the terminal event" — and then relied on
+that reader anyway. The idle deadline is reset forever by exactly the traffic
+that signals nothing is finishing. The 8 MiB response ceiling is no help either:
+heartbeat comments are a few bytes each, so a stream would have to run for well
+over a day to reach it. A server that heartbeats but never terminates — a stuck
+turn, a wedged harness, a proxy holding the connection open — hangs the caller
+forever.
+
+`AGENT_MESSAGE_STREAM_TIMEOUT_S = 50 * 60.0` is now enforced by both the sync
+and async readers, threaded through as an absolute `time.monotonic` deadline and
+checked on every chunk. `request_event_stream` takes an optional
+`stream_timeout_s` override on both variants, mirroring the per-call override
+TypeScript and Go already expose.
+
+**The first cut of this fix did not work, and the test caught it.** The readers
+iterate with `chunk_size=_RESPONSE_CHUNK_BYTES` (64 KiB), which buffers until
+that much data accumulates before yielding — so the deadline was only consulted
+once per 64 KiB. Against real 15s heartbeats of a few bytes that is hours, not
+50 minutes: the check was present, reachable, and useless. The test that was
+supposed to trip in 50ms took 15 seconds, which is what exposed it. Streams now
+read at arrival granularity (`iter_bytes()` / `aiter_bytes()` with no
+`chunk_size`), so the deadline binds when it should; ordinary non-stream
+responses keep the fixed-size chunking they had.
+
+Coverage could not have caught the original gap, because the thing that was
+missing was a whole file's worth of behaviour — there was nothing to assert
+against. That is also why a per-SDK guard was structurally insufficient: each
+SDK's parity file pins its own constant, and a file with no constant has no
+pin. A new cross-SDK parity guard now asserts all three declare the same
+50-minute ceiling, that TypeScript applies it as the message-stream default, and
+that Python actually _enforces_ it — the deadline reaches the reader, the reader
+checks it, and the reads are arrival-granular. Its first assertion is that each
+SDK source exists, so the guard fails rather than vacuously passing if a file
+disappears.
+
+The behavioural proof drives real streams: an endless heartbeat generator with a
+50ms override must raise `TransportError`, an identical terminating stream must
+still parse, and the constant must equal 50 minutes. Removing the deadline check
+does not merely fail the suite — it **hangs it past 45 seconds**, which is the
+production defect reproduced exactly. The mutated file was restored and
+re-hashed byte-identical.
+
+Verification: canonical full suite 2745 files / 28,050 passing / 0 failing; Python 343 pytest passing with `ruff check`,
+`ruff format --check` and `mypy` clean; strict server test TypeScript, targeted
+ESLint and Prettier. The Python source-text parity guard was updated to pin the
+new reader signatures and the arrival-granularity split. No schema, OpenAPI, server, environment, customer or secret
+surface changed, and no behaviour changes for any stream that terminates.

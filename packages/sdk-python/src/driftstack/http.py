@@ -17,6 +17,8 @@ server's error envelope updates both paths in one place.
 from __future__ import annotations
 
 import json
+import time
+from collections.abc import AsyncIterator, Iterator
 from typing import Any, TypeVar
 
 import httpx
@@ -53,6 +55,21 @@ _ModelT = TypeVar("_ModelT", bound=BaseModel)
 # server's scheduling slack so the client never aborts a request the server
 # would still honour. Mirrors the TS/Go SDKs.
 _BODY_TIMEOUT_HEADROOM_S = 15.0
+
+# Absolute wall-clock backstop for one heartbeat-backed SSE turn, mirroring the
+# TypeScript SDK's AGENT_MESSAGE_STREAM_TIMEOUT_MS and the Go SDK's
+# AgentMessageStreamTimeout. Eight legal five-minute harness intents consume
+# ~42 minutes; this leaves headroom for decomposition + optional read-back while
+# preventing a permanently-heartbeating but never-terminal stream from hanging
+# forever.
+#
+# httpx's timeout is a per-READ idle deadline, not a wall-clock one, and the
+# server sends keep-alive comments every 15s — so the idle deadline is reset
+# forever by exactly the traffic that indicates nothing is finishing. The byte
+# ceiling does not help either: heartbeat comments are a few bytes, so 8 MiB of
+# them is effectively unreachable. Without this backstop a Python caller could
+# block indefinitely where the other two SDKs give up at 50 minutes.
+AGENT_MESSAGE_STREAM_TIMEOUT_S = 50 * 60.0
 
 
 def _body_operation_timeout_s(json_body: Any) -> float | None:
@@ -385,6 +402,7 @@ class HttpClient:
         params: dict[str, Any] | None = None,
         json_body: Any | None = None,
         extra_headers: dict[str, str] | None = None,
+        stream_timeout_s: float | None = None,
     ) -> Any:
         """Read one heartbeat-backed SSE response through the shared byte cap.
 
@@ -401,10 +419,14 @@ class HttpClient:
         if extra_headers:
             headers.update(extra_headers)
         headers["accept"] = "text/event-stream"
+        # httpx's 30s default is a per-read idle deadline, not one absolute
+        # wall-clock deadline. The server's 15s comments keep it alive while
+        # this bounded reader waits for the terminal event — which is why the
+        # reader also enforces an absolute backstop of its own.
+        deadline = time.monotonic() + (
+            AGENT_MESSAGE_STREAM_TIMEOUT_S if stream_timeout_s is None else stream_timeout_s
+        )
         try:
-            # httpx's 30s default is a per-read idle deadline, not one absolute
-            # wall-clock deadline. The server's 15s comments keep it alive while
-            # this bounded reader waits for the terminal event.
             with self._client.stream(
                 method,
                 url,
@@ -412,7 +434,7 @@ class HttpClient:
                 json=json_body,
                 headers=headers,
             ) as response:
-                content = _read_bounded_response(response)
+                content = _read_bounded_response(response, deadline)
                 return _decode_event_stream_or_raise(response, content)
         except httpx.TimeoutException as err:
             raise TransportError("request timed out", status=0) from err
@@ -516,6 +538,7 @@ class AsyncHttpClient:
         params: dict[str, Any] | None = None,
         json_body: Any | None = None,
         extra_headers: dict[str, str] | None = None,
+        stream_timeout_s: float | None = None,
     ) -> Any:
         """Async mirror of :meth:`HttpClient.request_event_stream`."""
         url = self._base_url + path
@@ -527,6 +550,9 @@ class AsyncHttpClient:
         if extra_headers:
             headers.update(extra_headers)
         headers["accept"] = "text/event-stream"
+        deadline = time.monotonic() + (
+            AGENT_MESSAGE_STREAM_TIMEOUT_S if stream_timeout_s is None else stream_timeout_s
+        )
         try:
             async with self._client.stream(
                 method,
@@ -535,7 +561,7 @@ class AsyncHttpClient:
                 json=json_body,
                 headers=headers,
             ) as response:
-                content = await _read_bounded_response_async(response)
+                content = await _read_bounded_response_async(response, deadline)
                 return _decode_event_stream_or_raise(response, content)
         except httpx.TimeoutException as err:
             raise TransportError("request timed out", status=0) from err
@@ -585,26 +611,63 @@ def _body_too_large(status: int) -> TransportError:
     )
 
 
-def _read_bounded_response(response: httpx.Response) -> bytes:
-    """Stream one sync response through the shared decoded-byte ceiling."""
+def _iter_chunks(response: httpx.Response, deadline: float | None) -> Iterator[bytes]:
+    """Arrival-granularity chunks for a deadline-bounded stream; fixed-size otherwise."""
+    if deadline is None:
+        return response.iter_bytes(chunk_size=_RESPONSE_CHUNK_BYTES)
+    return response.iter_bytes()
+
+
+def _aiter_chunks(response: httpx.Response, deadline: float | None) -> AsyncIterator[bytes]:
+    """Async mirror of :func:`_iter_chunks`."""
+    if deadline is None:
+        return response.aiter_bytes(chunk_size=_RESPONSE_CHUNK_BYTES)
+    return response.aiter_bytes()
+
+
+def _check_stream_deadline(deadline: float | None) -> None:
+    """Raise once an event stream has outlived its absolute wall-clock backstop."""
+    if deadline is not None and time.monotonic() > deadline:
+        raise TransportError(
+            "event stream exceeded its absolute timeout without a terminal event",
+            status=0,
+        )
+
+
+def _read_bounded_response(response: httpx.Response, deadline: float | None = None) -> bytes:
+    """Stream one sync response through the shared decoded-byte ceiling.
+
+    ``deadline`` is an absolute :func:`time.monotonic` instant. It is checked on
+    every chunk, which is exactly where it bites: a stream kept alive by
+    heartbeat comments never trips httpx's per-read idle timeout, so arriving
+    traffic is the only signal available to bound total wall-clock.
+    """
     if _declares_oversized_body(response):
         raise _body_too_large(response.status_code)
 
     body = bytearray()
-    for chunk in response.iter_bytes(chunk_size=_RESPONSE_CHUNK_BYTES):
+    # A deadline means this is an event stream, so read at ARRIVAL granularity:
+    # a fixed 64 KiB chunk_size buffers until that much data accumulates, and
+    # 15s heartbeat comments of a few bytes each would take hours to fill one —
+    # the deadline would then be checked far too late to bound anything.
+    for chunk in _iter_chunks(response, deadline):
+        _check_stream_deadline(deadline)
         if len(body) + len(chunk) > MAX_RESPONSE_BODY_BYTES:
             raise _body_too_large(response.status_code)
         body.extend(chunk)
     return bytes(body)
 
 
-async def _read_bounded_response_async(response: httpx.Response) -> bytes:
-    """Stream one async response through the shared decoded-byte ceiling."""
+async def _read_bounded_response_async(
+    response: httpx.Response, deadline: float | None = None
+) -> bytes:
+    """Async mirror of :func:`_read_bounded_response`, same deadline semantics."""
     if _declares_oversized_body(response):
         raise _body_too_large(response.status_code)
 
     body = bytearray()
-    async for chunk in response.aiter_bytes(chunk_size=_RESPONSE_CHUNK_BYTES):
+    async for chunk in _aiter_chunks(response, deadline):
+        _check_stream_deadline(deadline)
         if len(body) + len(chunk) > MAX_RESPONSE_BODY_BYTES:
             raise _body_too_large(response.status_code)
         body.extend(chunk)
