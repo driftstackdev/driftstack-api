@@ -954,6 +954,50 @@ The first version of this sweep was scoped to `apps/server/tests` and found
 **zero** — all eight offenders were in other apps. Narrowing the guard's root
 back to that is one of the four mutations proving it.
 
+### 30. The e2e harness would DROP SCHEMA on whatever `DATABASE_URL` pointed at
+
+The highest-severity finding of this run. `startTestServer` executed, before any
+test body ran:
+
+```
+DROP SCHEMA IF EXISTS "drizzle" CASCADE
+DROP SCHEMA IF EXISTS "public"  CASCADE
+CREATE SCHEMA "public"
+```
+
+and `resetState()` then TRUNCATEd `accounts`, `api_keys`, `profiles`, `sessions`
+and eleven more tables RESTART IDENTITY CASCADE, followed by `redis.flushdb()`.
+
+**Which database that hit came from `process.env.DATABASE_URL` with no check of
+any kind**, defaulting to the shared local dev database. Not a TRUNCATE — a DROP
+SCHEMA CASCADE, every table, before a single assertion.
+
+The accident is specific and easy: a shell exporting a remote `DATABASE_URL` from
+a profile, an `.env`, or a pasted command, and someone runs the e2e suite. The
+convention that protected it — each agent pointing at a disposable scratch
+database — was a convention, not an enforcement.
+
+Loopback-or-nothing costs nothing, which is why it is a refusal rather than a
+warning: CI sets localhost for both URLs, docker-compose publishes both on
+localhost, every scratch database is localhost, and managed Postgres/Redis are
+never on loopback. The rule cannot fire on a legitimate run and cannot fail to
+fire on the accident.
+
+Redis is checked independently because `flushdb` is destructive alone. An
+unparseable URL is refused rather than assumed harmless — a guard that cannot
+identify its target must not conclude the target is safe, or malformed input
+becomes the bypass. `DRIFTSTACK_E2E_ALLOW_NONLOCAL_RESET=1` covers a genuine
+compose-network topology; `NODE_ENV=production` is refused even with it set.
+
+Verified end to end rather than only in unit tests: a real spec against a local
+scratch database still passes 4/4, and a remote `DATABASE_URL` through the real
+harness fails fast inside `startTestServer`, naming the offending variable and
+host, before any connection opens.
+
+One of the six mutations is worth keeping: moving the call to _after_ the
+connection is opened reds the wiring case while all nine behavioural cases stay
+green either way. Behaviour cannot see ordering, so the pair is orthogonal.
+
 ## What A2 deliberately did not do
 
 - No suite where measurement showed the boundary already covered — webhooks and
