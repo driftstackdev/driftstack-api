@@ -30253,3 +30253,56 @@ assertion helper; no assertion was weakened. No schema, OpenAPI, SDK,
 environment, customer or secret surface changed — an MFA-enrolled account now
 receives the same `mfa_required` envelope the other three flows already return,
 and accounts with no second factor see byte-identical behaviour.
+
+## V-721 — The per-session upload lifetime cap now survives concurrent uploads
+
+**Date:** 2026-08-01
+
+`POST /v1/agent-sessions/:id/files` reads the session's lifetime upload totals
+at admission, checks them against the 2 GiB / 500-file ceiling, and — before
+this change — wrote the new totals back only _after_
+`await conn.requestUpload(...)`. That made the check-and-increment a
+read-modify-write straddling the relay. Every upload admitted while another was
+in flight read the same pre-relay total and wrote back its own single
+increment, so a concurrent batch registered as **one** upload.
+
+The route allows `UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT` (4) uploads in flight per
+account, so a caller that simply kept its pipeline full spent the per-session
+ceiling at roughly a quarter rate: about 8 GiB and 2,000 files against a cap
+written as 2 GiB and 500. No unusual client is needed — four parallel uploads is
+ordinary behaviour, and nothing in the response told the caller its usage was
+being under-counted.
+
+The two ceilings this counter defends are not interchangeable. The per-account
+concurrent caps bound in-flight volume at any instant but release the moment
+each upload settles, so they never bound a session's total. The lifetime
+counter is the only thing that does, which is exactly why it was added
+(2026-06-30) — and it was the half that did not hold.
+
+The fix reserves the lifetime totals in the same synchronous block as the
+existing concurrent-cap reservation, and rolls them back in the `finally` on
+every outcome except a successful relay. Reserving rather than committing is
+what closes the interleave: admission decisions are now made against totals that
+already include every upload still in flight. The stated semantics are
+unchanged — an error, timeout, unavailable node or thrown 400 still consumes
+nothing, and the existing "a FAILED relay does not consume the lifetime total"
+test continues to pass untouched. The map-eviction guard moved to the
+reservation point because that is now where the entry is inserted; a session
+whose counter is evicted mid-flight simply has nothing to give back, which only
+ever widens its remaining allowance, the same soft-cap posture the surrounding
+maps already document.
+
+Existing coverage could not catch this, and the reason is visible in the tests
+themselves: all five lifetime tests drive uploads **sequentially**. With one
+upload in flight at a time a read-modify-write cannot interleave with itself, so
+the cap looked enforced under every existing test while being defeated by the
+ordinary concurrent case. The new tests hold a whole batch inside the relay on a
+gate and assert that exactly the cap's worth is admitted, that the shed request
+never reached the node, and — separately — that a fully failing concurrent batch
+gives its entire reservation back. Both concurrent tests are proved red against
+the original post-relay commit: three uploads are admitted where two is the cap.
+The mutated file was restored and re-hashed byte-identical.
+
+Verification: canonical full suite 2744 files / 28,039 passing / 0 failing, both halves of the server typecheck clean, targeted
+ESLint and Prettier. No schema, OpenAPI, SDK, environment, customer or secret
+surface changed, and no cap value moved — only when the counter is written.

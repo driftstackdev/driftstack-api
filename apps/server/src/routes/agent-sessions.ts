@@ -3020,6 +3020,34 @@ export function registerAgentSessionsRoutes(
       }
       accountUploadInFlightBytes.set(acct, inFlightBytes + reserveBytes);
       accountUploadInFlightCount.set(acct, inFlightCount + 1);
+      // V-721 — RESERVE the lifetime total here, in the same synchronous block
+      // as the concurrent-cap reservation above, and roll it back below unless
+      // the relay succeeds.
+      //
+      // Committing it after `await conn.requestUpload(...)` instead made the
+      // check-and-increment a read-modify-write straddling the relay: every
+      // upload admitted while another was in flight read the SAME pre-relay
+      // total and wrote back its own single increment, so a concurrent batch
+      // registered as ONE upload. With UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT (4)
+      // allowed in flight per account, a caller keeping the pipeline full spent
+      // the 2 GiB / 500-file per-session ceiling at roughly a quarter rate —
+      // defeating the very cap this counter exists to enforce, and the one that
+      // backstops the concurrent caps for a caller who paces itself.
+      //
+      // Reserving does NOT change what a failed upload costs: the rollback in
+      // the finally restores the total on every non-ok outcome, so an error,
+      // timeout, unavailable node or thrown 400 still consumes nothing.
+      let lifetimeCommitted = false;
+      sessionUploadLifetimeBytes.set(rec.id, lifetimeBytes + reserveBytes);
+      sessionUploadLifetimeCount.set(rec.id, lifetimeCount + 1);
+      // Runs at RESERVATION now, because that is where the entry is inserted.
+      if (sessionUploadLifetimeBytes.size > SESSION_UPLOAD_LIFETIME_MAX_TRACKED_SESSIONS) {
+        const oldest = sessionUploadLifetimeBytes.keys().next().value;
+        if (oldest !== undefined) {
+          sessionUploadLifetimeBytes.delete(oldest);
+          sessionUploadLifetimeCount.delete(oldest);
+        }
+      }
       try {
         // Decode to validate base64 + enforce the 64 MiB cap on the DECODED size
         // (a client error → 400, NOT a discriminated relay status). Buffer.from is
@@ -3071,17 +3099,10 @@ export function registerAgentSessionsRoutes(
           // Security-audit hardening (2026-06-30, MEDIUM): only a SUCCESSFUL
           // relay counts against the session's lifetime total — an error/
           // timeout wrote nothing to the jail, so it must not consume the cap.
-          // NEVER released (unlike the concurrent-cap maps in the finally
-          // below): this is a true running total for the session's lifetime.
-          sessionUploadLifetimeBytes.set(rec.id, lifetimeBytes + reserveBytes);
-          sessionUploadLifetimeCount.set(rec.id, lifetimeCount + 1);
-          if (sessionUploadLifetimeBytes.size > SESSION_UPLOAD_LIFETIME_MAX_TRACKED_SESSIONS) {
-            const oldest = sessionUploadLifetimeBytes.keys().next().value;
-            if (oldest !== undefined) {
-              sessionUploadLifetimeBytes.delete(oldest);
-              sessionUploadLifetimeCount.delete(oldest);
-            }
-          }
+          // Keeping the reservation (rather than releasing it like the
+          // concurrent-cap maps in the finally below) is what makes this a true
+          // running total for the session's lifetime.
+          lifetimeCommitted = true;
           return { handle: outcome.handle, status: 'ok' as const };
         }
         if (outcome.status === 'error') {
@@ -3093,6 +3114,21 @@ export function registerAgentSessionsRoutes(
         }
         return { handle: null, status: 'timeout' as const };
       } finally {
+        // V-721 — release the lifetime reservation on every outcome EXCEPT a
+        // successful relay, preserving the rule that only a real jail write
+        // consumes the session's lifetime allowance. A missing entry means the
+        // tracking map evicted this session mid-flight; an evicted counter is a
+        // cleared counter, so there is nothing to give back.
+        if (!lifetimeCommitted) {
+          const curLifetimeBytes = sessionUploadLifetimeBytes.get(rec.id);
+          if (curLifetimeBytes !== undefined) {
+            sessionUploadLifetimeBytes.set(rec.id, Math.max(0, curLifetimeBytes - reserveBytes));
+          }
+          const curLifetimeCount = sessionUploadLifetimeCount.get(rec.id);
+          if (curLifetimeCount !== undefined) {
+            sessionUploadLifetimeCount.set(rec.id, Math.max(0, curLifetimeCount - 1));
+          }
+        }
         const curBytes = accountUploadInFlightBytes.get(acct) ?? reserveBytes;
         const nextBytes = curBytes - reserveBytes;
         if (nextBytes <= 0) accountUploadInFlightBytes.delete(acct);

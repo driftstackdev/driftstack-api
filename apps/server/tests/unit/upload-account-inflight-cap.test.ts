@@ -685,3 +685,153 @@ describe('POST /v1/agent-sessions/:id/files — per-SESSION LIFETIME cap (indepe
     }
   });
 });
+
+// V-721 — every lifetime test above is SEQUENTIAL, which is exactly why the cap
+// looked enforced: with one upload in flight at a time, a read-modify-write
+// cannot interleave with itself.
+//
+// The counters were read at admission but written back only AFTER
+// `await conn.requestUpload(...)`. Every upload admitted while another was in
+// flight therefore read the SAME pre-relay total and wrote back its own single
+// increment, so a concurrent batch registered as ONE upload. Production allows
+// UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT (4) in flight per account, so a caller
+// keeping the pipeline full spent the 2 GiB / 500-file per-session ceiling at
+// roughly a quarter rate — defeating the cap that exists precisely to backstop
+// the concurrent caps against a caller who paces itself.
+describe('POST /v1/agent-sessions/:id/files — the LIFETIME cap holds under CONCURRENT uploads', () => {
+  const CHUNK_BYTES = 4 * 1024;
+  const CHUNK_B64 = Buffer.alloc(CHUNK_BYTES, 0x42).toString('base64');
+  const HUGE = 1024 * 1024 * 1024;
+  const HUGE_COUNT = 10_000;
+
+  let fx: DirectFixture;
+  afterEach(async () => {
+    if (fx) await fx.app.close();
+  });
+
+  /** A registry whose relays all block on `gate`, so a whole batch is genuinely
+   *  in flight at once — the only condition under which the old
+   *  read-modify-write could interleave. `entered` records which uploads
+   *  actually reached the node, so the test can prove a shed request was
+   *  refused BEFORE the relay rather than merely reported as an error. */
+  function makeGatedUploadRegistry(
+    nodeId: string,
+    gate: Promise<void>,
+    entered: string[],
+  ): FleetControlRegistry {
+    const conn = {
+      requestUpload: async (
+        _requestId: string,
+        _sessionId: string,
+        name: string,
+        mime: string,
+        dataB64: string,
+      ) => {
+        entered.push(name);
+        await gate;
+        return {
+          status: 'ok' as const,
+          handle: { id: 'up_test', name, mime, size: Buffer.from(dataB64, 'base64').length },
+        };
+      },
+    };
+    return {
+      get: (id: string) => (id === nodeId ? conn : undefined),
+    } as unknown as FleetControlRegistry;
+  }
+
+  it('admits at most the COUNT cap when the whole batch is in flight at once', async () => {
+    const nodeId = 'node-lifetime-race-count';
+    const entered: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    fx = await buildDirectApp({
+      fleetControlRegistry: makeGatedUploadRegistry(nodeId, gate, entered),
+      sessionUploadMaxLifetimeCount: 2,
+      sessionUploadMaxLifetimeBytes: HUGE,
+      uploadMaxAccountInFlightBytes: HUGE,
+      uploadMaxAccountInFlightCount: HUGE_COUNT,
+    });
+    const rec = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
+    await fx.sessions.setNodeId(rec.id, nodeId);
+
+    // Fire three WITHOUT awaiting, so all are admitted before any relay settles.
+    const inFlight = [0, 1, 2].map((i) => postDirectUpload(fx, rec.id, `race-${i}.bin`, CHUNK_B64));
+    await new Promise((r) => setTimeout(r, 50));
+    release();
+    const bodies = (await Promise.all(inFlight)).map((r) => r.json<FilesBody>());
+
+    expect(bodies.filter((b) => b.status === 'ok')).toHaveLength(2);
+    const shed = bodies.filter((b) => b.status === 'error');
+    expect(shed).toHaveLength(1);
+    expect(shed[0]!.reason).toMatch(/too many files uploaded in this session/);
+    // The shed upload must never have reached the node.
+    expect(entered).toHaveLength(2);
+  });
+
+  it('admits at most the BYTE cap when the whole batch is in flight at once', async () => {
+    const nodeId = 'node-lifetime-race-bytes';
+    const entered: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    fx = await buildDirectApp({
+      fleetControlRegistry: makeGatedUploadRegistry(nodeId, gate, entered),
+      // Room for exactly two of these chunks. The reservation is taken on the
+      // ENCODED length, same as the sequential tests above.
+      sessionUploadMaxLifetimeBytes: CHUNK_B64.length * 2,
+      sessionUploadMaxLifetimeCount: HUGE_COUNT,
+      uploadMaxAccountInFlightBytes: HUGE,
+      uploadMaxAccountInFlightCount: HUGE_COUNT,
+    });
+    const rec = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
+    await fx.sessions.setNodeId(rec.id, nodeId);
+
+    const inFlight = [0, 1, 2].map((i) =>
+      postDirectUpload(fx, rec.id, `race-b-${i}.bin`, CHUNK_B64),
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    release();
+    const bodies = (await Promise.all(inFlight)).map((r) => r.json<FilesBody>());
+
+    expect(bodies.filter((b) => b.status === 'ok')).toHaveLength(2);
+    const shed = bodies.filter((b) => b.status === 'error');
+    expect(shed).toHaveLength(1);
+    expect(shed[0]!.reason).toMatch(/at most 2 GiB of total uploads per session/);
+    expect(entered).toHaveLength(2);
+  });
+
+  it('a concurrent batch that all FAIL gives the whole reservation back', async () => {
+    // The reservation must not become a silent second cap: uploads that never
+    // land in the jail have to release, exactly as they did when the counter
+    // was only incremented on success.
+    const nodeId = 'node-lifetime-race-rollback';
+    const relayed: string[] = [];
+    const opts: { relayed: string[]; fail: boolean } = { relayed, fail: true };
+    fx = await buildDirectApp({
+      fleetControlRegistry: makeUploadRegistry(nodeId, opts),
+      sessionUploadMaxLifetimeCount: 3,
+      sessionUploadMaxLifetimeBytes: HUGE,
+      uploadMaxAccountInFlightBytes: HUGE,
+      uploadMaxAccountInFlightCount: HUGE_COUNT,
+    });
+    const rec = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
+    await fx.sessions.setNodeId(rec.id, nodeId);
+
+    // Three concurrent FAILING uploads — a full cap's worth.
+    const failed = await Promise.all(
+      [0, 1, 2].map((i) => postDirectUpload(fx, rec.id, `bad-${i}.bin`, CHUNK_B64)),
+    );
+    for (const res of failed) expect(res.json<FilesBody>().status).toBe('error');
+
+    // The session's allowance is untouched: a full cap of REAL uploads still fits.
+    opts.fail = false;
+    for (let i = 0; i < 3; i += 1) {
+      const res = await postDirectUpload(fx, rec.id, `good-${i}.bin`, CHUNK_B64);
+      expect(res.json<FilesBody>().status).toBe('ok');
+    }
+  });
+});
