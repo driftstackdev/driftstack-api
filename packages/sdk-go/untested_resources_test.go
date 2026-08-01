@@ -278,3 +278,109 @@ func TestAccount_RevokeAllOtherWebSessionsSendsKeepCurrent(t *testing.T) {
 		t.Errorf("query = %q, want keep=current", rawQuery)
 	}
 }
+
+// ───────────────────────── BYOK Anthropic key ────────────────────────
+//
+// The customer's own Anthropic key. Fourteen of AccountResource's fifteen
+// methods had no test reference at all; these are the ones that carry a
+// credential, so they are the ones worth driving.
+
+// The key must travel in the BODY. A credential in a path or query string ends
+// up in access logs, proxy logs and browser history — the request succeeding is
+// not enough, it has to succeed the right way.
+func TestAccount_SetByokAnthropicKeyPutsTheKeyInTheBodyNotTheURL(t *testing.T) {
+	t.Parallel()
+	const secret = "sk-ant-CUSTOMERSECRETVALUE"
+	var url, rawQuery, body string
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		url, rawQuery, body = r.URL.Path, r.URL.RawQuery, decodeBody(t, r)
+		if r.Method != "PUT" {
+			t.Errorf("method = %q, want PUT", r.Method)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"set_at":"2026-08-01T00:00:00Z"}`))
+	})
+
+	if _, err := client.Account.SetByokAnthropicKey(context.Background(), secret); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, `"api_key":"`+secret+`"`) {
+		t.Errorf("key not sent in the body under api_key; body = %s", body)
+	}
+	if strings.Contains(url, secret) || strings.Contains(rawQuery, secret) {
+		t.Errorf("credential leaked into the URL: path=%q query=%q", url, rawQuery)
+	}
+}
+
+// Reading BYOK state returns METADATA only. The server never echoes the key
+// back, and the Go type has no field that could hold one — so a future response
+// carrying the key would have nowhere to land here. This pins that shape.
+func TestAccount_GetByokAnthropicKeyReturnsMetadataOnly(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			t.Errorf("method = %q, want GET", r.Method)
+		}
+		w.Header().Set("content-type", "application/json")
+		// Deliberately includes an api_key the server would never send: if the
+		// struct ever grew a field for it, this decode would surface it.
+		_, _ = w.Write([]byte(
+			`{"has_key":true,"set_at":"2026-08-01T00:00:00Z","last_used_at":null,` +
+				`"api_key":"sk-ant-SHOULD-NEVER-BE-READ"}`))
+	})
+
+	got, err := client.Account.GetByokAnthropicKey(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.HasKey {
+		t.Errorf("has_key = false, want true")
+	}
+	// The metadata struct must not have absorbed the key. Re-encoding it is the
+	// check: whatever the SDK hands a caller must not contain the credential.
+	round, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(round), "sk-ant-") {
+		t.Errorf("BYOK metadata carried the key back to the caller: %s", round)
+	}
+}
+
+func TestAccount_ClearByokAnthropicKeyUsesDelete(t *testing.T) {
+	t.Parallel()
+	var method, path string
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	if err := client.Account.ClearByokAnthropicKey(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if method != "DELETE" || path != "/v1/account/me/byok-anthropic-key" {
+		t.Errorf("clear: got %s %s, want DELETE /v1/account/me/byok-anthropic-key", method, path)
+	}
+}
+
+// Test is a POST to its own sub-path. It must not be confused with the PUT that
+// sets the key: one validates, the other overwrites the customer's credential.
+func TestAccount_TestByokAnthropicKeyPostsToItsOwnSubPath(t *testing.T) {
+	t.Parallel()
+	var method, path string
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+
+	if _, err := client.Account.TestByokAnthropicKey(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if method != "POST" {
+		t.Errorf("method = %q, want POST", method)
+	}
+	if path != "/v1/account/me/byok-anthropic-key/test" {
+		t.Errorf("path = %q, want the /test sub-path", path)
+	}
+}
