@@ -25,6 +25,7 @@
 
 import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import { signWebhookPayload } from '../lib/webhook-signing.js';
+import { parseUuidCursor } from '../lib/keyset-cursor.js';
 import type {
   DlqManager,
   EnqueueDeliveryOpts,
@@ -184,11 +185,19 @@ export class DurableWebhookDeliveryService implements WebhookDeliveryService {
       // landing inside such a batch lost rows. Mirrors the in-memory
       // reference impl (packages/webhook-delivery in-memory.ts), which
       // slices after the cursor on a (createdAt, id)-sorted list.
-      const [cursorRow] = await this.database.db
-        .select({ createdAt: webhookDeliveries.createdAt })
-        .from(webhookDeliveries)
-        .where(eq(webhookDeliveries.id, opts.cursor))
-        .limit(1);
+      // `id` is a uuid column, so a malformed cursor — reachable only from
+      // a hand-crafted request, never from a next_cursor we emit — would
+      // make Postgres raise `invalid input syntax for type uuid` and surface
+      // as a 500. Skipping the anchor lookup falls through to the same
+      // first-page path as a cursor row that is simply not found.
+      const [cursorRow] =
+        parseUuidCursor(opts.cursor) === undefined
+          ? []
+          : await this.database.db
+              .select({ createdAt: webhookDeliveries.createdAt })
+              .from(webhookDeliveries)
+              .where(eq(webhookDeliveries.id, opts.cursor))
+              .limit(1);
       if (cursorRow) {
         conditions.push(
           or(
@@ -286,11 +295,19 @@ export class DurableDlqManager implements DlqManager {
       // DurableWebhookDeliveryService.list. An updatedAt-only filter
       // drops DLQ rows sharing the cursor's updatedAt (common when a
       // batch enters the DLQ together) at the page boundary.
-      const [cursorRow] = await this.database.db
-        .select({ updatedAt: webhookDeliveries.updatedAt })
-        .from(webhookDeliveries)
-        .where(eq(webhookDeliveries.id, opts.cursor))
-        .limit(1);
+      // `id` is a uuid column, so a malformed cursor — reachable only from
+      // a hand-crafted request, never from a next_cursor we emit — would
+      // make Postgres raise `invalid input syntax for type uuid` and surface
+      // as a 500. Skipping the anchor lookup falls through to the same
+      // first-page path as a cursor row that is simply not found.
+      const [cursorRow] =
+        parseUuidCursor(opts.cursor) === undefined
+          ? []
+          : await this.database.db
+              .select({ updatedAt: webhookDeliveries.updatedAt })
+              .from(webhookDeliveries)
+              .where(eq(webhookDeliveries.id, opts.cursor))
+              .limit(1);
       if (cursorRow) {
         conditions.push(
           or(

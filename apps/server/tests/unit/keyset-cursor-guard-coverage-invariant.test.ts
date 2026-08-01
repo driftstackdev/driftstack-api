@@ -21,7 +21,17 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DB_DIR = resolve(HERE, '..', '..', 'src', 'db');
+const SRC = resolve(HERE, '..', '..', 'src');
+
+// Both `src/db` and `src/services`. The scan was `src/db` filtered to
+// `-repo.ts`, which is TWO roots, and durable-webhook-delivery.ts sits outside
+// both: it is a service, not a repo, and it resolved a keyset cursor with
+// `eq(webhookDeliveries.id, opts.cursor)` against a uuid column with no guard.
+// Unwired at the time it was found — bootstrap drives webhook-worker.ts — so
+// nothing was reachable, but the defect travels with whoever wires it. The
+// property is "a uuid column must not receive an unvalidated cursor", which is
+// about the QUERY, not about where the file lives or what it is called.
+const SCAN_DIRS = ['db', 'services'].map((d) => resolve(SRC, d));
 
 // Raw-id keyset cursor lookup: `eq(<table>.id, <var>.cursor)`.
 const CURSOR_ID_LOOKUP = /eq\(\w+\.id,\s*\w+\.cursor\)/;
@@ -33,10 +43,13 @@ const CURSOR_ID_LOOKUP = /eq\(\w+\.id,\s*\w+\.cursor\)/;
 const TEXT_PK_EXEMPT = new Set(['recipes-repo.ts', 'agent-sessions-repo.ts']);
 
 describe('keyset-cursor UUID-guard coverage invariant', () => {
-  const repos = readdirSync(DB_DIR).filter((f) => f.endsWith('-repo.ts'));
-  const withCursorLookup = repos.filter((f) =>
-    CURSOR_ID_LOOKUP.test(readFileSync(resolve(DB_DIR, f), 'utf8')),
-  );
+  const withCursorLookup = SCAN_DIRS.flatMap((dir) =>
+    readdirSync(dir)
+      .filter((f) => f.endsWith('.ts'))
+      .filter((f) => CURSOR_ID_LOOKUP.test(readFileSync(resolve(dir, f), 'utf8')))
+      .map((f) => resolve(dir, f)),
+  ).sort();
+  const basename = (f: string): string => f.slice(f.lastIndexOf('/') + 1);
 
   it('the scan finds the raw-id cursor repos (regex did not drift to match nothing)', () => {
     expect(withCursorLookup.length).toBeGreaterThanOrEqual(8);
@@ -45,23 +58,23 @@ describe('keyset-cursor UUID-guard coverage invariant', () => {
   it('every TEXT_PK_EXEMPT entry still exists + still does a raw-id cursor lookup (no rot)', () => {
     for (const f of TEXT_PK_EXEMPT) {
       expect(
-        withCursorLookup,
-        `${f} is allow-listed but no longer scans as a cursor-by-id repo`,
+        withCursorLookup.map(basename),
+        `${f} is allow-listed but no longer scans as a cursor-by-id source`,
       ).toContain(f);
     }
   });
 
   for (const file of withCursorLookup) {
-    const body = readFileSync(resolve(DB_DIR, file), 'utf8');
-    if (TEXT_PK_EXEMPT.has(file)) {
-      it(`${file}: text-PK — exempt, must NOT apply the UUID guard`, () => {
+    const body = readFileSync(file, 'utf8');
+    if (TEXT_PK_EXEMPT.has(basename(file))) {
+      it(`${basename(file)}: text-PK — exempt, must NOT apply the UUID guard`, () => {
         expect(
           body.includes('parseUuidCursor'),
           `${file} is TEXT_PK_EXEMPT (text id PK) but now uses parseUuidCursor — if its PK became a uuid, drop it from the allowlist; otherwise remove the guard (it rejects the repo's own prefixed cursor).`,
         ).toBe(false);
       });
     } else {
-      it(`${file}: uuid-PK keyset cursor is parseUuidCursor-guarded`, () => {
+      it(`${basename(file)}: uuid-PK keyset cursor is parseUuidCursor-guarded`, () => {
         expect(
           body.includes('parseUuidCursor'),
           `${file} resolves a keyset cursor via eq(id, cursor) against a uuid column but does NOT guard it with parseUuidCursor — a malformed cursor would 500 (PG "invalid input syntax for type uuid"). Guard it like the other list repos (lib/keyset-cursor.ts), or allow-list it if its id PK is text.`,
