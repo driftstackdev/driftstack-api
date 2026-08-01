@@ -146,6 +146,32 @@ export type OpenVpnProxyConfig = z.infer<typeof OpenVpnProxyConfigSchema>;
 // below — `[0-9]{1,5}` alone also matches syntactically-invalid ports like
 // `0` or `99999`.
 const WG_ENDPOINT_RE = /^([A-Za-z0-9.\-:_]+):([0-9]{1,5})$/;
+/**
+ * WireGuard value shapes, enforced because these three fields are the only ones
+ * in the config that carried no format check — `private_key`, `peer_public_key`
+ * and `endpoint` are each regex-validated, and these were length-capped only.
+ *
+ * Every one of them is written as the right-hand side of a `wg0.conf` line
+ * (`AllowedIPs = …`, `Address = …`, `DNS = …`). A value containing a NEWLINE
+ * therefore adds a line to that file, and WireGuard's `PostUp` / `PreUp` /
+ * `PostDown` / `PreDown` run shell commands. The config is assembled outside
+ * this repository, so what happens to a newline downstream is not something
+ * this package can see — which is the reason to make one impossible at ingress
+ * rather than to assume the consumer is careful.
+ *
+ * `[ \t]` rather than `\s` is deliberate and was the bug in the first draft:
+ * `\s` matches `\n`, so `^\s*…\s*$` accepts `'0.0.0.0/0\n'` and any newline
+ * sitting between list entries. Verified against both forms before shipping.
+ *
+ * The address halves stay permissive (`[0-9A-Fa-f:.]+`) so unusual but valid
+ * IPv6 spellings are not rejected; the SHAPE is what carries the safety, and
+ * being stricter about address validity would risk refusing legitimate configs
+ * without adding to it.
+ */
+const WG_CIDR_LIST_RE =
+  /^[ \t]*[0-9A-Fa-f:.]+\/\d{1,3}(?:[ \t]*,[ \t]*[0-9A-Fa-f:.]+\/\d{1,3})*[ \t]*$/;
+const WG_IP_LIST_RE = /^[ \t]*[0-9A-Fa-f:.]+(?:[ \t]*,[ \t]*[0-9A-Fa-f:.]+)*[ \t]*$/;
+
 export const WireGuardProxyConfigSchema = z.object({
   private_key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/, {
     message: 'private_key must be a 44-char base64 curve25519 key',
@@ -167,12 +193,30 @@ export const WireGuardProxyConfigSchema = z.object({
       },
       { message: 'endpoint must be host:port (port 1-65535)' },
     ),
-  allowed_ips: z.string().max(1024).default('0.0.0.0/0'),
+  allowed_ips: z
+    .string()
+    .max(1024)
+    .regex(WG_CIDR_LIST_RE, {
+      message: 'allowed_ips must be a comma-separated list of CIDRs (no newlines)',
+    })
+    .default('0.0.0.0/0'),
   // [Interface] Address (e.g. 10.7.0.2/32) — the harness userspace WireGuard
   // ifconfig needs it to bring up the tunnel (A3 W2109). Optional in the schema
   // for back-compat; the GUI's wg0.conf parser requires it before create.
-  address: z.string().max(128).optional(),
-  dns: z.string().max(256).optional(),
+  address: z
+    .string()
+    .max(128)
+    .regex(WG_CIDR_LIST_RE, {
+      message: 'address must be a comma-separated list of CIDRs (no newlines)',
+    })
+    .optional(),
+  dns: z
+    .string()
+    .max(256)
+    .regex(WG_IP_LIST_RE, {
+      message: 'dns must be a comma-separated list of IP addresses (no newlines)',
+    })
+    .optional(),
 });
 export type WireGuardProxyConfig = z.infer<typeof WireGuardProxyConfigSchema>;
 
