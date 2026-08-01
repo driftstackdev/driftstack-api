@@ -838,6 +838,77 @@ with a document; it would remove the ground the disclosure stands on. The guard
 also pins the claim side, because checking only code keeps passing if the
 document is rewritten to promise more than the code delivers.
 
+### 25. Two instruments were built, found invalid, and discarded before publishing
+
+A1's diagnostic — _a source-text pin asserts an expression verbatim and exercises
+no behaviour_ — was run over this suite. The first instrument matched test names
+against behaviour verbs and returned **2121 cases across 1431 files**. Nearly all
+were `*-content-parity.test.ts`, which are self-declared text pins whose names
+say so. A sharpened version excluding them returned **143**, nearly all
+`*-cross-source-invariant`, a deliberate repo pattern for pinning that two
+sources agree on a constant.
+
+Both measured naming, not the defect. Publishing either would have cost whoever
+chased it far more than checking cost. Recorded because the instinct to ship the
+first list is strong and the list looks like work.
+
+The valid instrument asks a behavioural question: which exported symbols does no
+test ever CALL? 394 exports, 87 never imported by a test, 11 security-relevant
+and mentioned only as text, of which 5 are route registrars reached through
+`buildApp`. Six real candidates, each then measured by mutation rather than
+judged by reading.
+
+**Four were already covered** and were verified out, not asserted out:
+`extractBearerToken` (127 reds), `isIndependentDeviceKeyDeniedRoute` (25),
+`consumeEffectiveOwnerRateLimit` (6), and `verifyTotpCodeWithCounter`, which is
+exercised through the `verifyTotpCode` wrapper that has real assertions.
+
+### 26. `validateGuiControlKey` — four fail-closed branches nothing could see
+
+Reachable only transitively, through eight integration files that send the header
+at a route. Whether that covered its branches was measured against the 584-test
+control-key integration set:
+
+| mutation                                                      | result       |
+| ------------------------------------------------------------- | ------------ |
+| accept any presented key (drop the constant-time compare)     | 3 RED        |
+| drop the expiry condition entirely                            | 2 RED        |
+| undecryptable ciphertext rethrows as 500 instead of 401       | 1 RED        |
+| **no encryption key configured falls through instead of 401** | **584 PASS** |
+| **expiry comparison becomes exclusive (boundary off-by-one)** | **584 PASS** |
+| **unknown session gets its own message**                      | **584 PASS** |
+| **repeated header takes the last value**                      | **584 PASS** |
+
+The first uncovered branch is the deployment-level switch: with
+`MFA_ENCRYPTION_KEY` absent, a presented key must be a hard 401 rather than a
+silent fallthrough to account auth. The third is an enumeration oracle —
+distinguishing "no such session" from "wrong key" confirms a session id exists
+for another account. The fourth would let a proxy-injected trailing header
+override the real credential.
+
+Nothing was wrong in the source. What was missing was any test that would notice
+if a branch stopped. Eleven cases now drive the real function, including a
+positive control, because a suite of negative assertions passes against a
+function that throws unconditionally.
+
+### 27. The profile-session advisory lock key had no behavioural coverage
+
+Both customer session-create surfaces serialize on
+`profileSessionAdvisoryLockKey` before binding a persistent profile. The module
+exists because the legacy and agent repos drifted into independent locks once
+already. Content-parity regexes pin that both repos CALL the shared helper —
+which is a connection code cannot express, so they stay — but nothing checked
+what it returns.
+
+Measured against 85 files / 1019 tests: a constant key passes 1019, and a
+per-call-unique key passes 1019 with a clean typecheck. The second makes
+`pg_advisory_xact_lock` take a fresh uncontended lock every call, so two
+concurrent creates against one profile both proceed — exactly the race the lock
+closes.
+
+Determinism and injectivity are separate properties and are covered separately;
+a single "contains the id" assertion satisfies neither.
+
 ## What A2 deliberately did not do
 
 - No suite where measurement showed the boundary already covered — webhooks and
