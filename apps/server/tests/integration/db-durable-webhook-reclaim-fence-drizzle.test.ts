@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { and, eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createDurableWebhookDelivery } from '../../src/services/durable-webhook-delivery.js';
 import { webhookDeliveries } from '../../src/db/schema.js';
 import type { Database } from '../../src/db/client.js';
@@ -68,6 +68,21 @@ beforeAll(async () => {
     await client.end({ timeout: 1 }).catch(() => {});
     client = null;
   }
+});
+
+// The four tables live in one per-file schema that is only dropped in afterAll,
+// so rows a test inserts stay put for every test after it. That is invisible in
+// declared order and wrong in any other: reordered, "the in_flight claim
+// advances updated_at so a just-reclaimed row is not re-reclaimed" counted 2
+// rows where it expected 1, the extra one belonging to whichever test ran
+// before it. The schema is per-file and discarded, so truncating between tests
+// costs nothing and makes each test true on its own.
+beforeEach(async () => {
+  if (!dbReachable || !admin) return;
+  await admin.unsafe(
+    `TRUNCATE "${TEST_SCHEMA}".webhook_delivery_attempts, "${TEST_SCHEMA}".webhook_deliveries, ` +
+      `"${TEST_SCHEMA}".webhook_endpoints, "${TEST_SCHEMA}".accounts CASCADE`,
+  );
 });
 
 afterAll(async () => {

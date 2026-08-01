@@ -26,7 +26,7 @@
 // `webhook-claim-fairness-parity`.
 
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../src/db/schema.js';
@@ -53,17 +53,34 @@ beforeAll(async () => {
   client = postgres(DB_URL, { max: 4 });
 });
 
-afterAll(async () => {
-  if (client) {
-    for (const accountId of seeded) {
-      await client`DELETE FROM webhook_deliveries WHERE webhook_id IN (SELECT id FROM webhook_endpoints WHERE account_id = ${accountId})`.catch(
-        () => {},
-      );
-      await client`DELETE FROM webhook_endpoints WHERE account_id = ${accountId}`.catch(() => {});
-      await client`DELETE FROM accounts WHERE id = ${accountId}`.catch(() => {});
-    }
-    await client.end({ timeout: 5 });
+/**
+ * Delete everything seeded so far, and forget it.
+ *
+ * This ran only in afterAll, so every account a test seeded stayed in the
+ * database for the rest of the FILE. That is invisible while the tests run in
+ * declared order and fatal when they do not: the claim these tests exercise is
+ * GLOBAL — the worker takes a batch across all endpoints — so an earlier test's
+ * pending deliveries fill the batch that a later test expects to be its own.
+ * Under `--sequence.shuffle` this file failed alone on three seeds out of four,
+ * with "the quiet endpoint gets served despite being newer" finding zero
+ * claimed rows because a previous test's backlog had taken them.
+ */
+async function cleanupSeeded(): Promise<void> {
+  if (!client) return;
+  for (const accountId of seeded.splice(0)) {
+    await client`DELETE FROM webhook_deliveries WHERE webhook_id IN (SELECT id FROM webhook_endpoints WHERE account_id = ${accountId})`.catch(
+      () => {},
+    );
+    await client`DELETE FROM webhook_endpoints WHERE account_id = ${accountId}`.catch(() => {});
+    await client`DELETE FROM accounts WHERE id = ${accountId}`.catch(() => {});
   }
+}
+
+afterEach(cleanupSeeded);
+
+afterAll(async () => {
+  await cleanupSeeded();
+  if (client) await client.end({ timeout: 5 });
 });
 
 async function seedEndpoint(): Promise<string> {

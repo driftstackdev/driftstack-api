@@ -22,7 +22,7 @@
 // terminated status, so that is what gets hammered below.
 
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
 import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
@@ -60,15 +60,33 @@ beforeAll(async () => {
   client = postgres(DB_URL, { max: 4 });
 });
 
-afterAll(async () => {
-  if (client) {
-    for (const accountId of seeded) {
-      await client`DELETE FROM profile_snapshots WHERE account_id = ${accountId}`.catch(() => {});
-      await client`DELETE FROM profiles WHERE account_id = ${accountId}`.catch(() => {});
-      await client`DELETE FROM accounts WHERE id = ${accountId}`.catch(() => {});
-    }
-    await client.end({ timeout: 5 });
+/**
+ * Delete everything seeded so far, and forget it.
+ *
+ * A comment further down already names why this matters: the purges are GLOBAL
+ * — they select every terminated account, not one — so a fixture left behind is
+ * picked up by the NEXT test's call and shows there as a phantom row. That was
+ * handled by draining at the end of the one test known to precede the one it
+ * broke, which fixes exactly that ordering and no other. Reordered, "a
+ * SUSPENDED account keeps everything" counted 1 where it expected 0.
+ *
+ * Draining after every test makes each one independent of what ran before it,
+ * rather than correct only in the order they happen to be written.
+ */
+async function cleanupSeeded(): Promise<void> {
+  if (!client) return;
+  for (const accountId of seeded.splice(0)) {
+    await client`DELETE FROM profile_snapshots WHERE account_id = ${accountId}`.catch(() => {});
+    await client`DELETE FROM profiles WHERE account_id = ${accountId}`.catch(() => {});
+    await client`DELETE FROM accounts WHERE id = ${accountId}`.catch(() => {});
   }
+}
+
+afterEach(cleanupSeeded);
+
+afterAll(async () => {
+  await cleanupSeeded();
+  if (client) await client.end({ timeout: 5 });
 });
 
 /** An account in a lifecycle state, owning one live profile and one snapshot. */
