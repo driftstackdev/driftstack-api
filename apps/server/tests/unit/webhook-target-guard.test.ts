@@ -288,6 +288,30 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
     expect(classifyUnsafeVpnTargets({ configBlob: '  DOWN\t/tmp/x\n' })).toBe('unsafe-directive');
     expect(classifyUnsafeVpnTargets({ configBlob: 'route-up /x\n' })).toBe('unsafe-directive');
     expect(classifyUnsafeVpnTargets({ configBlob: 'tls-verify /x\n' })).toBe('unsafe-directive');
+
+    // Derived from the SHIPPED OpenVPN man page (2.7) rather than recalled: every
+    // directive whose own text says it runs a command. These three were missing
+    // from the rejection set.
+    //
+    // `client-crresponse cmd` — "Executed when the client sends a text based
+    // challenge response"; the response is written to a temp file and the
+    // filename passed to cmd.
+    expect(classifyUnsafeVpnTargets({ configBlob: 'client-crresponse /x\n' })).toBe(
+      'unsafe-directive',
+    );
+    // `dns-updown` runs a command to apply DNS settings.
+    expect(classifyUnsafeVpnTargets({ configBlob: 'dns-updown /x\n' })).toBe('unsafe-directive');
+    // `plugin` loads a SHARED MODULE — arbitrary native code, not a script. The
+    // box forces --script-security 1, which is what neuters the script
+    // directives above; whether it also gates plugin LOADING is unverified here,
+    // so ingress rejection is the defense we control.
+    expect(classifyUnsafeVpnTargets({ configBlob: 'plugin /x/evil.so\n' })).toBe(
+      'unsafe-directive',
+    );
+    // Case-insensitive and leading-whitespace tolerant, same as the others.
+    expect(classifyUnsafeVpnTargets({ configBlob: '  PLUGIN\t/x/evil.so\n' })).toBe(
+      'unsafe-directive',
+    );
     // script-security 2/3 is the switch that ENABLES the above → reject; 0/1 safe.
     expect(classifyUnsafeVpnTargets({ configBlob: 'script-security 2\n' })).toBe(
       'unsafe-directive',

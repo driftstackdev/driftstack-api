@@ -236,6 +236,27 @@ const DANGEROUS_OPENVPN_DIRECTIVES = new Set([
   'client-disconnect',
   'auth-user-pass-verify',
   'up-restart',
+  // Derived from the shipped OpenVPN man page (2.7) rather than recalled: every
+  // directive whose own text says it runs a command. These three were absent.
+  //
+  // `client-crresponse cmd` — "Executed when the client sends a text based
+  // challenge response"; OpenVPN writes the response to a temp file and passes
+  // the filename to cmd. Same class as the eleven above.
+  'client-crresponse',
+  // `dns-updown` — runs a command to apply DNS settings ("use force as cmd to
+  // run the default command"). Same class.
+  'dns-updown',
+  // `plugin` loads a SHARED MODULE and hooks it into OpenVPN's callbacks, which
+  // is arbitrary native code rather than a script. Included because a customer
+  // config blob has no legitimate reason to load one.
+  //
+  // Stated honestly: the box forces `--script-security 1`, and that is what
+  // neuters the script directives above. Whether it also gates plugin LOADING
+  // could not be verified here — this machine's man page carries only a single
+  // passing mention of `--script-security` and no levels section. So treat the
+  // box mitigation as unconfirmed for this entry specifically, which is the
+  // reason to reject it at ingress rather than rely on the host.
+  'plugin',
 ]);
 
 /**
