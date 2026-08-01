@@ -1041,6 +1041,68 @@ is not repeated:
 
 Only the two fixed above lacked a guard.
 
+### 33. A fire of verified negatives — five areas probed, nothing broken
+
+Recorded because "we checked and it holds" is worth as much as a fix, and because
+the next person should not repeat any of it.
+
+**Error responses do not leak internals.** `normaliseError` wraps anything
+unexpected as `InternalError('An unexpected error occurred.', err)`, and `cause`
+goes to the native `Error` cause while `toProblem()` spreads only `extensions` —
+so a Postgres error's table, column and SQL never reach the customer. Mutating
+`toProblem()` to spread the cause reds 3 tests, including a dedicated behavioural
+end-to-end file. Guarded.
+
+**`AUTH_EXPOSE_DEBUG_TOKEN` cannot be on in production.** Read with an exact
+`=== 'true'` (the comment explains that coercion would invert it: `'false'` is
+truthy) and production refuses to boot if set. Guarded.
+
+**All six production boot refusals are behaviourally covered** — debug token,
+localhost auth URLs, missing `DASHBOARD_ORIGIN`, the decomposer fallback bypass,
+the Stripe live-key cutover, and the task-refusal pattern misconfiguration.
+
+That last one first measured as UNCOVERED and it was **my mutation that was
+wrong**: I changed the message text rather than the behaviour, so it measured
+whether a message pin exists, not whether the refusal fires. Re-run as `if
+(false)`, it reds 6. **A message-only mutation does not measure coverage** — it
+measures whether someone pinned the string.
+
+### 34. The route-coverage instrument does not work here — seven flaws, no finding
+
+I tried to answer "which registered routes does no test ever request". The first
+run reported 53 of 250. Every candidate I hand-checked was covered, through seven
+distinct defects in the instrument:
+
+1. `acc_${id}` normalised to `acc_:p`, never matching a registered `/:id`.
+2. Literal placeholders (`agt_xxx`, `ord_x`) are not `${}` and were not
+   parameterised at all.
+3. e2e builds `${server.baseUrl}/v1/...`, so paths did not start at `/v1`.
+4. The scan root was `tests/integration` + `tests/e2e`; plenty of request-level
+   tests use `app.inject` from `tests/unit` — `GET /v1/archetypes` is tested
+   exactly there. **My own scan-root defect, the one I have been finding in others
+   all day.**
+5. Request detection missed `request.get(...)` and template-literal forms.
+6. `admin-scope-refusal-coverage.test.ts` GENERATES requests via `it.each` over
+   routes derived from source, so no literal path string exists to match. That
+   single suite covers the whole admin surface.
+7. `cross-account-session-isolation.test.ts` builds
+   `` `/v1/sessions/${id}${suffix}` `` from a table, so nine session action routes
+   have no literal path either.
+
+Successive fixes took 53 → 45 → 13 → 6 → 1 → 0.
+
+**The near-miss is the part worth keeping.** At "1" I concluded that
+`POST /v1/sessions/:id/extract` had no request-level coverage, having mutated its
+id decoding and watched 18,981 unit tests and 1,163 "sessions"-filtered tests
+pass. Both runs were wrong: the unit project excludes integration, and the filter
+`sessions` never matches `cross-account-session-isolation`. Run against the suite
+that actually drives the route, the same mutation reds immediately. **A green
+result from a run that could not have covered the code is not evidence** — the
+filter has to be shown to include the covering suite.
+
+No route-coverage finding exists. The instrument is not sound for this repo and
+should not be rebuilt from scratch by the next person.
+
 ## What A2 deliberately did not do
 
 - No suite where measurement showed the boundary already covered — webhooks and
