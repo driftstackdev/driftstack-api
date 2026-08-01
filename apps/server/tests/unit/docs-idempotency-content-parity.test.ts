@@ -80,12 +80,23 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
     expect(body).toMatch(/Empty string is treated as.+absent/i);
   });
 
-  it('documents the endpoint-specific same-key-different-body rejection/legacy replay behavior', () => {
+  // V-724 — this pin previously required the sentence "Agent-message and
+  // crypto-checkout receipts reject a changed request with `409`", which was
+  // true of agent-message and false of crypto checkout: billing-crypto.ts
+  // deliberately REPLAYS a mismatched body (V-666.AR — "the contract still
+  // replays; the warn surfaces accidental key reuse for ops to see"). The pin
+  // held a customer-facing promise the server never kept. It now requires the
+  // per-surface split, including the practical consequence for the caller.
+  it('documents the endpoint-specific same-key-different-body behaviour, per surface', () => {
     expect(body).toMatch(/different body/i);
     expect(body).toMatch(
-      /Agent-message and crypto-checkout receipts reject a changed\s*\n?\s*request with `409`/,
+      /\*\*Agent message turns\*\* reject a changed request with `409`[\s\S]{0,120}idempotency_status: "mismatch"/,
     );
-    expect(body).toMatch(/legacy agent-session create path replays the existing session/);
+    // Crypto checkout must NOT be described as rejecting.
+    expect(body).toMatch(/\*\*Crypto checkout\*\* does \*\*not\*\* reject/);
+    expect(body).toMatch(/Idempotent-Replayed: 1/);
+    expect(body).toMatch(/returns you the \*\*first\*\* order/);
+    expect(body).toMatch(/legacy agent-session create path\*\* likewise replays/);
   });
 
   it('documents the fail-closed durable agent-turn receipt and disconnect ambiguity', () => {

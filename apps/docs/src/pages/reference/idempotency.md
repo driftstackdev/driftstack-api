@@ -101,10 +101,20 @@ new AI turn with new browser work.
 
 ### What happens if I send the same key with a different body?
 
-Do not do this. Agent-message and crypto-checkout receipts reject a changed
-request with `409`; Stripe also validates parameters on a reused checkout key.
-The legacy agent-session create path replays the existing session. In every
-case, mint a new key for a new logical operation.
+Do not do this. What happens depends on the surface:
+
+- **Agent message turns** reject a changed request with `409` and
+  `idempotency_status: "mismatch"`, without dispatching browser work.
+- **Crypto checkout** does **not** reject. It replays the original order
+  verbatim with `Idempotent-Replayed: 1` and records the key reuse for support.
+  So a changed body returns you the **first** order — not the one you just
+  asked for. Check that header, or the returned `order_id`, before treating a
+  checkout response as the order you requested.
+- **The legacy agent-session create path** likewise replays the existing
+  session.
+
+Stripe also validates parameters on a reused checkout key. In every case, mint
+a new key for a new logical operation.
 
 ### What happens during a concurrent retry?
 

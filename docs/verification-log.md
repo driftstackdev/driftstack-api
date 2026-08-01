@@ -30426,3 +30426,52 @@ Verification: canonical full suite 2745 files / 28,050 passing / 0 failing; Pyth
 ESLint and Prettier. The Python source-text parity guard was updated to pin the
 new reader signatures and the arrival-granularity split. No schema, OpenAPI, server, environment, customer or secret
 surface changed, and no behaviour changes for any stream that terminates.
+
+## V-724 — The idempotency docs promised a 409 that crypto checkout never sends
+
+**Date:** 2026-08-01
+
+`reference/idempotency.md` told customers that "Agent-message and
+crypto-checkout receipts reject a changed request with `409`". That is true of
+agent message turns — `agent-sessions.ts` throws `ConflictError` with
+`idempotency_status: 'mismatch'` before any dispatch — and false of crypto
+checkout, which never sends a 409 at all.
+
+`billing-crypto.ts` states its behaviour deliberately, in its own header:
+"replays whose body fingerprint differs from the stored one fire an additional
+warn log ... The contract still replays — the warn surfaces accidental key reuse
+for ops to see." A reused key with a changed body returns the ORIGINAL order
+verbatim, with `Idempotent-Replayed: 1`, and a `200`.
+
+So the two surfaces genuinely differ, and the sentence had generalised one to
+both. This is corrected in the docs rather than in the server: the replay
+behaviour is an explicit, reasoned decision (V-666.AR), it is the safer default
+for a billing endpoint — a double-fire cannot mint a second order — and flipping
+a `200` to a `409` on a payment path is a breaking change that would be made for
+the sake of a sentence rather than for a customer.
+
+The correction is per-surface, and states the consequence rather than only the
+mechanism: a changed body on crypto checkout returns you the FIRST order, not
+the one you just asked for, so a caller should check `Idempotent-Replayed` or
+the returned `order_id` before treating the response as their new order. That is
+the part a customer can act on, and the part the previous wording hid behind a
+promise of rejection.
+
+The wrong claim was pinned. `docs-idempotency-content-parity.test.ts` required
+the exact sentence, so the guard was holding a customer-facing promise the
+server never kept in place — the same failure mode as V-720, on documentation
+rather than code. The pin now requires the per-surface split, including that
+crypto checkout is described as NOT rejecting.
+
+Verification: the 256 docs and idempotency test files pass (2,261 tests),
+Prettier clean. No code, schema, OpenAPI, SDK, environment, customer or secret
+surface changed — only the description, which now matches what the server does.
+
+A related gap is NOT closed by this entry and is recorded here so it is not
+mistaken for covered: `createIdempotent`'s DB-replay path returns
+`bodyFingerprintMismatch: false` unconditionally, because the fingerprint is
+held only in the in-process cache and never persisted. The ops warning that is
+this contract's entire mitigation therefore cannot fire for any replay served by
+the database — which is every replay after a restart or deploy, and every
+cross-instance replay. Closing it needs the fingerprint stored alongside
+`idempotency_key`.
