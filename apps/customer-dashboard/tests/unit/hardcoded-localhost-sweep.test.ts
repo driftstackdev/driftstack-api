@@ -30,32 +30,47 @@ function read(p: string): string {
 
 const pages = walk(SRC).filter((f) => /\.astro$/.test(f));
 
+/**
+ * The page body a host literal would have to appear in.
+ *
+ * Strip Astro frontmatter so doc-comment examples don't trip. The api-base-url
+ * library helper docstring may reference localhost — that lives outside
+ * src/pages and src/layouts. Any hit here is genuine drift.
+ *
+ * Shared with the reachability check below deliberately: a floor exercising a
+ * separate copy of this would prove that copy works, not this one.
+ */
+const pageBody = (text: string): string => text.replace(/^---[\s\S]*?\n---\n/, '');
+
+const hasLocalhostHost = (text: string): boolean => /localhost:[0-9]/.test(pageBody(text));
+const hasLoopbackHost = (text: string): boolean => /\b127\.0\.0\.1\b/.test(pageBody(text));
+
 describe('W280.B customer-dashboard hard-coded-host sweep', () => {
+  it('CRITICAL the sweep read real pages and both matchers still fire. `walk` returns silently when its directory is missing, so a renamed or moved src/ leaves both assertions below vacuously true — reporting every page free of hard-coded hosts because it read none.', () => {
+    expect(pages.length, '.astro pages found under customer-dashboard/src').toBeGreaterThan(15);
+    expect(hasLocalhostHost('<p>http://localhost:8080/v1</p>'), 'a localhost host is seen').toBe(
+      true,
+    );
+    expect(hasLoopbackHost('<p>http://127.0.0.1:8080/v1</p>'), 'a loopback host is seen').toBe(
+      true,
+    );
+    expect(
+      hasLocalhostHost('---\nconst example = "http://localhost:8080";\n---\n<p>ok</p>'),
+      'and a frontmatter-only mention is still ignored, so the strip has not become a blanket',
+    ).toBe(false);
+  });
+
   it('no .astro page or layout contains a localhost:* host literal', () => {
-    const offenders: string[] = [];
-    for (const f of pages) {
-      const body = read(f);
-      // Strip Astro frontmatter so doc-comment examples don't trip.
-      const stripped = body.replace(/^---[\s\S]*?\n---\n/, '');
-      // The api-base-url library helper docstring may reference
-      // localhost — that lives outside src/pages and src/layouts. Any
-      // hit here is genuine drift.
-      if (/localhost:[0-9]/.test(stripped)) {
-        offenders.push(f.slice(REPO_ROOT.length + 1));
-      }
-    }
+    const offenders = pages
+      .filter((f) => hasLocalhostHost(read(f)))
+      .map((f) => f.slice(REPO_ROOT.length + 1));
     expect(offenders).toEqual([]);
   });
 
   it('no .astro page or layout contains a 127.0.0.1 host literal', () => {
-    const offenders: string[] = [];
-    for (const f of pages) {
-      const body = read(f);
-      const stripped = body.replace(/^---[\s\S]*?\n---\n/, '');
-      if (/\b127\.0\.0\.1\b/.test(stripped)) {
-        offenders.push(f.slice(REPO_ROOT.length + 1));
-      }
-    }
+    const offenders = pages
+      .filter((f) => hasLoopbackHost(read(f)))
+      .map((f) => f.slice(REPO_ROOT.length + 1));
     expect(offenders).toEqual([]);
   });
 });

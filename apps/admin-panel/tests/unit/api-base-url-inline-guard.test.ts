@@ -29,14 +29,43 @@ function walk(dir: string): string[] {
   return out;
 }
 
-const FORBIDDEN = "import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000'";
+/**
+ * The inline fallback, matched by shape rather than by exact text.
+ *
+ * This was `text.includes("import.meta.env.PUBLIC_API_BASE_URL ?? 'http://…'")`
+ * — a single literal, so a double-quoted copy, a different spacing around `??`,
+ * or any port other than 3000 reproduced the same production bug and walked
+ * straight past the guard. The defect is the pattern, not one spelling of it.
+ */
+const INLINE_FALLBACK =
+  /import\.meta\.env\.PUBLIC_API_BASE_URL\s*(?:\?\?|\|\|)\s*['"`]https?:\/\/(?:localhost|127\.0\.0\.1):\d+['"`]/;
 
 describe('W193 admin-panel inline-fallback drift guard', () => {
+  it('CRITICAL the guard read real files and the pattern still matches the shape it forbids. It walks a directory and asserts an absence, so a moved or renamed pages/ makes it report every page clean because it read none.', () => {
+    expect(walk(PAGES_DIR).length, 'files found under admin-panel pages/').toBeGreaterThan(10);
+    expect(
+      INLINE_FALLBACK.test(
+        "const b = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';",
+      ),
+      'the exact historical form is matched',
+    ).toBe(true);
+    expect(
+      INLINE_FALLBACK.test(
+        'const b = import.meta.env.PUBLIC_API_BASE_URL||"http://127.0.0.1:8080";',
+      ),
+      'and so is a re-spelled one — different operator, quotes, host and port, same production bug',
+    ).toBe(true);
+    expect(
+      INLINE_FALLBACK.test('const b = resolveApiBaseUrl();'),
+      'while the correct call is not reported',
+    ).toBe(false);
+  });
+
   it('no admin-panel page reaches into PUBLIC_API_BASE_URL directly', () => {
     const offenders: string[] = [];
     for (const file of walk(PAGES_DIR)) {
       const text = readFileSync(file, 'utf8');
-      if (text.includes(FORBIDDEN)) {
+      if (INLINE_FALLBACK.test(text)) {
         offenders.push(file);
       }
     }

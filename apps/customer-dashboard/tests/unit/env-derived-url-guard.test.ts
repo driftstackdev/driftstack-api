@@ -32,15 +32,32 @@ function read(p: string): string {
 
 const pages = walk(PAGES).filter((f) => /\.astro$/.test(f));
 
+/**
+ * A page reaching straight into the env var instead of `resolveApiBaseUrl()`.
+ *
+ * Shared with the reachability check below deliberately: a floor exercising a
+ * separate copy of this would prove that copy works, not this one.
+ */
+const readsEnvDirectly = (text: string): boolean =>
+  /import\.meta\.env\.PUBLIC_API_BASE_URL\b/.test(text);
+
 describe('W300.C customer-dashboard env-derived URL guard', () => {
+  it('CRITICAL the guard read real pages and the pattern still matches. It walks a directory and asserts an absence, so a moved or renamed pages/ makes it report every page clean because it read none.', () => {
+    expect(pages.length, '.astro pages found under customer-dashboard pages/').toBeGreaterThan(15);
+    expect(
+      readsEnvDirectly('const base = import.meta.env.PUBLIC_API_BASE_URL;'),
+      'a direct env read is seen',
+    ).toBe(true);
+    expect(
+      readsEnvDirectly('const base = resolveApiBaseUrl();'),
+      'and the helper call this guard exists to require is not reported',
+    ).toBe(false);
+  });
+
   it('no page reads PUBLIC_API_BASE_URL directly — call resolveApiBaseUrl()', () => {
-    const offenders: string[] = [];
-    for (const f of pages) {
-      const body = read(f);
-      if (/import\.meta\.env\.PUBLIC_API_BASE_URL\b/.test(body)) {
-        offenders.push(f.slice(REPO_ROOT.length + 1));
-      }
-    }
+    const offenders = pages
+      .filter((f) => readsEnvDirectly(read(f)))
+      .map((f) => f.slice(REPO_ROOT.length + 1));
     expect(offenders).toEqual([]);
   });
 });
