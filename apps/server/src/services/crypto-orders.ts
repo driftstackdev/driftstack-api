@@ -121,11 +121,20 @@ export interface CryptoOrdersRepo {
    * two concurrent / cross-instance / post-restart requests with the same key
    * can never mint two orders. Returns `{ order, replayed }`: replayed=true
    * means the key already existed and the prior order is returned verbatim.
+   *
+   * V-725 — `bodyFingerprint` is RECORDED with the order, and a replay hands
+   * back the fingerprint stored on the existing row as `storedFingerprint`, so
+   * the caller can detect a key reused with a different body on a replay served
+   * by the DATABASE. `null` means the row predates the column (or carried no
+   * key): unknown, NOT matched. Before this the in-memory cache was the only
+   * place a fingerprint lived, so every post-restart replay reported no
+   * mismatch regardless of what the caller sent.
    */
   insertWithIdempotencyKey(
     order: CryptoOrder,
     scopedIdempotencyKey: string,
-  ): Promise<{ order: CryptoOrder; replayed: boolean }>;
+    bodyFingerprint: string,
+  ): Promise<{ order: CryptoOrder; replayed: boolean; storedFingerprint: string | null }>;
   /**
    * Serialize a read-modify-write on ONE order. The DB impl takes a row-level
    * lock (SELECT … FOR UPDATE) inside a transaction, hands the locked committed
@@ -165,23 +174,34 @@ export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
     return this.orders.get(orderId) ?? null;
   }
   private readonly byIdempotencyKey = new Map<string, string>(); // scopedKey -> order_id
+  /** V-725 — mirrors the persisted idempotency_body_fingerprint column. */
+  private readonly fingerprintByIdempotencyKey = new Map<string, string>();
   // eslint-disable-next-line @typescript-eslint/require-await
   async insertWithIdempotencyKey(
     order: CryptoOrder,
     scopedIdempotencyKey: string,
-  ): Promise<{ order: CryptoOrder; replayed: boolean }> {
+    bodyFingerprint: string,
+  ): Promise<{ order: CryptoOrder; replayed: boolean; storedFingerprint: string | null }> {
     // Single-threaded JS → the check-and-insert is naturally atomic; mirrors
     // the DB impl's INSERT ... ON CONFLICT DO NOTHING contract. The real
     // cross-instance race lives only in the multi-connection Postgres path.
     const existingId = this.byIdempotencyKey.get(scopedIdempotencyKey);
     if (existingId !== undefined) {
       const existing = this.orders.get(existingId);
-      if (existing !== undefined) return { order: existing, replayed: true };
+      if (existing !== undefined) {
+        return {
+          order: existing,
+          replayed: true,
+          storedFingerprint: this.fingerprintByIdempotencyKey.get(scopedIdempotencyKey) ?? null,
+        };
+      }
       this.byIdempotencyKey.delete(scopedIdempotencyKey);
+      this.fingerprintByIdempotencyKey.delete(scopedIdempotencyKey);
     }
     this.orders.set(order.order_id, order);
     this.byIdempotencyKey.set(scopedIdempotencyKey, order.order_id);
-    return { order, replayed: false };
+    this.fingerprintByIdempotencyKey.set(scopedIdempotencyKey, bodyFingerprint);
+    return { order, replayed: false, storedFingerprint: null };
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async withOrderLock<T>(
@@ -566,7 +586,11 @@ export class CryptoOrdersService {
     // deduped by the DB UNIQUE constraint instead of minting a second order.
     // The in-memory layers above stay as a same-process fast-path; the DB is
     // the cross-instance source of truth, and its `replayed` flag is honoured.
-    const createPromise = (async (): Promise<{ order: CryptoOrder; replayed: boolean }> => {
+    const createPromise = (async (): Promise<{
+      order: CryptoOrder;
+      replayed: boolean;
+      storedFingerprint: string | null;
+    }> => {
       const candidate: CryptoOrder = {
         order_id: args.order_id,
         account_id: args.account_id,
@@ -583,13 +607,13 @@ export class CryptoOrdersService {
         created_at: now,
         updated_at: now,
       };
-      return this.opts.repo.insertWithIdempotencyKey(candidate, scopeKey);
+      return this.opts.repo.insertWithIdempotencyKey(candidate, scopeKey, fingerprint);
     })();
     // Single-flight awaits the order (not the {order,replayed} envelope) so the
     // existing inflight-replay contract is unchanged.
     const orderPromise = createPromise.then((r) => r.order);
     this.idempotencyInflight.set(scopeKey, { promise: orderPromise, fingerprint });
-    let result: { order: CryptoOrder; replayed: boolean };
+    let result: { order: CryptoOrder; replayed: boolean; storedFingerprint: string | null };
     try {
       result = await createPromise;
     } finally {
@@ -603,8 +627,17 @@ export class CryptoOrdersService {
     if (result.replayed) {
       // The DB found a prior order for this key (cross-instance / post-restart
       // duplicate) — surface it as a replay, not a fresh write.
+      //
+      // V-725 — compare against the fingerprint RECORDED on that row. This
+      // branch previously hardcoded `false`, which was not a conservative
+      // default but a false statement: it claimed the bodies matched when
+      // nothing had been compared. A null stored fingerprint (row predates the
+      // column) stays false, because an unknown body is not a proven mismatch.
+      const mismatch =
+        result.storedFingerprint !== null && result.storedFingerprint !== fingerprint;
+      if (mismatch) this.idempotentBodyMismatches += 1;
       this.idempotentReplays += 1;
-      return { order: result.order, replayed: true, bodyFingerprintMismatch: false };
+      return { order: result.order, replayed: true, bodyFingerprintMismatch: mismatch };
     }
     this.idempotentFirstWrites += 1;
     return { order: result.order, replayed: false, bodyFingerprintMismatch: false };

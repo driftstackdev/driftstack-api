@@ -273,11 +273,19 @@ describe('crypto-checkout DB-backed idempotency (#7)', () => {
       created_at: 1,
       updated_at: 1,
     };
-    const first = await repo.insertWithIdempotencyKey({ ...base, order_id: 'ord_a' }, 'acc:key1');
+    const first = await repo.insertWithIdempotencyKey(
+      { ...base, order_id: 'ord_a' },
+      'acc:key1',
+      'fp-a',
+    );
     expect(first.replayed).toBe(false);
     // A SECOND insert with the SAME scoped key (e.g. a retry on another
     // instance that minted a different order_id) is deduped to the FIRST order.
-    const second = await repo.insertWithIdempotencyKey({ ...base, order_id: 'ord_b' }, 'acc:key1');
+    const second = await repo.insertWithIdempotencyKey(
+      { ...base, order_id: 'ord_b' },
+      'acc:key1',
+      'fp-a',
+    );
     expect(second.replayed).toBe(true);
     expect(second.order.order_id).toBe('ord_a');
     // Only ONE order exists.

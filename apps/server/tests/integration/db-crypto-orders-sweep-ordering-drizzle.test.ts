@@ -149,16 +149,31 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
       // Before the C6 fix this call threw 42P10 (ON CONFLICT with no predicate
       // against the partial unique index) — a hard 500 on every keyed checkout.
-      const first = await repo.insertWithIdempotencyKey(makeOrder(`${prefix}first`), key);
+      const first = await repo.insertWithIdempotencyKey(
+        makeOrder(`${prefix}first`),
+        key,
+        'fp-first',
+      );
       expect(first.replayed).toBe(false);
       expect(first.order.order_id).toBe(`${prefix}first`);
 
       // A retry with the SAME scoped key but a fresh envelope must REPLAY the
       // stored order (the ON CONFLICT DO NOTHING → SELECT path), never mint a
       // second row.
-      const retry = await repo.insertWithIdempotencyKey(makeOrder(`${prefix}second`), key);
+      const retry = await repo.insertWithIdempotencyKey(
+        makeOrder(`${prefix}second`),
+        key,
+        'fp-second',
+      );
       expect(retry.replayed).toBe(true);
       expect(retry.order.order_id).toBe(`${prefix}first`);
+      // V-725 — the replay carries the fingerprint RECORDED on the stored row,
+      // not the one just sent, so the service can see that this retry changed
+      // the body. Real Postgres is the only place this round-trip is proved:
+      // the column has to exist (migration 0110) and the ON CONFLICT → SELECT
+      // path has to read it back.
+      expect(retry.storedFingerprint).toBe('fp-first');
+      expect(first.storedFingerprint).toBeNull();
     });
   },
 );

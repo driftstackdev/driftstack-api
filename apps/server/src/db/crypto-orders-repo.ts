@@ -101,7 +101,8 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
   async insertWithIdempotencyKey(
     order: CryptoOrder,
     scopedIdempotencyKey: string,
-  ): Promise<{ order: CryptoOrder; replayed: boolean }> {
+    bodyFingerprint: string,
+  ): Promise<{ order: CryptoOrder; replayed: boolean; storedFingerprint: string | null }> {
     const inserted = await this.database.db
       .insert(cryptoOrders)
       .values({
@@ -114,6 +115,7 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
         payAmount: order.pay_amount,
         payCurrency: order.pay_currency,
         idempotencyKey: scopedIdempotencyKey,
+        idempotencyBodyFingerprint: bodyFingerprint,
         status: order.status,
         customerNote: order.customer_note,
         internalNote: order.internal_note,
@@ -134,7 +136,7 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
       })
       .returning();
     if (inserted[0] !== undefined) {
-      return { order: rowToEnvelope(inserted[0]), replayed: false };
+      return { order: rowToEnvelope(inserted[0]), replayed: false, storedFingerprint: null };
     }
     // Key already existed → fetch + replay the prior order.
     const existing = await this.database.db
@@ -143,13 +145,21 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
       .where(eq(cryptoOrders.idempotencyKey, scopedIdempotencyKey))
       .limit(1);
     if (existing[0] !== undefined) {
-      return { order: rowToEnvelope(existing[0]), replayed: true };
+      // V-725 — hand back the RECORDED fingerprint (NULL for rows written
+      // before the column existed, or without a key) so the caller can tell a
+      // genuine body mismatch from "we have nothing to compare against". The
+      // service must never read NULL as a match.
+      return {
+        order: rowToEnvelope(existing[0]),
+        replayed: true,
+        storedFingerprint: existing[0].idempotencyBodyFingerprint,
+      };
     }
     // Extremely unlikely (conflict on insert but the row vanished between the
     // insert + select). Fall back to a plain upsert so the checkout still
     // completes rather than 500ing.
     await this.upsert(order);
-    return { order, replayed: false };
+    return { order, replayed: false, storedFingerprint: null };
   }
 
   // Row-level locked read-modify-write (mirrors stripe-webhooks-repo.setAccountTier).

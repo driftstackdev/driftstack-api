@@ -1,0 +1,21 @@
+-- 2026-08-01 (V-725) — persist the idempotency BODY fingerprint alongside the
+-- key that minted the order.
+--
+-- Crypto checkout's contract on a reused Idempotency-Key is to replay the
+-- original order rather than reject it (V-666.AR); the mitigation for a caller
+-- who reuses a key with a DIFFERENT body is an ops warn log driven by comparing
+-- body fingerprints. That comparison only ever worked in-process: the
+-- fingerprint lived in CryptoOrdersService's in-memory cache and was never
+-- written down, so `createIdempotent`'s database-replay path reported "no
+-- mismatch" unconditionally — it had nothing to compare against.
+--
+-- The database path is not an edge case. The in-memory cache is empty after
+-- every restart and every deploy, so within the 24h idempotency window every
+-- replay is served from here. The contract's entire safety net was therefore
+-- dark exactly where it needed to work.
+--
+-- Additive + nullable, and deliberately NOT backfilled: existing rows have no
+-- recorded fingerprint, and inventing one would manufacture false matches. NULL
+-- reads as "unknown", never as "matched", so a pre-migration order still
+-- replays without ever claiming its body was verified.
+ALTER TABLE "crypto_orders" ADD COLUMN IF NOT EXISTS "idempotency_body_fingerprint" text;

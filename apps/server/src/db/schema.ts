@@ -2554,6 +2554,17 @@ export const cryptoOrders = pgTable(
     // restart retries can't mint multiple orders. Null for orders created
     // without an Idempotency-Key (the unique index is partial: WHERE NOT NULL).
     idempotencyKey: text('idempotency_key'),
+    // V-725 — hash of the request body that minted this order, so a replay
+    // served by the DATABASE can tell whether the caller reused the key with a
+    // different body. The in-process cache held this already; the DB path did
+    // not, and returned "no mismatch" unconditionally — meaning the ops warning
+    // that is this contract's whole mitigation could not fire for any replay
+    // after a restart or deploy (when the cache is empty and every replay is
+    // served from here). Never returned to customers; it is an internal
+    // fingerprint, not order data. NULL for rows written before this column
+    // existed, and for orders created without an Idempotency-Key — NULL means
+    // "unknown", never "matched".
+    idempotencyBodyFingerprint: text('idempotency_body_fingerprint'),
     status: text('status')
       .notNull()
       .$type<'pending' | 'confirming' | 'paid' | 'failed' | 'partial' | 'cancelled'>(),

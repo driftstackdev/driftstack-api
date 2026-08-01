@@ -771,6 +771,13 @@
       "when": 1784469600000,
       "tag": "0109_accounts_deleted_purge_index",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1784556000000,
+      "tag": "0110_crypto_orders_idempotency_body_fingerprint",
+      "breakpoints": true
     }
   ]
 }

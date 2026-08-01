@@ -29,6 +29,7 @@ import {
   type CryptoOrderPaidEmail,
   type CryptoOrderPaidEmailNotifier,
   type CryptoOrderWebhookEmitter,
+  type CryptoOrdersRepo,
   InMemoryCryptoOrdersRepo,
   encodeCursor,
   mapNowpaymentsStatus,
@@ -2915,5 +2916,99 @@ describe('C3 — refund/failure IPN after paid auto-claws-back the tier (non-str
     // Not an after-paid refund → no visibility note and no clawback attempt.
     expect(warns.find((e) => e.obj.event === 'ipn_refund_after_paid')).toBeUndefined();
     expect(clawbackCalls).toHaveLength(0);
+  });
+});
+
+// V-725 — the body-fingerprint check on the path that actually serves most
+// replays in production.
+//
+// Every V-666.AR test above reuses ONE service instance, so every replay is
+// answered by the in-process cache, where the fingerprint has always been
+// available. The DATABASE replay path had no fingerprint to compare and
+// returned `bodyFingerprintMismatch: false` unconditionally — not a cautious
+// default but a false statement, since nothing had been compared.
+//
+// That path is not an edge case: the cache is empty after every restart and
+// every deploy, so within the 24h idempotency window every replay is served
+// from the repo. The ops warn log that is this contract's only mitigation for
+// accidental key reuse was therefore dark exactly where it was needed. A fresh
+// service over a shared repo reproduces a restart precisely.
+describe('V-725 createIdempotent body fingerprint across a restart (repo-served replay)', () => {
+  const ARGS = {
+    idempotency_key: 'k-restart',
+    account_id: 'acc',
+    product: 'team_growth',
+    price_cents: 4900,
+    price_currency: 'USD',
+  };
+
+  it('detects a changed body on a replay served by the repo, not the cache', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    await new CryptoOrdersService({ repo }).createIdempotent({ ...ARGS, order_id: 'ord_a' });
+
+    // Restart: a brand-new service, empty cache, same durable repo.
+    const afterRestart = new CryptoOrdersService({ repo });
+    const r = await afterRestart.createIdempotent({
+      ...ARGS,
+      order_id: 'ord_b',
+      price_cents: 9900, // different intent, same key
+    });
+
+    expect(r.replayed).toBe(true);
+    expect(r.bodyFingerprintMismatch).toBe(true);
+    expect(afterRestart.getIdempotencyMetrics().bodyMismatches).toBe(1);
+    // Contract is unchanged: still a replay of the ORIGINAL order.
+    expect(r.order.order_id).toBe('ord_a');
+    expect(r.order.price_cents).toBe(4900);
+  });
+
+  it('does not cry mismatch for an identical body across a restart', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    await new CryptoOrdersService({ repo }).createIdempotent({ ...ARGS, order_id: 'ord_a' });
+
+    const afterRestart = new CryptoOrdersService({ repo });
+    const r = await afterRestart.createIdempotent({ ...ARGS, order_id: 'ord_b' });
+
+    expect(r.replayed).toBe(true);
+    expect(r.bodyFingerprintMismatch).toBe(false);
+    expect(afterRestart.getIdempotencyMetrics().bodyMismatches).toBe(0);
+  });
+
+  it('treats a row with no recorded fingerprint as unknown, never as a match', async () => {
+    // Rows written before migration 0110 have a NULL fingerprint. Unknown is
+    // not a proven mismatch, so the order still replays without a warning — but
+    // the service must reach that answer from the NULL, not by assuming.
+    const existing = {
+      order_id: 'ord_legacy',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 4900,
+      price_currency: 'USD',
+      payment_id: null,
+      pay_amount: null,
+      pay_currency: null,
+      status: 'pending' as const,
+      customer_note: null,
+      internal_note: null,
+      events: [],
+      created_at: 1,
+      updated_at: 1,
+    };
+    const repo: CryptoOrdersRepo = {
+      upsert: () => Promise.resolve(),
+      getById: (id) => Promise.resolve(id === 'ord_legacy' ? existing : null),
+      insertWithIdempotencyKey: () =>
+        Promise.resolve({ order: existing, replayed: true, storedFingerprint: null }),
+      withOrderLock: () => Promise.resolve(null),
+      listExpiredPending: () => Promise.resolve([]),
+      listByAccount: () => Promise.resolve([]),
+    } as unknown as CryptoOrdersRepo;
+
+    const svc = new CryptoOrdersService({ repo });
+    const r = await svc.createIdempotent({ ...ARGS, order_id: 'ord_new', price_cents: 9900 });
+
+    expect(r.replayed).toBe(true);
+    expect(r.bodyFingerprintMismatch).toBe(false);
+    expect(svc.getIdempotencyMetrics().bodyMismatches).toBe(0);
   });
 });

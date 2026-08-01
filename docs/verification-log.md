@@ -30475,3 +30475,59 @@ this contract's entire mitigation therefore cannot fire for any replay served by
 the database — which is every replay after a restart or deploy, and every
 cross-instance replay. Closing it needs the fingerprint stored alongside
 `idempotency_key`.
+
+## V-725 — The crypto idempotency body-mismatch check now works after a restart
+
+**Date:** 2026-08-01
+
+Crypto checkout replays rather than rejects a reused `Idempotency-Key`
+(V-666.AR, and now documented accurately per V-724). The mitigation for a caller
+who reuses a key with a _different_ body is an ops warn log, driven by comparing
+body fingerprints. That comparison only ever worked in-process.
+
+The fingerprint lived exclusively in `CryptoOrdersService`'s in-memory cache and
+was never written down, so `createIdempotent`'s database-replay branch returned
+`bodyFingerprintMismatch: false` unconditionally. That is not a cautious
+default — it is a false statement. Nothing had been compared, and the branch
+asserted the bodies matched.
+
+The database branch is not an edge case. The in-memory cache is empty after every
+restart and every deploy, so within the 24h idempotency window every subsequent
+replay is served from the repo. The contract's entire safety net was dark exactly
+where it needed to work, and the counter behind
+`GET /v1/admin/crypto-orders/...` metrics under-reported key reuse by the same
+amount.
+
+Migration 0110 adds a nullable `idempotency_body_fingerprint` to `crypto_orders`,
+recorded on the keyed insert and read back on the conflict-replay path.
+Deliberately not backfilled: existing rows have no recorded fingerprint, and
+inventing one would manufacture false matches. NULL reads as _unknown_, never as
+_matched_, so a pre-migration order still replays without ever claiming its body
+was verified — the service derives that from the NULL rather than assuming it.
+
+Nothing about the customer-visible contract moves. A mismatched replay still
+returns the original order with `Idempotent-Replayed: 1` and a 200; the
+fingerprint is internal and never enters the order envelope.
+
+Existing coverage could not catch this, and the shape of the tests is the reason:
+all five V-666.AR fingerprint tests reuse a single service instance, so every
+replay they exercise is answered by the cache, where the fingerprint was always
+present. The path that serves production replays had no test at all. The new
+tests construct a _fresh service over a shared repo_ — a restart, precisely —
+and prove the changed body is detected there, that an identical body is not
+falsely flagged, and that a NULL stored fingerprint yields "no mismatch" without
+being treated as a match. Reinstating the hardcoded `false` is proved red.
+
+Because this is a schema change, the round-trip is proved against real
+Postgres, not only the in-memory twin: migration 0110 applied cleanly, the column
+is present, and the existing partial-index `ON CONFLICT` integration test now
+also asserts that a replay hands back the fingerprint recorded on the stored row
+while a first write reports none. That distinction is invisible to the in-memory
+repo and is exactly the sort of thing this file's own C6 comment warns only real
+Postgres enforces.
+
+Verification: canonical full suite 2746 files / 28,064 passing / 0 failing; migration applied against real Postgres and the
+partial-index integration test run against it; both halves of the server
+typecheck clean; targeted ESLint and Prettier. No OpenAPI, SDK, pricing,
+environment, customer or secret surface changed, and no cap, status or response
+shape moved.
