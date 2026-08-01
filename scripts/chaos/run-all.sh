@@ -30,12 +30,29 @@ FAIL_LINES=()
 
 for slug in "${SCENARIOS[@]}"; do
   printf '\n=== Scenario: %s (mode=%s) ===\n' "$slug" "$CHAOS_MODE" >&2
-  if RESULT=$("$SCRIPT_DIR/$slug.sh"); then
-    printf '%s\n' "$RESULT"
-    PASS_COUNT=$((PASS_COUNT + 1))
-  else
+  set +e
+  RESULT=$("$SCRIPT_DIR/$slug.sh")
+  STATUS=$?
+  set -e
+
+  # Print the scenario's own output either way. This used to print only on
+  # success, so a FAILING scenario had its reason= field discarded and the
+  # summary named the slug with no indication of what went wrong — the one
+  # moment the detail is worth having.
+  [[ -n "$RESULT" ]] && printf '%s\n' "$RESULT"
+
+  # A scenario counts as failed if it exited non-zero OR emitted a FAIL line.
+  # Judging on exit status alone made the header's promise above false: a
+  # scenario that emitted FAIL and then returned 0 was counted as a PASS and
+  # the run reported all-green. Every scenario today pairs `emit_fail` with
+  # `exit 1`, so the two agree — but nothing enforced that pairing, and the
+  # aggregator is the wrong place to depend on it.
+  FAIL_LINE=$(printf '%s' "$RESULT" | grep -m1 '^FAIL ' || true)
+  if [[ $STATUS -ne 0 || -n "$FAIL_LINE" ]]; then
     FAIL_COUNT=$((FAIL_COUNT + 1))
-    FAIL_LINES+=("$slug")
+    FAIL_LINES+=("${slug} (exit=${STATUS})${FAIL_LINE:+ ${FAIL_LINE}}")
+  else
+    PASS_COUNT=$((PASS_COUNT + 1))
   fi
 done
 
@@ -46,3 +63,7 @@ if [[ $FAIL_COUNT -gt 0 ]]; then
   for f in "${FAIL_LINES[@]}"; do printf '    - %s\n' "$f"; done
   exit 1
 fi
+
+# Explicit, so the exit status is this script's verdict rather than whatever
+# the last command above happened to return.
+exit 0
