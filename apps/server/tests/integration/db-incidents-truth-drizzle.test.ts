@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleIncidentsRepo } from '../../src/db/incidents-repo.js';
 import * as schema from '../../src/db/schema.js';
 import type { CreateIncidentInput } from '../../src/services/incidents.js';
@@ -54,6 +54,23 @@ beforeAll(async () => {
   repo = new DrizzleIncidentsRepo({ client, db, close: async () => {} });
   const [current] = await client<Array<{ value: string }>>`SELECT current_schema() AS value`;
   expect(current?.value).toBe(TEST_SCHEMA);
+});
+
+// Every test here asserts on COUNTS returned by the repository, and they all
+// share the one per-file schema — cleanup was DROP SCHEMA in afterAll, so rows
+// from one test lived on into the next. In declared order the tests happened
+// not to collide; under `--sequence.shuffle` they do, and this file fails
+// alone: "applies open state before LIMIT" expected 0 and got 3, which is
+// another test's incidents still sitting in the table.
+//
+// The schema is per-file and dropped afterwards, so truncating between tests is
+// free and makes each one independently meaningful rather than dependent on
+// what ran before it.
+beforeEach(async () => {
+  if (!RUN_DB_TESTS || !admin) return;
+  await admin.unsafe(
+    `TRUNCATE "${TEST_SCHEMA}".incident_updates, "${TEST_SCHEMA}".incidents CASCADE`,
+  );
 });
 
 afterAll(async () => {
