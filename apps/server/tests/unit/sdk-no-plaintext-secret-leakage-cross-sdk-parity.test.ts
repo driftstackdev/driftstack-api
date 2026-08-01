@@ -62,16 +62,33 @@ const REAL_SECRET_PATTERNS = [
   { name: 'AWS access key', regex: /\bAKIA[A-Z0-9]{16}\b/ },
 ];
 
-// Allow-listed placeholder strings (these intentionally appear in source).
-const ALLOWED_PLACEHOLDERS = [
-  'ds_live_demo', // TS error-handling fallback (W797 + W837)
-  'ds_test_fakefakefakefakefakefakefakefake', // Python pytest fixture key (W802)
-  'sk_test_REDACTED', // env-template placeholder (W807)
-  'whsec_REDACTED', // env-template placeholder (W807)
-  'whsec_dev_only', // TS webhook example dev fallback (W799)
-];
+// Allow-listed placeholder strings.
+//
+// EMPTY, and that is the finding rather than an omission. It previously held
+// five entries — `ds_live_demo`, a Python fixture key, two `*_REDACTED` env
+// placeholders and `whsec_dev_only` — and NOT ONE of them could match any
+// pattern above. `ds_live_demo` has four characters after the prefix where the
+// pattern needs twenty; `whsec_REDACTED` is not 32 url-safe characters. So the
+// list read as "five reviewed exceptions" while exempting nothing at all.
+//
+// An inert exemption is not harmless. It is the shape that invites a real one to
+// be added beside it without anyone re-deriving whether the check still works —
+// and the check DID have a hole (see the scan below). The reachability arm
+// further down now fails on any entry that cannot match, so this list can only
+// ever contain exceptions that genuinely do something.
+const ALLOWED_PLACEHOLDERS: string[] = [];
 
 describe('W840 cross-SDK no plaintext-secret leakage', () => {
+  it('CRITICAL every allow-listed placeholder can actually match a pattern. An entry that matches nothing exempts nothing — it is dead text that reads as a reviewed exception. All five original entries were in exactly that state, which is how a list nobody re-derives ends up sitting next to a check that has a hole in it.', () => {
+    const unreachable = ALLOWED_PLACEHOLDERS.filter(
+      (ph) => !REAL_SECRET_PATTERNS.some(({ regex }) => regex.test(ph)),
+    );
+    expect(
+      unreachable,
+      'allow-listed placeholder(s) that cannot match any secret pattern — delete them, they exempt nothing:',
+    ).toEqual([]);
+  });
+
   // ─── SDK runtime source scan ─────────────────────────────────
 
   it('CRITICAL no SDK runtime source contains real-looking plaintext secrets (sk_live_ / pk_live_ / whsec_<32hex> / ds_live_<24chars> / GitHub PAT / AWS access key). Only placeholder/ellipsis values allowed. Defense against accidental commits of real keys per credential-handling memory rule + AGENTS.md trust pattern.', () => {
@@ -93,11 +110,18 @@ describe('W840 cross-SDK no plaintext-secret leakage', () => {
       const p = read(f);
       const rel = relative(REPO_ROOT, f);
       for (const { name, regex } of REAL_SECRET_PATTERNS) {
-        const m = p.match(regex);
-        if (!m) continue;
-        // Check if it's an allowed placeholder.
-        const isPlaceholder = ALLOWED_PLACEHOLDERS.some((ph) => m[0] === ph);
-        expect(isPlaceholder, `${rel} contains real-looking ${name}: '${m[0]}'`).toBe(true);
+        // EVERY occurrence, not just the first. `String.match` with a
+        // non-global regex returns only the first hit, so a file containing an
+        // allow-listed placeholder BEFORE a real secret would have been judged
+        // solely on the placeholder and passed. No placeholder could actually
+        // match at the time this was found, which is the only reason the hole
+        // was latent rather than live — a single reachable placeholder would
+        // have opened it.
+        const all = [...p.matchAll(new RegExp(regex.source, `${regex.flags}g`))];
+        for (const m of all) {
+          const isPlaceholder = ALLOWED_PLACEHOLDERS.some((ph) => m[0] === ph);
+          expect(isPlaceholder, `${rel} contains real-looking ${name}: '${m[0]}'`).toBe(true);
+        }
       }
     }
   });
@@ -128,15 +152,10 @@ describe('W840 cross-SDK no plaintext-secret leakage', () => {
     }
   });
 
-  // ─── 6 documented allow-listed placeholders ──────────────────
+  // ─── the allow-list, now empty by derivation ─────────────────
 
-  it('CRITICAL the 5 documented allow-listed placeholders (ds_live_demo / ds_test_fakefakefake... / sk_test_REDACTED / whsec_REDACTED / whsec_dev_only) are the ONLY secret-shaped strings in source. Drift to adding a new placeholder without updating this allow-list would let real secrets through.', () => {
-    expect(ALLOWED_PLACEHOLDERS).toHaveLength(5);
-    expect(ALLOWED_PLACEHOLDERS).toContain('ds_live_demo');
-    expect(ALLOWED_PLACEHOLDERS).toContain('ds_test_fakefakefakefakefakefakefakefake');
-    expect(ALLOWED_PLACEHOLDERS).toContain('sk_test_REDACTED');
-    expect(ALLOWED_PLACEHOLDERS).toContain('whsec_REDACTED');
-    expect(ALLOWED_PLACEHOLDERS).toContain('whsec_dev_only');
+  it('CRITICAL the allow-list is EMPTY, and stays empty until an entry is needed AND reachable. It previously pinned five names as "the ONLY secret-shaped strings in source" — but none of the five could match any pattern, so the case was pinning the spelling of five inert strings while claiming to bound real exemptions. Emptying it is not a relaxation: the reachability arm above now rejects any entry that exempts nothing, so a future addition has to prove it does something.', () => {
+    expect(ALLOWED_PLACEHOLDERS).toEqual([]);
   });
 
   // ─── Examples use ellipsis (…) not real secrets ─────────────
