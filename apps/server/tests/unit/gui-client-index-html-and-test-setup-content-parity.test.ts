@@ -113,7 +113,9 @@ describe('W791 gui-client index.html + tests/setup.ts content parity', () => {
   it("CRITICAL 3-import set pinned — afterEach from 'vitest' + cleanup from '@testing-library/react' + side-effect '@testing-library/jest-dom/vitest'. Drift to dropping the side-effect-only import would break jest-dom matcher registration.", () => {
     const p = read(TEST_SETUP);
 
-    expect(p).toMatch(/import \{ afterEach \} from 'vitest';/);
+    // `vi` joined the vitest import when the afterEach began restoring real
+    // timers — the named import set is what matters, not its exact spelling.
+    expect(p).toMatch(/import \{ afterEach, vi \} from 'vitest';/);
     expect(p).toMatch(/import \{ cleanup \} from '@testing-library\/react';/);
     expect(p).toMatch(/import '@testing-library\/jest-dom\/vitest';/);
   });
@@ -121,7 +123,15 @@ describe('W791 gui-client index.html + tests/setup.ts content parity', () => {
   it('CRITICAL afterEach(cleanup) shape pinned. Drift to a bare `afterEach(cleanup)` (which works) is fine, but the named-arrow form `afterEach(() => { cleanup(); })` is what we ship — pinning the shape so it stays consistent with other setup files.', () => {
     const p = read(TEST_SETUP);
 
-    expect(p).toMatch(/afterEach\(\(\) => \{\s*\n\s+cleanup\(\);\s*\n\}\);/);
+    // The hook now does two things, and the ORDER is the load-bearing part:
+    // cleanup() unmounts under whatever timer mode the test chose, then real
+    // timers are restored so a spec that installed fake ones cannot leak them
+    // into whatever runs next. Reversing these would unmount under real timers
+    // in a fake-timer test; dropping the restore reopens the shuffle
+    // order-dependence in simulator-window-frozen.
+    expect(p).toMatch(
+      /afterEach\(\(\) => \{[\s\S]*?cleanup\(\);[\s\S]*?vi\.useRealTimers\(\);[\s\S]*?\}\);/,
+    );
   });
 
   it('test file metadata — file exists at canonical path', () => {

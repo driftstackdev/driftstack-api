@@ -891,6 +891,16 @@ describe('SimulatorWindow — keyboard ownership from inputFocused (#6)', () => 
     getAgentSessionSpy.mockClear();
   });
 
+  // Restore real timers between tests, as the four describe blocks above this
+  // one already do. Without it this block was order-dependent: its LAST test
+  // installs fake timers and, in declared order, nothing runs after it — but
+  // the other four tests here `await waitFor(...)`, which polls on real timers.
+  // Run under `--sequence.shuffle` with the fake-timer test scheduled first and
+  // those four polls never advance, so each one sat until the 10s test timeout.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   function dataHandler(): ((p: Uint8Array) => void) | null {
     return latestDataHandler;
   }
