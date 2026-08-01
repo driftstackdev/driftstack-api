@@ -333,11 +333,20 @@ export interface CryptoOrdersServiceOpts {
    * notifier errors are swallowed so the IPN ack stays 200.
    *
    * The notifier is an *intent emitter* — it does not directly call
-   * Postmark. Production wiring routes through the existing
-   * EmailService template path (template ID + per-account locale
-   * resolution belongs there). In tests, a local mock captures the
-   * intent so we can assert the args without standing up the email
-   * pipeline.
+   * Postmark. It is INTENDED to route through the existing EmailService
+   * template path (template ID + per-account locale resolution belongs
+   * there). In tests, a local mock captures the intent so we can assert
+   * the args without standing up the email pipeline.
+   *
+   * ⚠️ NOT WIRED IN PRODUCTION. bootstrap.ts does not pass this, so no
+   * dedicated crypto receipt is sent — the sentence above described the
+   * intended design in the present tense and read as if it were live.
+   * Paying customers are not silently dropped: `tierActivator` IS wired
+   * and emits `subscription.tier_changed`, which sends the tier-changed
+   * email and writes the audit row. Adding a second, dedicated receipt
+   * needs a new customer-facing template, so it is a product decision
+   * rather than a wiring oversight to fix in passing. Declared in
+   * tests/unit/bootstrap-unwired-optional-deps-are-declared.test.ts.
    */
   paidEmailNotifier?: CryptoOrderPaidEmailNotifier;
   /**
