@@ -349,7 +349,7 @@ nobody checked, which reads as coverage and is worse than the gap. It needs
 per-table verification against the published retention table, and it should be
 built alongside the sweeper arms above rather than bolted on after.
 
-### 11. One integration test can fail intermittently in CI, and the mechanism is proven
+### 11. ROOT-CAUSED AND CLOSED — the intermittent webhook failure
 
 Three cases in `db-webhooks-concurrency-drizzle.test.ts` assert on the result of
 `encryptLegacySecrets`, which sweeps `webhook_endpoints` **globally** — it takes
@@ -428,6 +428,34 @@ unrelated files seen failing once — `account-byok-anthropic-active`,
 recurred. What changed is the prior: what I called "ambient flakiness across the
 suite" was partly a real defect I had introduced, so the remaining unexplained
 rate is lower than this item originally claimed and may be zero.
+
+**ROOT CAUSE, captured at last (`1877f1848`).** A failing run was finally caught
+with its assertion text, and it was not a count mismatch and not timing:
+
+```
+Error: Webhook signing secret must match whsec_<32 lowercase base32 characters>
+  at validatePlaintext -> convertWebhookSecretToV2 -> encryptLegacySecrets
+```
+
+`encryptLegacySecrets` sweeps `webhook_endpoints` GLOBALLY for non-v2 secrets and
+converts each one. Five real-Postgres test files seeded values that are neither
+valid legacy plaintext nor v2-shaped — `'whsec_test_secret'`, `'whsec_test'`,
+`'v2:secret'`. When the sweep reached one of those rows it THREW, failing
+whichever test had called it.
+
+All five fixtures now carry a syntactically v2 secret, so the sweep excludes
+them and never touches another test's rows.
+
+**Three hypotheses were wrong, recorded so they are not re-tried:** connection
+exhaustion (measured peak 8 of 100), lock contention (zero blocked backends
+across a sampled full run), and timing on the CAS `pg_stat_activity` poll. The
+real cause was the same global-scan class as the count mismatch fixed in
+`024eb4f6c` — but a different failure mode, which is exactly why fixing the
+counts did not close it and why the residual looked like ambient noise.
+
+_What actually worked:_ keeping a full log of a failing run. Every sampling
+approach failed for many fires because it measured the system's state rather
+than the failure's message.
 
 _Recommendation, revised:_ stop sampling and capture instead. The next step that
 would actually settle it is a persistent reporter over repeated runs that
