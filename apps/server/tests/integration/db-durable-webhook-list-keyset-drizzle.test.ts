@@ -90,7 +90,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       seeded.push({ accountId, webhookId });
       await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`durable-wh-${accountId}@test.local`})`;
       await client`INSERT INTO webhook_endpoints (id, account_id, url, secret, secret_prefix, events)
-        VALUES (${webhookId}, ${accountId}, 'https://example.test/hook', 'driftstack:webhook-secret:v2:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'whsec_test',
+        VALUES (${webhookId}, ${accountId}, 'https://example.test/hook', 'whsec_abcdefghijklmnopqrstuvwxyz234567', 'whsec_test',
                 ARRAY['session.completed']::webhook_event_type[])`;
 
       // 2 newest, 5 in a tie group (> page size 2), 2 oldest — all on the
