@@ -141,7 +141,7 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(eventValues.has('test.ping')).toBe(false);
   });
 
-  it.skip('HMAC-SHA256 + 5-minute timestamp tolerance posture pinned (V-359)', () => {
+  it('HMAC-SHA256 + 5-minute timestamp tolerance posture pinned (V-359)', () => {
     expect(body).toMatch(/HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance/);
   });
 
@@ -157,15 +157,22 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(occurrences.length).toBeGreaterThanOrEqual(2);
   });
 
-  it.skip('V-475 rotate-secret pane replaces window.prompt (keyboard-accessibility decision)', () => {
+  it('V-475 rotate-secret pane replaces window.prompt (keyboard-accessibility decision)', () => {
     expect(body).toMatch(/V-475 — rotate-secret in-page reveal\. Replaces the window\.prompt/);
     expect(body).toMatch(/data-rotate-secret/);
   });
 
-  it.skip('V-181 caveat: live response carries no aggregate delivery_counts (delivered/failed/dlq)', () => {
-    expect(body).toMatch(/aggregate delivery_counts \(delivered\/failed\/dlq\)/);
-    expect(body).toMatch(/render dashes for\s*\n?\s*\/\/\s*those cells/);
-    expect(body).toMatch(/Delivery counts coming soon/);
+  // Replaces a skipped V-181 case that pinned the OPPOSITE claim: that
+  // /v1/webhooks carries no aggregate delivery_counts, so the page renders
+  // dashes and says "Delivery counts coming soon". V-185 shipped the counts and
+  // the cards render them, so that caveat became false and the case was skipped
+  // rather than replaced. Un-skipping it would have re-pinned a claim the
+  // product had outgrown; what belongs here is the property that now holds.
+  it('delivery counts are read from the live response, with a zero fallback rather than a crash', () => {
+    expect(body, 'counts come from the endpoint payload').toMatch(/e\.delivery_counts/);
+    expect(body, 'and a response without them must not throw').toMatch(
+      /delivery_counts \|\| \{ delivered: 0, failed: 0, dlq: 0 \}/,
+    );
   });
 
   it('POST /v1/webhooks registered server-side', () => {
@@ -183,9 +190,18 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).not.toContain('href="https://docs.driftstack.dev/webhooks/"');
   });
 
-  it.skip('signing-secret reveal pattern mirrors V-296 api-key reveal (shown ONCE)', () => {
-    expect(body).toMatch(
-      /On\s+success the secret is shown ONCE — same pattern as the V-296\s+api-key reveal pane/,
+  // Re-anchored on the claim. The original required the literal "V-296" inside
+  // the sentence; the copy later dropped that internal token and the pin was
+  // skipped rather than updated. Shown-ONCE is a security posture — if the page
+  // ever starts re-displaying a signing secret, this must fail.
+  it('signing-secret reveal is shown ONCE, mirroring the api-key reveal posture', () => {
+    expect(body, 'the create-form reveal claims shown-ONCE').toMatch(/shown ONCE/);
+    expect(body, 'and says it mirrors the api-key reveal').toMatch(/api-key reveal/);
+    // Behavioural counterpart to the copy: the revealed secret is wiped from the
+    // DOM rather than merely hidden, which is the part a reader cannot verify
+    // from the sentence alone.
+    expect(body, 'the revealed secret is wiped from the DOM').toMatch(
+      /Wipe the previously-revealed signing secret from the DOM/,
     );
   });
 });

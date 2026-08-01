@@ -71,10 +71,18 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     );
   });
 
-  it.skip('TOTP MFA: AES-256-GCM at-rest + recovery-codes scrypt-hashed + V-353e step-up gate', () => {
+  // Re-anchored on the CLAIMS. The original pinned "Step-up gate (V-353e)
+  // requires MFA on destructive admin paths" verbatim; the page was later
+  // rewritten into plain customer language with the internal V-number removed,
+  // the pin stopped matching, and it was skipped rather than updated. A pin that
+  // tracks copy polish teaches people to skip it. These four assertions each name
+  // a security property a customer relies on, phrased so a rewrite that KEEPS the
+  // property keeps passing and a rewrite that DROPS one fails.
+  it('TOTP MFA: AES-256-GCM at-rest + recovery-codes scrypt-hashed + step-up gate on destructive admin paths', () => {
     expect(body).toMatch(/AES-256-GCM at-rest encryption of TOTP secrets/);
     expect(body).toMatch(/Recovery\s+codes are scrypt-hashed/);
-    expect(body).toMatch(/Step-up\s+gate \(V-353e\) requires MFA on destructive admin paths/);
+    expect(body, 'the step-up claim must survive any rewording').toMatch(/step-up/i);
+    expect(body, 'and must still say what it gates').toMatch(/destructive admin paths/);
     expect(body).toMatch(
       /apps\/server\/src\/lib\/mfa-totp\.ts · apps\/server\/src\/services\/mfa\.ts/,
     );
@@ -91,11 +99,17 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     expect(body).toMatch(/access tokens are\s+opaque random strings \(no JWT\)/); // S20c 2026-07-06
   });
 
-  it.skip('inbound webhook signing pinned: Stripe V-080 + NowPayments V-487 + shared raw-body parser', () => {
-    expect(body).toMatch(/Stripe: V-080 timestamp\+sha256 HMAC/);
-    expect(body).toMatch(/NowPayments: V-487\s+HMAC-SHA512 on canonical-keyed JSON/);
-    expect(body).toMatch(
-      /Shared raw-body\s+parser ensures the bytes the signature was computed over\s+are the bytes the verifier sees/,
+  // Same re-anchoring: the algorithm per provider and the raw-body guarantee are
+  // the claims; the V-numbers and sentence shape were editorial and are gone.
+  it('inbound webhook signing: Stripe timestamp+sha256 HMAC, NowPayments HMAC-SHA512 over canonical JSON, shared raw-body parser', () => {
+    expect(body, 'Stripe algorithm').toMatch(/Stripe: timestamp \+\s*sha256 HMAC/);
+    expect(body, 'NowPayments algorithm').toMatch(/NowPayments: HMAC-SHA512/);
+    expect(body, 'and that it is over the canonical-keyed JSON').toMatch(/canonical-keyed\) JSON/);
+    // The raw-body guarantee is the load-bearing one: it is why a re-encoding
+    // proxy cannot silently invalidate verification.
+    expect(body, 'shared raw-body parser claim').toMatch(/shared raw-body\s+parser/i);
+    expect(body, 'and what it guarantees').toMatch(
+      /bytes the signature was\s+computed over are the bytes the verifier sees/,
     );
   });
 
@@ -147,12 +161,23 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     );
   });
 
-  it.skip('chaos-engineering rehearsal harness: scripts/chaos/ + V-547 doc reference', () => {
-    expect(body).toMatch(/Chaos engineering rehearsal harness/);
-    expect(body).toMatch(
-      /Sub-processor outages, DB failover, Redis-down,\s+webhook-signature failures/,
-    );
-    expect(body).toMatch(/scripts\/chaos\/ · docs\/internal\/v547-chaos-engineering-scenarios\.md/);
+  // The internal scenarios doc is no longer cited on a customer-facing page,
+  // which is correct — it is an internal path. What must stay is the claim that
+  // drills exist, what they cover, and that they do not break things by default.
+  it('chaos-engineering rehearsal harness: the four drilled failure modes, scripts/chaos/, dry-run by default', () => {
+    expect(body, 'the practice is claimed').toMatch(/chaos engineering/i);
+    for (const mode of [
+      /sub-processor\) outages/i,
+      /DB failover/,
+      /Redis cache going down/i,
+      /webhook-signature failures/,
+    ]) {
+      expect(body, `drilled failure mode ${mode} must stay claimed`).toMatch(mode);
+    }
+    expect(body, 'and the drills must be locatable').toMatch(/scripts\/chaos\//);
+    // Dry-run-by-default is a safety claim, not decoration: it is what makes
+    // running a drill against production a deliberate act.
+    expect(body, 'drills are simulations unless explicitly opted in').toMatch(/dry-run/);
   });
 
   it('cross-link to /security architecture deep-dive pinned', () => {
@@ -171,7 +196,7 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     );
   });
 
-  it.skip('V-670 CISO-self-serve framing pinned in page comment', () => {
+  it('V-670 CISO-self-serve framing pinned in page comment', () => {
     expect(body).toMatch(/V-670 \(V-550 follow-up\) — public security overview as an evaluator/);
     expect(body).toMatch(
       /a prospective customer's CISO can self-serve a security\s*\n?\s*\/\/\s*review without scheduling a call/,
