@@ -123,7 +123,7 @@ import { InMemoryExitIdentityCache } from '../services/exit-identity-cache.js';
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
-import { WebhookDeliveryWorker } from '../services/webhook-worker.js';
+import { WebhookDeliveryWorker, drainWebhookDeliveries } from '../services/webhook-worker.js';
 import { AdminAuditService } from '../services/admin-audit.js';
 import { AccountsAdminService } from '../services/admin-accounts.js';
 import { AdminBillingService } from '../services/admin-billing.js';
@@ -2892,8 +2892,9 @@ export async function createProductionDeps(
   // and the failure-response read is size-capped. Without this poller, every
   // configured webhook enqueues but is never delivered (and replay routes that
   // re-set 'pending' never re-fire).
-  // Pinned here rather than left to the worker's default so the drain loop
-  // below can tell a FULL batch (more work waiting) from a partial one.
+  // Pinned here rather than left to the worker's default so the ceiling is
+  // explicit at the call site. It is NOT the drain loop's stop signal — see
+  // there for why a partial batch does not mean the queue is empty.
   const WEBHOOK_DELIVERY_BATCH_SIZE = 25;
   const webhookDeliveryWorker = new WebhookDeliveryWorker({
     repo: webhooksRepo,
@@ -2929,13 +2930,11 @@ export async function createProductionDeps(
       if (webhookDeliveryRunning) return;
       webhookDeliveryRunning = true;
       try {
-        const startedAt = Date.now();
-        for (let batch = 0; batch < WEBHOOK_DRAIN_MAX_BATCHES; batch++) {
-          const { claimed } = await webhookDeliveryWorker.tickOnce();
-          // Fewer than a full batch (or nothing) → the queue is drained.
-          if (claimed < WEBHOOK_DELIVERY_BATCH_SIZE) break;
-          if (Date.now() - startedAt >= WEBHOOK_DRAIN_BUDGET_MS) break;
-        }
+        await drainWebhookDeliveries({
+          tick: () => webhookDeliveryWorker.tickOnce(),
+          maxBatches: WEBHOOK_DRAIN_MAX_BATCHES,
+          budgetMs: WEBHOOK_DRAIN_BUDGET_MS,
+        });
       } catch (err) {
         logger.warn(
           {

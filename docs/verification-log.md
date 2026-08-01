@@ -30103,3 +30103,41 @@ server source TypeScript, targeted ESLint and Prettier. No route, schema,
 OpenAPI, SDK, customer-visible delivery semantics, signature, retry schedule or
 auto-disable behaviour changed — only how much of the existing queue one poll
 works through.
+
+---
+
+## V-718 — Correction to V-717: the drain loop stopped on the wrong signal
+
+**Date:** 2026-08-01
+
+V-717 claimed the drain loop fixed the case where "a backlog from one busy
+account, or a brief outage of any single receiver, could never drain." **It did
+not fix that case, and the stop condition made it look handled.**
+
+`repo.claim` ranks pending deliveries within each endpoint and takes at most
+`perEndpointCap` (5) per call — deliberate fairness, so one broken endpoint
+cannot monopolise a batch. The loop stopped when a batch came back smaller than
+the 25-row ceiling, reasoning that a partial batch meant the queue was drained.
+With the per-endpoint cap that reasoning is wrong in exactly the shape a backlog
+takes: a single backlogged endpoint returns 5, which is less than 25, so the
+loop stopped after ONE claim and that endpoint still drained at 5 per poll —
+5/minute. The change only helped when at least five distinct endpoints had work.
+
+The loop now stops on an EMPTY claim, which is the only honest "nothing is
+ready". It cannot spin: every claimed row is marked `in_flight` and settles to
+delivered, dlq, or pending with a FUTURE `next_attempt_at`, so it leaves the
+ready set and cannot be re-claimed by the next iteration. Both bounds are
+unchanged.
+
+The loop was also extracted from the `setInterval` closure into
+`drainWebhookDeliveries`. The bootstrap parity guard had noted, correctly, that
+an inline loop no test can construct leaves only wiring pins — and that a text
+pin proves the line exists, not that it works. That is precisely why the defect
+shipped: nothing exercised the stop condition. It is now asserted behaviourally,
+including the case that was broken (a 40-deep single-endpoint backlog served 5
+at a time drains fully), the empty case, and both bounds. Reinstating the
+partial-batch stop is proved red.
+
+Verification: full server suite 2510 files / 26,384 passing / 0 failing, strict
+server source TypeScript, targeted ESLint and Prettier. Delivery semantics,
+signature, retry schedule and auto-disable behaviour remain unchanged.

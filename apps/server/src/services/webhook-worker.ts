@@ -87,6 +87,43 @@ const MAX_RESPONSE_READ_BYTES = 64 * 1024;
 const EXCERPT_MAX_CHARS = 4096;
 const TRANSPORT_ERROR_MAX_CHARS = 500;
 
+/**
+ * Drive `tickOnce` until the ready queue is empty, bounded.
+ *
+ * Extracted from the bootstrap poller so the stop condition is testable. It is
+ * the stop condition that matters: `repo.claim` ranks rows within each endpoint
+ * and takes at most `perEndpointCap` (5) per call, so it deliberately returns
+ * fewer than a full batch whenever ready work is concentrated on few endpoints
+ * — the normal shape of a backlog. Stopping on a PARTIAL batch therefore ended
+ * the drain after one claim in exactly the case the loop exists for: a single
+ * endpoint recovering from an outage drained at 5 per poll. Only an EMPTY claim
+ * means nothing is ready.
+ *
+ * Cannot spin: every claimed row is marked in_flight and settles to delivered,
+ * dlq, or pending with a FUTURE next_attempt_at, so it leaves the ready set.
+ *
+ * @returns how many batches ran and how many deliveries were claimed in total.
+ */
+export async function drainWebhookDeliveries(args: {
+  tick: () => Promise<{ claimed: number }>;
+  maxBatches: number;
+  budgetMs: number;
+  now?: () => number;
+}): Promise<{ batches: number; claimed: number }> {
+  const now = args.now ?? ((): number => Date.now());
+  const startedAt = now();
+  let batches = 0;
+  let claimedTotal = 0;
+  for (let batch = 0; batch < args.maxBatches; batch++) {
+    const { claimed } = await args.tick();
+    batches += 1;
+    claimedTotal += claimed;
+    if (claimed === 0) break;
+    if (now() - startedAt >= args.budgetMs) break;
+  }
+  return { batches, claimed: claimedTotal };
+}
+
 export class WebhookDeliveryWorker {
   private running = false;
 
