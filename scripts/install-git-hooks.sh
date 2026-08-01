@@ -39,3 +39,24 @@ else
   echo ""
   echo "✓ $INSTALLED hook(s) installed into $DST"
 fi
+
+# Say so when git will not read what we just wrote.
+#
+# `core.hooksPath` overrides .git/hooks entirely. This repo sets it to
+# `.husky/_` via the package.json `prepare` script, so every hook copied above
+# is inert, and this script previously reported success anyway. That is how the
+# V-205 attribution hook came to sit in .git/hooks unread while both CLAUDE.md
+# and AGENTS.md described it as enforcing: a message carrying a tool co-author
+# trailer committed cleanly.
+#
+# Not an error — husky's `.husky/<hook>` files are the ones that run, and they
+# delegate back to the same canonical sources. But someone repairing enforcement
+# by running this script needs to be told it is not the lever.
+HOOKS_PATH=$(git -C "$REPO_ROOT" config --get core.hooksPath || true)
+if [[ -n "$HOOKS_PATH" ]]; then
+  echo ""
+  echo "⚠ core.hooksPath is set to '$HOOKS_PATH' — git does NOT read $DST."
+  echo "  The hooks that actually run are the ones under .husky/, which"
+  echo "  delegate to $SRC. Verify with:"
+  echo "    printf 'x\\n\\n<a banned trailer>\\n' > /tmp/m && bash '$HOOKS_PATH/commit-msg' /tmp/m"
+fi

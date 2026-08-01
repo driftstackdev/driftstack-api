@@ -1,0 +1,24 @@
+# V-527 — run the canonical commit-msg hook.
+#
+# `core.hooksPath` is `.husky/_`, so git does NOT consult `.git/hooks/`. The
+# V-205 attribution / V-211 anonymity hook was installed there by
+# scripts/install-git-hooks.sh and was therefore never invoked: a message
+# carrying a tool co-author trailer was accepted, while the same message run
+# through the canonical hook is rejected. Husky's own `.husky/_/commit-msg`
+# shim delegates to THIS file, so this is the one place the hook can be
+# reached from.
+#
+# The banned patterns are deliberately NOT spelled out here — one list, in the
+# canonical hook. Restating them would both duplicate the source of truth and
+# put the very strings this hook rejects into a tracked file.
+#
+# Delegating rather than duplicating: scripts/git-hooks/commit-msg stays the
+# single source of the patterns.
+#
+# Invoked through `bash` rather than executed directly, and deliberately: the
+# canonical hook is not marked executable in the tree, and executing it
+# directly fails with "Permission denied". Because this hook fails CLOSED that
+# did not look like a broken delegation — it looked like every commit message
+# being rejected, clean ones included. It also needs bash specifically; the
+# pattern lists are arrays.
+exec bash "$(dirname "$0")/../scripts/git-hooks/commit-msg" "$@"
