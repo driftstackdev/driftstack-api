@@ -113,6 +113,22 @@ export interface TerminatedAccountTurnReceiptPurgeRepo {
   purgeForTerminatedAccountsBefore(cutoff: Date, maxPerTick?: number): Promise<number>;
 }
 
+/**
+ * The agent-session half. `transcript` is the customer's agent conversation and
+ * `gui_control_key_ciphertext` a session credential; neither was ever deleted.
+ *
+ * Ordered AFTER the receipt arm in the tick even though
+ * `agent_turn_receipts.agent_session_id` is ON DELETE CASCADE and would take
+ * them anyway. Two reasons: the receipt arm is bounded independently, so it
+ * must not depend on sessions having run; and if the cascade is ever changed to
+ * SET NULL the receipts would otherwise be stranded — selected by ACCOUNT they
+ * still drain, but the ordering keeps neither arm relying on the other.
+ */
+export interface TerminatedAccountAgentSessionPurgeRepo {
+  /** Hard-delete agent sessions of accounts terminated before `cutoff`. */
+  purgeForTerminatedAccountsBefore(cutoff: Date, maxPerTick?: number): Promise<number>;
+}
+
 export interface AccountDeletionPurgeSweeperDeps {
   readonly repo: AccountDeletionPurgeRepo;
   /**
@@ -153,6 +169,11 @@ export interface AccountDeletionPurgeSweeperDeps {
    */
   readonly turnReceipts?: TerminatedAccountTurnReceiptPurgeRepo;
   /**
+   * Optional for the same reason as every arm above: absent means skipped and
+   * visibly so, never silently claimed as done.
+   */
+  readonly agentSessions?: TerminatedAccountAgentSessionPurgeRepo;
+  /**
    * Sealed-blob store for purged profiles. When wired, each purged profile's
    * `profiles/<id>.sealed` object is best-effort deleted so the encrypted bytes
    * do not outlive the row they belong to — the erasure promise is about the
@@ -180,6 +201,8 @@ export interface AccountDeletionPurgeResult {
   readonly snapshotsPurged: number;
   /** Agent-turn receipts hard-deleted for terminated accounts this tick. */
   readonly turnReceiptsPurged: number;
+  /** Agent sessions hard-deleted for terminated accounts this tick. */
+  readonly agentSessionsPurged: number;
 }
 
 export class AccountDeletionPurgeSweeperService {
@@ -320,7 +343,32 @@ export class AccountDeletionPurgeSweeperService {
       }
     }
 
-    return { purged, proxySecretsPurged, profilesPurged, snapshotsPurged, turnReceiptsPurged };
+    let agentSessionsPurged = 0;
+    if (this.deps.agentSessions === undefined) {
+      count('agent_sessions', 'skipped');
+    }
+    if (this.deps.agentSessions !== undefined) {
+      try {
+        agentSessionsPurged =
+          await this.deps.agentSessions.purgeForTerminatedAccountsBefore(cutoff);
+        count('agent_sessions', 'purged');
+      } catch (err) {
+        count('agent_sessions', 'failed');
+        this.deps.logger?.error?.(
+          { component: 'account-deletion-purge', err },
+          'failed to purge terminated-account agent sessions (will retry next sweep)',
+        );
+      }
+    }
+
+    return {
+      purged,
+      proxySecretsPurged,
+      profilesPurged,
+      snapshotsPurged,
+      turnReceiptsPurged,
+      agentSessionsPurged,
+    };
   }
 }
 

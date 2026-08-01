@@ -1034,3 +1034,50 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 }
+
+/**
+ * Erase agent sessions belonging to accounts terminated before `cutoff`.
+ *
+ * `agent_sessions.transcript` is the customer's agent conversation and
+ * `gui_control_key_ciphertext` is a session credential. Nothing purged this
+ * table on any schedule, so both were retained indefinitely after termination —
+ * the same soft-delete-vs-CASCADE root cause behind the proxy-secret, profile
+ * and turn-receipt arms.
+ *
+ * Cascade behaviour is deliberate and was checked against the live schema
+ * rather than assumed: `agent_turn_receipts.agent_session_id` is ON DELETE
+ * CASCADE, so a purged session takes its receipts with it, and
+ * `recipes.agent_session_id` is ON DELETE SET NULL, so a customer's saved
+ * recipes survive with the link cleared rather than being destroyed as a side
+ * effect of an unrelated erasure. Nothing billing-related references this
+ * table — usage records key off their own session id — so the 7-year billing
+ * retention is untouched.
+ *
+ * Standalone and key-free for the same reason as the turn-receipt purge: the
+ * repo class requires the transcript encryption key, a DELETE decrypts nothing,
+ * and binding an erasure promise to an unrelated flag is the defect 2eeddefa7
+ * already had to fix once.
+ *
+ * BOUNDED per tick on SESSION rows; the sweep is self-limiting because deleted
+ * rows stop matching. The bound sits on a subselect because PostgreSQL's DELETE
+ * takes no LIMIT.
+ */
+export async function purgeAgentSessionsForTerminatedAccountsBefore(
+  database: Database,
+  cutoff: Date,
+  maxPerTick = 500,
+): Promise<number> {
+  const rows = await database.client<Array<{ id: string }>>`
+    DELETE FROM agent_sessions
+    WHERE id IN (
+      SELECT s.id
+      FROM agent_sessions s
+      JOIN accounts a ON a.id = s.account_id
+      WHERE a.status = 'deleted'
+        AND a.deleted_at IS NOT NULL
+        AND a.deleted_at < ${cutoff.toISOString()}::timestamptz
+      LIMIT ${maxPerTick}
+    )
+    RETURNING id`;
+  return rows.length;
+}

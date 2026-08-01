@@ -145,6 +145,7 @@ describe('no purge arm can be disabled by another arm being unavailable', () => 
       profilesPurged: 0,
       snapshotsPurged: 0,
       turnReceiptsPurged: 0,
+      agentSessionsPurged: 0,
     });
   });
 

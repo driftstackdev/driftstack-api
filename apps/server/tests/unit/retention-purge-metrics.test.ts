@@ -72,6 +72,7 @@ describe('the retention purge reports what it did, and what it never ran', () =>
     // dashboard whether it ran or was never wired — which is the failure this
     // whole file exists for, so the list must fail on additions too.
     expect(samples(metrics)).toEqual([
+      'agent_sessions/skipped=1',
       'byok/skipped=1',
       'profiles/skipped=1',
       'proxy_secrets/skipped=1',

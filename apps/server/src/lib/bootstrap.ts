@@ -101,7 +101,10 @@ import { MetricsRegistry, METRIC_NAMES } from '../services/metrics-registry.js';
 import { refreshJobChainLiveness } from '../services/job-chain-liveness.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
-import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
+import {
+  DrizzleAgentSessionsRepo,
+  purgeAgentSessionsForTerminatedAccountsBefore,
+} from '../db/agent-sessions-repo.js';
 import {
   DrizzleAgentTurnReceiptsRepo,
   purgeTurnReceiptsForTerminatedAccountsBefore,
@@ -1611,6 +1614,16 @@ export async function createProductionDeps(
     turnReceipts: {
       purgeForTerminatedAccountsBefore: (cutoff, maxPerTick) =>
         purgeTurnReceiptsForTerminatedAccountsBefore(dbHandle, cutoff, maxPerTick),
+    },
+    // agent_sessions.transcript is the customer's agent conversation and
+    // gui_control_key_ciphertext a session credential. Neither was ever deleted.
+    // Purging a session cascades its turn receipts and only NULLs the link on
+    // saved recipes, so a customer's recipes survive the erasure; nothing
+    // billing-related references this table, so the 7-year retention is
+    // untouched. Key-free for the same reason as the receipts arm above.
+    agentSessions: {
+      purgeForTerminatedAccountsBefore: (cutoff, maxPerTick) =>
+        purgeAgentSessionsForTerminatedAccountsBefore(dbHandle, cutoff, maxPerTick),
     },
     // Drops each purged profile's sealed blob; a blob outliving its row is
     // the customer's data outliving the erasure we committed to.
