@@ -170,6 +170,10 @@ func (r *AccountResource) RevokeAllOtherWebSessions(ctx context.Context) error {
 	return r.client.do(ctx, requestOptions{
 		method: "DELETE",
 		path:   "/v1/account/web-sessions",
+		// Required by the endpoint: without it the server answers 400
+		// "Bulk revoke requires `?keep=current`. Pass it explicitly to
+		// confirm intent." The dashboard has always sent it.
+		query: url.Values{"keep": {"current"}},
 	})
 }
 

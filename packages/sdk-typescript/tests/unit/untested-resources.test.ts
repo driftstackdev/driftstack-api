@@ -34,6 +34,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MfaResource } from '../../src/resources/mfa.js';
 import { LegalResource } from '../../src/resources/legal.js';
 import { EmailPreferencesResource } from '../../src/resources/email-preferences.js';
+import { AccountResource } from '../../src/resources/account.js';
 import type { HttpClient } from '../../src/http.js';
 
 interface RequestOpts {
@@ -93,6 +94,26 @@ describe('MfaResource — driven, not read', () => {
     expect(calls[0]!.method).toBe('POST');
     expect(calls[0]!.path).toBe('/v1/account/mfa/recovery-codes/regenerate');
     expect(calls[0]!.body).toEqual({});
+  });
+});
+
+describe('AccountResource web-session revocation — the bug this caught', () => {
+  it('CRITICAL revokeAllOtherWebSessions sends ?keep=current. The endpoint REFUSES a bulk revoke without it — "Bulk revoke requires `?keep=current`. Pass it explicitly to confirm intent." — so omitting it made this method a guaranteed 400 in all three SDKs while the dashboard, which always sent it, worked. Nothing caught that, because every guard pinned the method signature and none asserted the URL.', async () => {
+    const { http, calls } = recorder(undefined);
+    await new AccountResource(http).revokeAllOtherWebSessions();
+    expect(calls[0]!.method).toBe('DELETE');
+    expect(calls[0]!.path).toBe('/v1/account/web-sessions');
+    expect(
+      (calls[0] as { query?: Record<string, unknown> }).query,
+      'the confirm-intent query the server requires',
+    ).toEqual({ keep: 'current' });
+  });
+
+  it('revokeWebSession targets one id on the item path, so the single and bulk revocations cannot be confused for each other.', async () => {
+    const { http, calls } = recorder(undefined);
+    await new AccountResource(http).revokeWebSession('wsess_abc');
+    expect(calls[0]!.method).toBe('DELETE');
+    expect(calls[0]!.path).toBe('/v1/account/web-sessions/wsess_abc');
   });
 });
 

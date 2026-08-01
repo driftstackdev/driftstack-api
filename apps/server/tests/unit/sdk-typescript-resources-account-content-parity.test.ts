@@ -218,10 +218,21 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('CRITICAL revokeAllOtherWebSessions verb — V-355 DELETE /v1/account/web-sessions (NO id, collection root). "revoke every web session EXCEPT the calling one" framing pinned. Drift to including the calling session would log customer OUT mid-revocation, silently breaking the "log out other devices, keep this one" UX. The exclusion is load-bearing.', () => {
+  // Re-anchored on the CLAIMS rather than the whole block. The previous regex
+  // spanned the entire method body, so adding the `?keep=current` the endpoint
+  // REQUIRES broke it — a pin that fails when a bug is fixed is a pin that
+  // pressures the next person to revert the fix.
+  it('CRITICAL revokeAllOtherWebSessions verb — V-355 DELETE /v1/account/web-sessions (NO id, collection root) WITH ?keep=current. "revoke every web session EXCEPT the calling one" framing pinned. Drift to including the calling session would log customer OUT mid-revocation; dropping the query makes the endpoint refuse the call outright.', () => {
     expect(body).toMatch(/\/\*\* V-355 — revoke every web session except the calling one\. \*\//);
-    expect(body).toMatch(
-      /revokeAllOtherWebSessions\(\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: '\/v1\/account\/web-sessions',\s*\n?\s*\}\);\s*\n?\s*\}/,
+    expect(body, 'DELETE on the collection root, no id').toMatch(
+      /revokeAllOtherWebSessions\(\): Promise<void>/,
+    );
+    expect(body, 'collection-root path').toMatch(/path: '\/v1\/account\/web-sessions',/);
+    // The endpoint answers 400 "Bulk revoke requires `?keep=current`" without
+    // this. Omitting it made the method a guaranteed failure in all three SDKs
+    // while the dashboard, which always sent it, worked fine.
+    expect(body, 'keep=current is required by the endpoint').toMatch(
+      /query: \{ keep: 'current' \}/,
     );
   });
 

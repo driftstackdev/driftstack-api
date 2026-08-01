@@ -254,3 +254,27 @@ func TestEmailPreferences_OptOutForwardsTheEventTypeItWasGiven(t *testing.T) {
 		t.Errorf("OptOut body = %s, want the event type it was given", body)
 	}
 }
+
+// The endpoint REFUSES a bulk revoke without ?keep=current — "Bulk revoke
+// requires `?keep=current`. Pass it explicitly to confirm intent." Omitting it
+// made this method a guaranteed 400 in all three SDKs, while the dashboard,
+// which always sent it, worked. Every guard pinned the method signature; none
+// asserted the URL.
+func TestAccount_RevokeAllOtherWebSessionsSendsKeepCurrent(t *testing.T) {
+	t.Parallel()
+	var rawQuery, method string
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		rawQuery, method = r.URL.RawQuery, r.Method
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	if err := client.Account.RevokeAllOtherWebSessions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if method != "DELETE" {
+		t.Errorf("method = %q, want DELETE", method)
+	}
+	if !strings.Contains(rawQuery, "keep=current") {
+		t.Errorf("query = %q, want keep=current", rawQuery)
+	}
+}

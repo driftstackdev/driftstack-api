@@ -139,8 +139,14 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
   });
 
   it('Sync revoke_all_other_web_sessions — V-355 DELETE /v1/account/web-sessions (NO id, collection root). CRITICAL "every web session except the calling one" framing pinned. Drift to including the calling session would log the customer OUT mid-revocation, silently breaking the "log out my other devices, keep this one" UX. The exclusion of the calling session is the load-bearing claim.', () => {
-    expect(body).toMatch(
-      /def revoke_all_other_web_sessions\(self\) -> None:\s*\n\s*"""V-355 — revoke every web session except the calling one\."""\s*\n\s*self\._http\.request\("DELETE", "\/v1\/account\/web-sessions"\)/,
+    // Re-anchored on the CLAIMS: the previous regex ran from the signature
+    // through the request call, so adding the required `?keep=current` broke it.
+    expect(body, 'signature + framing').toMatch(
+      /def revoke_all_other_web_sessions\(self\) -> None:\s*\n\s*"""V-355 — revoke every web session except the calling one\."""/,
+    );
+    // Without this the server answers 400 "Bulk revoke requires `?keep=current`".
+    expect(body, 'the confirm-intent query the endpoint requires').toMatch(
+      /"DELETE", "\/v1\/account\/web-sessions", params=\{"keep": "current"\}/,
     );
   });
 
@@ -202,8 +208,13 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
     expect(body).toMatch(
       /async def revoke_web_session\(self, session_id: str\) -> None:\s*\n\s*await self\._http\.request\("DELETE", f"\/v1\/account\/web-sessions\/\{quote\(session_id, safe=''\)\}"\)/,
     );
-    expect(body).toMatch(
-      /async def revoke_all_other_web_sessions\(self\) -> None:\s*\n\s*await self\._http\.request\("DELETE", "\/v1\/account\/web-sessions"\)/,
+    // The async mirror carries the same required `?keep=current`; without it
+    // the endpoint answers 400 and the method can never succeed.
+    expect(body, 'async signature').toMatch(
+      /async def revoke_all_other_web_sessions\(self\) -> None:/,
+    );
+    expect(body, 'async confirm-intent query').toMatch(
+      /await self\._http\.request\(\s*\n?\s*"DELETE", "\/v1\/account\/web-sessions", params=\{"keep": "current"\}/,
     );
     expect(body).toMatch(
       /async def rate_limits\(self\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/rate-limits"\)/,

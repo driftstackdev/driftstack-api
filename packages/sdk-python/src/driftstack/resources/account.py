@@ -66,7 +66,9 @@ class AccountResource:
 
     def revoke_all_other_web_sessions(self) -> None:
         """V-355 — revoke every web session except the calling one."""
-        self._http.request("DELETE", "/v1/account/web-sessions")
+        # `?keep=current` is REQUIRED by the endpoint; without it the server
+        # answers 400 "Bulk revoke requires `?keep=current`".
+        self._http.request("DELETE", "/v1/account/web-sessions", params={"keep": "current"})
 
     def rate_limits(self) -> dict[str, Any]:
         """V-258 — read effective rate-limit config."""
@@ -138,7 +140,7 @@ class AsyncAccountResource:
         await self._http.request("DELETE", f"/v1/account/web-sessions/{quote(session_id, safe='')}")
 
     async def revoke_all_other_web_sessions(self) -> None:
-        await self._http.request("DELETE", "/v1/account/web-sessions")
+        await self._http.request("DELETE", "/v1/account/web-sessions", params={"keep": "current"})
 
     async def rate_limits(self) -> dict[str, Any]:
         return await self._http.request("GET", "/v1/account/rate-limits")

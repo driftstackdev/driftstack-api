@@ -197,3 +197,30 @@ async def test_async_opt_out_sends_false_too() -> None:
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             await client.email_preferences.opt_out("billing-receipt")
         assert b'"opted_in":false' in route.calls[0].request.content
+
+
+# ───────────────────── account web-session revocation ────────────────
+
+
+def test_revoke_all_other_web_sessions_sends_keep_current() -> None:
+    """The endpoint REFUSES a bulk revoke without ?keep=current -- "Bulk revoke
+    requires `?keep=current`. Pass it explicitly to confirm intent." Omitting it
+    made this method a guaranteed 400 in all three SDKs, while the dashboard,
+    which always sent it, worked. Every guard pinned the method signature; none
+    asserted the URL."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.delete("/v1/account/web-sessions").mock(return_value=httpx.Response(204))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.account.revoke_all_other_web_sessions()
+        assert route.calls[0].request.url.params["keep"] == "current"
+
+
+@pytest.mark.asyncio
+async def test_async_revoke_all_other_web_sessions_sends_keep_current() -> None:
+    """The async mirror is a separate method and therefore a separate chance to
+    omit the query."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.delete("/v1/account/web-sessions").mock(return_value=httpx.Response(204))
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            await client.account.revoke_all_other_web_sessions()
+        assert route.calls[0].request.url.params["keep"] == "current"

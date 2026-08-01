@@ -159,8 +159,17 @@ describe('W590.B packages/sdk-go/account.go content parity', () => {
     expect(body).toMatch(
       /\/\/ RevokeAllOtherWebSessions — V-355 revoke every session except the calling one\./,
     );
-    expect(body).toMatch(
-      /func \(r \*AccountResource\) RevokeAllOtherWebSessions\(ctx context\.Context\) error \{\s*\n\s*return r\.client\.do\(ctx, requestOptions\{\s*\n\s*method: "DELETE",\s*\n\s*path:\s+"\/v1\/account\/web-sessions",\s*\n\s*\}\)\s*\n\}/,
+    // Re-anchored on the CLAIMS. The previous regex spanned the whole function,
+    // so adding the `?keep=current` the endpoint REQUIRES broke it - a pin that
+    // fails when a bug is fixed pressures the next person to revert the fix.
+    expect(body, 'collection-root DELETE, no id').toMatch(
+      /func \(r \*AccountResource\) RevokeAllOtherWebSessions\(ctx context\.Context\) error/,
+    );
+    expect(body, 'collection-root path').toMatch(/path:\s+"\/v1\/account\/web-sessions",/);
+    // Without this the server answers 400 "Bulk revoke requires `?keep=current`",
+    // which made the method a guaranteed failure in every SDK.
+    expect(body, 'the confirm-intent query the endpoint requires').toMatch(
+      /query: url\.Values\{"keep": \{"current"\}\}/,
     );
   });
 

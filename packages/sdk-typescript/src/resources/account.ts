@@ -194,6 +194,11 @@ export class AccountResource {
     return this.http.request<void>({
       method: 'DELETE',
       path: '/v1/account/web-sessions',
+      // The endpoint REFUSES a bulk revoke without this: "Bulk revoke requires
+      // `?keep=current`. Pass it explicitly to confirm intent." Omitting it made
+      // this method a guaranteed 400 in every SDK. The dashboard has always sent
+      // it (security.astro), which is why the flow worked there and not here.
+      query: { keep: 'current' },
     });
   }
 
