@@ -155,7 +155,7 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
     expect(stale, 'entries for services that no longer expose a tickOnce:').toEqual([]);
   });
 
-  it('records the current split, so the one unwired service is a visible number rather than a thing someone has to go looking for', () => {
+  it('records the current split, so the THREE unwired services are a visible number rather than a thing someone has to go looking for', () => {
     const unwired = services.filter((s) => !wiredInApplication(s.name, s.file)).map((s) => s.name);
     expect(unwired.sort()).toEqual([
       'AuditArchiveService',

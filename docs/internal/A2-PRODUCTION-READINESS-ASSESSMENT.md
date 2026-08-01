@@ -377,6 +377,21 @@ Four consecutive green full-suite runs followed, so the failure did not
 reproduce this session at all. Sampling cannot characterise a rare event without
 catching a failing run, and this approach has now been tried and did not.
 
+_Update — the rate collapsed after a cause was fixed, and the cause was mine._
+`84c2aaee8` fixed a real cross-test cascade: the receipts test hung its session
+off the same terminated account it was testing, and the agent-session purge test
+deleted that session with `ON DELETE CASCADE` taking the receipts with it. Since
+that commit, **8+ consecutive full-suite runs have been green**, including a
+dedicated 4-run measurement (4/4, no failing logs retained). The pre-fix record
+was 3 failures in 6.
+
+That is NOT closure. The two receipts failures are explained; the three
+unrelated files seen failing once — `account-byok-anthropic-active`,
+`stripe-webhooks`, a dashboard BYOK page — are not, and have simply not
+recurred. What changed is the prior: what I called "ambient flakiness across the
+suite" was partly a real defect I had introduced, so the remaining unexplained
+rate is lower than this item originally claimed and may be zero.
+
 _Recommendation, revised:_ stop sampling and capture instead. The next step that
 would actually settle it is a persistent reporter over repeated runs that
 preserves the assertion text of any failure — the three non-webhook failures
