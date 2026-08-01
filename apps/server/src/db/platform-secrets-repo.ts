@@ -16,6 +16,7 @@ import type {
 } from '../services/platform-secrets.js';
 import type { Database } from './client.js';
 import { platformSecrets } from './schema.js';
+import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 
 const MAX_PLATFORM_SECRET_VALUE_MIGRATION_BATCH = 500;
 const PLATFORM_SECRET_VALUE_V2_PREFIX_BYTES = Buffer.from(PLATFORM_SECRET_VALUE_V2_PREFIX, 'utf8');
@@ -60,7 +61,9 @@ export class DrizzlePlatformSecretsRepo implements PlatformSecretsRepo {
       .orderBy(asc(platformSecrets.name))
       .limit(1);
     if (v2Probe !== undefined) {
-      decryptPlatformSecretValue(v2Probe.ciphertext, encryptionKeyBase64, v2Probe.name);
+      verifyBootEncryptionKey('Platform secret values', 'MFA_ENCRYPTION_KEY', () => {
+        decryptPlatformSecretValue(v2Probe.ciphertext, encryptionKeyBase64, v2Probe.name);
+      });
     }
 
     const rows = await this.database.db

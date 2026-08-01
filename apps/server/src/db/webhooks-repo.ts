@@ -43,6 +43,7 @@ import type {
 } from '../services/webhooks.js';
 import type { Database } from './client.js';
 import { accounts, webhookDeliveries, webhookEndpoints } from './schema.js';
+import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 
 // V-173.R — an in_flight row whose `updated_at` is older than this has no
 // live worker on it (the claimer crashed/deployed mid-delivery); the claim
@@ -143,10 +144,12 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       .limit(1);
     if (v2Probe !== undefined) {
       const context = { accountId: v2Probe.accountId, endpointId: v2Probe.id };
-      readWebhookSecret(v2Probe.secret, encryptionKey, context);
-      if (v2Probe.secretPrev !== null) {
-        readWebhookSecret(v2Probe.secretPrev, encryptionKey, context);
-      }
+      verifyBootEncryptionKey('Webhook signing secrets', 'MFA_ENCRYPTION_KEY', () => {
+        readWebhookSecret(v2Probe.secret, encryptionKey, context);
+        if (v2Probe.secretPrev !== null) {
+          readWebhookSecret(v2Probe.secretPrev, encryptionKey, context);
+        }
+      });
     }
 
     const rows = await this.database.db

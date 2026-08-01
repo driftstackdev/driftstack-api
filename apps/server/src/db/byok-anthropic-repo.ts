@@ -13,6 +13,7 @@ import { and, asc, count, eq, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { accounts } from './schema.js';
 import type { BYOKAnthropicKeyRow, BYOKAnthropicRepo } from '../services/byok-anthropic.js';
+import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 import {
   BYOK_ANTHROPIC_KEY_V2_PREFIX,
   decryptByokAnthropicKey,
@@ -67,7 +68,16 @@ export class DrizzleBYOKAnthropicRepo implements BYOKAnthropicRepo {
       if (v2Probe.ciphertext === null) {
         throw new Error(`Account ${v2Probe.accountId} has an incomplete BYOK ciphertext.`);
       }
-      decryptByokAnthropicKey(v2Probe.ciphertext, encryptionKeyBase64, v2Probe.accountId);
+      // Only the DECRYPT is wrapped: the incomplete-ciphertext check above is a
+      // structural fault, not a key mismatch, and keeps its own message.
+      // `ciphertext` is bound locally first: inside the callback TypeScript no
+      // longer carries the null-narrowing from the structural check above, and
+      // widening the parameter to accept null would erase a real type guarantee
+      // to satisfy a diagnostic wrapper.
+      const probeCiphertext = v2Probe.ciphertext;
+      verifyBootEncryptionKey('BYOK Anthropic keys', 'MFA_ENCRYPTION_KEY', () => {
+        decryptByokAnthropicKey(probeCiphertext, encryptionKeyBase64, v2Probe.accountId);
+      });
     }
 
     const rows = await this.database.db

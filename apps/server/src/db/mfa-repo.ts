@@ -10,6 +10,7 @@ import {
 import type { MfaEnrollmentRow, MfaRepo, RecoveryCodeRow } from '../services/mfa.js';
 import type { Database } from './client.js';
 import { accountMfa, accountMfaRecoveryCodes, accounts, webSessions } from './schema.js';
+import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 
 const MAX_MFA_SECRET_MIGRATION_BATCH = 500;
 
@@ -77,7 +78,9 @@ export class DrizzleMfaRepo implements MfaRepo {
       .orderBy(asc(accountMfa.createdAt), asc(accountMfa.accountId))
       .limit(1);
     if (v2Probe !== undefined) {
-      decryptSecret(v2Probe, keyBase64, v2Probe.accountId);
+      verifyBootEncryptionKey('MFA TOTP secrets', 'MFA_ENCRYPTION_KEY', () => {
+        decryptSecret(v2Probe, keyBase64, v2Probe.accountId);
+      });
     }
 
     const rows = await this.database.db
