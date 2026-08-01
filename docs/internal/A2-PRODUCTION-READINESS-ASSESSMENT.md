@@ -269,6 +269,26 @@ _Recommendation:_ unchanged in substance — decide compartmentalisation, then
 write the runbook or add dual-key reads. But the framing matters: this is
 finishing a deliberate design, not repairing a broken one.
 
+_Follow-up: are the probes themselves proven?_ Eight of the nine react to being
+neutralised — each reds exactly one test. The ninth,
+`migrateTranscriptEnvelopes`, does not: disabling its v1 probe leaves the FULL
+suite green.
+
+That is **not** a coverage gap, and the distinction took several attempts to
+establish. Two independent mechanisms protect the same property — the probe, and
+the fact that `prepared` computes every conversion before the first UPDATE (the
+source says so: "One bad legacy array/envelope therefore cannot leave a
+partially converted page"). Disabling the probe leaves the structure; breaking
+the structure leaves the probe. **Disabling BOTH still left the property
+holding**, so the redundancy is deeper than two layers.
+
+_I wrote a guard for this and then deleted it._ A byte-identical "a wrong key
+rewrote nothing" assertion passed under every mutation I could construct,
+including both mechanisms disabled at once. A test that cannot be made to fail
+proves nothing, and shipping it would have added the appearance of coverage to
+something already covered. That is the same standard applied to everyone else's
+guards in this document, and it has to apply to mine.
+
 _Lesson for my own method:_ I generalised from a test-fixture flake to a
 production claim without running the production path. The probe was ten lines
 above the code I had already read twice. **Reading further beats reasoning
