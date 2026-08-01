@@ -485,7 +485,7 @@ nobody checked, which reads as coverage and is worse than the gap. It needs
 per-table verification against the published retention table, and it should be
 built alongside the sweeper arms above rather than bolted on after.
 
-### 11. ROOT-CAUSED AND CLOSED — the intermittent webhook failure
+### 11. ROOT-CAUSED; my first fix REGRESSED it, second fix narrows it — not closed
 
 Three cases in `db-webhooks-concurrency-drizzle.test.ts` assert on the result of
 `encryptLegacySecrets`, which sweeps `webhook_endpoints` **globally** — it takes
@@ -564,6 +564,25 @@ unrelated files seen failing once — `account-byok-anthropic-active`,
 recurred. What changed is the prior: what I called "ambient flakiness across the
 suite" was partly a real defect I had introduced, so the remaining unexplained
 rate is lower than this item originally claimed and may be zero.
+
+**CORRECTION — that fix regressed it, and I called it closed too early
+(`4768e03a5`).** Making the fixtures v2-SHAPED moved them out of the legacy
+sweep and into the key probe, where they are not encrypted under anyone's key,
+so the probe threw instead. A row is always in exactly one of two sets — the
+sweep selects NOT-v2, the probe selects v2 — so "hide it from the sweep" was
+never available. Fixtures now use a VALID `whsec_<32 base32>` plaintext, the
+only option that throws in neither set.
+
+**Still not closed, and this time said plainly.** Once converted, such a row IS
+v2 under whichever key ran, so a later probe under a different key can still
+object. No fixture choice substitutes for isolating the real-Postgres
+integration files; that remains the structural answer.
+
+_Worth recording: the diagnostic wrapper shipped in `791246263` named this
+regression on the first read_ — `Caused by: Unsupported state or unable to
+authenticate data at decryptV2Payload` — where the previous incarnation of the
+same class cost days of hypotheses. It was written for operators mid-rotation
+and paid for itself against my own bug instead.
 
 **ROOT CAUSE, captured at last (`1877f1848`).** A failing run was finally caught
 with its assertion text, and it was not a count mismatch and not timing:
