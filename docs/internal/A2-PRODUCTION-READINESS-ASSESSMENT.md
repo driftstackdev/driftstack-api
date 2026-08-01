@@ -296,9 +296,27 @@ faster**, and a claim about behaviour should be executed before it is published.
 
 ## Assumed, not proven
 
-- **Deploy-time behaviour.** Nothing here was deployed, and nothing has been
-  pushed — see open item 1. Migration `0108` applied cleanly to a populated local
-  Postgres; production application is unverified by A2.
+- **Deploy-time behaviour — PARTLY CLOSED.** Still nothing deployed and nothing
+  pushed (item 1). But the boot path itself was finally executed rather than
+  assumed, against a FRESH database:
+  - **All 110 migrations applied from empty** — the whole chain, not an
+    incremental step. `__drizzle_migrations` matched the journal exactly.
+  - **The server boots** with every optional integration absent (Sentry, R2,
+    Postmark, Stripe, NOWPayments, MFA/PROFILE keys) and says so explicitly per
+    subsystem rather than failing or silently degrading.
+  - **Contract holds against a live process:** `/health`, `/ready`, `/version`
+    200; protected routes 401; unknown route 404; errors are RFC 9457
+    `application/problem+json` with `type`/`title`/`status`/`detail`/`instance`.
+  - **Graceful shutdown works end to end: 0.13s** from SIGTERM to exit, with
+    `shutdown signal received` → `tearing down` → `teardown complete` and no
+    fatal — against a 10s drain budget and a 20s stop window. That is the
+    concurrent-teardown fix from `2522213df` observed in a real process.
+
+  _What is still unproven:_ behaviour under the production env (real Sentry,
+  Postmark, LiveKit, R2 credentials), and anything about the Hetzner units.
+  Running with all integrations ABSENT proves the degradation path, not the
+  wired one.
+
 - ~~First-run volume of the BYOK arm.~~ **Closed.** All six erasure paths are
   now bounded at 500 rows per tick, and the BYOK candidate query — which had no
   test coverage of any kind, only in-memory doubles — is now exercised against
