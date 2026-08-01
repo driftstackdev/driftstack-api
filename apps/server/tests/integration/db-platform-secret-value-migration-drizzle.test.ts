@@ -5,6 +5,7 @@ import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzlePlatformSecretsRepo } from '../../src/db/platform-secrets-repo.js';
 import { PlatformSecretsService } from '../../src/services/platform-secrets.js';
 import {
@@ -14,8 +15,12 @@ import {
 } from '../../src/lib/platform-secret-value-encryption.js';
 import type * as schema from '../../src/db/schema.js';
 
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+// Runs against its OWN database: this file calls a GLOBAL envelope migration,
+// which scans its whole table and therefore depends on rows owned by whatever
+// else is running. See _helpers/isolated-database.ts for why fixture discipline
+// cannot close that and isolation can.
+const ISOLATED_DB_NAME = 'driftstack_iso_platform_secret';
+let DB_URL = '';
 const RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL);
 const TEST_SCHEMA = `platform_secret_value_${randomUUID().replaceAll('-', '')}`;
 const KEY = Buffer.alloc(32, 83).toString('base64');
@@ -58,6 +63,9 @@ async function insertSecret(args: {
 }
 
 beforeAll(async () => {
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   if (!RUN_DB_TESTS) return;
   admin = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzleProfilesRepo } from '../../src/db/profiles-repo.js';
 import {
   deriveTenantMasterKey,
@@ -13,8 +14,12 @@ import {
 } from '../../src/lib/profile-key-hierarchy.js';
 import type * as schema from '../../src/db/schema.js';
 
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+// Runs against its OWN database: this file calls a GLOBAL envelope migration,
+// which scans its whole table and therefore depends on rows owned by whatever
+// else is running. See _helpers/isolated-database.ts for why fixture discipline
+// cannot close that and isolation can.
+const ISOLATED_DB_NAME = 'driftstack_iso_profile_dek';
+let DB_URL = '';
 const MASTER = Buffer.alloc(32, 61);
 const WRONG_MASTER = Buffer.alloc(32, 62);
 const TEST_SCHEMA = `profile_dek_envelope_${randomUUID().replaceAll('-', '')}`;
@@ -44,6 +49,9 @@ async function insertLegacyProfile(args: {
 }
 
 beforeAll(async () => {
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;

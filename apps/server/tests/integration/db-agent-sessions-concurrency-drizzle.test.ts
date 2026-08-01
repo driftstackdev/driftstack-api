@@ -26,12 +26,17 @@ import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzleAgentSessionsRepo } from '../../src/db/agent-sessions-repo.js';
 import type * as schema from '../../src/db/schema.js';
 import type { TranscriptEntry } from '../../src/services/agent-decomposer.js';
 
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+// Runs against its OWN database: this file calls a GLOBAL envelope migration,
+// which scans its whole table and therefore depends on rows owned by whatever
+// else is running. See _helpers/isolated-database.ts for why fixture discipline
+// cannot close that and isolation can.
+const ISOLATED_DB_NAME = 'driftstack_iso_agent_conc';
+let DB_URL = '';
 const RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL);
 const TRANSCRIPT_KEY = Buffer.alloc(32, 11).toString('base64');
 const TEST_SCHEMA = `agent_sessions_concurrency_${randomUUID().replaceAll('-', '')}`;
@@ -43,6 +48,9 @@ let client: ReturnType<typeof postgres> | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   if (!RUN_DB_TESTS) return;
   admin = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {

@@ -2,6 +2,7 @@ import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzleBYOKAnthropicRepo } from '../../src/db/byok-anthropic-repo.js';
 import {
   BYOK_ANTHROPIC_KEY_V2_PREFIX,
@@ -10,8 +11,12 @@ import {
 } from '../../src/lib/byok-anthropic-encryption.js';
 import type * as schema from '../../src/db/schema.js';
 
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+// Runs against its OWN database: this file calls a GLOBAL envelope migration,
+// which scans its whole table and therefore depends on rows owned by whatever
+// else is running. See _helpers/isolated-database.ts for why fixture discipline
+// cannot close that and isolation can.
+const ISOLATED_DB_NAME = 'driftstack_iso_byok';
+let DB_URL = '';
 const KEY = Buffer.alloc(32, 71).toString('base64');
 const WRONG_KEY = Buffer.alloc(32, 72).toString('base64');
 const TEST_SCHEMA = `byok_anthropic_envelope_${randomUUID().replaceAll('-', '')}`;
@@ -51,6 +56,9 @@ async function insertAccount(args: {
 }
 
 beforeAll(async () => {
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   if (!RUN_DB_TESTS) return;
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {

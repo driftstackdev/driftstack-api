@@ -22,11 +22,9 @@
 
 import { randomBytes, randomUUID } from 'node:crypto';
 import postgres from 'postgres';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzleWebhooksRepo } from '../../src/db/webhooks-repo.js';
 import { encryptPlatformSecret } from '../../src/lib/platform-secret-encryption.js';
 import {
@@ -36,9 +34,6 @@ import {
 } from '../../src/lib/webhook-secret-encryption.js';
 import type * as schema from '../../src/db/schema.js';
 import type { NewWebhookEndpointInput } from '../../src/services/webhooks.js';
-
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const BASE_DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 
 /**
  * This file gets its OWN database, and that is structural rather than tidiness.
@@ -62,13 +57,7 @@ const BASE_DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
  * global sweep. Migrations are idempotent, so the setup cost is paid once.
  */
 const ISOLATED_DB_NAME = 'driftstack_webhook_sweep_iso';
-const withDatabase = (name: string): string => {
-  const u = new URL(BASE_DB_URL);
-  u.pathname = `/${name}`;
-  return u.toString();
-};
-const DB_URL = withDatabase(ISOLATED_DB_NAME);
-const ADMIN_DB_URL = withDatabase('postgres');
+let DB_URL = '';
 const WEBHOOK_KEY = Buffer.alloc(32, 17).toString('base64');
 
 let dbReachable = false;
@@ -77,25 +66,9 @@ let client: ReturnType<typeof postgres> | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
-  // Create + migrate the isolated database first. Both steps are idempotent, and
-  // a checkout without Postgres still SKIPS this file rather than failing it —
-  // the probe below remains the single source of `dbReachable`.
-  const admin = postgres(ADMIN_DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
-  try {
-    const [existing] = await admin<
-      Array<{ n: number }>
-    >`SELECT 1 AS n FROM pg_database WHERE datname = ${ISOLATED_DB_NAME}`;
-    if (existing === undefined) await admin.unsafe(`CREATE DATABASE "${ISOLATED_DB_NAME}"`);
-    await admin.end({ timeout: 1 });
-    const migrator = postgres(DB_URL, { max: 1 });
-    await migrate(drizzle(migrator), {
-      migrationsFolder: resolve(dirname(fileURLToPath(import.meta.url)), '../../src/db/migrations'),
-    });
-    await migrator.end({ timeout: 5 });
-  } catch {
-    await admin.end({ timeout: 1 }).catch(() => {});
-    return;
-  }
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;
