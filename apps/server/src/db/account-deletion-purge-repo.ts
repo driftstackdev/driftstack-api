@@ -11,7 +11,19 @@ import type { AccountDeletionPurgeRepo } from '../services/account-deletion-purg
 export class DrizzleAccountDeletionPurgeRepo implements AccountDeletionPurgeRepo {
   constructor(private readonly database: Database) {}
 
-  async findDeletedAccountIdsWithByokKeyBefore(cutoff: Date): Promise<string[]> {
+  /**
+   * BOUNDED per tick, matching the other five arms.
+   *
+   * This was the last unbounded erasure path. The sweeper consumes the result
+   * in a loop, one `clearKey` per account, so an unbounded candidate list on a
+   * production backlog of long-terminated accounts means one tick issues an
+   * unbounded number of sequential key-clearing writes. Correct either way —
+   * the query is self-limiting, since clearing the ciphertext drops the account
+   * out of the candidate set — but a cap keeps the blast radius of a first run
+   * something an operator can watch, and leaves no arm behaving differently
+   * from its siblings for no stated reason.
+   */
+  async findDeletedAccountIdsWithByokKeyBefore(cutoff: Date, maxPerTick = 500): Promise<string[]> {
     const rows = await this.database.db
       .select({ id: accounts.id })
       .from(accounts)
@@ -22,7 +34,8 @@ export class DrizzleAccountDeletionPurgeRepo implements AccountDeletionPurgeRepo
           lt(accounts.deletedAt, cutoff),
           isNotNull(accounts.byokAnthropicApiKeyCiphertext),
         ),
-      );
+      )
+      .limit(maxPerTick);
     return rows.map((r) => r.id);
   }
 }

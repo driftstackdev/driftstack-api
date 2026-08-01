@@ -48,7 +48,7 @@ export interface AccountDeletionPurgeRepo {
    * Account ids where accounts.status = 'deleted' AND accounts.deleted_at
    * < cutoff AND accounts.byok_anthropic_api_key_ciphertext IS NOT NULL.
    */
-  findDeletedAccountIdsWithByokKeyBefore(cutoff: Date): Promise<string[]>;
+  findDeletedAccountIdsWithByokKeyBefore(cutoff: Date, maxPerTick?: number): Promise<string[]>;
 }
 
 /**
