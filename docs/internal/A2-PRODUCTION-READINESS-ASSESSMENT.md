@@ -342,6 +342,40 @@ failure into a swallowed one, which is strictly worse than the cryptic message i
 would replace. It wants a shared helper and unhurried review, not a late-session
 sweep.
 
+### 20. Six parameterised routes may return an undocumented 404 — unverified
+
+Five were found and fixed (`2744199bc`): three customer-facing proxy routes, the
+profile-snapshots list, and the admin incident update all throw `NotFoundError`
+while the spec documented no 404. That matters because the spec drives codegen —
+`packages/sdk-python/openapi.json` encodes each operation's response status set,
+so an omitted status is one customers' generated clients never model.
+
+**Six remain unverified and were deliberately left alone:**
+
+| route                                                     |
+| --------------------------------------------------------- |
+| `POST /v1/admin/validation-schedules/{archetype}/trigger` |
+| `DELETE /v1/admin/oauth/clients/{id}`                     |
+| `POST /v1/admin/oauth/clients/{id}/rotate-secret`         |
+| `PUT /v1/admin/owner/secrets/{name}`                      |
+| `PATCH /v1/admin/owner/pricing/{tier}`                    |
+| `POST /v1/sessions/{id}/proxy`                            |
+
+Each has a plausible 404 path, and "plausible" is exactly why they are not
+fixed. Adding 404 to a route that cannot return it is as wrong as omitting one
+that can — it tells an SDK to model a branch that never occurs. The five that
+shipped were each confirmed at a specific throw site with a line number.
+
+_Also worth recording: one apparent gap was a correct omission._
+`DELETE /v1/profiles/{id}` does `if (!ok) return` — an idempotent 204 that never
+404s. A scan by path shape would have "fixed" it wrongly.
+
+_Recommendation:_ verify the six against their handlers, then add a roster guard
+requiring every parameterised route to either document 404 or carry an explicit
+exemption with a reason. The guard is deliberately NOT added yet: with six routes
+undecided it would either fail the suite or encode "unknown" as "fine", and the
+second is how a stale allowlist starts lying.
+
 ## Assumed, not proven
 
 - **Deploy-time behaviour — PARTLY CLOSED.** Still nothing deployed and nothing
