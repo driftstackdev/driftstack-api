@@ -23,6 +23,16 @@
 // `ListDeliveriesQuery` is a query type using `url:` tags rather than `json:`.
 // A guard that cries wolf three times out of four gets switched off, so the
 // parser follows embedded types before deciding anything is missing.
+//
+// WHAT THIS GUARD CANNOT SEE, stated because a scan's reach is an assumption
+// until it is written down. It compares TOP-LEVEL fields of a shape whose NAME
+// matches a spec schema. Fields nested inside an INLINE object literal are
+// invisible: removing `egress_state` from the TypeScript AgentSession's inline
+// `capability_report` object leaves this green, and that was measured, not
+// assumed. Go is less exposed because its nested shapes are named structs, which
+// do get compared. Extending to inline objects means resolving anonymous types
+// against nested schemas, which is worth doing when a bug appears there — not
+// speculatively, since the parser complexity is where false alarms come from.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -33,6 +43,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..', '..');
 const GO_DIR = resolve(REPO, 'packages', 'sdk-go');
 const SPEC = resolve(REPO, 'packages', 'sdk-python', 'openapi.json');
+const TS_DIR = resolve(REPO, 'packages', 'sdk-typescript', 'src');
 
 interface GoStruct {
   /** json tag names declared directly on this struct. */
@@ -80,6 +91,86 @@ function allFields(
   const out = new Set(s.own);
   for (const e of s.embeds) for (const f of allFields(e, table, seen)) out.add(f);
   return out;
+}
+
+interface TsInterface {
+  readonly own: Set<string>;
+  /** Interfaces this one extends; their fields are part of the shape too. */
+  readonly extends: string[];
+}
+
+/**
+ * TypeScript interfaces declared in the SDK.
+ *
+ * Far fewer of these name-match a spec schema than on the Go side, because the
+ * TypeScript SDK imports most shapes from `@driftstack/api-types` — and those
+ * are the very definitions the OpenAPI document is generated from, so they
+ * cannot drift. What is left is the hand-written remainder, which can.
+ */
+function tsInterfaces(): Map<string, TsInterface> {
+  const out = new Map<string, TsInterface>();
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith('.ts')) {
+        const src = readFileSync(full, 'utf8');
+        for (const m of src.matchAll(
+          /export interface (\w+)(?: extends ([\w, ]+))? \{([\s\S]*?)\n\}/g,
+        )) {
+          out.set(m[1]!, {
+            own: new Set([...m[3]!.matchAll(/^\s*(\w+)\??:/gm)].map((f) => f[1]!)),
+            extends: (m[2] ?? '')
+              .split(',')
+              .map((x) => x.trim())
+              .filter((x) => x !== ''),
+          });
+        }
+      }
+    }
+  };
+  walk(TS_DIR);
+  return out;
+}
+
+/** Every field on a TS interface, following `extends`. */
+function allTsFields(
+  name: string,
+  table: Map<string, TsInterface>,
+  seen = new Set<string>(),
+): Set<string> {
+  if (seen.has(name)) return new Set();
+  seen.add(name);
+  const i = table.get(name);
+  if (i === undefined) return new Set();
+  const out = new Set(i.own);
+  for (const e of i.extends) for (const f of allTsFields(e, table, seen)) out.add(f);
+  return out;
+}
+
+/**
+ * Can this interface's full shape be reconstructed from SDK source alone?
+ *
+ * `RotateApiKeyResponse extends CreateApiKeyResponse`, and that parent is
+ * IMPORTED from `@driftstack/api-types` rather than declared here — so its
+ * fields are invisible to this parser and the interface reads as missing all
+ * nine of them. That is a false alarm, and this file's header is explicit that
+ * a guard which cries wolf gets switched off rather than fixed.
+ *
+ * Such interfaces are skipped, but the skip is COUNTED and pinned below, so the
+ * blind spot cannot quietly grow.
+ */
+function tsResolvable(
+  name: string,
+  table: Map<string, TsInterface>,
+  seen = new Set<string>(),
+): boolean {
+  if (seen.has(name)) return true;
+  seen.add(name);
+  const i = table.get(name);
+  if (i === undefined) return false;
+  return i.extends.every((e) => tsResolvable(e, table, seen));
 }
 
 /** OpenAPI component schemas that describe an object, name → property names. */
@@ -131,5 +222,57 @@ describe('sdk-go structs cover the fields the API returns', () => {
       missing.sort(),
       'Go struct(s) missing fields the API returns — the caller cannot read them:',
     ).toEqual([]);
+  });
+  it('CRITICAL the TypeScript parse found interfaces too. Same reasoning as the Go arm: this reports an absence, so an empty parse would report perfect coverage.', () => {
+    const ifaces = tsInterfaces();
+    expect(ifaces.size, 'TS interfaces parsed').toBeGreaterThan(30);
+    const matched = [...specSchemas().keys()].filter((n) => ifaces.has(n));
+    expect(matched.length, 'TS interfaces name-matching a spec schema').toBeGreaterThanOrEqual(9);
+  });
+
+  it('CRITICAL `extends` is resolved for TypeScript, the analogue of Go embedding. Without it an interface that inherits its fields reads as missing all of them, which is how a guard earns a reputation for false alarms.', () => {
+    const ifaces = tsInterfaces();
+    const extending = [...ifaces.entries()].filter(([, i]) => i.extends.length > 0);
+    expect(extending.length, 'interfaces using extends').toBeGreaterThan(0);
+    const [name, iface] = extending[0]!;
+    const parent = iface.extends[0]!;
+    const parentFields = allTsFields(parent, ifaces);
+    if (parentFields.size > 0) {
+      const inherited = [...parentFields][0]!;
+      expect(iface.own.has(inherited), `${inherited} is not declared directly on ${name}`).toBe(
+        false,
+      );
+      expect(
+        allTsFields(name, ifaces).has(inherited),
+        `but it IS part of ${name} via extends ${parent}`,
+      ).toBe(true);
+    }
+  });
+
+  it('CRITICAL no TypeScript interface drops a field its matching OpenAPI schema declares. The Go side of this guard exists because AgentSession dropped error_event; the TypeScript types are hand-written too and can drift the same way.', () => {
+    const ifaces = tsInterfaces();
+    const missing: string[] = [];
+    const unresolvable: string[] = [];
+    for (const [name, props] of specSchemas()) {
+      if (!ifaces.has(name)) continue;
+      // A parent living in api-types cannot be reconstructed here; counted
+      // rather than reported as missing everything it inherits.
+      if (!tsResolvable(name, ifaces)) {
+        unresolvable.push(name);
+        continue;
+      }
+      const have = allTsFields(name, ifaces);
+      if (have.size === 0) continue;
+      const gap = [...props].filter((p) => !have.has(p));
+      if (gap.length > 0) missing.push(`${name}: ${gap.sort().join(', ')}`);
+    }
+    expect(missing.sort(), 'TypeScript interface(s) missing fields the API returns:').toEqual([]);
+    // Bound what this guard admits it cannot see. One today, whose parent is
+    // imported. If this list grows, the blind spot is growing with it and
+    // wants a look — not a bigger expected array.
+    expect(
+      unresolvable.sort(),
+      'interface(s) whose parent is declared outside the SDK, so coverage is unverifiable:',
+    ).toEqual(['RotateApiKeyResponse']);
   });
 });
