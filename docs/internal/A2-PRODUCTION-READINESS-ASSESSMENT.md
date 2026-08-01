@@ -120,6 +120,41 @@ straight into a brand-new guard.** Worth stating plainly: writing this kind of
 test does not confer immunity to the mistake it exists to catch. Only the
 mutation showed it.
 
+### 15. CLOSED — MFA activation authority, and a flake I introduced
+
+Third sweep, revocation predicates (25 across six repos). Five repos reacted;
+`mfa-repo` did not.
+
+`completeEnrollmentIfPending` turns a pending TOTP secret into an active
+credential, gated on five conditions. **Three proved nothing** — deleting both
+`isNull(webSessions.revokedAt)` checks, the `authEpoch` equality and the
+`accountId` equality, each with a clean typecheck, left the full suite green at
+2,567 files / 26,606 tests. Only expiry red anything. Closed by `043c6533a`.
+
+The revocation one carries the most weight: killing sessions is the first thing
+a customer does after a compromise, and an unenforced check there means a
+session they believe is dead can still add an authentication factor to their
+account.
+
+_Also closed: a flake I introduced two fires ago (`84c2aaee8`)._
+`agent_turn_receipts` has two independent foreign keys and nothing requires them
+to agree. My receipts test hung its session off the same terminated account, and
+`agent_session_id` is ON DELETE CASCADE — so the agent-session purge test
+deleted that session and took the receipts with it whenever the two overlapped.
+Demonstrated in SQL rather than inferred, because scheduling would not reproduce
+it: three paired runs were green before the fix and three after.
+
+_Three method notes, all earned the hard way this session._
+
+1. **Typecheck every mutation.** One earlier mutation used `or`/`isNotNull` that
+   were not imported; it could not compile, and its green result meant nothing.
+2. **Diff the file before believing a mutation.** A bound mutation reported
+   green because shell `${…}` expansion had eaten the pattern and it never
+   applied. `!! NOT APPLIED` is a result; silence is not.
+3. **Assert the script wrote.** A Python edit asserted its anchor AFTER two
+   replacements but BEFORE `write_text`, so a failed anchor silently discarded
+   the whole edit and the file was left half-changed in a way that typechecked.
+
 ## Assumed, not proven
 
 - **Deploy-time behaviour.** Nothing here was deployed, and nothing has been
