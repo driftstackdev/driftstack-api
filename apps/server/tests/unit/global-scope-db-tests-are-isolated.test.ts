@@ -31,6 +31,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_SRC = resolve(HERE, '..', '..', 'src', 'db');
 const INTEGRATION = resolve(HERE, '..', 'integration');
+const E2E = resolve(HERE, '..', 'e2e');
 
 /**
  * Names of repo operations that act on a WHOLE TABLE with no account scope.
@@ -54,12 +55,17 @@ function globalOperations(): string[] {
   return [...found].sort();
 }
 
-function integrationFiles(dir: string): string[] {
+function testFilesUnder(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
-    if (statSync(full).isDirectory()) out.push(...integrationFiles(full));
-    else if (entry.endsWith('.test.ts')) out.push(full);
+    if (statSync(full).isDirectory()) out.push(...testFilesUnder(full));
+    // e2e specs use .spec.ts; both are included so the guard's reach is
+    // "any real-Postgres test", not "one directory". e2e is not exposed today —
+    // `buildApp` carries none of the nine migrations and the harness never
+    // calls `createProductionDeps` — but a guard whose scope is narrower than
+    // the property it claims is the same defect it exists to catch.
+    else if (entry.endsWith('.test.ts') || entry.endsWith('.spec.ts')) out.push(full);
   }
   return out;
 }
@@ -79,7 +85,14 @@ interface Offender {
  * finding elsewhere.
  */
 function realPostgresFiles(): string[] {
-  return integrationFiles(INTEGRATION).filter((f) => readFileSync(f, 'utf8').includes('postgres('));
+  return [...testFilesUnder(INTEGRATION), ...testFilesUnder(E2E)].filter((f) => {
+    const src = readFileSync(f, 'utf8');
+    // Integration files open their own connection; e2e specs never do — they
+    // boot a server through the harness, which owns the connection. Detecting
+    // only `postgres(` silently excluded all 28 e2e specs, so the first version
+    // of this widening matched nothing and would have shipped as decoration.
+    return src.includes('postgres(') || src.includes('helpers/server');
+  });
 }
 
 /** Real-Postgres test files that call a global operation without isolating. */
@@ -90,7 +103,8 @@ function unisolatedCallers(): Offender[] {
     const src = readFileSync(file, 'utf8');
     if (src.includes('ensureIsolatedDatabase')) continue;
     for (const op of ops) {
-      if (src.includes(op)) out.push({ file: file.slice(INTEGRATION.length + 1), operation: op });
+      if (src.includes(op))
+        out.push({ file: file.slice(resolve(HERE, '..').length + 1), operation: op });
     }
   }
   return out;
