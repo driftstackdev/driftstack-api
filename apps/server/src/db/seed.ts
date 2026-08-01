@@ -10,12 +10,17 @@ import { createDb } from './client.js';
 import { accounts, apiKeys } from './schema.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../lib/api-keys.js';
 import { loadConfig } from '../lib/config.js';
+import { assertSeedTargetIsLocal } from './seed-target-guard.js';
 
 const SEED_EMAIL = 'dev@driftstack.local';
 const SEED_KEY_NAME = 'dev-default';
 
 async function main(): Promise<void> {
   const config = loadConfig();
+  // Before opening a connection: this script mints an API key with
+  // ['read', 'write', 'admin'] and prints its plaintext. That is correct for a
+  // local dev database and a credential-issuing incident anywhere else.
+  assertSeedTargetIsLocal(config.databaseUrl, process.env);
   const { db, close } = createDb(config.databaseUrl);
 
   try {

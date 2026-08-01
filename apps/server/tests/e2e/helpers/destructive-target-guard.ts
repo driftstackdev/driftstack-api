@@ -28,14 +28,7 @@
 // environment variable, because someone who sets that has made a decision rather
 // than an accident, and it is the accident this exists to prevent.
 
-/** Hostnames that cannot be a managed/remote database. */
-const LOOPBACK_HOSTS: ReadonlySet<string> = new Set([
-  'localhost',
-  '127.0.0.1',
-  '::1',
-  '[::1]',
-  '0.0.0.0',
-]);
+import { nonLoopbackTargets } from '../../../src/lib/loopback-host.js';
 
 /**
  * Opt-out for setups whose Postgres is reachable only under a non-loopback name
@@ -44,22 +37,6 @@ const LOOPBACK_HOSTS: ReadonlySet<string> = new Set([
  * sets it, and it should stay that way.
  */
 export const OVERRIDE_ENV = 'DRIFTSTACK_E2E_ALLOW_NONLOCAL_RESET';
-
-function hostOf(raw: string, label: string): string {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    // An unparseable URL is not evidence of safety. Refusing here also means the
-    // guard cannot be bypassed by handing it something it fails to understand.
-    throw new Error(
-      `${label} is not a parseable URL, so the e2e harness cannot confirm it is a ` +
-        `local throwaway database. Refusing to DROP SCHEMA and TRUNCATE against an ` +
-        `unidentified target.`,
-    );
-  }
-  return url.hostname.toLowerCase();
-}
 
 /**
  * Throw unless every destructive target is loopback.
@@ -91,9 +68,7 @@ export function assertLocalDestructiveTarget(
     ['REDIS_URL', redisUrl],
   ];
 
-  const remote = targets
-    .map(([label, raw]) => [label, hostOf(raw, label)] as const)
-    .filter(([, host]) => !LOOPBACK_HOSTS.has(host));
+  const remote = nonLoopbackTargets(targets);
 
   if (remote.length === 0) return;
 
