@@ -44,17 +44,53 @@ const FORBIDDEN_FIELDS: { pattern: RegExp; reason: string }[] = [
   { pattern: /"webhook_secret"\s*:/g, reason: 'Field is "signing_secret" or "secret"' },
 ];
 
+/**
+ * Does `text` use this fictional field?
+ *
+ * The `lastIndex` reset is load-bearing and easy to lose: these patterns carry
+ * the `g` flag and are shared by every generated test below, so a `.test()`
+ * that matched would leave the next file's scan starting mid-string. Keeping
+ * the reset inside one named function is what stops that from depending on
+ * every call site remembering.
+ */
+function usesField(pattern: RegExp, text: string): boolean {
+  pattern.lastIndex = 0;
+  const hit = pattern.test(text);
+  pattern.lastIndex = 0;
+  return hit;
+}
+
 describe('W288.B workspace-wide forbidden-field sweep', () => {
+  it('CRITICAL the sweep read real pages and every pattern still fires. Each assertion below runs INSIDE a loop over the collected pages, so a moved or renamed root leaves all of them vacuously true — reporting every page accurate because it read none.', () => {
+    expect(allFiles.length, 'pages found across marketing-site and docs').toBeGreaterThan(50);
+    // Each pattern against a payload it must catch. A pattern that stopped
+    // matching would leave its own test permanently, silently green.
+    const samples: Record<string, string> = {
+      tier_slug: '{ "tier_slug": "pro" }',
+      account_tier: '{ "account_tier": "pro" }',
+      is_active: '{ "is_active": true }',
+      api_key_secret: '{ "api_key_secret": "x" }',
+      webhook_secret: '{ "webhook_secret": "x" }',
+    };
+    for (const { pattern, reason } of FORBIDDEN_FIELDS) {
+      const key = Object.keys(samples).find((k) => pattern.source.includes(k));
+      expect(key, `no sample payload written for pattern ${pattern.source}`).toBeDefined();
+      expect(
+        usesField(pattern, samples[key!]!),
+        `pattern still matches its field — ${reason}`,
+      ).toBe(true);
+      expect(
+        usesField(pattern, '{ "tier": "pro", "status": "active", "key": "x", "secret": "x" }'),
+        `and does not flag the canonical shape — ${reason}`,
+      ).toBe(false);
+    }
+  });
+
   for (const { pattern, reason } of FORBIDDEN_FIELDS) {
     it(`no page uses the fictional field — ${reason}`, () => {
-      const offenders: string[] = [];
-      for (const f of allFiles) {
-        const body = read(f);
-        if (pattern.test(body)) {
-          offenders.push(f.slice(REPO_ROOT.length + 1));
-        }
-        pattern.lastIndex = 0;
-      }
+      const offenders = allFiles
+        .filter((f) => usesField(pattern, read(f)))
+        .map((f) => f.slice(REPO_ROOT.length + 1));
       expect(offenders).toEqual([]);
     });
   }

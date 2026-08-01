@@ -39,27 +39,46 @@ function slugify(s: string): string {
 
 const mdFiles = walk(PAGES).filter((f) => /\.md$/.test(f));
 
+/**
+ * Anchors in `text` that more than one heading slugs to.
+ *
+ * Fenced code blocks are stripped so `# Comment` inside a snippet does not
+ * count as a heading.
+ *
+ * Shared with the reachability check below deliberately: a floor exercising a
+ * separate copy of this would prove that copy works, not this one.
+ */
+function duplicateAnchors(text: string): { anchor: string; headings: string[] }[] {
+  const stripped = text.replace(/```[\s\S]*?```/g, '');
+  const headings = [...stripped.matchAll(/^#{1,6}\s+(.+)$/gm)].map((m) => m[1]!.trim());
+  const seen = new Map<string, string[]>();
+  for (const h of headings) {
+    const slug = slugify(h);
+    if (!slug) continue;
+    seen.set(slug, [...(seen.get(slug) ?? []), h]);
+  }
+  return [...seen]
+    .filter(([, hs]) => hs.length > 1)
+    .map(([anchor, headings]) => ({ anchor, headings }));
+}
+
 describe('W296.B apps/docs anchor uniqueness', () => {
+  it('CRITICAL the scan read real pages and the matcher still fires. The assertion below runs INSIDE a loop over the collected pages, so a moved or renamed pages/ leaves it vacuously true — reporting every anchor unique because it read none.', () => {
+    expect(mdFiles.length, '.md pages found under docs pages/').toBeGreaterThan(40);
+    expect(
+      duplicateAnchors('# Usage\n\n## Limits\n\n## Limits\n'),
+      'two headings slugging to one anchor are reported',
+    ).toHaveLength(1);
+    expect(
+      duplicateAnchors('# Usage\n\n## Limits\n\n```md\n## Limits\n```\n'),
+      'and a heading inside a fence is not, so the strip still protects code samples',
+    ).toEqual([]);
+  });
+
   it('no .md page produces two headings that slug to the same anchor', () => {
-    const offenders: { file: string; anchor: string; headings: string[] }[] = [];
-    for (const f of mdFiles) {
-      const body = read(f);
-      // Strip fenced code blocks so `# Comment` inside snippets doesn't
-      // count.
-      const stripped = body.replace(/```[\s\S]*?```/g, '');
-      const headings = [...stripped.matchAll(/^#{1,6}\s+(.+)$/gm)].map((m) => m[1]!.trim());
-      const seen = new Map<string, string[]>();
-      for (const h of headings) {
-        const slug = slugify(h);
-        if (!slug) continue;
-        seen.set(slug, [...(seen.get(slug) ?? []), h]);
-      }
-      for (const [slug, hs] of seen) {
-        if (hs.length > 1) {
-          offenders.push({ file: f.slice(REPO_ROOT.length + 1), anchor: slug, headings: hs });
-        }
-      }
-    }
+    const offenders = mdFiles.flatMap((f) =>
+      duplicateAnchors(read(f)).map((d) => ({ file: f.slice(REPO_ROOT.length + 1), ...d })),
+    );
     expect(offenders).toEqual([]);
   });
 });
