@@ -1434,6 +1434,10 @@ export async function createProductionDeps(
     authFlowsService,
     apiKeysService,
     webhooksService,
+    // Every reclaim step in suspend/deleteAccount is best-effort by design, so
+    // a GDPR termination returns success whether or not each surface was
+    // actually reclaimed. Without this the failure is written down nowhere.
+    logger,
   );
 
   // 2026-05-20 — auth-tokens sweeper. Periodic DELETE of stale rows

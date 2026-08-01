@@ -625,6 +625,18 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toContain('new BYOKAnthropicService(byokAnthropicRepo, {');
   });
 
+  it('AccountsAdminService receives the logger, without which every reclaim failure is unrecorded in production', () => {
+    // suspend()/deleteAccount() reclaim sessions, web sessions, API keys and
+    // webhooks, each best-effort so a GDPR Article 17 termination returns
+    // success whether or not the surface was actually reclaimed. The service
+    // reports those failures only if a logger was injected, and its logger
+    // parameter is optional — so dropping this argument leaves every unit test
+    // for that reporting green while production goes silent again.
+    expect(body).toMatch(
+      /const accountsAdminService = new AccountsAdminService\(\s*\n?\s*accountsAdminRepo,[\s\S]*?webhooksService,[\s\S]*?\n\s*logger,\s*\n?\s*\);/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

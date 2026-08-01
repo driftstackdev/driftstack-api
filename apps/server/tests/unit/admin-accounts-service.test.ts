@@ -445,3 +445,122 @@ describe('GDPR Article 17 AccountsAdminService.deleteAccount', () => {
     expect((rows[0] as AccountRow & { status: string }).status).toBe('deleted');
   });
 });
+
+describe('GDPR Article 17 AccountsAdminService — a reclaim that fails is recorded', () => {
+  // The existing reclaim tests inject a stub reclaimer, so they prove the call
+  // is MADE. None of them could fail if the call THREW: every step is wrapped
+  // best-effort so the termination still returns success. That is the correct
+  // behaviour and it is also how a termination could report success having
+  // reclaimed nothing at all.
+  function loggerSpy(): {
+    logger: { error: (obj: Record<string, unknown>, msg: string) => void };
+    entries: Array<{ obj: Record<string, unknown>; msg: string }>;
+  } {
+    const entries: Array<{ obj: Record<string, unknown>; msg: string }> = [];
+    return {
+      logger: {
+        error: (obj: Record<string, unknown>, msg: string): void => {
+          entries.push({ obj, msg });
+        },
+      },
+      entries,
+    };
+  }
+
+  it('a throwing reclaim completes the termination and names the surface left unreclaimed', async () => {
+    const { repo, rows } = makeRepo([baseAccount()]);
+    const { logger, entries } = loggerSpy();
+    const svc = new AccountsAdminService(
+      repo,
+      null,
+      null,
+      null,
+      {
+        revokeAllForAccount: () => Promise.resolve(0),
+        revokeAllMintedByAccount: () => Promise.reject(new Error('revoke failed')),
+      },
+      null,
+      logger,
+    );
+
+    const updated = await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
+
+    // The failure must not fail the delete — the status mutation is committed.
+    expect(updated.status).toBe('deleted');
+    expect((rows[0] as AccountRow & { status: string }).status).toBe('deleted');
+
+    // ...and the surface that was NOT reclaimed is named. This particular step
+    // is the one whose failure is NOT masked by the auth-path 'deleted' check:
+    // those keys live on another, still-active account and keep authenticating.
+    const failed = entries.filter((e) => e.obj.event === 'account_reclaim_failed');
+    expect(failed, 'a failed credential reclaim must not be silent').toHaveLength(1);
+    expect(failed[0]?.obj.step).toBe('api_keys_minted_elsewhere');
+    expect(failed[0]?.obj.account_id).toBe('acc_1');
+    expect(failed[0]?.msg).toContain('needs reconciling');
+  });
+
+  it('a termination whose reclaims all succeed records nothing', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const { logger, entries } = loggerSpy();
+    const svc = new AccountsAdminService(
+      repo,
+      null,
+      { destroyAllForAccount: () => Promise.resolve(1) },
+      { revokeAllWebSessionsForAccount: () => Promise.resolve(1) },
+      {
+        revokeAllForAccount: () => Promise.resolve(1),
+        revokeAllMintedByAccount: () => Promise.resolve(1),
+      },
+      { deleteAllForAccount: () => Promise.resolve(1) },
+      logger,
+    );
+
+    await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(
+      entries.filter((e) => e.obj.event === 'account_reclaim_failed'),
+      'a clean termination must stay quiet or the signal is noise',
+    ).toEqual([]);
+  });
+
+  it('every failing step is reported, so one failure does not hide the next', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const { logger, entries } = loggerSpy();
+    const svc = new AccountsAdminService(
+      repo,
+      null,
+      { destroyAllForAccount: () => Promise.reject(new Error('sessions')) },
+      { revokeAllWebSessionsForAccount: () => Promise.reject(new Error('web sessions')) },
+      {
+        revokeAllForAccount: () => Promise.reject(new Error('api keys')),
+        revokeAllMintedByAccount: () => Promise.reject(new Error('minted elsewhere')),
+      },
+      { deleteAllForAccount: () => Promise.reject(new Error('webhooks')) },
+      logger,
+    );
+
+    await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(
+      entries.filter((e) => e.obj.event === 'account_reclaim_failed').map((e) => e.obj.step),
+    ).toEqual(['sessions', 'web_sessions', 'api_keys', 'api_keys_minted_elsewhere', 'webhooks']);
+  });
+
+  it('suspend reports a failed session reclaim without failing the suspend', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const { logger, entries } = loggerSpy();
+    const svc = new AccountsAdminService(
+      repo,
+      null,
+      { destroyAllForAccount: () => Promise.reject(new Error('driver unreachable')) },
+      null,
+      null,
+      null,
+      logger,
+    );
+
+    const updated = await svc.suspend(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(updated.status).toBe('suspended');
+    const failed = entries.filter((e) => e.obj.event === 'account_reclaim_failed');
+    expect(failed).toHaveLength(1);
+    expect(failed[0]?.obj.step).toBe('sessions');
+  });
+});

@@ -118,7 +118,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
   it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer + optional GDPR Article 17 delete-reclaim trio (web sessions / API keys / webhooks)', () => {
     expect(body).toMatch(/export class AccountsAdminService \{/);
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly repo: AccountsAdminRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*\n?\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*\n?\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*\n?\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,\s*\n?\s*\) \{\}/,
+      /constructor\(\s*\n?\s*private readonly repo: AccountsAdminRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*\n?\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*\n?\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*\n?\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,[\s\S]*?private readonly logger: \{[\s\S]*?\} \| null = null,\s*\n?\s*\) \{\}/,
     );
     expect(body).toMatch(
       /export interface SuspendSessionReclaimer \{\s*\n?\s*destroyAllForAccount\(accountId: string\): Promise<number>;\s*\n?\s*\}/,
@@ -150,10 +150,20 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     expect(body).toMatch(
       /async deleteAccount\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{\s*\n?\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*\n?\s*const now = new Date\(\);\s*\n?\s*const updated = await this\.repo\.setStatus\(accountId, 'deleted', now\);\s*\n?\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);/,
     );
-    expect(body).toMatch(/if \(this\.sessions\) \{/);
-    expect(body).toMatch(/if \(this\.webSessions\) \{/);
-    expect(body).toMatch(/if \(this\.apiKeys\) \{/);
-    expect(body).toMatch(/if \(this\.webhooks\) \{/);
+    // Each surface must go through reclaim(), which is what keeps the step
+    // best-effort AND recorded. Pinning the step NAMES matters as much as the
+    // calls: "the account was terminated" is true whichever step failed, and
+    // only the name tells an operator whether live API keys are still
+    // authenticating or a browser is merely still running.
+    expect(body).toMatch(/await this\.reclaim\('sessions', accountId, \(\) =>/);
+    expect(body).toMatch(/await this\.reclaim\('web_sessions', accountId, \(\) =>/);
+    expect(body).toMatch(/await this\.reclaim\('api_keys', accountId, \(\) =>/);
+    expect(body).toMatch(/await this\.reclaim\('api_keys_minted_elsewhere', accountId, \(\) =>/);
+    expect(body).toMatch(/await this\.reclaim\('webhooks', accountId, \(\) =>/);
+    // reclaim() swallows so the admin action still succeeds, but reports first.
+    expect(body).toMatch(
+      /private async reclaim\([\s\S]*?\} catch \(err\) \{[\s\S]*?event: 'account_reclaim_failed',/,
+    );
   });
 
   it('getAccount: scope check → repo.findById → NotFoundError-or-row', () => {

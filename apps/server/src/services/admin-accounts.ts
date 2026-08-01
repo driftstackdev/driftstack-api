@@ -94,7 +94,55 @@ export class AccountsAdminService {
     private readonly webSessions: DeleteWebSessionReclaimer | null = null,
     private readonly apiKeys: DeleteApiKeyReclaimer | null = null,
     private readonly webhooks: DeleteWebhookReclaimer | null = null,
+    /**
+     * Optional structured logger. Every reclaim below is deliberately
+     * best-effort — the status mutation is already committed and the auth path
+     * already blocks a suspended/deleted account — but swallowing the failure
+     * SILENTLY is what let a GDPR Article 17 termination report success having
+     * reclaimed nothing. Omitted ⇒ no log; the reclaims still run.
+     */
+    private readonly logger: {
+      error?: (obj: Record<string, unknown>, msg: string) => void;
+    } | null = null,
   ) {}
+
+  /**
+   * Run one best-effort reclaim step.
+   *
+   * The failure must not fail the surrounding admin action: the status
+   * mutation is already committed, and `auth.ts` rejects every new request
+   * from a suspended/deleted account regardless of whether a given step
+   * landed. That is why these are swallowed, and it stays true here.
+   *
+   * What changes is that the failure is now RECORDED. A swallowed reclaim is
+   * the difference between "terminated" and "terminated with live credentials
+   * still authenticating on another account", and nothing else in the system
+   * writes that down — the admin action returns success either way.
+   */
+  private async reclaim(
+    step: string,
+    accountId: string,
+    run: () => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      await run();
+    } catch (err) {
+      try {
+        this.logger?.error?.(
+          {
+            component: 'admin-accounts',
+            event: 'account_reclaim_failed',
+            step,
+            account_id: accountId,
+            err,
+          },
+          `account reclaim step "${step}" failed — the status change is committed but this surface was not reclaimed and needs reconciling`,
+        );
+      } catch {
+        // Swallow; logging is best-effort and must not fail the admin action.
+      }
+    }
+  }
 
   async getAccount(ctx: AccountContext, accountId: string): Promise<AccountRow> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
@@ -161,12 +209,13 @@ export class AccountsAdminService {
     // request from a suspended account (auth.ts) — this frees the in-flight
     // compute. Best-effort: the suspend mutation is already committed, and
     // the duration sweep mops up any straggler if reclaim fails.
-    if (this.sessions) {
-      try {
-        await this.sessions.destroyAllForAccount(accountId);
-      } catch {
-        // Never fail the suspend on a reclaim error.
-      }
+    const suspendSessions = this.sessions;
+    if (suspendSessions) {
+      // Never fails the suspend; reported so a straggling live session that
+      // only the duration sweep will eventually mop up is not invisible.
+      await this.reclaim('sessions', accountId, () =>
+        suspendSessions.destroyAllForAccount(accountId),
+      );
     }
     return updated;
   }
@@ -201,43 +250,38 @@ export class AccountsAdminService {
     const updated = await this.repo.setStatus(accountId, 'deleted', now);
     if (!updated) throw new NotFoundError(`Account "${accountId}" not found.`);
 
-    if (this.sessions) {
-      try {
-        await this.sessions.destroyAllForAccount(accountId);
-      } catch {
-        // Never fail delete on a reclaim error.
-      }
+    // Each step never fails the delete, and each now records its own failure.
+    // Naming the step matters: "the account was terminated" is true whichever
+    // of these did not land, and only the step tells an operator whether live
+    // API keys are still authenticating or a browser is merely still running.
+    const sessions = this.sessions;
+    if (sessions) {
+      await this.reclaim('sessions', accountId, () => sessions.destroyAllForAccount(accountId));
     }
-    if (this.webSessions) {
-      try {
-        await this.webSessions.revokeAllWebSessionsForAccount(accountId, now);
-      } catch {
-        // Never fail delete on a reclaim error.
-      }
+    const webSessions = this.webSessions;
+    if (webSessions) {
+      await this.reclaim('web_sessions', accountId, () =>
+        webSessions.revokeAllWebSessionsForAccount(accountId, now),
+      );
     }
-    if (this.apiKeys) {
-      try {
-        await this.apiKeys.revokeAllForAccount(ctx, accountId);
-      } catch {
-        // Never fail delete on a reclaim error.
-      }
-      try {
-        // V-727 — also the keys this account minted on OTHER accounts. The call
-        // above filters on account_id and so reclaims only the credentials ON
-        // this account; a team member's keys live on the OWNER's account and
-        // authenticate as the owner, so terminating the member left them
-        // working. Same hole V-726 closed for member removal, different door.
-        await this.apiKeys.revokeAllMintedByAccount(ctx, accountId);
-      } catch {
-        // Never fail delete on a reclaim error.
-      }
+    const apiKeys = this.apiKeys;
+    if (apiKeys) {
+      await this.reclaim('api_keys', accountId, () => apiKeys.revokeAllForAccount(ctx, accountId));
+      // V-727 — also the keys this account minted on OTHER accounts. The call
+      // above filters on account_id and so reclaims only the credentials ON
+      // this account; a team member's keys live on the OWNER's account and
+      // authenticate as the owner, so terminating the member left them
+      // working. Same hole V-726 closed for member removal, different door.
+      //
+      // This is the step whose silent failure is NOT masked by the auth-path
+      // 'deleted' check: those keys authenticate as a still-active account.
+      await this.reclaim('api_keys_minted_elsewhere', accountId, () =>
+        apiKeys.revokeAllMintedByAccount(ctx, accountId),
+      );
     }
-    if (this.webhooks) {
-      try {
-        await this.webhooks.deleteAllForAccount(ctx, accountId);
-      } catch {
-        // Never fail delete on a reclaim error.
-      }
+    const webhooks = this.webhooks;
+    if (webhooks) {
+      await this.reclaim('webhooks', accountId, () => webhooks.deleteAllForAccount(ctx, accountId));
     }
 
     await this.invalidateCache(accountId);
