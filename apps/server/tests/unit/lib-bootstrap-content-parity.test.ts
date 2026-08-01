@@ -349,6 +349,45 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/metrics: metricsRegistry/);
     expect(body).toMatch(/await webhookDeliveryWorker\.tickOnce\(\);/);
     expect(body).toMatch(/webhookDeliveryTimer\.unref\(\);/);
+    // The drain loop (a469de115) has no behavioural coverage anywhere — it lives
+    // inline in a setInterval closure that no test constructs, so these are
+    // wiring pins rather than proofs. Stated plainly because a text pin is the
+    // weaker instrument: it proves the line exists, not that it works.
+    //
+    // The one that matters is the `finally`. `webhookDeliveryRunning` is a
+    // module-scoped latch: set before the drain, and if it is ever not cleared,
+    // EVERY later tick returns at the guard and webhook delivery stops for the
+    // life of the process — no error, no metric, no log. A reset that lives
+    // anywhere but a `finally` is one thrown exception away from that, and the
+    // catch above it does not cover a throw from the catch itself.
+    expect(body).toMatch(/\} finally \{\s*\n?\s*webhookDeliveryRunning = false;/);
+    // The latch itself: without the early return, ticks overlap and a slow drain
+    // stacks on the next interval.
+    expect(body).toMatch(/if \(webhookDeliveryRunning\) return;/);
+    // Both bounds. Without the partial-batch break the loop always runs its full
+    // batch count; without the wall-clock break a slow receiver can push a tick
+    // past the poll interval it is supposed to fit inside.
+    expect(body).toMatch(/if \(claimed < WEBHOOK_DELIVERY_BATCH_SIZE\) break;/);
+    expect(body).toMatch(/if \(Date\.now\(\) - startedAt >= WEBHOOK_DRAIN_BUDGET_MS\) break;/);
+    // The budget must stay inside the poll interval, or a tick can still be
+    // draining when the next one is due. Computed, not pinned as a literal.
+    const drainBudget = Number(
+      /const WEBHOOK_DRAIN_BUDGET_MS = ([\d_]+);/.exec(body)?.[1]?.replace(/_/g, '') ?? '0',
+    );
+    const pollInterval = Number(
+      /const POLLER_INTERVAL_MS = ([\d_ *]+);/
+        .exec(body)?.[1]
+        ?.replace(/_/g, '')
+        ?.split('*')
+        .reduce((a, b) => a * Number(b.trim()), 1) ?? 0,
+    );
+    expect(drainBudget, 'drain budget parsed').toBeGreaterThan(0);
+    expect(pollInterval, 'poll interval parsed').toBeGreaterThan(0);
+    expect(
+      drainBudget,
+      `drain budget ${String(drainBudget)}ms must stay inside the ${String(pollInterval)}ms poll interval`,
+    ).toBeLessThan(pollInterval);
+
     expect(body).toMatch(/clearInterval\(webhookDeliveryTimer\);/);
   });
 
