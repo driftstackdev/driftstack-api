@@ -85,6 +85,41 @@ red exactly one test. Both are covered, so neither is a finding, but one failing
 case across six predicates is thin enough to be worth a look if this area is
 revisited.
 
+### 14. CLOSED — expired and revoked OAuth bearer tokens were unproven
+
+Second sweep, same method, different predicate class: the 17 expiry comparisons
+in `apps/server/src/db`. Six repos reacted. **`oauth-store.ts` did not.**
+
+`findTokenForAuthentication` is the credential check behind OAuth bearer auth —
+`services/auth.ts` calls it on the request path. It resolves a token only while
+four conditions hold, and **all four could be neutralised with the full
+26,599-test suite green**:
+
+| predicate                             | what its absence allows                  |
+| ------------------------------------- | ---------------------------------------- |
+| `gt(oauthAccessTokens.expiresAt)`     | an expired access token authenticates    |
+| `isNull(oauthAccessTokens.revokedAt)` | a revoked access token authenticates     |
+| `gt(apiKeys.expiresAt)`               | an expired API key's token authenticates |
+| `isNull(apiKeys.revokedAt)`           | a revoked API key's token authenticates  |
+
+Closed by `f88df9d49`.
+
+_This one has no second line._ The repo ownership predicates closed in item 13
+had a well-tested service check in front of them; this query IS the check —
+whatever it returns is treated as an authenticated caller. Revocation is what a
+customer reaches for after a key leaks, and expiry is what bounds a leak they
+never noticed. Two of the four sit inside an `innerJoin`, which is where a
+condition is easiest to drop without any caller noticing.
+
+_The method caught a flaw in the guard written to close it._ The token-expiry
+mutation initially red only one case instead of two: the caller's-clock case
+seeded the API key with the default one-hour expiry, so at NOW+2h the result was
+null because the KEY had expired, not the token. **A sibling predicate masking
+the one under test — the same trap the sweep keeps finding in source — written
+straight into a brand-new guard.** Worth stating plainly: writing this kind of
+test does not confer immunity to the mistake it exists to catch. Only the
+mutation showed it.
+
 ## Assumed, not proven
 
 - **Deploy-time behaviour.** Nothing here was deployed, and nothing has been
