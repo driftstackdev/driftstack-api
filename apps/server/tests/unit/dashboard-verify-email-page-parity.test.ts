@@ -85,9 +85,17 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
     expect(p).toMatch(/persistVerifiedSession\(session\)/);
     expect(p).toMatch(/removeSignupState\('ds_signup_email'\)/);
     expect(p).toMatch(/removeSignupState\('ds_debug_verify_token'\)/);
-    expect(p.replace("removeSignupState('ds_debug_verify_token');", '')).not.toMatch(
-      /removeSignupState\('ds_debug_verify_token'\)/,
-    );
+    // V-728 — the cleanup now runs on BOTH arms of the response union: the
+    // session arm, and the mfa_required arm (V-720 gave verify-email an MFA
+    // branch, so an enrolled account gets a challenge instead of a session and
+    // still needs its signup-stage state cleared before being sent to sign in).
+    //
+    // Pinned as EXACTLY TWO rather than loosened to "at least one": the point of
+    // this guard is that dropping the cleanup lets stale signup state persist
+    // across logins, and that has to hold on the path a customer actually takes
+    // as well as the happy one. A third copy would mean a branch was duplicated.
+    expect(p.match(/removeSignupState\('ds_debug_verify_token'\);/g)).toHaveLength(2);
+    expect(p.match(/removeSignupState\('ds_signup_email'\);/g)).toHaveLength(2);
   });
 
   it('CRITICAL V-267 ?next= deep-link round-trip pinned. The `next` query-param honors deep-link entry from /cli/authorize + any other surface. Falls back to /welcome for the first-time onboarding flow.', () => {

@@ -184,6 +184,42 @@ describe('verify-email page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_VERIFIED');
   });
 
+  // V-728 — /v1/auth/verify-email is a discriminated union. A verification link
+  // proves control of the mailbox, not possession of the second factor, so an
+  // MFA-enrolled account gets { mfa_required, challenge_token } rather than a
+  // session (V-720, matching login / magic-link / password-reset).
+  //
+  // Before this branch existed `body.session` was undefined, so
+  // persistVerifiedSession threw "Verification response did not include a
+  // session token" and the customer saw a FAILURE banner — despite the link
+  // having worked and their email now being verified. jsdom cannot navigate, so
+  // (per this file's convention) the assertion is on the observable side
+  // effects: the link is consumed, no session is stored, and no error is shown.
+  it('sends an MFA-enrolled customer to sign in instead of persisting an empty session', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [
+        () =>
+          json({
+            mfa_required: true,
+            challenge_token: 'chal_abc',
+            challenge_expires_at: '2026-08-01T12:00:00.000Z',
+          }),
+      ],
+    });
+    win = window;
+    await flush();
+
+    // The link was still consumed — verification happened.
+    const post = fetchCalls.find((c) => /\/v1\/auth\/verify-email$/.test(c.url));
+    expect(post?.init?.method).toBe('POST');
+    // No session may be persisted: there ISN'T one until the second factor.
+    expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+    // The distinguishing assertion: the old code threw into the catch and
+    // surfaced the error banner. A challenge is a normal outcome, not a failure.
+    expect(bannerHidden(window)).toBe(true);
+  });
+
   it('does not consume a one-time verification token when session storage is unavailable', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       url: TOKEN_URL,

@@ -30673,3 +30673,65 @@ additionally documents the `revoked_api_key_ids` payload V-726 added to
 removal invalidated and that pre-attribution keys are not listed. No OpenAPI,
 SDK, pricing, environment or secret surface changed, and no schema change beyond
 the already-landed migration 0111.
+
+## V-728 — Follow-through on V-720: the docs and the dashboard did not know verify-email could return a challenge
+
+**Date:** 2026-08-01
+
+V-720 gave `POST /v1/auth/verify-email` an MFA branch, because a verification
+link proves control of the mailbox and not possession of the account's second
+factor. That was the right change, and it was incomplete: two consumers still
+assumed the endpoint always returns a session. Both are defects this entry
+closes, and both were introduced by V-720 rather than found alongside it.
+
+**The API docs.** `api/auth.md` documented verify-email as "Returns `200` with a
+fresh web session", full stop — the exact shape of claim V-724 was written
+about, this time made wrong by my own change rather than inherited. An
+integrator following it would read `session.token` off a response that carries a
+challenge instead. The page now documents both arms as a discriminated union,
+the same way it already documented `login`, states that the email is marked
+verified either way, and tells the caller to branch on the `mfa_required`
+literal rather than on the presence of `session`. A parity pin now requires both
+arms: the equivalent claim on the idempotency page stayed wrong precisely
+because its pin froze it, so the pin has to hold the BRANCH, not the prose.
+
+**The customer dashboard.** `verify-email.astro` read `body.session || {}` and
+handed it to `persistVerifiedSession`, which throws unless it gets a non-empty
+token string. An MFA-enrolled customer clicking their verification link would
+therefore see a failure banner — "Verification response did not include a
+session token" — even though the link had WORKED and their email was now
+verified. The page now recognises the challenge, clears the signup-stage state,
+and sends them to sign in with their second factor, which is what actually
+happens next.
+
+Worth being accurate about severity, because my first reading of this was wrong
+and overstated: I described it as silently persisting an empty session and
+redirecting as though signed in. It does not — `persistVerifiedSession` fails
+closed on a missing token. The real defect is a confusing hard failure on a flow
+that succeeded, not a broken authentication state. The fix is a UX correction,
+not a security one; V-720 remains the security change.
+
+The dashboard proof is behavioural against the BUILT page, as that suite
+requires: jsdom cannot navigate, so per this file's own convention it asserts
+the observable side effects — the link is consumed, no session is stored, and no
+error banner is shown. That last assertion is the one that distinguishes fixed
+from broken, and removing the branch and rebuilding is proved red. Mutating the
+docs to drop the MFA arm is likewise proved red against the new pin. Both
+mutated files were restored and re-hashed byte-identical.
+
+The general lesson is the one this session keeps re-learning from the other
+side: changing a response shape is not finished when the server and its tests
+are green. `grep` the whole repo for consumers — docs pages, dashboard pages,
+SDKs — because the tests that would notice live in other suites, and in this
+case the dashboard's live in a project that reads compiled `dist` and needs a
+rebuild before they can see the change at all.
+
+Verification: canonical full suite 2754 files / 28,106 passing, with two failures neither of
+which is this change: the known `simulator-window-stalled` gui intermittent
+(recorded separately — it reproduces only in full multi-project runs and never
+in 10 loaded isolated ones), and `openapi.test.ts`, where a concurrent peer
+change added IP/CIDR `pattern` fields to the webhook-target-guard schema without
+regenerating `packages/sdk-python/openapi.json`. This entry touches no schema; the customer-dashboard project rebuilt and its full
+145 files / 1,089 tests passing; targeted Prettier. No server, schema, OpenAPI,
+SDK, environment or secret surface changed — this entry is entirely the two
+consumers catching up with V-720.

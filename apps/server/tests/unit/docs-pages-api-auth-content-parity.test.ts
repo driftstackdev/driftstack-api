@@ -60,6 +60,25 @@ describe('W764 docs /api/auth content parity', () => {
     expect(p).not.toMatch(/feature_not_available/);
   });
 
+  // V-728 — verify-email is a discriminated union, not "always a session".
+  // V-720 gave it an MFA branch (a verification link proves the mailbox, not the
+  // second factor); documenting only the session shape would tell an integrator
+  // to read `session.token` off a response that carries a challenge instead.
+  // The equivalent claim on the idempotency page was wrong for a year because
+  // its parity pin froze it (V-724) — so pin the BRANCH, not just the prose.
+  it('CRITICAL verify-email documents BOTH arms of its discriminated union, including the MFA challenge', () => {
+    const body = read(PAGE);
+
+    expect(body).toMatch(/Returns a \*\*discriminated union\*\*, the same shape as `login`/);
+    expect(body).toMatch(/\*\*No MFA enrolled\*\* — `200` with a fresh web session/);
+    expect(body).toMatch(/\*\*MFA enrolled\*\* — `200` with a challenge instead of a session/);
+    // The caller-facing rule, and the fact that verification still lands.
+    expect(body).toMatch(
+      /Branch on the `mfa_required` literal, never on the presence of `session`/,
+    );
+    expect(body).toMatch(/The email is\s*marked verified either way/);
+  });
+
   it('CRITICAL signup 12-char-min password pinned. Matches W737 dashboard signup-form minlength=12 + W736 reset-password.', () => {
     const p = read(PAGE);
 

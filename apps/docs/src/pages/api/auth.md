@@ -57,17 +57,34 @@ at the timestamp returned.
 { "token": "<from the verification email>" }
 ```
 
-Returns `200` with a fresh web session:
+Returns a **discriminated union**, the same shape as `login`:
 
-```json
-{
-  "session": {
-    "token": "<opaque base64>",
-    "expires_at": "2026-05-23T22:00:00.000Z",
-    "account_id": "acc_<uuid>"
+- **No MFA enrolled** — `200` with a fresh web session:
+  ```json
+  {
+    "session": {
+      "token": "<opaque base64>",
+      "expires_at": "2026-05-23T22:00:00.000Z",
+      "account_id": "acc_<uuid>"
+    }
   }
-}
-```
+  ```
+- **MFA enrolled** — `200` with a challenge instead of a session:
+  ```json
+  {
+    "mfa_required": true,
+    "challenge_token": "<one-time, expires in 5 minutes>",
+    "challenge_expires_at": "2026-05-09T22:35:00.000Z"
+  }
+  ```
+
+Verifying an email proves control of the mailbox, not possession of the
+account's second factor, so an enrolled account gets a challenge here exactly
+as it does on `login`, `magic-link/consume` and `password-reset/confirm`.
+Exchange it at `/v1/auth/mfa/challenge` as described below. The email is
+marked verified either way — only the session waits for the second factor.
+
+Branch on the `mfa_required` literal, never on the presence of `session`.
 
 The dashboard stores `session.token` in local storage and uses it
 as the bearer for every subsequent `/v1/*` request. Verifying email

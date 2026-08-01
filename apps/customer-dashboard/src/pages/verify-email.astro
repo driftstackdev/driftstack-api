@@ -282,6 +282,25 @@ const apiBaseUrl = resolveApiBaseUrl();
               .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
           })
           .then((body) => {
+            // V-728 — /v1/auth/verify-email returns a discriminated union.
+            // A verification link proves control of the mailbox, not possession
+            // of the account's second factor, so an MFA-enrolled account gets
+            // { mfa_required: true, challenge_token } instead of a session
+            // (same as login / magic-link / password-reset).
+            //
+            // Without this branch `body.session` is undefined, so
+            // persistVerifiedSession throws its "did not include a session
+            // token" error and the customer sees a failure banner — even
+            // though the link WORKED and their email is now verified. The
+            // challenge is discarded either way. Send them to sign in with
+            // their second factor instead, which is what actually happens
+            // next.
+            if (body && body.mfa_required === true) {
+              removeSignupState('ds_signup_email');
+              removeSignupState('ds_debug_verify_token');
+              window.location.href = '/login?verified=1&mfa=1';
+              return;
+            }
             const session = body.session || {};
             persistVerifiedSession(session);
             // Cleanup signup-stage state.
