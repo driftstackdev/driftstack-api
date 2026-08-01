@@ -23,34 +23,37 @@ _don't_ write one — six lanes came back adequately covered and got no new code
 
 ## Proven (mutation-verified)
 
-| area                      | evidence                                                                                                                                                                                                                                                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Scope enforcement         | All **163** scope-enforcing routes refuse a key lacking the scope. Staff surface (65 routes) and customer surface (98) each pin an independent roster, because a table generated from the source it grades cannot see a deletion — verified: removing one gate took the run from 67 passed to 66 passed, all green. |
-| Cross-account ownership   | Sessions 2 guarding tests → 16, profiles 1 → 12, agent sessions **0** → 12, snapshots **0** → 3, proxies (route level) 0 → 4, crypto orders ~1 → 7. Webhooks + api-keys measured at 23 and deliberately left alone.                                                                                                 |
-| Credential secrecy        | BYOK Anthropic key, proxy secrets and api-key plaintext are absent from every response including write and error paths, asserted against the secret **value** rather than its public prefix or its field name.                                                                                                      |
-| Rate-limit disclosure     | Every dedicated bucket's consumers are named on every page describing it, per page and forward of the mention. Roster derives from the canonical enum.                                                                                                                                                              |
-| PKCE                      | `plain` is refused, proved by sending one and requiring S256 to succeed on the identical request.                                                                                                                                                                                                                   |
-| MFA credential management | API keys cannot enroll, disable or regenerate recovery codes — 6 tests hold that gate.                                                                                                                                                                                                                              |
-| SSE resource bound        | The public unauthenticated stream refuses past its per-IP cap with 503 + `Retry-After`, over real sockets.                                                                                                                                                                                                          |
-| AUP refusal               | Evasion-resistant: zero-width splitters and full-width confusables normalise before matching, and the normalize order itself is pinned.                                                                                                                                                                             |
-| SDK consistency           | Three SDKs expose the same 19 resources and the same methods modulo language idiom; two deliberate aliases are allowlisted with reasons.                                                                                                                                                                            |
-| Production dependencies   | `npm audit --omit=dev` is zero at any severity, now gated in CI. All 12 remaining advisories are build/lint tooling.                                                                                                                                                                                                |
-| Billing idempotency       | A retried usage write cannot charge a turn twice — one row id per row, reused across attempts, insert `onConflictDoNothing`. Both halves guarded because they fail independently: a stable id with a plain insert still double-writes, and a conflict-safe insert with a per-attempt id does too.                   |
-| Intent replay safety      | `intentReplayMayDuplicateEffect` fails safe: it enumerates the SAFE kinds and treats anything unrecognised as effectful, so a new intent kind is not auto-retried after an ambiguous WebDriver failure until someone says it can be.                                                                                |
-| Retention erasure         | Wrapped proxy credentials, profiles and snapshots are erased 30 days after account termination, with sealed R2 blobs dropped. Safety predicates live in SQL beside the delete target; an active account survives a direct clear call with its own id.                                                               |
-| Webhook fairness          | One broken endpoint cannot starve the rest — the claim ranks per endpoint rather than global FIFO. Held on BOTH implementations so the staged cutover cannot reintroduce it.                                                                                                                                        |
-| SDK retry safety          | A create is never auto-retried without an Idempotency-Key, in all three SDKs. Go had no coverage of the gate at all; PATCH was untested everywhere.                                                                                                                                                                 |
-| Observability             | Retention purge outcomes are labelled per arm with a `skipped` value, and a scrape-time gauge reports a dead job chain as 0 rather than as an absent series. Every emitted metric is registered at boot.                                                                                                            |
+| area                      | evidence                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope enforcement         | All **163** scope-enforcing routes refuse a key lacking the scope. Staff surface (65 routes) and customer surface (98) each pin an independent roster, because a table generated from the source it grades cannot see a deletion — verified: removing one gate took the run from 67 passed to 66 passed, all green.                                                                                                                             |
+| Cross-account ownership   | Sessions 2 guarding tests → 16, profiles 1 → 12, agent sessions **0** → 12, snapshots **0** → 3, proxies (route level) 0 → 4, crypto orders ~1 → 7. Webhooks + api-keys measured at 23 and deliberately left alone.                                                                                                                                                                                                                             |
+| Credential secrecy        | BYOK Anthropic key, proxy secrets and api-key plaintext are absent from every response including write and error paths, asserted against the secret **value** rather than its public prefix or its field name.                                                                                                                                                                                                                                  |
+| Rate-limit disclosure     | Every dedicated bucket's consumers are named on every page describing it, per page and forward of the mention. Roster derives from the canonical enum.                                                                                                                                                                                                                                                                                          |
+| PKCE                      | `plain` is refused, proved by sending one and requiring S256 to succeed on the identical request.                                                                                                                                                                                                                                                                                                                                               |
+| MFA credential management | API keys cannot enroll, disable or regenerate recovery codes — 6 tests hold that gate.                                                                                                                                                                                                                                                                                                                                                          |
+| SSE resource bound        | The public unauthenticated stream refuses past its per-IP cap with 503 + `Retry-After`, over real sockets.                                                                                                                                                                                                                                                                                                                                      |
+| AUP refusal               | Evasion-resistant: zero-width splitters and full-width confusables normalise before matching, and the normalize order itself is pinned.                                                                                                                                                                                                                                                                                                         |
+| SDK consistency           | Three SDKs expose the same 19 resources and the same methods modulo language idiom; two deliberate aliases are allowlisted with reasons.                                                                                                                                                                                                                                                                                                        |
+| Production dependencies   | `npm audit --omit=dev` is zero at any severity, now gated in CI. All 12 remaining advisories are build/lint tooling.                                                                                                                                                                                                                                                                                                                            |
+| Billing idempotency       | A retried usage write cannot charge a turn twice — one row id per row, reused across attempts, insert `onConflictDoNothing`. Both halves guarded because they fail independently: a stable id with a plain insert still double-writes, and a conflict-safe insert with a per-attempt id does too.                                                                                                                                               |
+| Intent replay safety      | `intentReplayMayDuplicateEffect` fails safe: it enumerates the SAFE kinds and treats anything unrecognised as effectful, so a new intent kind is not auto-retried after an ambiguous WebDriver failure until someone says it can be.                                                                                                                                                                                                            |
+| Retention erasure         | Five arms erase 30 days after termination: BYOK key, wrapped proxy credentials, profiles, snapshots, agent-turn receipts and agent sessions — with sealed R2 blobs dropped. Safety predicates live in SQL beside the delete target. Each arm's status predicate is proved load-bearing by a case seeding an active account that still carries a `deleted_at`, a state unreachable today but the only protection if reinstatement is ever added. |
+| Webhook fairness          | One broken endpoint cannot starve the rest — the claim ranks per endpoint rather than global FIFO. Held on BOTH implementations so the staged cutover cannot reintroduce it.                                                                                                                                                                                                                                                                    |
+| SDK retry safety          | A create is never auto-retried without an Idempotency-Key, in all three SDKs. Go had no coverage of the gate at all; PATCH was untested everywhere.                                                                                                                                                                                                                                                                                             |
+| Observability             | Retention purge outcomes are labelled per arm with a `skipped` value, and a scrape-time gauge reports a dead job chain as 0 rather than as an absent series. Every emitted metric is registered at boot.                                                                                                                                                                                                                                        |
 
 ## Assumed, not proven
 
 - **Deploy-time behaviour.** Nothing here was deployed, and nothing has been
   pushed — see open item 1. Migration `0108` applied cleanly to a populated local
   Postgres; production application is unverified by A2.
-- **First-run volume of the retention purges.** The three erasure paths shipped
-  today have no batch limit. On a production backlog of long-terminated accounts
-  the first run deletes everything past the cutoff in one pass. Correct, but
-  unmeasured at scale; the existing trash purge has the same shape.
+- **First-run volume of the BYOK arm.** Five of the six erasure paths are now
+  bounded per tick (500 rows). `findDeletedAccountIdsWithByokKeyBefore` is the
+  exception and still takes no limit, so on a production backlog its first run
+  loads every matching account id in one query and clears them in a loop. Less
+  severe than an unbounded DELETE — it is one key per account rather than an
+  unbounded row count — but it is the last unbounded arm and worth closing for
+  symmetry.
 - **Observability.** Sentry, email and LiveKit activation flags are wired in
   config and untested against the real services from this repo.
 - **Performance under load.** The bench-regression job is advisory
@@ -89,7 +92,7 @@ Branch coverage sits at 79.24% against a 75% floor. That is 4.24 points of
 headroom and it is the metric that drifts down as source is added, so it is
 worth watching rather than acting on.
 
-### 12. Agent transcripts and turn receipts are retained forever, including after account termination
+### 12. CLOSED — agent transcripts and turn receipts were retained forever; both are now purged
 
 `agent_sessions` (encrypted transcripts) and `agent_turn_receipts`
 (`response_ciphertext` — the agent turn's response body) have **no purge of any
@@ -118,16 +121,27 @@ profiles+snapshots; and nothing nulls `transcript` on close or
 `response_ciphertext` on completion, so the content is live in the row rather
 than a husk.
 
-_Doing nothing:_ two unbounded tables, and a disclosed retention commitment that
-is not met for the richest customer content in the product.
-_Recommendation:_ a fourth and fifth sweeper arm on the established pattern —
-bounded per tick, independently optional, per-arm metric. Receipts are the
-simpler half (no blob side effects); `agent_sessions` needs a check for
-usage-record and LiveKit references first. **A2 did not implement this in the
-fire that found it:** it is two repo methods, two sweeper arms, metrics and
-guards, and starting it with little runway risks leaving a half-wired sweep,
-which for an erasure path is worse than none. It is the top item for the next
-fire.
+_Closed._ Both arms now exist on the established pattern — bounded per tick,
+independently optional, per-arm metric, each with a real-Postgres guard. The
+sweeper carries five arms.
+
+Two things are worth recording from the implementation rather than the finding.
+
+**Neither purge is bound to `MFA_ENCRYPTION_KEY`.** Both repo classes require
+that key, because reading or writing these rows means decrypting. A DELETE
+decrypts nothing, so both purges are standalone key-free functions. Wiring the
+arms to the repos would have made an unrelated flag switch off two more
+retention promises — the exact defect `2eeddefa7` had to fix for the first
+three, reintroduced by the obvious implementation.
+
+**The cascade rules decide whether this erasure destroys data it has no licence
+to touch**, and they differ: `agent_turn_receipts.agent_session_id` is ON DELETE
+CASCADE, so receipts go with a purged session; `recipes.agent_session_id` is ON
+DELETE SET NULL, so a customer's saved recipes survive with the link cleared.
+That was checked against the live schema, not assumed, and both directions are
+now guarded. If the recipe rule were ever changed to CASCADE, purging a
+terminated account would quietly destroy recipes and no assertion about
+`agent_sessions` would notice.
 
 _Worth noting for whoever picks it up:_ the same soft-delete-vs-CASCADE question
 applies to every table with an `account_id` foreign key. Fixing these two by
@@ -186,13 +200,31 @@ write reds three, and one dropping the four-field CAS predicate reds one. With
 one and two seeded foreign legacy rows the file now passes where it previously
 failed deterministically.
 
-_Still open._ The same three cases failed once more under full-suite load after
-that fix, so at least one mechanism remains. The evidence now points at timing
-rather than data: the CAS case polls `pg_stat_activity` for only 100 × 10 ms
-before asserting the migrator reached its lock wait, and the suite's
-`testTimeout` is 10 s — both are load-sensitive in a way the data path is not.
-Confirming it needs the assertion text from a failing run, which requires
-catching one; the failures are not reproducible on demand.
+_Update after a dedicated 5-run capture: all five passed._ Post-fix the count is
+**1 failure in 8 full-suite runs**, against 3 in 6 before. The data mechanism
+was evidently the dominant one.
+
+_But the intermittency is NOT confined to that file, which is the more important
+finding._ A later full-suite run went red on three entirely different tests —
+`account-byok-anthropic-active`, `stripe-webhooks`, and a customer-dashboard
+BYOK page test — all three of which pass in isolation, and the immediately
+following full run was green at 2,563 files. So this is not one flaky file with
+one bad assertion; it is an ambient failure rate across the suite under
+full-parallel load, and item 11's original framing was too narrow.
+
+That reframes the risk for item 1: the question is not "is this one file fixed"
+but "what fraction of CI runs go red for reasons unrelated to the change under
+test". Observed across this session: roughly 1 in 4 full-suite runs shows at
+least one failure that does not reproduce in isolation.
+
+_Not recommended:_ chasing each file individually. Three unrelated files failing
+the same way points at a shared cause — most plausibly contention on the single
+local Postgres, since every failing test so far touches it. _Recommendation:_
+establish whether CI sees the same rate before treating it as a local artefact.
+CI runs the same command against a containerised Postgres service with different
+CPU and connection limits, so the rate there may differ in either direction, and
+that measurement decides whether this blocks the push or is an artefact of a
+developer machine running other work.
 
 _Doing nothing:_ the push lands an intermittently red CI, and an intermittent
 red is the kind that gets re-run until green and then stops being read.
