@@ -30900,3 +30900,47 @@ fully green, including the peer openapi drift noted in V-730 and V-731, now
 resolved upstream. Both halves of the server typecheck, targeted ESLint and
 Prettier. No schema, OpenAPI, SDK, environment or secret surface changed, and no
 status code or response shape moved on the profile-backed path.
+
+## V-733 — The proxies page promised routing through a scheme the server refuses
+
+**Date:** 2026-08-01
+
+`api/proxies.md` opened with "Register your own SOCKS5, HTTP, OpenVPN, or
+WireGuard proxies against your account and route a session's egress through one"
+and said "Four schemes are supported". Registering an `http` proxy does work;
+routing a session through one never does. `agent-sessions.ts:1974` throws a
+`BadRequestError` for `owned.scheme === 'http'` on every create, and the check
+is unconditional despite its "on this deployment" wording. The page's failure
+list named only `404`, so the `400` a customer actually hits was undocumented.
+
+The page now separates the two capabilities, because they genuinely differ:
+four schemes can be **registered**; three can **route a session** — `socks5`
+dialled by the control plane, `openvpn`/`wireguard` tunnelled at the browser
+host (`account-proxies.ts:78-82`). `http` is stored and managed but is not a
+dispatch target, and the create is refused rather than silently ignored, which
+is the part worth knowing.
+
+Fixed in the docs rather than the server: `http` has no dispatch slot to give
+it, and inventing one to satisfy a sentence would be a feature, not a
+correction. The refusal is already the honest behaviour — the server surfaces a
+message naming the schemes that work.
+
+No new pin. The behaviour itself is already covered behaviourally at
+`agent-sessions-routes.test.ts:309`, which asserts the 400 and its exact
+message, so the docs now describe something a test holds. Adding a source-text
+pin over the prose would guard the wording, not the truth — and three separate
+pins this session turned out to be holding false claims in place, so the bar for
+adding another is that it must assert something a behavioural test cannot.
+
+Verification: canonical full suite 2763 files / 28,201 passing / 0 failing;
+Prettier clean. Docs only — no server, schema, SDK, environment or secret
+surface changed.
+
+A related audit finding was NOT actioned, and the reason is worth recording:
+it claimed the documented pair-mode flow cannot complete because nothing fires
+`takeover-grant`. Nothing in THIS repo does — the routes only ever fire
+`takeover-request` — but the grant is produced by the harness, as
+`agent-sessions-routes.test.ts:3002` states outright ("via a harness
+takeover-grant (not a customer route)"). The producer lives in another
+repository, so the claim is unverifiable from here and the docs were left alone.
+A finding scoped to one repo is not evidence about a system that spans two.

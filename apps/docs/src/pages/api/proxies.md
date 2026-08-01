@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Account proxies
-description: Register your own SOCKS5, HTTP, OpenVPN, or WireGuard proxies against your account and route a session's egress through one. Secrets are encrypted at rest under your account key and never echoed back.
+description: Register your own SOCKS5, HTTP, OpenVPN, or WireGuard proxies against your account and route a session's egress through a SOCKS5, OpenVPN, or WireGuard one. Secrets are encrypted at rest under your account key and never echoed back.
 ---
 
 # Account proxies
@@ -10,7 +10,15 @@ The **account proxies** surface lets you register your own proxies
 against your Driftstack account and route an
 [agent session](/api/agent-sessions/)'s traffic through one — so a
 session browses from your egress IP instead of the default. Four
-schemes are supported: `socks5`, `http`, `openvpn`, and `wireguard`.
+schemes can be **registered**: `socks5`, `http`, `openvpn`, and
+`wireguard`.
+
+Three of them can currently **route a browser session**: `socks5`
+(dialled by the control plane) and `openvpn` / `wireguard` (tunnelled
+at the browser host). `http` proxies can be stored and managed here,
+but are not a session-dispatch target on this deployment — passing an
+`http` proxy to a session create is refused with `400`, not silently
+ignored.
 
 Proxy **secrets are write-only**: passwords (SOCKS5/HTTP), the OpenVPN
 config blob (which embeds your certs/keys), and the WireGuard private
@@ -173,7 +181,9 @@ Pass `proxy_id` when you
 
 The session's egress is routed through that proxy. The `proxy_id` must
 be one of your account's proxies (an unknown or not-owned id returns
-`404`). Omit it to use the default egress.
+`404`), and its scheme must be one that can route a session — an
+`http` proxy returns `400` with a message naming the supported
+schemes. Omit it to use the default egress.
 
 > The Driftstack desktop app manages this for you: add a proxy under
 > **Proxies**, set it as a profile's default, and launching the profile
