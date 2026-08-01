@@ -30735,3 +30735,83 @@ regenerating `packages/sdk-python/openapi.json`. This entry touches no schema; t
 145 files / 1,089 tests passing; targeted Prettier. No server, schema, OpenAPI,
 SDK, environment or secret surface changed — this entry is entirely the two
 consumers catching up with V-720.
+
+## V-730 — A cleared BYOK key kept being used, a rotated one never arrived, and a cold cache silently billed the customer
+
+**Date:** 2026-08-01
+
+Three customer-facing defects, one root cause. The per-session BYOK plaintext
+cache is populated once at agent-session create, keyed only by session id, and
+the turn path resolves from it and nothing else — `byokService.getPlaintext` is
+called at exactly three sites (`agent-sessions.ts:2028`, `:2208`, `:2268`), all
+inside `POST /v1/agent-sessions`, never on a turn. So the credential lifecycle
+had no way to reach a live session, and a cache miss was indistinguishable from
+"this customer has no key".
+
+**1. Clearing did not revoke.** `DELETE /v1/account/me/byok-anthropic-key`
+called `service.clearKey` and nothing else. `has_key` flipped to false while
+every already-open agent session kept transmitting the _cleared_ Anthropic key
+to the provider until that session closed or the 13-hour TTL lapsed. The docs
+promise the opposite — that after clearing, sessions fall through to the
+bundled-LLM leg or surface `502 ByokAnthropicRequired` — and neither can happen
+while the entry is warm, because both branches are gated on the cached value
+being absent. A customer revoking a compromised credential had no way to make
+that true.
+
+**2. Rotation never reached open sessions.** `PUT` replaced the ciphertext and
+held no cache reference, so a session opened before the rotation used the OLD
+key for the rest of its life. The page's advice — "wait for in-flight turns to
+complete before rotating" — guards a hazard that does not exist (a turn resolves
+its key once, up front) while missing the one that does.
+
+**3. A cold cache silently moved the customer onto our key.** The bundled-LLM
+preflight is entered when `cachedByokKey === undefined`, which is a pure
+in-memory read. On any miss — process restart, redeploy, LRU eviction at 10k
+entries, TTL — a customer with a perfectly valid _stored_ key was promoted onto
+the bundled leg, running on Driftstack's deployment key and billing against
+their bundled cap, while both `byok-anthropic.md` and `bundled-llm.md` state
+that BYOK always wins. This is the one that costs money, and it is silent.
+
+The fix is in two halves. The cache gains an account index and
+`deleteByAccount`, and `set` takes the owning account id; every removal now
+funnels through one private `forget` so the index cannot outlive the entries it
+points at — otherwise `deleteByAccount` would report evictions it never
+performed, and an operator would read that count as a completed revocation. The
+clear and rotate routes call it. Second, on a cache miss with no header key the
+turn re-reads storage before conceding to the bundled leg. That half is what
+makes eviction _effective_: after a clear or rotate drops the entry, the next
+turn re-resolves and sees either the absence (falling through exactly as
+documented) or the new key, instead of continuing on stale plaintext. One extra
+decrypt per miss, and misses are rare by construction.
+
+This closes the single-node case, which is what runs today. A multi-instance
+deployment still needs a shared invalidation signal; that is a real residual and
+is stated in the code rather than left implied.
+
+Existing coverage could not catch any of it. The cache class was unit-tested and
+the route wiring was not; the delete-on-close guard file says as much in its own
+header, having settled for a source pin because `buildTestApp` did not expose
+the cache. It does now, so the eviction half is proved behaviourally at both
+routes — clearing evicts this account's live entries and leaves another tenant's
+untouched, rotation evicts the superseded key — and both are proved red by
+removing the call. The cache index has its own behavioural tests, including that
+`delete`, TTL expiry and LRU eviction all keep the index honest. The turn-path
+re-read is guarded at source rather than behaviourally, because driving a real
+turn needs the runtime plus provider mocks; that is a weaker guard and is
+labelled as one — it proves the re-read is still wired, not that it resolves
+correctly.
+
+Found by an adversarial docs-versus-behaviour audit, and every claim was
+re-verified against source before any code moved — the same audit's headline
+finding on another page did not survive that check.
+
+Verification: canonical full suite 2756 files / 28,136 passing, with two failures neither of
+which is this change — `openapi.test.ts` and a chaos-script parity pin, both
+from a peer's concurrent in-flight edits (`scripts/chaos/*.sh` and an
+unregenerated `packages/sdk-python/openapi.json`). The node project alone, which
+is the complete relevant gate here, is 2530 files / 26,560 passing with only
+that same openapi drift; both halves of the server typecheck clean; targeted
+ESLint and Prettier. Two content-parity pins updated (the cache's method surface
+and its TTL/LRU shape) because the entry now carries an account id and removals
+funnel through `forget`. No schema, OpenAPI, SDK, pricing, environment or secret
+surface changed, and no response shape or status code moved.

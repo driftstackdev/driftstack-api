@@ -47,7 +47,11 @@ export interface ByokKeyCacheOptions {
 }
 
 export class InMemoryByokKeyCache {
-  private readonly cache = new Map<string, { key: string; at: number }>();
+  private readonly cache = new Map<string, { key: string; at: number; accountId?: string }>();
+  /** V-730 — session ids per owning account, so a key CLEAR or ROTATE can evict
+   *  the live plaintext it invalidates. Without this the cache was keyed only by
+   *  session, and the credential lifecycle had no way to reach it. */
+  private readonly byAccount = new Map<string, Set<string>>();
   private readonly maxEntries: number;
   private readonly ttlMs: number;
   private readonly now: () => number;
@@ -65,22 +69,65 @@ export class InMemoryByokKeyCache {
    * expired-entry sweep + LRU-cap enforcement here are cheap and bound memory
    * even when a session's close path omits delete().
    */
-  set(agentSessionId: string, plaintextKey: string): void {
+  set(agentSessionId: string, plaintextKey: string, accountId?: string): void {
     const now = this.now();
     // Free (not just hide) plaintext keys leaked by a delete()-less close path.
     for (const [id, e] of this.cache) {
-      if (now - e.at > this.ttlMs) this.cache.delete(id);
+      if (now - e.at > this.ttlMs) this.forget(id);
     }
     // Re-insert to move to the end (LRU recency) with a fresh timestamp.
-    this.cache.delete(agentSessionId);
-    this.cache.set(agentSessionId, { key: plaintextKey, at: now });
+    this.forget(agentSessionId);
+    this.cache.set(agentSessionId, {
+      key: plaintextKey,
+      at: now,
+      ...(accountId ? { accountId } : {}),
+    });
+    if (accountId !== undefined) {
+      const ids = this.byAccount.get(accountId) ?? new Set<string>();
+      ids.add(agentSessionId);
+      this.byAccount.set(accountId, ids);
+    }
     // Hard cap: evict oldest-inserted until within bound (an evicted live
     // session degrades to the header/fallback resolution path, still correct).
     while (this.cache.size > this.maxEntries) {
       const oldest = this.cache.keys().next().value;
       if (oldest === undefined) break;
-      this.cache.delete(oldest);
+      this.forget(oldest);
     }
+  }
+
+  /** Drop one entry from BOTH indexes. Every removal goes through here so the
+   *  account index cannot outlive the entries it points at. */
+  private forget(agentSessionId: string): void {
+    const entry = this.cache.get(agentSessionId);
+    this.cache.delete(agentSessionId);
+    if (entry?.accountId === undefined) return;
+    const ids = this.byAccount.get(entry.accountId);
+    if (ids === undefined) return;
+    ids.delete(agentSessionId);
+    if (ids.size === 0) this.byAccount.delete(entry.accountId);
+  }
+
+  /**
+   * V-730 — evict every live plaintext this account has cached, and report how
+   * many. Called when the stored key is CLEARED or ROTATED.
+   *
+   * Without it, `DELETE /v1/account/me/byok-anthropic-key` flipped `has_key` to
+   * false while every already-open agent session kept transmitting the cleared
+   * key to Anthropic until the session closed or the 13h TTL lapsed — a clear
+   * that did not revoke. Rotation had the mirror problem: open sessions kept
+   * using the OLD key for the rest of their lives.
+   *
+   * In-process only. A multi-instance deployment still needs a shared
+   * invalidation signal; this closes the single-node case, which is what runs
+   * today.
+   */
+  deleteByAccount(accountId: string): number {
+    const ids = this.byAccount.get(accountId);
+    if (ids === undefined) return 0;
+    const n = ids.size;
+    for (const id of [...ids]) this.forget(id);
+    return n;
   }
 
   /** Returns the cached plaintext or undefined when no entry exists (cache
@@ -91,7 +138,7 @@ export class InMemoryByokKeyCache {
     const entry = this.cache.get(agentSessionId);
     if (entry === undefined) return undefined;
     if (this.now() - entry.at > this.ttlMs) {
-      this.cache.delete(agentSessionId);
+      this.forget(agentSessionId);
       return undefined;
     }
     return entry.key;
@@ -103,7 +150,7 @@ export class InMemoryByokKeyCache {
    * concurrent with the runtime's budget-exhausted close).
    */
   delete(agentSessionId: string): void {
-    this.cache.delete(agentSessionId);
+    this.forget(agentSessionId);
   }
 
   /** Test seam: observable size for cache-pressure assertions. */

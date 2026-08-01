@@ -71,9 +71,10 @@ they must generate a new one from the Anthropic console and PUT
 it again (Driftstack cannot recover it).
 
 Rotation: PUT replaces the existing key atomically. There is no
-grace window — the next agent session turn uses the new key
-immediately. Customers running long-lived agent sessions across
-a rotation should wait for in-flight turns to complete before
+grace window — rotation applies to the next turn on every agent
+session, including sessions that were already open. A turn resolves
+its key once, up front, so a turn already in flight completes on the
+key it started with; you do not need to drain sessions before
 rotating.
 
 ## Clear
@@ -85,7 +86,9 @@ non-existent key is also 204). Required scope: `account_owner`.
 
 After clearing, agent sessions fall through to the bundled-LLM
 leg (if the customer has opted into bundled-LLM) or surface
-`502 ByokAnthropicRequired` (if neither path resolves).
+`502 ByokAnthropicRequired` (if neither path resolves). This applies
+to sessions that were already open as well — clearing takes effect
+from their next turn, not only for sessions started afterwards.
 
 ## Test connection
 

@@ -1264,6 +1264,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // PUT/DELETE/POST-test of the BYOK key. Pre-launch blocker per
       // the 2026-05-19 audit-log-coverage audit.
       ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
+      // V-730 — so clearing or rotating the stored key evicts the plaintext
+      // already cached for OPEN agent sessions. Without it the credential
+      // lifecycle never reaches them: a cleared key kept being sent to Anthropic
+      // until the session closed or the 13h TTL lapsed.
+      ...(deps.byokKeyCache !== undefined ? { byokKeyCache: deps.byokKeyCache } : {}),
     });
   } else {
     registerAccountByokAnthropicDisabledRoutes(app);

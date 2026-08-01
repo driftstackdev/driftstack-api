@@ -60,3 +60,46 @@ describe('Q.1.c BYOK plaintext-clear-on-close (both route close paths) drift gua
     expect(clearSites.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+// V-730 — the turn path must consult STORAGE on a cache miss before conceding
+// to the bundled-LLM leg.
+//
+// The per-session cache is populated once at session-create and is lossy by
+// construction (process restart, redeploy, LRU eviction at 10k, 13h TTL), while
+// the bundled preflight gates on `cachedByokKey === undefined`. So a customer
+// with a valid STORED key was silently promoted onto Driftstack's deployment
+// key and billed against their bundled cap — with the docs promising BYOK
+// always wins. The same re-read is what makes credential-lifecycle eviction
+// effective: after a clear or rotate drops the entry, the next turn re-resolves
+// instead of continuing on stale plaintext.
+//
+// Pinned at source rather than behaviourally, for the reason this file already
+// records: driving a real turn needs the runtime plus provider mocks. That is a
+// weaker guard than a behavioural test and is labelled as such — it proves the
+// re-read is still WIRED, not that it resolves correctly. The eviction half IS
+// behavioural (account-byok-anthropic-active.test.ts), as is the cache index
+// (byok-anthropic-key-cache.test.ts).
+describe('V-730 turn-path BYOK storage re-read on cache miss drift guard', () => {
+  const body = readFileSync(ROUTE, 'utf8');
+
+  it('re-reads the stored key when the cache misses and no header key was supplied', () => {
+    // The guard condition: only on a miss, and only when the caller did not
+    // already supply a header key (which outranks storage).
+    expect(body).toMatch(
+      /if \(cachedByokKey === undefined && headerByokKey === undefined && byokService !== undefined\) \{/,
+    );
+    expect(body).toMatch(/const stored = await byokService\.getPlaintext\(\{/);
+    // Re-populating the cache is what keeps this to ONE decrypt per miss.
+    expect(body).toMatch(/byokKeyCache\?\.set\(req\.params\.id, stored, turnAccountId\);/);
+  });
+
+  it('cached entries are tagged with their owning account so a clear/rotate can find them', () => {
+    // Without the accountId argument the cache cannot be evicted by account and
+    // the credential lifecycle silently stops reaching live sessions again.
+    expect(body.match(/byokKeyCache\.set\([^)]*, stored, ownerAccountId\)/g)).toHaveLength(3);
+  });
+
+  it('a failed re-read degrades instead of failing the turn', () => {
+    expect(body).toMatch(/'BYOK re-read on cache miss failed; resolving without a stored key'/);
+  });
+});

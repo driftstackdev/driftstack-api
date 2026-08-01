@@ -51,6 +51,17 @@ export interface AccountByokAnthropicRoutesOptions {
    *  Optional so test fixtures + the activation-gate-off stub
    *  variant compile without it. */
   accountAudit?: AccountAuditService;
+  /**
+   * V-730 — live per-session plaintext cache. Clearing or rotating the stored
+   * key MUST evict the copies already handed to open agent sessions, or the
+   * credential lifecycle simply does not reach them: a cleared key kept being
+   * transmitted to Anthropic until the session closed or the 13h TTL lapsed,
+   * and a rotated key never reached a session that was already open.
+   *
+   * Optional so the activation-gate-off stub variant and test fixtures compile
+   * without it; when absent, clear/rotate behave exactly as before.
+   */
+  byokKeyCache?: { deleteByAccount(accountId: string): number };
 }
 
 /** Map a connection-test result to one of the bounded `outcome` label
@@ -71,6 +82,7 @@ export function registerAccountByokAnthropicRoutes(
   const testConnection = opts.testConnection ?? testAnthropicKey;
   const metrics = opts.metrics;
   const accountAudit = opts.accountAudit;
+  const byokKeyCache = opts.byokKeyCache;
 
   // 2026-05-20 — best-effort audit emit. Wraps the record call so the
   // route never 5xx's because audit failed (mirrors the
@@ -142,6 +154,17 @@ export function registerAccountByokAnthropicRoutes(
           plaintext: body.api_key,
           now: now(),
         });
+        // V-730 — the rotation only reaches OPEN sessions through this
+        // eviction; each turn otherwise resolves from the copy cached at
+        // session-create and would keep using the OLD key for the rest of the
+        // session's life.
+        const evicted = byokKeyCache?.deleteByAccount(ctx.account.id) ?? 0;
+        if (evicted > 0) {
+          request.log.info(
+            { component: 'byok-anthropic', account_id: ctx.account.id, evicted },
+            'evicted cached BYOK plaintext for live sessions after key rotation',
+          );
+        }
         // 2026-05-20 — audit emit AFTER successful set. Drift-test
         // landed alongside the enum extension; ipAddress carried so
         // the audit log shows where the key was set from (useful for
@@ -170,6 +193,17 @@ export function registerAccountByokAnthropicRoutes(
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       await service.clearKey({ accountId: ctx.account.id, now: now() });
+      // V-730 — a clear that does not revoke is not a clear. Drop the plaintext
+      // already handed to open sessions so the next turn resolves the documented
+      // way (bundled-LLM leg, or 502 ByokAnthropicRequired) instead of continuing
+      // on the cleared credential.
+      const evicted = byokKeyCache?.deleteByAccount(ctx.account.id) ?? 0;
+      if (evicted > 0) {
+        request.log.info(
+          { component: 'byok-anthropic', account_id: ctx.account.id, evicted },
+          'evicted cached BYOK plaintext for live sessions after key clear',
+        );
+      }
       // 2026-05-20 — audit emit AFTER successful clear. Even an
       // idempotent clear-on-already-cleared rates an audit entry so
       // operators investigating a "key disappeared" report can see

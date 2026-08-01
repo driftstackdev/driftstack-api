@@ -59,9 +59,23 @@ describe('services/byok-anthropic-key-cache content parity', () => {
     );
   });
 
-  it('InMemoryByokKeyCache 4-method surface pinned: set + get + delete + size (test seam). Drift to dropping size would break test-pressure assertions; drift to adding has() would tempt callers to use a non-atomic check-then-get pattern instead of just calling get + checking undefined', () => {
+  // V-730 — a FIFTH method, deleteByAccount, plus an accountId on set(). The
+  // cache was keyed only by session, so the credential lifecycle could not reach
+  // it: clearing the stored key left every open session transmitting the cleared
+  // credential until close or the 13h TTL, and rotating never reached an
+  // already-open session. Dropping either the method or the accountId argument
+  // silently restores that, so both are pinned.
+  it('InMemoryByokKeyCache 5-method surface pinned: set + get + delete + deleteByAccount + size (test seam). Drift to dropping size would break test-pressure assertions; drift to adding has() would tempt callers to use a non-atomic check-then-get pattern instead of just calling get + checking undefined', () => {
     expect(body).toMatch(/export class InMemoryByokKeyCache \{/);
-    expect(body).toMatch(/set\(agentSessionId: string, plaintextKey: string\): void/);
+    expect(body).toMatch(
+      /set\(agentSessionId: string, plaintextKey: string, accountId\?: string\): void/,
+    );
+    expect(body).toMatch(/deleteByAccount\(accountId: string\): number/);
+    // Every removal must funnel through forget(), or the account index outlives
+    // the entries it points at and deleteByAccount reports evictions it never
+    // performed — an operator would read that count as a completed revocation.
+    expect(body).toMatch(/private forget\(agentSessionId: string\): void/);
+    expect(body.match(/this\.cache\.delete\(/g)).toHaveLength(1);
     expect(body).toMatch(/get\(agentSessionId: string\): string \| undefined/);
     expect(body).toMatch(/delete\(agentSessionId: string\): void/);
     expect(body).toMatch(
@@ -88,12 +102,16 @@ describe('services/byok-anthropic-key-cache content parity', () => {
   });
 
   it('TTL + LRU bound pinned (audit wsihqzj39): the cache MUST self-bound so a delete()-less close path (worker-initiated / reaper / sweeper terminal close) cannot retain a decrypted plaintext key unbounded — maxEntries LRU cap (10k default), a 13h TTL (past the 12h orphan cap), an opportunistic expired-entry sweep on set(), and lazy TTL eviction on get(). Drift back to a plain unbounded Map<string,string> would reintroduce the plaintext-key leak', () => {
+    // V-730 — the entry now also carries the owning accountId so a clear/rotate
+    // can evict it; the self-bounding properties below are unchanged.
     expect(body).toMatch(
-      /private readonly cache = new Map<string, \{ key: string; at: number \}>\(\);/,
+      /private readonly cache = new Map<string, \{ key: string; at: number; accountId\?: string \}>\(\);/,
     );
     expect(body).toMatch(/this\.maxEntries = opts\.maxEntries \?\? 10_000;/);
     expect(body).toMatch(/this\.ttlMs = opts\.ttlMs \?\? 13 \* 60 \* 60 \* 1000;/);
-    expect(body).toMatch(/if \(now - e\.at > this\.ttlMs\) this\.cache\.delete\(id\);/);
+    // The expired-entry sweep goes through forget() so the account index is
+    // swept with it — the bound itself is unchanged.
+    expect(body).toMatch(/if \(now - e\.at > this\.ttlMs\) this\.forget\(id\);/);
     expect(body).toMatch(/while \(this\.cache\.size > this\.maxEntries\)/);
   });
 });

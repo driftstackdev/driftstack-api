@@ -18,6 +18,8 @@ interface MetaResponse {
 }
 
 const VALID_KEY = 'sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+/** V-730 — a second, distinct key for the rotation test. */
+const ROTATED_KEY = 'sk-ant-api03-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 describe('byok-anthropic active storage routes (GET/PUT/DELETE)', () => {
   let fx: TestAppFixture;
@@ -137,5 +139,71 @@ describe('byok-anthropic active storage routes (GET/PUT/DELETE)', () => {
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(del2.statusCode).toBe(204);
+  });
+});
+
+// V-730 — clearing or rotating the stored key must reach the plaintext already
+// handed to OPEN agent sessions.
+//
+// A turn resolves its BYOK key from a per-session cache populated once at
+// session-create; the message path never re-read storage. So DELETE flipped
+// has_key to false while every open session kept transmitting the CLEARED key
+// to Anthropic until it closed or the 13h TTL lapsed — a clear that did not
+// revoke — and PUT never reached a session that was already open, which kept
+// using the OLD key for the rest of its life. The docs promise the opposite on
+// both counts.
+describe('V-730 BYOK key lifecycle evicts live session plaintext', () => {
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('DELETE evicts the plaintext cached for this account live sessions', async () => {
+    fx = await buildTestApp({ enableByokAnthropic: true });
+    await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/me/byok-anthropic-key',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { api_key: VALID_KEY },
+    });
+    // Stand in for a live agent session holding the decrypted key.
+    fx.byokKeyCache.set('agt_live_1', VALID_KEY, fx.accountId);
+    fx.byokKeyCache.set('agt_live_2', VALID_KEY, fx.accountId);
+    // Another tenant's live session must be untouched by this revocation.
+    fx.byokKeyCache.set('agt_other', 'sk-ant-other', 'acc_someone_else');
+    expect(fx.byokKeyCache.get('agt_live_1')).toBe(VALID_KEY);
+
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/account/me/byok-anthropic-key',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(del.statusCode).toBe(204);
+
+    expect(fx.byokKeyCache.get('agt_live_1')).toBeUndefined();
+    expect(fx.byokKeyCache.get('agt_live_2')).toBeUndefined();
+    expect(fx.byokKeyCache.get('agt_other')).toBe('sk-ant-other');
+  });
+
+  it('PUT (rotation) evicts the OLD plaintext so open sessions cannot keep using it', async () => {
+    fx = await buildTestApp({ enableByokAnthropic: true });
+    await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/me/byok-anthropic-key',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { api_key: VALID_KEY },
+    });
+    fx.byokKeyCache.set('agt_live_1', VALID_KEY, fx.accountId);
+
+    const rotated = await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/me/byok-anthropic-key',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { api_key: ROTATED_KEY },
+    });
+    expect(rotated.statusCode).toBe(200);
+
+    // The next turn must not find the superseded key sitting in the cache.
+    expect(fx.byokKeyCache.get('agt_live_1')).toBeUndefined();
   });
 });

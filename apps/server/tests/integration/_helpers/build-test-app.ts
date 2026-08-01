@@ -33,6 +33,7 @@ import {
   BYOKAnthropicService,
   InMemoryBYOKAnthropicRepo,
 } from '../../../src/services/byok-anthropic.js';
+import { InMemoryByokKeyCache } from '../../../src/services/byok-anthropic-key-cache.js';
 import { AgentSessionEventBus } from '../../../src/services/agent-session-event-bus.js';
 import { InMemoryPairModeTakeoverLock } from '../../../src/services/agent-pair-mode-lock.js';
 import { InMemoryPairModeHeartbeatTracker } from '../../../src/services/agent-pair-mode-heartbeat.js';
@@ -470,6 +471,10 @@ export interface AdditionalAccount {
 
 export interface TestAppFixture {
   app: Awaited<ReturnType<typeof buildApp>>;
+  /** V-730 — the live per-session BYOK plaintext cache, so a test can prove
+   *  that clearing or rotating the stored key evicts what open agent sessions
+   *  are still holding. */
+  byokKeyCache: InMemoryByokKeyCache;
   authRepo: InMemoryAuthRepo;
   authCache: InMemoryAuthCache;
   authCoalescer: AuthCoalescer;
@@ -988,6 +993,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // register their 503 activation-gate stubs. Repo is always declared so
   // the fixture shape is stable.
   const byokAnthropicRepo = new InMemoryBYOKAnthropicRepo();
+  const testByokKeyCache = new InMemoryByokKeyCache();
   const byokAnthropicService =
     opts.enableByokAnthropic === true
       ? new BYOKAnthropicService(byokAnthropicRepo, {
@@ -1615,6 +1621,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // limiter so a test can pre-occupy slots and assert the route 429s.
     bundledTurnConcurrency,
     ...(byokAnthropicService !== undefined ? { byokAnthropicService } : {}),
+    // V-730 — so a test can prove that clearing / rotating the stored key
+    // EVICTS the plaintext already cached for open agent sessions.
+    ...(byokAnthropicService !== undefined ? { byokKeyCache: testByokKeyCache } : {}),
     // V-820 — wire the fleet control-plane deps so the live WS handler
     // registers. All three are required by the app.ts activation gate.
     ...(opts.enableFleetControlPlane === true
@@ -1710,6 +1719,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   return {
     app,
+    /** V-730 — lets a test prove that clearing / rotating the stored key evicts
+     *  the plaintext cached for open agent sessions. */
+    byokKeyCache: testByokKeyCache,
     authRepo,
     authCache,
     authCoalescer,

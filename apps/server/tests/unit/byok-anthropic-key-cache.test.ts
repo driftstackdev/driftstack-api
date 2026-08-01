@@ -98,3 +98,62 @@ describe('Q.1.c InMemoryByokKeyCache', () => {
     expect(cache.get('c')).toBe('kc');
   });
 });
+
+// V-730 — the credential lifecycle has to be able to REACH the plaintext this
+// cache hands to open agent sessions.
+//
+// The cache was keyed only by agent-session id and populated once at
+// session-create. `DELETE /v1/account/me/byok-anthropic-key` flipped `has_key`
+// to false and every already-open session kept transmitting the CLEARED key to
+// Anthropic until the session closed or the 13h TTL lapsed — a clear that did
+// not revoke. Rotation had the mirror problem: a `PUT` never reached a session
+// that was already open, which kept using the OLD key for the rest of its life.
+describe('V-730 InMemoryByokKeyCache.deleteByAccount', () => {
+  it('evicts every live entry belonging to the account and leaves other accounts alone', () => {
+    const cache = new InMemoryByokKeyCache();
+    cache.set('sess_a1', 'sk-ant-A', 'acc_a');
+    cache.set('sess_a2', 'sk-ant-A', 'acc_a');
+    cache.set('sess_b1', 'sk-ant-B', 'acc_b');
+
+    expect(cache.deleteByAccount('acc_a')).toBe(2);
+
+    expect(cache.get('sess_a1')).toBeUndefined();
+    expect(cache.get('sess_a2')).toBeUndefined();
+    // A revocation on one tenant must never disturb another's live sessions.
+    expect(cache.get('sess_b1')).toBe('sk-ant-B');
+  });
+
+  it('is idempotent and reports zero for an account with nothing cached', () => {
+    const cache = new InMemoryByokKeyCache();
+    cache.set('sess_a1', 'sk-ant-A', 'acc_a');
+    expect(cache.deleteByAccount('acc_a')).toBe(1);
+    expect(cache.deleteByAccount('acc_a')).toBe(0);
+    expect(cache.deleteByAccount('acc_never_seen')).toBe(0);
+  });
+
+  it('does not leak the account index when entries leave by other routes', () => {
+    // delete(), TTL expiry and LRU eviction all have to keep the index honest,
+    // or deleteByAccount would later report evictions it did not perform — and
+    // an operator reading that count would believe a revocation reached
+    // sessions it never touched.
+    let clock = 0;
+    const cache = new InMemoryByokKeyCache({ ttlMs: 1_000, now: () => clock });
+    cache.set('sess_1', 'sk-ant-A', 'acc_a');
+    cache.delete('sess_1');
+    expect(cache.deleteByAccount('acc_a')).toBe(0);
+
+    cache.set('sess_2', 'sk-ant-A', 'acc_a');
+    clock = 5_000; // past the TTL
+    expect(cache.get('sess_2')).toBeUndefined(); // lazily evicted here
+    expect(cache.deleteByAccount('acc_a')).toBe(0);
+  });
+
+  it('still accepts an untagged set (no accountId) without breaking eviction', () => {
+    // The parameter is optional so existing callers compile; an untagged entry
+    // simply cannot be reached by account, which is the pre-V-730 behaviour.
+    const cache = new InMemoryByokKeyCache();
+    cache.set('sess_legacy', 'sk-ant-L');
+    expect(cache.deleteByAccount('acc_a')).toBe(0);
+    expect(cache.get('sess_legacy')).toBe('sk-ant-L');
+  });
+});

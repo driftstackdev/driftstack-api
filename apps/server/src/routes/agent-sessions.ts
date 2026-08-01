@@ -2029,7 +2029,7 @@ export function registerAgentSessionsRoutes(
                 accountId: ownerAccountId,
                 now: new Date(),
               });
-              if (stored !== null) byokKeyCache.set(existing.id, stored);
+              if (stored !== null) byokKeyCache.set(existing.id, stored, ownerAccountId);
             } catch (err) {
               req.log.warn(
                 { component: 'agent-session-create', sessionId: existing.id, err },
@@ -2209,7 +2209,7 @@ export function registerAgentSessionsRoutes(
                   accountId: ownerAccountId,
                   now: new Date(),
                 });
-                if (stored !== null) byokKeyCache.set(winner.id, stored);
+                if (stored !== null) byokKeyCache.set(winner.id, stored, ownerAccountId);
               } catch (err) {
                 req.log.warn(
                   { component: 'agent-session-create', sessionId: winner.id, err },
@@ -2270,7 +2270,7 @@ export function registerAgentSessionsRoutes(
               now: new Date(),
             });
             if (stored !== null) {
-              byokKeyCache.set(created.id, stored);
+              byokKeyCache.set(created.id, stored, ownerAccountId);
             }
           } catch (err) {
             req.log.warn(
@@ -4383,7 +4383,40 @@ export function registerAgentSessionsRoutes(
       typeof rawHeaderByokKey === 'string' && rawHeaderByokKey.length > 0
         ? rawHeaderByokKey
         : undefined;
-    const cachedByokKey = byokKeyCache?.get(req.params.id);
+    let cachedByokKey = byokKeyCache?.get(req.params.id);
+    // V-730 — on a cache MISS, consult STORAGE before conceding to the bundled
+    // leg. The cache is populated once at session-create and is lossy by
+    // construction (process restart, redeploy, LRU eviction at 10k, 13h TTL),
+    // and the bundled preflight below gates on `cachedByokKey === undefined`.
+    // So a customer with a perfectly valid STORED key was silently promoted to
+    // the bundled-LLM leg on any miss — billed against their bundled cap, on
+    // Driftstack's deployment key — while the docs promise BYOK always wins.
+    //
+    // This also makes credential-lifecycle eviction WORK: after a clear or a
+    // rotate drops the live entry, the next turn lands here and re-reads, so it
+    // sees the absence (falling through exactly as documented) or the new key,
+    // instead of continuing on the stale plaintext.
+    //
+    // One extra decrypt per miss, and misses are rare by construction.
+    if (cachedByokKey === undefined && headerByokKey === undefined && byokService !== undefined) {
+      try {
+        const stored = await byokService.getPlaintext({
+          accountId: turnAccountId,
+          now: new Date(),
+        });
+        if (stored !== null) {
+          cachedByokKey = stored;
+          byokKeyCache?.set(req.params.id, stored, turnAccountId);
+        }
+      } catch (err) {
+        // Never fail the turn on a re-read problem: degrade to the same
+        // resolution order this code had before.
+        req.log.warn(
+          { component: 'agent-session-message', sessionId: req.params.id, err },
+          'BYOK re-read on cache miss failed; resolving without a stored key',
+        );
+      }
+    }
     let bundledLlmKey: string | undefined;
     let bundledLlmConsentMissing = false;
     /** Consent is stored and true, but the account's CURRENT tier no longer
