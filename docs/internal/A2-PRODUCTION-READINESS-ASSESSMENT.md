@@ -42,45 +42,48 @@ _don't_ write one — six lanes came back adequately covered and got no new code
 | SDK retry safety          | A create is never auto-retried without an Idempotency-Key, in all three SDKs. Go had no coverage of the gate at all; PATCH was untested everywhere.                                                                                                                                                                                                                                                                                             |
 | Observability             | Retention purge outcomes are labelled per arm with a `skipped` value, and a scrape-time gauge reports a dead job chain as 0 rather than as an absent series. Every emitted metric is registered at boot.                                                                                                                                                                                                                                        |
 
-### 13. Repo-layer account boundaries are largely unproven — swept, partly closed
+### 13. CLOSED — repo-layer account boundaries, swept across all 24 repos
 
-A mutation sweep over `eq(table.accountId, …)` predicates, neutralising each to
-`eq(t.accountId, t.accountId)` (always true) and measuring what reds:
+Every `eq(table.accountId, …)` predicate in `apps/server/src/db` — **120 across
+24 repos** — was neutralised to `eq(t.accountId, t.accountId)` (always true) and
+measured. Sixteen repos reacted immediately. **Five repos, holding 17
+predicates, did not, and every one was escalated to a FULL 26,592-test run
+before being called unproven:**
 
-| repo                   | predicates | result                                       |
-| ---------------------- | ---------- | -------------------------------------------- |
-| `profiles-repo`        | 20         | 14 tests red — covered                       |
-| `sessions-repo`        | 15         | 17 red — covered                             |
-| `mfa-repo`             | 14         | 8 red — covered                              |
-| `webhooks-repo`        | 11         | 5 red — covered                              |
-| `api-keys-repo`        | 5          | 12 red — covered                             |
-| `recipes-repo`         | 6          | **1 red** — thin, not investigated           |
-| `agent-sessions-repo`  | 8          | **0 red across the FULL suite** — now closed |
-| `account-proxies-repo` | 6          | **0 red across the FULL suite** — now closed |
+| repo                   | predicates | what the missing check exposes                          |
+| ---------------------- | ---------- | ------------------------------------------------------- |
+| `agent-sessions-repo`  | 8          | another account's agent sessions and transcripts        |
+| `account-proxies-repo` | 6          | another account's proxies, incl. an irreversible delete |
+| `crypto-orders-repo`   | 1          | a customer's crypto payment history                     |
+| `oauth-links-repo`     | 1          | linked Google/GitHub identities + provider email        |
+| `bundled-llm-repo`     | 1          | the monthly spend total the BUDGET CHECK reads          |
 
-The two zero-red repos are closed by `83710e2f5`. Both were escalated to a full
-26,584-test run before being called unproven, because a scoped run can miss a
-covering file.
+Closed by `83710e2f5` and `849c90ab9`.
 
-_Not a live vulnerability._ The service and route layers check ownership first
-and are well tested — but against a repo DOUBLE, so those tests never reach the
-SQL. The distinction matters because the retention sweeper arms added this week
-call these repos directly rather than through a route.
+_Severity, stated precisely and differently for the two groups._ For
+agent-sessions and proxies this was never a live vulnerability: the service and
+route layers check ownership first and are well tested — but against a repo
+DOUBLE, so those tests never reach the SQL. For the three scoped reads there is
+**no service-side filter at all**, so the predicate is the entire boundary; they
+were correct in production and simply unverified.
 
-**Still unswept: 12 repos, roughly 40 predicates** — `account-audit-repo`,
-`auth-flows-repo`, `auth-repo`, `billing-repo`, `bundled-llm-repo`,
-`crypto-orders-repo`, `email-preferences-repo`, `oauth-links-repo`,
-`profile-snapshots-repo`, `rate-limit-overrides-repo`, `session-operations-repo`,
-`stripe-webhooks-repo`, `usage-repo`. `recipes-repo`'s single red also deserves
-a look — one failing test across six ownership predicates is closer to the
-zero-red repos than to the well-covered ones.
+`bundled-llm-repo.sumMonthlySpendCents` is the one worth singling out because
+its failure mode is not disclosure. Unscoped, it sums every account's spend, so
+one customer gets refused for another's usage — and to that customer it is
+indistinguishable from their own budget running out.
 
-_Recommendation:_ finish the sweep. It is mechanical, each repo costs one scoped
-run, and it has already found two repos where fourteen cross-account checks
-proved nothing. The method matters as much as the result: **a predicate whose
-sibling condition already excludes the fixtures is untested no matter how many
-cases surround it**, and that shape has now appeared in three retention arms and
-two repos.
+_Two things the method taught, both reusable._ **A predicate whose sibling
+condition already excludes the fixtures is untested no matter how many cases
+surround it** — that shape produced all five findings here plus three retention
+arms. And **a conditional predicate hides a break in both directions**:
+`listAll`'s `accountId` is optional so an admin view can list everything, which
+means an unscoped result looks exactly like the admin call it is supposed to be,
+so the guard has to assert the admin path still works too.
+
+_Residual._ `recipes-repo` (6 predicates) and `session-operations-repo` (2) each
+red exactly one test. Both are covered, so neither is a finding, but one failing
+case across six predicates is thin enough to be worth a look if this area is
+revisited.
 
 ## Assumed, not proven
 
