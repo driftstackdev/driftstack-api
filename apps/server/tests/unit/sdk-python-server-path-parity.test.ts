@@ -45,19 +45,32 @@ function safeStat(p: string): boolean {
 }
 
 describe('W250.A SDK-python ↔ server path parity', () => {
-  if (!safeStat(SDK_RESOURCES)) {
-    it.skip('python SDK not present', () => undefined);
-    return;
-  }
-  // Preprocess the Python source so f-string placeholders like
-  // `{quote(id, safe='')}` don't break our simple ["'](/v1/...)["'] regex
-  // (the embedded `''` confuses the closing-quote match). Replace any
-  // `{…}` Python f-string placeholder with a single `:p` token first.
-  const rawPython = readAll(SDK_RESOURCES, '.py');
-  const sdkBlob = rawPython.replace(/\{[^{}]*\}/g, ':p');
-  const serverBlob = walkServerTs(SERVER_SRC);
+  // The directory check used to early-return `it.skip('python SDK not present')`.
+  // The Python SDK is not an optional dependency — it is 21 git-tracked files in
+  // a workspace package of this repo, with no submodule anywhere — so that branch
+  // could only ever fire when the directory was renamed, moved, or deleted. In
+  // other words it fired exactly when this guard mattered most, and it reported
+  // "1 passed | 1 skipped", which is a green suite. Measured, not assumed:
+  // pointing SDK_RESOURCES at a non-existent path left the run green.
+  //
+  // A missing directory is now a failure. The reads moved inside the cases so a
+  // missing directory surfaces as this test failing rather than as a collection
+  // crash that stops the presence case from ever running.
+  it('CRITICAL the Python SDK resources directory is where this guard expects it. If it moves, every path-parity assertion below silently stops being made — and a guard that disappears quietly is worse than one that never existed, because the suite still reads as green.', () => {
+    expect(
+      safeStat(SDK_RESOURCES),
+      `${SDK_RESOURCES} is not a directory — if the SDK layout changed, update this guard in the same commit rather than letting it skip`,
+    ).toBe(true);
+  });
 
   it('every Python SDK path literal resolves to a server route', () => {
+    // Preprocess the Python source so f-string placeholders like
+    // `{quote(id, safe='')}` don't break our simple ["'](/v1/...)["'] regex
+    // (the embedded `''` confuses the closing-quote match). Replace any
+    // `{…}` Python f-string placeholder with a single `:p` token first.
+    const rawPython = readAll(SDK_RESOURCES, '.py');
+    const sdkBlob = rawPython.replace(/\{[^{}]*\}/g, ':p');
+    const serverBlob = walkServerTs(SERVER_SRC);
     const sdkPaths = new Set<string>();
     // Python uses both bare strings ("/v1/foo") and f-strings (f"/v1/foo/{x}").
     // Capture both; normalise `{var}` and `{quote(var, safe='')}` to `:p`.

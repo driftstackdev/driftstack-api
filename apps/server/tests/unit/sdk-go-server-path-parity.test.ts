@@ -46,14 +46,20 @@ function safeStat(p: string): boolean {
 }
 
 describe('W250.B SDK-go ↔ server path parity', () => {
-  if (!safeStat(SDK_GO)) {
-    it.skip('Go SDK not present', () => undefined);
-    return;
-  }
-  const sdkBlob = readAll(SDK_GO, '.go');
-  const serverBlob = walkServerTs(SERVER_SRC);
+  // Same change as the Python twin, for the same measured reason: the Go SDK is
+  // 64 git-tracked files in a workspace package, never an optional dependency,
+  // so `it.skip('Go SDK not present')` could only fire when the directory moved
+  // — and it reported a green suite while this guard stopped running entirely.
+  it('CRITICAL the Go SDK directory is where this guard expects it. If it moves, the path-parity assertion below silently stops being made while the suite still reads as green.', () => {
+    expect(
+      safeStat(SDK_GO),
+      `${SDK_GO} is not a directory — if the SDK layout changed, update this guard in the same commit rather than letting it skip`,
+    ).toBe(true);
+  });
 
   it('every Go SDK path expression resolves to a server route', () => {
+    const sdkBlob = readAll(SDK_GO, '.go');
+    const serverBlob = walkServerTs(SERVER_SRC);
     const sdkPaths = new Set<string>();
     // Match lines that look like `path: "/v1/..." + url.PathEscape(...) + "/segment"`
     // — concatenated string expressions. Pull every contiguous chunk.
