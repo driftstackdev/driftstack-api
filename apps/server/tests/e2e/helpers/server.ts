@@ -155,7 +155,23 @@ export async function startTestServer(): Promise<TestServer> {
   // host.
   assertLocalDestructiveTarget(dbUrl, redisUrl, process.env);
 
-  const client = postgres(dbUrl, { max: 5 });
+  // `TRUNCATE … CASCADE` emits one NOTICE per cascaded table and resetState()
+  // runs before EVERY test, so postgres.js printed 104 multi-line notice objects
+  // from a single spec file and thousands across the suite — which is what a
+  // Playwright failure gets buried under on a red CI run.
+  //
+  // Filtered rather than silenced wholesale: only the expected cascade chatter
+  // is dropped, so a notice that actually means something (a migration warning,
+  // a skipped DDL) still prints. Doing this with `SET LOCAL` in an explicit
+  // transaction is not an option — postgres.js rejects a raw BEGIN on a pooled
+  // client with UNSAFE_TRANSACTION.
+  const client = postgres(dbUrl, {
+    max: 5,
+    onnotice: (notice) => {
+      if (/^truncate cascades to table/i.test(String(notice.message ?? ''))) return;
+      console.warn(notice);
+    },
+  });
   const db = drizzle(client, { schema });
 
   // E2E owns the database. Drop everything (including drizzle's migration
