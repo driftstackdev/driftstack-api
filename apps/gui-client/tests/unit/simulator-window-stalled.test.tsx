@@ -256,16 +256,22 @@ describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
   it('renders an HTTP-status-specific message for kind:http', async () => {
     const { container } = renderSim();
     await waitForPageStateSubscriber();
-    act(() => {
-      fireDataFrame({
+    // Via fireUntilRendered, like the sibling test below that asserts on this
+    // same overlay. Firing inside act() and reading the DOM on the next line
+    // assumes the overlay renders synchronously; this block runs under REAL
+    // timers, so it does not always, and the test failed roughly one run in ten
+    // at a fixed shuffle seed. The two tests above get away with the same shape
+    // only because their block installs fake timers.
+    const overlay = await fireUntilRendered(
+      container,
+      {
         state: 'errored',
         url: 'https://app.example/',
         error: { kind: 'http', http_status: 503, message: 'service unavailable' },
-      });
-    });
-    expect(container.querySelector('[data-component="page-error-overlay"]')?.textContent).toMatch(
-      /HTTP 503/,
+      },
+      '[data-component="page-error-overlay"]',
     );
+    expect(overlay.textContent).toMatch(/HTTP 503/);
   });
 
   it('clears the error overlay when a subsequent loading/loaded frame arrives', async () => {
