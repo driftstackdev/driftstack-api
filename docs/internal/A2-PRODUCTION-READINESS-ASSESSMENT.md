@@ -294,6 +294,54 @@ production claim without running the production path. The probe was ten lines
 above the code I had already read twice. **Reading further beats reasoning
 faster**, and a claim about behaviour should be executed before it is published.
 
+### 19. The WIRED path boots, key rotation refuses to boot — both now executed, not argued
+
+Follow-up to item 18's correction. Last time I established the mechanism by
+reading; this time the whole thing was run against a real process and a fresh
+database. Both encryption keys are locally generatable 32-byte values, so the
+wired path needs no external credentials to exercise.
+
+**Wired boot.** With `MFA_ENCRYPTION_KEY` and `PROFILE_MASTER_KEY` set, every
+"not set — disabled" warning disappears and the seven gated subsystems come up.
+`POST /v1/account/mfa/enroll` returns **401 (registered, unauthenticated)**
+rather than 404 (route absent) — the cheapest possible proof that the flag
+actually registers routes rather than merely being read.
+
+**Rotation, proven end to end.** Seed a legacy plaintext webhook secret → boot
+with key A → the boot migration converts it to v2 and logs "legacy webhook
+signing secrets migrated to record-bound v2 before serving" → boot the SAME
+database with key B:
+
+```
+exit code 1 · 0 "listening" lines · port closed
+"msg":"bootstrap failed — exiting"
+"message":"Unsupported state or unable to authenticate data"
+```
+
+So item 18's corrected conclusion is confirmed in a real process: the
+key-verification probe fires, the server refuses to serve, and it fails loudly
+rather than serving with unreadable secrets. **This is the system working as
+designed.**
+
+**What running it revealed that reading it did not — the diagnostic.** The
+operator-visible failure is a raw Node crypto error. Nothing in the message says
+"the encryption key does not match the stored data"; the only clue is a stack
+frame naming `webhook-secret-encryption.ts`. During a rotation — which is when
+this fires, by definition — an operator sees `Unsupported state or unable to
+authenticate data` and has to infer the cause from a stack trace.
+
+_Recommendation:_ wrap each probe's read so the thrown error names the subsystem
+and the likely cause (key mismatch), never the key itself. It is a diagnostic
+change with no behavioural effect: it still fails closed.
+
+_A2 did not implement it this fire, deliberately._ The nine probes have three
+different shapes — one read, two reads, or a differently-structured check — so it
+is not a uniform one-line edit, and every one of them sits on a fail-closed boot
+path in a security-critical file. A careless wrap there could convert a loud
+failure into a swallowed one, which is strictly worse than the cryptic message it
+would replace. It wants a shared helper and unhurried review, not a late-session
+sweep.
+
 ## Assumed, not proven
 
 - **Deploy-time behaviour — PARTLY CLOSED.** Still nothing deployed and nothing
