@@ -81,7 +81,7 @@ async function seed(): Promise<{ endpointId: string; deliveryId: string }> {
   await c`
     INSERT INTO webhook_endpoints (id, account_id, url, secret, secret_prefix, events, active)
     VALUES (${endpointId}, ${accountId}, 'https://receiver.example/hook',
-            'whsec_test', 'whsec_te', ARRAY['session.completed']::webhook_event_type[], true)`;
+            'driftstack:webhook-secret:v2:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'whsec_te', ARRAY['session.completed']::webhook_event_type[], true)`;
   const deliveryId = randomUUID();
   await c`
     INSERT INTO webhook_deliveries (id, webhook_id, event_id, event_type, payload, status, attempts)
