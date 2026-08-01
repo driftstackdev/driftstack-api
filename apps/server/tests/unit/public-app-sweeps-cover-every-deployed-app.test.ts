@@ -26,7 +26,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { PUBLIC_APP_EXTS, REPO_ROOT, publicAppDirs, publicApps } from './_helpers/public-apps';
+import { PUBLIC_APP_EXTS, REPO_ROOT, publicAppDirs, publicApps } from './_helpers/public-apps.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 

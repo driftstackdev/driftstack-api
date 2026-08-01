@@ -13,7 +13,7 @@
 // V-527 commit-msg hook DOES catch 'founder' in commits, but here
 // we focus on the public-app source where the rule is strictest.
 
-import { PUBLIC_APP_EXTS, publicAppDirs } from './_helpers/public-apps';
+import { PUBLIC_APP_EXTS, publicAppDirs } from './_helpers/public-apps.js';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';

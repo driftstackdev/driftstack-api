@@ -6,7 +6,7 @@
 // Anthropic/Copilot/GPT Co-Authored-By trailers + 🤖 robot + Generated
 // with [Claude + noreply@anthropic.com + noreply@github.com).
 
-import { PUBLIC_APP_EXTS, publicAppDirs } from './_helpers/public-apps';
+import { PUBLIC_APP_EXTS, publicAppDirs } from './_helpers/public-apps.js';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';

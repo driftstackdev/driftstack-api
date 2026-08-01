@@ -29,7 +29,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { REPO_ROOT } from './_helpers/public-apps';
+import { REPO_ROOT } from './_helpers/public-apps.js';
 
 const POLICY = resolve(REPO_ROOT, 'apps', 'marketing-site', 'src', 'pages', 'legal', 'privacy.md');
 

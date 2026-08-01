@@ -30,7 +30,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { REPO_ROOT } from './_helpers/public-apps';
+import { REPO_ROOT } from './_helpers/public-apps.js';
 
 /** Directories that hold test files, across every workspace package. */
 const TEST_ROOTS = ['apps', 'packages'];
