@@ -117,9 +117,10 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     expect(body).toMatch(
       /function mfaRequiredResponse\(args: \{[\s\S]+?mfa_required: true,[\s\S]+?challenge_token: args\.challengeToken,[\s\S]+?challenge_expires_at: args\.challengeExpiresAt\.toISOString\(\),/,
     );
+    // magic-link, password-reset, and (V-720) verify-email.
     expect(
       body.match(/if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);/g),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(body).toMatch(
       /if \(result\.kind === 'mfa_required'\) \{\s*\n?\s*return mfaRequiredResponse\(result\);/,
     );
@@ -183,9 +184,14 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     expect(body).not.toMatch(/bundledLlmConsent:/);
   });
 
-  it('verify-email/refresh always return sessions; magic/reset branch through MFA first', () => {
+  // V-720 — this pin previously asserted verify-email "always returns a
+  // session", freezing the MFA gap in place as though it were intended. A
+  // verification link proves mailbox control, not the second factor; every
+  // session-minting flow now branches. Behavioural cover:
+  // tests/integration/auth-flows.test.ts (verify-email + MFA enrolled).
+  it('verify-email/magic/reset all branch through MFA first; refresh always returns a session', () => {
     expect(body).toMatch(
-      /const result = await service\.verifyEmail\(\{[\s\S]+?return sessionResponse\(result\);/,
+      /const result = await service\.verifyEmail\(\{[\s\S]+?if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);\s*return sessionResponse\(result\);/,
     );
     expect(body).toMatch(
       /const result = await service\.consumeMagicLink\(\{[\s\S]+?if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);\s*\n?\s*return sessionResponse\(result\);/,

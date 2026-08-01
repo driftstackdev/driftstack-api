@@ -215,6 +215,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
         issuedFromIp: clientIp(req),
         userAgent: userAgent(req),
       });
+      if (result.kind === 'mfa_required') return mfaRequiredResponse(result);
       return sessionResponse(result);
     } catch (e) {
       mapAuthFlowError(e);

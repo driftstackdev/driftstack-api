@@ -14,6 +14,7 @@ import type { AuthCache } from '../../src/services/auth-cache.js';
 import {
   AuthFlowError,
   AuthFlowsService,
+  type VerifyEmailResult,
   type WebSessionRow,
 } from '../../src/services/auth-flows.js';
 import {
@@ -23,6 +24,19 @@ import {
   redisKey as mfaChallengeKey,
 } from '../../src/services/mfa-challenge-store.js';
 import { InMemoryAuthFlowsRepo } from './_helpers/in-memory-auth-flows-repo.js';
+
+/** V-720 — verifyEmail returns `session | mfa_required`. The fixtures below use
+ *  accounts with no enrolled second factor, so they narrow to the session
+ *  branch; the challenge branch has its own dedicated test. Written as an
+ *  assertion function so it narrows the existing const in place rather than
+ *  forcing every call site to re-indent. */
+function assertVerifiedSession(
+  result: VerifyEmailResult,
+): asserts result is Extract<VerifyEmailResult, { kind: 'session' }> {
+  if (result.kind !== 'session') {
+    throw new Error(`expected verify-email to mint a session, got ${result.kind}`);
+  }
+}
 
 class PasswordResetBeforeSessionInsertRepo extends InMemoryAuthFlowsRepo {
   private resetBeforeNextInsert = false;
@@ -955,6 +969,46 @@ describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
     expect(insertSession).not.toHaveBeenCalled();
   });
 
+  // V-720 — verify-email was the ONE session-minting flow with no MFA branch,
+  // so a live signup link minted a full session on an MFA-enrolled account:
+  // possession of the inbox defeated the second factor, which is the exact
+  // threat MFA backstops. Reachable inside the 30-minute signupVerification TTL
+  // because consumeMagicLink marks the email verified and mints a session of
+  // its own, letting the owner enrol MFA while the original signup token is
+  // still live and unconsumed.
+  it('turns a consumed verification link into an MFA challenge without minting a session, while still verifying the email', async () => {
+    const { repo, service, challenges, getStatus } = makeMfaDirectService();
+    const signup = await service.signup({
+      email: 'mfa-verify-email@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+
+    const result = await service.verifyEmail({
+      token: signup.debugToken as string,
+      issuedFromIp: '203.0.113.7',
+      userAgent: 'inbox-browser',
+    });
+
+    expect(result.kind).toBe('mfa_required');
+    if (result.kind !== 'mfa_required') throw new Error('expected MFA challenge');
+    expect(
+      JSON.parse(String(await challenges.peek(mfaChallengeKey(result.challengeToken)))),
+    ).toMatchObject({
+      account_id: signup.account.id,
+      source_ip: '203.0.113.7',
+      issued_user_agent: 'inbox-browser',
+    });
+    expect(result.challengeExpiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(getStatus).toHaveBeenCalledWith(signup.account.id);
+    // The bypass itself: no session may exist until the second factor lands.
+    expect(insertSession).not.toHaveBeenCalled();
+    // ...but the link DID prove mailbox control, so verification still sticks.
+    // Only the session waits.
+    expect((await repo.findAccountById(signup.account.id))?.emailVerifiedAt).toBeInstanceOf(Date);
+  });
+
   it('changes the password, revokes every old session, and returns MFA without minting a replacement', async () => {
     const { repo, service, challenges, getStatus } = makeMfaDirectService();
     const signup = await service.signup({
@@ -1449,6 +1503,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
       issuedFromIp: null,
       userAgent: null,
     });
+    assertVerifiedSession(verify);
     repo.armPasswordResetBeforeNextInsert();
 
     await expect(
@@ -1475,6 +1530,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
       issuedFromIp: null,
       userAgent: null,
     });
+    assertVerifiedSession(verify);
     repo.seedAccount({ ...verify.account, status: 'suspended' });
     const insertSession = vi.spyOn(repo, 'insertWebSession');
 
@@ -1503,6 +1559,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
       issuedFromIp: null,
       userAgent: null,
     });
+    assertVerifiedSession(verify);
     const oldToken = verify.session.plaintext;
 
     const results = await Promise.allSettled([
@@ -1539,6 +1596,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
       issuedFromIp: null,
       userAgent: null,
     });
+    assertVerifiedSession(verify);
 
     const results = await Promise.allSettled([
       serviceA.refreshSession({
@@ -1576,6 +1634,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
       issuedFromIp: null,
       userAgent: null,
     });
+    assertVerifiedSession(verify);
     const first = await service.refreshSession({
       token: verify.session.plaintext,
       issuedFromIp: null,
@@ -1612,6 +1671,8 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
       issuedFromIp: null,
       userAgent: null,
     });
+    assertVerifiedSession(verifyA);
+    assertVerifiedSession(verifyB);
     const [resultA, resultB] = await Promise.all([
       service.refreshSession({
         token: verifyA.session.plaintext,

@@ -30183,3 +30183,73 @@ Verification: full server suite 2510 files / 26,385 passing / 0 failing, strict
 server source TypeScript, targeted ESLint and Prettier. No schema, OpenAPI, SDK,
 pricing-table, environment, customer or secret surface changed — only which
 number the existing gate compares against.
+
+## V-720 — Verifying an email no longer bypasses the account's second factor
+
+**Date:** 2026-08-01
+
+`POST /v1/auth/verify-email` was the one session-minting flow with no MFA
+branch. `login`, `consumeMagicLink`, `confirmPasswordReset` and
+`issueOAuthWebSession` all check `mfa.getStatus(account.id).enrolled` and return
+a short-lived challenge instead of a session; `verifyEmail` called
+`issueWebSession` unconditionally and handed back a full web session. Possession
+of the signup email therefore defeated MFA outright — which is the exact threat
+MFA exists to backstop.
+
+The gap was reachable, not theoretical, and the reproduction is now a test that
+drives real HTTP end to end. `consumeMagicLink` marks the email verified
+**itself** and mints a session, so an owner reaches an authenticated,
+MFA-enrollable state without ever spending the signup verification token:
+
+1. signup — verification token A issued, unconsumed
+2. magic-link request + consume — session; email now marked verified
+3. enroll + verify TOTP — a second factor now guards the account
+4. redeem token A — previously returned a full session
+
+`resendSignupVerification` refuses once the email is verified, but that guard
+says nothing about an already-issued token; A stays live for its full 30-minute
+`signupVerification` TTL. That window is narrow, which is why this is a defect
+and not an incident — but the TTL is a constant, and an auth invariant that
+holds only because a timer is short is not holding.
+
+The fix mirrors `consumeMagicLink` exactly. The email is still marked verified
+before the branch, because the link genuinely did prove mailbox control and
+verification is a property of the mailbox; only the **session** waits for the
+second factor. `createMfaChallenge` fails closed when its store is unavailable,
+so an MFA-enrolled account cannot degrade into a session when Redis is down.
+
+`VerifyEmailResult` was widened from an interface to a discriminated union
+mirroring `LoginResult`. That shape is the durable half of the fix: the old
+interface let `routes/auth.ts` pass the result straight to `sessionResponse()`,
+so nothing in the type system objected to a route ignoring a branch that did not
+exist. The union makes that a compile error.
+
+Existing coverage could not catch this, and one pin actively concealed it. The
+source-text parity pin in `routes-auth-content-parity.test.ts` was titled
+"verify-email/refresh always return sessions; magic/reset branch through MFA
+first" and asserted the missing branch as though it were intended design — the
+recurring failure mode where a parity pin guards the expression rather than the
+invariant, freezing a defect in place while reading as deliberate. It now pins
+three MFA branches, not two; the sibling pin counting `mfaRequiredResponse` call
+sites moves 2 to 3.
+
+Proof is behavioural at both layers. A service-level test asserts the challenge
+is issued, `insertWebSession` is never called, and `emailVerifiedAt` is still
+stamped. A route-level test replays the four-step chain above through
+`app.inject` and asserts the response carries `mfa_required` with no session
+token anywhere in the body. Both halves are proved red: forcing the service
+branch to `false` fails the service test, and deleting the route branch fails
+the end-to-end test with a 500. Both mutated files were restored and re-hashed
+byte-identical.
+
+Verification: canonical full suite 2743 files / 28,026 passing, both halves of
+the server typecheck (`tsc --build` and `tsc --noEmit -p tsconfig.test.json`)
+clean, targeted ESLint and Prettier. The one failure in that run —
+`simulator-window-stalled` in the gui-jsdom project — passes in isolation and
+across the whole 162-file gui-jsdom project, so it is a load-sensitive flake in
+the multi-project run, on a surface this change does not touch. Ten existing
+`verifyEmail` call sites in the integration suite were narrowed through an
+assertion helper; no assertion was weakened. No schema, OpenAPI, SDK,
+environment, customer or secret surface changed — an MFA-enrolled account now
+receives the same `mfa_required` envelope the other three flows already return,
+and accounts with no second factor see byte-identical behaviour.

@@ -330,10 +330,25 @@ export interface VerifyEmailArgs {
   userAgent: string | null;
 }
 
-export interface VerifyEmailResult {
-  account: AuthFlowAccountRow;
-  session: { plaintext: string; row: WebSessionRow };
-}
+/** V-720 — shaped as a union mirroring {@link LoginResult}. Verifying an email
+ *  proves mailbox control, NOT possession of an enrolled second factor, so this
+ *  flow branches through MFA like every other session-minting flow. The union
+ *  (rather than an interface with optional fields) is deliberate: it makes the
+ *  compiler reject a caller that ignores the challenge branch, which is exactly
+ *  how the gap this replaces survived — the old interface let routes/auth.ts
+ *  pass the result straight to sessionResponse(). */
+export type VerifyEmailResult =
+  | {
+      kind: 'session';
+      account: AuthFlowAccountRow;
+      session: { plaintext: string; row: WebSessionRow };
+    }
+  | {
+      kind: 'mfa_required';
+      account: AuthFlowAccountRow;
+      challengeToken: string;
+      challengeExpiresAt: Date;
+    };
 
 export interface LoginArgs {
   email: string;
@@ -807,7 +822,35 @@ export class AuthFlowsService {
     const account = await this.requireAccount(row.accountId);
     if (account.status !== 'active') throw new AuthFlowError('account_suspended');
     const firstVerification = await this.repo.markEmailVerified(row.accountId, now);
-    const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+
+    // V-720 — a verification link proves mailbox control, not possession of the
+    // account's enrolled second factor. login/consumeMagicLink/
+    // confirmPasswordReset/issueOAuthWebSession all branch here; this flow did
+    // not, so a live signup link minted a FULL session on an MFA-enrolled
+    // account — an MFA bypass for whoever holds the inbox, which is the precise
+    // threat MFA backstops.
+    //
+    // Reachable inside the 30-minute signupVerification TTL: consumeMagicLink
+    // marks the email verified itself (see its emailVerifiedAt branch) and
+    // mints a session, so the owner can enrol MFA while the original signup
+    // token is still live and unconsumed. resendSignupVerification refuses once
+    // verified, but the ALREADY-issued token is untouched by that guard.
+    //
+    // The email is still marked verified above — verification is a property of
+    // the mailbox and the link did prove it. Only the SESSION waits for the
+    // second factor. createMfaChallenge fails closed if its store is down.
+    const outcome: VerifyEmailResult =
+      this.mfa !== null && (await this.mfa.getStatus(account.id)).enrolled
+        ? {
+            kind: 'mfa_required',
+            account,
+            ...(await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent)),
+          }
+        : {
+            kind: 'session',
+            account,
+            session: await this.issueWebSession(account, args.issuedFromIp, args.userAgent),
+          };
 
     await this.emitAuditBestEffort(account.id, 'account.email_verified', {
       issued_from_ip: args.issuedFromIp,
@@ -840,7 +883,7 @@ export class AuthFlowsService {
       });
     }
 
-    return { account, session };
+    return outcome;
   }
 
   async login(args: LoginArgs): Promise<LoginResult> {
