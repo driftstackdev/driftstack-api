@@ -774,6 +774,70 @@ exactly, so a future minor bump cannot reformat the repo silently. A2 did not,
 because it means editing `package.json` and the lockfile while A3 was actively
 working dependencies.
 
+### 21. Item 20 closed — every parameterised route decided
+
+All six undecided routes were resolved at their handlers rather than inferred
+from their paths. Two were real gaps and now document 404:
+`DELETE /v1/admin/oauth/clients/{id}` and `POST /v1/sessions/{id}/proxy`. Four
+were correct omissions: rotate-secret answers **401** because the service throws
+`OAuthError('invalid_client')` and `oauthErrorToHttp` maps it there; owner
+secrets is an upsert; pricing validates the tier as an enum so unknown is 400;
+the validation-harness trigger never looks the archetype up. With every route
+decided, the roster guard held back in item 20 is in — document 404 or carry an
+exemption naming the behaviour that makes it unreachable, and the exemption list
+may only shrink.
+
+Worth noting as an API inconsistency rather than a defect: `DELETE` on an OAuth
+client 404s while `rotate-secret` on the same resource 401s. Both are defensible
+alone; together they are surprising. Not changed, because changing either is a
+customer-visible status change and that is a product decision.
+
+### 22. Five route-security guards had a root narrower than their claim
+
+Auth coverage, admin authorization, the effective-account header, mutation
+rate-limiting and the free-desktop policy all scan `src/routes`. `src/lib/app.ts`
+registers five more routes.
+
+Measured, not argued. Stripping `requireAuth` from `/v1/whoami` reds **exactly
+one** test — the content-parity pin that quotes that line — and none of the five
+notice. Adding a new unauthenticated route there reds three, but all three check
+**documentation** coverage, so documenting the route and giving it a consumer
+silences them with no auth check ever having run.
+
+Latent, not live: all five routes there are correct. Closed by making the shared
+assumption checked rather than teaching five parsers a sixth file shape.
+
+### 23. `errors-site` sat outside both public-surface sweeps
+
+The V-211 personal-name and V-205 attribution sweeps each listed five app
+directories inline while describing their scope as "public-visible apps".
+errors-site is the sixth, deploys to `errors.driftstack.dev`, and every RFC-9457
+problem+json the API emits carries a `type` URI pointing at it — developers land
+there from any error response. It was clean; the sweeps were not reporting it
+clean, they were not looking.
+
+The roster now derives from the `deploy-frontend.sh` case statement. The part
+worth carrying: widening the directory alone would have scanned **zero** new
+files, because the extension list omitted `.mjs` and errors-site generates every
+page from one dependency-free `build.mjs`. A widening that reports success while
+matching nothing also retires the suspicion, which is worse than the gap it
+replaced. Both widenings were confirmed load-bearing by planting a violation in
+`build.mjs` and removing each in turn.
+
+### 24. The privacy policy's status-page storage claim was unverified
+
+`legal/privacy.md` §3.9 states the status page sets no analytics cookies and
+declares "Cookies: none" for it; §3.8 names Article 5(3) of the ePrivacy
+Directive as why no consent mechanism is required. Nothing checked the status
+page — the tracker guard scans marketing-site only, correctly, since the footer's
+"No trackers on this site" is scoped to that site.
+
+True today and verified before pinning: no cookie, no client storage, no
+off-domain origin. A cookie added there would not merely make a page disagree
+with a document; it would remove the ground the disclosure stands on. The guard
+also pins the claim side, because checking only code keeps passing if the
+document is rewritten to promise more than the code delivers.
+
 ## What A2 deliberately did not do
 
 - No suite where measurement showed the boundary already covered — webhooks and
