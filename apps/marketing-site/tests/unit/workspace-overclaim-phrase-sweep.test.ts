@@ -45,15 +45,40 @@ const FORBIDDEN_AFFIRMATIVE_FEATURES: { pattern: RegExp; reason: string }[] = [
 ];
 
 describe('W276.B workspace-wide marketing-overclaim sweep', () => {
+  it('CRITICAL the sweep read real pages and every phrase still matches. Each assertion below runs INSIDE a loop over the collected pages, so a moved or renamed root leaves all four vacuously true — reporting every page clean because it read none. These are claims about the security of the product, so a silent pass is the expensive outcome.', () => {
+    expect(allFiles.length, 'pages across marketing-site and docs').toBeGreaterThan(100);
+
+    const samples: [RegExp, string][] = [
+      [/mTLS support\b/i, 'Includes mTLS support for every session.'],
+      [/\bzero[- ]knowledge encryption\b/i, 'Backed by zero-knowledge encryption.'],
+      [/\bend[- ]to[- ]end encrypted\b/i, 'Every session is end-to-end encrypted.'],
+      [/\bFIPS 140-2\b/i, 'Uses a FIPS 140-2 validated module.'],
+    ];
+    expect(samples.length, 'a sample per forbidden phrase').toBe(
+      FORBIDDEN_AFFIRMATIVE_FEATURES.length,
+    );
+    for (const [i, { pattern, reason }] of FORBIDDEN_AFFIRMATIVE_FEATURES.entries()) {
+      const [samplePattern, sample] = samples[i]!;
+      expect(samplePattern.source, `sample ${i} pairs with the wrong phrase`).toBe(pattern.source);
+      expect(pattern.test(sample), `pattern no longer catches: ${reason}`).toBe(true);
+    }
+
+    // The hyphen alternations are the fragile part of these patterns — the
+    // published copy uses either spelling, and a pattern that only matched one
+    // would pass this file while the other spelling shipped.
+    expect(/\bend[- ]to[- ]end encrypted\b/i.test('end to end encrypted'), 'spaced form').toBe(
+      true,
+    );
+    expect(/\bend[- ]to[- ]end encrypted\b/i.test('end-to-end encrypted'), 'hyphenated form').toBe(
+      true,
+    );
+  });
+
   for (const { pattern, reason } of FORBIDDEN_AFFIRMATIVE_FEATURES) {
     it(`no page makes the affirmative claim — ${reason}`, () => {
-      const offenders: string[] = [];
-      for (const f of allFiles) {
-        const body = read(f);
-        if (pattern.test(body)) {
-          offenders.push(f.slice(REPO_ROOT.length + 1));
-        }
-      }
+      const offenders = allFiles
+        .filter((f) => pattern.test(read(f)))
+        .map((f) => f.slice(REPO_ROOT.length + 1));
       expect(offenders).toEqual([]);
     });
   }
