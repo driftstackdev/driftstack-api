@@ -78,6 +78,16 @@ const ALLOWED_PREFIXES = [
 ];
 
 describe('W210 internal-link drift guard', () => {
+  // Vacuity arm. The case below reports an ABSENCE, which is vacuously true
+  // over an empty scan — so a filter that stops matching (a rename, a new
+  // extension, a moved root) would leave this reporting clean forever while
+  // checking nothing. Measured, not hypothetical: pointing the extension
+  // filter at a non-existent suffix left this file GREEN.
+  it('CRITICAL the walk found real pages, so a clean result means checked rather than not looked.', () => {
+    const files = walk(PAGES_DIR);
+    expect(files.length, 'marketing-site pages walked').toBeGreaterThan(5);
+  });
+
   it('every internal /href in a marketing-site doc resolves to a real page', () => {
     const violations: { file: string; href: string }[] = [];
     for (const file of walk(PAGES_DIR)) {

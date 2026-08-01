@@ -37,6 +37,14 @@ const DISPLAY_NAME_TO_CAP: Record<string, number> = {
 
 describe('W248.D marketing-site tier-cap drift sweep', () => {
   const pages = walk(PAGES);
+  // Vacuity arm. Every assertion below reports an ABSENCE, and an absence is
+  // vacuously true over an empty scan — so a filter that stops matching (a
+  // rename, a new extension, a moved page root) would make this guard report
+  // clean forever while checking nothing. Measured, not hypothetical: pointing
+  // the extension filter at a non-existent suffix left this file GREEN.
+  it('CRITICAL the scan found real pages, so a clean result means checked rather than not looked.', () => {
+    expect(pages.length, 'marketing-site .astro pages scanned').toBeGreaterThan(5);
+  });
 
   it('no page asserts a concurrent count above the live cap for any tier', () => {
     const offenders: { file: string; name: string; assertion: number; live: number }[] = [];

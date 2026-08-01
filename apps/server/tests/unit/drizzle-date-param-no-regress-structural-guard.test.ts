@@ -150,6 +150,23 @@ interface Finding {
 }
 
 describe('drizzle-orm Date-param-in-raw-sql structural drift guard', () => {
+  // Vacuity arm. The case below reports an ABSENCE, which is vacuously true
+  // over an empty scan — so a filter that stops matching (a rename, a new
+  // extension, a moved root) would leave this reporting clean forever while
+  // checking nothing. Measured, not hypothetical: pointing the extension
+  // filter at a non-existent suffix left this file GREEN.
+  it('CRITICAL the scan found real server sources AND real raw-sql blocks. Files alone is not enough: if SQL_TEMPLATE_BLOCK stopped matching, every file would be read and no interpolation examined, which reads identically to having none.', () => {
+    const files = listTsFiles(SERVER_SRC);
+    expect(files.length, 'server .ts files scanned').toBeGreaterThan(50);
+    let blocks = 0;
+    for (const file of files) {
+      SQL_TEMPLATE_BLOCK.lastIndex = 0;
+      const source = readFileSync(file, 'utf8');
+      while (SQL_TEMPLATE_BLOCK.exec(source) !== null) blocks += 1;
+    }
+    expect(blocks, 'raw sql`` template blocks found').toBeGreaterThan(5);
+  });
+
   it('every raw `sql`` ` template interpolation in apps/server/src is allow-listed or non-Date', () => {
     const findings: Finding[] = [];
     for (const file of listTsFiles(SERVER_SRC)) {
