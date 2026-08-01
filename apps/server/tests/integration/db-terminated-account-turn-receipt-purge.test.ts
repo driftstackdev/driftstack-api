@@ -66,12 +66,23 @@ const db = (): Database => ({ client, db: null, close: async () => {} }) as unkn
 async function seedAccountWithReceipt(args: {
   status: 'active' | 'suspended' | 'deleted';
   deletedDaysAgo: number | null;
-}): Promise<{ accountId: string; key: string }> {
+}): Promise<{ accountId: string; key: string; sessionId: string }> {
   if (!client) throw new Error('no client');
   const accountId = randomUUID();
+  // The SESSION is hosted by a separate ACTIVE account, deliberately.
+  //
+  // agent_turn_receipts has two independent foreign keys — account_id and
+  // agent_session_id — and nothing requires them to agree. Hanging the session
+  // off the terminated account instead made these rows collateral of the
+  // agent-session purge: that sweep deletes sessions for terminated accounts
+  // and agent_session_id is ON DELETE CASCADE, so the sibling test silently
+  // erased this test's receipts whenever the two overlapped. Demonstrated
+  // directly in SQL, not inferred: seed both, run the session sweep, and the
+  // receipt count goes 1 → 0.
+  const sessionHostId = randomUUID();
   const sessionId = `agt_${randomUUID()}`;
   const key = `idem-${randomUUID()}`;
-  seeded.push(accountId);
+  seeded.push(accountId, sessionHostId);
   const deletedAt =
     args.deletedDaysAgo === null
       ? null
@@ -80,13 +91,16 @@ async function seedAccountWithReceipt(args: {
     INSERT INTO accounts (id, email, status, deleted_at)
     VALUES (${accountId}, ${`turn-receipt-${accountId}@test.local`}, ${args.status}::account_status, ${deletedAt})`;
   await client`
+    INSERT INTO accounts (id, email, status)
+    VALUES (${sessionHostId}, ${`receipt-session-host-${sessionHostId}@test.local`}, 'active')`;
+  await client`
     INSERT INTO agent_sessions (id, account_id, status, token_budget_total, token_budget_remaining)
-    VALUES (${sessionId}, ${accountId}, 'closed', 1000, 1000)`;
+    VALUES (${sessionId}, ${sessionHostId}, 'closed', 1000, 1000)`;
   await client`
     INSERT INTO agent_turn_receipts
       (account_id, idempotency_key, agent_session_id, request_hash, state, response_status, response_ciphertext, completed_at)
     VALUES (${accountId}, ${key}, ${sessionId}, ${'a'.repeat(64)}, 'completed', 200, ${Buffer.from('ciphertext')}, now())`;
-  return { accountId, key };
+  return { accountId, key, sessionId };
 }
 
 async function receiptCount(accountId: string): Promise<number> {
@@ -178,14 +192,12 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
     it('CRITICAL the per-tick bound is honoured and the sweep is self-limiting. One terminated account can own an unbounded number of receipts, so an unbounded DELETE would take the whole backlog in a single statement; the remainder must still drain on the next tick.', async () => {
       if (!client) throw new Error('no client');
-      const { accountId } = await seedAccountWithReceipt({
+      // sessionId comes back from the seeder: the session belongs to a separate
+      // active host account now, so looking it up by this account finds nothing.
+      const { accountId, sessionId } = await seedAccountWithReceipt({
         status: 'deleted',
         deletedDaysAgo: 60,
       });
-      const sessionRows = await client<
-        Array<{ id: string }>
-      >`SELECT id FROM agent_sessions WHERE account_id = ${accountId} LIMIT 1`;
-      const sessionId = sessionRows[0]!.id;
       for (let i = 0; i < 4; i += 1) {
         await client`
           INSERT INTO agent_turn_receipts
@@ -194,9 +206,16 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       }
       expect(await receiptCount(accountId), 'five receipts seeded').toBe(5);
 
+      // Asserted against the BOUND, not a global row count: the LIMIT applies to
+      // every eligible receipt in the table, so any other terminated account's
+      // rows consume part of the budget. "Exactly three of mine remain" quietly
+      // assumes this account owns all of them.
       const first = await purgeTurnReceiptsForTerminatedAccountsBefore(db(), CUTOFF, 2);
-      expect(first, 'the bound is respected').toBe(2);
-      expect(await receiptCount(accountId), 'three left behind').toBe(3);
+      expect(first, 'the DELETE never exceeds the per-tick bound').toBe(2);
+      expect(
+        5 - (await receiptCount(accountId)),
+        'so at most two of this account rows can have gone',
+      ).toBeLessThanOrEqual(2);
 
       await purgeTurnReceiptsForTerminatedAccountsBefore(db(), CUTOFF, 500);
       expect(await receiptCount(accountId), 'the remainder drains on the next tick').toBe(0);
