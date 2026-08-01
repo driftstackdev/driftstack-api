@@ -25,6 +25,7 @@
 // that a pass.
 
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -35,6 +36,58 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const HUSKY_HOOK = resolve(REPO_ROOT, '.husky/commit-msg');
 const CANONICAL = resolve(REPO_ROOT, 'scripts/git-hooks/commit-msg');
+
+/**
+ * Every pattern the canonical hook rejects, read from the hook itself.
+ *
+ * Hand-listing samples covered 8 of its 13 patterns. The five it missed
+ * included ALL FOUR V-211 anonymity patterns — the rule keeping personal names
+ * out of commit messages had no behavioural coverage whatsoever, so deleting
+ * those lines from the hook would not have failed anything.
+ *
+ * Parsed rather than restated so the roster cannot fall behind: a pattern added
+ * to the hook is exercised here without editing this file.
+ */
+function hookPatterns(): { group: string; pattern: string }[] {
+  const hook = readFileSync(CANONICAL, 'utf8');
+  const out: { group: string; pattern: string }[] = [];
+  for (const group of ['REJECT_PATTERNS_V205', 'REJECT_PATTERNS_V211']) {
+    const block = new RegExp(`${group}=\\(\\n([\\s\\S]*?)\\n\\)`).exec(hook);
+    if (block === null) continue;
+    for (const line of block[1]!.split('\n')) {
+      const m = /^\s*'(.*)'\s*$/.exec(line);
+      if (m) out.push({ group, pattern: m[1]! });
+    }
+  }
+  return out;
+}
+
+/**
+ * A message body the given hook pattern must reject, built FROM the pattern.
+ *
+ * Deriving the probe rather than writing it out keeps the forbidden names out
+ * of this file entirely — they live in the hook, which is the one place they
+ * have to — and means a new name added there is probed automatically.
+ */
+function probeFor(pattern: string): string {
+  // `(^|[^[:alnum:]])[Ff]ounder([^[:alnum:]]|$)` — a word with a case-either
+  // first letter, delimited. Take the lowercase branch and pad it.
+  const word = /^\(\^\|\[\^\[:alnum:\]\]\)\[(\w)(\w)\](\w+)\(\[\^\[:alnum:\]\]\|\$\)$/.exec(
+    pattern,
+  );
+  if (word !== null) return `context ${word[2]!}${word[3]!} context`;
+  // Otherwise a near-literal: unescape and fill any `.*` with something inert.
+  return pattern.replace(/\\\[/g, '[').replace(/\\\./g, '.').replace(/\.\*/g, ' probe ');
+}
+
+/**
+ * Digest of the hook's declared pattern list.
+ *
+ * Not a value to paste over when it fails: a change here means the rules
+ * governing what may appear in a commit message moved, which is exactly the
+ * moment someone should look at the diff.
+ */
+const PATTERN_DIGEST = '6a3836c2fd58cb45';
 
 /** Attribution forms V-205 forbids, each in the shape a tool actually emits. */
 const BANNED_MESSAGES: [string, string][] = [
@@ -82,6 +135,42 @@ describe('the commit-msg attribution hook is reachable and enforcing', () => {
       hook,
       'and does not restate the banned patterns — the canonical hook owns them',
     ).not.toMatch(/Co-Authored-By:\s*Claude/);
+  });
+
+  it('CRITICAL every pattern the hook declares is exercised, and the roster is read FROM the hook. Hand-listed samples covered 8 of 13 — the five missed included all four V-211 anonymity patterns, so the rule keeping personal names out of commit messages could have been deleted from the hook without failing anything.', () => {
+    const declared = hookPatterns();
+
+    // EXACT counts, not a floor. Deriving the probe list from the hook makes
+    // additions self-covering, but it also makes deletion invisible: a pattern
+    // removed from the hook is simply no longer in `declared`, so probing
+    // everything declared stays trivially green. Measured — deleting an
+    // anonymity pattern left this file passing until these two lines existed.
+    // Pinning the counts is what makes removal fail; the probes below are what
+    // make presence mean something.
+    const v205 = declared.filter((d) => d.group === 'REJECT_PATTERNS_V205');
+    const v211 = declared.filter((d) => d.group === 'REJECT_PATTERNS_V211');
+    expect(v205.length, 'V-205 attribution patterns declared by the hook').toBe(9);
+    expect(v211.length, 'V-211 anonymity patterns declared by the hook').toBe(4);
+
+    // And a digest, because an EDIT changes neither count: weakening a pattern
+    // in place would still be probed, by the weakened pattern, and still pass.
+    // If this fails, re-read the pattern list and update the constant
+    // deliberately rather than pasting the new value.
+    const digest = createHash('sha256')
+      .update(declared.map((d) => `${d.group}|${d.pattern}`).join('\n'))
+      .digest('hex')
+      .slice(0, 16);
+    expect(digest, 'the hook pattern list changed — review it, then update this digest').toBe(
+      PATTERN_DIGEST,
+    );
+
+    const unenforced = declared.filter(
+      ({ pattern }) => runHook(`feat: a subject\n\n${probeFor(pattern)}\n`) === 0,
+    );
+    expect(
+      unenforced.map((d) => `${d.group}: ${d.pattern}`),
+      'declared pattern(s) the hook did not actually reject',
+    ).toEqual([]);
   });
 
   for (const [label, trailer] of BANNED_MESSAGES) {
