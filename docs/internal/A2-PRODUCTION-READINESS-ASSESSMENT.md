@@ -190,6 +190,43 @@ _Three method notes, all earned the hard way this session._
    replacements but BEFORE `write_text`, so a failed anchor silently discarded
    the whole edit and the file was left half-changed in a way that typechecked.
 
+### 17. Route authorization swept CLEAN; and one known limitation, quantified
+
+**Route-layer authorization refusals: 28 across 13 files, ZERO unproven.** Every
+`throw new ForbiddenError(...)` in `src/routes` was turned into a no-op
+construction (`void new ForbiddenError(...)`, which keeps control flow going)
+and every one of them red something. Combined with the existing 163-route scope
+roster and the service-layer status gates (10 sites, also swept clean), the
+authorization surface is genuinely covered.
+
+_Two apparent findings were scoped-filter false negatives_ — `account-me.ts` and
+`auth-cli.ts` showed zero reds under a name-matched subset and both turned out
+to be covered by test files whose names did not match the filter
+(`account-organization-team-effective-account`, `device-key-deny`). Escalating
+every zero-red to a FULL run is what caught it, and it is why the earlier
+findings in items 13–16 can be trusted: each was escalated the same way.
+
+**Incident notification fan-out: a KNOWN limitation, now quantified.**
+`incident-notifications.ts` already says dispatch is serial and points at the
+scheduled-jobs pattern for scale, so this is not a new finding. What the note
+does not say, and what is worth recording:
+
+- The recipient list is loaded whole (`listConfirmed`, no `LIMIT`), and each
+  subscriber costs a DB read (on `updated`), a DB write (token rotation) and an
+  email round-trip — **serially**, so duration grows linearly with subscribers.
+- The fan-out is **fire-and-forget and purely in-process** (`void … .catch()`,
+  by design per W427 so the admin create is not blocked). **It is therefore lost
+  on restart with no resumption and no record of who was reached.** Incidents
+  and deploys coincide more often than either does alone, which is precisely
+  when a redeploy would silently truncate the notification to an arbitrary
+  prefix of the subscriber list.
+
+_Not a defect at current scale_ — zero confirmed subscribers locally, and the
+serial design is a deliberate, documented choice. _Recommendation:_ when the
+scheduled-jobs migration the source comment already anticipates happens, make
+durability the reason for it rather than throughput. Throughput is the visible
+problem; silently notifying half the list is the one that matters.
+
 ## Assumed, not proven
 
 - **Deploy-time behaviour.** Nothing here was deployed, and nothing has been
