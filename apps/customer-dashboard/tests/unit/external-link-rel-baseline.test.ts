@@ -31,18 +31,40 @@ function read(p: string): string {
 
 const astroFiles = walk(SRC).filter((f) => /\.astro$/.test(f));
 
+/**
+ * Anchors in `text` that open a new tab without `rel="noopener"`.
+ *
+ * Shared with the reachability check below deliberately: a floor exercising a
+ * separate copy of the matcher would prove that copy works, which is not the
+ * question being asked.
+ */
+function unsafeBlankAnchors(text: string): string[] {
+  // Match <a ... target="_blank" ...>
+  return [...text.matchAll(/<a\b([^>]*)>/g)]
+    .filter((m) => /target=["']_blank["']/.test(m[1]!) && !/rel=["'][^"']*\bnoopener\b/.test(m[1]!))
+    .map((m) => m[0].slice(0, 120));
+}
+
 describe('W294.B customer-dashboard target=_blank rel-attribute sweep', () => {
+  it('CRITICAL the sweep read real pages and can still see a violation. `walk` returns silently when its directory is missing, so a renamed or moved src/ leaves the assertion below vacuously true — reporting every anchor safe because it read none.', () => {
+    expect(astroFiles.length, '.astro pages found under customer-dashboard/src').toBeGreaterThan(
+      15,
+    );
+    expect(
+      unsafeBlankAnchors('<a href="https://example.com" target="_blank">docs</a>'),
+      'a known-bad anchor is still detected by the matcher above',
+    ).toHaveLength(1);
+    expect(
+      unsafeBlankAnchors('<a href="https://x.dev" target="_blank" rel="noopener noreferrer">x</a>'),
+      'and a correctly-declared one is not reported',
+    ).toEqual([]);
+  });
+
   it('every <a target="_blank"> declares rel="noopener" (or "noopener noreferrer")', () => {
     const offenders: { file: string; snippet: string }[] = [];
     for (const f of astroFiles) {
-      const body = read(f);
-      // Match <a ... target="_blank" ...>
-      const anchors = [...body.matchAll(/<a\b([^>]*)>/g)];
-      for (const m of anchors) {
-        const attrs = m[1]!;
-        if (/target=["']_blank["']/.test(attrs) && !/rel=["'][^"']*\bnoopener\b/.test(attrs)) {
-          offenders.push({ file: f.slice(REPO_ROOT.length + 1), snippet: m[0].slice(0, 120) });
-        }
+      for (const snippet of unsafeBlankAnchors(read(f))) {
+        offenders.push({ file: f.slice(REPO_ROOT.length + 1), snippet });
       }
     }
     expect(offenders).toEqual([]);

@@ -47,20 +47,36 @@ const FORBIDDEN_ATTRS = [
   'onmouseleave=',
 ];
 
+/**
+ * The forbidden attributes present in `text`, by the rule the sweep uses.
+ *
+ * Shared with the reachability check below deliberately: a floor that exercised
+ * a *separate* copy of the matcher would prove that copy works, which is not
+ * the question.
+ */
+function offendingAttrs(text: string): string[] {
+  // Strip frontmatter + JS-context tokens so we only catch HTML attributes.
+  const stripped = text.replace(/^---[\s\S]*?\n---\n/, '');
+  // Require the attr to be preceded by whitespace, ", or '
+  return FORBIDDEN_ATTRS.filter((attr) => new RegExp(`[\\s"']${attr}`, 'i').test(stripped));
+}
+
 describe('W283.B customer-dashboard no-inline-event-handler sweep', () => {
+  it('CRITICAL the sweep read real pages and can still see a violation. `walk` returns silently when its directory is missing, so a renamed or moved src/ leaves the assertion below vacuously true — reporting every page clean because it read none.', () => {
+    expect(astroFiles.length, '.astro pages found under customer-dashboard/src').toBeGreaterThan(
+      15,
+    );
+    expect(
+      offendingAttrs('<button type="button" onclick="doThing()">Go</button>'),
+      'a known-bad page is still detected by the matcher above',
+    ).toEqual(['onclick=']);
+  });
+
   it('no .astro file uses an inline DOM event handler attribute', () => {
     const offenders: { file: string; attr: string }[] = [];
     for (const f of astroFiles) {
-      const body = read(f);
-      // Strip frontmatter + JS-context tokens so we only catch HTML
-      // attributes.
-      const stripped = body.replace(/^---[\s\S]*?\n---\n/, '');
-      for (const attr of FORBIDDEN_ATTRS) {
-        // Require the attr to be preceded by whitespace, ", or '
-        const re = new RegExp(`[\\s"']${attr.replace('=', '=')}`, 'i');
-        if (re.test(stripped)) {
-          offenders.push({ file: f.slice(REPO_ROOT.length + 1), attr });
-        }
+      for (const attr of offendingAttrs(read(f))) {
+        offenders.push({ file: f.slice(REPO_ROOT.length + 1), attr });
       }
     }
     expect(offenders).toEqual([]);
