@@ -30604,3 +30604,72 @@ team-members repo imports plus the revocation predicate itself, and the service'
 removeMember body plus its audit payload — because the predicate is the security
 property and should be pinned, not merely the fact that some update happens. No
 OpenAPI, SDK, pricing, environment or secret surface changed.
+
+## V-727 — Terminating an account now revokes the keys it minted elsewhere
+
+**Date:** 2026-08-01
+
+V-726 closed the credential half of offboarding for one door: removing a team
+member revokes the API keys that member minted on the owner's account. Account
+**termination** is the same hole reached by another.
+
+`AccountsAdminService.deleteAccount` reclaims API keys via
+`revokeAllForAccount`, which lists by `account_id`. That finds the credentials
+**on** the terminated account and structurally cannot see the ones it created on
+someone else's workspace — and those are exactly the dangerous ones, because a
+team-minted key carries `account_id` = the OWNER and authenticates as the owner.
+The owner is still active after the member is terminated, so the key kept
+working, held by someone whose account had just been deleted.
+
+`ApiKeysService.revokeAllMintedByAccount` now sweeps by
+`created_by_account_id` (migration 0111) and the delete path calls it alongside
+the existing by-account reclaim. As in V-726, a NULL minter is never revoked:
+rows predating the column are unattributable, and revoking on a guess would
+break the owner's own integrations.
+
+**A second defect surfaced while proving the first, and it would have made this
+fix inert.** Both bulk reclaims called the public `revoke()`, which re-gates on
+the CUSTOMER `account_owner` scope even though the reclaim has already gated on
+`driftstack_internal_admin`. That passes today only because a staff WEB SESSION
+is granted `account_owner` in its `baseScopes` (`services/auth.ts`) — so the
+guarantee silently depended on which credential _type_ the operator used. Driven
+by a staff API key holding only `driftstack_internal_admin`, every per-key
+revoke threw `ForbiddenError`, and `deleteAccount` catches and discards reclaim
+errors, so the termination reported success having revoked nothing.
+
+For the pre-existing by-account reclaim that failure was largely masked:
+authentication rejects any key whose account is `deleted`, so those keys were
+dead regardless. For the new minted-elsewhere sweep there is no such masking —
+the key lives on an _active_ owner — so the same silent failure would have left
+precisely the credential this entry exists to revoke. The revoke body is now
+split into `revokeChecked` (atomic revoke + cache invalidation + webhook +
+audit) and the public `revoke()` (that body behind the customer gates), and the
+staff reclaims call `revokeChecked` directly. Behaviour for customer callers is
+unchanged; the staff guarantee is now unconditional.
+
+Worth recording how that was found, because the first read was wrong: an
+isolated probe with a synthetic internal-admin-only context threw, which looked
+like a live production break. It is not — the doc comment on
+`revokeAllForAccount` already documented the web-session reasoning, and
+`auth.ts:357` confirms it. The real finding is narrower and different in kind: a
+guarantee that holds for one credential type and silently fails for another, in
+a code path that swallows its own errors.
+
+Existing coverage could not catch either half. The delete-path test injects a
+STUB reclaimer, so it proves the call is _made_, never that it _succeeds_ — the
+recurring gap where a wiring assertion is mistaken for a behavioural one. And
+there was no by-minter query at all to test. The new tests prove the sweep
+revokes a key living on a DIFFERENT account while leaving the owner's own key, a
+third party's, and an unattributed key untouched; that it works for an
+internal-admin-only staff key; and that the delete path invokes both reclaims.
+Both mutations are proved red — routing the sweep back through `revoke()`, and
+dropping it from the delete path.
+
+Verification: node project 2591 files / 26,521 passing / 0 failing (the complete relevant gate for a server-only change; the multi-project run adds only gui/docs projects this cannot affect); both halves of the server typecheck clean; targeted
+ESLint and Prettier. The `DeleteApiKeyReclaimer` parity pin now requires both
+methods, since losing the second silently restores the hole. `api/audit-log.md`
+additionally documents the `revoked_api_key_ids` payload V-726 added to
+`team.member_removed`, with a pin, because an owner needs to know both what a
+removal invalidated and that pre-attribution keys are not listed. No OpenAPI,
+SDK, pricing, environment or secret surface changed, and no schema change beyond
+the already-landed migration 0111.

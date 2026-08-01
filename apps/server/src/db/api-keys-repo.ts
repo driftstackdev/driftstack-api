@@ -35,6 +35,17 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
     return toApiKeyRow(row);
   }
 
+  // V-727 — keys minted BY this account on other accounts. Deliberately not
+  // filtered by accountId: the whole point is the ones that live elsewhere.
+  async listApiKeysMintedBy(minterAccountId: string): Promise<ApiKeyRow[]> {
+    const rows = await this.database.db
+      .select()
+      .from(apiKeys)
+      .where(eq(apiKeys.createdByAccountId, minterAccountId))
+      .orderBy(desc(apiKeys.createdAt));
+    return rows.map(toApiKeyRow);
+  }
+
   async listApiKeys(accountId: string): Promise<ApiKeyRow[]> {
     const rows = await this.database.db
       .select()

@@ -107,6 +107,13 @@ export type RevokeApiKeyRepoResult =
 
 export interface ApiKeysRepo {
   insertApiKey(input: NewApiKeyInput): Promise<ApiKeyRow>;
+  /**
+   * V-727 — keys this account MINTED on OTHER accounts (team-scoped mints,
+   * where `accountId` is the owner and `createdByAccountId` is this account).
+   * `listApiKeys` cannot find them: it filters on `accountId`, so it only ever
+   * returns keys ON the account, never keys it created elsewhere.
+   */
+  listApiKeysMintedBy(minterAccountId: string): Promise<ApiKeyRow[]>;
   listApiKeys(accountId: string): Promise<ApiKeyRow[]>;
   findApiKey(id: string, accountId: string): Promise<ApiKeyRow | null>;
   /** Find an API key by id WITHOUT account scoping (admin force-actions only). */
@@ -526,11 +533,31 @@ export class ApiKeysService {
   ): Promise<boolean> {
     throwIfMissingScope(ctx, 'account_owner');
     assertNotDeviceKey(ctx, 'revoke API keys');
-
     // V-326e6 — when team-scoped, revoke a key on the OWNER's
     // account. Route layer enforces 'admin' team role.
-    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    return this.revokeChecked(ctx, keyId, opts.effectiveAccountId ?? ctx.account.id);
+  }
 
+  /**
+   * The revoke body WITHOUT the customer-scope gate: atomic revoke, auth-cache
+   * invalidation, webhook fan-out, customer audit row.
+   *
+   * V-727 — split out because the staff bulk reclaims must not depend on the
+   * CALLER also holding a customer scope. They gate on
+   * `driftstack_internal_admin` and then previously called `revoke()`, which
+   * re-gates on `account_owner`. That happens to pass today only because a staff
+   * WEB SESSION is granted account_owner in its baseScopes (services/auth.ts) —
+   * so the guarantee silently depended on which credential TYPE the operator
+   * used. Driven by a staff API key holding only `driftstack_internal_admin`,
+   * every per-key revoke threw ForbiddenError, and `deleteAccount` catches and
+   * discards reclaim errors, so the termination reported success having revoked
+   * nothing. Routing the staff paths here makes the reclaim unconditional.
+   */
+  private async revokeChecked(
+    ctx: AccountContext,
+    keyId: string,
+    accountId: string,
+  ): Promise<boolean> {
     const outcome = await this.repo.revokeApiKeyAtomic({
       id: keyId,
       accountId,
@@ -597,13 +624,18 @@ export class ApiKeysService {
 
   /**
    * GDPR Article 17 — bulk-revoke every non-revoked API key for the
-   * account. Backs AccountsAdminService.deleteAccount(); reuses
-   * revoke() per-key rather than duplicating its cache-invalidate /
-   * webhook-emit / customer-audit-emit logic. Requires
-   * driftstack_internal_admin — only the admin account-deletion flow
-   * calls this (staff web sessions also carry account_owner, so the
-   * per-key revoke()'s own scope check passes too; see
-   * services/auth.ts's baseScopes).
+   * account. Backs AccountsAdminService.deleteAccount(). Requires
+   * driftstack_internal_admin.
+   *
+   * Goes through {@link revokeChecked} rather than the public revoke(), so it
+   * still gets the cache-invalidate / webhook-emit / customer-audit-emit
+   * behaviour without re-gating on the CUSTOMER `account_owner` scope. V-727 —
+   * it used to call revoke(), which passed only because a staff WEB SESSION is
+   * granted account_owner in its baseScopes (services/auth.ts). A staff API key
+   * holding just driftstack_internal_admin threw ForbiddenError on every key,
+   * and deleteAccount discards reclaim errors, so termination reported success
+   * having revoked nothing. The guarantee must not depend on which credential
+   * type the operator happened to use.
    */
   async revokeAllForAccount(ctx: AccountContext, accountId: string): Promise<number> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
@@ -611,7 +643,30 @@ export class ApiKeysService {
     let n = 0;
     for (const key of keys) {
       if (key.revokedAt !== null) continue;
-      if (await this.revoke(ctx, key.id, { effectiveAccountId: accountId })) n++;
+      if (await this.revokeChecked(ctx, key.id, accountId)) n++;
+    }
+    return n;
+  }
+
+  /**
+   * V-727 — revoke the keys this account minted on OTHER accounts.
+   *
+   * {@link revokeAllForAccount} filters on `account_id`, so it reclaims the
+   * credentials ON an account and misses every key that account created on
+   * someone else's workspace. Those authenticate as the OWNER and never
+   * re-check the minter, so terminating a team member's account left their
+   * credential live on the owner — the same hole V-726 closed for the removal
+   * path, reached by a different door.
+   */
+  async revokeAllMintedByAccount(ctx: AccountContext, minterAccountId: string): Promise<number> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    const keys = await this.repo.listApiKeysMintedBy(minterAccountId);
+    let n = 0;
+    for (const key of keys) {
+      if (key.revokedAt !== null) continue;
+      // Scoped to the key's OWN account, which is the owner's — not the
+      // minter's — because that is the account the row belongs to.
+      if (await this.revokeChecked(ctx, key.id, key.accountId)) n++;
     }
     return n;
   }

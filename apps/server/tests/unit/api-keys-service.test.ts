@@ -96,6 +96,9 @@ function makeRepo(initial: ApiKeyRow[] = []): {
   };
   let counter = state.rows.length;
   const repo: ApiKeysRepo = {
+    // V-727 — keys minted BY an account on other accounts. This fixture tracks
+    // no minter, so nothing is ever attributed to one.
+    listApiKeysMintedBy: () => Promise.resolve([]),
     insertApiKey: (input: NewApiKeyInput) => {
       counter += 1;
       const row: ApiKeyRow = {

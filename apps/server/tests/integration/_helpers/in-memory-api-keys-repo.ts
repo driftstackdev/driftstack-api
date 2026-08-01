@@ -47,8 +47,32 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
       createdAt: new Date(),
     };
     this.byId.set(row.id, row);
+    // V-727 — the production api_keys row carries created_by_account_id (who
+    // MINTED the key, which on a team-scoped mint is the member while
+    // accountId stays the owner). ApiKeyRow deliberately does not expose it —
+    // it is not auth-relevant and widening that type ripples into the auth
+    // cache — so the twin mirrors the column in a side map instead.
+    if (input.createdByAccountId != null) {
+      this.minterByKeyId.set(row.id, input.createdByAccountId);
+    }
     if (this.authRepoMirror) this.authRepoMirror.upsertApiKey(row);
     return Promise.resolve(row);
+  }
+
+  private readonly minterByKeyId = new Map<string, string>();
+
+  /** V-727 — test seam: record a minter for a key created outside insertApiKey. */
+  setMinter(keyId: string, minterAccountId: string): void {
+    this.minterByKeyId.set(keyId, minterAccountId);
+  }
+
+  // V-727 — mirrors the Drizzle sibling: keys minted BY this account, wherever
+  // they live. Deliberately NOT filtered by accountId.
+  listApiKeysMintedBy(minterAccountId: string): Promise<ApiKeyRow[]> {
+    const rows = Array.from(this.byId.values())
+      .filter((r) => this.minterByKeyId.get(r.id) === minterAccountId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return Promise.resolve(rows);
   }
 
   listApiKeys(accountId: string): Promise<ApiKeyRow[]> {

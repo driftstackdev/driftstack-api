@@ -144,6 +144,18 @@ describe('W768 docs /api/audit-log content parity', () => {
     }
   });
 
+  // V-726 — removal now revokes the keys the departing member minted on the
+  // owner, and the audit entry names them. That payload is the only way an owner
+  // can establish afterwards which credentials an offboarding invalidated, so it
+  // is a documented contract, not an implementation detail.
+  it('V-726 team.member_removed documents its revoked_api_key_ids payload and the pre-attribution caveat', () => {
+    const p = read(PAGE);
+    expect(p).toMatch(/`team\.member_removed`[^|]*\|[^|]*\|[^|]*revoked_api_key_ids/);
+    // The caveat matters as much as the field: an owner must not read an empty
+    // list as proof that nothing was left behind.
+    expect(p).toMatch(/keys created before this was recorded are not listed/);
+  });
+
   it("CRITICAL account.login payload method 3-enum pinned — password/mfa_totp/mfa_recovery, plus the oauth_callback variant. S36 2026-07-07 (fable-truth-audit): the old 5-enum was FALSE — auth-flows.ts only ever emits method 'password' (:821) or 'mfa_totp'/'mfa_recovery' (:935); magic-link consume emits NO account.login row, password-reset confirm emits account.password_changed {via:'password_reset'}, and the OAuth callback emits account.login with {kind:'oauth_callback', provider, session_id} and no method field.", () => {
     const p = read(PAGE);
 

@@ -76,6 +76,9 @@ export interface DeleteWebSessionReclaimer {
 /** GDPR Article 17 — minimal api-keys-service surface the delete-reclaim path depends on. */
 export interface DeleteApiKeyReclaimer {
   revokeAllForAccount(ctx: AccountContext, accountId: string): Promise<number>;
+  /** V-727 — keys this account minted on OTHER accounts, which the by-account
+   *  reclaim above cannot see. */
+  revokeAllMintedByAccount(ctx: AccountContext, minterAccountId: string): Promise<number>;
 }
 
 /** GDPR Article 17 — minimal webhooks-service surface the delete-reclaim path depends on. */
@@ -215,6 +218,16 @@ export class AccountsAdminService {
     if (this.apiKeys) {
       try {
         await this.apiKeys.revokeAllForAccount(ctx, accountId);
+      } catch {
+        // Never fail delete on a reclaim error.
+      }
+      try {
+        // V-727 — also the keys this account minted on OTHER accounts. The call
+        // above filters on account_id and so reclaims only the credentials ON
+        // this account; a team member's keys live on the OWNER's account and
+        // authenticate as the owner, so terminating the member left them
+        // working. Same hole V-726 closed for member removal, different door.
+        await this.apiKeys.revokeAllMintedByAccount(ctx, accountId);
       } catch {
         // Never fail delete on a reclaim error.
       }

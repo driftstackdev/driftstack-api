@@ -126,8 +126,12 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     expect(body).toMatch(
       /export interface DeleteWebSessionReclaimer \{\s*\n?\s*revokeAllWebSessionsForAccount\(accountId: string, now: Date\): Promise<number>;\s*\n?\s*\}/,
     );
+    // V-727 — the reclaimer now has TWO methods. revokeAllForAccount filters on
+    // account_id and so can only reach credentials ON the account; a team
+    // member's keys live on the OWNER's account, so terminating the member
+    // needs the minted-by sweep as well. Losing it silently restores the hole.
     expect(body).toMatch(
-      /export interface DeleteApiKeyReclaimer \{\s*\n?\s*revokeAllForAccount\(ctx: AccountContext, accountId: string\): Promise<number>;\s*\n?\s*\}/,
+      /export interface DeleteApiKeyReclaimer \{\s*revokeAllForAccount\(ctx: AccountContext, accountId: string\): Promise<number>;[\s\S]*?revokeAllMintedByAccount\(ctx: AccountContext, minterAccountId: string\): Promise<number>;\s*\}/,
     );
     expect(body).toMatch(
       /export interface DeleteWebhookReclaimer \{\s*\n?\s*deleteAllForAccount\(ctx: AccountContext, accountId: string\): Promise<number>;\s*\n?\s*\}/,

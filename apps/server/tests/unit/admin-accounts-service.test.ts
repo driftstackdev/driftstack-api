@@ -393,13 +393,24 @@ describe('GDPR Article 17 AccountsAdminService.deleteAccount', () => {
     const { repo } = makeRepo([baseAccount()]);
     const calls: string[] = [];
     const svc = new AccountsAdminService(repo, null, null, null, {
+      // V-727 — the delete path now also revokes keys this account minted on
+      // OTHER accounts; record it under a distinct label so the existing
+      // by-account assertion stays exact.
+      revokeAllMintedByAccount: (_ctx: AccountContext, id: string) => {
+        calls.push(`minted-by:${id}`);
+        return Promise.resolve(0);
+      },
       revokeAllForAccount: (_ctx, id: string) => {
         calls.push(id);
         return Promise.resolve(1);
       },
     });
     await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
-    expect(calls).toEqual(['acc_1']);
+    // V-727 — BOTH reclaims run: the keys ON the account, and the keys the
+    // account minted on OTHER accounts. The second is not redundant — it is the
+    // only one that can reach a team member's keys, which live on the owner's
+    // account and authenticate as the owner.
+    expect([...calls].sort()).toEqual(['acc_1', 'minted-by:acc_1']);
   });
 
   it('reclaims webhook endpoints via the injected webhook reclaimer', async () => {
@@ -422,7 +433,11 @@ describe('GDPR Article 17 AccountsAdminService.deleteAccount', () => {
       null,
       { destroyAllForAccount: () => Promise.reject(new Error('sessions boom')) },
       { revokeAllWebSessionsForAccount: () => Promise.reject(new Error('web sessions boom')) },
-      { revokeAllForAccount: () => Promise.reject(new Error('api keys boom')) },
+      {
+        revokeAllForAccount: () => Promise.reject(new Error('api keys boom')),
+        // V-727 — must ALSO not fail the delete when it throws.
+        revokeAllMintedByAccount: () => Promise.reject(new Error('minted-by boom')),
+      },
       { deleteAllForAccount: () => Promise.reject(new Error('webhooks boom')) },
     );
     const result = await svc.deleteAccount(ctxWith(['driftstack_internal_admin']), 'acc_1');
