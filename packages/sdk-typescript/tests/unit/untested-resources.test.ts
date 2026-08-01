@@ -1,0 +1,162 @@
+// Behavioural coverage for the three resources no test ever called.
+//
+// `client.mfa`, `client.legal` and `client.emailPreferences` had zero usages in
+// any test — measured, not assumed, by scanning every `.test.ts` in the repo for
+// the symbols and for `client.<name>.`.
+//
+// They were not unguarded: content-parity pins hold each method's verb, path and
+// JSDoc, and they are strong. Three mutations confirmed it — dropping the request
+// body, flipping DELETE to POST, and even hiding the whole request inside a
+// branch that never runs while leaving every pinned string verbatim in the file.
+// All three reds.
+//
+// What a source-text pin cannot show is that calling the method actually issues
+// that request. It reads the file; it never runs the code. So this file drives
+// each resource through the real class with a recording transport.
+//
+// Being exact about what that buys, because the tempting claim is wrong: for
+// every mutation tried here, the existing pins ALSO red. Swapping the opt-out
+// polarity — a one-character edit — reds two pin cases with this file deleted,
+// because they hold the `opted_in: false` / `opted_in: true` literals. So these
+// are not catching something nothing else catches, and saying so would misread
+// the suite.
+//
+// What they are is a second, independent kind of evidence, and the value shows
+// up when the first kind moves. A pin is matched against source text, so any
+// refactor that changes formatting forces someone to update it — and updating a
+// pin to match new text is not the same as re-verifying the behaviour. Eight
+// tests in this repo were found skipped rather than updated when page copy was
+// rewritten, and five of them had silently stopped checking anything. A
+// behavioural test does not need editing when the source is reformatted, and it
+// keeps holding if a pin is ever relaxed or retired.
+
+import { describe, expect, it, vi } from 'vitest';
+import { MfaResource } from '../../src/resources/mfa.js';
+import { LegalResource } from '../../src/resources/legal.js';
+import { EmailPreferencesResource } from '../../src/resources/email-preferences.js';
+import type { HttpClient } from '../../src/http.js';
+
+interface RequestOpts {
+  method: string;
+  path: string;
+  body?: unknown;
+}
+
+/** A transport that records what the resource asked it to send. */
+function recorder<T>(reply: T): { http: HttpClient; calls: RequestOpts[] } {
+  const calls: RequestOpts[] = [];
+  const request = vi.fn((opts: RequestOpts) => {
+    calls.push(opts);
+    return Promise.resolve(reply);
+  });
+  return { http: { request } as unknown as HttpClient, calls };
+}
+
+describe('MfaResource — driven, not read', () => {
+  it('status() issues GET /v1/account/mfa with no body', async () => {
+    const { http, calls } = recorder({ enrolled: false });
+    await new MfaResource(http).status();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.method).toBe('GET');
+    expect(calls[0]!.path).toBe('/v1/account/mfa');
+    expect(calls[0]!.body).toBeUndefined();
+  });
+
+  it('enroll() POSTs an empty body rather than omitting it, so the server sees a JSON object', async () => {
+    const { http, calls } = recorder({ otpauth_uri: 'otpauth://x', secret: 's' });
+    await new MfaResource(http).enroll();
+    expect(calls[0]!.method).toBe('POST');
+    expect(calls[0]!.path).toBe('/v1/account/mfa/enroll');
+    expect(calls[0]!.body).toEqual({});
+  });
+
+  it("CRITICAL verify() forwards the caller's code verbatim. Dropping or rewriting the body here would make every enrollment fail with a correct code, and the failure would look like the customer mistyping.", async () => {
+    const { http, calls } = recorder({ recovery_codes: ['a', 'b'] });
+    const result = await new MfaResource(http).verify({ code: '123456' });
+    expect(calls[0]!.method).toBe('POST');
+    expect(calls[0]!.path).toBe('/v1/account/mfa/verify');
+    expect(calls[0]!.body).toEqual({ code: '123456' });
+    expect(result.recovery_codes).toEqual(['a', 'b']);
+  });
+
+  it("CRITICAL disable() uses DELETE and forwards the literal confirmation phrase. The body is `{ confirm: 'disable-mfa' }` — a deliberate speed bump, not an MFA code — so a client that drops or rewrites it turns a two-step teardown of the customer's second factor into a one-step one.", async () => {
+    const { http, calls } = recorder(undefined);
+    await new MfaResource(http).disable({ confirm: 'disable-mfa' });
+    expect(calls[0]!.method).toBe('DELETE');
+    expect(calls[0]!.path).toBe('/v1/account/mfa');
+    expect(calls[0]!.body).toEqual({ confirm: 'disable-mfa' });
+  });
+
+  it('regenerateRecoveryCodes() POSTs to the regenerate path with an empty body', async () => {
+    const { http, calls } = recorder({ recovery_codes: [] });
+    await new MfaResource(http).regenerateRecoveryCodes();
+    expect(calls[0]!.method).toBe('POST');
+    expect(calls[0]!.path).toBe('/v1/account/mfa/recovery-codes/regenerate');
+    expect(calls[0]!.body).toEqual({});
+  });
+});
+
+describe('LegalResource — driven, not read', () => {
+  it('documents() and required() are DISTINCT reads. They differ by one path segment and return different sets — the catalogue versus what this account still owes — so a copy-paste between them would silently tell a customer they have nothing to accept.', async () => {
+    const docs = recorder({ data: [] });
+    await new LegalResource(docs.http).documents();
+    expect(docs.calls[0]!.method).toBe('GET');
+    expect(docs.calls[0]!.path).toBe('/v1/legal/documents');
+
+    const req = recorder({ data: [] });
+    await new LegalResource(req.http).required();
+    expect(req.calls[0]!.method).toBe('GET');
+    expect(req.calls[0]!.path).toBe('/v1/legal/required');
+
+    expect(docs.calls[0]!.path).not.toBe(req.calls[0]!.path);
+  });
+
+  it('accept() POSTs the acceptance tuple verbatim. The content_hash is what binds the acceptance to an exact document version, so a body that drops it records consent to nothing in particular.', async () => {
+    const { http, calls } = recorder({ accepted_at: '2026-08-01T00:00:00Z' });
+    const body = { document_key: 'tos', version: '2026-01', content_hash: 'abc123' };
+    await new LegalResource(http).accept(body);
+    expect(calls[0]!.method).toBe('POST');
+    expect(calls[0]!.path).toBe('/v1/legal/accept');
+    expect(calls[0]!.body).toEqual(body);
+  });
+});
+
+describe('EmailPreferencesResource — driven, not read', () => {
+  it('list() issues GET /v1/account/email-preferences', async () => {
+    const { http, calls } = recorder({ data: [] });
+    await new EmailPreferencesResource(http).list();
+    expect(calls[0]!.method).toBe('GET');
+    expect(calls[0]!.path).toBe('/v1/account/email-preferences');
+  });
+
+  it('set() PUTs the preference. PUT rather than POST matters: the server treats this as an idempotent upsert of one event type, so a POST would be a different contract.', async () => {
+    const { http, calls } = recorder(undefined);
+    await new EmailPreferencesResource(http).set({
+      event_type: 'billing-receipt',
+      opted_in: true,
+    });
+    expect(calls[0]!.method).toBe('PUT');
+    expect(calls[0]!.path).toBe('/v1/account/email-preferences');
+    expect(calls[0]!.body).toEqual({ event_type: 'billing-receipt', opted_in: true });
+  });
+
+  it('CRITICAL optOut sends opted_in:false and optIn sends opted_in:true. They delegate to the same set() one boolean apart, so swapping them opts a customer back IN to mail they asked to stop — a consent defect rather than a UI bug. The content-parity pin holds these literals too; this asserts the delegation actually happens, which reading the file cannot show.', async () => {
+    const out = recorder(undefined);
+    await new EmailPreferencesResource(out.http).optOut('billing-receipt');
+    expect(out.calls[0]!.body).toEqual({ event_type: 'billing-receipt', opted_in: false });
+
+    const back = recorder(undefined);
+    await new EmailPreferencesResource(back.http).optIn('billing-receipt');
+    expect(back.calls[0]!.body).toEqual({ event_type: 'billing-receipt', opted_in: true });
+
+    // Asserted against each other too: identical polarity in both would satisfy
+    // neither expectation above only by accident of which literal was wrong.
+    expect(out.calls[0]!.body).not.toEqual(back.calls[0]!.body);
+  });
+
+  it('optOut forwards the event type it was given rather than a fixed one, so opting out of one email does not silence a different one.', async () => {
+    const { http, calls } = recorder(undefined);
+    await new EmailPreferencesResource(http).optOut('tier-changed');
+    expect(calls[0]!.body).toEqual({ event_type: 'tier-changed', opted_in: false });
+  });
+});
