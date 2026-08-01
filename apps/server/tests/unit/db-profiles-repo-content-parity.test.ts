@@ -111,8 +111,14 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toContain('const MAX_PROFILE_DEK_MIGRATION_BATCH = 500;');
     expect(body).toContain('async migrateWrappedDekEnvelopes(');
     expect(body).toContain('.where(profileDekIsV2())');
+    // The probe's unwrap now runs inside verifyBootEncryptionKey so a wrong
+    // PROFILE_MASTER_KEY names the subsystem instead of surfacing a raw crypto
+    // error. Both halves are pinned: the wrapper, and the unwrap it guards.
     expect(body).toContain(
-      'unwrapProfileDek(masterKey, v2Probe.accountId, v2Probe.id, v2Probe.wrappedDek);',
+      "verifyBootEncryptionKey('Profile encryption keys', 'PROFILE_MASTER_KEY', () => {",
+    );
+    expect(body).toContain(
+      'unwrapProfileDek(masterKey, v2Probe.accountId, v2Probe.id, probeWrappedDek);',
     );
     expect(body).toContain('.where(profileDekIsLegacy())');
     expect(body).toContain(

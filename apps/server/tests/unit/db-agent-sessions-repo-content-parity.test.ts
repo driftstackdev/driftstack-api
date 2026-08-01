@@ -61,7 +61,11 @@ describe('db/agent-sessions-repo content parity', () => {
     expect(body).toMatch(/\.set\(\{ transcript: encryptedTranscript, updatedAt: now \}\)/);
     expect(body).toMatch(/throw new Error\('Agent transcript encryption key is unavailable\.'\)/);
     expect(body).toMatch(/async migrateTranscriptEnvelopes\(/);
-    expect(body).toMatch(/readAgentTranscript\(v1Probe\.transcript, key\)/);
+    // The v1 probe now runs inside verifyBootEncryptionKey, so a wrong key names
+    // the subsystem instead of surfacing a raw crypto error. The probe itself is
+    // still pinned — the wrapper changed the message, not whether it happens.
+    expect(body).toMatch(/verifyBootEncryptionKey\(\s*'Agent session transcripts'/);
+    expect(body).toMatch(/readAgentTranscript\(probeTranscript, key\)/);
     expect(body).toMatch(/readAgentSessionTranscript\(v2Probe\.transcript, key,/);
     expect(body).toMatch(/const prepared = rows\.map\(\(row\) => \(\{/);
     expect(body).toMatch(

@@ -13,6 +13,7 @@
 //   - No update/delete surface in v1.0 — write-only per the
 //     orchestrator handoff #3 Q.5.
 
+import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 import { randomUUID } from 'node:crypto';
 import { and, asc, count, desc, eq, lt, or, sql, type SQL } from 'drizzle-orm';
 import type { Database } from './client.js';
@@ -143,8 +144,10 @@ export class DrizzleRecipesRepo implements RecipesRepo {
       .limit(1);
     if (v2Probe !== undefined) {
       const context = { accountId: v2Probe.accountId, recipeId: v2Probe.id };
-      readRecipeIntentLog(v2Probe.intentLog, key, context);
-      readRecipeTranscriptSnapshot(v2Probe.transcriptSnapshot, key, context);
+      verifyBootEncryptionKey('Recipe payloads', 'MFA_ENCRYPTION_KEY', () => {
+        readRecipeIntentLog(v2Probe.intentLog, key, context);
+        readRecipeTranscriptSnapshot(v2Probe.transcriptSnapshot, key, context);
+      });
     }
 
     const rows = await this.database.db

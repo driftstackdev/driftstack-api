@@ -1,5 +1,6 @@
 // Drizzle-backed ProfilesRepo (V-081).
 
+import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { StorageQuotaExceededError } from '../lib/errors.js';
@@ -104,7 +105,11 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       if (v2Probe.wrappedDek === null) {
         throw new Error(`Profile ${v2Probe.id} has an incomplete wrapped DEK.`);
       }
-      unwrapProfileDek(masterKey, v2Probe.accountId, v2Probe.id, v2Probe.wrappedDek);
+      // Structural check above keeps its own message; only the UNWRAP is wrapped.
+      const probeWrappedDek = v2Probe.wrappedDek;
+      verifyBootEncryptionKey('Profile encryption keys', 'PROFILE_MASTER_KEY', () => {
+        unwrapProfileDek(masterKey, v2Probe.accountId, v2Probe.id, probeWrappedDek);
+      });
     }
 
     const rows = await this.database.db

@@ -6,6 +6,7 @@
 // accountId) so one account can never read/update/delete another's proxy — the
 // same cross-account isolation the profile DEK relies on.
 
+import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 import { and, asc, count, eq, sql, type SQL } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { accountProxies } from './schema.js';
@@ -332,24 +333,28 @@ export class DrizzleAccountProxiesRepo implements AccountProxiesRepo {
       .orderBy(asc(accountProxies.id))
       .limit(1);
     if (v2Probe !== undefined) {
-      if (v2Probe.wrappedPassword !== null) {
-        readAccountProxySecret(
-          masterKey,
-          { accountId: v2Probe.accountId, proxyId: v2Probe.id, slot: 'password' },
-          v2Probe.wrappedPassword,
-        );
-      }
-      if (v2Probe.wrappedSecret !== null) {
-        readAccountProxySecret(
-          masterKey,
-          {
-            accountId: v2Probe.accountId,
-            proxyId: v2Probe.id,
-            slot: vpnSecretSlot(v2Probe.scheme),
-          },
-          v2Probe.wrappedSecret,
-        );
-      }
+      const probeWrappedPassword = v2Probe.wrappedPassword;
+      const probeWrappedSecret = v2Probe.wrappedSecret;
+      verifyBootEncryptionKey('Account proxy credentials', 'PROFILE_MASTER_KEY', () => {
+        if (probeWrappedPassword !== null) {
+          readAccountProxySecret(
+            masterKey,
+            { accountId: v2Probe.accountId, proxyId: v2Probe.id, slot: 'password' },
+            probeWrappedPassword,
+          );
+        }
+        if (probeWrappedSecret !== null) {
+          readAccountProxySecret(
+            masterKey,
+            {
+              accountId: v2Probe.accountId,
+              proxyId: v2Probe.id,
+              slot: vpnSecretSlot(v2Probe.scheme),
+            },
+            probeWrappedSecret,
+          );
+        }
+      });
     }
 
     const rows = await this.database.db

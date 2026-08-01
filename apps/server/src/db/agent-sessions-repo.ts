@@ -30,6 +30,7 @@
 // guards the opposite drift). Validated against real Postgres by
 // db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
+import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 import { randomUUID } from 'node:crypto';
 import { and, asc, count, desc, eq, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
@@ -198,7 +199,12 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       `,
       )
       .limit(1);
-    if (v1Probe !== undefined) readAgentTranscript(v1Probe.transcript, key);
+    if (v1Probe !== undefined) {
+      const probeTranscript = v1Probe.transcript;
+      verifyBootEncryptionKey('Agent session transcripts', 'MFA_ENCRYPTION_KEY', () => {
+        readAgentTranscript(probeTranscript, key);
+      });
+    }
 
     // On successor boots, authenticate one already-bound envelope with its
     // exact database identity before selecting the remaining legacy page.

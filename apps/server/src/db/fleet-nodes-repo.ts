@@ -11,6 +11,7 @@
 // InMemory variant to grow too; the operator routes only run against
 // the Drizzle path so this asymmetry is intentional.
 
+import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 import { and, asc, count, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { fleetNodes } from './schema.js';
@@ -144,10 +145,17 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
       if (v2Probe.apiKey === null || v2Probe.ciphertext === null || v2Probe.wsUrl === null) {
         throw new Error(`Fleet node ${v2Probe.id} has an incomplete LiveKit credential tuple.`);
       }
-      decryptLivekitSecret(v2Probe.ciphertext, keyBase64, {
-        nodeId: v2Probe.id,
-        apiKey: v2Probe.apiKey,
-        wsUrl: v2Probe.wsUrl,
+      // Structural check above keeps its own message; only the DECRYPT is
+      // wrapped. Locals carry the narrowing the closure would otherwise lose.
+      const probeCiphertext = v2Probe.ciphertext;
+      const probeApiKey = v2Probe.apiKey;
+      const probeWsUrl = v2Probe.wsUrl;
+      verifyBootEncryptionKey('Fleet node LiveKit secrets', 'MFA_ENCRYPTION_KEY', () => {
+        decryptLivekitSecret(probeCiphertext, keyBase64, {
+          nodeId: v2Probe.id,
+          apiKey: probeApiKey,
+          wsUrl: probeWsUrl,
+        });
       });
     }
 

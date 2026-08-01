@@ -87,7 +87,10 @@ describe('db/fleet-nodes-repo content parity', () => {
 
   it('boot migration prevalidates pages, probes v2, exact-CASes the five old tuple fields, and preserves registration time', () => {
     expect(body).toContain('async migrateLivekitSecretEnvelopes(');
-    expect(body).toContain('decryptLivekitSecret(v2Probe.ciphertext, keyBase64');
+    // Probe decrypt now runs inside verifyBootEncryptionKey; the structural
+    // incomplete-tuple check above it deliberately keeps its own message.
+    expect(body).toMatch(/verifyBootEncryptionKey\(\s*'Fleet node LiveKit secrets'/);
+    expect(body).toContain('decryptLivekitSecret(probeCiphertext, keyBase64');
     expect(body).toContain('decryptLegacyLivekitSecret(row.ciphertext, keyBase64)');
     expect(body).toContain('const prepared = rows.map((row) => {');
     expect(body).toContain('eq(fleetNodes.id, row.id)');
