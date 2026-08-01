@@ -998,6 +998,49 @@ One of the six mutations is worth keeping: moving the call to _after_ the
 connection is opened reds the wiring case while all nine behavioural cases stay
 green either way. Behaviour cannot see ordering, so the pair is orthogonal.
 
+### 31. `db:seed` would mint a full-admin key into any database it was given
+
+`seed.ts` creates an account and an API key scoped `['read', 'write', 'admin']`
+and prints the plaintext so a developer can paste it into a curl command. Correct
+locally. Anywhere else it is a credential-issuing incident: a working full-admin
+key exists in that environment and its plaintext is in a shell scrollback or a CI
+log — and the script's output never names the database it landed in, so the
+mistake does not announce itself.
+
+The target came from `config.databaseUrl` with no check. The accident needs no
+unusual state: a staging or production `DATABASE_URL` exported, and
+`npm run db:seed`.
+
+Same rule as the e2e guard, with the host classification shared in
+`lib/loopback-host.ts` so the two cannot drift. The **policy** is deliberately not
+shared — each owns its message and its own override name, because otherwise
+someone who set the e2e override to run tests against a compose network would
+silently also authorise seeding an admin key into a remote database. A case pins
+that separation, and a mutation that collapses the two names reds it.
+
+Verified end to end in both directions: a remote URL through the real npm script
+fails fast naming the host, and migrate-plus-seed against a scratch database
+(created and dropped for the check) still works.
+
+### 32. The destructive-target class is now closed, and most of it was already safe
+
+Having found two instances, the whole repo was swept for operations that destroy
+or issue credentials against whatever `DATABASE_URL` names. The result is mostly
+a list of things that were already correct, which is worth recording so the sweep
+is not repeated:
+
+- **Integration tests** — verified safe by construction, not assumed. They run on
+  isolated databases via `ensureIsolatedDatabase` _and_ create uniquely-named
+  schemas, and the clients that issue unqualified `TRUNCATE` set
+  `search_path=<TEST_SCHEMA>` with an assertion confirming it took effect.
+- **`scripts/`** — four scripts read `DATABASE_URL`; none is destructive.
+- **`db:migrate`** — additive, and running it against production is a normal
+  deploy step, so a locality guard would be wrong.
+- **Retention purges and the account-deletion sweeper** — destructive by design in
+  production, gated on account status rather than on host; covered separately.
+
+Only the two fixed above lacked a guard.
+
 ## What A2 deliberately did not do
 
 - No suite where measurement showed the boundary already covered — webhooks and
