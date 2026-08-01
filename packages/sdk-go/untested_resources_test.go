@@ -384,3 +384,78 @@ func TestAccount_TestByokAnthropicKeyPostsToItsOwnSubPath(t *testing.T) {
 		t.Errorf("path = %q, want the /test sub-path", path)
 	}
 }
+
+// ─────────────── agent-session capability report + error event ───────────────
+//
+// The API returns both on AgentSession and the TypeScript and Python SDKs
+// expose them; the Go struct omitted them, so a Go caller could not read why a
+// session had failed, how severe it was, or whether retrying was worthwhile.
+// Python's models are generated from the OpenAPI document and stayed in sync
+// automatically — Go's are hand-written, and drifted.
+
+func TestAgentSessions_DecodesErrorEventAndCapabilityReport(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"agt_1","account_id":"acc_1","driftstack_session_id":null,
+			"status":"closed","closed_reason":"worker_error",
+			"token_budget_total":100,"token_budget_remaining":0,
+			"transcript_length":3,"closed_at":"2026-08-01T00:00:00Z",
+			"created_by_user_id":null,"mode":"auto","model":"claude-opus-4-8",
+			"pair_mode_state":null,
+			"created_at":"2026-08-01T00:00:00Z","updated_at":"2026-08-01T00:00:00Z",
+			"capability_report":{
+				"timestamp":"2026-08-01T00:00:00Z","manual_input_available":null,
+				"streaming_state":"failed","egress_state":"dead_proxy",
+				"proxy_kind":"socks5","proxy_udp_supported":false,
+				"transport_mode_requested":"h2-and-h3","transport_mode_active":"h2-only",
+				"safeguards_passed":true},
+			"error_event":{
+				"timestamp":"2026-08-01T00:00:00Z","code":"egress_proxy_dead",
+				"severity":"fatal","summary":"proxy stopped responding",
+				"detail":null,"customer_actionable":true,"retryable":false}
+		}`))
+	})
+
+	got, err := client.AgentSessions.Get(context.Background(), "agt_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ErrorEvent == nil {
+		t.Fatal("error_event was dropped — a Go caller cannot see why the session failed")
+	}
+	// The three fields a caller acts on: how bad, can a human fix it, is a
+	// retry worth attempting.
+	if got.ErrorEvent.Severity != "fatal" {
+		t.Errorf("severity = %q, want fatal", got.ErrorEvent.Severity)
+	}
+	if !got.ErrorEvent.CustomerActionable {
+		t.Errorf("customer_actionable = false, want true")
+	}
+	if got.ErrorEvent.Retryable {
+		t.Errorf("retryable = true, want false — retrying a dead proxy is wasted work")
+	}
+	if got.ErrorEvent.Code != "egress_proxy_dead" {
+		t.Errorf("code = %q", got.ErrorEvent.Code)
+	}
+	if got.ErrorEvent.Detail != nil {
+		t.Errorf("detail should stay nil when the server sends null")
+	}
+
+	if got.CapabilityReport == nil {
+		t.Fatal("capability_report was dropped")
+	}
+	// Nullable-vs-zero matters here: a nil ManualInputAvailable means "not
+	// reported", which a plain bool could not distinguish from false.
+	if got.CapabilityReport.ManualInputAvailable != nil {
+		t.Errorf("manual_input_available should stay nil when the server sends null")
+	}
+	if got.CapabilityReport.StreamingState == nil || *got.CapabilityReport.StreamingState != "failed" {
+		t.Errorf("streaming_state = %v", got.CapabilityReport.StreamingState)
+	}
+	if got.CapabilityReport.TransportModeRequested != "h2-and-h3" ||
+		got.CapabilityReport.TransportModeActive != "h2-only" {
+		t.Errorf("transport modes did not decode: %+v", got.CapabilityReport)
+	}
+}

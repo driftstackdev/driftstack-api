@@ -79,6 +79,51 @@ type AgentSession struct {
 	// deployment has no fleet control plane OR no beat has reported the
 	// session — treat nil as "unknown, trust the binding", never "dead".
 	Liveness *SessionLiveness `json:"liveness,omitempty"`
+	// The worker's last self-report of what this session can actually do.
+	// nil when no report has arrived. Present in the API response and in the
+	// TypeScript and Python SDKs; the Go struct omitted it, so Go callers
+	// silently could not read it.
+	CapabilityReport *AgentSessionCapabilityReport `json:"capability_report,omitempty"`
+	// The structured reason a session degraded or failed. nil when nothing has
+	// gone wrong. Carries Severity, CustomerActionable and Retryable, which is
+	// what a caller needs to decide whether to surface the failure to a human or
+	// simply try again — none of which was reachable from Go before.
+	ErrorEvent *AgentSessionErrorEvent `json:"error_event,omitempty"`
+}
+
+// AgentSessionCapabilityReport is the worker's self-report for a session.
+// Pointer fields are the ones the API models as nullable: nil means "not
+// reported", which is distinct from a zero value.
+type AgentSessionCapabilityReport struct {
+	Timestamp            string `json:"timestamp"`
+	ManualInputAvailable *bool  `json:"manual_input_available"`
+	// "provisioning" | "live" | "blank" | "failed", or nil when unreported.
+	StreamingState *string `json:"streaming_state"`
+	// "live" | "dead_proxy", or nil when unreported.
+	EgressState *string `json:"egress_state"`
+	// "socks5" | "openvpn" | "wireguard".
+	ProxyKind         string `json:"proxy_kind"`
+	ProxyUDPSupported bool   `json:"proxy_udp_supported"`
+	// "h2-only" | "h2-and-h3".
+	TransportModeRequested string `json:"transport_mode_requested"`
+	TransportModeActive    string `json:"transport_mode_active"`
+	SafeguardsPassed       bool   `json:"safeguards_passed"`
+}
+
+// AgentSessionErrorEvent is the structured failure report for a session.
+//
+// Severity is "info" | "warn" | "error" | "fatal". CustomerActionable says
+// whether a human can do anything about it; Retryable says whether the same
+// call is worth repeating. Detail is nil when the server has nothing to add
+// beyond Summary.
+type AgentSessionErrorEvent struct {
+	Timestamp          string  `json:"timestamp"`
+	Code               string  `json:"code"`
+	Severity           string  `json:"severity"`
+	Summary            string  `json:"summary"`
+	Detail             *string `json:"detail"`
+	CustomerActionable bool    `json:"customer_actionable"`
+	Retryable          bool    `json:"retryable"`
 }
 
 // SessionLiveness is the worker-reported liveness for an agent session
