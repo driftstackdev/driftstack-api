@@ -109,6 +109,95 @@ describe('AI-B4 POST /v1/recipes — wired', () => {
     expect(res.json<{ intent_count: number }>().intent_count).toBeGreaterThan(0);
   });
 
+  // V-736 — a team ADMIN who launched a session ON the owner must be able to
+  // snapshot it as a recipe.
+  //
+  // Both recipes routes hand-rolled `source.accountId !== ctx.account.id`, the
+  // last two raw owner-equality sites in routes/. Every agent-session route uses
+  // callerCanAccessAgentSession instead, and its own comment records this exact
+  // bug being fixed across the rest of that surface: "a team admin who launched
+  // on an owner was locked out of every session-scoped route because they all
+  // compared against ctx.account.id only". So the admin could read the session,
+  // stream its entire transcript and delete it — but got a bare 404 when saving
+  // it as a recipe.
+  //
+  // Fails CLOSED (a 404, nothing leaked), so this is availability, not exposure.
+  it('a team admin can snapshot a session they launched on the OWNER', async () => {
+    const RECIPE_OWNER_ID = '00000000-0000-4000-8000-000000000e01';
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    fx.authRepo.upsertAccount({
+      id: RECIPE_OWNER_ID,
+      email: 'owner-recipes@driftstack.local',
+      name: 'Owner',
+      tier: 'api_builder',
+      status: 'active',
+      timezone: null,
+      avatarR2Key: null,
+      slug: null,
+      region: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-000000000e02',
+        ownerAccountId: RECIPE_OWNER_ID,
+        role: 'admin',
+      },
+    ]);
+    const teamHeaders = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'x-driftstack-account': `acc_${RECIPE_OWNER_ID}`,
+    };
+
+    // Launch on the OWNER — the create route honours the header, so the session
+    // row is filed under the owner, not the acting member.
+    const launched = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: teamHeaders,
+      payload: {},
+    });
+    expect(launched.statusCode).toBe(201);
+    const agentSessionId = launched.json<{ id: string }>().id;
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { ...teamHeaders, 'content-type': 'application/json' },
+      payload: { agent_session_id: agentSessionId, label: 'owners flow' },
+    });
+
+    // Was a bare 404 for a session this caller launched.
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('a NON-admin member still gets a 404 — the predicate widens for admins only', async () => {
+    const RECIPE_OWNER_ID = '00000000-0000-4000-8000-000000000e03';
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    // A session that genuinely belongs to the OWNER, seeded directly.
+    const owned = await fx.agentSessionsRepo!.create({
+      accountId: RECIPE_OWNER_ID,
+      tokenBudgetTotal: 50_000,
+    });
+    // Member role, not admin: callerCanAccessAgentSession must still refuse.
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-000000000e04',
+        ownerAccountId: RECIPE_OWNER_ID,
+        role: 'member',
+      },
+    ]);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { agent_session_id: `agt_${owned.id}`, label: 'not mine' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
   it('cross-account: agent_session_id belongs to another account → 404 (no existence disclosure)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     // Use a forged session id that doesn't exist anywhere.

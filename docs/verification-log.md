@@ -31038,3 +31038,81 @@ Verification: canonical full suite 2763 files / 28,204 passing / 0 failing; both
 halves of the server typecheck, targeted ESLint and Prettier. No schema, OpenAPI,
 SDK, docs, environment or secret surface changed — only which account a row is
 filed under.
+
+## V-736 — Two owner-scoped decisions still made from the caller
+
+**Date:** 2026-08-01
+
+Both found by an adversarial sweep for routes that mishandle the effective
+account, and both verified against source before anything moved. Fourteen
+candidates were raised across six route groups; nine were refuted, and these two
+are what survived and held up on my own re-reading.
+
+**Fleet dispatch used the caller's region.** On a team-admin launch the create
+handler owner-scopes everything it threads into the dispatch — the session's
+`accountId`, the owner's profile DEK, their saved proxy, their BYOK key, the
+LiveKit identity `customer-<ownerAccountId>`, the audit row, the tier gate, the
+idempotency namespace — and then passed `accountRegion: ctx.account.region`. That
+value is the sole selection input to `resolveLiveDispatchNode`, and on a create
+there is no bound `node_id`, so it is the entire node selector rather than a rare
+fallback. A US-region admin launching for an EU-region owner preferred a US box
+to decrypt the OWNER's profile store.
+
+I refuted this once before fixing it, and was wrong. The reasoning was that
+`reference/data-residency.md` calls the region preference "informational only",
+so region could not carry a residency guarantee. What that missed is that region
+is not inert: it steers node selection, and the sibling route had already decided
+this exact question in code. `agent-sessions-livekit-token.ts` computes
+`isOwnerCaller` and passes region only when the caller IS the owner, with the
+reason written beside it — "a team admin's region is NOT the owner's ... Passing
+a team member's region could otherwise resolve a wrong-region node". A docs
+sentence about what a preference means is not evidence about what a selector
+does. The create route now matches the sibling.
+
+Passing `null` is region-BLIND rather than wrong-region: the repo query omits the
+region term entirely for null and degrades to pure LiveKit recency. So this is a
+narrowing, it grants nothing, and severity is genuinely bounded — it only
+mis-places when the caller's region holds a registered, connected box, and is
+inert in a single-region fleet. It fails OPEN, which is why it ranks first
+regardless: nothing errors, and the owner's session quietly lands elsewhere.
+
+**Recipes locked out the admin who launched the session.** Both recipes routes
+hand-rolled `source.accountId !== ctx.account.id`. A team admin who launched a
+session on the owner could read it, stream its entire transcript and delete it,
+but got a bare `404` when saving it as a recipe. These were the last two raw
+owner-equality sites in `routes/`; every agent-session route uses
+`callerCanAccessAgentSession`, whose own comment records this same bug being
+fixed across the rest of that surface — "a team admin who launched on an owner
+was locked out of every session-scoped route because they all compared against
+`ctx.account.id` only". Recipes was the straggler.
+
+Worth labelling precisely, because the raw finding got it wrong: this is NOT a
+header defect and is not fixed by wiring the header. The admin gets the same 404
+with or without `X-Driftstack-Account`, and the canonical predicate reads
+`ctx.teams`, resolved server-side by `requireAuth`, so no header can forge
+membership. `recipes.ts` correctly stays out of the effective-account registry.
+It fails CLOSED — a 404, nothing leaked — so it is availability, not exposure,
+and ranks below the region defect.
+
+Fixing recipes surfaced a third thing worth keeping: a route-wiring stub built
+its context as `{ account: { id: ACC } }` with no `teams`, via an `as unknown`
+cast, and the predicate turned that into a 500 where the test expected a 404.
+`teams` is required on `AccountContext` and always populated by the real auth
+paths, so the stub was lying about a required field. Fixed there rather than by
+making the shared predicate defensive: a lying stub should fail loudly, and
+seventeen agent-session routes already depend on that field being real.
+
+The recipes fix is proved behaviourally — an admin can now snapshot a session
+launched on the owner, a non-admin member still gets a 404 — and reverting to raw
+equality is proved red. The region fix is a source pin, and is labelled as the
+weaker guard it is: proving node selection end-to-end needs a fixture fleet with
+registered boxes in two regions, which `buildTestApp` does not provide. The
+existing `agent-sessions-fleet-dispatch.test.ts` calls the dispatcher directly
+with an explicit `accountRegion`, which is exactly why it could never have caught
+this — it supplies the argument the route was getting wrong. The pin also
+requires the sibling to keep its rule, so the two cannot silently diverge again.
+
+Verification: canonical full suite 2765 files / 28,212 passing / 0 failing; both
+halves of the server typecheck, targeted ESLint and Prettier. Two content-parity
+pins updated. No schema, OpenAPI, SDK, docs, environment or secret surface
+changed.

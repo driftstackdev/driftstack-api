@@ -1925,6 +1925,11 @@ export function registerAgentSessionsRoutes(
         );
       }
       const ownerAccountId = effective.accountId;
+      // V-736 — whether the CALLER is the owner. Only then is their region the
+      // owner's, so only then may it steer node selection (see the accountRegion
+      // comment at the dispatch call, and the same computation in
+      // agent-sessions-livekit-token.ts).
+      const isOwnerCaller = ownerAccountId === ctx.account.id;
       const ownerTier = await consumeEffectiveOwnerRateLimit(
         app,
         req,
@@ -2311,10 +2316,25 @@ export function registerAgentSessionsRoutes(
           // Worker-disconnect fix (2026-06-19) — persist session→node so the
           // disconnect reaper can free this node's slot if the node drops.
           agentSessions: sessions,
-          // Region-aware dispatch (2026-06-21) — the viewer's home region so the
+          // Region-aware dispatch (2026-06-21) — the owner's home region so the
           // session routes to the nearest livekit node (EU box for EU customers);
           // falls back to any node when the home region has none.
-          accountRegion: ctx.account.region,
+          //
+          // V-736 — the CALLER's region is only usable when the caller IS the
+          // owner. On a team-admin launch every other input here is owner-scoped
+          // (accountId, the owner's profile DEK, their saved proxy, their BYOK
+          // key, the LiveKit identity, the audit row), and `accountRegion` is the
+          // SOLE selection input to resolveLiveDispatchNode — on a create there
+          // is no bound node_id, so it is the entire node selector rather than a
+          // rare fallback. A US-region admin launching for an EU-region owner
+          // therefore preferred a US box to decrypt the OWNER's profile store.
+          //
+          // Passing null is region-BLIND, not wrong-region: the repo query omits
+          // the region term entirely for null and degrades to pure LiveKit
+          // recency. So this is a narrowing, and it is exactly what the sibling
+          // agent-sessions-livekit-token.ts already does, for the reason written
+          // there — "a team admin's region is NOT the owner's".
+          accountRegion: isOwnerCaller ? ctx.account.region : null,
           // Customer start URL from the create body — overrides the operator
           // default; omitted when absent so the fallback applies. The harness opens
           // this URL on session launch (inert until the box honors initialUrl).

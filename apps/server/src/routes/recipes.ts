@@ -16,6 +16,7 @@ import { PaginationQuerySchema } from '@driftstack/api-types';
 import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/errors.js';
 import { suggestRecipeMetadata, type RecipesRepo, type RecipeRecord } from '../services/recipes.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
+import { callerCanAccessAgentSession } from './agent-sessions.js';
 import type { AgentIntent } from '../services/agent-decomposer.js';
 import { publicAgentIntent } from '../services/agent-public-redaction.js';
 
@@ -92,7 +93,18 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
     async (req) => {
       const ctx = requireCtx(req);
       const source = await agentSessions.get(req.params.id);
-      if (source === null || source.accountId !== ctx.account.id) {
+      // V-736 — the canonical predicate, not raw owner-equality. A team admin who
+      // launched a session ON the owner can read it, stream its whole transcript
+      // and delete it, but raw `!== ctx.account.id` locked them out of this one:
+      // a bare 404 for a session they own the launch of. These were the last two
+      // raw-equality sites in routes/; every agent-session route already uses
+      // callerCanAccessAgentSession, whose own comment records this exact bug
+      // being fixed across the rest of the surface (audit wxzlp9yiz #4).
+      //
+      // Not a header defect: the predicate reads ctx.teams, resolved server-side
+      // by requireAuth, so no header can forge membership and recipes.ts stays
+      // out of the effective-account registry.
+      if (source === null || !callerCanAccessAgentSession(ctx, source.accountId)) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
       const intentLog: AgentIntent[] = source.transcript.flatMap((entry) => entry.intents ?? []);
@@ -114,10 +126,11 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
       // Load the source agent session to snapshot its intent_log +
-      // transcript. The session MUST belong to the caller's account
-      // (cross-account 404 instead of 403 — don't leak existence).
+      // transcript. The caller must be able to ACCESS the session — its owner,
+      // or an admin member of the owner's team (V-736; cross-account 404 instead
+      // of 403 — don't leak existence).
       const source = await agentSessions.get(parsed.data.agent_session_id);
-      if (source === null || source.accountId !== ctx.account.id) {
+      if (source === null || !callerCanAccessAgentSession(ctx, source.accountId)) {
         throw new NotFoundError(`AgentSession ${parsed.data.agent_session_id} not found.`);
       }
 

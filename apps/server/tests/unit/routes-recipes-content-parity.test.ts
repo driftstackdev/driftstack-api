@@ -59,13 +59,22 @@ describe('routes/recipes content parity', () => {
     expect(body).toMatch(/updated_at: string;/);
   });
 
-  it("Cross-account 404 framing pinned: 'The session MUST belong to the caller's account (cross-account 404 instead of 403 — don't leak existence).' — pinned so the 404-not-403 anti-enumeration contract stays documented (drift to 403 would leak that a session id exists on someone else's account)", () => {
+  // V-736 — the 404-not-403 contract is unchanged and still pinned; what changed
+  // is WHO passes. Raw `!== ctx.account.id` locked a team admin out of a session
+  // they had launched on the owner and could already read, stream and delete.
+  // These were the last two raw-equality sites in routes/; the canonical
+  // predicate is header-independent (it reads ctx.teams, resolved server-side),
+  // so nothing here can be forged by a caller.
+  it("Cross-account 404 framing pinned: the caller must be able to ACCESS the session (owner, or admin member of the owner's team) — 404 not 403 so a session id on another account is not leaked", () => {
     expect(body).toMatch(
-      /\/\/ Load the source agent session to snapshot its intent_log \+\s*\n?\s*\/\/ transcript\. The session MUST belong to the caller's account\s*\n?\s*\/\/ \(cross-account 404 instead of 403 — don't leak existence\)\./,
+      /\/\/ Load the source agent session to snapshot its intent_log \+\s*\n?\s*\/\/ transcript\. The caller must be able to ACCESS the session — its owner,\s*\n?\s*\/\/ or an admin member of the owner's team \(V-736; cross-account 404 instead\s*\n?\s*\/\/ of 403 — don't leak existence\)\./,
     );
     expect(body).toMatch(
-      /if \(source === null \|\| source\.accountId !== ctx\.account\.id\) \{\s*\n?\s*throw new NotFoundError\(`AgentSession \$\{parsed\.data\.agent_session_id\} not found\.`\);/,
+      /if \(source === null \|\| !callerCanAccessAgentSession\(ctx, source\.accountId\)\) \{\s*\n?\s*throw new NotFoundError\(`AgentSession \$\{parsed\.data\.agent_session_id\} not found\.`\);/,
     );
+    // Both sites, not just the create one — the suggestion route had it too.
+    expect(body.match(/!callerCanAccessAgentSession\(ctx, source\.accountId\)/g)).toHaveLength(2);
+    expect(body).not.toMatch(/source\.accountId !== ctx\.account\.id/);
   });
 
   it("Q.5.c intent_log assembly framing pinned: 'assemble intent_log from the transcript's plan-executed agent turns. AgentRuntime persists each plan's structured intent array on the transcript entry's optional `intents` field (Q.5.c follow-up). flatMap produces a concatenated intent_log in turn order so replay walks them in the same sequence the customer's session originally executed.' + source.transcript.flatMap((entry) => entry.intents ?? []) — pinned so the Q.5.c anchor + turn-order-replay-fidelity contract stays documented", () => {

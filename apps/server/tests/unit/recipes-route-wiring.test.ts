@@ -77,7 +77,14 @@ async function harness(sessionSource: unknown = null): Promise<{
   registerErrorHandler(app);
   // requireAuth stub sets the authed account context the route scopes by.
   app.decorate('requireAuth', (req: FastifyRequest) => {
-    (req as { account: unknown }).account = { account: { id: ACC } };
+    // V-736 — `teams` is REQUIRED on AccountContext (services/auth.ts:218) and
+    // always populated by the auth paths; this stub omitted it via an `as
+    // unknown` cast. Once recipes.ts started using the canonical
+    // callerCanAccessAgentSession predicate, the omission surfaced as a 500
+    // where the test expected a 404. Fixed here rather than by making the
+    // shared predicate defensive: a stub that lies about a required field
+    // should fail loudly, and ~17 agent-session routes depend on it being real.
+    (req as { account: unknown }).account = { account: { id: ACC }, teams: [] };
     return Promise.resolve();
   });
   app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
