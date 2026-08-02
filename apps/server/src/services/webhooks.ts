@@ -338,8 +338,21 @@ export class WebhooksService {
     private readonly accountAudit: AccountAuditService | null = null,
   ) {}
 
+  /**
+   * V-735 — `accountId` is the account the row BELONGS to (the owner under a
+   * team-scoped write); `ctx` supplies only the ACTOR. It used to hardcode
+   * `accountId: ctx.account.id`, so a team admin's change to the OWNER's webhook
+   * endpoint — create, update, delete, or SECRET ROTATION — landed in the
+   * member's own audit log and left no trace in the owner's. The owner could not
+   * see changes to their own webhook configuration, which is the one place that
+   * record has to exist.
+   *
+   * `replayDeliveryAsCustomer` already had the right shape (row on the effective
+   * account, actor on the caller); this helper is now consistent with it.
+   */
   private async emitAuditBestEffort(
     ctx: AccountContext,
+    accountId: string,
     action:
       | 'webhook_endpoint.created'
       | 'webhook_endpoint.updated'
@@ -351,7 +364,7 @@ export class WebhooksService {
     if (this.accountAudit === null) return;
     try {
       await this.accountAudit.record({
-        accountId: ctx.account.id,
+        accountId,
         actorType: 'customer',
         actorAccountId: ctx.account.id,
         actorKeyId: ctx.apiKey.id,
@@ -410,10 +423,16 @@ export class WebhooksService {
       );
     }
 
-    await this.emitAuditBestEffort(ctx, 'webhook_endpoint.created', `webhook_endpoint_${row.id}`, {
-      url: url.toString(),
-      events: input.events,
-    });
+    await this.emitAuditBestEffort(
+      ctx,
+      accountId,
+      'webhook_endpoint.created',
+      `webhook_endpoint_${row.id}`,
+      {
+        url: url.toString(),
+        events: input.events,
+      },
+    );
 
     return { row, plaintextSecret };
   }
@@ -512,12 +531,18 @@ export class WebhooksService {
     const updated = await this.repo.updateEndpoint(repoInput);
     if (!updated) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
 
-    await this.emitAuditBestEffort(ctx, 'webhook_endpoint.updated', `webhook_endpoint_${id}`, {
-      url: url ? url.toString() : before.url,
-      events: input.events ?? before.events,
-      description: input.description ?? before.description,
-      active: input.active ?? before.active,
-    });
+    await this.emitAuditBestEffort(
+      ctx,
+      accountId,
+      'webhook_endpoint.updated',
+      `webhook_endpoint_${id}`,
+      {
+        url: url ? url.toString() : before.url,
+        events: input.events ?? before.events,
+        description: input.description ?? before.description,
+        active: input.active ?? before.active,
+      },
+    );
 
     return updated;
   }
@@ -594,6 +619,7 @@ export class WebhooksService {
 
     await this.emitAuditBestEffort(
       ctx,
+      accountId,
       'webhook_endpoint.secret_rotated',
       `webhook_endpoint_${id}`,
       {
@@ -622,9 +648,15 @@ export class WebhooksService {
     if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
     if (row.disabledAt !== null) return; // idempotent — no audit emit on no-op
     await this.repo.disableEndpoint(id, new Date());
-    await this.emitAuditBestEffort(ctx, 'webhook_endpoint.deleted', `webhook_endpoint_${id}`, {
-      url: row.url,
-    });
+    await this.emitAuditBestEffort(
+      ctx,
+      accountId,
+      'webhook_endpoint.deleted',
+      `webhook_endpoint_${id}`,
+      {
+        url: row.url,
+      },
+    );
   }
 
   /**
@@ -794,7 +826,10 @@ export class WebhooksService {
     if (this.accountAudit) {
       try {
         await this.accountAudit.record({
-          accountId: ctx.account.id,
+          // V-735 — the row belongs to the OWNER under a team-scoped write; only
+          // the actor is the caller. This synthetic delivery fires against the
+          // owner's endpoint, so the owner's log is where it has to appear.
+          accountId,
           actorType: 'customer',
           actorAccountId: ctx.account.id,
           actorKeyId: ctx.apiKey.id,

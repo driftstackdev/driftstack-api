@@ -309,6 +309,76 @@ describe('GET /v1/account/audit-log', () => {
     expect((entry.payload as { url?: string } | null)?.url).toBe('https://example.test/hook');
   });
 
+  // V-735 — under a team-scoped write the audit row belongs to the OWNER, not
+  // the acting member.
+  //
+  // The shared emit helper hardcoded `accountId: ctx.account.id`, so a team
+  // admin creating, updating, deleting or ROTATING THE SECRET of one of the
+  // owner's webhook endpoints wrote the row into their own log and left the
+  // owner's empty. The owner could not see changes to their own webhook
+  // configuration — and a secret rotation they did not perform is exactly the
+  // thing an audit log exists to show them.
+  //
+  // `replayDeliveryAsCustomer` already had the right shape (row on the effective
+  // account, actor on the caller); this pins that the helper matches it.
+  it('attributes a team-scoped webhook create to the OWNER log, with the member as actor', async () => {
+    const WEBHOOK_OWNER_ID = '00000000-0000-4000-8000-000000000c03';
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: WEBHOOK_OWNER_ID,
+      email: 'owner-webhooks@driftstack.local',
+      name: 'Owner',
+      tier: 'api_builder',
+      status: 'active',
+      timezone: null,
+      avatarR2Key: null,
+      slug: null,
+      region: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-000000000c02',
+        ownerAccountId: WEBHOOK_OWNER_ID,
+        role: 'admin',
+      },
+    ]);
+    const teamHeaders = {
+      ...auth(fx),
+      'x-driftstack-account': `acc_${WEBHOOK_OWNER_ID}`,
+    };
+
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: teamHeaders,
+      payload: { url: 'https://owner.test/hook', events: ['session.completed'] },
+    });
+    expect(create.statusCode).toBe(201);
+
+    // The OWNER's log has the row (read it team-scoped, as the owner's).
+    const ownerLog = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=webhook_endpoint.created',
+      headers: teamHeaders,
+    });
+    const ownerEntries = ownerLog.json<ListResponse>();
+    expect(ownerEntries.data.length).toBe(1);
+    expect((ownerEntries.data[0]!.payload as { url?: string } | null)?.url).toBe(
+      'https://owner.test/hook',
+    );
+
+    // ...and the MEMBER's own log does not: the row is not theirs, they are only
+    // the actor on it.
+    const memberLog = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=webhook_endpoint.created',
+      headers: auth(fx),
+    });
+    expect(memberLog.json<ListResponse>().data.length).toBe(0);
+  });
+
   it('records webhook_endpoint.deleted when a customer deletes an endpoint', async () => {
     fx = await buildTestApp();
     const create = await fx.app.inject({

@@ -108,7 +108,12 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     expect(body).toMatch(/await this\.repo\.insertEndpointIfUnderLimit\(/);
     expect(body).toMatch(/if \(row === null\) \{\s*\n?\s*throw new ConflictError\(/);
     expect(body).toMatch(
-      /await this\.emitAuditBestEffort\(ctx, 'webhook_endpoint\.created', `webhook_endpoint_\$\{row\.id\}`, \{\s*\n?\s*url: url\.toString\(\),\s*\n?\s*events: input\.events,\s*\n?\s*\}\);/,
+      // V-735 — the helper now takes the account the ROW belongs to (the owner
+      // under a team-scoped write) as its second argument. It used to hardcode
+      // `accountId: ctx.account.id`, so a team admin's change to the owner's
+      // endpoint landed in the MEMBER's audit log and left the owner's empty.
+      // Dropping this argument silently restores that, so it is pinned.
+      /await this\.emitAuditBestEffort\(\s*ctx,\s*accountId,\s*'webhook_endpoint\.created',\s*`webhook_endpoint_\$\{row\.id\}`,\s*\{\s*url: url\.toString\(\),\s*events: input\.events,\s*\},\s*\);/,
     );
   });
 
@@ -142,7 +147,7 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     );
     expect(body).toMatch(/await this\.repo\.disableEndpoint\(id, new Date\(\)\);/);
     expect(body).toMatch(
-      /await this\.emitAuditBestEffort\(ctx, 'webhook_endpoint\.deleted', `webhook_endpoint_\$\{id\}`, \{/,
+      /await this\.emitAuditBestEffort\(\s*ctx,\s*accountId,\s*'webhook_endpoint\.deleted',\s*`webhook_endpoint_\$\{id\}`,/,
     );
   });
 
@@ -210,6 +215,15 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     );
     expect(body).toMatch(
       /action:\s*\n?\s*\| 'webhook_endpoint\.created'\s*\n?\s*\| 'webhook_endpoint\.updated'\s*\n?\s*\| 'webhook_endpoint\.deleted'\s*\n?\s*\| 'webhook_endpoint\.secret_rotated',/,
+    );
+    // V-735 — the row is scoped to the passed account; only the ACTOR is the
+    // caller. Both halves matter: an owner-scoped row with the member recorded
+    // as actor is what makes a team change answerable to the owner.
+    expect(body).toMatch(
+      /private async emitAuditBestEffort\(\s*ctx: AccountContext,\s*accountId: string,/,
+    );
+    expect(body).toMatch(
+      /await this\.accountAudit\.record\(\{\s*accountId,\s*actorType: 'customer',\s*actorAccountId: ctx\.account\.id,/,
     );
   });
 

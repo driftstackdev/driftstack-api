@@ -30994,3 +30994,47 @@ the self-scoped path — every pre-existing test — is byte-for-byte unaffected
 
 A broader sweep for this same class across every route file is running
 separately; this entry covers only the route the docs audit surfaced.
+
+## V-735 — A team admin's webhook changes were audited to the wrong account
+
+**Date:** 2026-08-01
+
+`WebhooksService.emitAuditBestEffort` hardcoded `accountId: ctx.account.id`. Every
+one of its four call sites had already computed
+`const accountId = opts.effectiveAccountId ?? ctx.account.id` and used it for the
+actual write, so the endpoint really was created, updated, disabled or
+re-secreted on the OWNER's account — and then the audit row was filed under the
+acting MEMBER.
+
+The owner's audit log therefore showed no trace of changes to their own webhook
+configuration, including secret rotations. That is precisely the record an owner
+consults to answer "who changed this, and when", and for a credential rotation
+they did not perform it is the only record there is. The member's own log held
+rows about endpoints that are not theirs, which is the same defect seen from the
+other side.
+
+The correct shape already existed in the same file: `replayDeliveryAsCustomer`
+(:716) files the row under the resolved `accountId` and records the caller as
+`actorAccountId`. The helper now takes the owning account as an explicit
+parameter and matches it, as does the inline emit in `sendTestEvent`, which had
+the same hardcode. Row belongs to the owner; actor is the caller.
+
+This grants nothing. `effectiveAccountIdForWrite` already lets a team admin
+create, mutate, disable and re-secret the owner's endpoints, and the service
+already performed those writes against the owner. Attributing the row correctly
+only RECORDS authority that was already being exercised — the previous behaviour
+exercised it silently.
+
+Existing coverage could not catch it: every webhook audit test is self-scoped,
+where `opts.effectiveAccountId` is undefined and the two spellings are the same
+value. The new test makes the fixture account an admin member, creates an
+endpoint on the owner through the header, and asserts the row appears in the
+OWNER's log and NOT in the member's. Reverting the attribution is proved red.
+
+Two content-parity pins were updated to require the new argument, since dropping
+it is exactly how this silently returns.
+
+Verification: canonical full suite 2763 files / 28,204 passing / 0 failing; both
+halves of the server typecheck, targeted ESLint and Prettier. No schema, OpenAPI,
+SDK, docs, environment or secret surface changed — only which account a row is
+filed under.
