@@ -13,6 +13,9 @@ import { seedProfiles } from './_helpers/scenarios.js';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 
 const RECIPIENT_ID = '00000000-0000-4000-8000-0000000000b2';
+/** V-734 — a team OWNER whose workspace an admin member acts on. */
+const OWNER_ID = '00000000-0000-4000-8000-0000000000c3';
+const MEMBERSHIP_ID = '00000000-0000-4000-8000-0000000000d4';
 
 /** Register a second (recipient) account directly in the in-memory
  *  auth repo so the transfer route's getAccount lookup resolves it. */
@@ -50,6 +53,101 @@ async function seedOne(
   if (!p) throw new Error('seedProfiles returned no profile');
   return p;
 }
+
+// V-734 — transfer must honour X-Driftstack-Account like every other profile
+// WRITE in this file.
+//
+// It was the only write route that never called `effectiveAccountIdForWrite`, so
+// an admin team member transferring one of the OWNER's profiles had
+// `sourceAccountId` silently set to their OWN account and got a bare `404
+// profile not found`. The header was ignored rather than refused, which is the
+// worst of the three options: the caller cannot tell whether the profile is
+// missing or the scoping was dropped.
+//
+// Honouring it grants no new power — the sibling DELETE routes already run under
+// the same helper, so an admin can already destroy the owner's profiles outright.
+//
+// The self-transfer guard had the matching bug: it compared the recipient against
+// the CALLER, so under a team-scoped write it refused a legitimate transfer to
+// the member's own account while permitting a no-op transfer to the owner.
+describe('POST /v1/profiles/:id/transfer — team-scoped (X-Driftstack-Account)', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  /** Make the fixture account an ADMIN member of OWNER_ID's team, and seed a
+   *  profile that belongs to the OWNER (created through the sibling POST route,
+   *  which already honours the header). */
+  async function ownerProfileViaAdminMember(): Promise<{
+    headers: Record<string, string>;
+    profileId: string;
+  }> {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ID,
+      email: 'owner@driftstack.local',
+      name: 'Owner',
+      tier: 'api_builder',
+      status: 'active',
+      timezone: null,
+      avatarR2Key: null,
+      slug: null,
+      region: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: MEMBERSHIP_ID, ownerAccountId: OWNER_ID, role: 'admin' },
+    ]);
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'x-driftstack-account': `acc_${OWNER_ID}`,
+      'content-type': 'application/json',
+    };
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers,
+      payload: { name: 'owners-profile' },
+    });
+    expect(created.statusCode).toBe(200);
+    return { headers, profileId: created.json<{ id: string }>().id };
+  }
+
+  it('an admin member can transfer one of the OWNER profiles', async () => {
+    const { headers, profileId } = await ownerProfileViaAdminMember();
+    seedRecipient(fx);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/transfer`,
+      headers,
+      payload: { recipient_account_id: `acc_${RECIPIENT_ID}` },
+    });
+
+    // Was a bare 404: sourceAccountId had silently been the member's account.
+    expect(res.statusCode).toBe(200);
+    expect(res.json<TransferResponse>().recipient_account_id).toBe(`acc_${RECIPIENT_ID}`);
+  });
+
+  it('refuses a transfer to the OWNER itself, because the source is the owner', async () => {
+    const { headers, profileId } = await ownerProfileViaAdminMember();
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/transfer`,
+      headers,
+      payload: { recipient_account_id: `acc_${OWNER_ID}` },
+    });
+
+    // The self-transfer guard now compares against the SOURCE account. Before,
+    // it compared against the caller, so this no-op was allowed through.
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
+  });
+});
 
 describe('POST /v1/profiles/:id/transfer', () => {
   let fx: TestAppFixture;

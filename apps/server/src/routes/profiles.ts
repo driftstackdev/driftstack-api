@@ -438,6 +438,18 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
+      // V-734 — honour X-Driftstack-Account like every other profile WRITE.
+      // This was the only one of the file's write routes that did not, so an
+      // admin team member transferring one of the OWNER's profiles had
+      // `sourceAccountId` silently set to their OWN account and got a bare
+      // `404 profile not found` — the header was ignored rather than refused.
+      //
+      // Honouring it grants no new power: the sibling DELETE routes already run
+      // under this same helper, so an admin can already destroy the owner's
+      // profiles outright. Transfer is strictly less destructive than that, and
+      // leaving it owner-only was an inconsistency rather than a protection.
+      const eff = effectiveAccountIdForWrite(req, ctx);
+      const sourceAccountId = eff ?? ctx.account.id;
       const body = req.body as { recipient_account_id?: unknown };
       const raw = typeof body.recipient_account_id === 'string' ? body.recipient_account_id : '';
       if (!/^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(raw)) {
@@ -447,7 +459,12 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         });
       }
       const recipientId = raw.slice(4);
-      if (recipientId === ctx.account.id) {
+      // V-734 — compare against the SOURCE account, not the caller. Under a
+      // team-scoped write the source is the owner, so the caller's own id is the
+      // wrong thing to guard on: it let an admin member "transfer" an owner
+      // profile to the owner itself (a no-op that should be refused) while
+      // wrongly blocking a legitimate transfer to the member's own account.
+      if (recipientId === sourceAccountId) {
         throw new ValidationError({
           fieldErrors: { recipient_account_id: ['Cannot transfer to your own account.'] },
           formErrors: [],
@@ -460,7 +477,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       const sourceId = uuidFromProfileId(req.params.id);
       const { newProfile } = await service.transferProfile({
         sourceProfileId: sourceId,
-        sourceAccountId: ctx.account.id,
+        sourceAccountId,
         recipientAccountId: recipient.id,
         recipientTier: recipient.tier,
       });

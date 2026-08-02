@@ -30944,3 +30944,53 @@ it claimed the documented pair-mode flow cannot complete because nothing fires
 takeover-grant (not a customer route)"). The producer lives in another
 repository, so the claim is unverifiable from here and the docs were left alone.
 A finding scoped to one repo is not evidence about a system that spans two.
+
+## V-734 — Profile transfer was the one write route that ignored the effective account
+
+**Date:** 2026-08-01
+
+`POST /v1/profiles/:id/transfer` never called `effectiveAccountIdForWrite`. Every
+other write route in `routes/profiles.ts` does — eight of them, at :147, :253,
+:268, :303, :321, :342, :406 and :501. So an admin team member transferring one
+of the OWNER's profiles had `sourceAccountId` silently set to their own account
+and got a bare `404 profile not found`.
+
+Ignoring the header is the worst of the three available behaviours. Honouring it
+does the right thing; refusing it tells the caller the scoping is unsupported;
+silently dropping it produces a 404 that is indistinguishable from a genuinely
+missing profile, so the caller has no way to tell that their request was
+reinterpreted.
+
+**The direction of this fix needed deciding, not assuming.** Honouring the header
+GRANTS a team admin power over the owner's data, so "make it consistent" is not
+automatically correct — done carelessly it is a privilege expansion wearing a bug
+fix's clothes. What settles it here is that the sibling `app.delete` routes at
+:268 and :321 already run under the same helper: an admin member can already
+destroy the owner's profiles outright. Transfer moves a profile to another
+account, which is strictly less destructive to the owner than deletion. Leaving
+transfer owner-only was therefore an inconsistency, not a protection, and it
+protected nothing that deletion did not already expose.
+
+The self-transfer guard had the matching defect: it compared
+`recipientId === ctx.account.id`, the CALLER. Under a team-scoped write the
+source is the owner, so the caller's id is the wrong thing to guard on — it
+refused a legitimate transfer to the member's own account while permitting a
+no-op transfer to the owner. It now compares against the resolved source account.
+
+Existing coverage could not catch either half: all seven transfer tests are
+self-scoped, and under self-scoping `eff` is `undefined`, so
+`eff ?? ctx.account.id` and the old `ctx.account.id` are the same value and the
+two guards agree. The case that breaks is the one nobody wrote, because it does
+not look like a transfer test — it looks like a team test. The new tests make the
+fixture account an admin member, seed a profile onto the owner through the
+sibling POST route (which already honours the header, so the seeding itself
+exercises the pattern), then transfer it. Both halves are proved red
+independently: reverting the header handling fails both new tests, and reverting
+only the self-guard fails only the owner-recipient one.
+
+Verification: canonical full suite 2763 files / 28,203 passing / 0 failing; both halves of the server typecheck clean; targeted
+ESLint. No schema, OpenAPI, SDK, docs, environment or secret surface changed, and
+the self-scoped path — every pre-existing test — is byte-for-byte unaffected.
+
+A broader sweep for this same class across every route file is running
+separately; this entry covers only the route the docs audit surfaced.
