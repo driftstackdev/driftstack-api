@@ -183,8 +183,13 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     expect(body).toMatch(
       /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);\s*\n?\s*if \(!result\.success\) \{\s*\n?\s*throw new BadRequestError\(result\.error\.message\);\s*\n?\s*\}\s*\n?\s*return result\.data;\s*\n?\s*\}/,
     );
+    // V-737 — the code now also travels as an RFC 6749 §5.2 `error` extension on
+    // the problem body. It used to select the status and then be discarded, and
+    // the messages do not contain it either, so the code reached the client
+    // NOWHERE. Dropping the extension silently restores that, which is why the
+    // status mapping and the extension are pinned together.
     expect(body).toMatch(
-      /function oauthErrorToHttp\(err: unknown\): Error \{\s*\n?\s*if \(!\(err instanceof OAuthError\)\) return err as Error;\s*\n?\s*switch \(err\.code\) \{\s*\n?\s*case 'invalid_client':\s*\n?\s*case 'unauthorized_client':\s*\n?\s*return new UnauthorizedError\(err\.message\);\s*\n?\s*case 'invalid_request':\s*\n?\s*case 'invalid_scope':\s*\n?\s*case 'invalid_grant':\s*\n?\s*case 'access_denied':\s*\n?\s*return new BadRequestError\(err\.message\);\s*\n?\s*\}\s*\n?\s*\}/,
+      /function oauthErrorToHttp\(err: unknown\): Error \{\s*if \(!\(err instanceof OAuthError\)\) return err as Error;\s*switch \(err\.code\) \{\s*case 'invalid_client':\s*case 'unauthorized_client':\s*return new UnauthorizedError\(err\.message, \{ error: err\.code \}\);\s*case 'invalid_request':\s*case 'invalid_scope':\s*case 'invalid_grant':\s*case 'access_denied':\s*return new BadRequestError\(err\.message, \{ error: err\.code \}\);\s*\}\s*\}/,
     );
   });
 

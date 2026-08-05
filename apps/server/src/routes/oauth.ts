@@ -359,16 +359,33 @@ function parseOrThrow<T>(schema: z.ZodSchema<T>, input: unknown): T {
   return result.data;
 }
 
+/**
+ * V-737 — the OAuth code selects the HTTP status AND is carried through as a
+ * machine-readable `error` extension on the problem+json body.
+ *
+ * It used to select the status and then be discarded. Every 400 therefore
+ * arrived as `type: bad-request` with only free-text `detail` to tell
+ * `invalid_grant` (restart the flow) apart from `invalid_request` (fix the
+ * request) — and the messages do not contain the code either
+ * (`new OAuthError('invalid_client', 'unknown or revoked client_id')`), so the
+ * page's claim that "the OAuth code ... appears in the title/detail" was simply
+ * untrue: it appeared nowhere. An integrator had to string-match prose that no
+ * test pinned.
+ *
+ * `error` is the field name RFC 6749 §5.2 gives this, so a standard OAuth client
+ * reads it without Driftstack-specific handling. Purely additive — status, type,
+ * title and detail are unchanged.
+ */
 function oauthErrorToHttp(err: unknown): Error {
   if (!(err instanceof OAuthError)) return err as Error;
   switch (err.code) {
     case 'invalid_client':
     case 'unauthorized_client':
-      return new UnauthorizedError(err.message);
+      return new UnauthorizedError(err.message, { error: err.code });
     case 'invalid_request':
     case 'invalid_scope':
     case 'invalid_grant':
     case 'access_denied':
-      return new BadRequestError(err.message);
+      return new BadRequestError(err.message, { error: err.code });
   }
 }

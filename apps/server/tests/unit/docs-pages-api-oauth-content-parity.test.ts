@@ -81,11 +81,17 @@ describe('docs/pages/api/oauth content parity', () => {
       /All responses use `application\/problem\+json` per RFC 9457 \(status,\s*\n?\s*type, title, detail\)\. The `type` field is a real RFC 9457 type URI:\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/bad-request` for the 400 cases and\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/unauthorized` for the 401 cases\./,
     );
     expect(body).toMatch(
-      /The\s*\n?\s*OAuth code from the table above \(`invalid_grant`, `invalid_client`,\s*\n?\s*…\) appears in the `title`\/`detail`\./,
+      // V-737 — the code is now a top-level machine-readable `error` field, not
+      // prose in title/detail. The old claim was not merely weak, it was FALSE:
+      // oauthErrorToHttp discarded the code and the messages never contained it,
+      // so an integrator told to read it from `detail` had nothing to read.
+      /returned as a top-level\s*\n?\s*\*\*`error`\*\* field on the problem document/,
     );
     // Ban the superseded RFC 7807 / urn:driftstack:oauth: type-prefix framing —
     // the corrected doc moved to RFC 9457 + real https://errors.driftstack.dev/ type URIs.
     expect(body).not.toMatch(/urn:driftstack:oauth:/);
+    expect(body).toMatch(/Branch on `error`, not on `detail`/);
+    expect(body).toMatch(/"error": "invalid_grant"/);
   });
 
   it('RFC 7009 revoke requires client credentials, binds ownership, preserves authorized anti-enumeration, and rejects invalid credentials', () => {

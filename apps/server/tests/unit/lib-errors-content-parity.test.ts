@@ -75,7 +75,10 @@ describe('W389.A apps/server/src/lib/errors.ts content parity', () => {
 
   it('UnauthorizedError = 401 Unauthorized (default "API key missing or invalid.")', () => {
     expect(body).toMatch(
-      /export class UnauthorizedError extends ApiError \{[\s\S]+?constructor\(detail = 'API key missing or invalid\.'\)[\s\S]+?type: PROBLEM_TYPES\.Unauthorized,\s*\n?\s*title: 'Unauthorized',\s*\n?\s*status: 401,/,
+      // V-737 — an optional `extensions` param (mirroring BadRequestError) so the
+      // OAuth token route can carry its RFC 6749 §5.2 `error` code on a 401. The
+      // default detail is unchanged and every existing caller is unaffected.
+      /export class UnauthorizedError extends ApiError \{[\s\S]+?constructor\(detail = 'API key missing or invalid\.', extensions\?: Record<string, unknown>\)[\s\S]+?type: PROBLEM_TYPES\.Unauthorized,\s*\n?\s*title: 'Unauthorized',\s*\n?\s*status: 401,/,
     );
   });
 

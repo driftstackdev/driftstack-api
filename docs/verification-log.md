@@ -31116,3 +31116,54 @@ Verification: canonical full suite 2765 files / 28,212 passing / 0 failing; both
 halves of the server typecheck, targeted ESLint and Prettier. Two content-parity
 pins updated. No schema, OpenAPI, SDK, docs, environment or secret surface
 changed.
+
+## V-737 — The OAuth error code reached the client nowhere at all
+
+**Date:** 2026-08-05
+
+`oauthErrorToHttp` used the OAuth code to pick an HTTP status class and then
+discarded it. The messages do not carry it either — `new OAuthError(
+'invalid_client', 'unknown or revoked client_id')` yields the detail "unknown or
+revoked client_id", with the code absent — so `invalid_grant`, `invalid_request`,
+`invalid_scope` and `access_denied` all arrived as
+`type: https://errors.driftstack.dev/bad-request` with a 400 and free-text prose,
+indistinguishable to a client.
+
+That matters most exactly where it is worst: `invalid_grant` means restart the
+authorization flow, `invalid_request` means the request itself is malformed.
+They share a status AND a type, so the only thing separating them was a sentence.
+
+The docs did not merely under-promise here; they made a claim that was false.
+`api/oauth.md` documented the six codes in an errors-at-a-glance table and then
+told integrators "the OAuth code from the table above appears in the
+`title`/`detail`". It appeared in neither. An integrator following that page had
+to string-match prose that no test pinned and that did not contain the string.
+
+The code now travels as a top-level `error` field on the problem document —
+the name RFC 6749 §5.2 gives it, so a standard OAuth client reads it without
+Driftstack-specific handling. `UnauthorizedError` gained the optional
+`extensions` parameter `BadRequestError` already had, so the 401 codes carry it
+too. Purely additive: status, type, title and detail are untouched, and the
+existing 400/401 mapping is unchanged.
+
+Existing coverage could not catch this. The route parity pin asserted the status
+mapping — `invalid_client → UnauthorizedError`, the rest → `BadRequestError` —
+which was true and remains true, and says nothing about whether the code reaches
+the caller. The docs pin asserted the sentence about `title`/`detail`, which is
+the third parity pin this session found holding a false claim in place. Both now
+pin the extension alongside the mapping, since dropping it silently restores the
+old behaviour.
+
+The proof drives the real route with a service stubbed to throw each code and
+asserts the wire body, because the contract IS the wire body: `error` present and
+correct, `type`/`status`/`detail` unchanged, and — the point of the whole
+change — that the code is NOT recoverable from `detail`. Removing the extension
+is proved red on all three.
+
+Verification: canonical full suite 2766 files / 28,215 passing / 0 failing; both
+halves of the server typecheck, targeted ESLint and Prettier. Three
+error-taxonomy pins needed touching: two for the new constructor parameter, and
+one only because a doc comment placed between the class line and its `status:`
+overflowed a 300-character proximity window — fixed by moving the comment above
+the class rather than widening a shared assertion, so no pin was loosened. No
+schema, SDK, environment or secret surface changed.

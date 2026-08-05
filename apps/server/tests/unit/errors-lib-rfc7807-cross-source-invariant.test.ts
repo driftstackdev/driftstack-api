@@ -149,7 +149,12 @@ describe('W965 errors lib RFC 7807 cross-source invariant', () => {
 
   it("CRITICAL UnauthorizedError defaults detail to 'API key missing or invalid.'. The default-message lets routes throw new UnauthorizedError() with no args.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
-    expect(p).toMatch(/constructor\(detail = 'API key missing or invalid\.'\)/);
+    // V-737 — the DEFAULT is what this pins, and it is unchanged; the optional
+    // extensions param added for the OAuth `error` code does not disturb
+    // `new UnauthorizedError()` with no args.
+    expect(p).toMatch(
+      /constructor\(detail = 'API key missing or invalid\.', extensions\?: Record<string, unknown>\)/,
+    );
   });
 
   // ─── 25 ApiError subclasses cardinality ──────────────────────

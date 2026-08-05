@@ -74,13 +74,17 @@ export class ValidationError extends ApiError {
   }
 }
 
+/** V-737 — `extensions` mirrors BadRequestError, so the OAuth token route can
+ *  carry its RFC 6749 §5.2 `error` code on a 401 the same way it does on a 400.
+ *  Optional: every existing caller is unaffected. */
 export class UnauthorizedError extends ApiError {
-  constructor(detail = 'API key missing or invalid.') {
+  constructor(detail = 'API key missing or invalid.', extensions?: Record<string, unknown>) {
     super({
       type: PROBLEM_TYPES.Unauthorized,
       title: 'Unauthorized',
       status: 401,
       detail,
+      ...(extensions !== undefined ? { extensions } : {}),
     });
     this.name = 'UnauthorizedError';
   }

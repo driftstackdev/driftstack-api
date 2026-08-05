@@ -320,9 +320,27 @@ Rotating only the client secret does not revoke existing bearer tokens.
 All responses use `application/problem+json` per RFC 9457 (status,
 type, title, detail). The `type` field is a real RFC 9457 type URI:
 `https://errors.driftstack.dev/bad-request` for the 400 cases and
-`https://errors.driftstack.dev/unauthorized` for the 401 cases. The
-OAuth code from the table above (`invalid_grant`, `invalid_client`,
-…) appears in the `title`/`detail`.
+`https://errors.driftstack.dev/unauthorized` for the 401 cases.
+
+The OAuth code from the table above is returned as a top-level
+**`error`** field on the problem document — the field name RFC 6749
+§5.2 gives it, so a standard OAuth client reads it without
+Driftstack-specific handling. Branch on `error`, not on `detail`:
+
+```json
+{
+  "type": "https://errors.driftstack.dev/bad-request",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "authorization code is invalid or expired",
+  "error": "invalid_grant"
+}
+```
+
+`detail` is human-readable prose and may change; `error` is the
+stable discriminator. It matters most between the 400s, which share
+one `type`: `invalid_grant` means restart the authorization flow,
+while `invalid_request` means the request itself is malformed.
 
 ## Implementation notes
 
