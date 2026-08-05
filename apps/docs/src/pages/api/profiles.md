@@ -489,6 +489,12 @@ it first).
 Read endpoints (GET) accept any valid bearer with `read` scope;
 write endpoints (POST, PATCH, DELETE) require the `write:profiles`
 scope on the calling key (a broad `write` key also satisfies it).
+
+One exception, documented here because the endpoint is: **`POST
+/v1/profiles/{id}/launch` requires `write:sessions`, not
+`write:profiles`** — it creates a session, so it is gated as a session
+write. A key scoped to `write:profiles` alone can manage profiles but
+cannot launch one.
 Team RBAC: `X-Driftstack-Account` is honored for both reads and
 writes — member roles cannot write on the owner's account; admin
 members can.

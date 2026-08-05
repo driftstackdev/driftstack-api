@@ -49,7 +49,13 @@ describe('docs/pages/api/agent-sessions content parity', () => {
 
   it("Resource shape framing pinned: agt_<uuid> id + 3-status (active/paused/closed) + closed_reason/closed_at nullable + token_budget total+remaining + transcript_length + mode + 5-field optional livekit (ws_url + room=agt_<uuid> + HS256 JWT token + customer-<account-uuid> participant_identity + expires_at). + 'The livekit field is optional — auto-populated on the session-create response when the deployment has at least one Mac with registered LiveKit credentials, and absent otherwise (pre-LK deployment, OR no Mac has called POST /v1/mac-nodes/register yet). Clients that need a token in the absent case use the explicit endpoint at' — pinned so the resource-shape + optional-livekit + auto-populated-when-Mac-registered + fallback-to-explicit-endpoint contract all stay documented", () => {
     expect(body).toMatch(
-      /"id": "agt_<uuid>",\s*\n?\s*"account_id": "<uuid>",\s*\n?\s*"driftstack_session_id": "<uuid> \| null",\s*\n?\s*"status": "active \| paused \| closed",/,
+      // V-738 — driftstack_session_id is emitted PREFIXED (`ses_<uuid>`); the
+      // route stores it bare and returns the canonical form so input and output
+      // share one contract (agent-sessions.ts:414-417). The page contradicted
+      // itself: this shape and the ID-format note both said bare, while the
+      // create-response example two blocks down said `ses_<uuid>`. account_id
+      // IS bare, which is what the note is for.
+      /"id": "agt_<uuid>",\s*\n?\s*"account_id": "<uuid>",\s*\n?\s*"driftstack_session_id": "ses_<uuid> \| null",\s*\n?\s*"status": "active \| paused \| closed",/,
     );
     expect(body).toMatch(
       /"livekit": \{\s*\n?\s*"ws_url": "wss:\/\/mac-NNN\.driftstack\.dev:8443",\s*\n?\s*"room": "agt_<uuid>",\s*\n?\s*"token": "<HS256 JWT>",\s*\n?\s*"participant_identity": "customer-<account-uuid>",\s*\n?\s*"expires_at": "<ISO-8601>"\s*\n?\s*\}/,

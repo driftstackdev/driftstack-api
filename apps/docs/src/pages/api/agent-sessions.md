@@ -40,7 +40,7 @@ Three operational modes:
 {
   "id": "agt_<uuid>",
   "account_id": "<uuid>",
-  "driftstack_session_id": "<uuid> | null",
+  "driftstack_session_id": "ses_<uuid> | null",
   "status": "active | paused | closed",
   "closed_reason": "<string> | null",
   "closed_at": "<ISO-8601> | null",
@@ -72,15 +72,18 @@ the absent case use the explicit endpoint at
 [Live video (LiveKit)](#live-video-livekit) below.
 
 > **ID-format note.** The agent-sessions resource emits
-> `account_id` and `driftstack_session_id` as **bare UUIDs** (no
-> `acc_` / `ses_` prefix), unlike `GET /v1/account/me` and
+> `account_id` as a **bare UUID** (no `acc_` prefix), unlike
+> `GET /v1/account/me` and
 > `GET /v1/account/audit-log` which emit `acc_<uuid>`, and the
 > `GET /v1/sessions/:id` resource which emits prefixed `ses_/acc_/
 key_` IDs. Customer code comparing `agentSession.account_id`
 > against `accountMe.id` must strip the `acc_` prefix from the
 > latter first. (The session's own `id` field IS prefixed —
 > `agt_<uuid>` — because the agent-session row id is minted with
-> the prefix baked in.)
+> the prefix baked in. So is `driftstack_session_id`, which is
+> returned as `ses_<uuid>`: it is stored bare but emitted in the
+> canonical prefixed form, so input and output use the same
+> contract. Only `account_id` is bare here.)
 
 ## Create
 
@@ -442,9 +445,13 @@ stream.addEventListener('error', () => {
 ```
 
 Closing the EventSource on `beforeunload` is the customer's
-responsibility — the server doesn't enforce a max-subscribers
-limit per session, but each subscriber consumes a long-lived
-TCP connection.
+responsibility. There is no per-session subscriber cap, but there IS
+an account-wide one: **at most 10 concurrent transcript streams per
+account**. The eleventh is refused with `429` and a `Retry-After` of
+30 seconds, so a dashboard that opens a stream per visible session
+will start shedding them once it crosses ten — across all sessions,
+not per session. Each subscriber also holds a long-lived TCP
+connection.
 
 ## Set mode
 

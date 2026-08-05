@@ -31167,3 +31167,58 @@ one only because a doc comment placed between the class line and its `status:`
 overflowed a 300-character proximity window — fixed by moving the comment above
 the class rather than widening a shared assertion, so no pin was loosened. No
 schema, SDK, environment or secret surface changed.
+
+## V-738 — Four documented claims the server does not make true
+
+**Date:** 2026-08-05
+
+Each verified against source before editing; docs-only, no behaviour changed.
+
+**`POST /v1/profiles/{id}/launch` needs `write:sessions`.** `profiles.md` states
+that write endpoints require `write:profiles`, and launch is documented on that
+page — but the route lives in `sessions.ts` and is gated on `write:sessions`. A
+key scoped to `write:profiles` alone can manage profiles and cannot launch one,
+with nothing on the page to explain the 403. The gate is right (launch creates a
+session); the blanket sentence was not, and now carries the exception.
+
+**The transcript stream cap is real and account-wide.** The page said the server
+"doesn't enforce a max-subscribers limit per session". Strictly true and
+practically misleading: there is no per-SESSION cap, but there is a per-ACCOUNT
+one of 10 concurrent streams, and the eleventh is refused with `429` plus a
+30-second `Retry-After`. A dashboard opening a stream per visible session starts
+shedding them past ten, across all sessions. The page now says so, with the
+status a client will actually see.
+
+**`driftstack_session_id` is emitted prefixed.** The page contradicted itself
+three ways: the resource shape said `<uuid>`, an explicit ID-format note said the
+field is a bare UUID with no `ses_` prefix, and the create-response example two
+blocks later showed `ses_<uuid>`. The server returns `ses_${...}` with a comment
+saying the canonical prefixed form is deliberate so input and output share one
+contract. The note's other half is correct — `account_id` IS bare — which is
+presumably how the wrong half survived: a note that is half right reads as
+verified. Both the shape and the note are corrected, and the note now states
+which field is bare and which is not.
+
+**There is no `unverified` account status.** The page said an account "exists in
+`unverified` status until the customer clicks the verification link", and that
+verifying "also marks the account `active`". Neither is true.
+`AccountStatusSchema` is `['active','suspended','deleted']`, the accounts table
+defaults `status` to `'active'`, and `markEmailVerified` sets `emailVerifiedAt`
+and `updatedAt` while touching `status` nowhere. The real state machine is the
+`email_verified_at` timestamp — as the schema's own comment says, "a verified
+email check `email_verified_at IS NOT NULL`" — and `login` is what refuses while
+it is null. A customer modelling their onboarding on a status value that does not
+exist would look for a transition that never happens.
+
+That last one had a parity pin requiring BOTH false sentences, titled "CRITICAL
+signup unverified→active transition framing pinned ... the load-bearing
+onboarding state-machine framing". It is load-bearing, which is exactly why it
+has to be the true framing. That makes four pins this session found holding a
+false claim in place, and the count is the point: a source-text pin records what
+the text said when it was written, never whether it was ever true, so a pin and
+the server disagreeing is not evidence about which one is wrong. All four
+rewritten pins now also assert the old wording does NOT return.
+
+Verification: canonical full suite 2766 files / 28,215 passing / 0 failing;
+Prettier clean. Two content-parity pins updated. No server, schema, OpenAPI, SDK,
+environment or secret surface changed.

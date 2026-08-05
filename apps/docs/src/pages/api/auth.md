@@ -43,9 +43,14 @@ response is the normal RFC 9457 `403 Forbidden`, with actionable detail:
 ```
 
 Returns `200` with `verification_email_expires_at` (ISO timestamp).
-The account exists in `unverified` status until the customer clicks
-the verification link emailed to `email`. The link's token expires
-at the timestamp returned.
+The link's token expires at the timestamp returned.
+
+There is no `unverified` account status — `status` is one of
+`active`, `suspended`, `deleted`, and a new signup is created
+`active`. What verification changes is `email_verified_at`, which
+starts null and is stamped when the customer clicks the link. Gates
+that care about verification test that field, not `status`; `login`
+refuses while it is null.
 
 `409 Conflict` is returned when `email` is already registered.
 
@@ -88,8 +93,9 @@ Branch on the `mfa_required` literal, never on the presence of `session`.
 
 The dashboard stores `session.token` in local storage and uses it
 as the bearer for every subsequent `/v1/*` request. Verifying email
-also marks the account `active` so the customer can sign in
-directly afterward.
+stamps `email_verified_at`; it does not change `status`, which was
+already `active`. That stamp is what lets the customer sign in
+directly afterward, since `login` refuses an unverified address.
 
 ## Resend verification email
 

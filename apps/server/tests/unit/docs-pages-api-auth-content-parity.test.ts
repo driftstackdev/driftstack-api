@@ -98,13 +98,28 @@ describe('W764 docs /api/auth content parity', () => {
     expect(p).toMatch(/"password": "<min 12 chars>"/);
   });
 
-  it("CRITICAL signup unverified→active transition framing pinned. The 'The account exists in unverified status until the customer clicks the verification link emailed to email' + 'Verifying email also marks the account active' is the load-bearing onboarding state-machine framing.", () => {
+  // V-738 — this pin required TWO false claims. There is no `unverified`
+  // account status: AccountStatusSchema is ['active','suspended','deleted'] and
+  // the accounts table defaults status to 'active', so a signup is active
+  // immediately. And verifying does not "mark the account active" —
+  // markEmailVerified sets `emailVerifiedAt` and updatedAt, and touches status
+  // nowhere. The real state machine is the `email_verified_at` timestamp, as the
+  // schema's own comment says ("a verified email check `email_verified_at IS NOT
+  // NULL`"). The onboarding framing IS load-bearing, which is why it has to be
+  // the true one.
+  it('CRITICAL signup onboarding state-machine framing pinned: no `unverified` status; verification stamps email_verified_at and leaves status alone', () => {
     const p = read(PAGE);
 
+    expect(p).toMatch(/There is no `unverified` account status/);
+    expect(p).toMatch(/a new signup is created\s*\n?`active`/);
     expect(p).toMatch(
-      /The account exists in `unverified` status until the customer clicks\s*\n?the verification link emailed to `email`\./,
+      /Verifying email\s*\n?stamps `email_verified_at`; it does not change `status`/,
     );
-    expect(p).toMatch(/Verifying email\s*\n?also marks the account `active`/);
+    // The consequence a customer acts on.
+    expect(p).toMatch(/`login` refuses an unverified address/);
+    // And the false claims must not come back.
+    expect(p).not.toMatch(/exists in `unverified` status/);
+    expect(p).not.toMatch(/also marks the account `active`/);
   });
 
   it('CRITICAL signup 409 on duplicate-email pinned. Drift to a different status code would let SDK consumers misclassify the failure.', () => {
