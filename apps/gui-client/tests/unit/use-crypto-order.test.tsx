@@ -164,6 +164,18 @@ describe('V-534.T useCryptoOrder — polling', () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(sample({ order_id: 'ord_new' })), { status: 200 }),
+      )
+      // sample() is status 'pending', which is not terminal, so the 5ms poll
+      // below keeps ticking after the assertions. With only the two responses
+      // above, the third tick received `undefined` and the hook reported an
+      // error — so the final assertion won or lost on timing, and lost under
+      // full-suite load. A durable fallback keeps every later poll valid; no
+      // assertion is relaxed and no timing is widened. It must build a NEW
+      // Response per call: a body can only be read once.
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(sample({ order_id: 'ord_new' })), { status: 200 }),
+        ),
       );
     vi.stubGlobal('fetch', fetchMock);
     const { result, rerender } = renderHook(
