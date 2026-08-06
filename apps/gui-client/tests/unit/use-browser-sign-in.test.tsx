@@ -372,13 +372,32 @@ describe('useBrowserSignIn — V-328 deep-link primary path', () => {
       result.current.start();
     });
 
+    // V-739 — wait for BOTH the handler registration AND the `waiting` commit.
+    //
+    // The hook sets `kind: 'waiting'` before registering the listener, but that
+    // setState is async with respect to this test: `__onOpenUrl` resolves
+    // immediately, so `triggerDeepLink` can be assigned in the same microtask
+    // chain, BEFORE React has committed the `waiting` render. Waiting only on the
+    // handler therefore raced the state — and the `'unknown'` fallback below
+    // turned that race into a deep link carrying the WRONG state, which the hook
+    // silently ignores by design (see the mismatched-state test that follows).
+    // The final `waitFor` then never saw 'success' and the test failed on a
+    // timeout that pointed nowhere near the cause. Observed under CPU contention
+    // in a shuffled project run; the ordering is what makes it possible at all.
     await waitFor(() => {
       expect(triggerDeepLink).not.toBeNull();
+      expect(result.current.state.kind).toBe('waiting');
     });
 
-    // Fire the deep-link with the expected code + state.
-    const stateValue =
-      result.current.state.kind === 'waiting' ? result.current.state.state : 'unknown';
+    // Fire the deep-link with the expected code + state. Read the state through a
+    // narrowing check rather than an `'unknown'` fallback: if the kind is somehow
+    // not `waiting` here, that is the bug, and it should fail loudly rather than
+    // silently sending a state the hook will drop.
+    const waitingState = result.current.state;
+    if (waitingState.kind !== 'waiting') {
+      throw new Error(`expected 'waiting' before firing the deep link, got '${waitingState.kind}'`);
+    }
+    const stateValue = waitingState.state;
     act(() => {
       triggerDeepLink!([
         `driftstack://auth/callback?code=${initiateBody.code}&state=${stateValue}`,

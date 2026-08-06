@@ -31222,3 +31222,60 @@ rewritten pins now also assert the old wording does NOT return.
 Verification: canonical full suite 2766 files / 28,215 passing / 0 failing;
 Prettier clean. Two content-parity pins updated. No server, schema, OpenAPI, SDK,
 environment or secret surface changed.
+
+## V-739 — Synchronous assertions on asynchronous renders, and a correction about "order-dependence"
+
+**Date:** 2026-08-06
+
+Two gui-jsdom test races removed, plus a correction to how this whole class was
+being characterised — including by me.
+
+**`use-browser-sign-in`: a state read before React committed.** The deep-link
+test waited for the handler to be registered, then read `state.state` with an
+`'unknown'` fallback. The hook sets `kind: 'waiting'` _before_ registering, but
+that `setState` is async relative to the test and `__onOpenUrl` resolves
+immediately, so `triggerDeepLink` can be assigned before React commits the
+`waiting` render. The fallback then sends a deep link carrying the wrong state —
+which the hook silently drops by design, as the very next test pins. The final
+`waitFor` never saw `success` and the failure surfaced as a timeout pointing
+nowhere near the cause. It now waits for both conditions and narrows instead of
+falling back, so a wrong kind fails loudly.
+
+**`simulator-window-frozen`: four assertions read the pre-render DOM.** The
+`keyboard ownership (#6)` block did `pushPageState(false)`,
+`pushPageState(true)`, then asserted `aria-pressed === 'true'` synchronously.
+Under load that returned `'false'`; the same assertion passes under a `waitFor`,
+which is what distinguishes a render lag from a lost blur→focus edge. Converted
+the four real-timer positive transitions.
+
+Two sites were deliberately NOT converted, and the reason is the interesting
+part: they sit inside tests that call `vi.useFakeTimers()`. A `waitFor` there
+polls on real timers that never advance — reintroducing the exact
+leaked-fake-timer failure the global `afterEach(vi.useRealTimers())` was added to
+prevent. A first attempt did convert all five sites by blind replace and turned
+that test into a 10-second timeout, which is how the constraint was found. A
+"stays false" assertion is likewise unfixable this way: `waitFor` would pass on
+its first poll and assert nothing.
+
+**The correction.** These were being treated as seed-determined order-dependence,
+and they are not. Measured across eight project-wide shuffle runs: seed 13 failed
+twice then passed, seed 33 failed once then passed twice, seed 7 failed once then
+passed twice — and each failing test passes in isolation. The seed is not the
+determinant; this is a low-rate, load-sensitive population. Two consequences
+worth stating plainly:
+
+- A single-file run at "the same seed" does NOT reproduce a project-scope
+  failure, because `--sequence.seed` yields a different intra-file ordering at
+  the two scopes. Concluding "fixed" from the single-file run is a trap; I nearly
+  fell into it, and it is why a claim of "0/8 seeds clean" needs the scope
+  attached to be meaningful.
+- After fixing the four sites, seed 13 failed once more in a SIBLING test and
+  then passed. So this entry does not claim to have closed the population. It
+  removes two proven hazards; it does not make the suite deterministic.
+
+Scope, so nobody over-invests: the real gate does not shuffle — no `sequence.*`
+is configured in any vitest config — so these are latent, not CI-breaking.
+
+Verification: canonical full suite 2766 files / 28,216 passing / 0 failing;
+targeted ESLint and Prettier. Test-only — no source, schema, docs, environment or
+secret surface changed.

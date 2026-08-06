@@ -919,7 +919,22 @@ describe('SimulatorWindow — keyboard ownership from inputFocused (#6)', () => 
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
-    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+    // V-739 — `waitFor`, not a synchronous assert: pushPageState delivers the frame
+    // and React commits the resulting render asynchronously, so asserting
+    // immediately can read the PRE-render DOM. Proved red at project-wide
+    // `--sequence.shuffle --sequence.seed=13`, where this exact shape returned
+    // aria-pressed 'false'; the state does arrive, so the same assertion passes
+    // under a waitFor — which is what distinguishes a render lag from a lost
+    // blur→focus edge.
+    //
+    // Only real-timer, POSITIVE transitions are converted. The two sibling tests
+    // that install fake timers must NOT use waitFor (it polls on real timers that
+    // never advance — the leaked-fake-timer failure mode all over again), and a
+    // "stays false" assertion cannot use it either, since it would pass on its
+    // first poll.
+    await waitFor(() =>
+      expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true'),
+    );
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
   });
@@ -929,7 +944,22 @@ describe('SimulatorWindow — keyboard ownership from inputFocused (#6)', () => 
     await waitFor(() => expect(dataHandler()).not.toBeNull());
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
-    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+    // V-739 — `waitFor`, not a synchronous assert: pushPageState delivers the frame
+    // and React commits the resulting render asynchronously, so asserting
+    // immediately can read the PRE-render DOM. Proved red at project-wide
+    // `--sequence.shuffle --sequence.seed=13`, where this exact shape returned
+    // aria-pressed 'false'; the state does arrive, so the same assertion passes
+    // under a waitFor — which is what distinguishes a render lag from a lost
+    // blur→focus edge.
+    //
+    // Only real-timer, POSITIVE transitions are converted. The two sibling tests
+    // that install fake timers must NOT use waitFor (it polls on real timers that
+    // never advance — the leaked-fake-timer failure mode all over again), and a
+    // "stays false" assertion cannot use it either, since it would pass on its
+    // first poll.
+    await waitFor(() =>
+      expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true'),
+    );
     pushPageState({ state: 'loading', url: 'https://example.com/next' });
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
   });
@@ -939,7 +969,22 @@ describe('SimulatorWindow — keyboard ownership from inputFocused (#6)', () => 
     await waitFor(() => expect(dataHandler()).not.toBeNull());
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
-    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+    // V-739 — `waitFor`, not a synchronous assert: pushPageState delivers the frame
+    // and React commits the resulting render asynchronously, so asserting
+    // immediately can read the PRE-render DOM. Proved red at project-wide
+    // `--sequence.shuffle --sequence.seed=13`, where this exact shape returned
+    // aria-pressed 'false'; the state does arrive, so the same assertion passes
+    // under a waitFor — which is what distinguishes a render lag from a lost
+    // blur→focus edge.
+    //
+    // Only real-timer, POSITIVE transitions are converted. The two sibling tests
+    // that install fake timers must NOT use waitFor (it polls on real timers that
+    // never advance — the leaked-fake-timer failure mode all over again), and a
+    // "stays false" assertion cannot use it either, since it would pass on its
+    // first poll.
+    await waitFor(() =>
+      expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true'),
+    );
 
     fireEvent.click(keyboardToggle(container)!);
     expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('false');
@@ -948,7 +993,22 @@ describe('SimulatorWindow — keyboard ownership from inputFocused (#6)', () => 
 
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: false });
     pushPageState({ state: 'loaded', url: 'https://example.com/', inputFocused: true });
-    expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true');
+    // V-739 — `waitFor`, not a synchronous assert: pushPageState delivers the frame
+    // and React commits the resulting render asynchronously, so asserting
+    // immediately can read the PRE-render DOM. Proved red at project-wide
+    // `--sequence.shuffle --sequence.seed=13`, where this exact shape returned
+    // aria-pressed 'false'; the state does arrive, so the same assertion passes
+    // under a waitFor — which is what distinguishes a render lag from a lost
+    // blur→focus edge.
+    //
+    // Only real-timer, POSITIVE transitions are converted. The two sibling tests
+    // that install fake timers must NOT use waitFor (it polls on real timers that
+    // never advance — the leaked-fake-timer failure mode all over again), and a
+    // "stays false" assertion cannot use it either, since it would pass on its
+    // first poll.
+    await waitFor(() =>
+      expect(keyboardToggle(container)?.getAttribute('aria-pressed')).toBe('true'),
+    );
   });
 
   it('does NOT auto-show for the agent`s own field focus in AI mode', async () => {
