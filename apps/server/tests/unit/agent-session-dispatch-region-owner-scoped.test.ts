@@ -61,4 +61,35 @@ describe('V-736 agent-session dispatch region is owner-scoped', () => {
     );
     expect(body).toMatch(/a\s*\n?\s*\/\/ team admin's region is NOT the owner's/);
   });
+
+  it('EVERY region the create route hands to a LiveKit mint is owner-scoped too, not just the dispatch selector', () => {
+    // 2026-08-06 — the original fix converted the dispatch selector and left the
+    // three maybeMintLivekit call sites (pre-check replay, unique-violation race
+    // replay, primary create) passing the bare caller region. An adversarial
+    // review refuted a demonstrable defect at each: the mint's region is read
+    // only when no node_id is bound, and an unbound node_id means no publisher
+    // exists, so both values are equally provisional.
+    //
+    // They are pinned anyway, because the DISCREPANCY was the expensive part —
+    // one rule written two ways across two routes, which cost a full audit to
+    // re-derive before it could be dismissed. Counting matters: converting two
+    // of three sites would leave exactly the ambiguity this closes.
+    const body = readFileSync(CREATE_ROUTE, 'utf8');
+    // `await maybeMintLivekit(`, not `maybeMintLivekit(` — the latter also
+    // matches the function's own DEFINITION, which counted 4 and failed here
+    // before this line said what it meant.
+    const mintCalls = body.match(/await maybeMintLivekit\(\s*\n/g) ?? [];
+    expect(mintCalls.length, 'maybeMintLivekit call sites in the create route').toBe(3);
+
+    const ownerScoped = body.match(/isOwnerCaller \? ctx\.account\.region : null,/g) ?? [];
+    expect(
+      ownerScoped.length,
+      'owner-scoped region arguments — one per mint call plus the dispatch selector',
+    ).toBe(4);
+
+    // The bare form must not return at ANY of them. `accountRegion:` is already
+    // pinned above; this catches the positional argument, which has no key to
+    // anchor on and is exactly how these three were missed the first time.
+    expect(body).not.toMatch(/\n\s*ownerAccountId,\n\s*ctx\.account\.region,/);
+  });
 });

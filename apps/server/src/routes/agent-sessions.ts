@@ -1693,6 +1693,23 @@ export function registerAgentSessionsRoutes(
    *  omits the `livekit` field — clients fall back to calling
    *  LK.3 (POST /v1/agent-sessions/:id/livekit-token) explicitly.
    *  Best-effort: never fails the session-create call. */
+  /**
+   * V-736 (extended 2026-08-06) — `region` MUST be owner-scoped, exactly as the
+   * dispatch selector above and the sibling POST /:id/livekit-token are. It is
+   * only consulted when the session has no bound `node_id`
+   * (lib/livekit-token.ts resolveSessionPublisherNode), and in that fallback the
+   * caller's region is not evidence about the owner: a team admin's region is
+   * NOT the owner's, and we do not hold the owner's here. Passing null is
+   * region-BLIND rather than wrong-region — findNearestWithLivekit(null) skips
+   * the region term and degrades to LiveKit recency, which is the same fallback
+   * a caller-region miss already takes.
+   *
+   * No observable defect was demonstrated at these three call sites (an
+   * adversarial review refuted one for each), because a bound node_id wins and
+   * an unbound one means no publisher exists. This converts them anyway so the
+   * rule is expressed once instead of two ways in two routes — the discrepancy
+   * itself cost a full audit to re-derive.
+   */
   async function maybeMintLivekit(
     sessionId: string,
     accountId: string,
@@ -2045,7 +2062,7 @@ export function registerAgentSessionsRoutes(
           const livekit = await maybeMintLivekit(
             existing.id,
             ownerAccountId,
-            ctx.account.region,
+            isOwnerCaller ? ctx.account.region : null,
             existing.nodeId,
           );
           return reply
@@ -2225,7 +2242,7 @@ export function registerAgentSessionsRoutes(
             const livekit = await maybeMintLivekit(
               winner.id,
               ownerAccountId,
-              ctx.account.region,
+              isOwnerCaller ? ctx.account.region : null,
               winner.nodeId,
             );
             return reply
@@ -2369,7 +2386,7 @@ export function registerAgentSessionsRoutes(
         const livekit = await maybeMintLivekit(
           created.id,
           ownerAccountId,
-          ctx.account.region,
+          isOwnerCaller ? ctx.account.region : null,
           dispatched.nodeId,
         );
         // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
