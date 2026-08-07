@@ -31561,3 +31561,44 @@ lifecycle semantics and needs a secondary timeout for payments that never settle
 That is a founder call on how long to wait, not an observability fix. The sweep's
 own guard is otherwise correct: it re-checks `pending` under the row lock, so
 `confirming` orders and IPNs that win the race are safe (#79).
+
+## V-745 — a module-scope directory walk can collapse an entire test file
+
+**Mechanism (proven).** These source-scanning guards build their file list at
+MODULE scope via `walk()`, which calls `statSync(entry)` on every name returned by
+`readdirSync`. If an entry disappears in that window, `statSync` throws ENOENT —
+at module scope, so vitest fails the WHOLE file and attributes it to whichever
+test it names first. Reproduced directly: a dangling entry makes the old walk throw
+`ENOENT` and `statSync(p, { throwIfNoEntry: false })` returns `undefined` instead.
+
+That matches the otherwise-impossible failure recorded in V-744: the assertion that
+failed in `log-claims-match-captured-outcomes` is a pure function over a
+module-scope string constant. It cannot be load-sensitive — but its file's
+module-scope walk can die. In a worktree with concurrent writers (a peer's commit
+hook stashes; an agent's temp file is cleaned up) the window is live.
+
+**Fixed** in `log-claims-match-captured-outcomes.test.ts`: skip a vanished entry
+rather than stat it fatally. Verified behaviour-preserving on the real tree — old
+and new walks return an IDENTICAL 447-entry set (326 `.ts`), and the file's own
+"CRITICAL the scan reached the server source" vacuity guard still passes, which is
+what would catch a fix that silently scanned nothing.
+
+**Population, measured — and deliberately NOT bulk-fixed.**
+
+- 61 test files contain a `statSync(x).isDirectory()` walk, 66 sites total.
+- 8 files already pass `throwIfNoEntry`.
+- 28 of the walks are at module scope: the high-severity subset, because those
+  take the whole file down rather than one test.
+
+I did not change the other 60. The correct fix must _skip_ the entry, not coerce it
+to a file (coercing hands a nonexistent path to `readFileSync` later), so it is a
+loop restructure across 61 differently-shaped loops — and the race is not
+reproducible on demand, so no individual edit could be red-greened. A blind
+replace-all across similarly-shaped test sites is exactly what produced a 10s
+timeout earlier this session. The real remedy for 61 duplicated walks is ONE shared
+helper; that is a refactor worth doing on purpose, not a side effect of this fix.
+The list above is measured so it is ready if the class bites again.
+
+Also worth stating plainly: this is an artifact of a shared multi-writer worktree,
+not a production defect. Nothing in `apps/server/src` walks directories this way at
+runtime.

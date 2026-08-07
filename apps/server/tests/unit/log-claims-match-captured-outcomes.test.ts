@@ -86,7 +86,16 @@ function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, out);
+    // `throwIfNoEntry: false` + skip, rather than a bare statSync: this walk runs
+    // at MODULE scope, so an entry that vanishes between readdirSync and statSync
+    // throws ENOENT there and collapses the ENTIRE file — every test in it,
+    // reported against whichever one vitest names first. That is a live race in a
+    // worktree with concurrent writers (a peer's commit hook stashes, an agent's
+    // temp file is cleaned up). Skipping is also the correct answer for a dangling
+    // symlink, which produces the same ENOENT permanently.
+    const stat = statSync(full, { throwIfNoEntry: false });
+    if (stat === undefined) continue;
+    if (stat.isDirectory()) walk(full, out);
     else out.push(full);
   }
   return out;
