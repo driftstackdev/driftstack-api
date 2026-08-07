@@ -52,42 +52,78 @@ describe('W247.A marketing-site egress-claim drift sweep', () => {
     serverSourceMatches(/implements SessionEgressService\b/);
   const pages = walk(PAGES, ['.astro', '.md']);
 
-  it('no page asserts "customer-controlled egress" as a shipped feature', () => {
-    if (hasEgressImpl) return;
-    const offenders: string[] = [];
-    for (const p of pages) {
-      const body = readFileSync(p, 'utf8').replace(/^---[\s\S]*?---/, '');
-      if (/customer-controlled egress/i.test(body)) {
-        offenders.push(p.replace(REPO + '/', ''));
-      }
-    }
-    expect(offenders).toEqual([]);
+  it('CRITICAL the sweep reached the marketing pages, and the gate below has RETIRED — both facts stated out loud because neither is visible otherwise', () => {
+    // Without this the file reports two passing tests having checked nothing.
+    // `if (hasEgressImpl) return;` returned silently from both arms, and a
+    // silent no-op is indistinguishable in the summary from a real check. The
+    // arms are now conditional SKIPS, which the repo sanctions and which show
+    // up in the skip count; this arm records why.
+    expect(pages.length, 'marketing pages scanned').toBeGreaterThan(40);
+
+    // The retirement condition, asserted rather than assumed. When this is
+    // true the two arms below DO NOT RUN: the egress backend is wired, so the
+    // marketing site is allowed to describe it. Measured 2026-08-07 with the
+    // gate forced open, four pages would fail the disclosure rule —
+    // changelog, comparison, self-hosted, and /trust/security-overview itself,
+    // which cannot cross-link to itself and would have been a false positive
+    // even while the gate was live.
+    expect(typeof hasEgressImpl, 'the gate condition is derived, not assumed').toBe('boolean');
+    expect(hasEgressImpl, 'egress is wired, so the claim gate has retired').toBe(true);
+
+    // If the wire is ever removed the gate reactivates — so prove here that it
+    // would not come back BLIND. A guard that hunts a violation cannot be
+    // floored by counting subjects, and this one had no synthetic control.
+    const knownBad = 'We ship customer-controlled egress today.';
+    expect(/customer-controlled egress/i.test(knownBad), 'arm-1 detector still fires').toBe(true);
+    const proxyClaim = 'Bring your own SOCKS5 proxy.';
+    expect(
+      /SOCKS5|WireGuard|OpenVPN/.test(proxyClaim) &&
+        !/roadmap/i.test(proxyClaim) &&
+        !/\/trust\/security-overview/.test(proxyClaim),
+      'arm-2 detector still fires on an undisclosed proxy claim',
+    ).toBe(true);
   });
 
-  it('SOCKS5 / WireGuard / OpenVPN only appear in honest-disclosure context (roadmap label OR cross-link to /trust/security-overview)', () => {
-    if (hasEgressImpl) return;
-    const offenders: string[] = [];
-    for (const p of pages) {
-      // Legal/ pages reference third-party HTTP/SOCKS5 proxy providers
-      // as Customer-Connected Services in the DPA/privacy text — that
-      // is a CUSTOMER responsibility, not a Driftstack capability, so
-      // exempt that subtree from this check.
-      if (p.includes('/pages/legal/')) continue;
-      const body = readFileSync(p, 'utf8');
-      const hasProxyMention = /SOCKS5|WireGuard|OpenVPN/.test(body);
-      if (!hasProxyMention) continue;
-      // Allow the mention if EITHER the doc still flags "roadmap" inline
-      // OR the doc cross-links to /trust/security-overview (the canonical
-      // honest-disclosure surface for the egress impl state; F-5 Issue 5
-      // reframe — pages no longer label features "on the roadmap" inline
-      // but they DO point at the surface that holds the impl-state
-      // disclosure, which is gated by W499.D against actual server source).
-      const hasRoadmap = /roadmap/i.test(body);
-      const hasSecOverviewLink = /\/trust\/security-overview/.test(body);
-      if (!hasRoadmap && !hasSecOverviewLink) {
-        offenders.push(p.replace(REPO + '/', ''));
+  it.skipIf(hasEgressImpl)(
+    'no page asserts "customer-controlled egress" as a shipped feature',
+    () => {
+      const offenders: string[] = [];
+      for (const p of pages) {
+        const body = readFileSync(p, 'utf8').replace(/^---[\s\S]*?---/, '');
+        if (/customer-controlled egress/i.test(body)) {
+          offenders.push(p.replace(REPO + '/', ''));
+        }
       }
-    }
-    expect(offenders).toEqual([]);
-  });
+      expect(offenders).toEqual([]);
+    },
+  );
+
+  it.skipIf(hasEgressImpl)(
+    'SOCKS5 / WireGuard / OpenVPN only appear in honest-disclosure context (roadmap label OR cross-link to /trust/security-overview)',
+    () => {
+      const offenders: string[] = [];
+      for (const p of pages) {
+        // Legal/ pages reference third-party HTTP/SOCKS5 proxy providers
+        // as Customer-Connected Services in the DPA/privacy text — that
+        // is a CUSTOMER responsibility, not a Driftstack capability, so
+        // exempt that subtree from this check.
+        if (p.includes('/pages/legal/')) continue;
+        const body = readFileSync(p, 'utf8');
+        const hasProxyMention = /SOCKS5|WireGuard|OpenVPN/.test(body);
+        if (!hasProxyMention) continue;
+        // Allow the mention if EITHER the doc still flags "roadmap" inline
+        // OR the doc cross-links to /trust/security-overview (the canonical
+        // honest-disclosure surface for the egress impl state; F-5 Issue 5
+        // reframe — pages no longer label features "on the roadmap" inline
+        // but they DO point at the surface that holds the impl-state
+        // disclosure, which is gated by W499.D against actual server source).
+        const hasRoadmap = /roadmap/i.test(body);
+        const hasSecOverviewLink = /\/trust\/security-overview/.test(body);
+        if (!hasRoadmap && !hasSecOverviewLink) {
+          offenders.push(p.replace(REPO + '/', ''));
+        }
+      }
+      expect(offenders).toEqual([]);
+    },
+  );
 });
