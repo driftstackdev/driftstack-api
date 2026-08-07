@@ -82,7 +82,7 @@ async function insertRecipe(args: {
       intent_log, transcript_snapshot, created_at, updated_at
     ) VALUES (
       ${args.id}, ${args.accountId}, ${args.agentSessionId ?? null}, 'Saved recipe', NULL,
-      ${JSON.stringify(args.intent)}::jsonb, ${JSON.stringify(args.snapshot)}::jsonb,
+      ${JSON.stringify(args.intent)}::text::jsonb, ${JSON.stringify(args.snapshot)}::text::jsonb,
       ${createdAt.toISOString()}::timestamptz, ${updatedAt.toISOString()}::timestamptz
     )
   `;
@@ -245,8 +245,8 @@ describe.skipIf(!RUN_DB_TESTS)(
       for (const targetId of [sameAccountId, crossAccountId]) {
         await client`
           UPDATE recipes SET
-            intent_log = ${JSON.stringify(migrated!.intent_log)}::jsonb,
-            transcript_snapshot = ${JSON.stringify(migrated!.transcript_snapshot)}::jsonb
+            intent_log = ${JSON.stringify(migrated!.intent_log)}::text::jsonb,
+            transcript_snapshot = ${JSON.stringify(migrated!.transcript_snapshot)}::text::jsonb
           WHERE id = ${targetId}
         `;
       }
