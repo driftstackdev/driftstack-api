@@ -115,7 +115,7 @@ async function seedAccountWithProfile(args: {
       (id, account_id, parent_profile_id, label, parent_archetype, parent_name, state_blob)
     VALUES (${randomUUID()}, ${accountId}, ${profileId}, 'snap',
             'iphone17_ios18_7_safari26_4', 'retention-test',
-            ${JSON.stringify({ cookies: 'secret' })}::jsonb)`;
+            ${JSON.stringify({ cookies: 'secret' })}::text::jsonb)`;
   return { accountId, profileId };
 }
 

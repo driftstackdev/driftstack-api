@@ -108,7 +108,7 @@ async function seedBundledSpend(accountId: string, cents: number): Promise<void>
     VALUES (
       ${randomUUID()}, ${accountId}, 'agent_decomposer_bundled', 1,
       ${new Date(NOW.getTime() - 60_000).toISOString()}::timestamptz,
-      ${JSON.stringify({ cost_usd_cents: cents, bundled: true })}::jsonb
+      ${JSON.stringify({ cost_usd_cents: cents, bundled: true })}::text::jsonb
     )`;
 }
 

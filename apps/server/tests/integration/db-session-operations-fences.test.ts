@@ -432,7 +432,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         await expect(
           client`INSERT INTO session_operations
             (account_id, session_id, driver_incarnation_id, kind, status, request_fingerprint, deadline_at, result)
-            VALUES (${base.accountId}, ${base.sessionId}, ${base.incarnation}, 'login', 'running', ${base.fingerprint}, ${base.deadline}, ${JSON.stringify({ submitted: true })}::jsonb)`,
+            VALUES (${base.accountId}, ${base.sessionId}, ${base.incarnation}, 'login', 'running', ${base.fingerprint}, ${base.deadline}, ${JSON.stringify({ submitted: true })}::text::jsonb)`,
         ).rejects.toThrow(/session_operations_terminal_shape/);
 
         await expect(

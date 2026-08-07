@@ -191,7 +191,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-legacy-${accountId}@test.local`})`;
       const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
       const legacy = [{ at: 't0', role: 'user', body: 'legacy-secret' }];
-      await client`UPDATE agent_sessions SET transcript = ${JSON.stringify(legacy)}::jsonb WHERE id = ${session.id}`;
+      await client`UPDATE agent_sessions SET transcript = ${JSON.stringify(legacy)}::text::jsonb WHERE id = ${session.id}`;
 
       await expect(repo.get(session.id)).rejects.toThrow(/not a v2/i);
       await expect(

@@ -109,12 +109,12 @@ describe.skipIf(!RUN_DB_TESTS)(
       ];
       await client`
         UPDATE agent_sessions
-        SET transcript = ${JSON.stringify(plaintext)}::jsonb
+        SET transcript = ${JSON.stringify(plaintext)}::text::jsonb
         WHERE id = ${plaintextRow.id}
       `;
       await client`
         UPDATE agent_sessions
-        SET transcript = ${JSON.stringify(encryptAgentTranscript(v1Transcript, KEY))}::jsonb
+        SET transcript = ${JSON.stringify(encryptAgentTranscript(v1Transcript, KEY))}::text::jsonb
         WHERE id = ${v1Row.id}
       `;
       const beforeTimestamps = await client`
@@ -176,7 +176,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       // under this destination row's immutable session identity.
       const [source] = await client`SELECT transcript FROM agent_sessions WHERE id = ${v1Row.id}`;
       await client`
-        UPDATE agent_sessions SET transcript = ${JSON.stringify(source?.transcript)}::jsonb
+        UPDATE agent_sessions SET transcript = ${JSON.stringify(source?.transcript)}::text::jsonb
         WHERE id = ${plaintextRow.id}
       `;
       await expect(repo.get(plaintextRow.id)).rejects.toThrow();
@@ -204,11 +204,11 @@ describe.skipIf(!RUN_DB_TESTS)(
       const plaintext = await repo.create({ accountId, tokenBudgetTotal: 100 });
       const legacy = [{ at: 't0', role: 'user', body: 'must-remain-plaintext-on-preflight-fail' }];
       await client`
-        UPDATE agent_sessions SET transcript = ${JSON.stringify({ kind: 'unknown', version: 9 })}::jsonb
+        UPDATE agent_sessions SET transcript = ${JSON.stringify({ kind: 'unknown', version: 9 })}::text::jsonb
         WHERE id = ${malformed.id}
       `;
       await client`
-        UPDATE agent_sessions SET transcript = ${JSON.stringify(legacy)}::jsonb
+        UPDATE agent_sessions SET transcript = ${JSON.stringify(legacy)}::text::jsonb
         WHERE id = ${plaintext.id}
       `;
       await expect(repo.migrateTranscriptEnvelopes(500)).rejects.toThrow(/malformed envelope/i);
@@ -225,7 +225,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       const legacy = [{ at: 'old', role: 'user', body: 'selected-before-lock' }];
       await client`
         UPDATE agent_sessions
-        SET transcript = ${JSON.stringify(legacy)}::jsonb, created_at = '1970-01-01T00:00:00Z'
+        SET transcript = ${JSON.stringify(legacy)}::text::jsonb, created_at = '1970-01-01T00:00:00Z'
         WHERE id = ${session.id}
       `;
 
@@ -266,7 +266,7 @@ describe.skipIf(!RUN_DB_TESTS)(
         });
         await blocker`
           UPDATE agent_sessions
-          SET transcript = ${JSON.stringify(newerEnvelope)}::jsonb
+          SET transcript = ${JSON.stringify(newerEnvelope)}::text::jsonb
           WHERE id = ${session.id}
         `;
         await blocker`COMMIT`;
