@@ -403,8 +403,14 @@ Event types emitted:
     `'operator'` (manual-mode pass-through — the customer's
     own UI/script logging directly without invoking the
     decomposer).
-  - `body` — free-text for user / operator turns; serialised
-    `DecomposeResult` JSON for agent turns.
+  - `body` — always human-readable text, never JSON. For user and
+    operator turns it is what was supplied. For agent turns it is a
+    prose rendering of the decomposer outcome: `refused: <reason>`,
+    `clarify: <question>`, a newline-joined plan summary for
+    plan-executed turns (which may end `(plan halted on failure)`),
+    or the answer text for a transcript question. Do **not**
+    `JSON.parse` it — the structured form of a plan-executed turn is
+    `intents?` below, not `body`.
   - `at` — ISO 8601 timestamp.
   - `intents?` — present only on `role: 'agent'` + plan-executed
     turns; carries the structured intent list the runtime

@@ -35,6 +35,27 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     );
   });
 
+  // V-740 — the transcript `body` is ALWAYS prose. The page said it was
+  // "serialised `DecomposeResult` JSON for agent turns", which no code path
+  // produces: agent-runtime writes `refused: <reason>` and `clarify: <question>`,
+  // agent-executor writes a newline-joined plan summary, and the transcript-answer
+  // path writes sanitised answer text. A consumer following the page and calling
+  // JSON.parse on an agent turn would throw on every one. The structured form is
+  // `intents?`, which is a separate field.
+  it('V-740 transcript body is documented as prose, never JSON, and points at intents for structure', () => {
+    const body = read(LIB);
+
+    expect(body).toMatch(/`body` — always human-readable text, never JSON\./);
+    // The concrete renderings, so the claim stays checkable against the code.
+    expect(body).toMatch(/`refused: <reason>`/);
+    expect(body).toMatch(/`clarify: <question>`/);
+    expect(body).toMatch(/\(plan halted on failure\)/);
+    // The actionable instruction, and where structure actually lives.
+    expect(body).toMatch(/Do \*\*not\*\*\s*\n?\s*`JSON\.parse` it/);
+    // And the false claim must not return.
+    expect(body).not.toMatch(/serialised\s*\n?\s*`DecomposeResult` JSON for agent turns/);
+  });
+
   it('3-mode state machine framing pinned: ai (default; every message goes through decomposer + executor; closed sessions return 409) + manual (message is transcript-only pass-through; gui-client drives real actions via gui_control plane HMAC channel) + pair (interactive takeover state machine; AI drives by default; customer calls takeover to seize control then handback to return; state transitions audit-logged) — pinned so the 3-mode roster + AI-default + manual-gui_control-plane + pair-takeover-handback-state-machine + audit-logged contract all stay documented (drift on any mode would mismatch route+service+DB enum)', () => {
     expect(body).toMatch(
       /- `ai` \(default\) — every customer message goes through the\s*\n?\s*decomposer \+ executor\. Closed sessions return 409\./,

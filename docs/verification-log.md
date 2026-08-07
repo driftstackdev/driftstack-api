@@ -31279,3 +31279,37 @@ is configured in any vitest config — so these are latent, not CI-breaking.
 Verification: canonical full suite 2766 files / 28,216 passing / 0 failing;
 targeted ESLint and Prettier. Test-only — no source, schema, docs, environment or
 secret surface changed.
+
+## V-740 — The transcript `body` was documented as JSON; it is always prose
+
+**Date:** 2026-08-07
+
+`api/agent-sessions.md` described the transcript frame's `body` as "free-text for
+user / operator turns; serialised `DecomposeResult` JSON for agent turns". No code
+path produces that. Every agent-role entry is human-readable text:
+
+- `agent-runtime.ts:1038` — `` `refused: ${decomposed.refuseReason}` ``
+- `agent-runtime.ts:1069` — `` `clarify: ${decomposed.clarifyingQuestion}` ``
+- `agent-executor.ts:596` — `lines.join('\n')`, a plan summary that can end
+  `(plan halted on failure)`
+- `agent-runtime.ts:1271` — `sanitizeTranscriptText(answer.answer)`
+
+So a consumer that followed the page and called `JSON.parse` on an agent turn
+threw on every one, and the failure would look like a malformed response rather
+than a documentation error. Nothing pinned the sentence, and nothing tested a
+consumer parsing it, so it could sit indefinitely.
+
+The page now states that `body` is always human-readable text and never JSON,
+lists the four concrete renderings so the claim stays checkable against the code,
+and points at `intents?` — a separate field — as where the structured form of a
+plan-executed turn actually lives. That last part matters: an integrator who
+wanted structure was being sent to the wrong field, and the right one was already
+documented two bullets down.
+
+A pin now requires the prose framing, the specific renderings, the explicit "do
+not `JSON.parse` it", and that the old sentence cannot return. Mutating the page
+back is proved red.
+
+Verification: canonical full suite 2766 files / 28,217 passing / 0 failing;
+Prettier clean. Docs and one pin only — no server, schema, OpenAPI, SDK,
+environment or secret surface changed.
