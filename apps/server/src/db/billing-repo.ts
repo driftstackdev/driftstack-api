@@ -1,6 +1,6 @@
 // Drizzle-backed BillingRepo (V-082).
 
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type {
   BillingAccountSnapshot,
   BillingRepo,
@@ -55,6 +55,31 @@ export class DrizzleBillingRepo implements BillingRepo {
       .update(accounts)
       .set({ stripeCustomerId: args.customerId, updatedAt: new Date() })
       .where(eq(accounts.id, args.accountId));
+  }
+
+  /**
+   * V-741 — any active|trialing subscription for the account.
+   *
+   * Filters the SET, unlike findCurrentSubscription below which picks the newest
+   * ROW by `created_at` and leaves status to the caller. That distinction is the
+   * whole point: `created_at` is frozen at first-webhook insert, so a replayed
+   * event for an old canceled subscription can sort NEWER than a live one, and a
+   * recency-then-inspect guard then reads 'canceled' and lets a second
+   * concurrently-billed subscription be created.
+   */
+  async findActiveSubscription(accountId: string): Promise<SubscriptionMirror | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.accountId, accountId),
+          inArray(subscriptions.status, ['active', 'trialing']),
+        ),
+      )
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+    return row ? toSubscription(row) : null;
   }
 
   async findCurrentSubscription(accountId: string): Promise<SubscriptionMirror | null> {

@@ -68,10 +68,19 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     );
   });
 
-  it('createCheckoutSession: double-subscribe guard — findCurrentSubscription + ConflictError when active|trialing, BEFORE the tier-price lookup (so it never reaches the provider)', () => {
+  // V-741 — the guard now filters the SET (findActiveSubscription) instead of
+  // picking the newest ROW by created_at and inspecting its status. created_at is
+  // frozen at first-webhook insert, so a canceled row can sort NEWER than a live
+  // one, and the old form then let Checkout mint a SECOND concurrently-billed
+  // subscription. Reverting to a recency-then-inspect read is proved red by
+  // tests/integration/billing.test.ts.
+  it('createCheckoutSession: double-subscribe guard — findActiveSubscription + ConflictError, BEFORE the tier-price lookup (so it never reaches the provider)', () => {
     expect(body).toMatch(
-      /const existingSubscription = await this\.repo\.findCurrentSubscription\(args\.accountId\);\s*\n?\s*if \(\s*\n?\s*existingSubscription !== null &&\s*\n?\s*\(existingSubscription\.status === 'active' \|\| existingSubscription\.status === 'trialing'\)\s*\n?\s*\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'Account already has an active subscription\. Use the customer portal to change plans instead of starting a new checkout\.',/,
+      /const existingSubscription = await this\.repo\.findActiveSubscription\(args\.accountId\);\s*if \(existingSubscription !== null\) \{\s*throw new ConflictError\(\s*'Account already has an active subscription\. Use the customer portal to change plans instead of starting a new checkout\.',/,
     );
+    // The guard must never go back to reading one row by recency and inspecting
+    // its status — that IS the bug.
+    expect(body).not.toMatch(/existingSubscription = await this\.repo\.findCurrentSubscription/);
     expect(body).toMatch(
       /resource: 'subscription',\s*\n?\s*existing_tier: existingSubscription\.tier,\s*\n?\s*existing_status: existingSubscription\.status,/,
     );
@@ -148,7 +157,7 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     );
   });
 
-  it('BillingRepo: 3-method (getAccount + setStripeCustomerId + findCurrentSubscription returning latest or null)', () => {
+  it('BillingRepo: 4-method (getAccount + setStripeCustomerId + findCurrentSubscription returning the newest row + findActiveSubscription filtering the set)', () => {
     expect(body).toMatch(/export interface BillingRepo \{/);
     expect(body).toMatch(
       /getAccount\(accountId: string\): Promise<BillingAccountSnapshot \| null>;/,
@@ -156,11 +165,20 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     expect(body).toMatch(
       /setStripeCustomerId\(args: \{ accountId: string; customerId: string \}\): Promise<void>;/,
     );
+    // V-741 — the old doc said "Returns the active or most-recent subscription
+    // ... 'Active' here is loose", and this pin required that sentence. The
+    // implementation never did the "active" half: it is only ever most-recent,
+    // which is exactly how it came to be used as a double-subscribe guard. The
+    // doc now says what it does, and names the method that does the other thing.
     expect(body).toMatch(
-      /Returns the active or most-recent subscription for the account, or\s*\n?\s*\*\s*null if none\. "Active" here is loose — caller filters by status if\s*\n?\s*\*\s*needed\./,
+      /Returns the MOST-RECENT subscription row for the account by `created_at`,/,
     );
+    expect(body).not.toMatch(/Returns the active or most-recent subscription/);
     expect(body).toMatch(
       /findCurrentSubscription\(accountId: string\): Promise<SubscriptionMirror \| null>;/,
+    );
+    expect(body).toMatch(
+      /findActiveSubscription\(accountId: string\): Promise<SubscriptionMirror \| null>;/,
     );
   });
 

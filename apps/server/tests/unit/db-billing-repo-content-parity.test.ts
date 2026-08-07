@@ -38,7 +38,9 @@ describe('W442.A apps/server/src/db/billing-repo.ts content parity', () => {
   });
 
   it('imports: desc/eq from drizzle-orm; BillingAccountSnapshot/BillingRepo/SubscriptionMirror from services/billing; Database type; accounts + subscriptions schema', () => {
-    expect(body).toMatch(/import \{ desc, eq \} from 'drizzle-orm';/);
+    // V-741 — and/inArray joined for findActiveSubscription, which filters the
+    // status SET rather than picking the newest row and inspecting it.
+    expect(body).toMatch(/import \{ and, desc, eq, inArray \} from 'drizzle-orm';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*BillingAccountSnapshot,\s*\n?\s*BillingRepo,\s*\n?\s*SubscriptionMirror,\s*\n?\s*\} from '\.\.\/services\/billing\.js';/,
     );

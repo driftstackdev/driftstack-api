@@ -31313,3 +31313,67 @@ back is proved red.
 Verification: canonical full suite 2766 files / 28,217 passing / 0 failing;
 Prettier clean. Docs and one pin only — no server, schema, OpenAPI, SDK,
 environment or secret surface changed.
+
+## V-741 — The double-subscribe guard asked the wrong question, and could double-bill
+
+**Date:** 2026-08-07
+
+`createCheckoutSession`'s guard read ONE subscription row — the newest by
+`created_at`, with no status predicate — and checked whether that row was
+`active` or `trialing`. So it answered "is the newest row active?" when the
+question it exists to answer is "does this account have ANY active
+subscription?".
+
+Three conditions make the difference reachable, all verified:
+
+- `created_at` is frozen at the moment the FIRST webhook for a subscription was
+  inserted — `upsertSubscription`'s `onConflictDoUpdate` set-clause deliberately
+  omits it — so row recency does not track subscription recency. A replayed or
+  out-of-order Stripe event for an old, canceled subscription lands with a LATER
+  `created_at` than a live one.
+- There is no per-account uniqueness on `subscriptions`; only
+  `stripe_subscription_id` is unique, and `account_id` carries a plain index.
+  Several rows per account are normal.
+- The repo method says so itself: "Most-recent first by created_at; route layer
+  can filter to active statuses if it cares. We don't filter here."
+
+With a canceled row sorting newest, the guard read `canceled`, allowed the
+Checkout, and Stripe minted a SECOND concurrently-billed subscription — up to
+2 × $1,499/month for `api_scale`, recurring, with nothing to collapse it. The
+service's own file header describes exactly this harm as the thing the guard
+exists to prevent. And it does not surface: the rank-aware tier recompute keeps
+`accounts.tier` looking correct, so the only evidence is the invoice.
+
+The guard now calls `findActiveSubscription`, which filters the status SET. That
+is strictly more conservative — it can only ever block more, never less — and the
+`past_due`/`canceled`/`incomplete` recovery path is unchanged, because those
+statuses still do not match. `findCurrentSubscription` stays for the dashboard's
+"your last subscription was canceled on X" copy, under a doc that now says what
+it actually returns.
+
+No existing test could catch it: every guard test seeds ONE subscription, where
+"newest row" and "any active" coincide, and the in-memory twin also picks max
+`created_at`. The new test seeds a live `active` row with an older `created_at`
+and a `canceled` row with a newer one, then asserts a 409 and that no Checkout
+session was started. Reverting the guard returns `200` and creates the session —
+the double-billing path, demonstrated.
+
+Four parity pins needed updating, and two of them were holding the flawed design
+in place. One pinned the JSDoc "Returns the active or most-recent subscription …
+'Active' here is loose — caller filters by status if needed" — a promise the
+implementation never kept, since it is only ever most-recent. The other pinned
+the same sentence under a title giving the rationale: "the active-is-loose
+framing keeps repo-level scope wide; service layer applies status filtering."
+That rationale is the bug stated as a principle. The service layer did apply
+status filtering; it applied it to a row chosen by recency. A guard must filter
+the set, not inspect whatever the sort happened to surface. Both rewrites now
+also assert the old framing cannot return.
+
+That is six and seven in this session's count of parity pins found protecting a
+false claim.
+
+Verification: canonical full suite 2766 files / 28,218 passing / 0 failing; both
+halves of the server typecheck, targeted ESLint and Prettier. Code-only — no
+schema change, and the optional hardening (a partial unique index on
+`account_id` WHERE status IN ('active','trialing')) is deliberately NOT included
+here, since it would need a migration and the code fix closes the path.

@@ -90,11 +90,30 @@ export interface BillingRepo {
   getAccount(accountId: string): Promise<BillingAccountSnapshot | null>;
   setStripeCustomerId(args: { accountId: string; customerId: string }): Promise<void>;
   /**
-   * Returns the active or most-recent subscription for the account, or
-   * null if none. "Active" here is loose — caller filters by status if
-   * needed.
+   * Returns the MOST-RECENT subscription row for the account by `created_at`,
+   * whatever its status, or null if none. Backs customer-facing copy like "your
+   * last subscription was canceled on X".
+   *
+   * V-741 — NOT usable as a double-subscribe guard, which is what it was doing.
+   * It answers "is the newest row active?", and the guard needs "does this
+   * account have ANY active subscription?". Use {@link findActiveSubscription}
+   * for that. (The previous doc here said "the active or most-recent
+   * subscription", which the implementation never did — it is only ever
+   * most-recent.)
    */
   findCurrentSubscription(accountId: string): Promise<SubscriptionMirror | null>;
+  /**
+   * V-741 — any `active` or `trialing` subscription for the account, or null.
+   *
+   * Filters the SET rather than picking a row by recency and inspecting it.
+   * `created_at` is frozen at the moment the FIRST webhook for a subscription
+   * was inserted (upsertSubscription's set-clause deliberately omits it), so row
+   * recency does not track subscription recency: a replayed or out-of-order
+   * event for an old, canceled subscription lands with a LATER `created_at` than
+   * a live one. There is no per-account uniqueness on `subscriptions` (only
+   * `stripe_subscription_id` is unique), so several rows per account are normal.
+   */
+  findActiveSubscription(accountId: string): Promise<SubscriptionMirror | null>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -146,11 +165,15 @@ export class BillingService {
     // session. past_due / canceled / incomplete subscriptions are NOT
     // blocked here: those aren't currently being billed, so letting the
     // customer re-checkout to recover is the right behavior.
-    const existingSubscription = await this.repo.findCurrentSubscription(args.accountId);
-    if (
-      existingSubscription !== null &&
-      (existingSubscription.status === 'active' || existingSubscription.status === 'trialing')
-    ) {
+    // V-741 — ask whether ANY active subscription exists, not whether the newest
+    // ROW happens to be active. The old form read one row by `created_at` desc
+    // with no status filter, so a canceled row that sorted newer than a live
+    // active one made the guard pass and Checkout minted a SECOND concurrently
+    // billed subscription — the exact harm this file's header describes. Nothing
+    // collapses the duplicate afterwards, and the rank-aware tier recompute keeps
+    // `accounts.tier` looking correct, so it does not surface anywhere.
+    const existingSubscription = await this.repo.findActiveSubscription(args.accountId);
+    if (existingSubscription !== null) {
       throw new ConflictError(
         'Account already has an active subscription. Use the customer portal to change plans instead of starting a new checkout.',
         {

@@ -32,6 +32,20 @@ export class InMemoryBillingRepo implements BillingRepo {
     return Promise.resolve();
   }
 
+  /** V-741 — filters the SET, mirroring the Drizzle sibling. The old guard read
+   *  the newest ROW regardless of status, so a canceled row sorting newer than a
+   *  live one let a second concurrently-billed subscription through. This twin
+   *  also picked max createdAt, which is why no existing test could catch it. */
+  findActiveSubscription(accountId: string): Promise<SubscriptionMirror | null> {
+    let found: SubscriptionMirror | null = null;
+    for (const s of this.subscriptions.values()) {
+      if (s.accountId !== accountId) continue;
+      if (s.status !== 'active' && s.status !== 'trialing') continue;
+      if (found === null || s.createdAt.getTime() > found.createdAt.getTime()) found = s;
+    }
+    return Promise.resolve(found);
+  }
+
   findCurrentSubscription(accountId: string): Promise<SubscriptionMirror | null> {
     let latest: SubscriptionMirror | null = null;
     for (const s of this.subscriptions.values()) {

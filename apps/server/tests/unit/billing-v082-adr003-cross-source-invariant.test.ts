@@ -198,11 +198,27 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL findCurrentSubscription JSDoc — \'Returns the active or most-recent subscription for the account, or null if none. "Active" here is loose — caller filters by status if needed\'. The active-is-loose framing keeps repo-level scope wide; service layer applies status filtering.', () => {
+  // V-741 — this pin previously required the JSDoc "Returns the active or
+  // most-recent subscription ... 'Active' here is loose — caller filters by
+  // status if needed", and its own title gave the rationale: "the active-is-loose
+  // framing keeps repo-level scope wide; service layer applies status filtering."
+  //
+  // That rationale IS the bug. The service layer did apply status filtering — to
+  // the wrong row. findCurrentSubscription returns the newest row by created_at,
+  // which is frozen at first-webhook insert, so a canceled row can sort newer
+  // than a live one; the guard then read 'canceled' and let Checkout mint a
+  // second concurrently-billed subscription. A guard must filter the SET, not
+  // inspect a row chosen by recency. The pin now requires the honest doc and the
+  // set-filtering sibling.
+  it('CRITICAL findCurrentSubscription JSDoc says MOST-RECENT-row only, and points at findActiveSubscription for the guard question', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
-    expect(p).toMatch(/Returns the active or most-recent subscription for the account, or/);
-    expect(p).toMatch(/null if none\. "Active" here is loose — caller filters by status if/);
-    expect(p).toMatch(/needed\./);
+    expect(p).toMatch(/Returns the MOST-RECENT subscription row for the account by `created_at`,/);
+    expect(p).toMatch(/NOT usable as a double-subscribe guard/);
+    expect(p).toMatch(
+      /findActiveSubscription\(accountId: string\): Promise<SubscriptionMirror \| null>;/,
+    );
+    // The framing that justified the flawed design must not return.
+    expect(p).not.toMatch(/"Active" here is loose/);
   });
 
   // ─── TierPrices 2-period shape + TierPriceMap ────────────────

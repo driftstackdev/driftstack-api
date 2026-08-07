@@ -195,6 +195,66 @@ describe('POST /v1/billing/checkout-session', () => {
     expect(fx.billingProvider.state.checkoutSessions).toHaveLength(0);
   });
 
+  // V-741 — the guard must ask whether ANY active subscription exists, not
+  // whether the NEWEST ROW happens to be active.
+  //
+  // `subscriptions.created_at` is frozen at the moment the first webhook for that
+  // subscription was inserted (upsertSubscription's set-clause omits it), so row
+  // recency does not track subscription recency: a replayed or out-of-order event
+  // for an old, canceled subscription lands with a LATER created_at than a live
+  // one. There is no per-account uniqueness (only stripe_subscription_id is
+  // unique), so several rows per account are normal.
+  //
+  // The old guard read one row by created_at desc with no status filter, saw
+  // 'canceled', and let Checkout mint a SECOND concurrently-billed subscription —
+  // the exact harm this service's file header describes. Nothing collapses the
+  // duplicate afterwards and the rank-aware tier recompute keeps accounts.tier
+  // looking right, so it surfaces nowhere but the invoice.
+  it('409 when a LIVE subscription is masked by a canceled row with a newer created_at', async () => {
+    fx = await buildTestApp();
+    // The live one, inserted first.
+    fx.billingRepo.upsertSubscription({
+      id: 'sub_live',
+      accountId: fx.accountId,
+      stripeSubscriptionId: 'sub_test_live',
+      stripePriceId: 'price_api_builder_monthly',
+      tier: 'api_builder',
+      status: 'active',
+      currentPeriodEnd: new Date('2026-09-01T00:00:00Z'),
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+      createdAt: new Date('2026-05-01T00:00:00Z'),
+      updatedAt: new Date('2026-05-01T00:00:00Z'),
+    });
+    // An older, already-canceled subscription whose first webhook arrived LATER,
+    // so its row sorts newest.
+    fx.billingRepo.upsertSubscription({
+      id: 'sub_stale',
+      accountId: fx.accountId,
+      stripeSubscriptionId: 'sub_test_stale',
+      stripePriceId: 'price_api_starter_monthly',
+      tier: 'api_starter',
+      status: 'canceled',
+      currentPeriodEnd: new Date('2026-04-01T00:00:00Z'),
+      cancelAtPeriodEnd: false,
+      canceledAt: new Date('2026-04-01T00:00:00Z'),
+      createdAt: new Date('2026-06-01T00:00:00Z'),
+      updatedAt: new Date('2026-06-01T00:00:00Z'),
+    });
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { tier: 'api_scale', billing_period: 'monthly' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    // The assertion that matters: no second Checkout was started, so the customer
+    // cannot end up paying for two concurrent subscriptions.
+    expect(fx.billingProvider.state.checkoutSessions).toHaveLength(0);
+  });
+
   it('200 still allowed when the existing subscription is canceled (not currently billed)', async () => {
     fx = await buildTestApp();
     seedActiveSubscription(fx, { tier: 'api_builder', status: 'canceled' });
