@@ -117,6 +117,14 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     return Array.from(this.events.values());
   }
 
+  /** V-742 — the account's current tier, the NOT-NULL filler for a subscription
+   *  whose Stripe price id is unmapped. Previously 'enterprise', which outranks
+   *  every real tier in tierActivationRank and was read back out by the recompute
+   *  as a genuine entitlement. */
+  getAccountTier(accountId: string): Promise<AccountTier | null> {
+    return Promise.resolve(this.accounts.get(accountId)?.tier ?? null);
+  }
+
   findAccountIdFromCustomerOrRef(args: {
     stripeCustomerId: string | null;
     clientReferenceId: string | null;

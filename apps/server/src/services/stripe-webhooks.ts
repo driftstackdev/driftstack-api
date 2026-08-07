@@ -64,6 +64,12 @@ export interface StripeWebhooksRepo {
   }): Promise<string | null>;
 
   /**
+   * V-742 — the account's current tier, used as the NOT-NULL filler for a
+   * subscription whose Stripe price id is absent from `priceToTier`.
+   */
+  getAccountTier(accountId: string): Promise<AccountTier | null>;
+
+  /**
    * Upsert a subscription mirror row keyed on `stripeSubscriptionId`.
    * If a row with that id exists, UPDATE its mutable fields ONLY when the
    * incoming event is newer than the stored row (event-recency guard —
@@ -481,6 +487,26 @@ export class StripeWebhooksService {
     }
 
     const tier = this.config.priceToTier[priceId];
+    // V-742 — when the price is unmapped the mirror row still needs a tier to
+    // satisfy the NOT NULL column, and that filler used to be 'enterprise'. It
+    // was inert when written (the grant on this event is gated on
+    // `tier !== undefined`) and became load-bearing once the rank-aware recompute
+    // started reading `subscriptions.tier` back out: tierActivationRank derives
+    // from TIER_MONTHLY_PRICE_CENTS, which has no enterprise entry, so it falls
+    // to POSITIVE_INFINITY and the placeholder outranks every real tier
+    // unconditionally. setAccountTierToBestActive would then write
+    // accounts.tier = 'enterprise' — 32 concurrent fleet browsers against
+    // api_starter's 2, unlimited session minutes, and profile-storage-quota
+    // clamps enterprise to 'soft' so the launch gate's hard block never fires at
+    // all. Nothing recomputes accounts.tier from Stripe truth afterwards.
+    //
+    // The filler is now the account's CURRENT tier, which makes this log line
+    // literally true: it cannot move the account in either direction, through the
+    // max-rank path OR through downgradeAccountTierToBestRemaining (which takes
+    // the most-recently-updated remaining row, not the highest-ranked — so a
+    // 'free' filler would have been unsafe there in the opposite direction).
+    const unmappedFillerTier =
+      tier === undefined ? await this.repo.getAccountTier(accountId) : null;
     if (tier === undefined) {
       this.config.logger.warn(
         { component: 'stripe-webhooks', eventId: event.id, priceId },
@@ -498,7 +524,7 @@ export class StripeWebhooksService {
       accountId,
       stripeSubscriptionId,
       stripePriceId: priceId,
-      tier: tier ?? 'enterprise',
+      tier: tier ?? unmappedFillerTier ?? 'free',
       status: stripeStatusToLocal(status),
       currentPeriodEnd,
       cancelAtPeriodEnd,
@@ -621,11 +647,19 @@ export class StripeWebhooksService {
     // account that has since been re-subscribed by a newer event.
     const at = eventTime(event);
     const priceId = readSubscriptionPriceId(sub);
+    const mappedCancelTier = priceId !== null ? this.config.priceToTier[priceId] : undefined;
+    const cancelFillerTier =
+      mappedCancelTier === undefined
+        ? ((await this.repo.getAccountTier(accountId)) ?? 'free')
+        : 'free';
     const { applied } = await this.repo.upsertSubscription({
       accountId,
       stripeSubscriptionId,
       stripePriceId: priceId ?? '',
-      tier: priceId !== null ? (this.config.priceToTier[priceId] ?? 'enterprise') : 'enterprise',
+      // V-742 — same filler rule as the upsert path above: never 'enterprise',
+      // which outranks every real tier in tierActivationRank and would be read
+      // back out by the tier recompute as a genuine entitlement.
+      tier: mappedCancelTier ?? cancelFillerTier,
       status: 'canceled',
       currentPeriodEnd: readUnixTimestamp(sub, 'current_period_end'),
       cancelAtPeriodEnd: false,

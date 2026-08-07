@@ -65,6 +65,22 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
     return null;
   }
 
+  /**
+   * V-742 — the account's CURRENT tier, used as the NOT-NULL filler when a
+   * subscription's Stripe price id is not in `priceToTier`. The handler's own log
+   * line says the mirror is "written without tier change", and this is what makes
+   * that literally true: a filler equal to the current tier cannot move the
+   * account in either direction through the rank recompute or the downgrade path.
+   */
+  async getAccountTier(accountId: string): Promise<AccountTier | null> {
+    const [row] = await this.database.db
+      .select({ tier: accounts.tier })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .limit(1);
+    return row?.tier ?? null;
+  }
+
   async upsertSubscription(args: {
     accountId: string;
     stripeSubscriptionId: string;

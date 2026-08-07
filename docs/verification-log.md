@@ -31377,3 +31377,61 @@ halves of the server typecheck, targeted ESLint and Prettier. Code-only — no
 schema change, and the optional hardening (a partial unique index on
 `account_id` WHERE status IN ('active','trialing')) is deliberately NOT included
 here, since it would need a migration and the code fix closes the path.
+
+## V-742 — An unmapped Stripe price granted enterprise entitlements
+
+**Date:** 2026-08-07
+
+When a subscription's Stripe price id is absent from `priceToTier`, the mirror
+row still needs a tier to satisfy a NOT NULL column, and that filler was
+`'enterprise'`. The handler's own log line says what was intended: "subscription
+price id not in priceToTier map; mirror written without tier change". The filler
+was inert when written — the grant on that event is gated on the price being
+mapped — and became load-bearing later, when the rank-aware tier recompute began
+reading `subscriptions.tier` back out.
+
+`tierActivationRank` derives from `TIER_MONTHLY_PRICE_CENTS`, which has no
+`enterprise` entry, so it falls through to `Number.POSITIVE_INFINITY`. The
+placeholder therefore outranks every real tier unconditionally, and
+`setAccountTierToBestActive` writes `accounts.tier = 'enterprise'`. The
+consequences are entitlement-shaped, not cosmetic: 32 concurrent fleet browsers
+against `api_starter`'s 2, `MAX_SESSION_MINUTES_PER_TIER` unlimited, and
+`profile-storage-quota` clamps enterprise to `'soft'` so the launch gate — which
+blocks only on `'hard'` — stops being a cap at all. Nothing recomputes
+`accounts.tier` from Stripe truth afterwards, so it persists.
+
+Direction matters here: Driftstack absorbs this. Stripe still charges whatever
+the real subscription costs; the divergence is entitlement granted versus
+entitlement paid for.
+
+**`'free'` would have been the wrong fix, in the opposite direction.**
+`downgradeAccountTierToBestRemaining` does not take the highest-ranked remaining
+row — it takes the most-recently-_updated_ one. A `'free'` filler that happened
+to be the freshest row would therefore have downgraded an account holding a
+perfectly live paid subscription. The filler is now the account's CURRENT tier,
+which is the only value that cannot move the account through either path: it can
+never win a max-rank contest against a higher real tier, and it can never lower
+the account if the downgrade path picks it. That also makes the existing log line
+literally true rather than aspirational.
+
+Both filler sites are converted — the subscription upsert and the cancel path.
+
+The reachability that makes this more than theoretical needs only ONE
+subscription: the crypto entitlement expiry sweeper calls
+`downgradeAccountTierToBestRemaining` with `fallbackTier: 'free'` when an
+entitlement lapses, and it would pick the unmapped mirror's `'enterprise'`
+instead of dropping to free.
+
+Existing coverage could not catch it: no test fires a subscription event with an
+unmapped price, so the filler was never observed. The new test registers an
+`api_starter` account, fires `customer.subscription.created` with a price absent
+from the map, and asserts the mirror is NOT `'enterprise'`, that it equals the
+account's current tier, and that `accounts.tier` is unchanged. Restoring the
+`'enterprise'` filler is proved red.
+
+Verification: canonical full suite 2766 files / 28,217 passing, with two failures
+neither of which is this change — a dashboard settings page test and an
+agent-session takeover race, both passing in isolation, i.e. the known
+load-sensitive population recorded in V-739. The 159 stripe/billing/crypto suites
+pass in full. Both halves of the server typecheck, targeted ESLint and Prettier.
+Code-only, no schema change.

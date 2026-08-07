@@ -85,6 +85,52 @@ describe('POST /v1/webhooks/stripe — signature verification', () => {
     expect(fx.stripeWebhooksRepo.list()).toHaveLength(1);
   });
 
+  // V-742 — a subscription whose Stripe price id is NOT in priceToTier must not
+  // be mirrored as 'enterprise'.
+  //
+  // The mirror row needs a tier to satisfy the NOT NULL column, and the filler
+  // used to be 'enterprise'. It was inert when written (the grant on this event
+  // is gated on the price being mapped) and became load-bearing once the
+  // rank-aware recompute began reading subscriptions.tier back out:
+  // tierActivationRank derives from TIER_MONTHLY_PRICE_CENTS, which has no
+  // enterprise entry, so it falls through to POSITIVE_INFINITY and the placeholder
+  // outranks every real tier unconditionally. The recompute then writes
+  // accounts.tier = 'enterprise' — 32 concurrent fleet browsers against
+  // api_starter's 2, unlimited session minutes, and profile-storage-quota clamps
+  // enterprise to 'soft' so the launch gate's hard block never fires. Nothing
+  // recomputes accounts.tier from Stripe truth afterwards.
+  it('mirrors an UNMAPPED price without claiming enterprise, and leaves the account tier alone', async () => {
+    fx = await buildTestApp();
+    fx.stripeWebhooksRepo.registerAccount({
+      accountId: fx.accountId,
+      stripeCustomerId: 'cus_test_default',
+      tier: 'api_starter',
+    });
+
+    const raw = makeEvent('evt_unmapped_price', 'customer.subscription.created', {
+      customer: 'cus_test_default',
+      items: { data: [{ price: { id: 'price_bespoke_not_in_map' } }] },
+    });
+    const { signature } = signWithFixture(fx, raw);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+      payload: raw,
+    });
+    expect(res.statusCode).toBe(200);
+
+    const mirrored = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(mirrored).toHaveLength(1);
+    // The defect at its source: the filler must never be the top-ranked tier.
+    expect(mirrored[0]!.tier).not.toBe('enterprise');
+    // And it is the account's CURRENT tier, so the row cannot move the account in
+    // either direction — which is what the handler's log line already claims
+    // ("mirror written without tier change").
+    expect(mirrored[0]!.tier).toBe('api_starter');
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_starter');
+  });
+
   it('401 on missing Stripe-Signature header', async () => {
     fx = await buildTestApp();
     const raw = makeEvent('evt_002', 'customer.subscription.created');
