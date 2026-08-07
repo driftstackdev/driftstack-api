@@ -20,6 +20,18 @@ const FRAME: PageStateFrame = {
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
+/** A lookup the TEST decides when to resolve. Lets the ordering tests below pin
+ *  the relay's chaining without depending on wall-clock timings — a fixed sleep
+ *  turns CPU contention into a spurious failure, and simply widening it hides the
+ *  next real regression. */
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 describe('audit-M1 makeSessionPageStateRelay', () => {
   it('stores the pageState when the reporting node OWNS the session', async () => {
     const store = new SessionPageStateStore();
@@ -64,43 +76,51 @@ describe('audit-M1 makeSessionPageStateRelay', () => {
 
   it('preserves per-session order and coalesces pending state to the newest frame', async () => {
     const store = new SessionPageStateStore();
-    // First lookup is deliberately slow, second is fast — without per-session
-    // chaining the fast 'loaded' would land first and the slow 'loading' would
-    // clobber it. With chaining, frame 1 fully applies before frame 2 is looked
-    // up, so the final stored state is the NEWER frame ('loaded').
+    // Frame 1's lookup is held open by the test, so the relay's per-session
+    // chaining is observed directly rather than inferred from a race that
+    // happened to settle in the expected order. Without chaining the newer
+    // 'loaded' would be looked up and applied immediately and frame 1's late
+    // result would then clobber it, leaving 'loading' as the final state.
+    const first = deferred<{ nodeId: string }>();
+    const second = deferred<{ nodeId: string }>();
     let call = 0;
     const sessions = {
       get: vi.fn().mockImplementation(() => {
         call += 1;
-        const delayMs = call === 1 ? 30 : 0; // frame 1 slow, frame 2 fast
-        return new Promise((resolve) => setTimeout(() => resolve({ nodeId: 'node-1' }), delayMs));
+        return call === 1 ? first.promise : second.promise;
       }),
     };
     const relay = makeSessionPageStateRelay(sessions, store, logger);
-    const loading: PageStateFrame = {
+    const frame = (state: PageStateFrame['state']): PageStateFrame => ({
       type: 'pageState',
       sessionId: 'agt_1',
-      state: 'loading',
+      state,
       url: 'https://example.com',
-    };
-    const loaded: PageStateFrame = {
-      type: 'pageState',
-      sessionId: 'agt_1',
-      state: 'loaded',
-      url: 'https://example.com',
-    };
-    const superseded: PageStateFrame = {
-      type: 'pageState',
-      sessionId: 'agt_1',
-      state: 'stalled',
-      url: 'https://example.com',
-    };
-    relay(loading, 'node-1');
-    relay(superseded, 'node-1');
-    relay(loaded, 'node-1');
-    await new Promise((r) => setTimeout(r, 60));
-    // The newer frame wins; the older slow one did NOT overwrite it.
-    expect(store.get('agt_1')?.state).toBe('loaded');
+    });
+
+    relay(frame('loading'), 'node-1');
+    relay(frame('stalled'), 'node-1');
+    relay(frame('loaded'), 'node-1');
+
+    // Chaining, stated as a fact about the mechanism: while frame 1 is in flight
+    // the successor has NOT been looked up, and nothing has been stored.
+    await flush();
+    expect(sessions.get).toHaveBeenCalledTimes(1);
+    expect(store.get('agt_1')).toBeNull();
+
+    first.resolve({ nodeId: 'node-1' });
+    await vi.waitFor(() => {
+      expect(sessions.get).toHaveBeenCalledTimes(2);
+    });
+    // Frame 1 fully applied before the successor was even looked up.
+    expect(store.get('agt_1')?.state).toBe('loading');
+
+    second.resolve({ nodeId: 'node-1' });
+    await vi.waitFor(() => {
+      expect(store.get('agt_1')?.state).toBe('loaded');
+    });
+    // 'stalled' was coalesced away by the newer frame and never looked up: three
+    // frames, two lookups.
     expect(sessions.get).toHaveBeenCalledTimes(2);
   });
 

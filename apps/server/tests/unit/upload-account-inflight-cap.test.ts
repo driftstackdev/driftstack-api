@@ -29,7 +29,7 @@
 // + a registered FleetControlRegistry connection whose socket-send callback we
 // drive).
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildTestApp,
   seedAdditionalAccount,
@@ -758,8 +758,22 @@ describe('POST /v1/agent-sessions/:id/files — the LIFETIME cap holds under CON
     await fx.sessions.setNodeId(rec.id, nodeId);
 
     // Fire three WITHOUT awaiting, so all are admitted before any relay settles.
-    const inFlight = [0, 1, 2].map((i) => postDirectUpload(fx, rec.id, `race-${i}.bin`, CHUNK_B64));
-    await new Promise((r) => setTimeout(r, 50));
+    let shedCount = 0;
+    const inFlight = [0, 1, 2].map((i) =>
+      postDirectUpload(fx, rec.id, `race-${i}.bin`, CHUNK_B64).then((r) => {
+        if (!entered.includes(`race-${i}.bin`)) shedCount += 1;
+        return r;
+      }),
+    );
+    // Release only once the race has actually been decided: two parked at the
+    // gate and the third already shed. A fixed sleep here is both flaky under
+    // load AND unsound — releasing early frees the reservation, so the third
+    // upload could be ADMITTED and the cap assertion below would be testing a
+    // different scenario than the one it names.
+    await vi.waitFor(() => {
+      expect(entered).toHaveLength(2);
+      expect(shedCount).toBe(1);
+    });
     release();
     const bodies = (await Promise.all(inFlight)).map((r) => r.json<FilesBody>());
 
@@ -790,10 +804,19 @@ describe('POST /v1/agent-sessions/:id/files — the LIFETIME cap holds under CON
     const rec = await fx.sessions.create({ accountId: LIFETIME_ACC, tokenBudgetTotal: 50_000 });
     await fx.sessions.setNodeId(rec.id, nodeId);
 
+    let shedCount = 0;
     const inFlight = [0, 1, 2].map((i) =>
-      postDirectUpload(fx, rec.id, `race-b-${i}.bin`, CHUNK_B64),
+      postDirectUpload(fx, rec.id, `race-b-${i}.bin`, CHUNK_B64).then((r) => {
+        if (!entered.includes(`race-b-${i}.bin`)) shedCount += 1;
+        return r;
+      }),
     );
-    await new Promise((r) => setTimeout(r, 50));
+    // See the count-cap test above: release only once two are parked and the
+    // third has been shed, so the release cannot itself create capacity.
+    await vi.waitFor(() => {
+      expect(entered).toHaveLength(2);
+      expect(shedCount).toBe(1);
+    });
     release();
     const bodies = (await Promise.all(inFlight)).map((r) => r.json<FilesBody>());
 

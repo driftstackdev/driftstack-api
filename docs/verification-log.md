@@ -31498,3 +31498,66 @@ Server unit suite: 19,102 passing. Two runs each surfaced ONE failure, in a
 DIFFERENT unrelated file (`log-claims-match-captured-outcomes`, then
 `session-page-state-relay`), both passing in isolation — the load-flake population,
 not this change. Being investigated next; NOT recorded as noise.
+
+## V-744 — wall-clock budgets in async tests: two real load-fragilities, one unsound
+
+**Trigger.** Two consecutive full runs of the server unit suite each failed ONE
+test, in a DIFFERENT unrelated file (`log-claims-match-captured-outcomes`, then
+`session-page-state-relay`), both passing in isolation. Not noise — in this repo a
+flake has been a real defect every time.
+
+**`session-page-state-relay`.** The ordering test fired three frames (frame 1's
+lookup slow at 30ms, frames 2–3 fast), slept a hard 60ms, then asserted the final
+state was `loaded`. Under CPU contention the chained work overran the 60ms budget
+and the assertion read `loading`.
+
+The obvious fix — poll until `loaded` — would have been **vacuous**: with chaining
+broken, `loaded` IS applied transiently at ~0ms before frame 1's late result
+clobbers it, so a poll would go green on the broken code. Instead the lookups are
+now deferreds the test resolves, which removes wall-clock entirely and lets the
+test pin the _mechanism_: while frame 1 is in flight the successor has NOT been
+looked up and nothing is stored; after frame 1 resolves the state is exactly
+`loading`; three frames produce two lookups. Strictly stronger than what it
+replaced.
+
+**`upload-account-inflight-cap` (2 sites).** `sleep(50)` then `release()` the
+admission gate, then assert exactly 2 of 3 uploads were admitted. This was not
+merely flaky but **unsound**: `release()` frees the lifetime reservation, so if the
+third upload had not yet been shed when the gate opened it could be ADMITTED, and
+the test would silently be exercising a different scenario than its name. Now it
+waits for the race to be genuinely decided — two parked at the gate AND the third
+already shed — before releasing.
+
+**Scope.** Swept all 36 fixed-sleep sites across 26 server test files. Most are
+sound: a sleep used to _exceed a TTL_ is monotone-safe under load (more delay only
+helps), and survival assertions ("still OPEN after 300ms") likewise. Only
+completion-budget sleeps are fragile. `fleet-events-websocket:211` looked
+budget-shaped in grep context but is correctly written — an `expect.poll` handles
+arrival and the 50ms window is a deliberate bounded check for a DUPLICATE pong.
+Reading it rather than trusting the grep context is what kept it unchanged.
+
+**Proof.** Every rewritten test mutation-proved, restores verified byte-identical:
+
+- relay chaining defeated (`pump` no longer skips in-flight sessions) → red.
+  My FIRST mutation attempt hit the wrong site (the pending-replacement fast path,
+  where both branches funnel through `pending`+`pump`) and stayed green — a green
+  mutation means the mutation missed, not that the guard is absent.
+- lifetime COUNT cap removed → the count race test red.
+- lifetime BYTE cap removed → the byte race test red.
+
+Full suite: **2766 files, 28,223 passing, 0 failures.**
+
+**Unresolved, recorded honestly.** The single `log-claims-match-captured-outcomes`
+failure is NOT explained. The assertion that failed is a pure function over a
+module-scope constant, which should be incapable of load-sensitivity; it has not
+reproduced in 4 subsequent runs. Not closed, not dismissed.
+
+**Root cause NOT fixed (deliberate, needs a product decision).** V-743's scenario
+exists because `sweepExpiredOrders` expires on `created_at` age alone, so a
+slow-settling payment on a `pending` order can land after the sweep. Excluding
+orders that already carry a `payment_id` (the provider has seen a payment, so the
+checkout is not abandoned) would remove the scenario at the source — but it changes
+lifecycle semantics and needs a secondary timeout for payments that never settle.
+That is a founder call on how long to wait, not an observability fix. The sweep's
+own guard is otherwise correct: it re-checks `pending` under the row lock, so
+`confirming` orders and IPNs that win the race are safe (#79).
