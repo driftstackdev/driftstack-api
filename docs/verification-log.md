@@ -31785,3 +31785,62 @@ tree — including a caller with the old arity that failed at runtime as postgre
 misattribute the "customer paid without receiving their tier" alarm. `emit` catches
 every branch internally and logs a warn ("best-effort, swallowed"), so it cannot
 throw. Reading the callee settled what the call-site shape suggested.
+
+## V-748 — privacy-policy §9 discloses two deletions the system never performs
+
+**Finding (audit, not a code change).** Checked each row of `privacy-policy.md` §9
+against implementation. Two disclosed deletions have no implementation anywhere:
+
+1. **"revoked records retained 90 days for audit then deleted"** — no deletion path
+   for `api_keys` exists: no `.delete(apiKeys)` in the db layer, no raw
+   `DELETE FROM api_keys`, no sweeper, and nothing at the DB level (no `pg_cron`, no
+   retention job in any of the 111 migrations). `revokeAllForAccount` sets
+   `revoked_at` and the row persists indefinitely.
+2. **"Session metadata | 90 days operational"** — neither `sessions` nor
+   `session_operations` has any deletion path. This is not covered by the same row's
+   "aggregated counters (no PII)" clause: `sessions` holds customer free text
+   (`purpose`, `label`, `metadata`) and `session_operations` holds
+   `request_fingerprint` / `result` / `error`. Nor is it covered by account
+   termination — `deleteAccount` only sets `accounts.status = 'deleted'`, so the
+   `onDelete: 'cascade'` FKs on `accounts.id` never fire.
+
+**Why (1) was never built, mechanically.** `sessions.api_key_id → api_keys.id` is
+`onDelete: 'restrict'`, so Postgres refuses to delete a revoked key while any session
+references it. The two promises are therefore coupled: sessions must be purged first
+before revoked keys are deletable at all. That ordering constraint — not oversight
+alone — is why the key half is unimplemented.
+
+**Prior art, and why this is not a re-derivation.** `docs/internal/2026-06-10-data-retention-audit.md`
+already exists and I read it before writing this up. Its lens is unbounded GROWTH over
+append-heavy operational tables, and its covered-list contains none of `api_keys`,
+`sessions`, `session_operations`. It is also now stale: `session_operations` landed
+2026-07-31 (migration 0108), seven weeks after it — an append-heavy account-scoped
+table with no retention, exactly the class that document exists to catch. Appended a
+dated re-audit section there rather than editing its record.
+
+**Deliberately NOT actioned, and why.** Two legitimate resolutions exist — implement
+the deletions, or amend the disclosed wording — and choosing between them is not an
+engineering call. I did not write a data-deletion sweeper: deleting customer rows is
+irreversible, a bug destroys data with no recovery, it needs a deliberate ordering
+design around a `restrict` FK, and my standing constraints exclude customer-data
+mutation. I also did not amend the privacy policy, which is a legal decision and
+would be the wrong reflex regardless. **Founder decision needed.**
+
+**Audited this pass, no finding.** Rate limiting is the best-built subsystem I have
+reviewed: `trustProxy` is a hop COUNT (1) not `true`, so a client-supplied
+`X-Forwarded-For` chain cannot spoof the key; the Redis Lua script fails safe on a
+corrupt hash; a store error degrades to a BOUNDED in-process store (never "allow
+everything") with a warn plus a dedicated `rateLimitStoreFallbackTotal` metric; and a
+fallback-store error fails CLOSED. Signature handling likewise: outbound webhooks sign
+`t.body` (timestamp inside the HMAC) over the same stored body string that is
+transmitted — no re-serialisation — at attempt time rather than enqueue time, with
+redirects disabled against SSRF; inbound Stripe uses `timingSafeEqual` with a 300s
+`Math.abs` window; inbound NowPayments uses HMAC-SHA512 over recursively sorted
+canonical JSON with a length guard before `timingSafeEqual`.
+
+**Memory corrected, not re-reported.** My own note claimed "deleteAccount swallows
+reclaim errors". It no longer does: every step runs through a `reclaim(step, …)`
+helper that logs `account_reclaim_failed` at error level with the step name, there is
+a fifth `api_keys_minted_elsewhere` step (V-727), and bootstrap passes the real logger
+as the 7th constructor argument. Verified the wiring rather than trusting the optional
+`logger?.error?.` shape.

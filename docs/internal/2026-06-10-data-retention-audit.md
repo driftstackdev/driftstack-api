@@ -50,3 +50,64 @@ No code changed here — retention is an irreversible-deletion policy choice, so
 surfaced rather than auto-applied. The mechanisms to implement it both exist.
 
 **W441 update:** `scheduled_jobs` finished-row retention RESOLVED — daily prune job (scheduled-jobs-prune-sweeper.ts) deletes completed/failed rows older than 30 days via repo.pruneFinished. Both retention gaps (session_events archive W438 + scheduled_jobs prune W441) now closed.
+
+---
+
+## Re-audit 2026-08-07 — different lens: DISCLOSED promises vs implementation
+
+The audit above asks "which append-heavy table grows unbounded". This pass asks the
+narrower compliance question: **for each row of privacy-policy.md §9, does code
+actually perform the deletion it discloses?** Three findings; none of them
+contradicts the above, because none of these tables was in its scope.
+
+### 1. Revoked API keys are never deleted (disclosed: 90 days)
+
+§9: "Authentication data (hashed API keys, key metadata) | Until revocation;
+revoked records retained 90 days for audit **then deleted**."
+
+There is no deletion path for `api_keys` anywhere — not in the db layer
+(`.delete(apiKeys)` does not exist), not in raw SQL, not in any sweeper, and not at
+the DB level (no `pg_cron`, no retention job in any migration). `revokeAllForAccount`
+sets `revoked_at`; the row persists indefinitely. Data at stake is pseudonymous
+(customer-supplied `name`, `key_prefix`, `key_hash`, `last_used_at`), so the exposure
+is a policy breach rather than a plaintext-credential leak.
+
+### 2. Session metadata is never deleted (disclosed: 90 days operational)
+
+§9: "Session metadata | 90 days operational; aggregated counters (no PII) retained
+indefinitely for capacity planning."
+
+Neither `sessions` nor `session_operations` has any deletion path. `sessions` carries
+customer free text (`purpose`, `label`, `metadata`) and `session_operations` carries
+`request_fingerprint` / `result` / `error`, so this is behavioural content, not just
+counters — the "aggregated counters" clause does not cover it. Note the
+account-termination purge does NOT help: `deleteAccount` only flips
+`accounts.status = 'deleted'`, so the `onDelete: 'cascade'` FKs on `accounts.id`
+never fire.
+
+### 3. Why (1) was almost certainly never built — the two are coupled by an FK
+
+`sessions.api_key_id → api_keys.id` is **`onDelete: 'restrict'`**. Postgres therefore
+_refuses_ to delete a revoked API key while any session row references it. So the
+90-day key deletion is not independently implementable: **sessions must be purged
+first**, then the keys become deletable. Any implementation has to do them in that
+order (or change the FK, which loses the attribution the `restrict` protects).
+
+### Stale-audit note
+
+`session_operations` landed **2026-07-31** (migration 0108) — seven weeks AFTER this
+audit was written. It is append-heavy, account-scoped, and has no retention
+mechanism: precisely the class this document exists to catch, added after the last
+sweep. Treat the "the rest are covered" line above as scoped to 2026-06-10.
+
+### Deliberately NOT implemented — needs a founder decision
+
+Two legitimate resolutions, and choosing is not an engineering call:
+
+- **implement** the deletions (sessions+operations first, then revoked keys), or
+- **amend** the disclosed §9 wording to match what the system actually does.
+
+I did not write a data-deletion sweeper: deleting customer rows is irreversible, a
+bug in it destroys data with no recovery, and it needs a deliberate ordering design
+around the `restrict` FK. Amending a published privacy policy is a legal decision.
+Flagged rather than actioned.
