@@ -62,8 +62,18 @@ const BENIGN = /\.(?:body\??\.)?cancel\(\)|reader\.cancel\(\)|\.end\(\{|clearTim
 const CLAIMS_DONE =
   /'[^']*\b(?:released|tore down|torn down|destroyed|deleted|purged|revoked|reclaimed|rolled back|reverted|cleaned up|cancelled|canceled|removed|flushed|drained|persisted|committed|restored)\b[^']*'/i;
 
-/** How far a claim can sit from the discard and still be about it. */
-const WINDOW = 16;
+/**
+ * How far a claim can sit from the discard and still be about it.
+ *
+ * 16 was too small and the guard was VACUOUS because of it — found 2026-08-07 by
+ * re-mutating the real defect back into sessions.ts, which the guard passed. A
+ * production log call carries a 6-field object plus a rationale comment, so the
+ * message sits 22 and 16 lines after its capture at the two real sites. The
+ * synthetic arm below used a compact 4-field object and therefore passed while
+ * the real shape escaped: the control was easier than reality, which is the only
+ * way a positive control can lie.
+ */
+const WINDOW = 40;
 
 interface Offender {
   file: string;
@@ -105,14 +115,22 @@ function claimsNextToDiscardedOutcomes(source: string, file: string): Offender[]
  * fixture written to suit it.
  */
 const KNOWN_BAD = `
+      // Tear down the LIVE driver/browser session. Marking the row 'errored' +
+      // stamping destroyedAt frees the DB cap slot, but the duration sweeper only
+      // reaps ACTIVE_SESSION_STATUSES and destroy() short-circuits 'errored' — so
+      // without this the real browser leaks forever on every transient error.
+      // Best-effort, mirroring create()'s orphan guard; the original error wins.
       await destroyDriverSessionWithTimeout(() =>
-        this.deps.driver.destroy(driverResult.driverSessionId),
+        this.deps.driver.destroy(session.driverSessionId),
       ).catch(() => {});
       try {
         this.deps.logger?.error?.(
           {
             component: 'sessions-service',
             event: 'post_dispatch_bind_failed',
+            account_id: accountId,
+            session_id: reserved.id,
+            driver_session_id: driverResult.driverSessionId,
             err,
           },
           'session post-dispatch DB write failed — released the leaked concurrency slot + tore down the orphaned worker',
