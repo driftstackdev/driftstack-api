@@ -47,14 +47,17 @@ class StubScheduledJobsRepo implements ScheduledJobsRepo {
     return Promise.resolve([]);
   }
 
-  markComplete(): Promise<void> {
-    return Promise.resolve();
+  // V-747 — settles report whether the claim's lock fence matched. This stub
+  // always holds its lock (true); the fenced-out path is covered in
+  // scheduled-jobs-service.test.ts.
+  markComplete(): Promise<boolean> {
+    return Promise.resolve(true);
   }
-  markRetry(): Promise<void> {
-    return Promise.resolve();
+  markRetry(): Promise<boolean> {
+    return Promise.resolve(true);
   }
-  markFailed(): Promise<void> {
-    return Promise.resolve();
+  markFailed(): Promise<boolean> {
+    return Promise.resolve(true);
   }
   pruneFinished(): Promise<number> {
     return Promise.resolve(0);

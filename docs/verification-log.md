@@ -31690,3 +31690,98 @@ paid without receiving their tier" alarm. `emit` catches every branch internally
 and logs a warn ("best-effort, swallowed"), so it cannot throw and the call sites
 are correct as written. Reading the callee rather than the call-site shape is what
 settled it.
+
+## V-747 — a job lease that was acquired with an identity and released without checking it
+
+**Finding.** `scheduled_jobs` claims set `locked_by` + `locked_at` and increment
+`attempts`; `claimDue` re-claims any row whose `locked_at` is older than a 5-minute
+stale window. It does **not** exclude the current worker's own still-running job, so
+a handler that overruns that window is re-claimed and **run again concurrently** —
+and this needs only ONE worker, not two. The three settles then keyed on `id`
+alone, so the slow invocation's late write landed on a row a newer claim owned:
+
+- `markComplete` could complete a job the new owner is still running;
+- `markRetry` could re-arm `run_at` on a job the new owner had already completed,
+  running a side-effecting sweep a THIRD time;
+- and every re-claim burns an attempt, so a slow-but-successful job can exhaust
+  `maxAttempts` and be recorded as permanently failed while it is still running.
+
+The registered handlers are exactly the ones that can be slow: account-deletion
+purge, agent-session orphan reap, auth-token sweep, cost nightly, crypto-entitlement
+expiry, OAuth retention, profile-trash purge.
+
+**Fixed.** All three settles are fenced on `locked_by = workerId` and return whether
+the fence matched; the service threads its `workerId` and raises
+`scheduled_job_lock_lost_before_settle` (error) when a settle is discarded. That
+alarm is the point: the discarded write is the ONLY in-band evidence that a
+duplicate execution happened, and nothing recorded it before.
+
+**Which forced a second fix — the workerId was not unique.** `bootstrap` used
+`pid-${process.pid}`. A containerised app is usually PID 1, so two replicas are both
+`pid-1` (one's stale write satisfies the other's fence, defeating it) and the id is
+stable across restarts. The comment beside it claimed a composition
+(`<process-pid>@<host>`) the code never had, and justified indifference with "SKIP
+LOCKED is what guarantees mutual exclusion, not the workerId" — true of the CLAIM,
+but the settle fence made uniqueness load-bearing. Now
+`pid-<pid>@<hostname>-<random8>`: hostname identifies the replica, and the random
+suffix means a RESTARTED process gets a new id, which is required — otherwise it
+could not reclaim its own orphaned rows.
+
+**Considered and rejected:** excluding `locked_by = <self>` from `claimDue` to stop
+the self-steal outright. With a container's stable `pid-1` that would have stranded
+a crashed worker's rows permanently, which is worse than the bug.
+
+**Deliberately NOT fixed.** The duplicate RUN still happens; only its state
+corruption is prevented and its occurrence made visible. Closing it needs either a
+lock heartbeat that refreshes `locked_at` during a long handler, or a larger stale
+window (which slows genuine crash recovery). Both are design calls, not a fence.
+
+**Proof.** 4 new service tests + 1 DB-backed repo test against real Postgres.
+Mutation-proved, restores byte-identical: suppressing the alarm reds 4 tests;
+reverting all three SQL fences to `id`-only reds the DB-backed fence test AND the
+parity pin.
+
+**Also corrected: `durable-webhook-delivery`'s fence comments.** They claimed "only
+the current owner of an in_flight row may finalize it". A status fence cannot
+identify an owner — a reclaimed row is `in_flight` AGAIN — so a stalled worker whose
+write lands while the FRESH attempt is in flight does match and finalizes with the
+stale outcome. The guarantee that holds is the narrower one its own TEST states
+("reclaimed AND FINALIZED"), and the comments now say that. Left as-is otherwise:
+harm is bounded (at-least-once means the customer got a POST) and a real fence needs
+a per-claim token — `attempts` cannot serve, since the claim doesn't bump it and both
+workers compute the same `attemptNumber`.
+
+**Verification, wider than before.** With Postgres + Redis wired locally the
+DB-gated tests run instead of skipping: **2766 files, 28,484 passing, 0 failures**
+(the default local gate skips 63 files, ~55 of them DB-gated). CI runs these too
+(`postgres:17-alpine` + `redis:7-alpine`, plus a separate e2e job), so they were not
+rotting — my local gate was simply the narrower instrument. `npm run typecheck`
+clean, which matters here: `apps/server/tsconfig.json` EXCLUDES `tests`, so the
+src-only typecheck I ran first reported clean while five real errors sat in the test
+tree — including a caller with the old arity that failed at runtime as postgres-js
+`UNDEFINED_VALUE`. The workspace script runs both projects.
+
+**Audited this pass, no finding.**
+
+- Agent-session tenant isolation: all 18 by-id loads gated by
+  `callerCanAccessAgentSession` (checked mechanically, not by counting). The one
+  documented bypass (`guiControlKeyAuthorized`) is genuinely bound to the route's
+  own `:id` and fail-closed — `validateGuiControlKey` throws `UnauthorizedError`
+  when the session is null.
+- IDOR sweep across all 27 route files: 2 flagged, both sound. `/v1/status/incidents/:id`
+  is public BY DESIGN and safe end-to-end: `publicOnly: true` → `public = true` in
+  SQL → 404 before `listUpdates` → allow-list projections that omit
+  `postedByAdminId`. The other was a scan-window artefact.
+- Write-side team RBAC: every write handler resolving `X-Driftstack-Account`
+  requires admin role (11 sites). Billing writes never consume the header at all —
+  safe by construction rather than by a check.
+- Log redaction: the pino→Sentry mirror invariant IS enforced (subset direction,
+  with start/end marker assertions and an explicit `> 10` vacuity guard on both
+  sets) — stronger than the ad-hoc extraction I first tried, which silently
+  truncated and would have produced a false gap report.
+
+**A finding I raised and refuted myself, again.** I read the unwrapped
+`await accountLifecycle.emit(...)` at both tier-change sites as a throw that would
+misattribute the "customer paid without receiving their tier" alarm. `emit` catches
+every branch internally and logs a warn ("best-effort, swallowed"), so it cannot
+throw. Reading the callee settled what the call-site shape suggested.

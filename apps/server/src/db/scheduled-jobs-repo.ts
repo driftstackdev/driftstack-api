@@ -152,15 +152,26 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
     return rows.map((r) => r.job_type);
   }
 
-  async markComplete(jobId: string, at: Date): Promise<void> {
-    await this.database.db
+  // V-747 — every settle is fenced on `locked_by = workerId` and returns whether
+  // it matched. claimDue re-claims a row whose lock is older than the 5-minute
+  // stale window without excluding the current worker's own running job, so an
+  // overrunning handler's late write must not land on a row someone else now owns
+  // (it could complete a job still running, or markRetry one already completed and
+  // re-run a side-effecting sweep). RETURNING id tells the caller which happened.
+  async markComplete(jobId: string, at: Date, workerId: string): Promise<boolean> {
+    const rows = await this.database.db
       .update(scheduledJobs)
       .set({ completedAt: at, lockedBy: null, lockedAt: null, updatedAt: at })
-      .where(eq(scheduledJobs.id, jobId));
+      .where(and(eq(scheduledJobs.id, jobId), eq(scheduledJobs.lockedBy, workerId)))
+      .returning({ id: scheduledJobs.id });
+    return rows.length > 0;
   }
 
-  async markRetry(jobId: string, opts: { lastError: string; nextRunAt: Date }): Promise<void> {
-    await this.database.db
+  async markRetry(
+    jobId: string,
+    opts: { lastError: string; nextRunAt: Date; workerId: string },
+  ): Promise<boolean> {
+    const rows = await this.database.db
       .update(scheduledJobs)
       .set({
         runAt: opts.nextRunAt,
@@ -169,11 +180,16 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
         lockedAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(scheduledJobs.id, jobId));
+      .where(and(eq(scheduledJobs.id, jobId), eq(scheduledJobs.lockedBy, opts.workerId)))
+      .returning({ id: scheduledJobs.id });
+    return rows.length > 0;
   }
 
-  async markFailed(jobId: string, opts: { lastError: string; at: Date }): Promise<void> {
-    await this.database.db
+  async markFailed(
+    jobId: string,
+    opts: { lastError: string; at: Date; workerId: string },
+  ): Promise<boolean> {
+    const rows = await this.database.db
       .update(scheduledJobs)
       .set({
         failedAt: opts.at,
@@ -182,7 +198,9 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
         lockedAt: null,
         updatedAt: opts.at,
       })
-      .where(eq(scheduledJobs.id, jobId));
+      .where(and(eq(scheduledJobs.id, jobId), eq(scheduledJobs.lockedBy, opts.workerId)))
+      .returning({ id: scheduledJobs.id });
+    return rows.length > 0;
   }
 
   // W441 — retention prune. Hard-deletes finished rows (completed OR failed)

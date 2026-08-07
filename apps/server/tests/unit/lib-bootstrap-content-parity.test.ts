@@ -223,13 +223,25 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/accountAuditService, \/\/ V-202b — required for tier_changed audit emit/);
   });
 
-  it('V-202d scheduled-jobs framing pinned: generic dispatcher; trial_pack.expired handler removed 2026-05-27; dispatcher remains for auth_tokens.sweep + cost.recompute_nightly; workerId `pid-${pid}@<host>` sufficient — single-replica today; multi-replica safety via SELECT FOR UPDATE SKIP LOCKED in repo (not workerId)', () => {
+  it('V-202d scheduled-jobs framing pinned: generic dispatcher; trial_pack.expired handler removed 2026-05-27; dispatcher remains for auth_tokens.sweep + cost.recompute_nightly; V-747 workerId is unique PER PROCESS (pid@host-random) because the settle fence keys on it — pid alone is PID 1 in a container, so it collided across replicas and was stable across restarts', () => {
     expect(body).toMatch(
       /\/\/ V-202d — generic scheduled-jobs dispatcher\. The trial_pack\.expired\s*\n?\s*\/\/ handler was removed 2026-05-27 with the trial_pack retirement; the\s*\n?\s*\/\/ dispatcher remains for the other registered cron-shaped jobs\s*\n?\s*\/\/ \(auth_tokens\.sweep, cost\.recompute_nightly\) via `register\(\.\.\.\)`\./,
     );
+    // V-747 — this pinned "`<process-pid>@<host>` is sufficient ... multi-replica
+    // safety still works because SELECT FOR UPDATE SKIP LOCKED ... not the
+    // workerId". Two problems: the code never had the `@<host>` part the comment
+    // described, and the SKIP-LOCKED argument only covers the CLAIM — the settle
+    // fence added in V-747 keys on locked_by, so uniqueness became load-bearing.
     expect(body).toMatch(
-      /\/\/ workerId composition: `<process-pid>@<host>` is sufficient here —\s*\n?\s*\/\/ production runs single-replica today; multi-replica safety still\s*\n?\s*\/\/ works because the SELECT FOR UPDATE SKIP LOCKED query in the repo\s*\n?\s*\/\/ is what guarantees mutual exclusion, not the workerId\./,
+      /SKIP LOCKED is what guarantees\s*\n?\s*\/\/ mutual exclusion at CLAIM time/,
     );
+    expect(body).toMatch(/must therefore be unique per PROCESS/);
+    expect(body).toMatch(/a\s*\n?\s*\/\/\s*containerised app is usually PID 1/);
+    expect(body).toMatch(
+      /workerId: `pid-\$\{process\.pid\.toString\(\)\}@\$\{hostname\(\)\}-\$\{randomUUID\(\)\.slice\(0, 8\)\}`/,
+    );
+    // The old "sufficient" framing must not come back.
+    expect(body).not.toMatch(/is sufficient here —/);
   });
 
   it('V-225 wiring framing pinned for both webhooks (created/deleted) and profiles (created/deleted); V-049 legalService gate on ApiKeysService; V-216 accountAudit wired for api-keys customer-facing audit emit', () => {

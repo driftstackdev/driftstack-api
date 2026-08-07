@@ -22,6 +22,7 @@
 import { attachUnhandledRejectionMetric } from './unhandled-rejection-backstop.js';
 import { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -748,12 +749,20 @@ export async function createProductionDeps(
   // handler was removed 2026-05-27 with the trial_pack retirement; the
   // dispatcher remains for the other registered cron-shaped jobs
   // (auth_tokens.sweep, cost.recompute_nightly) via `register(...)`.
-  // workerId composition: `<process-pid>@<host>` is sufficient here —
-  // production runs single-replica today; multi-replica safety still
-  // works because the SELECT FOR UPDATE SKIP LOCKED query in the repo
-  // is what guarantees mutual exclusion, not the workerId.
+  // workerId composition. SELECT FOR UPDATE SKIP LOCKED is what guarantees
+  // mutual exclusion at CLAIM time, and that part never depended on the
+  // workerId. But V-747 made the workerId load-bearing for the settle fence
+  // (`locked_by = workerId`), and it must therefore be unique per PROCESS:
+  //   - the old `pid-<pid>` alone collides across replicas, because a
+  //     containerised app is usually PID 1 — two replicas would both be
+  //     `pid-1`, so one's stale write would satisfy the other's fence;
+  //   - it was also STABLE across restarts for the same reason, and the
+  //     comment here claimed a `@<host>` component the code never had.
+  // hostname identifies the replica (the container id, in practice) and the
+  // random suffix guarantees a restarted process gets a NEW id — which is
+  // required, or a restarted worker could not reclaim its own orphaned rows.
   const scheduledJobsService = new ScheduledJobsService(scheduledJobsRepo, logger, {
-    workerId: `pid-${process.pid.toString()}`,
+    workerId: `pid-${process.pid.toString()}@${hostname()}-${randomUUID().slice(0, 8)}`,
   });
 
   // Webhooks first so sessions + api-keys can wire it.

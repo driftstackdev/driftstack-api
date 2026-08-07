@@ -19,13 +19,19 @@ import {
 } from '../../src/services/scheduled-jobs.js';
 import type { Logger } from '../../src/lib/logger.js';
 
-function makeRepo(initialDue: ScheduledJobRow[] = []): {
+function makeRepo(
+  initialDue: ScheduledJobRow[] = [],
+  // V-747 — when true every settle reports the lock fence did NOT match, i.e. the
+  // handler outran the stale-lock window and another claim took the row.
+  lockLost = false,
+): {
   repo: ScheduledJobsRepo;
   state: {
     completed: string[];
     retried: Array<{ id: string; lastError: string; nextRunAt: Date }>;
     failed: Array<{ id: string; lastError: string }>;
     enqueues: EnqueueScheduledJobInput[];
+    settleWorkerIds: string[];
   };
 } {
   const state = {
@@ -33,6 +39,7 @@ function makeRepo(initialDue: ScheduledJobRow[] = []): {
     retried: [] as Array<{ id: string; lastError: string; nextRunAt: Date }>,
     failed: [] as Array<{ id: string; lastError: string }>,
     enqueues: [] as EnqueueScheduledJobInput[],
+    settleWorkerIds: [] as string[],
   };
   let due = [...initialDue];
   const repo: ScheduledJobsRepo = {
@@ -46,17 +53,23 @@ function makeRepo(initialDue: ScheduledJobRow[] = []): {
       due = [];
       return Promise.resolve(batch);
     },
-    markComplete: (jobId) => {
+    markComplete: (jobId, _at, workerId) => {
+      state.settleWorkerIds.push(workerId);
+      if (lockLost) return Promise.resolve(false);
       state.completed.push(jobId);
-      return Promise.resolve();
+      return Promise.resolve(true);
     },
     markRetry: (jobId, opts) => {
+      state.settleWorkerIds.push(opts.workerId);
+      if (lockLost) return Promise.resolve(false);
       state.retried.push({ id: jobId, lastError: opts.lastError, nextRunAt: opts.nextRunAt });
-      return Promise.resolve();
+      return Promise.resolve(true);
     },
     markFailed: (jobId, opts) => {
+      state.settleWorkerIds.push(opts.workerId);
+      if (lockLost) return Promise.resolve(false);
       state.failed.push({ id: jobId, lastError: opts.lastError });
-      return Promise.resolve();
+      return Promise.resolve(true);
     },
     pruneFinished: () => Promise.resolve(0),
   };
@@ -233,5 +246,83 @@ describe('V-553.B-29 ScheduledJobsService.processTick', () => {
     await svc.processTick(NOW);
 
     expect(state.retried[0]?.lastError).toBe('scheduled job failed');
+  });
+});
+
+// V-747 — claimDue re-claims any row whose locked_at is older than the 5-minute
+// stale window and does NOT exclude the current worker's own still-running job. So
+// a handler that overruns that window gets re-claimed and re-run concurrently, and
+// its late settle must not land on the row the new owner now holds.
+describe('settle is fenced on the claim lock (V-747)', () => {
+  function capturingLogger(): { logger: Logger; errors: Array<[Record<string, unknown>, string]> } {
+    const errors: Array<[Record<string, unknown>, string]> = [];
+    const logger = {
+      debug: () => undefined,
+      info: () => undefined,
+      warn: () => undefined,
+      error: (obj: Record<string, unknown>, msg: string) => {
+        errors.push([obj, msg]);
+      },
+    } as unknown as Logger;
+    return { logger, errors };
+  }
+
+  it('threads the claiming workerId into every settle', async () => {
+    const { repo, state } = makeRepo([row()]);
+    const svc = new ScheduledJobsService(repo, makeLogger(), { workerId: 'worker-A' });
+    svc.register('trial.expire', () => Promise.resolve());
+    await svc.processTick(new Date());
+    // Without the workerId the repo cannot fence, so this is the load-bearing part.
+    expect(state.settleWorkerIds).toEqual(['worker-A']);
+  });
+
+  it('alarms when the lock was lost before settling — the duplicate run already happened', async () => {
+    const { repo, state } = makeRepo([row()], true);
+    const { logger, errors } = capturingLogger();
+    const svc = new ScheduledJobsService(repo, logger, { workerId: 'worker-A' });
+    svc.register('trial.expire', () => Promise.resolve());
+
+    await svc.processTick(new Date());
+
+    // The write was discarded — the new owner's state is untouched.
+    expect(state.completed).toEqual([]);
+    // ...and the overrun is loud, because nothing else records that a
+    // side-effecting sweep ran twice.
+    expect(errors).toHaveLength(1);
+    const [obj, msg] = errors[0]!;
+    expect(obj).toMatchObject({
+      event: 'scheduled_job_lock_lost_before_settle',
+      jobId: 'job_1',
+      jobType: 'trial.expire',
+      settle: 'markComplete',
+    });
+    expect(msg).toMatch(/RUN AGAIN concurrently/);
+  });
+
+  it('alarms on a fenced-out RETRY settle, naming markRetry', async () => {
+    const { repo, state } = makeRepo([row({ attempts: 1, maxAttempts: 3 })], true);
+    const { logger, errors } = capturingLogger();
+    const svc = new ScheduledJobsService(repo, logger, { workerId: 'worker-A' });
+    svc.register('trial.expire', () => Promise.reject(new Error('boom')));
+
+    await svc.processTick(new Date());
+
+    expect(state.retried).toEqual([]);
+    // The handler failure is logged too, so filter to the integrity alarm.
+    const lost = errors.filter(([o]) => o.event === 'scheduled_job_lock_lost_before_settle');
+    expect(lost).toHaveLength(1);
+    expect(lost[0]?.[0]).toMatchObject({ settle: 'markRetry' });
+  });
+
+  it('does NOT alarm when the settle lands normally', async () => {
+    const { repo, state } = makeRepo([row()]);
+    const { logger, errors } = capturingLogger();
+    const svc = new ScheduledJobsService(repo, logger, { workerId: 'worker-A' });
+    svc.register('trial.expire', () => Promise.resolve());
+
+    await svc.processTick(new Date());
+
+    expect(state.completed).toEqual(['job_1']);
+    expect(errors.filter(([o]) => o.event === 'scheduled_job_lock_lost_before_settle')).toEqual([]);
   });
 });

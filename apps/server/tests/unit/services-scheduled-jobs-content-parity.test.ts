@@ -92,12 +92,17 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
     expect(body).toMatch(
       /claimDue\(opts: \{ batchSize: number; now: Date; workerId: string \}\): Promise<ScheduledJobRow\[\]>;/,
     );
-    expect(body).toMatch(/markComplete\(jobId: string, at: Date\): Promise<void>;/);
+    // V-747 — settles carry the claim's workerId and report whether the lock
+    // fence matched; the void-returning, unfenced signatures must not come back.
     expect(body).toMatch(
-      /markRetry\(jobId: string, opts: \{ lastError: string; nextRunAt: Date \}\): Promise<void>;/,
+      /markComplete\(jobId: string, at: Date, workerId: string\): Promise<boolean>;/,
+    );
+    expect(body).not.toMatch(/markComplete\(jobId: string, at: Date\): Promise<void>;/);
+    expect(body).toMatch(
+      /markRetry\(\s*jobId: string,\s*opts: \{ lastError: string; nextRunAt: Date; workerId: string \},\s*\): Promise<boolean>;/,
     );
     expect(body).toMatch(
-      /markFailed\(jobId: string, opts: \{ lastError: string; at: Date \}\): Promise<void>;/,
+      /markFailed\(\s*jobId: string,\s*opts: \{ lastError: string; at: Date; workerId: string \},\s*\): Promise<boolean>;/,
     );
   });
 
@@ -128,7 +133,7 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
       /'no handler registered for job_type — marking failed \(operator should register or delete\)',/,
     );
     expect(body).toMatch(
-      /await this\.repo\.markFailed\(job\.id, \{\s*\n?\s*lastError: `no handler registered for job_type=\$\{job\.jobType\}`,\s*\n?\s*at: now,\s*\n?\s*\}\);/,
+      /markFailed\(job\.id, \{\s*\n?\s*lastError: `no handler registered for job_type=\$\{job\.jobType\}`,\s*\n?\s*at: now,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
     );
   });
 
@@ -137,7 +142,7 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
     expect(body).toMatch(/if \(exhausted\) \{\s*\n?\s*this\.logger\.error\(/);
     expect(body).toMatch(/'job failed permanently — attempts exhausted',/);
     expect(body).toMatch(
-      /await this\.repo\.markFailed\(job\.id, \{ lastError: message, at: now \}\);/,
+      /markFailed\(job\.id, \{\s*\n?\s*lastError: message,\s*\n?\s*at: now,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
     );
   });
 
@@ -152,7 +157,7 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
   it('Retry path: markRetry with lastError + nextRunAt; warn-log includes attempts + nextRunAt', () => {
     expect(body).toMatch(/'job failed — scheduling retry',/);
     expect(body).toMatch(
-      /await this\.repo\.markRetry\(job\.id, \{ lastError: message, nextRunAt \}\);/,
+      /markRetry\(job\.id, \{\s*\n?\s*lastError: message,\s*\n?\s*nextRunAt,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
     );
   });
 

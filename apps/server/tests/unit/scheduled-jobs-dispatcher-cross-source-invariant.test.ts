@@ -169,8 +169,15 @@ describe('W915 V-202d ScheduledJobs dispatcher cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/scheduled-jobs.ts'));
     expect(p).toMatch(/const SCHEDULED_JOB_ERROR_MAX_CHARS = 500;/);
     expect(p).toMatch(/const message = safeScheduledJobError\(err\);/);
-    expect(p).toMatch(/markFailed\(job\.id, \{ lastError: message, at: now \}\)/);
-    expect(p).toMatch(/markRetry\(job\.id, \{ lastError: message, nextRunAt \}\)/);
+    // V-747 — both settles now also carry the claim's workerId so the repo can
+    // fence on the lock; the bounded credential-safe `message` is unchanged, which
+    // is what this invariant is actually about.
+    expect(p).toMatch(
+      /markFailed\(job\.id, \{\s*\n?\s*lastError: message,\s*\n?\s*at: now,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
+    );
+    expect(p).toMatch(
+      /markRetry\(job\.id, \{\s*\n?\s*lastError: message,\s*\n?\s*nextRunAt,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\)/,
+    );
   });
 
   // ─── register() last-write-wins ──────────────────────────────

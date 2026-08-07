@@ -118,10 +118,27 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
     expect(body).toMatch(/maxAttempts: r\.max_attempts as number,/);
   });
 
-  it('markComplete: completedAt + clear lockedBy/lockedAt + updatedAt where id; markRetry: bump runAt + lastError + clear locked + updatedAt; markFailed: failedAt + lastError + clear locked + updatedAt', () => {
+  it('markComplete/markRetry/markFailed each set their terminal fields AND are fenced on locked_by = workerId (V-747), returning whether the fence matched', () => {
     expect(body).toMatch(
-      /async markComplete\(jobId: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(scheduledJobs\)\s*\n?\s*\.set\(\{ completedAt: at, lockedBy: null, lockedAt: null, updatedAt: at \}\)\s*\n?\s*\.where\(eq\(scheduledJobs\.id, jobId\)\);\s*\n?\s*\}/,
+      /async markComplete\(jobId: string, at: Date, workerId: string\): Promise<boolean>/,
     );
+    expect(body).toMatch(
+      /\.set\(\{ completedAt: at, lockedBy: null, lockedAt: null, updatedAt: at \}\)/,
+    );
+    // V-747 — this used to pin `.where(eq(scheduledJobs.id, jobId))`, i.e. it froze
+    // the UNFENCED settle in place as though intended. A settle keyed on id alone
+    // lets an overrunning handler's late write land on a row another claim now
+    // owns. All three settles must carry the lock fence, and the bare id-only form
+    // must not come back.
+    const fence =
+      /\.where\(and\(eq\(scheduledJobs\.id, jobId\), eq\(scheduledJobs\.lockedBy, (workerId|opts\.workerId)\)\)\)/g;
+    expect(body.match(fence) ?? []).toHaveLength(3);
+    expect(body).not.toMatch(/\.where\(eq\(scheduledJobs\.id, jobId\)\);/);
+    // >= 3 rather than == 3: enqueue also returns an id, so this counts the three
+    // settle sites plus any pre-existing returning() in the file.
+    expect(
+      (body.match(/\.returning\(\{ id: scheduledJobs\.id \}\)/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(3);
     expect(body).toMatch(
       /\.set\(\{\s*\n?\s*runAt: opts\.nextRunAt,\s*\n?\s*lastError: opts\.lastError,\s*\n?\s*lockedBy: null,\s*\n?\s*lockedAt: null,\s*\n?\s*updatedAt: new Date\(\),\s*\n?\s*\}\)/,
     );

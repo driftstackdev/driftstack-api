@@ -139,8 +139,58 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       // Cleanup — mark every claimed regression-guard job complete so
       // future runs don't see them as still-pending.
       for (const j of ours) {
-        await repo.markComplete(j.id, new Date());
+        // V-747 — settles are fenced on the claim's worker id; this loop claimed
+        // as `workerId`, so it must pass it or the fence discards the cleanup.
+        expect(await repo.markComplete(j.id, new Date(), workerId)).toBe(true);
       }
+    });
+
+    // V-747 — claimDue re-claims any row whose locked_at is older than the
+    // 5-minute stale window and does NOT exclude the current worker's own running
+    // job, so an overrunning handler is re-run concurrently. Its late settle must
+    // not land on the row the new owner holds. Proven here against real Postgres
+    // because the fence is a SQL WHERE clause; the fake repo in the unit test
+    // cannot demonstrate it.
+    it('a settle from a worker that no longer holds the lock is rejected (fenced on locked_by)', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
+      const marker = `fence-guard-${Date.now()}`;
+      await repo.enqueue({
+        jobType: 'regression_guard_dummy',
+        accountId: null,
+        runAt: new Date(Date.now() - 60_000),
+        payload: { marker },
+      });
+      const claimed = await repo.claimDue({ batchSize: 50, now: new Date(), workerId: 'worker-A' });
+      const mine = claimed.find((j) => (j.payload as { marker?: string }).marker === marker);
+      expect(mine).toBeDefined();
+
+      // A DIFFERENT worker's settle matches 0 rows and changes nothing.
+      expect(await repo.markComplete(mine!.id, new Date(), 'worker-B')).toBe(false);
+      expect(
+        await repo.markRetry(mine!.id, {
+          lastError: 'stale',
+          nextRunAt: new Date(Date.now() + 60_000),
+          workerId: 'worker-B',
+        }),
+      ).toBe(false);
+      expect(
+        await repo.markFailed(mine!.id, {
+          lastError: 'stale',
+          at: new Date(),
+          workerId: 'worker-B',
+        }),
+      ).toBe(false);
+
+      // Still claimable-by-nobody-else and still not settled: the lock holder can
+      // finish normally. (If the foreign markRetry had landed it would have cleared
+      // locked_by and re-armed run_at, and this would now be false.)
+      expect(await repo.markComplete(mine!.id, new Date(), 'worker-A')).toBe(true);
+      // Idempotence of the fence: the lock is released, so a repeat is rejected.
+      expect(await repo.markComplete(mine!.id, new Date(), 'worker-A')).toBe(false);
     });
 
     it('normalizes raw run_at before a self-arming handler feeds it to Drizzle dedup', async () => {

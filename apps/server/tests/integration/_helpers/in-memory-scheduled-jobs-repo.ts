@@ -130,16 +130,21 @@ export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
     return Promise.resolve([...new Set(pending)]);
   }
 
-  markComplete(jobId: string, at: Date): Promise<void> {
+  // V-747 — mirrors the Drizzle fence: a settle only lands if this worker still
+  // holds the lock, and reports whether it did.
+  markComplete(jobId: string, at: Date, workerId: string): Promise<boolean> {
     const r = this.rows.get(jobId);
-    if (!r) return Promise.resolve();
+    if (!r || r.lockedBy !== workerId) return Promise.resolve(false);
     this.rows.set(jobId, { ...r, completedAt: at, lockedBy: null, lockedAt: null });
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
-  markRetry(jobId: string, opts: { lastError: string; nextRunAt: Date }): Promise<void> {
+  markRetry(
+    jobId: string,
+    opts: { lastError: string; nextRunAt: Date; workerId: string },
+  ): Promise<boolean> {
     const r = this.rows.get(jobId);
-    if (!r) return Promise.resolve();
+    if (!r || r.lockedBy !== opts.workerId) return Promise.resolve(false);
     this.rows.set(jobId, {
       ...r,
       runAt: opts.nextRunAt,
@@ -147,12 +152,15 @@ export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
       lockedBy: null,
       lockedAt: null,
     });
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
-  markFailed(jobId: string, opts: { lastError: string; at: Date }): Promise<void> {
+  markFailed(
+    jobId: string,
+    opts: { lastError: string; at: Date; workerId: string },
+  ): Promise<boolean> {
     const r = this.rows.get(jobId);
-    if (!r) return Promise.resolve();
+    if (!r || r.lockedBy !== opts.workerId) return Promise.resolve(false);
     this.rows.set(jobId, {
       ...r,
       failedAt: opts.at,
@@ -160,7 +168,7 @@ export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
       lockedBy: null,
       lockedAt: null,
     });
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   // W441 — mirror DrizzleScheduledJobsRepo.pruneFinished: delete finished rows

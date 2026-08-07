@@ -62,12 +62,16 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
       /async enqueue\(input: EnqueueScheduledJobInput\): Promise<\{ enqueued: boolean \}> \{/,
     );
     expect(p).toMatch(/async claimDue\(opts: \{/);
-    expect(p).toMatch(/async markComplete\(jobId: string, at: Date\): Promise<void> \{/);
+    // V-747 — settles are fenced on the claim's worker id and report the match.
     expect(p).toMatch(
-      /async markRetry\(jobId: string, opts: \{ lastError: string; nextRunAt: Date \}\): Promise<void> \{/,
+      /async markComplete\(jobId: string, at: Date, workerId: string\): Promise<boolean> \{/,
+    );
+    expect(p).not.toMatch(/async markComplete\(jobId: string, at: Date\): Promise<void>/);
+    expect(p).toMatch(
+      /async markRetry\(\s*jobId: string,\s*opts: \{ lastError: string; nextRunAt: Date; workerId: string \},\s*\): Promise<boolean> \{/,
     );
     expect(p).toMatch(
-      /async markFailed\(jobId: string, opts: \{ lastError: string; at: Date \}\): Promise<void> \{/,
+      /async markFailed\(\s*jobId: string,\s*opts: \{ lastError: string; at: Date; workerId: string \},\s*\): Promise<boolean> \{/,
     );
   });
 

@@ -689,8 +689,19 @@ export class DurableWebhookWorker {
           lastError: attempt.errorMessage,
           updatedAt: new Date(this.now()),
         })
-        // Fence on in_flight (review wjf04whfl #1): only the current owner of an
-        // in_flight row may finalize it; a stale-worker write matches 0 rows.
+        // Fence on in_flight (review wjf04whfl #1): a stale worker's write cannot
+        // resurrect a row another tick already reclaimed AND FINALIZED — that row
+        // is no longer 'in_flight', so this matches 0 rows.
+        //
+        // V-747 — scope, because "only the current owner may finalize" is stronger
+        // than what a status fence can deliver: a reclaimed row is 'in_flight'
+        // AGAIN, so a >5min-stalled worker whose write lands while the FRESH
+        // attempt is still in flight does match, and finalizes the row with the
+        // stale attempt's outcome. Bounded harm — the customer got at least one
+        // POST (at-least-once is the contract) — but the recorded terminal state
+        // can be the older attempt's. A true fence needs a per-claim generation
+        // token; `attempts` cannot serve as one (the claim doesn't bump it, so both
+        // workers compute the same attemptNumber). See the verification log.
         .where(
           and(eq(webhookDeliveries.id, delivery.id), eq(webhookDeliveries.status, 'in_flight')),
         )
@@ -716,9 +727,12 @@ export class DurableWebhookWorker {
         lastError: attempt.errorMessage,
         updatedAt: new Date(this.now()),
       })
-      // Fence on in_flight (review wjf04whfl #1): only the current owner of an
-      // in_flight row may re-arm it for retry; a stale-worker write matches 0
-      // rows and is a no-op, so it can't resurrect a finalized delivery.
+      // Fence on in_flight (review wjf04whfl #1): a stale worker's write can't
+      // resurrect a delivery another tick already reclaimed AND FINALIZED — that
+      // row is no longer 'in_flight', so this is a 0-row no-op. Same V-747 scope
+      // note as the delivered/dlq fences above: a row that has been reclaimed and
+      // is mid-attempt IS 'in_flight' again, so this fence does not separate claim
+      // generations.
       .where(and(eq(webhookDeliveries.id, delivery.id), eq(webhookDeliveries.status, 'in_flight')))
       .returning({ id: webhookDeliveries.id });
     return 'retried';

@@ -87,9 +87,30 @@ export interface ScheduledJobsRepo {
    * warns about in its own comments — and nothing detects it today.
    */
   jobTypesWithPendingWork(): Promise<string[]>;
-  markComplete(jobId: string, at: Date): Promise<void>;
-  markRetry(jobId: string, opts: { lastError: string; nextRunAt: Date }): Promise<void>;
-  markFailed(jobId: string, opts: { lastError: string; at: Date }): Promise<void>;
+  /**
+   * Settle a job THIS worker still holds the lock on. All three settles are
+   * fenced on `locked_by = workerId` and report whether the fence matched.
+   *
+   * V-747 — they used to key on `id` alone. claimDue re-claims any row whose
+   * `locked_at` is older than the 5-minute stale window WITHOUT excluding the
+   * current worker's own still-running job, so a handler that overruns that
+   * window is re-claimed and re-run while the first invocation is still going.
+   * With an unfenced settle the slow invocation then wrote through: it could
+   * mark a job complete that the new owner is still running, or — worse —
+   * `markRetry` a job the new owner had already completed, re-arming `run_at`
+   * and running a side-effecting sweep a third time. `false` means this worker
+   * no longer owned the row, which is the only in-band signal that an overrun
+   * (and therefore a duplicate execution) happened.
+   */
+  markComplete(jobId: string, at: Date, workerId: string): Promise<boolean>;
+  markRetry(
+    jobId: string,
+    opts: { lastError: string; nextRunAt: Date; workerId: string },
+  ): Promise<boolean>;
+  markFailed(
+    jobId: string,
+    opts: { lastError: string; at: Date; workerId: string },
+  ): Promise<boolean>;
   /**
    * W441 retention — hard-delete finished rows (completed OR failed) whose
    * terminal timestamp is older than `olderThan`. Returns the deleted count.
@@ -162,6 +183,28 @@ export class ScheduledJobsService {
     return { processed: due.length };
   }
 
+  /**
+   * V-747 — a settle that matched 0 rows means claimDue handed this job to
+   * another claim while this invocation was still running (the handler outran the
+   * 5-minute stale-lock window). The write was correctly discarded, but the
+   * duplicate execution already happened, so say so loudly: side-effecting sweeps
+   * ran twice and each re-claim also burned a retry attempt.
+   */
+  private reportLostLock(job: ScheduledJobRow, settle: string): void {
+    this.logger.error(
+      {
+        component: 'scheduled-jobs',
+        event: 'scheduled_job_lock_lost_before_settle',
+        jobId: job.id,
+        jobType: job.jobType,
+        accountId: job.accountId,
+        attempts: job.attempts,
+        settle,
+      },
+      'job lock was lost before settling — the handler outran the stale-lock window and this job was re-claimed and RUN AGAIN concurrently; this write was discarded (integrity alarm)',
+    );
+  }
+
   private async runOne(job: ScheduledJobRow, now: Date): Promise<void> {
     const handler = this.handlers.get(job.jobType);
     if (!handler) {
@@ -174,16 +217,23 @@ export class ScheduledJobsService {
         },
         'no handler registered for job_type — marking failed (operator should register or delete)',
       );
-      await this.repo.markFailed(job.id, {
-        lastError: `no handler registered for job_type=${job.jobType}`,
-        at: now,
-      });
+      if (
+        !(await this.repo.markFailed(job.id, {
+          lastError: `no handler registered for job_type=${job.jobType}`,
+          at: now,
+          workerId: this.workerId,
+        }))
+      ) {
+        this.reportLostLock(job, 'markFailed:no-handler');
+      }
       return;
     }
 
     try {
       await handler(job);
-      await this.repo.markComplete(job.id, now);
+      if (!(await this.repo.markComplete(job.id, now, this.workerId))) {
+        this.reportLostLock(job, 'markComplete');
+      }
     } catch (err) {
       const message = safeScheduledJobError(err);
       const exhausted = job.attempts >= job.maxAttempts;
@@ -199,7 +249,15 @@ export class ScheduledJobsService {
           },
           'job failed permanently — attempts exhausted',
         );
-        await this.repo.markFailed(job.id, { lastError: message, at: now });
+        if (
+          !(await this.repo.markFailed(job.id, {
+            lastError: message,
+            at: now,
+            workerId: this.workerId,
+          }))
+        ) {
+          this.reportLostLock(job, 'markFailed:exhausted');
+        }
       } else {
         // Exponential backoff: 60s, 120s, 240s, ... per default base.
         const backoffMs = this.retryBackoffBaseMs * 2 ** Math.max(0, job.attempts - 1);
@@ -216,7 +274,15 @@ export class ScheduledJobsService {
           },
           'job failed — scheduling retry',
         );
-        await this.repo.markRetry(job.id, { lastError: message, nextRunAt });
+        if (
+          !(await this.repo.markRetry(job.id, {
+            lastError: message,
+            nextRunAt,
+            workerId: this.workerId,
+          }))
+        ) {
+          this.reportLostLock(job, 'markRetry');
+        }
       }
     }
   }
