@@ -108,6 +108,13 @@ describe('W247.A marketing-site egress-claim drift sweep', () => {
         // is a CUSTOMER responsibility, not a Driftstack capability, so
         // exempt that subtree from this check.
         if (p.includes('/pages/legal/')) continue;
+        // The disclosure surface itself cannot cross-link to itself, and it
+        // carries no inline "roadmap" label, so it would be reported as an
+        // offender by its own rule. Measured 2026-08-07 while proving the
+        // reactivation path: it was one of four hits, and the only false one.
+        // Its CONTENT is gated separately by W499.D against real server source,
+        // which is the check that actually belongs to it.
+        if (p.includes('/pages/trust/security-overview.')) continue;
         const body = readFileSync(p, 'utf8');
         const hasProxyMention = /SOCKS5|WireGuard|OpenVPN/.test(body);
         if (!hasProxyMention) continue;
