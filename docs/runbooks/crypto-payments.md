@@ -78,8 +78,15 @@ arriving after the `finished` IPN — we ignore the late one).
      settle time for that asset (see `pricing/crypto.astro` table).
    - **`partial`** — customer underpaid. Follow up with the customer
      about a top-up or refund.
-   - **`failed`** — order expired or refunded. Open a new order
-     for the customer to retry.
+   - **`failed`** — order expired or refunded. **First check whether
+     money actually arrived**: search the logs for
+     `ipn_settled_payment_dropped_on_terminal_order` with this
+     `order_id` (V-743). The expiry sweep flips an order to `failed`
+     on age alone, so a slow-settling payment can land after it. If
+     that alarm fired, the customer HAS paid and the order will never
+     grant — refund or grant manually (see _Forcing a refund_), and do
+     NOT ask them to pay again. Only if no payment arrived should you
+     open a new order for the customer to retry.
 
 ### NowPayments IPN webhook is rejecting
 
@@ -129,13 +136,14 @@ overwrite manual changes.
 
 ## Failure modes
 
-| Symptom                                      | Likely cause + action                                                                                               |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| All orders gone after a deploy               | Expected — in-memory repo. Any in-flight orders are recoverable from the NowPayments dashboard by payment_id.       |
-| Order shows `paid` but customer not upgraded | The downstream tier-flip wiring (V-666.E) is not yet built — founder runs it manually until the wiring lands.       |
-| Duplicate `paid` IPN                         | Idempotent — service is no-op on same-state writes. No action needed.                                               |
-| Late `confirming` IPN after `paid`           | Rejected by `isTerminalForward` — logged, no state change.                                                          |
-| Customer signed up off-platform (no account) | Order's `account_id` may be null. Admin list still shows it; founder maps to a customer account post-paid manually. |
+| Symptom                                         | Likely cause + action                                                                                                                                                                                                                                                   |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| All orders gone after a deploy                  | Expected — in-memory repo. Any in-flight orders are recoverable from the NowPayments dashboard by payment_id.                                                                                                                                                           |
+| Order shows `paid` but customer not upgraded    | The downstream tier-flip wiring (V-666.E) is not yet built — founder runs it manually until the wiring lands.                                                                                                                                                           |
+| Duplicate `paid` IPN                            | Idempotent — service is no-op on same-state writes. No action needed.                                                                                                                                                                                                   |
+| Late `confirming` IPN after `paid`              | Rejected by `isTerminalForward` — logged, no state change.                                                                                                                                                                                                              |
+| Settled payment on a `failed`/`cancelled` order | `ipn_settled_payment_dropped_on_terminal_order` (V-743). Real money arrived on a dead order; the anti-revival guard correctly refuses to apply it, so NO entitlement was granted and no revenue row exists. Refund or grant manually — this alarm always needs a human. |
+| Customer signed up off-platform (no account)    | Order's `account_id` may be null. Admin list still shows it; founder maps to a customer account post-paid manually.                                                                                                                                                     |
 
 ## When the merchant account lands (V-666.E follow-up)
 

@@ -92,7 +92,21 @@ describe('W555.B /docs/runbooks/crypto-payments.md content parity', () => {
     expect(body).toMatch(/payment but no status IPN has fired\./);
     expect(body).toMatch(/- \*\*`partial`\*\* — customer underpaid\. Follow up with the customer/);
     expect(body).toMatch(/about a top-up or refund\./);
-    expect(body).toMatch(/- \*\*`failed`\*\* — order expired or refunded\. Open a new order/);
+    // V-743 — this bullet used to end at "Open a new order for the customer to
+    // retry", which is the WRONG action when the expiry sweep beat a slow
+    // settlement: the customer already paid. The pin now requires the
+    // check-first guidance, and asserts the bare old instruction cannot return.
+    expect(body).toMatch(
+      /- \*\*`failed`\*\* — order expired or refunded\. \*\*First check whether\n\s+money actually arrived\*\*/,
+    );
+    expect(body).toMatch(
+      /ipn_settled_payment_dropped_on_terminal_order` with this\n\s+`order_id` \(V-743\)/,
+    );
+    expect(body).toMatch(
+      /the customer HAS paid and the order will never\n\s+grant — refund or grant manually/,
+    );
+    expect(body).toMatch(/do\n\s+NOT ask them to pay again/);
+    expect(body).not.toMatch(/refunded\. Open a new order/);
     expect(body).toMatch(/for the customer to retry\./);
     expect(body).toMatch(/- \*\*`"x-nowpayments-sig header missing"`\*\* — NowPayments retried/);
     expect(body).toMatch(/- \*\*`"NowPayments IPN signature verification failed"`\*\* — IPN/);

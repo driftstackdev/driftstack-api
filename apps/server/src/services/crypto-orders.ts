@@ -1378,6 +1378,7 @@ export class CryptoOrdersService {
             fireFailed: false,
             paymentIdMismatch: true,
             payCurrencyMismatch: false,
+            settledPaymentDropped: false,
           },
         };
       }
@@ -1391,6 +1392,7 @@ export class CryptoOrdersService {
             fireFailed: false,
             paymentIdMismatch: false,
             payCurrencyMismatch: false,
+            settledPaymentDropped: false,
           },
         };
       }
@@ -1478,6 +1480,7 @@ export class CryptoOrdersService {
             firePaid: order.status !== 'paid' && mapped === 'paid' && updated.account_id !== null,
             paymentIdMismatch: false,
             payCurrencyMismatch,
+            settledPaymentDropped: false,
           },
         };
       }
@@ -1502,6 +1505,7 @@ export class CryptoOrdersService {
             fireFailed: false,
             paymentIdMismatch: false,
             payCurrencyMismatch,
+            settledPaymentDropped: false,
           },
         };
       }
@@ -1513,6 +1517,19 @@ export class CryptoOrdersService {
           fireFailed: false,
           paymentIdMismatch: false,
           payCurrencyMismatch,
+          // V-743 — money arrived on an order that is already terminally NOT
+          // paid, almost always because the expiry sweep flipped it to 'failed'
+          // before the IPN landed. isTerminalForward deliberately refuses the
+          // transition ("a late IPN payment cannot revive an abandoned order"),
+          // so NOT applying it is correct and is left alone here.
+          //
+          // What was wrong is that it happened in silence: no entitlement, no
+          // revenue row, no event (events are appended only inside the
+          // forward-transition branch above), and the IPN acked 200 with a
+          // routine info line. The funds settled on-chain and nothing anywhere
+          // asked a human to refund or grant manually. This flag exists purely to
+          // make that loud.
+          settledPaymentDropped: mapped === 'paid' && order.status !== 'paid',
         },
       };
     });
@@ -1521,6 +1538,25 @@ export class CryptoOrdersService {
     // Billing-integrity (#9) — a payment_id mismatch is an integrity alarm:
     // log loudly + DON'T apply. Return the unchanged order so the caller acks
     // the IPN (NowPayments stops retrying) but no state moved.
+    // V-743 — integrity alarm, deliberately NOT a state change. The refusal to
+    // revive a terminal order is by design; the alarm is what lets support see
+    // that a customer paid and received nothing. logger.error rather than warn:
+    // this always needs a human, unlike the accidental-key-reuse warn below.
+    if (outcome.settledPaymentDropped) {
+      this.opts.logger?.error(
+        {
+          component: 'crypto-orders',
+          event: 'ipn_settled_payment_dropped_on_terminal_order',
+          order_id: args.order_id,
+          order_status: outcome.order.status,
+          provider_status: args.provider_status,
+          actually_paid: args.actually_paid,
+          price_cents: outcome.order.price_cents,
+          account_id: outcome.order.account_id,
+        },
+        'settled crypto payment arrived on a terminal non-paid order; no entitlement granted — refund or grant manually',
+      );
+    }
     if (outcome.paymentIdMismatch) {
       this.opts.logger?.error(
         {

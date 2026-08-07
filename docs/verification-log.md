@@ -31435,3 +31435,66 @@ agent-session takeover race, both passing in isolation, i.e. the known
 load-sensitive population recorded in V-739. The 159 stripe/billing/crypto suites
 pass in full. Both halves of the server typecheck, targeted ESLint and Prettier.
 Code-only, no schema change.
+
+## V-743 — a settled crypto payment on a terminal order was dropped in silence
+
+**Finding.** The expiry sweep flips a `pending` crypto order to `failed` on age
+alone (`crypto-orders.ts` `expireOrder` / bulk sweep) — it never asks NowPayments
+whether the payment is still live. When a slow-settling payment then lands,
+`isTerminalForward` refuses the transition, and the IPN path took its non-forward
+return: no entitlement, no revenue row, **no audit event** (events are appended
+only inside the forward-transition branch), and a routine info line. The IPN was
+acked 200, so NowPayments stopped retrying. Up to $1,499 of received funds could
+leave no trace that anyone owed the customer anything. The same hole exists for a
+customer-`cancelled` order.
+
+**Deliberately NOT changed, and why.** The money semantics are correct as written
+and are left exactly as they were:
+
+- The transition is still refused. `isTerminalForward` says "a late IPN payment
+  cannot revive an abandoned order" (V-666.J); auto-reviving an order whose quote
+  and price may be stale is the wrong repair.
+- No event is appended. Events are appended only on an actual status change; a
+  terminal order takes no write, and inventing one would break that invariant.
+- `applyIpnStatus` still returns the unchanged order so the route acks and the
+  provider stops retrying.
+
+The defect was the **silence**, so that is what this fixes.
+
+**Fix.** A `settledPaymentDropped` flag on the locked reconcile outcome
+(`mapped === 'paid' && order.status !== 'paid'` on the non-forward path — reachable
+only when the current status is `failed` or `cancelled`, since `paid→paid` is an
+idempotent touch and every non-terminal status moves forward to `paid`). It raises
+a `logger.error` integrity alarm, `event: ipn_settled_payment_dropped_on_terminal_order`,
+carrying `account_id`, `order_status`, `provider_status`, `actually_paid` and
+`price_cents` — what a human needs to refund or grant. `error`, not `warn`: this
+always needs a human.
+
+**Runbook.** The triage bullet for `failed` said "order expired or refunded. Open
+a new order for the customer to retry" — the wrong action when the sweep beat a
+slow settlement, because the customer already paid. It now says to search for the
+alarm first and, if it fired, refund or grant manually and NOT ask them to pay
+again. Added a failure-modes row. The parity pin that froze the old bare
+instruction was updated and now also asserts it cannot return (the 8th pin this
+session found holding a claim that was wrong or dangerously incomplete — see
+`feedback_parity_pins_freeze_false_claims`).
+
+**Proof.** 4 new behavioural tests in
+`crypto-orders-amount-reconciliation.test.ts`, driven through the real path (the
+sweep expires the order, then the settled IPN lands) rather than a hand-set status.
+Mutation-proved in BOTH directions, restore verified byte-identical by `shasum`:
+
+- flag hard-coded `false` → both true-positive tests red (sweep-expired, cancelled).
+- flag hard-coded `true` → the negative test red.
+
+That second direction was worth running: my first two negative tests passed under
+BOTH mutations. Neither reached the non-forward return — an `expired` IPN on a
+`failed` order and a duplicate `paid` IPN are both `current === next` touches,
+which `isTerminalForward` treats as forward. An unconditionally-firing alarm would
+have been caught by nothing. The replacement negative (a stray `expired` IPN after
+a legitimate `paid`) does reach the drop path and does bind.
+
+Server unit suite: 19,102 passing. Two runs each surfaced ONE failure, in a
+DIFFERENT unrelated file (`log-claims-match-captured-outcomes`, then
+`session-page-state-relay`), both passing in isolation — the load-flake population,
+not this change. Being investigated next; NOT recorded as noise.

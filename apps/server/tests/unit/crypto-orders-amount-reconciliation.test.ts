@@ -9,6 +9,11 @@
 // (incomparable units — that left every full crypto payment stuck 'partial').
 // price_amount is persisted on the audit event for support reference only.
 //
+// V-743: a settled payment that lands on an order the expiry sweep already
+// flipped to 'failed' (or that the customer cancelled) is deliberately NOT
+// applied — but it now raises an integrity alarm, because the money is real and
+// nothing else in the system records that it went nowhere.
+//
 // #9: the NowPayments payment_id is bound to the order at createPayment
 // (recordPaymentId). applyIpnStatus rejects + alarms when an IPN's
 // payment_id doesn't match the stored one (guards the admin apply-ipn
@@ -319,5 +324,126 @@ describe('crypto-checkout DB-backed idempotency (#7)', () => {
     });
     expect(r2.replayed).toBe(true);
     expect(r2.order.order_id).toBe('ord_1');
+  });
+});
+
+// V-743 — a SETTLED payment that lands on an order the expiry sweep already
+// flipped to 'failed'. The refusal to apply it is deliberate (isTerminalForward:
+// "a late IPN payment cannot revive an abandoned order"), and these tests pin
+// that money semantic unchanged. What they add is the ALARM: without it the
+// customer's funds settle on-chain and nothing anywhere asks a human to refund
+// or grant, because events are appended only on an actual status change.
+describe('settled payment dropped on a terminal order (V-743)', () => {
+  it('alarms when a settled IPN lands on an order the sweep already expired', async () => {
+    const logger = { error: vi.fn() };
+    const { svc, repo } = await seed({ logger, bindQuote: true });
+    // The real-world path: the sweep expires the pending order first.
+    const expired = await svc.expireOrder({ order_id: 'ord_t', olderThanMs: 0 });
+    expect(expired?.status).toBe('failed');
+
+    const result = await svc.applyIpnStatus({
+      order_id: 'ord_t',
+      payment_id: 'np_p',
+      provider_status: 'finished',
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      price_amount: ORDER_PRICE_AMOUNT_FIAT,
+      pay_currency: 'btc',
+    });
+
+    // Money semantics UNCHANGED: the dead order is not revived. applyIpnStatus
+    // returns the order UNCHANGED (so the route acks and NowPayments stops
+    // retrying) — 'failed' here is the pre-IPN status, not a new write.
+    expect(result?.status).toBe('failed');
+    expect((await repo.getById('ord_t'))?.status).toBe('failed');
+
+    // ...but it is no longer silent, and the alarm carries what a human needs to
+    // act (which account, how much actually arrived, what it was owed).
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    const [obj, msg] = logger.error.mock.calls[0] ?? [];
+    expect(msg).toMatch(/refund or grant manually/);
+    expect(obj).toMatchObject({
+      event: 'ipn_settled_payment_dropped_on_terminal_order',
+      order_id: 'ord_t',
+      account_id: 'acc_a',
+      order_status: 'failed',
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      price_cents: 9900,
+    });
+  });
+
+  it('does NOT alarm on a duplicate IPN for an order that already paid legitimately', async () => {
+    const logger = { error: vi.fn() };
+    const { svc } = await seed({ logger, bindQuote: true });
+    const args = {
+      order_id: 'ord_t',
+      payment_id: 'np_p',
+      provider_status: 'finished',
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      price_amount: ORDER_PRICE_AMOUNT_FIAT,
+      pay_currency: 'btc',
+    };
+    expect((await svc.applyIpnStatus(args))?.status).toBe('paid');
+    // NowPayments retries; the second delivery is a benign idempotent touch, not
+    // dropped money. Alarming here would train support to ignore the alarm.
+    expect((await svc.applyIpnStatus(args))?.status).toBe('paid');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('ALSO alarms when a settled IPN lands on a customer-cancelled order', async () => {
+    const logger = { error: vi.fn() };
+    const { svc, repo } = await seed({ logger, bindQuote: true });
+    // V-666.J names 'cancelled' alongside 'failed' as terminal, so this is the
+    // second way real money lands on a dead order.
+    const cancelled = await svc.cancelOrder({ order_id: 'ord_t', account_id: 'acc_a' });
+    expect(cancelled?.ok).toBe('cancelled');
+
+    const result = await svc.applyIpnStatus({
+      order_id: 'ord_t',
+      payment_id: 'np_p',
+      provider_status: 'finished',
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      price_amount: ORDER_PRICE_AMOUNT_FIAT,
+      pay_currency: 'btc',
+    });
+    expect(result?.status).toBe('cancelled');
+    expect((await repo.getById('ord_t'))?.status).toBe('cancelled');
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error.mock.calls[0]?.[0]).toMatchObject({
+      event: 'ipn_settled_payment_dropped_on_terminal_order',
+      order_status: 'cancelled',
+    });
+  });
+
+  // The negative direction. This one is mutation-load-bearing: it reaches the
+  // SAME non-forward return as the alarm above (a terminal order + a status that
+  // is not a forward move), so hard-coding the flag to `true` reds it. An
+  // over-eager alarm is a real cost here — it would page support for a stray
+  // provider retry and train them to ignore the one that matters.
+  it('does NOT alarm when a non-settled IPN lands on an already-paid order', async () => {
+    const logger = { error: vi.fn() };
+    const { svc } = await seed({ logger, bindQuote: true });
+    const paidArgs = {
+      order_id: 'ord_t',
+      payment_id: 'np_p',
+      provider_status: 'finished',
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      price_amount: ORDER_PRICE_AMOUNT_FIAT,
+      pay_currency: 'btc',
+    };
+    expect((await svc.applyIpnStatus(paidArgs))?.status).toBe('paid');
+
+    // A stray 'expired' arrives after settlement (maps to 'failed'): terminal
+    // 'paid' refuses it, so it takes the drop path — but no money went missing.
+    const result = await svc.applyIpnStatus({
+      ...paidArgs,
+      provider_status: 'expired',
+      actually_paid: 0,
+    });
+    expect(result?.status).toBe('paid');
+    expect(logger.error).not.toHaveBeenCalled();
   });
 });
