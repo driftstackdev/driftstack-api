@@ -84,9 +84,44 @@ arriving after the `finished` IPN — we ignore the late one).
      `order_id` (V-743). The expiry sweep flips an order to `failed`
      on age alone, so a slow-settling payment can land after it. If
      that alarm fired, the customer HAS paid and the order will never
-     grant — refund or grant manually (see _Forcing a refund_), and do
-     NOT ask them to pay again. Only if no payment arrived should you
+     grant. Either refund (see _Forcing a refund_) or grant the tier by
+     hand via admin change-tier — the same remediation the
+     `crypto_paid_tier_activation_failed` alarm names. Do NOT ask them
+     to pay again. Only if no payment arrived should you
      open a new order for the customer to retry.
+
+### Customer was charged an amount that doesn't match the published price
+
+The quote and the charge both read `PricingService.listEffective()`, which serves
+the DB pricing table with `TIER_MONTHLY_PRICE_CENTS` as the seed AND the fallback.
+Two alarms say the fallback was used, which is the only way a charge can silently
+disagree with an edited price (V-746):
+
+- **`pricing_db_read_failed_serving_constants`** (error) — the pricing table read
+  FAILED and seeded constants were served. If a price had been edited via
+  `PATCH /v1/admin/owner/pricing/:tier`, every quote and charge during the outage
+  used the PRE-EDIT amount. Cross-check the order's `price_cents` against the
+  intended price for its `product` and refund the difference if the edit was a
+  discount. Check DB health first — this alarm means the pricing table
+  specifically was unreadable.
+- **`pricing_rows_missing_serving_constants`** (warn, once per process) — the read
+  succeeded but a priced tier has no row. Migration 0067 seeds every priced tier,
+  so a gap means the table was never seeded (fresh environment) or lost rows.
+  Re-run the migration; until then that tier charges its seeded constant.
+
+**Editing a price is a TWO-step operation.** `PATCH /v1/admin/owner/pricing/:tier`
+changes what checkout CHARGES. The advertised price is a static build artefact in
+`apps/marketing-site/src/data/pricing.ts` with no link to the pricing table, so an
+edit that is not mirrored there leaves the site advertising one price while
+customers are charged another. Nothing detects this: the marketing-pricing drift
+guard pins that file's own literals and has no view of the DB. After any price
+edit, update `apps/marketing-site/src/data/pricing.ts` (and the `apps/docs`
+pricing copy) and redeploy the marketing site.
+
+Note the quote and the checkout are SEPARATE requests, each doing its own price
+read. "Quote equals charge" means they read the same source, not that the amount is
+frozen between them — there is no quote-binding token, so an owner edit in between
+legitimately changes the charged amount.
 
 ### NowPayments IPN webhook is rejecting
 
@@ -142,6 +177,7 @@ overwrite manual changes.
 | Order shows `paid` but customer not upgraded    | The downstream tier-flip wiring (V-666.E) is not yet built — founder runs it manually until the wiring lands.                                                                                                                                                           |
 | Duplicate `paid` IPN                            | Idempotent — service is no-op on same-state writes. No action needed.                                                                                                                                                                                                   |
 | Late `confirming` IPN after `paid`              | Rejected by `isTerminalForward` — logged, no state change.                                                                                                                                                                                                              |
+| Charge disagrees with an edited price           | `pricing_db_read_failed_serving_constants` / `pricing_rows_missing_serving_constants` (V-746) — the pricing-table read fell back to seeded constants, so an owner price edit was not reflected. See the triage section above.                                           |
 | Settled payment on a `failed`/`cancelled` order | `ipn_settled_payment_dropped_on_terminal_order` (V-743). Real money arrived on a dead order; the anti-revival guard correctly refuses to apply it, so NO entitlement was granted and no revenue row exists. Refund or grant manually — this alarm always needs a human. |
 | Customer signed up off-platform (no account)    | Order's `account_id` may be null. Admin list still shows it; founder maps to a customer account post-paid manually.                                                                                                                                                     |
 

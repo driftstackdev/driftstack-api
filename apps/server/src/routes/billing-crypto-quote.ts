@@ -67,7 +67,12 @@ export function registerCryptoQuoteRoutes(app: FastifyInstance, deps: CryptoQuot
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       const product = parsed.data.product;
       // listEffective() = DB pricing row ?? TIER_PRICE_CENTS seed, per tier —
-      // the same read billing-crypto.ts charges from, so quote == charge.
+      // the same read billing-crypto.ts charges from, so an owner price edit
+      // moves BOTH. V-746 — "quote == charge" means same SOURCE, not same
+      // instant: this is a separate request from the checkout, each doing its own
+      // read, so an owner edit (or a pricing-table read failure, which falls back
+      // to the seeded constant and alarms) in between can still change the amount
+      // charged relative to the amount quoted. There is no quote-binding token.
       const effectivePricing = await deps.pricing.listEffective();
       const priceCents = effectivePricing.find((row) => row.tier === product)?.monthlyCents;
       if (priceCents === undefined) {

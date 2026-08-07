@@ -31602,3 +31602,91 @@ The list above is measured so it is ready if the class bites again.
 Also worth stating plainly: this is an artifact of a shared multi-writer worktree,
 not a production defect. Nothing in `apps/server/src` walks directories this way at
 runtime.
+
+## V-746 — the pricing fallback was silent, and its justification had expired
+
+**Finding.** `PricingService.listEffective()` swallowed a pricing-table read failure
+with a bare `catch {}` and served `TIER_MONTHLY_PRICE_CENTS` instead. The module
+justified that as "worst case it charges the same constant it does today" — true
+only while DB == constants. Since the owner price-edit route went live
+(`PATCH /v1/admin/owner/pricing/:tier` → `setPrice`), an edited price means DB !=
+constants, so a read failure charges the PRE-EDIT amount: a discount silently
+overcharges the customer, a rise silently undercharges the business. The order row
+records only the amount actually charged, so nothing downstream can reconstruct
+that the intended price was different. `billing-crypto.ts` stated the stronger
+claim outright — a pricing-table outage "never breaks checkout **nor charges a
+wrong amount**".
+
+Verified wiring before assigning severity, because the comments claimed otherwise
+("for now it has no production caller"): the charge path (`billing-crypto.ts:188`),
+the quote path (`billing-crypto-quote.ts:71`) and the owner edit
+(`admin-owner.ts:142`) are all live. The stale comments were themselves the tell.
+
+**Fixed — observability, not behaviour.** Falling back beats failing checkout, so
+the fallback stays. It now raises `pricing_db_read_failed_serving_constants`
+(error, per occurrence — each is a different customer request that may have been
+charged a stale amount) and `pricing_rows_missing_serving_constants` (warn, once
+per instance — one static condition, so it must not spam every checkout). Both
+corrected comments now state what the fallback actually costs.
+
+**Also fixed: `setPrice` had no tier backstop.** Its own docs promised the service
+"re-validates as a backstop", but it validated only the amount. A price written for
+a tier with no constant entry (`free`, `enterprise`) persists, returns success, and
+is then dropped by `listEffective` — which maps over the constants only. That is
+exactly the editable-price-that-doesn't-charge footgun this module exists to close.
+The owner route restricts the tier, so this was defence-in-depth, but the service is
+the boundary and its docs claimed the check existed.
+
+**The consequential one: editing a price is a TWO-step operation, and nothing says
+so.** The advertised price lives in `apps/marketing-site/src/data/pricing.ts`, a
+static build artefact with zero link to the pricing table (verified: no fetch, no
+env, no server import). So an owner edit changes what checkout CHARGES while the
+site keeps advertising the old price. Nothing detects it —
+`marketing-pricing-adr-004-parity.test.ts` exists to stop exactly this ("drift here
+would silently mismatch what the customer sees vs what Stripe / server-side
+actually charges") but pins that file's own literals and has no view of the DB, so
+it stays GREEN through the divergence. Documented in the runbook as a required
+second step, noted on `setPrice`, and the guard's header now states what it cannot
+see rather than implying coverage it never had.
+
+**Proof.** 7 new behavioural tests; all four guards mutation-proved, restores
+byte-identical:
+
+- read-failure alarm removed → the alarm test reds.
+- missing-row warn removed → both missing-row tests red.
+- once-per-instance flag removed → the warned-once test reds.
+- `setPrice` tier backstop removed → the unpriced-tier test reds.
+  The new runbook pin was mutation-proved too (rewording the guidance reds it).
+  Marketing prices cross-checked against the constants by hand: $79/$249/$699/
+  $149/$499/$1,499 ↔ 7900/24900/69900/14900/49900/149900 — currently aligned.
+
+Full suite: **2766 files, 28,231 passing, 0 failures.** `tsc --noEmit` clean
+(a vitest pass is not a strict tsc pass here).
+
+**Audited and found sound — no change made.** Completing the money sweep whose
+lower-ranked findings were truncated earlier:
+
+- `crypto-tier-activation.activateTierForPaidOrder` — entitlement + tier in ONE
+  `FOR UPDATE` transaction, idempotent on `order_id`, and a distinct loud alarm on
+  every non-grant path. Its caller already alarms if activation throws.
+- The refund clawback — idempotent on replay, and reconciles to BEST REMAINING
+  rather than dropping to free, so a Stripe sub or second grant still floors the
+  tier. The revoke/downgrade pair is NOT one transaction, but
+  `revokeCryptoEntitlementByOrderId` deliberately leaves `expired_processed_at`
+  NULL so the 15-min expiry sweeper re-lists and self-heals a crash in that window.
+- `agent-runtime.recordUsageRowWithRetry` — one stable `recordId` across attempts
+  plus `onConflictDoNothing()`, so a retry after a post-commit failure cannot
+  double-charge. Verified at the insert, not from the comment.
+- `admin-crypto-orders` — every endpoint on `driftstack_internal_admin`, and
+  apply-ipn wrapped in `withAudit('crypto_order.ipn_applied')`.
+- `DEFAULT_TIER_THRESHOLDS_DERIVED` derives spend caps from the CONSTANT map at
+  module load, so a price edit would not move them — but it has no production
+  consumer, so that asymmetry is latent, not live.
+
+**A finding I raised and then refuted myself.** `accountLifecycle.emit` is awaited
+unwrapped at both tier-change call sites while the adjacent cache call is
+try/caught — which looked like a throw that would misattribute the outer "customer
+paid without receiving their tier" alarm. `emit` catches every branch internally
+and logs a warn ("best-effort, swallowed"), so it cannot throw and the call sites
+are correct as written. Reading the callee rather than the call-site shape is what
+settled it.

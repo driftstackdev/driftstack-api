@@ -181,7 +181,13 @@ export function registerCryptoCheckoutRoutes(
       // table (migration 0067) is the source of truth, with TIER_PRICE_CENTS
       // as the seed + fallback (listEffective returns the constant value
       // for any tier the DB read misses or if the read throws, so a pricing
-      // -table outage never breaks checkout nor charges a wrong amount).
+      // -table outage never breaks checkout).
+      //
+      // V-746 — it CAN, however, charge a stale amount: once a price has been
+      // edited via the owner route, DB != constants, so a read failure charges
+      // the pre-edit price. listEffective raises an integrity alarm when it falls
+      // back for exactly that reason. Charging the seeded price beats failing
+      // checkout, but it is not the same as charging the right price.
       // Without an authoritative server price, a customer could POST
       // {product: 'api_scale', price_cents: 100} and unlock a $1,499/mo
       // tier for $1.

@@ -102,10 +102,14 @@ describe('W555.B /docs/runbooks/crypto-payments.md content parity', () => {
     expect(body).toMatch(
       /ipn_settled_payment_dropped_on_terminal_order` with this\n\s+`order_id` \(V-743\)/,
     );
-    expect(body).toMatch(
-      /the customer HAS paid and the order will never\n\s+grant — refund or grant manually/,
-    );
-    expect(body).toMatch(/do\n\s+NOT ask them to pay again/);
+    // V-746 — the remediation now names the actual mechanism (admin change-tier),
+    // matching what the crypto_paid_tier_activation_failed alarm tells ops, rather
+    // than the vague "grant manually" this first said.
+    expect(body).toMatch(/the customer HAS paid and the order will never\n\s+grant\./);
+    expect(body).toMatch(/grant the tier by\n\s+hand via admin change-tier/);
+    expect(body).toMatch(/`crypto_paid_tier_activation_failed` alarm names/);
+    expect(body).toMatch(/Do NOT ask them\n\s+to pay again/);
+    expect(body).not.toMatch(/grant — refund or grant manually/);
     expect(body).not.toMatch(/refunded\. Open a new order/);
     expect(body).toMatch(/for the customer to retry\./);
     expect(body).toMatch(/- \*\*`"x-nowpayments-sig header missing"`\*\* — NowPayments retried/);
@@ -138,5 +142,27 @@ describe('W555.B /docs/runbooks/crypto-payments.md content parity', () => {
 
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
+  });
+  // V-746 — two new pricing alarms need operator guidance, or they are as silent
+  // as the condition they report. Behaviour is covered by pricing-service.test.ts;
+  // this pin only guards the runbook text from being dropped.
+  it('V-746 pricing-fallback triage pinned: both alarm names, the pre-edit-amount consequence, and the quote-vs-charge caveat', () => {
+    expect(body).toMatch(
+      /### Customer was charged an amount that doesn't match the published price/,
+    );
+    expect(body).toMatch(/\*\*`pricing_db_read_failed_serving_constants`\*\* \(error\)/);
+    expect(body).toMatch(
+      /\*\*`pricing_rows_missing_serving_constants`\*\* \(warn, once per process\)/,
+    );
+    expect(body).toMatch(/used the PRE-EDIT amount/);
+    expect(body).toMatch(/refund the difference if the edit was a\n\s*discount/);
+    expect(body).toMatch(/there is no quote-binding token/);
+    // The two-step price edit. This is the part an owner can actually get wrong in
+    // a way customers see, so it must not quietly disappear from the runbook.
+    expect(body).toMatch(/\*\*Editing a price is a TWO-step operation\.\*\*/);
+    expect(body).toMatch(/apps\/marketing-site\/src\/data\/pricing\.ts/);
+    expect(body).toMatch(/advertising one price while\n\s*customers are charged another/);
+    expect(body).toMatch(/redeploy the marketing site/);
+    expect(body).toMatch(/Re-run the migration/);
   });
 });

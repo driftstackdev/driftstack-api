@@ -785,7 +785,7 @@ export async function createProductionDeps(
   // apiKeysService / authFlowsService / webhooksService all exist — its
   // GDPR Article 17 deleteAccount() reclaim path depends on all three).
   const adminBillingService = new AdminBillingService(adminBillingRepo);
-  const pricingService = new PricingService(new DrizzlePricingRepo(dbHandle));
+  const pricingService = new PricingService(new DrizzlePricingRepo(dbHandle), logger);
   // Secrets Phase A (migration 0074): owner platform-secret store, encrypted
   // under the shared MFA_ENCRYPTION_KEY (Q1-verdict reuse, same as BYOK/MFA).
   // Prefixless legacy values synchronously drain to name-bound v2 before the

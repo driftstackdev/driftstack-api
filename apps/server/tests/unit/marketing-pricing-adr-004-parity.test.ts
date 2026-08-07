@@ -10,6 +10,15 @@
 // retired 2026-05-27 and replaced by the perpetual free tier.
 //
 // Tier roster MUST match AccountTier enum from W728 (api-types).
+//
+// V-746 — SCOPE, because the framing above overstates what this can do. It pins
+// the LITERALS in the marketing data file. It does not read the server's charge
+// source and cannot: since pricing-as-data Phase A the charged price is
+// PricingService.listEffective() = the DB pricing table ?? the constants, and an
+// owner edit via PATCH /v1/admin/owner/pricing/:tier moves the charge without
+// touching this file. This guard is therefore GREEN while the site advertises one
+// price and checkout charges another. Mirroring a price edit into the marketing
+// data file is an operational step, not something this test enforces.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
