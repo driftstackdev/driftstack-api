@@ -150,7 +150,7 @@ The SDKs map these to typed error classes — catch `RateLimitError`, `Concurren
 
 If you've configured a webhook endpoint, terminal session events fire on the bus:
 
-- `session.completed` — session destroyed cleanly (customer-driven destroy, or the free-tier duration cap).
+- `session.completed` — one per logical destroy of a non-terminal session: a customer-driven destroy, the free-tier duration cap, or an account suspension reclaiming its live sessions. The last two also send `auto_destroyed: true` and a `reason`; branch on `auto_destroyed` if you attribute completions.
 - `session.failed` — session terminated due to a runtime / driver error.
 - `session.egress_capability_changed` — the session's egress capability state changed (e.g. proxy connectivity verified or lost). Lets subscribers react to capability transitions without polling.
 - `session.challenge_detected` — the in-session harness flagged a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge (e.g. in the live view) and it resumes.

@@ -31844,3 +31844,80 @@ helper that logs `account_reclaim_failed` at error level with the step name, the
 a fifth `api_keys_minted_elsewhere` step (V-727), and bootstrap passes the real logger
 as the 7th constructor argument. Verified the wiring rather than trusting the optional
 `logger?.error?.` shape.
+
+## V-749 — two customer-facing webhook payloads documented wrongly
+
+Applied the claim-vs-code lens to the webhook event catalogue: for each of the 8
+subscribable event types, does the documented trigger and payload match what the
+server emits? Two real defects, both customer-facing.
+
+**1. `session.completed` has THREE emitters; the docs described one.**
+
+- `destroy()` — the customer's `DELETE /v1/sessions/:id`.
+- `autoDestroyExpired()` — the free-tier session duration cap.
+- `destroyAllForAccount()` — account suspension reclaiming live sessions.
+
+The automatic two send `auto_destroyed: true` plus a `reason`
+(`'auto-destroyed: free-tier session duration cap'` / `'account suspended'`), and
+NEITHER field appeared anywhere in the doc. The page said "Fires when
+`DELETE /v1/sessions/:id` lands" with a two-field payload and a single
+`Emitter: … destroy()` line. So a customer attributing completions — billing,
+analytics, retry logic — could not distinguish a session they asked to end from one
+the duration cap killed or one reclaimed because their account was suspended. The
+two-field payload was not WRONG, only incomplete, which is why nothing failed.
+
+Note the prior art: the same sentence was already corrected once (S36 2026-07-07
+"fable-truth-audit" retired an idle-timeout fiction and established "the real second
+path is the free-tier duration cap"). That audit reached two paths; the third —
+suspension reclaim — was still missing. Its parity pin froze the two-path wording,
+so the pin itself had to be updated and now forbids it returning.
+
+**2. `session.failed` documented two values the server can NEVER emit.**
+The example showed `error_name: "DriverTimeoutError"` and
+`error_message: "Page load exceeded 30000ms"`. `sessionFailureCopy()` maps every
+failure onto exactly four classes with fixed copy — `SessionTimeoutError`,
+`DriverError`, `DriverNotIntegratedError`, `UnknownError` — deliberately, so internal
+driver detail never reaches a customer endpoint. `DriverTimeoutError` existed nowhere
+in the source; the ONLY occurrence in the repo was that doc line. A customer
+branching on the documented name would never match, and one parsing the message for
+a timeout figure would never find one, because the message is a constant per class.
+
+Documented the closed set as a table, said to branch on `error_name` and not to parse
+`error_message`, enumerated `operation`'s 10 values, and noted `session_id` /
+`duration_ms` are omitted when unresolvable.
+
+**Surfaces corrected (scope swept, not just the named file).** The rendered customer
+page, its byte-exact mirror `docs/api/webhook-events.md` (regenerated with the same
+frontmatter-stripping transform the parity test defines), the session-lifecycle guide,
+and the public marketing webhooks page — which said "Payload carries
+{ session_id, duration_ms }" with no mention of the automatic cases.
+
+**Proof.** Two new pins, both mutation-proved with byte-identical restore: reverting
+the trigger table or renaming `auto_destroyed` reds the first; restoring
+`DriverTimeoutError` reds the second (it also asserts the fabricated values cannot
+reappear anywhere on the page). Full suite with DB + Redis wired: **2766 files,
+28,486 passing, 0 failures.**
+
+**Checked and clean.** All 8 subscribable event types DO have live emission sites —
+`session.egress_capability_changed` traced end to end (`bootstrap:2277` →
+`makeSessionCapabilityReportRelay` → `ingestEgressCapabilityReport` → emit), so none
+is documented-but-dead. `crypto.order.paid`'s payload matches its doc exactly, and
+`session.profile_save_failed` scrubs its free-form `detail` through
+`customerSafeNodeDiagnostic` before it reaches a customer endpoint.
+
+A method note: my first extractor "found" gaps in three more events. All were
+artifacts — it merged multiple JSON blocks per doc section, and it read `component` /
+`err` out of a `logger.warn` adjacent to the real payload. Every defect reported here
+was confirmed by reading the emission site and the doc directly. A derived diff is a
+place to look, not a finding.
+
+**OAuth audited, no finding — genuinely textbook.** Authorization codes are single-use
+atomically (`SELECT … FOR UPDATE` inside the transaction, `consumedAt` checked and set
+in the same transaction), bound to both `client_id` and `account_id`, TTL-checked, and
+the client row is re-locked with its secret re-verified by constant-time compare at
+redemption — so a client revoked between authorize and exchange fails. `redirect_uri`
+is exact-matched against the registered array (not a prefix) at registration,
+authorize AND exchange, and the shape validator rejects credentials-in-URI and
+fragments, allows https, and permits http only for loopback per RFC 8252. PKCE is
+`S256`-only (`plain` refused), with RFC 7636's 43–128 verifier range enforced and a
+constant-time comparison.

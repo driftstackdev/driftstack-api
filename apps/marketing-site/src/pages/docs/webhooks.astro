@@ -18,7 +18,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // webhooks-doc-parity.test.ts pins these to source.
 
 const EVENT_TYPES = [
-  { name: 'session.completed', desc: 'Fires when a session is destroyed cleanly (non-error end of life). Payload carries { session_id, duration_ms }.' },
+  { name: 'session.completed', desc: 'Fires once per logical destroy of a non-terminal session — whether you called DELETE /v1/sessions/:id, the free-tier duration cap expired it, or your account was suspended and its sessions reclaimed. Payload carries { session_id, duration_ms }, plus { auto_destroyed: true, reason } on the two automatic cases. Branch on auto_destroyed if you attribute completions.' },
   { name: 'session.failed', desc: 'Fires when a session ends in an errored state.' },
   { name: 'api_key.revoked', desc: 'Fires when an API key is revoked from the dashboard.' },
   { name: 'session.egress_capability_changed', desc: 'Fires when a session\'s egress capability state changes (e.g. proxy connectivity verified or lost). Lets subscribers react to capability transitions without polling.' },

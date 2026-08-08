@@ -71,9 +71,18 @@ treat an older event arriving after a newer one as normal.
 
 ### `session.completed`
 
-Fires when `DELETE /v1/sessions/:id` lands on a session in a
-non-terminal state. The destroy path is idempotent; this event fires
-exactly once per logical destroy.
+Fires once per logical destroy of a session that was in a non-terminal
+state. The destroy path is idempotent. **Three things destroy a session,
+and all three emit this event** — do not assume the event means the
+session was deleted by you:
+
+| Trigger                                                       | `auto_destroyed` | `reason`                                         |
+| ------------------------------------------------------------- | ---------------- | ------------------------------------------------ |
+| You call `DELETE /v1/sessions/:id`                            | absent           | absent                                           |
+| The free-tier session duration cap expires the session        | `true`           | `auto-destroyed: free-tier session duration cap` |
+| Your account is suspended and its live sessions are reclaimed | `true`           | `account suspended`                              |
+
+A customer-initiated destroy:
 
 ```json
 {
@@ -82,7 +91,26 @@ exactly once per logical destroy.
 }
 ```
 
-Emitter: `apps/server/src/services/sessions.ts` `destroy()`.
+An automatic destroy adds two fields. **Branch on `auto_destroyed` if you
+attribute session completions** (billing, analytics, retry logic) —
+without it, a cap-expired or suspension-reclaimed session is
+indistinguishable from a clean completion you requested:
+
+```json
+{
+  "session_id": "ses_<uuid>",
+  "duration_ms": 900000,
+  "auto_destroyed": true,
+  "reason": "auto-destroyed: free-tier session duration cap"
+}
+```
+
+`auto_destroyed` is absent rather than `false` on a customer-initiated
+destroy, so test for presence/truthiness, not equality with `false`.
+
+Emitters: `apps/server/src/services/sessions.ts` — `destroy()` (customer
+call), `autoDestroyExpired()` (duration cap), `destroyAllForAccount()`
+(account suspension).
 
 ### `session.failed`
 
@@ -96,12 +124,32 @@ return 410.
   "session_id": "ses_<uuid>",
   "duration_ms": 12300,
   "operation": "navigate",
-  "error_name": "DriverTimeoutError",
-  "error_message": "Page load exceeded 30000ms"
+  "error_name": "SessionTimeoutError",
+  "error_message": "The session operation timed out."
 }
 ```
 
-Emitter: `runWithFailureCapture()` in `services/sessions.ts`.
+**`error_name` and `error_message` are a closed, classed set — not the
+underlying driver error.** The server maps every failure onto one of four
+classes and sends fixed copy for it, deliberately, so that internal driver
+detail never reaches a customer endpoint. The complete set of values you
+can receive:
+
+| `error_name`               | `error_message`                     |
+| -------------------------- | ----------------------------------- |
+| `SessionTimeoutError`      | The session operation timed out.    |
+| `DriverError`              | The browser operation failed.       |
+| `DriverNotIntegratedError` | The browser driver was unavailable. |
+| `UnknownError`             | The session operation failed.       |
+
+Branch on `error_name`; do not parse `error_message` and do not expect
+specifics such as a timeout value or a URL — the message is a constant per
+class. `operation` is one of `navigate`, `interact`, `gui_input`, `wait`,
+`state_capture`, `capture`, `extract`, `search`, `login`, or `unknown`.
+`session_id` and `duration_ms` are omitted when they cannot be resolved.
+
+Emitter: `runWithFailureCapture()` in `services/sessions.ts`, projected
+through `projectSessionFailedData()` in `lib/session-event-metadata.ts`.
 
 ### `api_key.revoked`
 

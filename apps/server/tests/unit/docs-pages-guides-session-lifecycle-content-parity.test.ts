@@ -279,10 +279,19 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
   it("CRITICAL session.completed + session.failed webhook events pinned. The 2-terminal-event set + 'Intermediate state transitions (e.g. a hypothetical session.created) are not on the bus today' wording explains the no-intermediate-events contract.", () => {
     const p = read(PAGE);
 
+    // S36 2026-07-07 (fable-truth-audit) — the idle-timeout clause was the retired
+    // fiction; the real second path is the free-tier duration cap.
+    // V-749 2026-08-08 — there is a THIRD path that audit did not reach:
+    // destroyAllForAccount() emits session.completed when an account is suspended
+    // and its live sessions are reclaimed. All three paths are now named, and the
+    // automatic two are the ones that carry auto_destroyed + reason.
     expect(p).toMatch(
-      // S36 2026-07-07 (fable-truth-audit) — the idle-timeout clause was the retired fiction;
-      // the real second path is the free-tier duration cap.
-      /`session\.completed` — session destroyed cleanly \(customer-driven destroy, or the free-tier duration cap\)\./,
+      /`session\.completed` — one per logical destroy of a non-terminal session: a customer-driven destroy, the free-tier duration cap, or an account suspension reclaiming its live sessions\./,
+    );
+    expect(p).toMatch(/`auto_destroyed: true` and a `reason`/);
+    // The two-path wording must not return.
+    expect(p).not.toMatch(
+      /destroyed cleanly \(customer-driven destroy, or the free-tier duration cap\)/,
     );
     expect(p).toMatch(/`session\.failed` — session terminated due to a runtime \/ driver error\./);
     expect(p).toMatch(
