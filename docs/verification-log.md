@@ -32027,3 +32027,15 @@ suite ran green). The last uncontended full run — V-749, same day — was **27
 28,486 passing / 0 failures** with Postgres + Redis wired. Recording this rather than
 re-running a 15-minute gate on a thrashed shared machine, which is the wrong thing to do
 to someone else's work.
+
+### V-750 follow-up 2 — the owed clean gate, obtained
+
+The peer's load cleared (load average 5.4) and the full suite ran uncontended:
+**2766 files / 28,487 passing / 8 skipped / 0 failures**, Postgres + Redis wired so the
+DB-gated integration files run rather than skip.
+
+That settles the item the entry above left open, and it retires the alternative
+hypothesis rather than merely asserting it: the same commit that produced 4 failures at
+load 66-82 and 2 at load 76 produces zero at load 5. The failing files were the
+already-documented load-sensitive population and the DB connect-probe guards, exactly as
+attributed — not defects introduced by V-749/V-750.
