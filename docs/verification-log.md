@@ -32092,3 +32092,41 @@ Also verified this pass: migration/journal integrity is otherwise clean — 112 
 files ↔ 112 entries, numbering 0..111 with no gaps or duplicates, `idx` monotonic, and
 `0022_consolidate_snapshot` is 1816 bytes of pure comment (a no-op marker), so it is
 the one entry in the anomaly range that was harmless to skip regardless.
+
+### V-751 correction — this was a re-derivation, and the real guard already existed
+
+Immediately after committing the above I read `scripts/migration-immutability-check.mjs`,
+which the deploy path runs before the artefact swap. Its header records the following,
+and it changes what V-751 is:
+
+- **The failure already happened in production on 2026-05-19.** deploy-bridge shipped
+  code expecting **17 migrations (0041-0057)** that drizzle's migrator silent-skipped for
+  exactly the watermark reason described above. It went undetected because `migrate.ts`'s
+  own row-count post-condition only fires AFTER the swap is half-done.
+- **A gate was built for it then, and it is watermark-aware.** Check #3,
+  `pending-journal-when-below-watermark`, asserts every pending journal entry has
+  `when > max(created_at)` in the TARGET DATABASE. Checks 1, 2 and 4 additionally cover
+  post-apply SQL rewrites (hash drift on already-applied migrations) and DB rows the
+  journal does not know about. Exit 2 aborts the deploy.
+
+So my framing above — "nothing in the suite caught that" — is true of the test suite and
+**misleading about the system**, which has guarded this for nearly three months. V-751 is
+not a discovery; it is a re-derivation of a known incident class.
+
+**Process failure, named:** I grepped `apps/server/tests/**` for prior art on the journal
+and found none. I did not grep `scripts/**`, where the guard lives. My own standing rule
+is to grep prior art BEFORE investigating, and "before" has to mean the whole repo, not
+the directory I expect the answer to live in.
+
+**What V-751 is actually worth, reassessed honestly.** The deploy gate is strictly
+stronger: a `when` can clear the repo's head and still sit below a specific database's
+watermark, which only a live comparison catches. The test's value is narrower and real —
+it needs no `DATABASE_URL`, so it fails in the ordinary suite at commit time instead of at
+deploy time, and every migration here is hand-authored. Keeping it as a pre-flight
+tripwire, with its header rewritten to name `migration-immutability-check.mjs` as the
+authoritative gate and to say explicitly that a green here is not clearance to deploy.
+
+Also verified while reading the deploy path, and matching its claims: migrate runs
+BEFORE the restart (`deploy-bridge.sh:258`), bails `exit 1` on failure (`:259`), and the
+restart only follows at `:260`, all under `set -euo pipefail` — so a failed migration
+blocks the new binary rather than half-deploying it.

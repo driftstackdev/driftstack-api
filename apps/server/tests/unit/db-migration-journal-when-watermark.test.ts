@@ -28,12 +28,21 @@
 // history now would be worse than recording it — so that set is pinned as a known
 // historical anomaly rather than "fixed".
 //
-// What this guard is FOR is the next migration. Every migration in this repo is
-// hand-authored (drizzle-kit generate is broken here — see the TD-002 proposal), so `when`
-// is hand-typed every single time. A new entry authored at or below the running maximum
-// would be silently skipped on prod and staging while passing CI green, and would surface
-// later as a failed deploy blaming an unrelated migration. Nothing else in the suite
-// catches that.
+// PRIOR ART — read this before assuming this file is the real defence. It is NOT.
+// This failure already happened in production on 2026-05-19: deploy-bridge shipped code
+// expecting 17 migrations (0041-0057) that the migrator silent-skipped for exactly this
+// reason. `scripts/migration-immutability-check.mjs` was built then and is the
+// AUTHORITATIVE gate — its check #3, `pending-journal-when-below-watermark`, compares
+// every pending entry against `max(created_at)` in the TARGET DATABASE, and
+// deploy-bridge.sh runs it before the artefact swap. That is strictly stronger than
+// anything here, because a `when` can clear the repo's head and still sit below a
+// particular database's watermark.
+//
+// This file is the cheap pre-flight version of that one check: it needs no DATABASE_URL,
+// so it fails in the ordinary test suite at COMMIT time rather than at deploy time. Every
+// migration in this repo is hand-authored (drizzle-kit generate is broken here — see the
+// TD-002 proposal), so `when` is hand-typed every single time, and the fast feedback is
+// worth having. Do not treat a green here as clearance to deploy — that is check #3's job.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
