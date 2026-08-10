@@ -202,7 +202,17 @@ describe('rate limit', () => {
         capacity: 120,
         refillPerSecond: 2,
         cost: 120,
-        now: Date.now(),
+        // Park the bucket's refill clock 60s in the FUTURE. The store computes
+        // `elapsedSec = Math.max(0, (now - lastRefillMs) / 1000)`, so a future
+        // stamp clamps the refill to zero and the next request is denied
+        // regardless of how long this test takes to reach it.
+        //
+        // Draining at `Date.now()` left a 500ms budget: the bucket refills at
+        // 2 tokens/sec, so one token returns after half a second and the
+        // request is allowed. That is comfortable in isolation — measured 53ms
+        // drain-to-request — but not under full-suite load, where this test was
+        // one of the intermittent failures in the CI coverage job.
+        now: Date.now() + 60_000,
       });
       expect(drained.allowed).toBe(true);
       expect(Math.floor(drained.remaining)).toBe(0);
