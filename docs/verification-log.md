@@ -32130,3 +32130,58 @@ Also verified while reading the deploy path, and matching its claims: migrate ru
 BEFORE the restart (`deploy-bridge.sh:258`), bails `exit 1` on failure (`:259`), and the
 restart only follows at `:260`, all under `set -euo pipefail` — so a failed migration
 blocks the new binary rather than half-deploying it.
+
+## V-752 — customer-facing claim sweep: the three most damaging, fixed
+
+Ran a 22-agent claim-vs-code sweep across every customer-facing surface (docs pages,
+guides, all three SDKs, marketing copy, error catalogue, api-types, legal operational
+claims), each finding put through a refuter briefed to default `refuted=true`. 14
+candidates → **13 confirmed**, 12 distinct. Nine are the docs lying about deliberate,
+correctly-implemented behaviour; exactly two need code. I re-verified each of the three
+below myself against both sides before touching anything — the sweep is where to look,
+not what to trust.
+
+**1. The profile guide promised restorable browser state. Nothing was ever captured.**
+`profile-snapshots.ts:135` writes a literal `stateBlob: {}` and restore reads only
+`parentArchetype` + `description`, minting a fresh DEK. The guide said the captured
+"`parent_archetype`, `parent_name`, and **state** stay restorable" — and said it in the
+sentence about deleting the parent, so a customer could **delete a parent profile
+believing the snapshot held their logins**. That loss is unrecoverable and only surfaces
+when they reach for the backup.
+
+This is the sharpest instance of a pattern the sweep flagged three times: the sibling API
+reference had ALREADY been corrected — `api/profiles.md` says "`description` remain
+restorable" and `api/profile-snapshots.md` says "restore does not bring back cookies or
+logins" — and the guide was the surface nobody came back to. Its parity pin froze the
+false wording, so the pin was the reason it stayed. Both fixed, and the pin now also
+requires the explicit "does NOT preserve browser state" warning and forbids the old
+sentence returning.
+
+**2. Three SDK READMEs advertised `egress.attachToSession`; it 503s everywhere, always.**
+`routes/session-proxy.ts` destructures the injected service as `service: _service` —
+deliberately discarded — and throws `FeatureUnavailableError` in both registration
+branches, so no configuration succeeds. The TS README annotates `sessions.search` and
+`sessions.login` as "capability-gated — 503" two lines above, which made the silence on
+`attachToSession` read as an affirmative liveness signal; it instead carried a positive
+gloss. Annotated in all three READMEs, corrected the `egress.ts` docstring, and prefixed
+the four shipped "complete runnable demos" that dead-end there with a warning naming the
+step that fails and which steps still work. Not deleted — the reusable proxy CRUD in
+those examples does work, and they remain the intended shape for when the backend lands.
+
+**3. Crypto-order docs said reads need only authentication; all five GETs need `read:billing`.**
+Verified the scope resolver myself, because that is where the customer harm lives:
+`scopesSatisfy` satisfies a `read:`-verb requirement only from broad `read` or
+`account_owner`, so a least-privilege `['admin:billing']` key — the natural reading of the
+same paragraph, which correctly says checkout needs `admin:billing` — can **create a real
+order, send crypto, and then 403 on every status poll and all three receipts**. The
+polling loop a crypto checkout depends on is precisely what breaks. The doc now states
+`read:billing` and spells out that granular `admin:billing` does not satisfy it.
+
+**Also handled:** editing two `apps/docs` pages tripped
+`dist-reading-suites-have-fresh-artifacts`, which correctly refuses to let a suite assert
+against markup its source no longer produces. Rebuilt `apps/docs` rather than repinning
+onto stale output, which is what that guard exists to prevent.
+
+Suites: **1837 files / 19,676 passing** (server + docs unit). Remaining sweep findings
+are tracked below and being worked in impact order; one of them (#2, the AUP's "billing
+pauses" promise) is a business decision and will be flagged, not silently resolved.

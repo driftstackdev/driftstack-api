@@ -219,15 +219,24 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
-  it("CRITICAL snapshots-no-automatic-lifecycle + orphan-on-parent-delete framing pinned. The 'Snapshots have no automatic lifecycle. Capture as many as you want; they sit until you delete them. Deleting the parent profile sets parent_profile_id to null but keeps the snapshot — the captured parent_archetype, parent_name, and state stay restorable' wording matches W774 + W756.", () => {
+  it("CRITICAL snapshots-no-automatic-lifecycle + orphan-on-parent-delete framing pinned, and V-752 requires the state_blob-is-always-empty warning: the old wording promised 'state stay restorable' while capture() hardcodes stateBlob:{} — a customer could delete a parent profile believing the snapshot held its logins.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
       /Snapshots have no automatic lifecycle\. Capture as many as you want; they sit until you delete them\./,
     );
     expect(p).toMatch(
-      /Deleting the parent profile sets `parent_profile_id` to `null` but keeps the snapshot — the captured `parent_archetype`, `parent_name`, and state stay restorable\./,
+      /Deleting the parent profile sets `parent_profile_id` to `null` but keeps the snapshot — the captured `parent_archetype`, `parent_name`, and `description` remain restorable\./,
     );
+    // V-752 — the destructive misreading this guards: "state stay restorable" invited a
+    // customer to delete the parent. profile-snapshots.ts:135 writes `stateBlob: {}` and
+    // restore reads only parentArchetype + description, so no browser state ever existed.
+    // The sibling API reference (api/profiles.md) was already corrected to "description";
+    // this guide was the surface that got missed.
+    expect(p).toMatch(/A snapshot does NOT preserve browser state/);
+    expect(p).toMatch(/always written empty in v1, and restore never reads it/);
+    expect(p).toMatch(/that data is not recoverable from one/);
+    expect(p).not.toMatch(/and state stay restorable/);
   });
 
   it("CRITICAL cross-SDK profile_snapshots access framing pinned. The 'The same surface is available in the Python and Go SDKs as client.profile_snapshots.* and client.ProfileSnapshots.* respectively' wording matches W777 SDK versioning cross-SDK lockstep contract.", () => {

@@ -42,6 +42,15 @@ export class EgressResource {
    *
    * NB: the request body's `session_id` MUST match `sessionId` here;
    * the server rejects mismatched pairs with 400 BadRequest.
+   *
+   * ⚠️ CAPABILITY-GATED, AND CURRENTLY UNAVAILABLE EVERYWHERE. `POST
+   * /v1/sessions/:id/proxy` throws `FeatureUnavailableError` (503) on every
+   * deployment today — `routes/session-proxy.ts` discards the injected service
+   * and both registration branches throw, so there is no configuration in which
+   * this succeeds. The 400-on-mismatch above is a real check, but you will not
+   * reach it. `getSessionProxy` likewise 404s unconditionally. Treat these two as
+   * declared-but-unshipped; the reusable proxy CRUD methods on this resource are
+   * unaffected.
    */
   attachToSession(
     sessionId: string,

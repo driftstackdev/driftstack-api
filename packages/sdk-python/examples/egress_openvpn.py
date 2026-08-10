@@ -1,3 +1,11 @@
+# ⚠️ THIS EXAMPLE CANNOT RUN SUCCESSFULLY TODAY. The per-session attach step below
+# hits POST /v1/sessions/:id/proxy, which throws FeatureUnavailableError (503) on
+# EVERY deployment — routes/session-proxy.ts discards the injected service and both
+# registration branches throw, so no configuration makes it succeed. Session
+# creation itself also refuses first when egress is required. The reusable proxy
+# CRUD steps (save / list / update / delete) DO work; the attach + read-back steps
+# are declared-but-unshipped. Kept as the intended shape for when the backend lands.
+#
 """Customer-configurable egress — OpenVPN variant (Phase 2 priority
 per planning 133 + ORCHESTRATOR-STATE 2026-05-16).
 

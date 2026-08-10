@@ -60,8 +60,8 @@ client.sessions.search(id, body) // capability-gated — 503 unless the deployme
 client.sessions.login(id, body)  // capability-gated — 503 unless the deployment has a real direct driver
 client.sessions.destroy(id)
 
-client.egress.attachToSession(sessionId, config)  // EG-API-1.2 — route THIS session through a proxy
-client.egress.getSessionProxy(sessionId)          // current session proxy summary (404 = unproxied)
+client.egress.attachToSession(sessionId, config)  // capability-gated — 503 on every deployment today; no egress backend is wired
+client.egress.getSessionProxy(sessionId)          // capability-gated — 404 unconditionally today (see attachToSession)
 client.egress.listProxies()             // EG-API-1.3 — saved reusable proxy library (metadata only)
 client.egress.createProxy(body)         // secret fields are write-only (never echoed back)
 client.egress.updateProxy(id, body)

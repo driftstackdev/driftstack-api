@@ -46,26 +46,26 @@ asyncio.run(main())
 
 Every public API endpoint is a typed method on a resource accessor:
 
-| Accessor                   | Methods                                                                                                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`                                      |
-| `client.agent_sessions`    | `create`, `get`, `message`, `close`, `set_mode`, `send_input_event`, `takeover`, `handback`, `livekit_token`, `resume` (AI chat — decompose + execute a task) |
-| `client.egress`            | `attach_to_session`, `get_session_proxy`, `list_proxies`, `create_proxy`, `update_proxy`, `delete_proxy`, `test_proxy` (per-session + reusable proxy egress)  |
-| `client.profiles`          | `create`, `list`, `iterate`, `get`, `update`, `delete`, `clone` (V-313)                                                                                       |
-| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312 — immutable point-in-time copies)                                         |
-| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (snapshot and manage an agent-session's intent_log; no execute method)                                           |
-| `client.api_keys`          | `create`, `list`, `rotate` (V-296), `revoke`                                                                                                                  |
-| `client.usage`             | `current_period`                                                                                                                                              |
-| `client.webhooks`          | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307)                                                         |
-| `client.team`              | `invite`, `list_members`, `list_invites`, `list_owners`, `accept_invite`, `remove_member` (V-298)                                                             |
-| `client.billing`           | `get_state`, `create_checkout_session`, `create_portal_session`                                                                                               |
-| `client.crypto_orders`     | `quote`, `create_checkout`, `list`, `iterate`, `get`, `update_note`, `cancel`, `receipt` (V-666 — crypto checkout orders)                                     |
-| `client.auth`              | `signup`, `verify_email`, `login`, `refresh`, `logout`, `request_magic_link`, `consume_magic_link`, `request_password_reset`, `confirm_password_reset`        |
-| `client.mfa`               | `status`, `enroll`, `verify`, `disable`, `regenerate_recovery_codes` (V-353b — TOTP MFA enrollment)                                                           |
-| `client.account`           | `me` (V-385 — full /v1/account/me with slug / region / avatar / mfa / teams)                                                                                  |
-| `client.legal`             | `documents`, `required`, `accept` (V-049 — legal-document catalog + acceptance)                                                                               |
-| `client.audit_log`         | `list`, `iterate`, `export` (V-216 — append-only account event ledger; V-462 export)                                                                          |
-| `client.email_preferences` | `list`, `set`, `opt_out`, `opt_in` (V-204 — non-critical email opt-out toggles)                                                                               |
+| Accessor                   | Methods                                                                                                                                                                                                                             |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`                                                                                                            |
+| `client.agent_sessions`    | `create`, `get`, `message`, `close`, `set_mode`, `send_input_event`, `takeover`, `handback`, `livekit_token`, `resume` (AI chat — decompose + execute a task)                                                                       |
+| `client.egress`            | `attach_to_session`, `get_session_proxy` (**capability-gated — 503/404 on every deployment today; no egress backend is wired**), `list_proxies`, `create_proxy`, `update_proxy`, `delete_proxy`, `test_proxy` (reusable proxy CRUD) |
+| `client.profiles`          | `create`, `list`, `iterate`, `get`, `update`, `delete`, `clone` (V-313)                                                                                                                                                             |
+| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312 — immutable point-in-time copies)                                                                                                               |
+| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (snapshot and manage an agent-session's intent_log; no execute method)                                                                                                                 |
+| `client.api_keys`          | `create`, `list`, `rotate` (V-296), `revoke`                                                                                                                                                                                        |
+| `client.usage`             | `current_period`                                                                                                                                                                                                                    |
+| `client.webhooks`          | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307)                                                                                                                               |
+| `client.team`              | `invite`, `list_members`, `list_invites`, `list_owners`, `accept_invite`, `remove_member` (V-298)                                                                                                                                   |
+| `client.billing`           | `get_state`, `create_checkout_session`, `create_portal_session`                                                                                                                                                                     |
+| `client.crypto_orders`     | `quote`, `create_checkout`, `list`, `iterate`, `get`, `update_note`, `cancel`, `receipt` (V-666 — crypto checkout orders)                                                                                                           |
+| `client.auth`              | `signup`, `verify_email`, `login`, `refresh`, `logout`, `request_magic_link`, `consume_magic_link`, `request_password_reset`, `confirm_password_reset`                                                                              |
+| `client.mfa`               | `status`, `enroll`, `verify`, `disable`, `regenerate_recovery_codes` (V-353b — TOTP MFA enrollment)                                                                                                                                 |
+| `client.account`           | `me` (V-385 — full /v1/account/me with slug / region / avatar / mfa / teams)                                                                                                                                                        |
+| `client.legal`             | `documents`, `required`, `accept` (V-049 — legal-document catalog + acceptance)                                                                                                                                                     |
+| `client.audit_log`         | `list`, `iterate`, `export` (V-216 — append-only account event ledger; V-462 export)                                                                                                                                                |
+| `client.email_preferences` | `list`, `set`, `opt_out`, `opt_in` (V-204 — non-critical email opt-out toggles)                                                                                                                                                     |
 
 Inputs accept either a Pydantic model OR a plain `dict` (both serialize identically on the wire). Outputs are typed Pydantic models — IDEs autocomplete every field.
 

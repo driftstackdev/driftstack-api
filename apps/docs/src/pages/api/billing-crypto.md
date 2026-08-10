@@ -47,8 +47,12 @@ Requires the `admin:billing` scope — starting a crypto checkout is a
 billing operation. (The same applies to the other mutating crypto
 endpoints: `PATCH /v1/billing/crypto-orders/:id` and
 `POST /v1/billing/crypto-orders/:id/cancel`. Read endpoints — listing
-orders, fetching a single order, and receipts — only require
-authentication.) Idempotent — pass an `Idempotency-Key` header to
+orders, fetching a single order, and all three receipt variants —
+require `read:billing`. Note that granular `admin:billing` does NOT
+satisfy `read:billing`: only the broad `read` scope or `account_owner`
+does. A key scoped `['admin:billing']` alone can therefore create an
+order and then 403 on every status poll, so mint checkout keys with
+both, or with `account_owner`.) Idempotent — pass an `Idempotency-Key` header to
 make retries safe; a repeated key returns the original order
 verbatim (with an `Idempotent-Replayed: 1` response header) for as
 long as the order row exists — there is no 24-hour expiry.
