@@ -32039,3 +32039,56 @@ hypothesis rather than merely asserting it: the same commit that produced 4 fail
 load 66-82 and 2 at load 76 produces zero at load 5. The failing files were the
 already-documented load-sensitive population and the DB connect-probe guards, exactly as
 attributed — not defects introduced by V-749/V-750.
+
+## V-751 — the migration journal's `when` is a watermark, and nothing guarded it
+
+**How this started, including the part I got wrong.** Auditing deploy-critical
+mechanics I read drizzle's pg migrator gate — `Number(lastDbMigration.created_at) <
+migration.folderMillis` — and found `0021_scheduled_jobs` carries a hand-typed `when`
+of 1778909000000, about 9 days ahead of its neighbours, leaving entries 0022-0057
+below it. I initially concluded that a fresh-database deploy would silently skip 36
+migrations, which would have been catastrophic. **That was wrong**, and simulating the
+loop in my head is what made it wrong: `lastDbMigration` is read ONCE, before the
+loop, so on an empty database it is `undefined`, `!lastDbMigration` short-circuits, and
+every entry applies regardless of `when`.
+
+**Verified empirically rather than argued**, against two throwaway databases (created
+and dropped; zero touch on the real one):
+
+- **Fresh DB + full journal** → all **112 migrations applied, 52 public tables**. This
+  is exactly what CI does (`ci.yml` runs `npm run db:migrate -w apps/server` against a
+  fresh `postgres:17-alpine`), which is _why_ a `when` anomaly is invisible to CI.
+- **DB migrated to 0021 only, then re-migrated with the full journal** → 0022-0057
+  skipped, 22 migrations recorded, 24 tables, and `agent_sessions` / `recipes` /
+  `account_mfa` / `team_members` / `incidents` / `oauth_clients` absent. It then
+  **threw** on a later migration that depends on those tables, reporting
+  `Failed query: -- ... per-session model picker` — i.e. blaming the wrong migration.
+
+**So the real risk is narrower than my first read, and still real.** No silent schema
+corruption: `deploy-bridge.sh` bails non-zero, so a broken migrate blocks the restart.
+But the journal carries a poisoned watermark, and on any ALREADY-migrated database
+(prod, staging) the gate is `max(recorded created_at) < when`. Every migration here is
+hand-authored — drizzle-kit generate is broken in this repo, so `when` is hand-typed
+every time. A new entry authored at or below the current head (1784642400000) would be
+**silently skipped on prod and staging while passing CI green**, then surface as a
+failed deploy pointing at an unrelated migration. Nothing in the suite caught that.
+
+**Guard added**, `db-migration-journal-when-watermark.test.ts`, 5 assertions: no new
+entry sits at or below the running max; the historical anomaly set is exactly 0022-0057
+and cannot grow; the newest entry holds the highest `when`; `.sql` files and journal
+entries are 1:1 in both directions; `idx` is unique, ascending and contiguous from 0.
+The failure message names the consequence and prints the head value to raise above.
+
+I did NOT rewrite the historical `when` values. Editing them cannot repair an existing
+database — the poisoned value is already recorded in its `__drizzle_migrations` table —
+and every real database took the fresh path where they applied correctly. Recording the
+anomaly beats rewriting history.
+
+**Proof.** Mutation: appended a realistic bad entry (`0112`, `when` under the head).
+4 of 5 assertions red, including the 1:1 check (no `.sql` for it). Journal restored
+byte-identical, 5/5 green after. Server unit suite **1741 files / 19,120 passing**.
+
+Also verified this pass: migration/journal integrity is otherwise clean — 112 SQL
+files ↔ 112 entries, numbering 0..111 with no gaps or duplicates, `idx` monotonic, and
+`0022_consolidate_snapshot` is 1816 bytes of pure comment (a no-op marker), so it is
+the one entry in the anomaly range that was harmless to skip regardless.
