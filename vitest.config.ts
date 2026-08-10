@@ -39,10 +39,19 @@ export default defineConfig({
       // set ~5% below current baseline so a meaningful drop fails CI but
       // small noise doesn't false-positive. Ratchet upward as coverage
       // improves; never ratchet downward to mask a regression.
+      // Ratcheted 2026-08-10 to restore the policy stated above. Measured on
+      // the full suite: lines 89.87, statements 88.16, functions 88.98,
+      // branches 79.30. The old 80/80/80 sat 8-10 points below actual, so
+      // coverage could fall by that much and still report green — a gate that
+      // far under its baseline cannot fail on anything short of a collapse.
+      // Each value is ~5 points under its own measurement, the margin this
+      // file asks for. `branches: 75` was already at policy against 79.30.
+      // The comment sits ABOVE the block because the content-parity pin
+      // requires the four values consecutive.
       thresholds: {
-        lines: 80,
-        statements: 80,
-        functions: 80,
+        lines: 85,
+        statements: 83,
+        functions: 84,
         branches: 75,
       },
     },

@@ -77,7 +77,7 @@ describe('W528.A /vitest.node.config.ts content parity', () => {
       /\/\/ V-107: regression gate, not aspirational target\. Thresholds are\s*\n?\s*\/\/ set ~5% below current baseline so a meaningful drop fails CI but\s*\n?\s*\/\/ small noise doesn't false-positive\. Ratchet upward as coverage\s*\n?\s*\/\/ improves; never ratchet downward to mask a regression\./,
     );
     expect(body).toMatch(
-      /thresholds: \{\s*\n?\s*lines: 80,\s*\n?\s*statements: 80,\s*\n?\s*functions: 80,\s*\n?\s*branches: 75,\s*\n?\s*\},/,
+      /thresholds: \{\s*\n?\s*lines: 85,\s*\n?\s*statements: 83,\s*\n?\s*functions: 84,\s*\n?\s*branches: 75,\s*\n?\s*\},/,
     );
   });
 
