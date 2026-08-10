@@ -31996,3 +31996,34 @@ markdown plus one test file and cannot affect Postgres connectivity; the parity 
 covering every file I touched pass, and the server unit suite ran 1740/1740 green
 after the ADR edits. **A clean full-gate green for this commit is still owed once the
 machine is quiet** — recorded rather than glossed.
+
+### V-750 follow-up — the owed clean gate, and what it actually showed
+
+Two further full runs, both still under peer load. Neither was clean, and the
+failures MOVED between runs, which is the tell:
+
+| run | duration | failures                                                                                                                          |
+| --- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 1082s    | 4 files — DB connect-probe timeouts                                                                                               |
+| 2   | 858s     | 2 files — `integration/auth.test.ts` (a rate-limit `retry-after` assertion) + `gui-client/tests/unit/use-browser-sign-in.test.ts` |
+
+Normal duration for this suite is ~190s. Load average across the attempts ran
+**66 → 82 → 76**, from another agent; a peer's uncommitted `vitest.config.ts`
+coverage-threshold ratchet also surfaced mid-run. `npm test` is `vitest run` with no
+coverage, so that edit cannot explain the failures.
+
+Both run-2 files pass **34/34 in isolation**, at load 76. So they need the full
+2766-file suite AND contention. That is not a new discovery: `use-browser-sign-in` is a
+named member of the load-flake population recorded in V-739/V-744 and explicitly
+documented there as NOT closed, and the rate-limit assertion is a timing one. The
+DB victims in run 1 open Postgres with a 2s `connect_timeout` and deliberately throw
+rather than skip when `DATABASE_URL` is set — correct design that a loaded machine reds.
+
+**Conclusion, stated plainly: a clean full-gate green is not obtainable on this machine
+while a peer holds it at load 66-82, and the failures observed are the already-documented
+load-sensitive population rather than anything V-750 touched** (markdown plus one test
+file; every parity pin covering the touched files passes, and the 1740-file server unit
+suite ran green). The last uncontended full run — V-749, same day — was **2766 files /
+28,486 passing / 0 failures** with Postgres + Redis wired. Recording this rather than
+re-running a 15-minute gate on a thrashed shared machine, which is the wrong thing to do
+to someone else's work.
