@@ -1,10 +1,24 @@
 # ADR-003 — $2.99 paid trial pack replaces the free tier
 
-**Status:** Accepted
+**Status:** Accepted — **but REVERSED BY THE SHIPPED SYSTEM as of 2026-08-10.
+A superseding ADR is owed and has no author yet (see the note below).**
 **Date:** 2026-05-03
-**Tier:** Contractual (explicit; commercial-commitment shape)
-**Related V-entry:** V-061 (file-127 sweep that initially carried forward the "free trial" framing — withdrawn here), V-063 (this ADR + memory + scaffolding annotations).
-**Related D-entry:** none yet — the file-127 §6 deviation lives in this ADR; if a one-line summary becomes necessary it adds as a future `D-NNN`.
+
+> ### ⚠️ 2026-08-10 reality check (V-750)
+>
+> This ADR records that a $2.99 one-time **trial pack replaces the free tier**.
+> Both halves are now reversed: `free` is a live value in `AccountTierSchema`
+> and the pre-launch checklist calls it a "perpetual free tier", while the
+> trial pack was retired 2026-05-27 and survives in the source only as comments
+> explaining its removal (`lib/config.ts`, `routes/billing.ts`).
+>
+> As with ADR-002, no `Status: Superseded by ADR-MMM` was recorded, so the
+> reasoning for reinstating a perpetual free tier is written down nowhere. This
+> note states the fact, not the rationale — the latter belongs to whoever made
+> the call.
+> **Tier:** Contractual (explicit; commercial-commitment shape)
+> **Related V-entry:** V-061 (file-127 sweep that initially carried forward the "free trial" framing — withdrawn here), V-063 (this ADR + memory + scaffolding annotations).
+> **Related D-entry:** none yet — the file-127 §6 deviation lives in this ADR; if a one-line summary becomes necessary it adds as a future `D-NNN`.
 
 ## Context
 

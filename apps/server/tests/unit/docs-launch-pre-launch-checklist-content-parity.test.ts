@@ -94,6 +94,29 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
     expect(body).toMatch(/## Cross-repo dependencies \(Agent 1\)/);
   });
 
+  // V-750 — the roll-up header is from 2026-05-09 (V-361) while the verification
+  // log is at V-750, so anyone reading a row as current state is reading a
+  // three-month-old snapshot. The staleness warning is the only thing standing
+  // between that and a wrong launch decision, and nothing else fails if it is
+  // deleted — hence pinned. It also records WHICH items were deliberately left
+  // alone because their truth lives outside this repo.
+  it('V-750 staleness warning is present and still names the un-verifiable founder-side items', () => {
+    expect(body).toMatch(/Staleness warning — read before trusting any row/);
+    expect(body).toContain('reached **V-750**');
+    expect(body).toMatch(/Deliberately NOT changed/);
+    expect(body).toMatch(/Re-verify those against the actual dashboards before launch/);
+    // The two contradicted ADRs must stay named here, since the ADR files are not
+    // what a launch reviewer opens first.
+    expect(body).toMatch(/ADR-002 \(Stripe-only — crypto shipped\)/);
+    expect(body).toMatch(/ADR-003/);
+    // The corrected rows must not revert to their stale form.
+    expect(body).not.toMatch(/1086 \/ 109 files server/);
+    expect(body).not.toMatch(/^- Public status page \(status\.driftstack\.dev\)\.$/m);
+    expect(body).not.toMatch(
+      /^- Crypto rail re-evaluation \(deferred per ADR-002 supersedure to fiat-only\)\.$/m,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

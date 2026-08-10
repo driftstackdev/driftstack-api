@@ -12,36 +12,60 @@ Roll-up of every item between current state and "first paying customer can sign 
 2026-05-09 (V-361 — V-353 cycle / V-359 / V-298a / V-313 / V-360 +
 SDK + audit cleanup absorbed).
 
+> ### ⚠️ Staleness warning — read before trusting any row (V-750, 2026-08-10)
+>
+> The roll-up above is from **2026-05-09 (V-361)**. The verification log has since
+> reached **V-750**. This page has NOT been re-rolled since, so treat it as a
+> 2026-05 snapshot with the corrections below applied, not as current state.
+>
+> **Corrected in place on 2026-08-10** (each verified against the repo):
+> the Test-coverage row's figures; the "crypto rail deferred" line (the crypto rail
+> shipped); the "public status page" line (built, with a deploy workflow).
+>
+> **Deliberately NOT changed:** every item whose truth lives OUTSIDE this repo —
+> Hetzner provisioning, Cloudflare Pages projects, Neon/Upstash/R2/Postmark/Sentry
+> env population, Stripe live keys, the Apple Developer cert, KvK closure, counsel
+> review, and whether any `*-v0.1.0` tag has fired. `CLAUDE.md` asserts prod and
+> staging are already live at `api.driftstack.dev` / `staging.driftstack.dev`, which
+> would close several queue items, but that is repo-recorded context and this file
+> should not silently flip an infrastructure claim on the strength of another
+> document. **Re-verify those against the actual dashboards before launch.**
+>
+> Two architecture records are also contradicted by the shipped system and now
+> carry dated reality notes: ADR-002 (Stripe-only — crypto shipped) and ADR-003
+> (trial pack replaces free tier — reversed). Neither has the superseding ADR the
+> `docs/adr/README.md` convention requires.
+
 ---
 
 ## 1. Backend (apps/server)
 
-| Item                                       | Status          | Owner   | Blocks launch? | Notes                                                                                                                                                |
-| ------------------------------------------ | --------------- | ------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Auth flows (V-079)                         | READY           | eng     | yes (READY)    | signup / verify-email / login / magic-link / password-reset / refresh / logout                                                                       |
-| Web sessions (V-168) + API keys (V-049)    | READY           | eng     | yes (READY)    | scrypt-hashed at rest; Redis-backed AccountContext cache (30s TTL)                                                                                   |
-| API key minting + revoke                   | READY           | eng     | yes (READY)    | `POST/GET/DELETE /v1/api-keys` per V-174 scope split                                                                                                 |
-| Browser-OAuth GUI activation (V-266)       | READY           | eng     | yes (READY)    | initiate / bind / exchange one-shot 5-min TTL                                                                                                        |
-| Sessions (V-073 + V-100)                   | READY           | eng     | yes (READY)    | create / list / navigate / interact / wait / capture / get-state / destroy                                                                           |
-| Profiles (V-081)                           | READY           | eng     | yes (READY)    | create / list / get / delete; tier profile-cap enforced                                                                                              |
-| Webhooks (V-074 + V-091)                   | READY           | eng     | yes (READY)    | endpoints CRUD + delivery introspection + retry queue                                                                                                |
-| Admin force-actions (V-100)                | READY           | eng     | yes (READY)    | session destroy / API key revoke / account suspend                                                                                                   |
-| Customer audit log (V-216 + V-354)         | READY           | eng     | yes (READY)    | `GET /v1/account/audit-log` with filter dropdown + load-more pagination on /audit-log dashboard page                                                 |
-| MFA (V-353 cycle: a-h + V-358)             | READY           | eng     | yes (READY)    | TOTP enrollment / verify / login challenge / step-up reauth / disable / recovery codes / dashboard UI / API docs. Optional per V-353a verdict        |
-| Web-session list + revoke (V-355)          | READY           | eng     | yes (READY)    | GET /v1/account/web-sessions + DELETE per-id + bulk-revoke-except-current. Wired in /settings Active sign-ins                                        |
-| Webhook secret rotation (V-359)            | READY           | eng     | yes (READY)    | POST /v1/webhooks/:id/rotate-secret with 24h grace; worker dual-signs; SDK verifiers (TS/Py/Go) accept either header during grace                    |
-| Webhook test-delivery (V-356)              | READY           | eng     | yes (READY)    | POST /v1/webhooks/:id/test enqueues synthetic test.ping; UI button per row                                                                           |
-| Account avatar (V-352b)                    | READY           | eng     | yes (READY)    | POST/DELETE /v1/account/me/avatar; presigned R2 GET; 2 MiB cap; PNG/JPEG/WebP                                                                        |
-| Account slug (V-298a)                      | READY           | eng     | n/a            | accounts.slug column + PATCH /v1/account/me + /settings UI. URL routing semantics deferred to founder design                                         |
-| Profile cloning (V-313)                    | READY           | eng     | n/a            | POST /v1/profiles/:id/clone with auto-derived "${source} (copy)" naming                                                                              |
-| Stripe Checkout (V-082) + webhooks (V-080) | READY           | eng     | yes (READY)    | six-tier recurring subscription checkout; webhook signature verify                                                                                   |
-| BillingService production wiring           | PENDING FOUNDER | founder | yes            | test mode is active; live launch needs `STRIPE_SECRET_KEY` + the 12-price six-tier map + `STRIPE_WEBHOOK_SECRET`. Live keys go via SSH-write only    |
-| Free entry tier                            | READY           | eng     | yes (READY)    | perpetual free tier; no card, expiry, one-time purchase, or prepaid credit                                                                           |
-| Rate limiting (V-251)                      | READY           | eng     | yes (READY)    | per-account token bucket + per-IP gates on auth endpoints                                                                                            |
-| Driver: mock                               | READY           | eng     | n/a            | dev/test only                                                                                                                                        |
-| Driver: webkit                             | PENDING ENG     | Agent 1 | yes            | cross-repo dep on Agent 1's V-203 Phase 2A + V-372–V-378 readback-path remediation. Agent 2 ValidationHarnessRecaptureBridge stays mocked until then |
-| OpenAPI 3.1 spec emit                      | READY           | eng     | yes (READY)    | `/openapi.json` + Scalar UI at `/docs/`                                                                                                              |
-| Test coverage                              | READY           | eng     | n/a            | 1086 / 109 files server + 17 / Python SDK + Go SDK pass; coverage thresholds enforced in CI per V-107                                                |
+| Item                                       | Status          | Owner   | Blocks launch? | Notes                                                                                                                                                                                                                                                              |
+| ------------------------------------------ | --------------- | ------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Auth flows (V-079)                         | READY           | eng     | yes (READY)    | signup / verify-email / login / magic-link / password-reset / refresh / logout                                                                                                                                                                                     |
+| Web sessions (V-168) + API keys (V-049)    | READY           | eng     | yes (READY)    | scrypt-hashed at rest; Redis-backed AccountContext cache (30s TTL)                                                                                                                                                                                                 |
+| API key minting + revoke                   | READY           | eng     | yes (READY)    | `POST/GET/DELETE /v1/api-keys` per V-174 scope split                                                                                                                                                                                                               |
+| Browser-OAuth GUI activation (V-266)       | READY           | eng     | yes (READY)    | initiate / bind / exchange one-shot 5-min TTL                                                                                                                                                                                                                      |
+| Sessions (V-073 + V-100)                   | READY           | eng     | yes (READY)    | create / list / navigate / interact / wait / capture / get-state / destroy                                                                                                                                                                                         |
+| Profiles (V-081)                           | READY           | eng     | yes (READY)    | create / list / get / delete; tier profile-cap enforced                                                                                                                                                                                                            |
+| Webhooks (V-074 + V-091)                   | READY           | eng     | yes (READY)    | endpoints CRUD + delivery introspection + retry queue                                                                                                                                                                                                              |
+| Admin force-actions (V-100)                | READY           | eng     | yes (READY)    | session destroy / API key revoke / account suspend                                                                                                                                                                                                                 |
+| Customer audit log (V-216 + V-354)         | READY           | eng     | yes (READY)    | `GET /v1/account/audit-log` with filter dropdown + load-more pagination on /audit-log dashboard page                                                                                                                                                               |
+| MFA (V-353 cycle: a-h + V-358)             | READY           | eng     | yes (READY)    | TOTP enrollment / verify / login challenge / step-up reauth / disable / recovery codes / dashboard UI / API docs. Optional per V-353a verdict                                                                                                                      |
+| Web-session list + revoke (V-355)          | READY           | eng     | yes (READY)    | GET /v1/account/web-sessions + DELETE per-id + bulk-revoke-except-current. Wired in /settings Active sign-ins                                                                                                                                                      |
+| Webhook secret rotation (V-359)            | READY           | eng     | yes (READY)    | POST /v1/webhooks/:id/rotate-secret with 24h grace; worker dual-signs; SDK verifiers (TS/Py/Go) accept either header during grace                                                                                                                                  |
+| Webhook test-delivery (V-356)              | READY           | eng     | yes (READY)    | POST /v1/webhooks/:id/test enqueues synthetic test.ping; UI button per row                                                                                                                                                                                         |
+| Account avatar (V-352b)                    | READY           | eng     | yes (READY)    | POST/DELETE /v1/account/me/avatar; presigned R2 GET; 2 MiB cap; PNG/JPEG/WebP                                                                                                                                                                                      |
+| Account slug (V-298a)                      | READY           | eng     | n/a            | accounts.slug column + PATCH /v1/account/me + /settings UI. URL routing semantics deferred to founder design                                                                                                                                                       |
+| Profile cloning (V-313)                    | READY           | eng     | n/a            | POST /v1/profiles/:id/clone with auto-derived "${source} (copy)" naming                                                                                                                                                                                            |
+| Stripe Checkout (V-082) + webhooks (V-080) | READY           | eng     | yes (READY)    | six-tier recurring subscription checkout; webhook signature verify                                                                                                                                                                                                 |
+| BillingService production wiring           | PENDING FOUNDER | founder | yes            | test mode is active; live launch needs `STRIPE_SECRET_KEY` + the 12-price six-tier map + `STRIPE_WEBHOOK_SECRET`. Live keys go via SSH-write only                                                                                                                  |
+| Free entry tier                            | READY           | eng     | yes (READY)    | perpetual free tier; no card, expiry, one-time purchase, or prepaid credit                                                                                                                                                                                         |
+| Rate limiting (V-251)                      | READY           | eng     | yes (READY)    | per-account token bucket + per-IP gates on auth endpoints                                                                                                                                                                                                          |
+| Driver: mock                               | READY           | eng     | n/a            | dev/test only                                                                                                                                                                                                                                                      |
+| Driver: webkit                             | PENDING ENG     | Agent 1 | yes            | cross-repo dep on Agent 1's V-203 Phase 2A + V-372–V-378 readback-path remediation. Agent 2 ValidationHarnessRecaptureBridge stays mocked until then                                                                                                               |
+| OpenAPI 3.1 spec emit                      | READY           | eng     | yes (READY)    | `/openapi.json` + Scalar UI at `/docs/`                                                                                                                                                                                                                            |
+| Test coverage                              | READY           | eng     | n/a            | 2766 files / 28,486 tests pass repo-wide (2026-08-10, Postgres + Redis wired so the ~55 DB-gated integration files run instead of skipping; the default local gate skips 63 files). Coverage thresholds enforced in CI per V-107; CI also runs a separate e2e job. |
 
 ## 2. SDKs
 
@@ -209,10 +233,10 @@ Remaining, in priority order:
 
 - Tauri custom URL scheme (deep-link replacement for V-268 polling).
 - Python + Go SDK first-tag-on-PyPI / first-tag-on-modules.
-- Public status page (status.driftstack.dev).
+- ~~Public status page (status.driftstack.dev)~~ — **BUILT** (2026-08-10 check): `apps/status-site` ships index/history/incident/404 pages and `.github/workflows/deploy-status-site.yml`. Whether the Cloudflare Pages project + DNS exist is founder-side and unverified here.
 - V-184b copy redline.
 - V-256 explicit deferrals (SDK matrix Streaming/Recording rows, etc.).
-- Crypto rail re-evaluation (deferred per ADR-002 supersedure to fiat-only).
+- ~~Crypto rail re-evaluation (deferred per ADR-002 supersedure to fiat-only)~~ — **SHIPPED, not deferred** (2026-08-10 check): eight customer-facing `/v1/billing/crypto-*` routes, a signature-verified NowPayments IPN ingress, `crypto_orders` + `crypto_entitlements`, tier activation with refund clawback, and receipts (json/txt/pdf). ADR-002 still reads Stripe-only and now carries a reality note; the superseding ADR is unwritten.
 - GUI ProfilesView/RecordingsView/ProxiesView further polish (V-275–V-277 closed empty-states).
 
 ## Cross-repo dependencies (Agent 1)

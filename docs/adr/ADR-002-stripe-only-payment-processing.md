@@ -1,10 +1,32 @@
 # ADR-002 — Stripe-only payment processing at launch
 
-**Status:** Accepted
+**Status:** Accepted — **but CONTRADICTED BY THE SHIPPED SYSTEM as of 2026-08-10.
+A superseding ADR is owed and has no author yet (see the note below).**
 **Date:** 2026-05-03
-**Tier:** Architectural (approved deviation; vendor / structural)
-**Related V-entry:** V-052 (Coinbase Commerce dropped from sub-processor list + legal docs), V-060 (this ADR + D-027 entry).
-**Related D-entry:** D-027 — Stripe-only payment rail at launch.
+
+> ### ⚠️ 2026-08-10 reality check (V-750)
+>
+> This ADR records "Stripe-only payment processing at launch". The system now
+> also ships a full customer-facing **crypto** rail via NowPayments, and has for
+> months: eight `/v1/billing/crypto-*` routes (checkout, quote, order list/get,
+> cancel, and `receipt`/`receipt.txt`/`receipt.pdf`), a signature-verified IPN
+> ingress at `/v1/webhooks/nowpayments`, `crypto_orders` +
+> `crypto_entitlements` tables, `CryptoTierActivationService` with refund
+> clawback, and a dedicated security audit
+> (`docs/internal/2026-06-03-crypto-payment-path-security-audit.md`).
+>
+> So the decision changed and the record did not. Per `docs/adr/README.md` the
+> convention is that a superseded ADR keeps its number and gets
+> `Status: Superseded by ADR-MMM` — that superseding ADR has never been written,
+> so nothing states WHY crypto was reinstated or under what constraints.
+>
+> This note is deliberately not that ADR: whoever made the call owns the
+> rationale, and inventing one here would fabricate a decision record. Flagged
+> so a diligence or counsel review reads the current state rather than a
+> three-month-old decision.
+> **Tier:** Architectural (approved deviation; vendor / structural)
+> **Related V-entry:** V-052 (Coinbase Commerce dropped from sub-processor list + legal docs), V-060 (this ADR + D-027 entry).
+> **Related D-entry:** D-027 — Stripe-only payment rail at launch.
 
 ## Context
 

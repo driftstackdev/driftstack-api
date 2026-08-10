@@ -31921,3 +31921,78 @@ authorize AND exchange, and the shape validator rejects credentials-in-URI and
 fragments, allows https, and permits http only for loopback per RFC 8252. PKCE is
 `S256`-only (`plain` refused), with RFC 7636's 43–128 verifier range enforced and a
 constant-time comparison.
+
+## V-750 — the launch checklist and two ADRs assert a state the system left behind
+
+Asked the "prod ready" question the only way that means anything: do the documents
+you would consult to decide whether to launch still describe the system? Three of
+them do not.
+
+**The pre-launch checklist is a 2026-05-09 snapshot presented as current.** Its own
+roll-up line reads "Last roll-up: 2026-05-07 (V-279), refreshed … 2026-05-09
+(V-361)". The verification log is at V-750. Verified against the repo and corrected
+in place:
+
+- Test coverage read "1086 / 109 files server". Actual: **2766 files / 28,486 tests**.
+- "Crypto rail re-evaluation (deferred per ADR-002 supersedure to fiat-only)" is
+  listed under _What's deferred post-launch_. The crypto rail SHIPPED: eight
+  customer-facing `/v1/billing/crypto-*` routes (checkout, quote, list, get, cancel,
+  and json/txt/pdf receipts), a signature-verified NowPayments IPN ingress,
+  `crypto_orders` + `crypto_entitlements`, tier activation with refund clawback — and
+  three money bugs fixed in it this week (V-741/742/743).
+- "Public status page (status.driftstack.dev)" is listed as deferred. `apps/status-site`
+  ships index/history/incident/404 and has a deploy workflow.
+
+**Two ADRs are contradicted by the shipped system, with no supersession recorded.**
+`docs/adr/README.md` states the convention — a superseded ADR keeps its number and
+gets `Status: Superseded by ADR-MMM`. Neither followed it:
+
+- **ADR-002 "Stripe-only payment processing at launch"** (Status: Accepted) — crypto
+  shipped, as above.
+- **ADR-003 "$2.99 paid trial pack replaces the free tier"** (Status: Accepted) —
+  reversed on BOTH halves. `free` is a live `AccountTierSchema` value and the trial
+  pack was retired 2026-05-27, surviving in source only as comments explaining its
+  removal.
+
+Both now carry dated reality notes. I deliberately did NOT write the superseding
+ADRs: the decision to reinstate crypto and to reinstate a perpetual free tier belongs
+to whoever made it, and inventing a rationale would fabricate a decision record. What
+is written down is the fact and the fact that the record is owed. This matters beyond
+tidiness — ADRs are what a diligence or counsel review reads.
+
+**Deliberately NOT changed: every claim whose truth lives outside this repo.**
+Hetzner provisioning, Cloudflare Pages projects, Neon/Upstash/R2/Postmark/Sentry env
+population, Stripe live keys, Apple Developer cert, KvK closure, counsel review, and
+whether any `*-v0.1.0` tag fired. `CLAUDE.md` asserts prod and staging are live,
+which would close several queue items — but that is another document, not the
+dashboard, and a launch checklist must not flip an infrastructure claim on the
+strength of a second piece of prose. The staleness banner says so and is pinned.
+
+**Audited this pass, no finding.**
+
+- `/ready` is genuinely production-grade AND actually wired: `bootstrap` registers
+  postgres (`SELECT 1`), redis (`ping`) and R2 (conditional) with 1.5s timeouts, any
+  failure returns 503, and the public response deliberately omits error detail
+  (CWE-200 info-disclosure) while logging it server-side. Checked the wiring, not
+  just the handler — an unwired `/ready` returns 200 with an empty checks array.
+- OpenAPI coverage is guarded by an invariant that scans every `/v1/*` registration
+  under `src` (not just `routes/`) against the spec, with an 18-entry exemption list
+  where every entry carries a reason (internal control-plane, fleet-node, provider
+  ingress, browser redirects, SSE, desktop transports) and a CRITICAL test that the
+  list may only SHRINK. Its header records that this drift is not speculative — three
+  endpoints were served-but-unspecified before it existed.
+- Every endpoint the checklist asserts is registered (9/9). `DELETE /v1/api-keys`
+  looked missing but is CRUD shorthand for `DELETE /v1/api-keys/:id` — checked before
+  "correcting" it.
+
+**Gate status, stated honestly.** The final full run was NOT clean: 4 files failed out
+of 2766 (28,483 passing). All are the DB-connect-probe kind — these integration files
+open Postgres with a 2s `connect_timeout` and, when `DATABASE_URL` is explicitly set,
+throw "real PostgreSQL setup failed" rather than skipping silently, which is the
+correct design. The machine was under **external load average 66 → 82** from another
+agent, and that run took 1082s against a normal 190s. `db-session-operation-claim`,
+the single failure in the prior run, passes 4/4 in isolation. My changes here are
+markdown plus one test file and cannot affect Postgres connectivity; the parity pins
+covering every file I touched pass, and the server unit suite ran 1740/1740 green
+after the ADR edits. **A clean full-gate green for this commit is still owed once the
+machine is quiet** — recorded rather than glossed.
