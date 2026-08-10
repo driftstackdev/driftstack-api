@@ -464,7 +464,15 @@ describe('V-820 — /v1/fleet/events live WebSocket', () => {
       status: 'data',
       name: 'big-file.bin',
     });
-  });
+    // 30s, not the 10s default. This case moves a ~20 MiB frame by design — it
+    // cannot shrink below 16 MiB, because exceeding the OLD cap IS the
+    // regression it guards. Measured 1594ms in isolation, the slowest in this
+    // file by 2.6x, which leaves only ~6x headroom against the global budget.
+    // Coverage instrumentation plus 2766-file parallel contention spends that,
+    // and it timed out in two of three full `vitest run --coverage` runs while
+    // passing alone every time. The budget was the wrong size for the work,
+    // not a symptom of the work being wrong.
+  }, 30_000);
 
   it('an uncorrelated oversized frame is policy-closed before normal parsing', async () => {
     const ws = await connect({
