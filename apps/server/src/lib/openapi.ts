@@ -6087,7 +6087,13 @@ function buildRegistry(): OpenAPIRegistry {
       },
     },
     responses: {
-      200: {
+      // The route replies `reply.code(201)`. This said 200, which it has never
+      // returned, so a client branching on 200 treated a successful creation as
+      // unexpected. 200 is REMOVED rather than kept alongside 201: documenting
+      // a status nothing produces is the same defect facing the other way. This
+      // also matches the sibling creates (api-keys, sessions), which already
+      // document 201.
+      201: {
         description: 'Created endpoint; plaintext signing secret returned ONCE.',
         content: {
           'application/json': {

@@ -30642,7 +30642,7 @@
           }
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Created endpoint; plaintext signing secret returned ONCE.",
             "content": {
               "application/json": {
