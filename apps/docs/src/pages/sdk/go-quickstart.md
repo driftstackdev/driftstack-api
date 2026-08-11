@@ -229,6 +229,23 @@ State machine kinds you'll see: `ai-driving`, `takeover-pending`,
 `takeover-queued` (mid-decompose deferral), `human-driving`,
 `handback-pending`, `handback-queued`.
 
+> **⚠️ The handback half of this loop cannot complete on any deployment today.**
+> `takeover()` works and parks the session in `takeover-pending`. Advancing from there to
+> `human-driving` requires the `takeover-grant` transition, and **nothing emits it** — the
+> harness has no control-plane surface to fire it yet (tracked in
+> `docs/internal/cross-agent-control-plane-contract.md`). Consequences you will actually
+> observe:
+>
+> - `handback()` returns **409 `pair-mode-conflict`** every time, because
+>   `handback-request` is only accepted from `human-driving`.
+> - `human-driving`, `handback-pending` and `handback-queued` are **unreachable**, so a UI
+>   that branches on them is dead code.
+> - After 30s without a client heartbeat the sweep silently returns the session to
+>   `ai-driving`, so a parked takeover expires on its own.
+>
+> Drive live sessions through the desktop Simulator's control channel until the emitter
+> ships.
+
 ### Modifier vocabulary
 
 `keyDown` / `keyUp` events accept a `modifiers` array. Use the

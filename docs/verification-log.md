@@ -32456,3 +32456,63 @@ present, `/v1/version` absent).
 Suites: **2034 files / 21,212 passing** (server + docs + marketing unit). The full gate's
 9 failures were entirely a peer's two untracked in-flight OpenAPI-conformance tests;
 attributed to the dirty files' owner rather than investigated.
+
+## V-757 — pair-mode takeover→handback is documented on four surfaces and cannot complete
+
+Highest-severity finding from the second sweep. Verified the whole chain myself before
+touching anything, because the conclusion is strong:
+
+- `agent-pair-mode-state.ts:180` — `human-driving` is produced by exactly one transition,
+  `takeover-grant`.
+- `:199` — `handback-request` is accepted from exactly one state, `human-driving`.
+- `takeover-grant` has **no producer**. Repo-wide it appears only in two comments, the
+  `PairModeTransition` union, and the reducer's own handler.
+
+So `handback()` throws `PairModeStateInvalidTransitionError` → **409 `pair-mode-conflict`
+on every call, on every deployment**, and `human-driving` / `handback-pending` /
+`handback-queued` are unreachable. Enumerating producers across the routes, the heartbeat
+sweep and the runtime: only `takeover-request` and `handback-request` are ever constructed,
+so **7 of the 10 declared transitions have no emitter** — `takeover-grant`,
+`takeover-decline`, `handback-complete`, `handback-cancel`, `decompose-settled`,
+`takeover-request-queued`, `handback-request-queued`.
+
+Customer-visible sequence: `takeover()` parks the session in `takeover-pending`; every
+input event then 409s; `handback()` 409s; 30s later the heartbeat sweep silently returns it
+to `ai-driving`. Four surfaces described the handback half as ordinary behaviour — the
+TypeScript, Python and Go quickstarts (each listing all six state kinds as "kinds you'll
+see") and `api/agent-sessions.md`, which stated `human-driving → handback-pending` with a
+200 example and **no caveat at all**, on the same page whose input-event section had already
+been corrected for the adjacent gap.
+
+**Fixed as DOC, deliberately.** This is a tracked cross-agent gap, not a plain bug:
+`docs/internal/ai-chat-manual-side-by-side-design.md:19-22` lists it under "OPEN GAPS (not
+yet wired)" and `cross-agent-control-plane-contract.md:132-143` records that "there is no
+control-plane surface for the harness to fire them" and already specifies the future
+contract. Implementing an emitter here would be inventing another agent's interface. All
+four surfaces now carry a caveat naming the 409, the three unreachable kinds, and the 30s
+auto-reset.
+
+**Guarded bidirectionally**, `pair-mode-unreachable-states-are-caveated.test.ts`: it fails
+if the caveats disappear, AND it fails if the un-emitted set SHRINKS — because once someone
+ships the emitter, a doc warning about a limitation that no longer exists is its own defect
+and nothing else would catch it. The failure message says which direction happened and what
+to do. Mutation-proved both ways (removing a caveat reds; adding a `takeover-grant`
+producer reds), byte-identical restores.
+
+**Two corrections to the sweep's report.** It proposed a one-line GUI fix at
+`SimulatorWindow.tsx:1279` (`onClick={humanDriving ? onHandback : onTakeover}`). That line
+is **correct as written** — it simply never takes the `humanDriving` branch because the
+state is unreachable. Changing it would be wrong; the symptom belongs to the missing
+emitter, not the component. And it counted 4 un-emitted transitions where the real number
+is 7.
+
+**Method note — my own guard was wrong twice before it was right, and the vacuity floor is
+what caught it.** First the declared-transition extraction swept in the `PairModeState`
+union too (both use `| { kind: '...' }`), wrongly reporting five STATE kinds as un-emitted;
+states are produced BY the reducer and can never appear as "produced". Then bounding the
+union with `indexOf(';')` truncated after member one, because each member contains its own
+semicolons — leaving a 1-element set that would have made the whole comparison vacuous. The
+`expect(declared.size).toBeGreaterThan(8)` floor failed loudly instead. Set-based
+assertions need that floor; without it this guard would have shipped green and blind.
+
+Gate: **2780 files, 28,539 passing, 0 failures**, uncontended.

@@ -630,6 +630,13 @@ Body: `{}` (empty).
 State machine: `human-driving → handback-pending`, or
 `handback-queued` if mid-decompose.
 
+**This transition is unreachable today.** `human-driving` is produced only by the
+`takeover-grant` transition, which nothing in the control plane emits yet (tracked in
+`docs/internal/cross-agent-control-plane-contract.md`), so this endpoint returns
+**409 `pair-mode-conflict`** on every call and the 200 shape below is not currently
+observable. A parked `takeover-pending` session returns to `ai-driving` after 30s without
+a client heartbeat.
+
 Response (200):
 
 ```json
