@@ -428,7 +428,11 @@ function rateLimitPlugin(
       // W199 — full RateLimit-header set as documented at
       // `/docs/rate-limits`. `bucket` lets clients distinguish which
       // limiter fired (`global` / `sessions:create` /
-      // `agent_sessions:message` today); `limit` is the bucket
+      // `agent_sessions:message` / `agent_sessions:input_event` today —
+      // V-754: this list had gone stale at three while input_event was a
+      // live preHandler gate AND published by GET /v1/account/rate-limits,
+      // so a client validating the header against it rejected a real
+      // value); `limit` is the bucket
       // capacity; `reset` is unix seconds at which the bucket will
       // be back at capacity.
       const nowSec = Math.floor(Date.now() / 1000);

@@ -93,7 +93,8 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
 
   it('W199 framing pinned: full RateLimit-header set documented at /docs/rate-limits', () => {
     expect(body).toMatch(
-      /W199 — full RateLimit-header set as documented at\s*\n?\s*\/\/\s*`\/docs\/rate-limits`\. `bucket` lets clients distinguish which\s*\n?\s*\/\/\s*limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` today\); `limit` is the bucket\s*\n?\s*\/\/\s*capacity; `reset` is unix seconds at which the bucket will\s*\n?\s*\/\/\s*be back at capacity/,
+      // V-754 — roster extended to the 4th enforced bucket (agent_sessions:input_event).
+      /W199 — full RateLimit-header set as documented at\s*\n?\s*\/\/\s*`\/docs\/rate-limits`\. `bucket` lets clients distinguish which\s*\n?\s*\/\/\s*limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` \/ `agent_sessions:input_event` today[\s\S]*?`limit` is the bucket\s*\n?\s*\/\/\s*capacity; `reset` is unix seconds at which the bucket will\s*\n?\s*\/\/\s*be back at capacity/,
     );
   });
 

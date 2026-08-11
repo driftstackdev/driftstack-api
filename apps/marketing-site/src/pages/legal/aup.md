@@ -196,11 +196,20 @@ subject to the discretion in Section 5.4 below:
    suspends Customer's account. Suspension means: (a) existing
    Sessions are destroyed, (b) the API rejects authenticated requests
    with HTTP 403 carrying a problem type
-   `https://errors.driftstack.dev/forbidden` and a `reason` extension
-   identifying the AUP clause, (c) Customer-Provided Secrets are NOT
+   `https://errors.driftstack.dev/forbidden`, (c) Customer-Provided Secrets are NOT
    deleted (Customer may need them to migrate workflows), and (d)
    billing pauses. Suspension typically lasts up to 30 days, during
    which Customer may dispute or remediate.
+
+   The 403 carries the standard RFC 9457 fields only (`type`, `title`,
+   `status`, `detail`) — there is no `reason` extension naming an AUP
+   clause, and no clause identifier is recorded against an account, so
+   a suspension 403 is not distinguishable by body shape from any other 403. The machine-readable signal for suspension is the webhook: the
+   `session.completed` events emitted when suspension reclaims live
+   Sessions carry `reason_code: "account_suspended"`. Customers who need
+   to detect suspension programmatically should subscribe to that rather
+   than parse the 403.
+
 3. **Termination.** A severe violation under Section 1, OR a
    continuing violation that survives suspension, OR a Customer's
    refusal to dispute or remediate during the suspension window —

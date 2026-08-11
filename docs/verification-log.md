@@ -32254,3 +32254,76 @@ onto stale markup.
 Suites: **2027 files / 21,195 passing** across server + docs + marketing unit projects,
 `tsc` clean on both server projects. Remaining sweep items: #8, #9, #10, #11. #2 (the AUP
 "billing pauses" promise) stays flagged as a business decision, untouched.
+
+## V-754 — sweep backlog closed: the last four customer-facing claims
+
+#8, #9, #10, #11 from the V-752 sweep. Each verified against both sides myself first,
+and two of the sweep's own claims were corrected in the process.
+
+**#8 — the AUP promised a `reason` extension on the suspension 403.** `ForbiddenError`'s
+constructor takes only `detail` and passes no extensions to `super`, so all three
+suspension throw sites (`services/auth.ts:353`, `:404`, `middleware/rate-limit.ts:181`)
+emit a bare problem body. No AUP clause identifier is stored anywhere either, so there
+was nothing to put in the field. Corrected in BOTH AUP copies, and the honest
+replacement points customers at the real machine-readable signal, which does exist: the
+`session.completed` events emitted when suspension reclaims live Sessions carry
+`reason_code: "account_suspended"`.
+
+_Sweep claim corrected:_ the report called the two detail strings inconsistent
+("Owner account is suspended." vs "Account is suspended."). They are not — the
+rate-limit one is reached via `ownerAccountId` in the acting-as path and is describing
+the OWNER's account, not the caller's. That is a useful distinction and I left it alone.
+
+**#9 — the public rate-limits page said three buckets are enforced; four are.**
+`agent_sessions:input_event` is a live preHandler gate (`agent-sessions.ts:3631`), is
+published by the unconditional customer endpoint `GET /v1/account/rate-limits`, and
+appears in the `X-RateLimit-Bucket` header — so a client validating that header against
+the documented three rejected a real value. The server states the invariant the doc
+broke: `account-rate-limits.ts` says "All four enforced buckets — must match
+TIER_RATE_LIMIT_DEFAULTS so the customer view never hides a limit that's actually
+applied." Page now names four with input_event's capacities, and the stale three-name
+roster in `middleware/rate-limit.ts` is fixed too.
+
+**Four separate pins had frozen that stale roster.** One of them —
+`server-rate-limit-middleware-parity` — literally warned in its own title that "drift
+to a 4th bucket without updating the roster would surface as unknown bucket-keys to
+clients". It was watching for exactly this and still missed it, because pinning the
+three-name TEXT freezes the stale list rather than detecting the drift. All four
+updated.
+
+**#10 — `billing.md` told self-hosters to configure the return-URL allowlist in env.**
+`ALLOWED_RETURN_ORIGINS` is a hardcoded three-origin constant whose own comment refuses
+env-driving, because "a typo in env config would silently re-introduce the
+open-redirect". So a self-hoster hunted for a variable that does not exist while their
+own origin 400'd. The page now documents the hardcoded list AND — the part the old text
+hid — that both URL fields are optional, and omitting them makes the server substitute
+its configured defaults, bypassing the allowlist entirely. That is a working self-hosted
+checkout with no source patch. Its pin, titled "the load-bearing CSRF/redirect defense",
+had frozen the false half; updated.
+
+**#11 — `egress_capability_changed` was framed as a transition signal.** It fires on
+every ingested report: the service's own docstring says "the webhook event fires on every
+successful persist", and the repo write sets `egressCapabilities` unconditionally with no
+comparison to the prior value, while `enqueueEvent` mints a fresh `event_id` per call so
+repeats cannot be collapsed. A subscriber told to "react to capability transitions" would
+act on identical repeats. Fixed in the guide and the marketing page; the authoritative
+catalog page was already correct, which is the third instance in this sweep of one
+surface corrected and a sibling missed. Also documented that `warnings` carries streaming
+faults (`streaming_blank`, `streaming_failed`) alongside egress ones, so an egress-named
+event can fire when only the video stream degraded.
+
+**Guards added:** new pins for the corrected AUP clause, the billing allowlist framing,
+and the egress per-report framing — each asserting the honest text AND that the old claim
+cannot return. One negative assertion had to be narrowed: `not.toMatch(/`reason`
+extension/)` failed against my own replacement sentence, which necessarily names the
+field it is denying. Scoped it to the old promise shape instead.
+
+Suites: **2029 files / 21,200 passing** (server + docs + marketing unit). Rebuilt
+`apps/docs` and `apps/marketing-site` when the dist-freshness guard fired.
+
+**The V-752 sweep backlog is now closed** — 11 of 12 distinct findings fixed across
+V-752/V-753/V-754. The twelfth, #2 (the AUP's "billing pauses" promise), remains
+deliberately untouched: it is the one item where code never implemented published intent,
+and choosing between wiring `pause_collection` and amending binding legal copy is a
+business decision. Still flagged alongside V-748 (privacy-policy §9 deletions nothing
+implements).

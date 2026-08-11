@@ -67,9 +67,19 @@ customer to `checkout_url`; Stripe handles card collection +
 3DS + tax compliance and posts the result back to your
 `success_url`.
 
-`success_url` and `cancel_url` are validated against an allowlist
-. Customers self-hosting Driftstack configure the allowlist
-in their deployment env.
+**Both URL fields are optional, and omitting them is the path that works
+for everyone.** When absent, the server substitutes its own configured
+return URLs (`STRIPE_SUCCESS_URL` and a `DASHBOARD_ORIGIN`-derived cancel
+URL) and no allowlist check applies — so a self-hosted deployment gets a
+working checkout that returns to its own origin without touching any
+source.
+
+If you DO send them, they are validated against a **hardcoded** allowlist
+of three origins (`https://app.driftstack.dev` and two local-development
+origins). That list is deliberately not env-driven — a typo in
+environment config would silently re-open the redirect hole the check
+exists to close — so it is edited in source under review. Sending any
+other origin returns `400`. Contact support to have an origin added.
 
 ## Open the Stripe Customer Portal
 

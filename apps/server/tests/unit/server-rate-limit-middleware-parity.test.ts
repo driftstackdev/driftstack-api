@@ -168,10 +168,10 @@ describe('W713 server-side rate-limit middleware parity', () => {
     );
   });
 
-  it('CRITICAL `bucket` framing pinned — "bucket lets clients distinguish which limiter fired (global / sessions:create / agent_sessions:message today)". v2-#8 sub-slice 8.20 added the agent_sessions:message bucket. Drift to a 4th bucket without updating the roster would surface as unknown bucket-keys to clients.', () => {
+  it('CRITICAL `bucket` framing pinned — the roster must name ALL enforced buckets. V-754: this pin\'s own title warned that "drift to a 4th bucket without updating the roster would surface as unknown bucket-keys to clients", and that is precisely what happened — agent_sessions:input_event became a live preHandler gate AND is published by GET /v1/account/rate-limits while this roster still said three. Pinning the 3-name text froze the stale list instead of catching the drift, so the assertion now requires the 4th name too.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
     expect(src).toMatch(
-      /`bucket` lets clients distinguish which\s*\n?\s*\/\/\s*limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` today\)/,
+      /`bucket` lets clients distinguish which\s*\n?\s*\/\/\s*limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` \/ `agent_sessions:input_event` today/,
     );
   });
 

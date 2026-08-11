@@ -152,7 +152,7 @@ If you've configured a webhook endpoint, terminal session events fire on the bus
 
 - `session.completed` — one per logical destroy of a non-terminal session: a customer-driven destroy, the free-tier duration cap, or an account suspension reclaiming its live sessions. The last two also send `auto_destroyed: true` and a `reason`; branch on `auto_destroyed` if you attribute completions.
 - `session.failed` — session terminated due to a runtime / driver error.
-- `session.egress_capability_changed` — the session's egress capability state changed (e.g. proxy connectivity verified or lost). Lets subscribers react to capability transitions without polling.
+- `session.egress_capability_changed` — the control plane ingested an egress capability report from the session harness. It fires on **every** report, not only when the state changed: there is no change detection on the path, so identical consecutive reports each emit an event with a fresh `event_id`. Treat it as "here is the current capability state" and compare against what you last stored, rather than as a transition signal. Note also that `warnings` carries streaming faults (`streaming_blank`, `streaming_failed`) alongside egress ones like `dead_proxy`, so an egress-named event can fire when only the video stream degraded.
 - `session.challenge_detected` — the in-session harness flagged a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge (e.g. in the live view) and it resumes.
 - `session.profile_save_failed` — a profile-backed session did not replace the stored profile at teardown. Failure reasons are terminal and the next restore will be stale; `superseded` is benign and means a newer saved profile won the conditional write.
 

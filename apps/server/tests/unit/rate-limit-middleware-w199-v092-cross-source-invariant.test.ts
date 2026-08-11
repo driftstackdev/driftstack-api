@@ -136,7 +136,8 @@ describe('W981 rate-limit middleware W199 + V-092 cross-source invariant', () =>
     expect(p).toMatch(/W199 — full RateLimit-header set as documented at/);
     expect(p).toMatch(/`\/docs\/rate-limits`\. `bucket` lets clients distinguish which/);
     expect(p).toMatch(
-      /limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` today\); `limit` is the bucket/,
+      // V-754 — roster extended to the 4th enforced bucket (agent_sessions:input_event).
+      /limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` \/ `agent_sessions:input_event` today[\s\S]*?`limit` is the bucket/,
     );
     expect(p).toMatch(/capacity; `reset` is unix seconds at which the bucket will/);
     expect(p).toMatch(/be back at capacity\./);

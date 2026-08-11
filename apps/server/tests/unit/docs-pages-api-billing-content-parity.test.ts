@@ -107,11 +107,19 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).toMatch(/"cancel_url":/);
   });
 
-  it("CRITICAL success_url + cancel_url allowlist framing pinned. The 'success_url and cancel_url are validated against an allowlist' + 'Customers self-hosting Driftstack configure the allowlist in their deployment env' wording is the load-bearing CSRF/redirect defense.", () => {
+  it("CRITICAL return-URL allowlist framing pinned. V-754 removed 'Customers self-hosting Driftstack configure the allowlist in their deployment env' — ALLOWED_RETURN_ORIGINS is a hardcoded 3-origin constant whose own comment refuses env-driving, because a typo in env config would silently re-open the redirect hole. The page now documents the hardcoded list AND the omit-the-fields path that actually works for a self-hoster.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/`success_url` and `cancel_url` are validated against an allowlist/);
-    expect(p).toMatch(/Customers self-hosting Driftstack configure the allowlist/);
+    // The real defense: hardcoded, not env-configurable.
+    expect(p).toMatch(/validated against a \*\*hardcoded\*\* allowlist/);
+    expect(p).toMatch(/deliberately not env-driven/);
+    // The working path a self-hoster needs, which the old text hid behind a
+    // non-existent env var: both fields are optional and the server substitutes
+    // its own configured return URLs, bypassing the check entirely.
+    expect(p).toMatch(/Both URL fields are optional/);
+    expect(p).toMatch(/STRIPE_SUCCESS_URL/);
+    // The false instruction must not return.
+    expect(p).not.toMatch(/self-hosting Driftstack configure the allowlist/);
   });
 
   it('CRITICAL trial-pack pricing section fully removed 2026-05-27 — the doc no longer documents a one-time $2.99 / 299¢ trial pack (replaced by the perpetual free tier).', () => {

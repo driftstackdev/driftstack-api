@@ -97,4 +97,21 @@ describe('W259.D docs/guides/session-lifecycle ↔ live session surface parity',
       readFileSync(resolve(REPO_ROOT, 'apps/docs/src/pages/reference/errors.md'), 'utf8').length,
     ).toBeGreaterThan(0);
   });
+  // V-754 — the guide framed session.egress_capability_changed as a TRANSITION signal
+  // ("state changed ... react to capability transitions without polling"). There is no
+  // change detection on the path: ingestEgressCapabilityReport's own docstring says the
+  // event "fires on every successful persist", and the repo write sets
+  // egressCapabilities unconditionally with no comparison to the prior value. A
+  // subscriber that treated each event as a change would act on identical repeats.
+  // The authoritative catalog page (webhooks/events.md) was already correct — this
+  // guide and the marketing page were the surfaces that drifted.
+  it('V-754 egress_capability_changed is described as per-report, not as a transition', () => {
+    expect(doc).toMatch(/It fires on \*\*every\*\* report, not only when the state/);
+    expect(doc).toMatch(/there is no change detection on the path/);
+    // warnings mixes streaming faults into an egress-named event; customers alarming on
+    // egress need to know that.
+    expect(doc).toMatch(/streaming_blank/);
+    // The transition framing must not return.
+    expect(doc).not.toMatch(/capability transitions without polling/);
+  });
 });

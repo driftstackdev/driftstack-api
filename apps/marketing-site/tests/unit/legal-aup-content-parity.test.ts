@@ -145,11 +145,15 @@ describe('W377.C marketing-site /legal/aup.md content parity', () => {
     expect(body).toMatch(/remediation\s+window \(typically 7 days\)/);
   });
 
-  it('§5.2 suspension: HTTP 403 + errors.driftstack.dev/forbidden problem type + reason extension', () => {
+  it('§5.2 suspension: HTTP 403 + errors.driftstack.dev/forbidden problem type. V-754 REMOVED the `reason` extension promise — ForbiddenError takes only `detail` and passes no extensions, so all three suspension throw sites emit a bare problem body and no AUP clause identifier is stored anywhere to put in one.', () => {
     expect(body).toMatch(/the API rejects authenticated requests\s+with HTTP 403/);
-    expect(body).toMatch(
-      /problem type\s+`https:\/\/errors\.driftstack\.dev\/forbidden` and a `reason` extension/,
-    );
+    expect(body).toMatch(/problem type\s+`https:\/\/errors\.driftstack\.dev\/forbidden`/);
+    // The false promise must not return, and the honest replacement must stay: the
+    // machine-readable suspension signal is the webhook reason_code, not the 403 body.
+    expect(body).not.toMatch(/forbidden` and a `reason` extension/);
+    expect(body).not.toMatch(/`reason` extension\s+identifying the AUP clause/);
+    expect(body).toMatch(/there is no `reason` extension naming an AUP/);
+    expect(body).toMatch(/reason_code: "account_suspended"/);
     expect(body).toMatch(/typically lasts up to 30 days/);
     expect(body).toMatch(/Customer-Provided Secrets are NOT\s+deleted/);
   });

@@ -67,11 +67,17 @@ const BUCKETS = [
 
     <h2>Bucket reference</h2>
     <p>
-      Three buckets are enforced today: <code>global</code> (every
+      Four buckets are enforced today: <code>global</code> (every
       authenticated request), <code>sessions:create</code> (POST
-      /v1/sessions), and <code>agent_sessions:message</code> (POST
-      /v1/agent-sessions/:id/message). Burst is the maximum bucket
-      capacity; sustained throughput is the refill rate.
+      /v1/sessions), <code>agent_sessions:message</code> (POST
+      /v1/agent-sessions/:id/message), and
+      <code>agent_sessions:input_event</code> (POST
+      /v1/agent-sessions/:id/input-event — 240 burst / 60 per second on
+      Free, 360 / 90 on Solo Manual). Burst is the maximum bucket
+      capacity; sustained throughput is the refill rate. All four are
+      returned by <code>GET /v1/account/rate-limits</code> and named in
+      the <code>X-RateLimit-Bucket</code> header, so validate that
+      header against four values, not three.
     </p>
     <table>
       <thead>
