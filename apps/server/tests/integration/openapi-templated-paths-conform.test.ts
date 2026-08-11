@@ -134,6 +134,62 @@ describe('templated-path responses conform to the spec', () => {
     expect(validate(schema, { id: 12345 }), 'a wrongly-typed field is reported').not.toEqual([]);
   });
 
+  it('CRITICAL no /{id} route serves a caller with NO credentials, and every one is rate limited. Both population sweeps that assert these — security-declaration-matches-enforcement and the status-snapshot work — can only reach PARAMETERLESS paths, so the 29 operations behind a real id had neither property checked anywhere.', async () => {
+    const servedAnonymously: string[] = [];
+    const unlimited: string[] = [];
+    let reached = 0;
+
+    for (const path of Object.keys(spec.paths ?? {})) {
+      if (!path.includes('{')) continue;
+      const family = familyOf(path);
+      if (family === null) continue;
+      for (const method of ['get', 'post', 'patch', 'delete'] as const) {
+        if (spec.paths?.[path]?.[method] === undefined) continue;
+        const url = path.replace(/\{[^}]+\}/, ids[family] ?? '');
+        if (url.includes('{')) continue;
+        const payload = method === 'get' ? {} : { payload: {} };
+
+        const anon = await fx.app.inject({
+          method: method.toUpperCase() as 'GET',
+          url,
+          ...payload,
+        });
+        if (anon.statusCode >= 200 && anon.statusCode < 300) {
+          servedAnonymously.push(`${method.toUpperCase()} ${path}`);
+        }
+
+        const authed = await fx.app.inject({
+          method: method.toUpperCase() as 'GET',
+          url,
+          headers: auth(),
+          ...payload,
+        });
+        reached += 1;
+        if (authed.headers['x-ratelimit-limit'] === undefined) {
+          unlimited.push(`${method.toUpperCase()} ${path} -> ${String(authed.statusCode)}`);
+        }
+      }
+    }
+
+    // MEASURED: 29 templated operations are reachable with these fixtures.
+    // Floored, because both assertions below report an ABSENCE and a sweep that
+    // substituted a broken id would reach nothing and report both as clean.
+    //
+    // On which arm catches what, measured rather than assumed: stripping BOTH
+    // the auth and the rate-limit preHandler from GET /v1/webhooks/:id reds the
+    // rate-limit arm, and does NOT red the anonymous arm — the handler throws
+    // on the missing account context and answers 500 instead of serving data.
+    // That is defence in depth working, and it is why the anonymous assertion
+    // is written against the OUTCOME (2xx reached an anonymous caller) rather
+    // than against any particular gate being present. The same predicate is
+    // mutation-proved on the parameterless population in
+    // security-declaration-matches-enforcement, where a route that really does
+    // serve anonymously exists to trip it.
+    expect(reached, 'templated operations exercised').toBeGreaterThanOrEqual(25);
+    expect(servedAnonymously, '/{id} route(s) served without credentials:').toEqual([]);
+    expect(unlimited, '/{id} route(s) with no rate-limit headers:').toEqual([]);
+  }, 120_000);
+
   it('CRITICAL every reachable /{id} response conforms, on whatever status it returns. These are the routes that return a real Session, Profile and Webhook — the shapes every SDK models, and the ones a list endpoint on a fresh account never exercises.', async () => {
     const violations: string[] = [];
     const undocumented: string[] = [];
