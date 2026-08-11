@@ -5760,6 +5760,10 @@ function buildRegistry(): OpenAPIRegistry {
     path: '/v1/egress/echo',
     summary: 'Echo the caller exit IP (+ best-effort CF-edge geo) — proxy-probe support',
     tags: ['egress'],
+    // Documented 200 alone while sitting behind `ipRateLimit` at 12/IP
+    // (`EGRESS_ECHO_IP_LIMIT`). This is the proxy-probe endpoint, so it is
+    // called in bursts by exactly the clients most likely to trip that gate,
+    // and the contract said it could not fail.
     responses: {
       200: {
         description:
@@ -5776,6 +5780,7 @@ function buildRegistry(): OpenAPIRegistry {
           },
         },
       },
+      429: { description: 'Rate limit hit.', content: problemContent },
     },
   });
   registerRoute(r, {
