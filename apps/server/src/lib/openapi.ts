@@ -5834,6 +5834,11 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Status snapshot with components + recent incidents.',
         content: { 'application/json': { schema: StatusResponseOpenApi } },
       },
+      // Added with the `status_snapshot` IP gate. Documenting it is not
+      // optional bookkeeping: an undocumented reachable status is the exact
+      // defect this file has been closing, and adding the limit without the
+      // contract entry would have introduced a fresh one.
+      429: { description: 'Rate limit hit.', content: problemContent },
     },
   });
   registerRoute(r, {

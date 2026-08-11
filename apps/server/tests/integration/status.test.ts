@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { registerStatusRoutes } from '../../src/routes/status.js';
+import { MemoryRateLimitStore } from '../../src/lib/memory-rate-limit-store.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 describe('GET /v1/status', () => {
@@ -45,7 +46,7 @@ describe('GET /v1/status', () => {
 
   it('fails closed when incident storage was not wired', async () => {
     const app = Fastify();
-    registerStatusRoutes(app, { readinessChecks: [] });
+    registerStatusRoutes(app, { readinessChecks: [], rateLimitStore: new MemoryRateLimitStore() });
     await app.ready();
     try {
       const res = await app.inject({ method: 'GET', url: '/v1/status' });

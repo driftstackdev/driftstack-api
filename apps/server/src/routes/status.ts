@@ -31,6 +31,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { ReadinessCheck } from '../lib/app.js';
 import type { IncidentRow, IncidentsService } from '../services/incidents.js';
+import type { RateLimitStore } from '../services/rate-limit.js';
+import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 
 const CACHE_MAX_AGE_SEC = 30;
 const COMPONENT_TIMEOUT_MS = 1500;
@@ -105,6 +107,10 @@ function aggregateOverall(components: readonly ComponentResult[]): ComponentStat
 
 export interface StatusRoutesOptions {
   readinessChecks: readonly ReadinessCheck[];
+  /** Required, matching the sibling public status routes. Optional would mean
+   *  an omitted store silently serves the endpoint ungated, which is the state
+   *  this gate exists to end. */
+  rateLimitStore: RateLimitStore;
   /** Optional — when provided, /v1/status surfaces all-time open truth
    *  plus bounded recent resolved history. When omitted (fresh fixtures),
    *  `recent_incidents` is an empty array. */
@@ -112,7 +118,18 @@ export interface StatusRoutesOptions {
 }
 
 export function registerStatusRoutes(app: FastifyInstance, opts: StatusRoutesOptions): void {
-  app.get('/v1/status', async (_request, reply) => {
+  // The only member of the public status family that had no gate, and the most
+  // expensive one in it: each request fans out to every readiness check. Its
+  // siblings (`status_incidents_list`, `status_incident_detail`, `status_sla`)
+  // were gated against direct-API abuse that bypasses the CDN; this closes the
+  // same hole at the same budget.
+  const statusSnapshotGate = ipRateLimit(opts.rateLimitStore, {
+    bucketPrefix: 'status_snapshot',
+    capacity: AUTH_IP_LIMITS.statusSnapshot.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.statusSnapshot.refillPerSecond,
+  });
+
+  app.get('/v1/status', { preHandler: statusSnapshotGate }, async (_request, reply) => {
     const components = await Promise.all(opts.readinessChecks.map(runComponentCheck));
     const recentIncidents: PublicIncidentSummary[] = [];
     let openIncidentCount = 0;

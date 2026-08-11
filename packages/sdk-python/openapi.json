@@ -29695,6 +29695,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Rate limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }

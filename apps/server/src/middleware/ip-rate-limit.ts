@@ -220,6 +220,14 @@ export const AUTH_IP_LIMITS = {
   // target window. Match the adjacent public incident-read budget so
   // direct API traffic is bounded independently of the global IP gate.
   statusSla: { capacity: 60, refillPerSecond: 60 / 60 },
+  // The snapshot endpoint the status PAGE actually calls, and the only member
+  // of this family that had no gate. It is also the most expensive: every
+  // request fans out to all readiness checks (`Promise.all(readinessChecks)`,
+  // each with its own timeout), so an unauthenticated caller bypassing the CDN
+  // could drive one DB/Redis probe per component per request. Its siblings were
+  // gated for exactly the abuse this leaves open, at exactly this budget, and
+  // it carries the same `Cache-Control: public, max-age=30`.
+  statusSnapshot: { capacity: 60, refillPerSecond: 60 / 60 },
   // 2026-06-01 — OAuth-PROVIDER public dance (V-667; Driftstack issuing
   // tokens to 3rd-party apps). authorize/token/introspect/revoke are
   // unauthenticated by protocol (PKCE + client_secret + code IS the

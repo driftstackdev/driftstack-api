@@ -112,7 +112,12 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
 
   it('Route handler combines readiness with exact incident aggregates and fails closed on incident-read errors', () => {
     expect(body).toMatch(
-      /app\.get\('\/v1\/status', async \(_request, reply\) => \{\s*\n?\s*const components = await Promise\.all\(opts\.readinessChecks\.map\(runComponentCheck\)\);/,
+      // Pins the GATE, not just the handler. This regex previously matched the
+      // ungated registration, which is the state that let the most expensive
+      // public endpoint in the status family run unlimited — every request fans
+      // out to all readiness checks. Requiring the preHandler here means the
+      // gate cannot be dropped without this failing.
+      /app\.get\('\/v1\/status', \{ preHandler: statusSnapshotGate \}, async \(_request, reply\) => \{\s*\n?\s*const components = await Promise\.all\(opts\.readinessChecks\.map\(runComponentCheck\)\);/,
     );
     expect(body).toMatch(
       /const recentIncidents: PublicIncidentSummary\[\] = \[\];[\s\S]*?let incidentDataComplete = opts\.incidentsService !== undefined;\s*\n?\s*if \(opts\.incidentsService\) \{/,

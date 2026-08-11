@@ -1210,6 +1210,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // level. /v1/status has no auth (public status pages are public).
   registerStatusRoutes(app, {
     readinessChecks: deps.readinessChecks ?? [],
+    rateLimitStore: deps.rateLimitStore,
     ...(deps.incidentsService ? { incidentsService: deps.incidentsService } : {}),
   });
 

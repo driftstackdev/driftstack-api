@@ -187,12 +187,13 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
     }
   });
 
-  it('CRITICAL "1-minute window" sustained-rate framing pinned across all 20 AUTH_IP_LIMITS entries.', () => {
+  it('CRITICAL "1-minute window" sustained-rate framing pinned across all 21 AUTH_IP_LIMITS entries.', () => {
     const src = read(IP_RATE_LIMIT);
 
-    // All 20 entries use the same `/ 60` divisor.
+    // All 21 entries use the same `/ 60` divisor (statusSnapshot added with the
+    // GET /v1/status gate).
     const refillEntries = src.match(/refillPerSecond: \d+ \/ 60/g) ?? [];
-    expect(refillEntries.length, '/ 60 sustained-rate uses').toBe(20);
+    expect(refillEntries.length, '/ 60 sustained-rate uses').toBe(21);
   });
 
   it('CRITICAL AUTH_IP_LIMITS object is `as const` for literal-type narrowing. The `as const` is what lets TypeScript treat each entry as a readonly literal record (vs. a mutable record). Drift to dropping would let callers accidentally mutate the const.', () => {
