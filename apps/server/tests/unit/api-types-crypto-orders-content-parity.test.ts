@@ -172,12 +172,12 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
     );
   });
 
-  it('Admin daily breakdown (rows: UTC YYYY-MM-DD date + status + count; truncated) + pending age (buckets record + total_pending) + apply IPN (provider_status + payment_id) + idempotency metrics (replays + first_writes + body_mismatches) + stats (total + by_status + revenue + avg/sample + by_product + truncated + scanned)', () => {
+  it('Admin daily breakdown (rows: UTC YYYY-MM-DD date + status + count; truncated) + pending age (buckets + pending_value_cents + total + truncated + scanned; NOT total_pending, which the route never returned) + apply IPN (provider_status + payment_id) + idempotency metrics (replays + first_writes + body_mismatches) + stats (total + by_status + revenue + avg/sample + by_product + truncated + scanned)', () => {
     expect(body).toMatch(
       /export const AdminCryptoDailyBreakdownResponseSchema = z\.object\(\{\s*\n?\s*rows: z\.array\(\s*\n?\s*z\.object\(\{\s*\n?\s*date: z\.string\(\)\.describe\('UTC YYYY-MM-DD\.'\),\s*\n?\s*status: CryptoOrderStatusSchema,\s*\n?\s*count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\),\s*\n?\s*\),\s*\n?\s*truncated: z\.boolean\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const AdminCryptoPendingAgeResponseSchema = z\.object\(\{\s*\n?\s*buckets: z\.record\(z\.string\(\), z\.number\(\)\.int\(\)\.nonnegative\(\)\),\s*\n?\s*total_pending: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\);/,
+      /export const AdminCryptoPendingAgeResponseSchema = z\.object\(\{\s*\n?\s*buckets: z\.record\(z\.string\(\), z\.number\(\)\.int\(\)\.nonnegative\(\)\),[\s\S]*?pending_value_cents: z\.record\([\s\S]*?total: z\.number\(\)\.int\(\)\.nonnegative\(\),[\s\S]*?truncated: z\.boolean\(\),[\s\S]*?scanned: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export const AdminApplyIpnRequestSchema = z\.object\(\{\s*\n?\s*provider_status: z\.string\(\),\s*\n?\s*payment_id: z\.string\(\),\s*\n?\s*\}\);/,

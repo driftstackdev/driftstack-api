@@ -239,9 +239,25 @@ export type AdminCryptoDailyBreakdownResponse = z.infer<
   typeof AdminCryptoDailyBreakdownResponseSchema
 >;
 
+/**
+ * GET /v1/admin/crypto-orders/pending-age.
+ *
+ * This described `{ buckets, total_pending }` with both REQUIRED, and the route
+ * has never returned `total_pending` at all — the field is called `total`. The
+ * other three the route does send were undocumented, so the contract was wrong
+ * in both directions at once: a required field that never arrives, and four
+ * that arrive unannounced. Corrected against the handler
+ * (`admin-crypto-orders.ts`) and the service's own return type.
+ */
 export const AdminCryptoPendingAgeResponseSchema = z.object({
   buckets: z.record(z.string(), z.number().int().nonnegative()),
-  total_pending: z.number().int().nonnegative(),
+  /** Sum of price_cents across pending orders, keyed by currency. */
+  pending_value_cents: z.record(z.string(), z.number().int().nonnegative()),
+  /** Sum of the four bucket counts. Named `total`, not `total_pending`. */
+  total: z.number().int().nonnegative(),
+  /** True when the scan hit its limit before exhausting pending orders. */
+  truncated: z.boolean(),
+  scanned: z.number().int().nonnegative(),
 });
 export type AdminCryptoPendingAgeResponse = z.infer<typeof AdminCryptoPendingAgeResponseSchema>;
 

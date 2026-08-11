@@ -2789,22 +2789,26 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'List status-page subscribers (admin)',
     tags: ['admin'],
     security: auth,
+    // The published pagination contract for this endpoint was fiction, copied
+    // from the keyset list endpoints. The route reads `limit`/`offset`
+    // (`ListQuerySchema` in admin-status-subscribers.ts) and returns `{ data }`
+    // alone. So `cursor` was never read — a client paginating by the contract
+    // sent it, got page one, and kept getting page one — `confirmed` was never
+    // a filter (it exists only as the `confirmed_at` RESPONSE field), and the
+    // two REQUIRED envelope fields were never sent at all.
     request: {
       query: z.object({
         limit: z.number().int().min(1).max(200).optional(),
-        cursor: z.string().optional(),
-        confirmed: z.boolean().optional(),
+        offset: z.number().int().min(0).optional(),
       }),
     },
     responses: {
       200: {
-        description: 'Paginated subscribers.',
+        description: 'Subscribers, offset-paginated. No cursor envelope.',
         content: {
           'application/json': {
             schema: z.object({
               data: z.array(AdminStatusSubscriberOpenApi),
-              has_more: z.boolean(),
-              next_cursor: z.string().nullable(),
             }),
           },
         },

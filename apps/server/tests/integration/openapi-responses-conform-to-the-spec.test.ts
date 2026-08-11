@@ -28,6 +28,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp } from './_helpers/build-test-app.js';
 
 let fx: Awaited<ReturnType<typeof buildTestApp>>;
+let staff: Awaited<ReturnType<typeof buildTestApp>>;
 let spec: SpecDocument;
 let ajvInstance: Ajv | null = null;
 
@@ -135,6 +136,13 @@ function validate(path: string, method: string, status: string, body: unknown): 
 
 beforeAll(async () => {
   fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+  // A staff credential too. With a customer key every /v1/admin route answers
+  // 403 — which IS documented, so the sweep validated the problem body and
+  // moved on, never reading a single admin SUCCESS shape. Two real contract
+  // defects were sitting behind that 403 the whole time.
+  staff = await buildTestApp({
+    scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+  });
   // The SERVED spec, not the checked-in file: this is the contract a customer
   // fetches and points a generator at.
   const res = await fx.app.inject({ method: 'GET', url: '/openapi.json' });
@@ -143,6 +151,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fx.app.close();
+  await staff.app.close();
 });
 
 const auth = (): { authorization: string } => ({ authorization: `Bearer ${fx.plaintext}` });
@@ -226,7 +235,16 @@ describe('real responses conform to the OpenAPI spec that generates the SDKs', (
     let validated = 0;
 
     for (const path of paths) {
-      const res = await fx.app.inject({ method: 'GET', url: path, headers: auth() });
+      // Admin paths go through the staff app; a customer key sees only their
+      // 403 and the success shape behind it is never read.
+      const isAdmin = path.startsWith('/v1/admin/');
+      const app = isAdmin ? staff.app : fx.app;
+      const bearer = isAdmin ? staff.plaintext : fx.plaintext;
+      const res = await app.inject({
+        method: 'GET',
+        url: path,
+        headers: { authorization: `Bearer ${bearer}` },
+      });
       const status = String(res.statusCode);
       const schema = lookup(path, 'get', status);
       if (schema === undefined) {
