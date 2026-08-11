@@ -40,6 +40,18 @@ const SITES = ['marketing-site', 'docs', 'customer-dashboard', 'admin-panel', 's
 const PAGE_EXTENSIONS = new Set(['.astro', '.md', '.mdx']);
 
 /**
+ * BOTH link syntaxes, because the sites use both and the split is not even.
+ *
+ * Measured: docs carries 219 markdown links against 48 HTML hrefs, so an
+ * href-only matcher checked 18% of that site and 58% of the corpus overall.
+ * That is the same failure the docs-example guard had — matching the minority
+ * spelling of a convention and reporting the result as coverage — so the
+ * pattern is written once here and reused by both extractors.
+ */
+const SAME_SITE_LINK = /href="(\/[^"]*)"|\]\((\/[^)\s]*)\)/g;
+const CROSS_SITE_LINK = /href="https?:\/\/([^/"]+)([^"]*)"|\]\(https?:\/\/([^)/\s]+)([^)\s]*)\)/g;
+
+/**
  * First-party hosts, mapped to the app in this repo that serves them.
  *
  * `api.driftstack.dev` is deliberately absent: it is the Fastify server, not a
@@ -113,8 +125,8 @@ function linksOf(site: string): Link[] {
   const out: Link[] = [];
   for (const file of walk(root)) {
     const text = readFileSync(file, 'utf8');
-    for (const m of text.matchAll(/href="(\/[^"]*)"/g)) {
-      const raw = m[1] ?? '';
+    for (const m of text.matchAll(SAME_SITE_LINK)) {
+      const raw = m[1] ?? m[2] ?? '';
       // Script-built or templated: not resolvable without evaluating it.
       if (raw.includes("'") || raw.includes('+') || raw.includes('${') || raw.includes('`')) {
         continue;
@@ -141,9 +153,9 @@ function crossSiteLinksOf(site: string): CrossLink[] {
   const out: CrossLink[] = [];
   for (const file of walk(root)) {
     const text = readFileSync(file, 'utf8');
-    for (const m of text.matchAll(/href="https?:\/\/([^/"]+)([^"]*)"/g)) {
-      const host = m[1] ?? '';
-      const raw = m[2] ?? '';
+    for (const m of text.matchAll(CROSS_SITE_LINK)) {
+      const host = m[1] ?? m[3] ?? '';
+      const raw = m[2] ?? m[4] ?? '';
       if (FIRST_PARTY_HOSTS[host] === undefined) continue;
       if (raw.includes("'") || raw.includes('+') || raw.includes('${') || raw.includes('`')) {
         continue;
@@ -176,12 +188,17 @@ describe('every internal site link resolves to a page that exists', () => {
   it('CRITICAL the scan found real routes and real links on every site. Each assertion below reports an ABSENCE, so a matcher that stopped finding links would satisfy them having checked nothing.', () => {
     // MEASURED per site rather than assumed, because the counts differ by an
     // order of magnitude and a single floor is either useless or wrong:
-    // marketing 230, dashboard 49, docs 48, status 8, admin-panel 4. The
-    // admin panel is low because most of its links ARE script-built, which is
-    // the case this guard deliberately skips.
+    // docs 267, marketing 264, dashboard 49, status 8, admin-panel 4. The admin
+    // panel is low because most of its links ARE script-built, which is the
+    // case this guard deliberately skips.
+    //
+    // Docs moved from 48 to 267 when the markdown syntax was added — it is a
+    // markdown site, so an href-only matcher was reading 18% of it. Floors are
+    // set against the post-fix numbers so that regression is visible if the
+    // matcher ever narrows again.
     const MIN_LINKS: Record<string, number> = {
-      'marketing-site': 150,
-      docs: 30,
+      'marketing-site': 200,
+      docs: 200,
       'customer-dashboard': 30,
       'admin-panel': 3,
       'status-site': 5,
@@ -194,7 +211,7 @@ describe('every internal site link resolves to a page that exists', () => {
       );
     }
     const total = SITES.reduce((n, s) => n + linksOf(s).length, 0);
-    expect(total, 'literal internal links across all sites').toBeGreaterThan(250);
+    expect(total, 'literal internal links across all sites').toBeGreaterThan(500);
 
     // The resolver, on cases whose verdict is not in doubt. `docs` has both a
     // nested route and an index, which is where an off-by-one in the index
@@ -208,8 +225,9 @@ describe('every internal site link resolves to a page that exists', () => {
 
   it('CRITICAL every FIRST-PARTY cross-site link resolves against the app that serves it. This is the adoption path — marketing sends people to docs, docs sends them to the dashboard — so a dead link here is a dead end at the moment someone is trying to use the product.', () => {
     const total = SITES.reduce((n, s) => n + crossSiteLinksOf(s).length, 0);
-    // MEASURED: 83 first-party cross-site links today, 51 of them into docs.
-    expect(total, 'first-party cross-site links found').toBeGreaterThan(60);
+    // MEASURED: 120 first-party cross-site links, up from 83 when the markdown
+    // syntax was added.
+    expect(total, 'first-party cross-site links found').toBeGreaterThan(100);
     expect(
       SITES.flatMap((site) => unresolvedCrossSite(site)),
       'cross-site link(s) pointing at a page the target app does not serve:',
