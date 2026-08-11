@@ -27,6 +27,7 @@ extendZodWithOpenApi(z);
 import {
   AccountRegionSchema,
   AccountSchema,
+  OptOutableEmailEventSchema,
   AccountStatusSchema,
   AccountTierSchema,
   ConsequentialActionCategorySchema,
@@ -2235,26 +2236,23 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // V-204 — customer email notification preferences.
+  // Both of these re-listed the event types by hand and both had drifted: they
+  // named four, while the server has emitted six since V-304a/V-304b added
+  // `session-success-first` and `billing-renewal-reminder`. A real
+  // GET /v1/account/email-preferences returns all six, so the published enum
+  // rejected two rows of its own response and any generated client parsing
+  // strictly would fail on them. Bound to the canonical schema instead of
+  // copied from it, so the next event type cannot drift the same way.
   const ListEmailPrefsResponseSchema = z.object({
     data: z.array(
       z.object({
-        event_type: z.enum([
-          'signup-welcome',
-          'session-failed-first',
-          'tier-changed',
-          'billing-receipt',
-        ]),
+        event_type: OptOutableEmailEventSchema,
         opted_in: z.boolean(),
       }),
     ),
   });
   const SetEmailPrefRequestOpenApi = z.object({
-    event_type: z.enum([
-      'signup-welcome',
-      'session-failed-first',
-      'tier-changed',
-      'billing-receipt',
-    ]),
+    event_type: OptOutableEmailEventSchema,
     opted_in: z.boolean(),
   });
   registerRoute(r, {
@@ -5722,10 +5720,25 @@ function buildRegistry(): OpenAPIRegistry {
     open_incidents: z.number().int().nonnegative().nullable(),
     incident_data_complete: z.boolean(),
   });
+  // This documented `{ window_days, uptime_percent, target_percent }` and the
+  // route has never returned any of those three. It returns
+  // `{ data: SlaTargetReport[] }` — one camelCase entry per probe target
+  // (`status-stream.ts`: `const data = await sla.report(...); return { data }`).
+  // Not one field name overlapped, so a client generated from the published
+  // spec read three undefined properties off an envelope it did not expect.
+  const StatusSlaTargetOpenApi = z.object({
+    target: z.string(),
+    uptimePct: z.number(),
+    totalProbes: z.number().int().nonnegative(),
+    okCount: z.number().int().nonnegative(),
+    failCount: z.number().int().nonnegative(),
+    lastProbeAt: z.string(),
+    lastFailureAt: z.string().nullable(),
+    windowStart: z.string(),
+    windowEnd: z.string(),
+  });
   const StatusSlaResponseOpenApi = z.object({
-    window_days: z.number().int().nonnegative(),
-    uptime_percent: z.number(),
-    target_percent: z.number(),
+    data: z.array(StatusSlaTargetOpenApi),
   });
   const StatusSubscribeRequestOpenApi = z.object({
     email: z.string().email(),
@@ -6812,6 +6825,44 @@ function registerRoute(r: OpenAPIRegistry, config: RouteConfig): void {
 
 let cached: OpenAPIObject | null = null;
 
+/**
+ * Add `null` to the enum of every schema whose `type` already admits null.
+ *
+ * zod-to-openapi renders `z.enum([...]).nullable()` as `type: ['string','null']`
+ * while leaving `enum` as the string members alone. OpenAPI 3.1 IS JSON Schema
+ * 2020-12, where `type` and `enum` are independent assertions and a value must
+ * satisfy BOTH — so null passes the type and fails the enum, and the published
+ * contract contradicts itself. `/v1/account/me` returns `region: null` for any
+ * account that has not set one, and the schema documenting that response
+ * rejects it.
+ *
+ * It is not cosmetic: this document is what the Python SDK is generated from
+ * and what customers point contract tests, gateways and mock servers at. Every
+ * one of those rejects a legitimate response.
+ *
+ * Applied to the whole document rather than the five fields that have the
+ * problem today (region, state, streaming_state, egress_state, sameSite — 31
+ * sites), because the defect is in the conversion, so any nullable enum added
+ * later arrives broken the same way.
+ */
+function reconcileNullableEnums(node: unknown): void {
+  if (Array.isArray(node)) {
+    for (const item of node) reconcileNullableEnums(item);
+    return;
+  }
+  if (node === null || typeof node !== 'object') return;
+  const schema = node as { type?: unknown; enum?: unknown[] };
+  if (
+    Array.isArray(schema.type) &&
+    schema.type.includes('null') &&
+    Array.isArray(schema.enum) &&
+    !schema.enum.includes(null)
+  ) {
+    schema.enum = [...schema.enum, null];
+  }
+  for (const value of Object.values(node)) reconcileNullableEnums(value);
+}
+
 export function generateOpenApiSpec(): OpenAPIObject {
   if (cached) return cached;
 
@@ -6851,6 +6902,7 @@ export function generateOpenApiSpec(): OpenAPIObject {
     },
     servers: [{ url: 'https://api.driftstack.dev', description: 'Production' }],
   });
+  reconcileNullableEnums(cached);
   return cached;
 }
 

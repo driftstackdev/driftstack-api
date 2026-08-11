@@ -182,18 +182,25 @@ Response (`200`):
   "data": [
     {
       "target": "<probe-target-name>",
-      "window_days": 30,
-      "checks_total": 43200,
-      "checks_failed": 12,
-      "uptime_pct": 99.972
+      "uptimePct": 99.972,
+      "totalProbes": 43200,
+      "okCount": 43188,
+      "failCount": 12,
+      "lastProbeAt": "2026-08-11T14:59:00.000Z",
+      "lastFailureAt": "2026-08-03T02:17:00.000Z",
+      "windowStart": "2026-07-12T15:00:00.000Z",
+      "windowEnd": "2026-08-11T15:00:00.000Z"
     }
   ]
 }
 ```
 
 Each probe target runs every 60 seconds, so the 30-day window holds
-~43,200 checks. `uptime_pct` is `(total - failed) / total * 100`
-rounded to three decimal places.
+~43,200 checks. `uptimePct` is `okCount / totalProbes * 100` rounded to
+three decimal places, and is `100` for a target with no probes yet.
+`lastFailureAt` is `null` when the target has not failed inside the
+window. The window itself is reported as the `windowStart`/`windowEnd`
+timestamps rather than a day count.
 
 ## Email subscriptions
 

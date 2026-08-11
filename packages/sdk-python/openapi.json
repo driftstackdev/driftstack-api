@@ -121,7 +121,7 @@
           },
           "region": {
             "type": ["string", "null"],
-            "enum": ["us", "eu", "apac"]
+            "enum": ["us", "eu", "apac", null]
           },
           "avatar_url": {
             "type": ["string", "null"]
@@ -215,7 +215,7 @@
           },
           "region": {
             "type": ["string", "null"],
-            "enum": ["us", "eu", "apac"]
+            "enum": ["us", "eu", "apac", null]
           }
         }
       },
@@ -475,7 +475,7 @@
             "properties": {
               "state": {
                 "type": ["string", "null"],
-                "enum": ["active", "provisioning", "idle", "terminating"]
+                "enum": ["active", "provisioning", "idle", "terminating", null]
               },
               "fresh": {
                 "type": "boolean"
@@ -494,11 +494,11 @@
               },
               "streaming_state": {
                 "type": ["string", "null"],
-                "enum": ["provisioning", "live", "blank", "failed"]
+                "enum": ["provisioning", "live", "blank", "failed", null]
               },
               "egress_state": {
                 "type": ["string", "null"],
-                "enum": ["live", "dead_proxy"]
+                "enum": ["live", "dead_proxy", null]
               },
               "proxy_kind": {
                 "type": "string",
@@ -3620,7 +3620,7 @@
                     "properties": {
                       "state": {
                         "type": ["string", "null"],
-                        "enum": ["active", "provisioning", "idle", "terminating"]
+                        "enum": ["active", "provisioning", "idle", "terminating", null]
                       },
                       "fresh": {
                         "type": "boolean"
@@ -3639,11 +3639,11 @@
                       },
                       "streaming_state": {
                         "type": ["string", "null"],
-                        "enum": ["provisioning", "live", "blank", "failed"]
+                        "enum": ["provisioning", "live", "blank", "failed", null]
                       },
                       "egress_state": {
                         "type": ["string", "null"],
-                        "enum": ["live", "dead_proxy"]
+                        "enum": ["live", "dead_proxy", null]
                       },
                       "proxy_kind": {
                         "type": "string",
@@ -4363,7 +4363,7 @@
                     "properties": {
                       "state": {
                         "type": ["string", "null"],
-                        "enum": ["active", "provisioning", "idle", "terminating"]
+                        "enum": ["active", "provisioning", "idle", "terminating", null]
                       },
                       "fresh": {
                         "type": "boolean"
@@ -4382,11 +4382,11 @@
                       },
                       "streaming_state": {
                         "type": ["string", "null"],
-                        "enum": ["provisioning", "live", "blank", "failed"]
+                        "enum": ["provisioning", "live", "blank", "failed", null]
                       },
                       "egress_state": {
                         "type": ["string", "null"],
-                        "enum": ["live", "dead_proxy"]
+                        "enum": ["live", "dead_proxy", null]
                       },
                       "proxy_kind": {
                         "type": "string",
@@ -4583,7 +4583,7 @@
                     "properties": {
                       "state": {
                         "type": ["string", "null"],
-                        "enum": ["active", "provisioning", "idle", "terminating"]
+                        "enum": ["active", "provisioning", "idle", "terminating", null]
                       },
                       "fresh": {
                         "type": "boolean"
@@ -4602,11 +4602,11 @@
                       },
                       "streaming_state": {
                         "type": ["string", "null"],
-                        "enum": ["provisioning", "live", "blank", "failed"]
+                        "enum": ["provisioning", "live", "blank", "failed", null]
                       },
                       "egress_state": {
                         "type": ["string", "null"],
-                        "enum": ["live", "dead_proxy"]
+                        "enum": ["live", "dead_proxy", null]
                       },
                       "proxy_kind": {
                         "type": "string",
@@ -4803,7 +4803,7 @@
                     "properties": {
                       "state": {
                         "type": ["string", "null"],
-                        "enum": ["active", "provisioning", "idle", "terminating"]
+                        "enum": ["active", "provisioning", "idle", "terminating", null]
                       },
                       "fresh": {
                         "type": "boolean"
@@ -4822,11 +4822,11 @@
                       },
                       "streaming_state": {
                         "type": ["string", "null"],
-                        "enum": ["provisioning", "live", "blank", "failed"]
+                        "enum": ["provisioning", "live", "blank", "failed", null]
                       },
                       "egress_state": {
                         "type": ["string", "null"],
-                        "enum": ["live", "dead_proxy"]
+                        "enum": ["live", "dead_proxy", null]
                       },
                       "proxy_kind": {
                         "type": "string",
@@ -11799,7 +11799,7 @@
                     },
                     "region": {
                       "type": ["string", "null"],
-                      "enum": ["us", "eu", "apac"]
+                      "enum": ["us", "eu", "apac", null]
                     },
                     "avatar_url": {
                       "type": ["string", "null"]
@@ -11955,7 +11955,7 @@
                   },
                   "region": {
                     "type": ["string", "null"],
-                    "enum": ["us", "eu", "apac"]
+                    "enum": ["us", "eu", "apac", null]
                   }
                 }
               }
@@ -12005,7 +12005,7 @@
                     },
                     "region": {
                       "type": ["string", "null"],
-                      "enum": ["us", "eu", "apac"]
+                      "enum": ["us", "eu", "apac", null]
                     },
                     "avatar_url": {
                       "type": ["string", "null"]
@@ -14210,8 +14210,10 @@
                             "enum": [
                               "signup-welcome",
                               "session-failed-first",
+                              "session-success-first",
                               "tier-changed",
-                              "billing-receipt"
+                              "billing-receipt",
+                              "billing-renewal-reminder"
                             ]
                           },
                           "opted_in": {
@@ -14288,8 +14290,10 @@
                     "enum": [
                       "signup-welcome",
                       "session-failed-first",
+                      "session-success-first",
                       "tier-changed",
-                      "billing-receipt"
+                      "billing-receipt",
+                      "billing-renewal-reminder"
                     ]
                   },
                   "opted_in": {
@@ -21692,7 +21696,7 @@
                       "properties": {
                         "state": {
                           "type": ["string", "null"],
-                          "enum": ["active", "provisioning", "idle", "terminating"]
+                          "enum": ["active", "provisioning", "idle", "terminating", null]
                         },
                         "fresh": {
                           "type": "boolean"
@@ -21711,11 +21715,11 @@
                         },
                         "streaming_state": {
                           "type": ["string", "null"],
-                          "enum": ["provisioning", "live", "blank", "failed"]
+                          "enum": ["provisioning", "live", "blank", "failed", null]
                         },
                         "egress_state": {
                           "type": ["string", "null"],
-                          "enum": ["live", "dead_proxy"]
+                          "enum": ["live", "dead_proxy", null]
                         },
                         "proxy_kind": {
                           "type": "string",
@@ -21975,7 +21979,7 @@
                             "properties": {
                               "state": {
                                 "type": ["string", "null"],
-                                "enum": ["active", "provisioning", "idle", "terminating"]
+                                "enum": ["active", "provisioning", "idle", "terminating", null]
                               },
                               "fresh": {
                                 "type": "boolean"
@@ -21994,11 +21998,11 @@
                               },
                               "streaming_state": {
                                 "type": ["string", "null"],
-                                "enum": ["provisioning", "live", "blank", "failed"]
+                                "enum": ["provisioning", "live", "blank", "failed", null]
                               },
                               "egress_state": {
                                 "type": ["string", "null"],
-                                "enum": ["live", "dead_proxy"]
+                                "enum": ["live", "dead_proxy", null]
                               },
                               "proxy_kind": {
                                 "type": "string",
@@ -22265,7 +22269,7 @@
                       "properties": {
                         "state": {
                           "type": ["string", "null"],
-                          "enum": ["active", "provisioning", "idle", "terminating"]
+                          "enum": ["active", "provisioning", "idle", "terminating", null]
                         },
                         "fresh": {
                           "type": "boolean"
@@ -22284,11 +22288,11 @@
                         },
                         "streaming_state": {
                           "type": ["string", "null"],
-                          "enum": ["provisioning", "live", "blank", "failed"]
+                          "enum": ["provisioning", "live", "blank", "failed", null]
                         },
                         "egress_state": {
                           "type": ["string", "null"],
-                          "enum": ["live", "dead_proxy"]
+                          "enum": ["live", "dead_proxy", null]
                         },
                         "proxy_kind": {
                           "type": "string",
@@ -23604,7 +23608,7 @@
                           },
                           "sameSite": {
                             "type": ["string", "null"],
-                            "enum": ["Strict", "Lax", "None"]
+                            "enum": ["Strict", "Lax", "None", null]
                           }
                         },
                         "required": ["domain", "name", "value"]
@@ -23744,7 +23748,7 @@
                         },
                         "sameSite": {
                           "type": ["string", "null"],
-                          "enum": ["Strict", "Lax", "None"]
+                          "enum": ["Strict", "Lax", "None", null]
                         }
                       },
                       "required": ["domain", "name", "value"]
@@ -29916,18 +29920,57 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "window_days": {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    "uptime_percent": {
-                      "type": "number"
-                    },
-                    "target_percent": {
-                      "type": "number"
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "target": {
+                            "type": "string"
+                          },
+                          "uptimePct": {
+                            "type": "number"
+                          },
+                          "totalProbes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "okCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "failCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "lastProbeAt": {
+                            "type": "string"
+                          },
+                          "lastFailureAt": {
+                            "type": ["string", "null"]
+                          },
+                          "windowStart": {
+                            "type": "string"
+                          },
+                          "windowEnd": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "target",
+                          "uptimePct",
+                          "totalProbes",
+                          "okCount",
+                          "failCount",
+                          "lastProbeAt",
+                          "lastFailureAt",
+                          "windowStart",
+                          "windowEnd"
+                        ]
+                      }
                     }
                   },
-                  "required": ["window_days", "uptime_percent", "target_percent"]
+                  "required": ["data"]
                 }
               }
             }
