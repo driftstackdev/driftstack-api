@@ -12,6 +12,13 @@
 // for the endpoints they cover. What neither can see is the POPULATION: whether
 // the route added last week also sets the header.
 //
+// The same sweep also pins the SECURITY headers, because the existing coverage
+// claims more than it checks: `security-headers.test.ts` is titled "every
+// response carries X-Content-Type-Options: nosniff" and samples SIX endpoints,
+// four of them `/version`. Measured across the real population instead — 66
+// responses, all three headers present on every one — so the claim is now as
+// wide as its wording.
+//
 // Both directions are pinned, because over-correcting is a real failure too.
 // The public status endpoints are deliberately cacheable, and the rate-limit
 // gates on that family are sized on the assumption that a CDN absorbs the
@@ -38,7 +45,17 @@ interface Observed {
   op: string;
   secured: boolean;
   cacheControl: string;
+  missingSecurityHeaders: string[];
 }
+
+/**
+ * Headers every response must carry, whatever it is.
+ *
+ * nosniff stops a browser reinterpreting a JSON body as script; the frame and
+ * referrer policies stop an API response being framed or leaking its URL
+ * onward. None of them depend on the route, so absence anywhere is a gap.
+ */
+const REQUIRED_SECURITY_HEADERS = ['x-content-type-options', 'x-frame-options', 'referrer-policy'];
 
 const observed: Observed[] = [];
 
@@ -82,6 +99,7 @@ beforeAll(async () => {
       op: `GET ${path}`,
       secured: op.security !== undefined,
       cacheControl: String(res.headers['cache-control'] ?? '<none>'),
+      missingSecurityHeaders: REQUIRED_SECURITY_HEADERS.filter((h) => res.headers[h] === undefined),
     });
   }
 }, 180_000);
@@ -125,6 +143,15 @@ describe('caller-private responses are never publicly cacheable', () => {
     expect(cacheable, 'operations advertising public caching:').toEqual(
       [...PUBLICLY_CACHEABLE].sort(),
     );
+  });
+
+  it('CRITICAL every response carries the security headers, across the POPULATION. The existing suite asserts this under the title "every response" while sampling six endpoints, four of them /version — so a route that missed them would have passed.', () => {
+    expect(
+      observed
+        .filter((o) => o.missingSecurityHeaders.length > 0)
+        .map((o) => `${o.op} missing ${o.missingSecurityHeaders.join(', ')}`),
+      'response(s) missing a required security header:',
+    ).toEqual([]);
   });
 
   it('CRITICAL /v1/egress/echo is UNAUTHENTICATED yet uncacheable, and that is not an oversight. It echoes the CALLER-S own exit IP, so a shared cache storing it would hand one probe another probe-S egress address — the one public response that must never be shared.', () => {
