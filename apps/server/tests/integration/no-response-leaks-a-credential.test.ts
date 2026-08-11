@@ -52,9 +52,23 @@ interface Created {
   id?: string;
 }
 
-/** Leaf names that look like a credential, a key, or key material. */
+/**
+ * Leaf names that look like a credential, a key, or key material.
+ *
+ * Widened after measuring: the original list had `access_token` and
+ * `refresh_token` but not a bare `token`, nor `jwt`, `credential`, `signature`,
+ * `pem`, `seed` or `otp`. Sweeping the population with the wider pattern
+ * produced ZERO new hits, so this costs nothing today and catches a field
+ * named `token` tomorrow.
+ *
+ * `cookie`, `cookies` and `auth` are deliberately NOT here. The agent-session
+ * cookie endpoints return cookie data as their legitimate payload — that
+ * surface is 503 in this fixture, so a sweep would not have caught the false
+ * positive, and a pattern that fires the day a dependency is wired is worse
+ * than one that never fired. `auth` matches too many innocent names.
+ */
 const CREDENTIAL_LEAF =
-  /^(.*_)?(secret|password|passwd|private_key|privatekey|key_hash|hashed|hash|encrypted|ciphertext|dek|salt|nonce|totp|mfa_secret|client_secret|refresh_token|access_token|signing_key|plaintext)$/i;
+  /^(.*_)?(secret|password|passwd|private_key|privatekey|key_hash|hashed|hash|encrypted|ciphertext|dek|salt|nonce|totp|mfa_secret|client_secret|refresh_token|access_token|token|jwt|credential|credentials|signature|pem|seed|otp|signing_key|plaintext)$/i;
 
 /**
  * Fields that legitimately appear, keyed by `METHOD /path` then leaf name.
@@ -234,6 +248,16 @@ describe('no successful response leaks a credential', () => {
       probe.map((h) => h.leaf),
       'a nested credential leaf is found',
     ).toEqual(['mfa_secret']);
+
+    // The WIDENED terms fire. Without this they would be decoration: a term
+    // that matches nothing today and is never asserted is indistinguishable
+    // from a typo in the pattern.
+    const widened: Hit[] = [];
+    walk({ token: 'x', jwt: 'y', signature: 'z', deep: [{ pem: 'k' }] }, '', 'PROBE', widened);
+    expect(
+      widened.map((h) => h.leaf).sort(),
+      'the newly added credential terms are matched',
+    ).toEqual(['jwt', 'pem', 'signature', 'token']);
 
     // And a benign body is not flagged — `key_prefix` and `next_cursor` are
     // both normal fields whose names brush against the pattern.
