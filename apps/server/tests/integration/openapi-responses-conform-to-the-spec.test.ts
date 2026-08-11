@@ -69,9 +69,19 @@ function toDraft07(node: unknown): unknown {
   return out;
 }
 
-/** The JSON schema for a path+method+status, or undefined if undocumented. */
+/**
+ * The JSON schema for a path+method+status, or undefined if undocumented.
+ *
+ * BOTH media types. Errors are published as `application/problem+json`, and an
+ * `application/json`-only lookup silently skipped every one of them — which is
+ * the half of the contract SDK error handling is built on. It also mislabelled
+ * them: a documented 503 came back as "undocumented" because the lookup could
+ * not see the media type it was published under, which reads like a missing
+ * contract rather than a blind spot in the reader.
+ */
 function lookup(path: string, method: string, status: string): unknown {
-  return spec.paths?.[path]?.[method]?.responses?.[status]?.content?.['application/json']?.schema;
+  const content = spec.paths?.[path]?.[method]?.responses?.[status]?.content;
+  return content?.['application/json']?.schema ?? content?.['application/problem+json']?.schema;
 }
 
 /** As `lookup`, but a miss is fatal rather than silent. */
@@ -204,7 +214,11 @@ describe('real responses conform to the OpenAPI spec that generates the SDKs', (
       if (op === undefined) return false;
       const responses = Object.values(op.responses ?? {});
       if (responses.some((r) => r.content?.['text/event-stream'] !== undefined)) return false;
-      return responses.some((r) => r.content?.['application/json'] !== undefined);
+      return responses.some(
+        (r) =>
+          r.content?.['application/json'] !== undefined ||
+          r.content?.['application/problem+json'] !== undefined,
+      );
     });
 
     const violations: string[] = [];
@@ -224,18 +238,21 @@ describe('real responses conform to the OpenAPI spec that generates the SDKs', (
       if (errors.length > 0) violations.push(`${path} -> ${status}: ${errors.join('; ')}`);
     }
 
-    // MEASURED, not assumed: 34 of the 65 swept endpoints are actually
-    // validated. The other 31 answer with a status the spec does not document —
-    // overwhelmingly a 403 on an admin route this customer key cannot reach —
-    // so they are counted and skipped rather than silently treated as passes.
+    // MEASURED, not assumed: 63 of the 68 swept endpoints are actually
+    // validated. It was 34 of 65 until the lookup started reading
+    // `application/problem+json` as well — the admin routes this customer key
+    // cannot reach answer 403 with a documented problem body, so they were
+    // being skipped as "undocumented" when the contract described them all
+    // along. Error bodies are also where SDK error handling lives, which makes
+    // them the more valuable half to validate.
     //
     // The floor is the whole point of reporting that number. A sweep that
     // validated two endpoints and found no violations looks identical, in a
-    // green run, to one that validated sixty. Pinned below the observed 34 so
+    // green run, to one that validated sixty. Pinned below the observed 63 so
     // ordinary drift does not trip it, high enough that a collapse in
     // reachability fails loudly instead of quietly checking almost nothing.
     expect(validated, `endpoints actually validated (of ${paths.length} swept)`).toBeGreaterThan(
-      24,
+      55,
     );
     expect(violations, 'response(s) that violate the schema documenting them:').toEqual([]);
     // Not asserted: `undocumented` — a status the spec does not describe is
