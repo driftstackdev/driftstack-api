@@ -21,12 +21,25 @@
 // Matching is on the LEAF key name, never the dotted path. A path-wide regex
 // matches the container instead of the field and acquits everything under a
 // well-named parent.
+//
+// TWO surfaces are swept, because a customer key sees the admin routes only as
+// 403s and would report them clean without ever reading a body: the customer
+// fixture, and a second one holding `driftstack_internal_admin`.
+//
+// The `/v1/admin/owner/*` tier is NOT reachable from either. It sits behind
+// `requireOwner`, which admits one specific account by email and fails closed
+// otherwise, so those three endpoints answer 403 here. That is a real boundary
+// of this guard rather than a gap in the API: `admin-owner-secrets.test.ts`
+// covers the sensitive one behaviourally, including the taint rule that a
+// secret value never appears in the list response or any audit payload.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp } from './_helpers/build-test-app.js';
 
 let fx: Awaited<ReturnType<typeof buildTestApp>>;
+let staff: Awaited<ReturnType<typeof buildTestApp>>;
 let spec: SpecDocument;
+let adminScanned = 0;
 let ids: Record<string, string> = {};
 
 interface SpecDocument {
@@ -110,6 +123,9 @@ function familyOf(path: string): string | null {
 
 beforeAll(async () => {
   fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+  staff = await buildTestApp({
+    scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+  });
   spec = (await fx.app.inject({ method: 'GET', url: '/openapi.json' })).json<SpecDocument>();
 
   const create = async (url: string, payload: Record<string, unknown>): Promise<string> => {
@@ -170,15 +186,46 @@ beforeAll(async () => {
       walk(body, '', op, hits);
     }
   }
+
+  // The admin surface, with a staff credential. The customer fixture above sees
+  // every one of these as a 403 and would report them clean having read no body
+  // at all — the shape of false green this whole file exists to avoid.
+  const staffAuth = { authorization: `Bearer ${staff.plaintext}` };
+  for (const path of Object.keys(spec.paths ?? {})) {
+    if (!path.startsWith('/v1/admin/') || path.includes('{')) continue;
+    for (const method of ['get', 'post'] as const) {
+      if (spec.paths?.[path]?.[method] === undefined) continue;
+      const res = await staff.app.inject({
+        method: method.toUpperCase() as 'GET',
+        url: path,
+        headers: staffAuth,
+        ...(method === 'get' ? {} : { payload: {} }),
+      });
+      if (res.statusCode < 200 || res.statusCode >= 300) continue;
+      adminScanned += 1;
+      let body: unknown;
+      try {
+        body = res.json();
+      } catch {
+        continue;
+      }
+      walk(body, '', `${method.toUpperCase()} ${path}`, hits);
+    }
+  }
 }, 180_000);
 
 afterAll(async () => {
   await fx.app.close();
+  await staff.app.close();
 });
 
 describe('no successful response leaks a credential', () => {
   it('CRITICAL the sweep reached real bodies AND the detector fires. Every assertion below reports an ABSENCE, so a sweep that scanned nothing — or a pattern that matched nothing — would satisfy them having proved nothing.', () => {
-    expect(scanned, '2xx bodies scanned').toBeGreaterThan(40);
+    expect(scanned, 'customer-surface 2xx bodies scanned').toBeGreaterThan(40);
+    // Floored separately: a staff credential that stopped working would turn
+    // every admin route back into a 403 and this sweep would silently return to
+    // reading nothing while still reporting clean.
+    expect(adminScanned, 'admin-surface 2xx bodies scanned').toBeGreaterThan(15);
 
     // The detector, on a body whose verdict is not in doubt.
     const probe: Hit[] = [];
