@@ -24,6 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp } from './_helpers/build-test-app.js';
 
 let fx: Awaited<ReturnType<typeof buildTestApp>>;
+let staff: Awaited<ReturnType<typeof buildTestApp>>;
 let spec: SpecDocument;
 let served: Set<string>;
 
@@ -70,12 +71,19 @@ function flatten(tree: string): Set<string> {
 
 beforeAll(async () => {
   fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+  // A staff credential for the admin surface. With a customer key those routes
+  // answer 403 — which IS documented — so this sweep confirmed the 403 and
+  // never observed a single admin SUCCESS status.
+  staff = await buildTestApp({
+    scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+  });
   served = flatten(fx.app.printRoutes({ commonPrefix: false }));
   spec = (await fx.app.inject({ method: 'GET', url: '/openapi.json' })).json<SpecDocument>();
 }, 60_000);
 
 afterAll(async () => {
   await fx.app.close();
+  await staff.app.close();
 });
 
 describe('every status the server returns is documented for that operation', () => {
@@ -99,6 +107,7 @@ describe('every status the server returns is documented for that operation', () 
     const violations: string[] = [];
     let checked = 0;
     let unregistered = 0;
+    let adminSuccess = 0;
 
     for (const path of Object.keys(spec.paths ?? {})) {
       // A templated path needs a real id; a synthetic one answers 404 and would
@@ -117,16 +126,19 @@ describe('every status the server returns is documented for that operation', () 
           continue;
         }
 
-        const res = await fx.app.inject({
+        const isAdmin = path.startsWith('/v1/admin/');
+        const target = isAdmin ? staff : fx;
+        const res = await target.app.inject({
           method: method.toUpperCase() as 'GET',
           url: path,
-          headers: { authorization: `Bearer ${fx.plaintext}` },
+          headers: { authorization: `Bearer ${target.plaintext}` },
           // An invalid body drives writes down their rejection paths, which is
           // where undocumented statuses live.
           ...(method === 'get' ? {} : { payload: { __not_a_valid_field__: 1 } }),
         });
         checked += 1;
         const status = String(res.statusCode);
+        if (isAdmin && res.statusCode >= 200 && res.statusCode < 300) adminSuccess += 1;
         if (!Object.keys(op.responses ?? {}).includes(status)) {
           violations.push(
             `${method.toUpperCase()} ${path} answered ${status}, documented [${Object.keys(
@@ -145,6 +157,13 @@ describe('every status the server returns is documented for that operation', () 
     // exactly the same clean green as a full pass.
     expect(checked, 'operations actually exercised').toBeGreaterThan(90);
     expect(unregistered, 'operations skipped as unregistered here').toBeLessThan(15);
+    // MEASURED, and the reason the staff credential is here at all: under a
+    // customer key 0 of 29 admin operations reach a 2xx — every one answers the
+    // documented 403, so the sweep confirmed that and learned nothing about
+    // their success statuses. Under staff, 20 do. Floored so a credential that
+    // silently loses its admin scope fails here instead of quietly returning to
+    // checking only the 403s.
+    expect(adminSuccess, 'admin operations observed at a SUCCESS status').toBeGreaterThan(15);
     expect(violations, 'operation(s) answering a status their contract denies:').toEqual([]);
   }, 180_000);
 });
