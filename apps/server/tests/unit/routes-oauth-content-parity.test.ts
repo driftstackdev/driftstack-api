@@ -179,10 +179,14 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
-  it('parseOrThrow → BadRequestError(err.message); oauthErrorToHttp: invalid_client/unauthorized_client → UnauthorizedError (401); invalid_request/_scope/_grant/access_denied → BadRequestError (400)', () => {
+  it("parseOrThrow → BadRequestError(err.message, { error: 'invalid_request' }) per V-753 — schema-shape 400s must carry the RFC 6749 §5.2 field too, not just service-layer OAuthError throws; oauthErrorToHttp: invalid_client/unauthorized_client → UnauthorizedError (401); invalid_request/_scope/_grant/access_denied → BadRequestError (400)", () => {
     expect(body).toMatch(
-      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);\s*\n?\s*if \(!result\.success\) \{\s*\n?\s*throw new BadRequestError\(result\.error\.message\);\s*\n?\s*\}\s*\n?\s*return result\.data;\s*\n?\s*\}/,
+      /function parseOrThrow<T>\(schema: z\.ZodSchema<T>, input: unknown\): T \{\s*\n?\s*const result = schema\.safeParse\(input\);\s*\n?\s*if \(!result\.success\) \{[\s\S]*?throw new BadRequestError\(result\.error\.message, \{ error: 'invalid_request' \}\);/,
     );
+    // V-753 — the bare form must not come back: it emitted no `error` key at all, so
+    // every missing-code_verifier / short-verifier / bad-redirect_uri 400 reached a
+    // standard OAuth client as `undefined` on the field the docs say to branch on.
+    expect(body).not.toMatch(/throw new BadRequestError\(result\.error\.message\);/);
     // V-737 — the code now also travels as an RFC 6749 §5.2 `error` extension on
     // the problem body. It used to select the status and then be discarded, and
     // the messages do not contain it either, so the code reached the client

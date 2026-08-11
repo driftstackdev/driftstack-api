@@ -354,7 +354,21 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
 function parseOrThrow<T>(schema: z.ZodSchema<T>, input: unknown): T {
   const result = schema.safeParse(input);
   if (!result.success) {
-    throw new BadRequestError(result.error.message);
+    // V-753 — carry the RFC 6749 §5.2 `error` field on schema-shape 400s too.
+    // /api/oauth's error table tells integrators to "Branch on `error`, not on
+    // `detail`", and oauthErrorToHttp attaches it — but ONLY for service-layer
+    // OAuthError throws. Everything rejected here (missing code_verifier, a
+    // verifier under 43 chars, absent client_secret, a non-URL redirect_uri —
+    // i.e. the most common integration-time mistakes) emitted a raw Zod string in
+    // `detail` and NO `error` key at all, so a standard OAuth client read
+    // `undefined` and fell through to its unknown-error branch, pushed back onto
+    // string-matching Zod prose that is free to change.
+    //
+    // `invalid_request` is the correct code for every caller of this helper: §5.2
+    // defines it as "missing a required parameter, includes an unsupported
+    // parameter value, ... or is otherwise malformed", which is exactly what a
+    // failed schema parse is.
+    throw new BadRequestError(result.error.message, { error: 'invalid_request' });
   }
   return result.data;
 }

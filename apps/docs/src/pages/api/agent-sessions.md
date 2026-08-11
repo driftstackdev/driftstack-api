@@ -494,9 +494,19 @@ Errors:
 
 ```json
 {
-  "event": { "type": "mouseMove", "x": 200, "y": 150 }
+  "event": { "type": "mouseMove", "x": 200, "y": 150 },
+  "client_id": "dashboard-tab-a"
 }
 ```
+
+`client_id` is **required for every pair-mode session**, on both legs: the
+first event (which fires the takeover-request transition) rejects without it,
+and every subsequent event must carry the SAME `client_id` that owns
+`human-driving` — the lock exists to scope contention to one tab. It is
+optional in the schema only because manual-mode sessions do not need it.
+Omitting it in pair mode returns `400 validation-failed` with a
+`client_id` field error, and sending a _different_ value once human-driving is
+held returns `409 pair-mode-conflict`. Reuse one stable id per tab or window.
 
 Forwards a raw LK.6 InputEvent to the harness for `mode: 'manual'`
 or `mode: 'pair'` sessions. The 12 valid variants:
@@ -566,7 +576,10 @@ Errors:
   `manual` or `pair`); OR session is not `active`.
 - `400 validation-failed` — event body fails the discriminated-union
   schema (unknown `type`, out-of-bounds coords, invalid `button`,
-  etc.).
+  etc.), OR `client_id` is missing on a pair-mode session (the field
+  error names `client_id`; check that before debugging coordinates).
+- `409 pair-mode-conflict` — a pair-mode `client_id` that differs from
+  the one currently holding `human-driving`.
 - `503 feature-unavailable` — this deployment does not expose HTTP
   manual-input dispatch. Use the desktop Simulator's live control channel for
   hands-on input.

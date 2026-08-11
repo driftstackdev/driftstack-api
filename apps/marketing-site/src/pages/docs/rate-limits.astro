@@ -96,8 +96,12 @@ const BUCKETS = [
     <p class="text-sm text-tk-ink-3">
       Higher tiers (API Scale, Enterprise) get larger buckets — see
       the <a href="/pricing/comparison/">tier comparison</a> for the
-      full matrix. Free uses the same bucket sizes as Solo
-      Manual.
+      full matrix. <strong>Free has its own, smaller buckets on every
+      limit</strong> — it does not share Solo Manual's sizes: global
+      60 burst / 1 per second, session-create 5 burst / 1 per minute,
+      agent-message 20 burst / 1 per 5 seconds, and input-event 240
+      burst / 60 per second. Size against these if you are on Free;
+      the columns above are Solo Manual and up.
     </p>
 
     <h2>Response headers</h2>

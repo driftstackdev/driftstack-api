@@ -307,15 +307,14 @@ Rotating only the client secret does not revoke existing bearer tokens.
 
 ## Errors at a glance
 
-| Status | Code / problem                            | When                                                          |
-| -----: | ----------------------------------------- | ------------------------------------------------------------- |
-|    400 | `invalid_request`                         | body / query failed validation                                |
-|    400 | `invalid_grant`                           | code unknown / expired / already used; PKCE verifier mismatch |
-|    400 | `invalid_scope`                           | requested scope outside the client's allowed set              |
-|    400 | `access_denied`                           | customer rejected the consent screen                          |
-|    401 | `invalid_client`                          | `client_id` + `client_secret` mismatch OR client revoked      |
-|    401 | `unauthorized_client`                     | the client isn't allowed to use this grant type               |
-|    403 | `https://errors.driftstack.dev/forbidden` | approving account is Free; upgrade to a tier with `apiAccess` |
+| Status | Code / problem                            | When                                                            |
+| -----: | ----------------------------------------- | --------------------------------------------------------------- |
+|    400 | `invalid_request`                         | body / query failed validation (schema-shape failures included) |
+|    400 | `invalid_grant`                           | code unknown / expired / already used; PKCE verifier mismatch   |
+|    400 | `invalid_scope`                           | requested scope outside the client's allowed set                |
+|    400 | `access_denied`                           | customer rejected the consent screen                            |
+|    401 | `invalid_client`                          | `client_id` + `client_secret` mismatch OR client revoked        |
+|    403 | `https://errors.driftstack.dev/forbidden` | approving account is Free; upgrade to a tier with `apiAccess`   |
 
 All responses use `application/problem+json` per RFC 9457 (status,
 type, title, detail). The `type` field is a real RFC 9457 type URI:

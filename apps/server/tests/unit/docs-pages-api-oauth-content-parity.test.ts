@@ -70,13 +70,16 @@ describe('docs/pages/api/oauth content parity', () => {
     expect(body).not.toMatch(/marketplace/i);
   });
 
-  it('Errors-at-a-glance 6-row roster pinned: 400 invalid_request + 400 invalid_grant (code unknown/expired/already-used; PKCE mismatch) + 400 invalid_scope + 400 access_denied + 401 invalid_client + 401 unauthorized_client. All RFC 9457 problem+json + real https://errors.driftstack.dev/ type URIs — pinned so the 6-error-code roster + RFC 9457 + errors.driftstack.dev type-URI contract all stay documented', () => {
+  it('Errors-at-a-glance 5-row roster pinned (V-753 dropped the unreachable 401 unauthorized_client row — no call site produces it, so branching on it was a dead branch): 400 invalid_request + 400 invalid_grant + 400 invalid_scope + 400 access_denied + 401 invalid_client. All RFC 9457 problem+json + real https://errors.driftstack.dev/ type URIs', () => {
     expect(body).toMatch(/\|\s*400 \| `invalid_request`/);
     expect(body).toMatch(/\|\s*400 \| `invalid_grant`/);
     expect(body).toMatch(/\|\s*400 \| `invalid_scope`/);
     expect(body).toMatch(/\|\s*400 \| `access_denied`/);
     expect(body).toMatch(/\|\s*401 \| `invalid_client`/);
-    expect(body).toMatch(/\|\s*401 \| `unauthorized_client`/);
+    // V-753 — the row must NOT come back. `unauthorized_client` is a forward slot in
+    // the union with zero producers; the doc-vs-union invariant that demanded it lived
+    // in docs-oauth-content-parity and now checks producers instead.
+    expect(body).not.toMatch(/`unauthorized_client`/);
     expect(body).toMatch(
       /All responses use `application\/problem\+json` per RFC 9457 \(status,\s*\n?\s*type, title, detail\)\. The `type` field is a real RFC 9457 type URI:\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/bad-request` for the 400 cases and\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/unauthorized` for the 401 cases\./,
     );

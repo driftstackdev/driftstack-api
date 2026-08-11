@@ -89,4 +89,41 @@ describe('W341.A /docs/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity', () => {
     expect(body).toContain('application/problem+json');
     expect(body).toContain('retry_after_seconds');
   });
+  // V-753 — this page claimed "Free uses the same bucket sizes as Solo Manual" while
+  // every one of free's four buckets is smaller. It drifted precisely because nothing
+  // pinned it: the assertions here covered only the Solo column. This is a CROSS-SOURCE
+  // pin, not a text pin — it reads TIER_RATE_LIMIT_DEFAULTS.free and requires the page
+  // to state those exact numbers, so a change on either side fails.
+  it('V-753 the Free-tier bucket numbers on the page match TIER_RATE_LIMIT_DEFAULTS.free', () => {
+    const body = readFileSync(PAGE, 'utf8');
+    const free = TIER_RATE_LIMIT_DEFAULTS.free;
+
+    // The false claim must not return.
+    expect(body).not.toMatch(/Free uses the same bucket sizes as Solo/);
+    expect(body).toMatch(/Free has its own, smaller buckets on every/);
+
+    // Every free capacity the page quotes must be the real one.
+    expect(body).toContain(`global
+      ${String(free.global.capacity)} burst`);
+    expect(body).toContain(`${String(free['sessions:create'].capacity)} burst / 1 per minute`);
+    expect(body).toContain(
+      `${String(free['agent_sessions:message'].capacity)} burst / 1 per 5 seconds`,
+    );
+    expect(body).toContain(`${String(free['agent_sessions:input_event'].capacity)}
+      burst / 60 per second`);
+
+    // And free must genuinely differ from solo on all four, or the prose is wrong again.
+    const solo = TIER_RATE_LIMIT_DEFAULTS.solo_manual;
+    for (const k of [
+      'global',
+      'sessions:create',
+      'agent_sessions:message',
+      'agent_sessions:input_event',
+    ] as const) {
+      expect(
+        free[k].capacity,
+        `free.${k} now equals solo_manual — if the tiers were unified, rewrite the page prose`,
+      ).not.toBe(solo[k].capacity);
+    }
+  });
 });

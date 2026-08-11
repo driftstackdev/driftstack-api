@@ -32185,3 +32185,72 @@ onto stale output, which is what that guard exists to prevent.
 Suites: **1837 files / 19,676 passing** (server + docs unit). Remaining sweep findings
 are tracked below and being worked in impact order; one of them (#2, the AUP's "billing
 pauses" promise) is a business decision and will be flagged, not silently resolved.
+
+## V-753 — sweep backlog: the OAuth error contract (code fix) + three doc corrections
+
+Four more findings from the V-752 sweep, each re-verified against both sides myself.
+
+**#7 — OAuth validation 400s carried no `error` field. THE CODE WAS WRONG, not the doc.**
+`/api/oauth` tells integrators "Branch on `error`, not on `detail`" and `oauthErrorToHttp`
+does attach it — but only for service-layer `OAuthError` throws. Everything rejected by
+the schema went through `parseOrThrow`, which threw `BadRequestError(msg)` with no
+extensions, so the most common integration-time mistakes — missing `code_verifier`, a
+verifier under RFC 7636's 43-char floor, absent `client_secret`, a non-URL `redirect_uri`
+— returned a raw Zod string in `detail` and **no `error` key at all**. A standard OAuth
+client read `undefined` and fell through to its unknown branch, then had to string-match
+Zod prose that is free to change.
+
+Fixed at the helper, which all six OAuth endpoints share, so `/authorize` is consistent
+too. `invalid_request` is the correct §5.2 code for every caller: "missing a required
+parameter … or is otherwise malformed" is exactly a failed schema parse. 5 new
+behavioural tests (4 malformed token bodies + the authorize query); mutation-proved by
+removing the extensions — all 5 red, and the 3 pre-existing service-layer tests stay
+green, which is precisely the gap they left.
+
+**#12 — the error table advertised `401 unauthorized_client`, which nothing can produce.**
+Zero `new OAuthError('unauthorized_client')` call sites; it exists only as a union member,
+a defensive `case`, two comments and the docs. Row removed, and the OpenAPI 401
+description no longer names it.
+
+The interesting part is WHY it was there. A cross-source invariant required the doc to
+list every code, but it checked `expect(serviceSource).toMatch(/'unauthorized_client'/)` —
+which the **type union alone satisfies**. So it read as "the service can emit this" while
+only proving "the identifier appears in the file", and that forced an unreachable value
+into customer docs. It now checks PRODUCERS (`new OAuthError('<code>'`) and asserts
+explicitly that declared-but-unproduced codes are NOT advertised, with a failure message
+telling a future author to move the code into the produced list if it ever gains a thrower.
+The union member and `case` are deliberately kept as a forward slot for a per-client
+grant-type allowlist.
+
+**#5 — the documented `input-event` body omitted a required field.** The reference showed
+`{"event": {...}}`, but `client_id` is required on BOTH pair-mode legs: the first event
+(which fires the takeover transition) rejects without it, and later events must carry the
+SAME id that owns `human-driving`. So the one 200 the page documents as reachable on that
+endpoint was unreachable with the documented body, and the 400 row blamed the event union
+exclusively — sending a customer to debug coordinates. Body, prose and the 400 row fixed,
+plus the `409 pair-mode-conflict` row that was missing entirely.
+
+**#6 — the public rate-limits page told Free readers to size against Solo Manual.** Every
+one of free's four buckets is smaller: global 60/1 vs 120/2, `sessions:create` 5 vs 10,
+`agent_sessions:message` 20 vs 40, `input_event` 240 vs 360. A free reader sized against
+the Personal column and got 429'd at half the documented global capacity. The page now
+states free's own numbers.
+
+This one had drifted because **nothing pinned it** — so the new guard is CROSS-SOURCE, not
+a text pin: it reads `TIER_RATE_LIMIT_DEFAULTS.free` and requires the page to quote those
+exact capacities, and separately asserts free still differs from solo on all four (so if
+the tiers are ever unified the prose gets rewritten deliberately). Mutation-proved by
+restating free's global as solo's. A _second_, pre-existing pin in
+`apps/server/tests` also froze the false sentence and was updated in the same commit —
+two pins on one lie, which is why it survived.
+
+**Shared-worktree note.** The gate's `ci-workflow-parity` failure was a peer's: `ci.yml`
+had an uncommitted rename of the Build step (the exact thing that pin checks), and their
+edit was mid-flight with a duplicated `env:` key. Attributed to the dirty file's owner and
+left untouched; it went green on its own once they finished. Also rebuilt `apps/docs` and
+`apps/marketing-site` when the dist-freshness guard flagged them, rather than repinning
+onto stale markup.
+
+Suites: **2027 files / 21,195 passing** across server + docs + marketing unit projects,
+`tsc` clean on both server projects. Remaining sweep items: #8, #9, #10, #11. #2 (the AUP
+"billing pauses" promise) stays flagged as a business decision, untouched.

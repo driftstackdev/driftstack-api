@@ -88,3 +88,60 @@ describe('V-737 POST /v1/oauth/token surfaces the OAuth error code', () => {
     expect(body.type).toMatch(/unauthorized$/);
   });
 });
+
+// V-753 — the gap V-737 left. Every test above stubs `exchangeCode` and therefore only
+// exercises the SERVICE-layer OAuthError path, where oauthErrorToHttp attaches `error`.
+// Schema-shape rejections never reach the service: parseOrThrow throws BadRequestError
+// directly, and it used to pass no extensions — so the most common integration-time
+// mistakes returned a 400 with a raw Zod string and NO `error` field, on a page that
+// tells integrators to branch on `error`.
+describe('V-753 schema-shape 400s also carry the RFC 6749 §5.2 `error` field', () => {
+  /** A service that must never be reached — these requests fail validation first. */
+  function appWithUnreachableService() {
+    const app = Fastify({ logger: false });
+    registerErrorHandler(app);
+    app.decorateRequest('account', null);
+    app.decorate('requireAuth', () => Promise.resolve());
+    app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
+    app.decorate('rateLimit', (_bucket: string) => () => Promise.resolve());
+    const service = {
+      exchangeCode: () => Promise.reject(new Error('validation should have rejected first')),
+    } as unknown as OAuthService;
+    registerOAuthRoutes(app, { service, rateLimitStore: new MemoryRateLimitStore() });
+    return app;
+  }
+
+  const malformed: ReadonlyArray<[string, Record<string, unknown>]> = [
+    ['missing code_verifier', { ...BODY, code_verifier: undefined }],
+    ['code_verifier under the RFC 7636 43-char floor', { ...BODY, code_verifier: 'too-short' }],
+    ['missing client_secret', { ...BODY, client_secret: undefined }],
+    ['redirect_uri that is not a URL', { ...BODY, redirect_uri: 'not-a-url' }],
+  ];
+
+  for (const [label, payload] of malformed) {
+    it(`carries error=invalid_request on a 400 for ${label}`, async () => {
+      const app = appWithUnreachableService();
+      const res = await app.inject({ method: 'POST', url: '/v1/oauth/token', payload });
+      await app.close();
+
+      expect(res.statusCode).toBe(400);
+      const body = res.json<{ error?: string; detail?: string; type?: string }>();
+      // The whole point: a standard OAuth client reads `error` and gets a real code
+      // instead of undefined.
+      expect(body.error).toBe('invalid_request');
+      expect(body.type).toMatch(/bad-request$/);
+      // detail is still the Zod prose — useful to a human, and deliberately NOT the
+      // thing a client is asked to branch on.
+      expect(typeof body.detail).toBe('string');
+    });
+  }
+
+  it('leaves the authorize endpoint consistent — its query validation carries the field too', async () => {
+    const app = appWithUnreachableService();
+    const res = await app.inject({ method: 'GET', url: '/v1/oauth/authorize?client_id=only' });
+    await app.close();
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error?: string }>().error).toBe('invalid_request');
+  });
+});

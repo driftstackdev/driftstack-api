@@ -2081,7 +2081,7 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'invalid_grant / invalid_request / invalid_scope / access_denied.',
         content: problemContent,
       },
-      401: { description: 'invalid_client / unauthorized_client.', content: problemContent },
+      401: { description: 'invalid_client.', content: problemContent },
     },
   });
   registerRoute(r, {

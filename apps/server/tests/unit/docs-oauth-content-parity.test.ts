@@ -95,24 +95,39 @@ describe('Arc 6 docs.oauth — apps/docs/src/pages/api/oauth.md parity', () => {
     expect(body).toMatch(/5 minutes/i);
   });
 
-  it('error table includes all 5 OAuthError codes from services/oauth.ts', () => {
-    // The OAuthError class' code-union is:
-    //   invalid_client | unauthorized_client | invalid_request |
-    //   invalid_scope | invalid_grant | access_denied
-    const codes = [
+  // V-753 — this used to assert `serviceSource` merely CONTAINS each code string,
+  // which the type union satisfies on its own. So it read as "the service can emit
+  // this" while only proving "the identifier appears in the file" — and that is what
+  // forced `unauthorized_client` into the customer-facing error table even though no
+  // call site produces it. A customer branching on it had a permanently dead branch.
+  // Now it checks PRODUCERS: `new OAuthError('<code>'`.
+  it('every OAuth code that has a PRODUCER is documented, and declared-but-unproduced codes are not', () => {
+    const producedCodes = [
       'invalid_client',
-      'unauthorized_client',
       'invalid_request',
       'invalid_scope',
       'invalid_grant',
       'access_denied',
     ];
-    for (const c of codes) {
-      // Service still emits the code.
-      expect(serviceSource).toMatch(new RegExp(`'${c}'`));
-      // Doc page surfaces it.
+    for (const c of producedCodes) {
+      expect(
+        new RegExp(`new OAuthError\\(\\s*'${c}'`).test(serviceSource),
+        `services/oauth.ts must actually throw ${c} — if this code was retired, remove its row from the docs table too`,
+      ).toBe(true);
       expect(body.includes(c), `docs page must reference ${c}`).toBe(true);
     }
+
+    // `unauthorized_client` is a real RFC 6749 code kept as a forward slot (union
+    // member + a defensive case in the status mapper) for a future per-client
+    // grant-type allowlist. Nothing throws it today, so it must NOT be advertised.
+    expect(
+      new RegExp("new OAuthError\\(\\s*'unauthorized_client'").test(serviceSource),
+      'unauthorized_client now has a producer — document it in the errors table and move it into producedCodes above',
+    ).toBe(false);
+    expect(
+      body.includes('unauthorized_client'),
+      'unauthorized_client has no producer, so the customer error table must not list it',
+    ).toBe(false);
   });
 
   it('documents that refresh tokens are NOT issued (anti-feature; intentional)', () => {
