@@ -74,21 +74,24 @@ describe('W554.C /docs/deployment/stripe-webhook-testing.md content parity', () 
     expect(body).toMatch(/from Stripe's network to our endpoint\./);
   });
 
-  it("Local + Staging procedure framing pinned: '## Local development — `stripe listen`' + 'stripe listen --forward-to http://localhost:3000/v1/webhooks/stripe' + 'Set this in your .env as STRIPE_WEBHOOK_SIGNING_SECRET, restart server.' + 'stripe trigger customer.subscription.created' + 'stripe trigger invoice.paid' + '## Staging environment' + 'Create a **test-mode** webhook endpoint in the Stripe Dashboard pointed at `https://staging.driftstack.dev/v1/webhooks/stripe`.' + 'SSH into the staging host and write it to the staging .env (`STRIPE_WEBHOOK_SIGNING_SECRET=whsec_...`) per the locked stripe-credential-handling memory — never paste webhook secrets into chat or PR diffs.' — pinned so the live-staging-webhook + SSH-write-never-chat-or-PR commitment survives", () => {
+  it("Local + Staging procedure framing pinned. V-755 CORRECTED the env var name in both procedures: the server reads STRIPE_WEBHOOK_SECRET (config.ts), and setting STRIPE_WEBHOOK_SIGNING_SECRET instead leaves POST /v1/webhooks/stripe UNREGISTERED — Stripe's deliveries 404 and no subscription event is ever processed, so customers pay without being upgraded. The wrong name almost certainly came from the app-level dep being called stripeWebhookSigningSecret. Still pins the SSH-write-never-chat-or-PR commitment.", () => {
     expect(body).toMatch(/## Local development — `stripe listen`/);
     expect(body).toMatch(
       /stripe listen --forward-to http:\/\/localhost:3000\/v1\/webhooks\/stripe/,
     );
-    expect(body).toMatch(
-      /Set this in your \.env as STRIPE_WEBHOOK_SIGNING_SECRET, restart server\./,
-    );
+    expect(body).toMatch(/Set this in your \.env as STRIPE_WEBHOOK_SECRET, restart server\./);
     expect(body).toMatch(/stripe trigger customer\.subscription\.created/);
     expect(body).toMatch(/stripe trigger invoice\.paid/);
     expect(body).toMatch(/## Staging environment/);
     expect(body).toMatch(/Create a \*\*test-mode\*\* webhook endpoint in the Stripe Dashboard/);
     expect(body).toMatch(/pointed at `https:\/\/staging\.driftstack\.dev\/v1\/webhooks\/stripe`/);
     expect(body).toMatch(/SSH into the staging host and write it/);
-    expect(body).toMatch(/to the staging \.env \(`STRIPE_WEBHOOK_SIGNING_SECRET=whsec_\.\.\.`\)/);
+    expect(body).toMatch(/to the staging \.env \(`STRIPE_WEBHOOK_SECRET=whsec_\.\.\.`\)/);
+    // V-755 — the wrong name must not return as an INSTRUCTION. It still appears once,
+    // deliberately, inside the warning note explaining why it is wrong.
+    expect(body).not.toMatch(/Set this in your \.env as STRIPE_WEBHOOK_SIGNING_SECRET/);
+    expect(body).not.toMatch(/\(`STRIPE_WEBHOOK_SIGNING_SECRET=whsec_/);
+    expect(body).toMatch(/leaves the endpoint UNREGISTERED/);
     expect(body).toMatch(/per the locked stripe-credential-handling memory — never paste/);
     expect(body).toMatch(/webhook secrets into chat or PR diffs\./);
   });

@@ -209,7 +209,7 @@ delete is the realistic risk.
 
 ### Scenario 6 — Compromised signing key / secret
 
-A `STRIPE_WEBHOOK_SIGNING_SECRET`, scrypt secret, JWT key, or
+A `STRIPE_WEBHOOK_SECRET`, scrypt secret, JWT key, or
 similar leaked (committed to a public repo, found in a screenshot,
 suspected via abuse signals).
 

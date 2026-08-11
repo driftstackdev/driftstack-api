@@ -45,7 +45,11 @@ stripe listen --forward-to http://localhost:3000/v1/webhooks/stripe
 
 # The CLI prints the signing secret on first connect:
 #   > Ready! Your webhook signing secret is whsec_xxxxxxxx
-# Set this in your .env as STRIPE_WEBHOOK_SIGNING_SECRET, restart server.
+# Set this in your .env as STRIPE_WEBHOOK_SECRET, restart server.
+# (The env var is STRIPE_WEBHOOK_SECRET even though Stripe's UI and the
+#  server's internal dep are both named "signing secret" — setting
+#  STRIPE_WEBHOOK_SIGNING_SECRET leaves the endpoint UNREGISTERED, so
+#  Stripe's deliveries 404 and no subscription event is ever processed.)
 
 # In a second terminal, trigger test events:
 stripe trigger customer.subscription.created
@@ -70,7 +74,7 @@ Once staging has a Hetzner host + a real public URL:
 1. Create a **test-mode** webhook endpoint in the Stripe Dashboard
    pointed at `https://staging.driftstack.dev/v1/webhooks/stripe`.
 2. Copy the signing secret. SSH into the staging host and write it
-   to the staging .env (`STRIPE_WEBHOOK_SIGNING_SECRET=whsec_...`)
+   to the staging .env (`STRIPE_WEBHOOK_SECRET=whsec_...`)
    per the locked stripe-credential-handling memory — never paste
    webhook secrets into chat or PR diffs.
 3. Restart the staging server.

@@ -32327,3 +32327,65 @@ deliberately untouched: it is the one item where code never implemented publishe
 and choosing between wiring `pause_collection` and amending binding legal copy is a
 business decision. Still flagged alongside V-748 (privacy-policy §9 deletions nothing
 implements).
+
+## V-755 — three operator runbooks told you to set an env var the server never reads
+
+Found by auditing operator docs against implementation while the parallel surface sweep
+ran. Mechanical first: every `scripts/*` path referenced by `docs/runbooks`,
+`docs/deployment` and `docs/operations` exists (12/12), and every `npm run` target they
+name exists (10/10). Then the env-var names, and that is where it broke.
+
+**The defect.** `config.ts` reads `STRIPE_WEBHOOK_SECRET`. Three deployment docs, in four
+places, told an operator to set **`STRIPE_WEBHOOK_SIGNING_SECRET`**:
+
+- `docs/deployment/stripe-webhook-testing.md` — the local `stripe listen` step ("Set this
+  in your .env as …") AND the staging SSH-write step (`…=whsec_...`);
+- `docs/deployment/runbook.md:75` — inside the _"if signature verification is failing"_
+  troubleshooting step;
+- `docs/deployment/dr-runbook.md:212` — the compromised-signing-key rotation scenario.
+
+The two runbook hits are the worst possible placements: they are the pages you open when
+Stripe webhooks are already broken, and they name the wrong knob.
+
+**Why it is not a warning.** `app.ts` registers `POST /v1/webhooks/stripe` only when
+`stripeWebhookSigningSecret` is provided, and `bootstrap.ts` sources that from
+`config.stripe.webhookSecret`. Set the wrong variable and the route is **never registered
+at all** — Stripe's deliveries hit the global 404 handler, no subscription event is ever
+processed, and customers pay without being upgraded. The operator gets silence, not an
+error, because nothing on the server is looking for the name they set.
+
+**Why it drifted, which is the durable part.** The server-internal dependency is called
+`stripeWebhookSigningSecret` while the env var is `STRIPE_WEBHOOK_SECRET`. Stripe's own UI
+also calls the value a "signing secret". So the wrong name is the _natural_ thing to write,
+and the canonical `docs/deployment/env-vars.md` has it right — another instance of one
+surface correct and its siblings missed.
+
+**Fixed** all four, keeping one deliberate mention inside a new warning note that explains
+the consequence, so the next author does not "helpfully" re-align the docs to the internal
+name.
+
+**Guarded**, `deployment-docs-env-names-resolve.test.ts`: every `STRIPE_*` name appearing
+in any operator doc must be one `config.ts` reads off the env object, with the failure
+message printing the valid set. Scoped to the STRIPE family **on purpose** — that family
+is wholly owned by `config.ts`, so docs ⊆ code is sound, whereas a blanket check over
+every env-looking token is not: 17 of the names in these docs are legitimately external
+(Cloudflare project ids, Sentry org/project, GitHub Actions vars) and read by nothing here,
+so it would need an allowlist that would itself go stale. A second assertion pins the
+internal-dep-vs-env-var asymmetry that caused this. Vacuity-guarded (asserts the extracted
+set exceeds 3 and contains the real name) and mutation-proved by restoring the wrong name
+in `runbook.md`, with byte-identical restore.
+
+Also updated the parity pin that had frozen BOTH wrong instructions, and it now asserts
+the wrong name cannot return as an instruction while permitting it inside the warning.
+
+**Method note.** My first pass at this reported 50 unresolved env names. That was my
+extraction, not 50 defects: `config.ts` reads `env.X` from a `loadConfig(env)` parameter,
+not `process.env.X`, so my known-set missed nearly everything. Re-measured correctly it was
+17, and reading each one left exactly one genuine defect. A derived measurement over the
+wrong key produces a confident wrong finding — prove the key first.
+
+**Gate.** 2777 files, 28,525 passing. The two reds in that run were a peer's: an untracked
+in-flight `sdk-typescript-against-the-real-server.test.ts`, and a transient collection
+failure in `durable-webhook-signature-sdk-verify.test.ts` (imports SDK build output; the
+peer was rebuilding it mid-run) which passes 12/12 in isolation. Attributed to the dirty
+files' owner rather than investigated, per the shared-worktree rule.

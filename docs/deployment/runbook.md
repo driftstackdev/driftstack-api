@@ -72,7 +72,7 @@ Symptoms: customers paying but subscription state not updating.
    row should exist with the event_id.
 3. Replay the failed delivery from Stripe Dashboard.
 4. If signature verification is failing, the webhook signing secret
-   in `STRIPE_WEBHOOK_SIGNING_SECRET` is out of sync with the
+   in `STRIPE_WEBHOOK_SECRET` is out of sync with the
    Dashboard endpoint config — rotate via Hetzner SSH-write per
    the locked stripe-credential-handling memory.
 
