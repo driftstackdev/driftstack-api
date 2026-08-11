@@ -13741,7 +13741,7 @@
             }
           },
           "401": {
-            "description": "invalid_client / unauthorized_client.",
+            "description": "invalid_client.",
             "content": {
               "application/problem+json": {
                 "schema": {
