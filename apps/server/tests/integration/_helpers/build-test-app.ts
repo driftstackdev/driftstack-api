@@ -6,7 +6,7 @@
 //
 // Returns the app, plain-text key, and helpers for direct repo manipulation.
 
-import { buildApp } from '../../../src/lib/app.js';
+import { buildApp, type ReadinessCheck } from '../../../src/lib/app.js';
 import { InMemoryOAuthStore } from '../../../src/services/oauth.js';
 import type { NowPaymentsApiClient } from '../../../src/lib/nowpayments-api.js';
 import type { R2 } from '../../../src/lib/r2.js';
@@ -229,6 +229,12 @@ function createRecordingEmailService(realService: EmailService): {
 }
 
 export interface TestAppOptions {
+  /**
+   * Readiness probes for `/ready`. Omitted ⇒ none, which is why the route
+   * returns 200 with an empty checks array in almost every fixture — and why
+   * its 503 path had no coverage at all until this seam existed.
+   */
+  readinessChecks?: ReadinessCheck[];
   tier?: AccountTier;
   scopes?: ApiKeyScope[];
   accountStatus?: 'active' | 'suspended' | 'deleted';
@@ -1490,6 +1496,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   const app = await buildApp({
     logger: testLogger,
+    ...(opts.readinessChecks !== undefined ? { readinessChecks: opts.readinessChecks } : {}),
     // Gates the whole OAuth provider surface in buildApp, including the
     // staff-only client routes. Off by default so existing fixtures are
     // unchanged.

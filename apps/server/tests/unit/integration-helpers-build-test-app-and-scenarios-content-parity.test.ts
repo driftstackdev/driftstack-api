@@ -124,7 +124,9 @@ describe('W795 integration _helpers/build-test-app + scenarios parity', () => {
   it('CRITICAL real-app-builder pinned — imports buildApp from src/lib/app.js. Drift to inlining the app construction would let the test fixture diverge from production app shape.', () => {
     const p = read(BUILD_APP);
 
-    expect(p).toMatch(/import \{ buildApp \} from '\.\.\/\.\.\/\.\.\/src\/lib\/app\.js';/);
+    expect(p).toMatch(
+      /import \{ buildApp, type ReadinessCheck \} from '\.\.\/\.\.\/\.\.\/src\/lib\/app\.js';/,
+    );
   });
 
   it('CRITICAL randomUUID alias + InMemoryCryptoOrdersRepo pinned. Drift would change test-data shape for crypto-orders integration tests.', () => {
