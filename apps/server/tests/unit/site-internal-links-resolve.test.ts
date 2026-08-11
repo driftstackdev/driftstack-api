@@ -14,9 +14,19 @@
 // `+` or a `${` is skipped rather than guessed at. What remains is the set that
 // can be resolved without evaluating anything.
 //
-// Cross-site links are also skipped: the sites deploy to separate hosts, so
-// `https://docs.driftstack.dev/...` cannot be resolved against a sibling's
-// pages directory and is not this check's subject.
+// FIRST-PARTY CROSS-SITE links are checked too, and that is the customer
+// journey: marketing sends people to docs, docs sends them to the dashboard.
+// The sites deploy to separate hosts, but all five apps live in this repo, so
+// `https://docs.driftstack.dev/api/sessions` resolves against `apps/docs`.
+// A dead link there is a dead end at the exact moment someone is trying to
+// adopt the product. Third-party hosts (github, sentry, the payment providers)
+// are not this check's subject and are skipped.
+//
+// `public/` is resolved as well as `src/pages`. Static files are real routes —
+// `/.well-known/security.txt` is served from `public/` and is what a security
+// researcher fetches to report a vulnerability. Without this the first cross-
+// site pass reported it as broken, which was the resolver's blind spot rather
+// than a defect.
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
@@ -28,6 +38,20 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
 const SITES = ['marketing-site', 'docs', 'customer-dashboard', 'admin-panel', 'status-site'];
 const PAGE_EXTENSIONS = new Set(['.astro', '.md', '.mdx']);
+
+/**
+ * First-party hosts, mapped to the app in this repo that serves them.
+ *
+ * `api.driftstack.dev` is deliberately absent: it is the Fastify server, not a
+ * page app, and its surface is covered by the OpenAPI route-coverage
+ * invariants. Staging is absent for the same reason plus impermanence.
+ */
+const FIRST_PARTY_HOSTS: Record<string, string> = {
+  'driftstack.dev': 'marketing-site',
+  'docs.driftstack.dev': 'docs',
+  'app.driftstack.dev': 'customer-dashboard',
+  'status.driftstack.dev': 'status-site',
+};
 
 function walk(dir: string): string[] {
   if (!existsSync(dir)) return [];
@@ -58,7 +82,24 @@ function routesOf(site: string): { staticRoutes: Set<string>; dynamic: RegExp[] 
       staticRoutes.add(route);
     }
   }
+  // Static assets are routes too: anything under `public/` is served verbatim.
+  const publicRoot = resolve(REPO_ROOT, 'apps', site, 'public');
+  for (const file of walkAll(publicRoot)) {
+    staticRoutes.add(`/${relative(publicRoot, file)}`.replace(/\/$/, ''));
+  }
   return { staticRoutes, dynamic };
+}
+
+/** Every file under a directory, whatever its extension. */
+function walkAll(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...walkAll(full));
+    else out.push(full);
+  }
+  return out;
 }
 
 interface Link {
@@ -86,6 +127,42 @@ function linksOf(site: string): Link[] {
     }
   }
   return out;
+}
+
+interface CrossLink {
+  from: string;
+  host: string;
+  path: string;
+}
+
+/** Literal absolute links from one site into another first-party app. */
+function crossSiteLinksOf(site: string): CrossLink[] {
+  const root = resolve(REPO_ROOT, 'apps', site, 'src', 'pages');
+  const out: CrossLink[] = [];
+  for (const file of walk(root)) {
+    const text = readFileSync(file, 'utf8');
+    for (const m of text.matchAll(/href="https?:\/\/([^/"]+)([^"]*)"/g)) {
+      const host = m[1] ?? '';
+      const raw = m[2] ?? '';
+      if (FIRST_PARTY_HOSTS[host] === undefined) continue;
+      if (raw.includes("'") || raw.includes('+') || raw.includes('${') || raw.includes('`')) {
+        continue;
+      }
+      const path = ((raw.split('#')[0] ?? '').split('?')[0] ?? '').replace(/\/$/, '') || '/';
+      out.push({ from: relative(root, file), host, path });
+    }
+  }
+  return out;
+}
+
+function unresolvedCrossSite(site: string): string[] {
+  return crossSiteLinksOf(site)
+    .filter(({ host, path }) => {
+      const target = FIRST_PARTY_HOSTS[host] ?? '';
+      const { staticRoutes, dynamic } = routesOf(target);
+      return !staticRoutes.has(path) && !dynamic.some((re) => re.test(path));
+    })
+    .map(({ from, host, path }) => `${site}: ${host}${path} <- ${from}`);
 }
 
 function unresolved(site: string): string[] {
@@ -127,6 +204,16 @@ describe('every internal site link resolves to a page that exists', () => {
     expect(docs.staticRoutes.has('/does-not-exist'), 'a made-up route does not resolve').toBe(
       false,
     );
+  });
+
+  it('CRITICAL every FIRST-PARTY cross-site link resolves against the app that serves it. This is the adoption path — marketing sends people to docs, docs sends them to the dashboard — so a dead link here is a dead end at the moment someone is trying to use the product.', () => {
+    const total = SITES.reduce((n, s) => n + crossSiteLinksOf(s).length, 0);
+    // MEASURED: 83 first-party cross-site links today, 51 of them into docs.
+    expect(total, 'first-party cross-site links found').toBeGreaterThan(60);
+    expect(
+      SITES.flatMap((site) => unresolvedCrossSite(site)),
+      'cross-site link(s) pointing at a page the target app does not serve:',
+    ).toEqual([]);
   });
 
   it('CRITICAL no internal link points at a route no site file produces. A renamed page leaves the old link behind, and the only symptom is a 404 on a customer-facing page — nothing errors and nothing is logged.', () => {
