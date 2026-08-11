@@ -105,6 +105,30 @@ function undocumentedKeys(example: unknown, schema: JsonSchema | undefined, path
   return out;
 }
 
+/**
+ * Doc keys the spec does not list but that the server genuinely sends.
+ *
+ * Needed because this check is deliberately STRICTER than the schema. Only 11
+ * of 447 object schemas set `additionalProperties: false`, so honouring the
+ * schema literally would make the check nearly vacuous — an undocumented key
+ * would almost never be a violation and the status.md defect it was written for
+ * would sail through. Keeping it strict means the rare legitimate case is
+ * recorded here, with the evidence, rather than silently tolerated.
+ *
+ * Exact, and checked for staleness below.
+ */
+const VERIFIED_UNDOCUMENTED: Record<string, string> = {
+  'pair_mode_state.requestedByClientId':
+    'REAL. The server union in services/agent-pair-mode-state.ts includes ' +
+    "{ kind: 'takeover-pending'; requestedByClientId; requestedAt }, and the " +
+    'published schema is z.object({ kind }).passthrough(), which permits extra ' +
+    'keys. So the docs are right and the SPEC is loose — it flattens a ' +
+    'discriminated union to its common member. Raised on the A2 bus rather ' +
+    'than restructured here, since pair-mode is A3-s active surface (V-757).',
+  'pair_mode_state.requestedAt':
+    'Same union member and the same passthrough schema as the entry above.',
+};
+
 interface Pair {
   file: string;
   endpoint: string;
@@ -119,7 +143,12 @@ function scan(): { pairs: Pair[]; matched: number; labelled: number } {
 
   for (const file of readdirSync(DOCS).filter((f) => f.endsWith('.md'))) {
     const text = readFileSync(resolve(DOCS, file), 'utf8');
-    for (const m of text.matchAll(/Response \(`(\d{3})`\):\s*\n+```json\n([\s\S]*?)```/g)) {
+    // BOTH marker spellings. The original regex required the status in
+    // backticks — `Response (`200`):` — which is the MINORITY form: the corpus
+    // uses the bare `Response (200):` 27 times against 10 backticked. So the
+    // guard was matching the smaller half of the convention it was written for,
+    // and 27 examples went unchecked because of a pair of backticks.
+    for (const m of text.matchAll(/Response \(`?(\d{3})`?\)[^\n]*:\s*\n+```json\n([\s\S]*?)```/g)) {
       labelled += 1;
       const status = m[1] ?? '';
       // The endpoint is the LAST `METHOD /v1/...` before this block, which is
@@ -142,13 +171,50 @@ function scan(): { pairs: Pair[]; matched: number; labelled: number } {
       const schema = responseSchema(path, method, status);
       if (schema?.properties === undefined) continue;
       matched += 1;
-      const undocumented = undocumentedKeys(example, schema);
+      const undocumented = undocumentedKeys(example, schema).filter(
+        // Match on the LEAF path so an exemption cannot acquit a whole subtree.
+        (path) => VERIFIED_UNDOCUMENTED[path.replace(/\[\d+\]/g, '')] === undefined,
+      );
       if (undocumented.length > 0) {
         pairs.push({ file, endpoint: `${method.toUpperCase()} ${path}`, undocumented });
       }
     }
   }
   return { pairs, matched, labelled };
+}
+
+/**
+ * Every undocumented key the examples contain, BEFORE exemptions are applied.
+ *
+ * The staleness arm needs this: exempted keys are filtered out of `scan()` by
+ * construction, so checking an exemption against the filtered result would
+ * always call it stale.
+ */
+function scanRaw(): Set<string> {
+  const out = new Set<string>();
+  if (!existsSync(DOCS)) return out;
+  for (const file of readdirSync(DOCS).filter((f) => f.endsWith('.md'))) {
+    const text = readFileSync(resolve(DOCS, file), 'utf8');
+    for (const m of text.matchAll(/Response \(`?(\d{3})`?\)[^\n]*:\s*\n+```json\n([\s\S]*?)```/g)) {
+      const status = m[1] ?? '';
+      const before = text.slice(0, m.index ?? 0);
+      const eps = [...before.matchAll(/`(GET|POST|PATCH|DELETE) (\/v1\/[^`\s]+)`/g)];
+      const last = eps.at(-1);
+      if (last === undefined) continue;
+      const method = (last[1] ?? '').toLowerCase();
+      const path = (last[2] ?? '').split('?')[0]?.replace(/\/$/, '') ?? '';
+      let example: unknown;
+      try {
+        example = JSON.parse(m[2] ?? '');
+      } catch {
+        continue;
+      }
+      const schema = responseSchema(path, method, status);
+      if (schema?.properties === undefined) continue;
+      for (const k of undocumentedKeys(example, schema)) out.add(k.replace(/\[\d+\]/g, ''));
+    }
+  }
+  return out;
 }
 
 describe('customer doc response examples match the published contract', () => {
@@ -190,6 +256,18 @@ describe('customer doc response examples match the published contract', () => {
       undocumentedKeys({ b: 1 }, { anyOf: [{ properties: { a: {} } }, { properties: { b: {} } }] }),
       'a key defined by one branch of a union is accepted',
     ).toEqual([]);
+  });
+
+  it('CRITICAL every verified-undocumented entry still describes a key the docs really show. An entry whose key is gone exempts nothing and reads as reviewed.', () => {
+    const { pairs } = scan();
+    const shown = new Set(pairs.flatMap((p) => p.undocumented));
+    // The entries suppress their keys, so they cannot appear in `pairs`. Assert
+    // against the raw scan instead: an exemption must correspond to a key some
+    // example actually contains.
+    const raw = scanRaw();
+    const stale = Object.keys(VERIFIED_UNDOCUMENTED).filter((k) => !raw.has(k));
+    expect(stale, 'exemption(s) no example produces any more:').toEqual([]);
+    expect(shown.size, 'no unexplained keys leak through').toBe(0);
   });
 
   it('CRITICAL no doc example shows a field the API does not define. This is the exact defect found in status.md, where four of five documented SLA field names did not exist on the route.', () => {
