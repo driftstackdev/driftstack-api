@@ -66,7 +66,9 @@ jobs:
       # SDK before typecheck ensures dist/ exists when the examples are
       # checked. Same goes for the workspace build of api-types — the SDK
       # depends on its compiled output.
-      - name: Build (api-types + sdk + server)
+      - name: Build (packages + server + all six Astro apps)
+        env:
+          PUBLIC_API_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL || 'https://api.driftstack.dev' }}
         run: npm run build
 
       - name: Build SDK (tsup ESM + CJS + .d.ts)
@@ -164,6 +166,11 @@ jobs:
         run: npm ci
 
       - name: Build
+        # Same fail-closed dashboards as build-test: `npm run build` builds all
+        # six Astro apps and admin-panel throws without this. Missing here meant
+        # e2e would fail at its own build step even once build-test was fixed.
+        env:
+          PUBLIC_API_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL || 'https://api.driftstack.dev' }}
         run: npm run build
 
       - name: Run e2e suite

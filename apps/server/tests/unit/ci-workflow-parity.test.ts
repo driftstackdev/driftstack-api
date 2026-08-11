@@ -127,7 +127,12 @@ describe('W723 GitHub Actions ci.yml workflow parity', () => {
     const c = read(CI);
 
     const order = [
-      'Build (api-types + sdk + server)',
+      // Renamed 2026-08-11: the old label claimed the step built only
+      // api-types + sdk + server, but `npm run build` is
+      // build:packages && build:apps — it builds all six Astro apps, two
+      // of which fail closed without PUBLIC_API_BASE_URL. That label is
+      // what let the missing env go unnoticed.
+      'Build (packages + server + all six Astro apps)',
       'Build SDK (tsup ESM + CJS + .d.ts)',
       'Typecheck',
       'Lint',
