@@ -3630,6 +3630,16 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: CreateCheckoutSessionResponseSchema } },
       },
       ...errors4xx,
+      // Refuses rather than minting a SECOND concurrently-billed subscription
+      // (the `findActiveSubscription` guard in billing.ts). A real business
+      // state, and undocumented until now.
+      409: {
+        description: 'Account already has an active subscription; use the customer portal.',
+        content: problemContent,
+      },
+      // Registered as a FeatureUnavailable stub wherever `billingService` is
+      // omitted from AppDeps, exactly like the GET variant below.
+      503: { description: 'Billing not enabled on this deployment.', content: problemContent },
     },
   });
   registerRoute(r, {
@@ -3645,6 +3655,14 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: CreatePortalSessionResponseSchema } },
       },
       ...errors4xx,
+      // The account has no Stripe customer record until it completes a
+      // checkout, so this is the ORDINARY answer for a free-tier caller — not
+      // an edge case — and the contract did not mention it.
+      409: {
+        description: 'Account has no Stripe customer record yet; complete a checkout first.',
+        content: problemContent,
+      },
+      503: { description: 'Billing not enabled on this deployment.', content: problemContent },
     },
   });
   // v2-#26 — dashboard-friendly 302 redirect to the Stripe Customer
@@ -3669,6 +3687,13 @@ function buildRegistry(): OpenAPIRegistry {
         },
       },
       ...errors4xx,
+      // Same ConflictError as POST /v1/billing/portal-session — both call
+      // `createPortalSession`, so both answer 409 for an account that has never
+      // checked out. Only the 503 was documented here.
+      409: {
+        description: 'Account has no Stripe customer record yet; complete a checkout first.',
+        content: problemContent,
+      },
       503: { description: 'Billing not enabled on this deployment.', content: problemContent },
     },
   });
@@ -3692,6 +3717,9 @@ function buildRegistry(): OpenAPIRegistry {
           'Key lacks the read:billing scope (a broad read or account_owner key satisfies it).',
         content: problemContent,
       },
+      // Also registered with the disabled-billing stub, so it answers 503 on a
+      // deployment without billing wired.
+      503: { description: 'Billing not enabled on this deployment.', content: problemContent },
     },
   });
 

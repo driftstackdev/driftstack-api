@@ -20835,8 +20835,28 @@
               }
             }
           },
+          "409": {
+            "description": "Account already has an active subscription; use the customer portal.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Billing not enabled on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20905,8 +20925,28 @@
               }
             }
           },
+          "409": {
+            "description": "Account has no Stripe customer record yet; complete a checkout first.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Billing not enabled on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20962,6 +21002,16 @@
           },
           "403": {
             "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Account has no Stripe customer record yet; complete a checkout first.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21115,6 +21165,16 @@
           },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Billing not enabled on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
