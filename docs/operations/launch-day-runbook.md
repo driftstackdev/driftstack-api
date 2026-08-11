@@ -168,11 +168,13 @@ If any of these fire, treat as escalation:
 # Refund via Stripe dashboard
 # Stripe → Customers → search by email → Charges → Refund
 
-# Document in audit log via the admin endpoint:
-curl -X POST https://api.driftstack.dev/v1/admin/accounts/{acc_id}/audit \
+# Record the manual refund via the purpose-built admin endpoint. It is
+# audit-only and does NOT call Stripe — the money movement above is the
+# operator's action in the Stripe dashboard.
+curl -X POST https://api.driftstack.dev/v1/admin/accounts/{acc_id}/refund-record \
   -H "Authorization: Bearer ${ADMIN_KEY}" \
   -H "Content-Type: application/json" \
-  -d '{"action":"manual_refund","payload":{"amount_cents":299,"reason":"Day-1 test refund"}}'
+  -d '{"external_reference":"re_...","amount_cents":299,"currency":"eur","reason":"Day-1 test refund"}'
 ```
 
 ---

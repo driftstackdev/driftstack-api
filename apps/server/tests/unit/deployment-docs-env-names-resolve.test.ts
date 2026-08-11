@@ -22,7 +22,7 @@
 // (Cloudflare project ids, Sentry org/project, GitHub Actions vars) and read by nothing in
 // this repo, so it would need an allowlist that would itself go stale.
 
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -90,5 +90,144 @@ describe('deployment docs name env vars the server actually reads (V-755)', () =
     // a reader does not "helpfully" align the docs to the internal name again.
     expect(config).toMatch(/env\.STRIPE_WEBHOOK_SECRET/);
     expect(config).not.toMatch(/env\.STRIPE_WEBHOOK_SIGNING_SECRET/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V-756 — the same lens on HTTP paths. Five operator docs told an operator to hit
+// endpoints that do not exist:
+//   • dr-runbook.md named `/v1/version` in THREE places — the DR cutover check and both
+//     rollback confirmations. `/version` is deliberately unversioned because the OpenAPI
+//     security invariant requires every `/v1/*` path to be authenticated and this one is
+//     intentionally public, so `/v1/version` can never exist.
+//   • livekit-go-live.md named `/v1/sessions/:id/livekit-token` (real route is
+//     `/v1/agent-sessions/:id/livekit-token`) and `/v1/config-summary` (never built).
+//   • postmark-go-live.md named `/v1/auth/password/reset/request`; the route is
+//     `/v1/auth/password-reset/request` — a hyphen, not a path segment.
+//   • cost-monitoring.md gave a curl to `/v1/admin/scheduled-jobs/run-once`; no
+//     `/v1/admin/scheduled-jobs/*` route exists at all.
+// Every one of these sits in a procedure an operator runs while something is already
+// wrong, so the 404 arrives at the worst moment and reads as "the system is broken"
+// rather than "the doc is".
+// One matcher for both quote styles. The generic parameter must be matched
+// permissively: `app.get<{ Querystring: Record<string, string> }>(` contains a nested
+// `>`, so a `<[^>]*>` class stops early and the route is MISSED — which made this guard
+// flag /v1/auth/oauth/google/callback, a route that genuinely exists (registered in a
+// `for (const provider of ['google','github'])` loop over a template literal).
+const ROUTE_ANY = /app\.(?:get|post|patch|put|delete)[\s\S]{0,160}?\(\s*\n?\s*(['`])([^'`]+)\1/g;
+
+/** Fastify writes :id, docs write :id or {id}; compare with params erased. */
+function normalizePath(p: string): string {
+  return p
+    .replace(/\{/g, ':')
+    .replace(/\}/g, '')
+    .replace(/:[A-Za-z_][A-Za-z0-9_]*/g, ':P')
+    .replace(/\/$/, '');
+}
+
+function registeredPaths(): Set<string> {
+  const out = new Set<string>();
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir)) {
+      const full = resolve(dir, e);
+      const st = statSync(full, { throwIfNoEntry: false });
+      if (st === undefined) continue;
+      if (st.isDirectory()) walk(full);
+      else if (e.endsWith('.ts')) {
+        const src = readFileSync(full, 'utf8');
+        for (const m of src.matchAll(ROUTE_ANY)) {
+          const raw = (m[2] as string).replace(/\$\{[^}]+\}/g, ':P');
+          if (!raw.startsWith('/')) continue;
+          out.add(normalizePath(raw));
+        }
+      }
+    }
+  };
+  walk(resolve(REPO_ROOT, 'apps/server/src'));
+  return out;
+}
+
+/**
+ * Bare prefixes that appear in PROSE, not as endpoints ("the /v1/admin surface",
+ * "/v1/auth flows"). Kept explicit and short on purpose: a broad heuristic here would
+ * swallow real misses like /v1/config-summary, which is exactly what this guard is for.
+ */
+const PROSE_PREFIXES = new Set([
+  '/v1/account',
+  '/v1/admin',
+  '/v1/auth',
+  '/v1/auth/oauth',
+  '/v1/auth/oauth-client',
+  '/v1/payment',
+]);
+
+describe('operator docs reference HTTP paths the server registers (V-756)', () => {
+  it('CRITICAL every /v1/* or bare-root path in an operator doc resolves to a registered route', () => {
+    const registered = registeredPaths();
+    // Vacuity guard: if the route-literal extraction breaks, every doc path looks
+    // unknown OR the set empties and comparisons go meaningless.
+    expect(registered.size, 'routes extracted from apps/server/src').toBeGreaterThan(150);
+    expect(registered.has('/version')).toBe(true);
+    expect(registered.has('/v1/version')).toBe(false);
+
+    const offenders: string[] = [];
+    for (const file of docFiles()) {
+      const body = readFileSync(file, 'utf8');
+      const rel = file.replace(`${REPO_ROOT}/`, '');
+      const found =
+        body.match(
+          /(?:\/v1\/[A-Za-z0-9_\-/:{}.]+|\/health\b|\/ready\b|\/version\b|\/metrics\b)/g,
+        ) ?? [];
+      for (const raw of new Set(found)) {
+        const path = raw.replace(/[.,)`]+$/, '').replace(/\/$/, '');
+        if (PROSE_PREFIXES.has(path)) continue;
+        // A line-wrapped path in prose loses its tail ("…/rotate-" + newline).
+        if (/[-/]$/.test(path)) continue;
+        const norm = normalizePath(path);
+        if (registered.has(norm)) continue;
+        // Example ids inside a real path shape (inc_<uuid>, acc_<id>) normalize to a
+        // literal segment; treat a path whose parent-with-:P resolves as fine.
+        const parametrized = norm.replace(/\/[a-z]+_[A-Za-z0-9-]+$/, '/:P');
+        if (registered.has(parametrized)) continue;
+        // Prose naming a route FAMILY ("the /v1/admin/cost/accounts reads") is not a
+        // broken link: it is a strict prefix of something registered.
+        if ([...registered].some((r) => r.startsWith(`${norm}/`))) continue;
+        // Docs write a CONCRETE example where the route has a param
+        // (/v1/auth/oauth/google/callback vs /v1/auth/oauth/:P/callback). Try each
+        // segment as a parameter before calling it missing.
+        const segs = norm.split('/');
+        const anySegmentAsParam = segs.some((_, i) => {
+          if (segs[i] === '' || segs[i] === ':P') return false;
+          const probe = [...segs];
+          probe[i] = ':P';
+          return registered.has(probe.join('/'));
+        });
+        if (anySegmentAsParam) continue;
+        // A doc may name a wrong path in order to warn against it — but the skip has to
+        // be PER OCCURRENCE, not per file. A file-wide skip made this guard blind: once
+        // dr-runbook.md said "NOT `/v1/version`", every OTHER `/v1/version` in the same
+        // file (there were two more, both live instructions) became invisible. Same
+        // too-broad-negative shape that bit the AUP `reason` assertion.
+        const NEGATED = /(?:NOT|no|never|there is no|404s|does not exist|was never built)/i;
+        let flaggedHere = false;
+        for (
+          let at = body.indexOf(path);
+          at !== -1 && !flaggedHere;
+          at = body.indexOf(path, at + 1)
+        ) {
+          const context = body.slice(Math.max(0, at - 90), at + path.length + 40);
+          if (!NEGATED.test(context)) flaggedHere = true;
+        }
+        if (!flaggedHere) continue;
+        offenders.push(`${rel}: ${path}`);
+      }
+    }
+
+    expect(
+      offenders,
+      'operator doc(s) naming an HTTP path the server does not register. Each of these ' +
+        '404s for an operator mid-incident, which reads as a broken system rather than a ' +
+        'stale doc. Either correct the path or, if the endpoint was never built, say so.',
+    ).toEqual([]);
   });
 });

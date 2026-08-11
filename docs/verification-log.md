@@ -32389,3 +32389,70 @@ in-flight `sdk-typescript-against-the-real-server.test.ts`, and a transient coll
 failure in `durable-webhook-signature-sdk-verify.test.ts` (imports SDK build output; the
 peer was rebuilding it mid-run) which passes 12/12 in isolation. Attributed to the dirty
 files' owner rather than investigated, per the shared-worktree rule.
+
+## V-756 — five operator runbooks sent you to endpoints that do not exist
+
+Same lens as V-755, next axis. Mechanical checks first, all clean: every SQL table
+referenced inside a fenced query in `docs/runbooks`, `docs/deployment`, `docs/operations`
+and `docs/internal` resolves (the only non-schema names are `__drizzle_migrations` and the
+`pg_locks` / `pg_stat_activity` system catalogs). Then HTTP paths, and five docs were
+wrong:
+
+1. **`dr-runbook.md` named `/v1/version` in THREE places** — the DR cutover verification
+   (step 6) and BOTH rollback confirmations. The real endpoint is `/version`, and it is
+   unversioned _by design_: the OpenAPI security invariant requires every `/v1/*` path to
+   be authenticated and this one is deliberately public, so `/v1/version` can never exist.
+   An operator mid-cutover curls it, gets 404, and cannot confirm the new host is running
+   the expected SHA — at exactly the moment that is the only thing they need to know.
+2. **`livekit-go-live.md`** claimed the route lives in `routes/sessions-livekit-token.ts`
+   at `POST /v1/sessions/:id/livekit-token`. Both wrong: the file is
+   `agent-sessions-livekit-token.ts` and the path is
+   `/v1/agent-sessions/:id/livekit-token`. Someone verifying LiveKit is enabled gets a 404
+   and concludes it is not wired when it is.
+3. **`livekit-go-live.md`** also pointed at `/v1/config-summary` for activation flags. No
+   such route was ever built; `/version` reports them.
+4. **`postmark-go-live.md`** told an operator to `POST /v1/auth/password/reset/request`
+   while verifying email delivery. The route is `/v1/auth/password-reset/request` — a
+   hyphen, not a path segment.
+5. **`cost-monitoring.md`** gave a curl to `/v1/admin/scheduled-jobs/run-once` as the
+   recovery for a missed nightly tick. There are **no** `/v1/admin/scheduled-jobs/*` routes
+   at all. Replaced with the truth, which is better than the fiction: `claimDue` selects on
+   `run_at <= now`, so the poller re-claims any past-due job on its next tick and a missed
+   tick needs no operator action — if a job stays pending, the poller is the thing to check,
+   not the job.
+6. **`launch-day-runbook.md`** curled `POST /v1/admin/accounts/{acc_id}/audit` to record a
+   manual refund. That route does not exist — and the one that does,
+   `/v1/admin/accounts/:id/refund-record`, carries a comment saying it was built "per the
+   V-280 launch-day runbook". The endpoint was created FOR this procedure and the procedure
+   still points elsewhere. Corrected to the real path and its real body
+   (`external_reference` / `amount_cents` / `currency` / `reason`).
+
+**Guarded** by a second describe-block in `deployment-docs-env-names-resolve.test.ts`:
+every `/v1/*` or bare-root path in an operator doc must resolve to a registered route.
+Getting this guard _sound_ took four corrections, and each is a lesson:
+
+- **Nested generics broke route extraction.** `app.get<{ Querystring: Record<string, string> }>(`
+  contains a `>` inside the type argument, so a `<[^>]*>` class stopped early and the route
+  was MISSED — which made the guard flag `/v1/auth/oauth/google/callback`, a route that
+  genuinely exists. Unified to one permissive matcher that also captures template-literal
+  registrations.
+- **Docs write concrete examples where routes have params.** Added a rule that tries each
+  segment as `:P` before declaring a path missing.
+- **Prose names route families.** A path that is a strict prefix of a registered route is a
+  family reference, not a broken link.
+- **The negative-mention skip was file-wide, and that made the guard BLIND.** Once
+  `dr-runbook.md` said "NOT `/v1/version`", every other `/v1/version` in that same file —
+  two live instructions — became invisible. Caught it because the mutation proof failed to
+  red. Now the negation check is per-occurrence over a ±90-char window. This is the second
+  time this session a too-broad negative assertion silently swallowed real cases (the AUP
+  `reason` field was the first); a guard with a blind spot is worse than none, because it
+  reads as coverage.
+
+Mutation-proved in both directions after hardening: restoring `/v1/version` in the file
+that legitimately warns about it now reds, and so does restoring the wrong refund path.
+Byte-identical restores. Vacuity-guarded (asserts >150 routes extracted, `/version`
+present, `/v1/version` absent).
+
+Suites: **2034 files / 21,212 passing** (server + docs + marketing unit). The full gate's
+9 failures were entirely a peer's two untracked in-flight OpenAPI-conformance tests;
+attributed to the dirty files' owner rather than investigated.

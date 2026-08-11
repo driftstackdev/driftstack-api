@@ -60,7 +60,8 @@ DNS hijack). Code + DB intact (Neon is separate; code is in git).
 4. Confirm `/health` returns 200 + `/ready` returns 200 with all
    readiness checks green.
 5. Cut DNS (Cloudflare) to the new host.
-6. Confirm `/v1/version` reports the expected git SHA on the new
+6. Confirm `/version` (NOT `/v1/version` — this endpoint is
+   unversioned) reports the expected git SHA on the new
    host.
 
 ### Scenario 2 — Postgres logical corruption (Neon PITR)
@@ -238,7 +239,7 @@ customers.
 
 **Concrete rollback commands** (V-496 expansion):
 
-1. **Confirm the bad deploy** via `/v1/version`:
+1. **Confirm the bad deploy** via `/version`:
 
    ```
    curl -sS https://api.driftstack.dev/version | jq .
@@ -267,7 +268,7 @@ customers.
    gh run watch <run-id>
    ```
 
-4. Confirm `/v1/version` reports the revert SHA + `/ready`
+4. Confirm `/version` reports the revert SHA + `/ready`
    returns 200 + all readiness checks green:
 
    ```

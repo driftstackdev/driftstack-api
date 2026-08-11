@@ -21,8 +21,8 @@ subscriber probe.
 - [x] `apps/server/src/lib/livekit-token.ts` — pure `node:crypto`
       HS256 JWT minter mirroring LiveKit's `AccessToken` claim shape
       (commit `2b92d957`). No `livekit-server-sdk` dependency.
-- [x] `apps/server/src/routes/sessions-livekit-token.ts` —
-      `POST /v1/sessions/:id/livekit-token` route (commit `1eea466d`)
+- [x] `apps/server/src/routes/agent-sessions-livekit-token.ts` —
+      `POST /v1/agent-sessions/:id/livekit-token` route (commit `1eea466d`)
       with publisher/subscriber role mapping + cross-account 404 +
       shape-check on session id.
 - [x] `apps/server/src/lib/app.ts` + `bootstrap.ts` — route
@@ -37,7 +37,7 @@ subscriber probe.
 
 What's already live for the operator: writing the 3 env vars +
 restarting the api service is sufficient to enable the
-`/v1/sessions/:id/livekit-token` endpoint. The gui-client + customer-
+`/v1/agent-sessions/:id/livekit-token` endpoint. The gui-client + customer-
 dashboard continue using HTTP polling until the subscriber probe
 lands; LiveKit Cloud usage stays zero until then.
 
@@ -78,7 +78,8 @@ systemctl restart driftstack-api
 
 Confirm the `livekit` block parses cleanly at boot. Until the
 token-mint route lands, the only observable behaviour change is that
-`/v1/config-summary` (if enabled) reports `livekit: configured` rather
+`/version` reports the activation flags (there is no
+`/v1/config-summary` endpoint — it was never built) and shows `livekit: configured` rather
 than `livekit: not configured`.
 
 > All-or-nothing posture: missing any of the three vars (partial

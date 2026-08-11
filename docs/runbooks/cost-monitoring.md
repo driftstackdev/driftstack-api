@@ -89,12 +89,17 @@ over-hard`), and fires an alert through `AlertSink` ONLY when the
 
 ### Re-enqueue the nightly job after a missed tick
 
-The job is self-re-arming. If a deploy lands between scheduled
-runs and the next tick is missed, run-once via:
+The job is self-re-arming, and **a missed tick needs no operator
+action**. `claimDue` selects on `run_at <= now`, so the background
+poller re-claims any past-due job on its next tick and runs it then.
+There is no HTTP trigger: no `/v1/admin/scheduled-jobs/*` route exists
+(this section previously documented a `run-once` endpoint that was
+never built, so the curl 404'd).
 
-    curl -X POST -H "Authorization: Bearer <internal-admin-key>" \
-         "$BASE_URL/v1/admin/scheduled-jobs/run-once" \
-         -d '{"job_type":"cost.recompute_nightly"}'
+If a job stays pending well past its `run_at`, the poller itself is the
+thing to check — not the job. Confirm the api service is up and look for
+the `scheduled-jobs tick processed due jobs` log line; a dead poller is
+the only way a due job goes unclaimed.
 
 If the endpoint above doesn't exist yet in the version deployed, the
 fallback is to enqueue the job manually with `runAt = now()` via the

@@ -86,7 +86,8 @@ test account to confirm the **real** customer-side path
 `emailService.sendSignupVerification`) lights up Postmark Activity.
 
 Then trigger a password reset via the **forgot password** flow:
-`POST /v1/auth/password/reset/request` with the test account email.
+`POST /v1/auth/password-reset/request` with the test account email
+(note the hyphen — `password/reset/request` 404s).
 Confirm `password-reset` template appears in Postmark Activity within
 ~5s.
 
