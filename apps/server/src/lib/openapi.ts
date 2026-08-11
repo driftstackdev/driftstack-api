@@ -5863,6 +5863,13 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Confirmation email sent (always 202 — no enumeration signal).',
         content: { 'application/json': { schema: StatusSubscribeResponseOpenApi } },
       },
+      // The 202 is deliberately unconditional for a WELL-FORMED address, so
+      // that a caller cannot learn whether it was already subscribed. A
+      // malformed address is a different thing entirely and does 400
+      // (`BadRequestError('Invalid email address.')`) — documenting it leaks
+      // nothing, and leaving it out told clients this endpoint cannot fail.
+      400: { description: 'Malformed email address.', content: problemContent },
+      429: { description: 'Rate limit hit.', content: problemContent },
     },
   });
   registerRoute(r, {
@@ -5873,11 +5880,24 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       query: StatusTokenQueryOpenApi,
     },
+    // This documented 200 and nothing else, and the 200 is the LEAST likely
+    // outcome to need documenting. The endpoint is reached by clicking a link
+    // in an email, so a token that is missing, malformed, expired or already
+    // used is routine — and each of those is a real status the handler
+    // produces (`ValidationError` -> 400, `NotFoundError` -> 404, expiry ->
+    // 400), behind an IP rate-limit gate that can 429. A client generated from
+    // the old contract had no branch for any of them.
     responses: {
       200: {
         description: 'Subscription confirmed.',
         content: { 'application/json': { schema: StatusSubscribeResponseOpenApi } },
       },
+      400: { description: 'Token missing, malformed, or expired.', content: problemContent },
+      404: {
+        description: 'Confirmation link is invalid or has already been used.',
+        content: problemContent,
+      },
+      429: { description: 'Rate limit hit.', content: problemContent },
     },
   });
   registerRoute(r, {
@@ -5888,11 +5908,16 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       query: StatusTokenQueryOpenApi,
     },
+    // Same as confirm: a one-click link from an email, where an invalid or
+    // stale token is the ordinary case rather than the exception.
     responses: {
       200: {
         description: 'Unsubscribed.',
         content: { 'application/json': { schema: StatusSubscribeResponseOpenApi } },
       },
+      400: { description: 'Token missing or malformed.', content: problemContent },
+      404: { description: 'Unsubscribe link is invalid.', content: problemContent },
+      429: { description: 'Rate limit hit.', content: problemContent },
     },
   });
 
