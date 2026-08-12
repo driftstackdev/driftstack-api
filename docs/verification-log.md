@@ -32804,3 +32804,50 @@ is justified rather than arbitrary.
 `dist-reading-suites-have-fresh-artifacts` fired for `docs` and `marketing-site` after the
 source edits, as it should have. Both apps were REBUILT rather than having assertions repinned
 onto stale markup. `EXPECTED_TEST_FILES` 2644 → 2645 for the one new test file.
+
+## V-761 — `sendInputEvent`'s `'forwarded'` reply framed as deployment-dependent when it is unreachable everywhere (2026-08-12)
+
+Three SDKs and the TS quickstart told customers "Live deployments forward accepted events to
+the active fleet harness. A deployment without a compatible harness returns 503" — which reads
+as _some_ deployment forwards. None does, for two independent reasons:
+
+- `routes/agent-sessions.ts:3841` throws `FeatureUnavailableError` **unconditionally**. There
+  is no deployment check of any kind on that path.
+- The single `{ kind: 'forwarded', duration_ms: 0 }` construction (`:3829`) sits inside
+  `if (currentState.kind === 'human-driving')` and additionally requires
+  `event.type === 'ping'`. `human-driving` is produced only by `takeover-grant`, which nothing
+  in the repo emits (V-757). And `duration_ms` is a literal `0`, not a measurement, so even if
+  it were reachable the documented "measured dispatch duration" would be wrong.
+
+So `if (res.kind === 'forwarded')` is dead code in every SDK on every deployment. All four
+surfaces now say that plainly. `lib/openapi.ts:4280` was already honest — "'forwarded'
+(post-harness; today 503s)" — so the SDKs were the stragglers, not the spec.
+
+**The drift-guard actively blocked the correction, exactly as the audit warned.**
+`sdk-current-state-copy-parity.test.ts:39` _required_ the phrase "deployment without a
+compatible harness returns" to survive, while `:31-33` _forbids_ the natural honest
+replacements (`not yet wired on this deployment`, `pre-harness (today)`, `harness ships`, …).
+A guard written to stop roadmap-promising had frozen a false claim and outlawed the truth. The
+new wording states universal unavailability and makes no future promise, so it satisfies the
+negative assertion on its own terms; `:39` was rewritten in the same commit.
+
+**And the pin had a second, worse weakness I only saw while rewriting it.** It asserted
+`expect(joined).toMatch(...)` against all 13 corpus files concatenated — so the phrase only
+had to survive in ONE of them. Two of the three SDKs could have drifted back to the false
+framing with the test still green. The input-event statement is now checked **per SDK file**.
+Mutation-proved in both directions: reverting only the Go SDK reds the new per-file check (it
+would have passed under `joined`), and reintroducing "harness ships" still reds the
+forbidden-wording negative.
+
+**Item 1 of the same audit needed no work — verified, not assumed.** The pair-mode
+takeover→handback loop was already caveated on all four surfaces (both quickstarts, the Go
+quickstart, and `api/agent-sessions.md`) and is guarded by
+`pair-mode-unreachable-states-are-caveated.test.ts`, all green. That was V-757 earlier in this
+same session. Recorded here so it is not re-derived a third time.
+
+Its trailing GUI claim is **not a defect**: `SimulatorWindow.tsx` derives `humanDriving` from
+the unreachable state, so the button never flips to "Hand back". That is correct behaviour
+while takeover cannot complete — dead code awaiting the emitter, not a bug, and changing it
+would make the button lie.
+
+No new test file, so `EXPECTED_TEST_FILES` is unchanged.

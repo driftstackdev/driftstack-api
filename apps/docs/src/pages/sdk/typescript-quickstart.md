@@ -171,7 +171,7 @@ await client.agentSessions.sendInputEvent(
 );
 // Response is a discriminated union — branch on `kind`:
 //   - 'pair-mode-takeover-fired' → pair_mode_state populated
-//   - 'forwarded' → duration_ms populated (after takeover-grant)
+//   - 'forwarded' → unreachable; every call returns 503 today
 
 // Programmatic takeover from your own code (e.g. an ops dashboard)
 // is identical to the explicit POST /:id/takeover call:

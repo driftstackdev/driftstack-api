@@ -468,14 +468,14 @@ type SendInputEventResponse struct {
 // names (Shift / Control / Alt / Meta) round-trip through the
 // schema unchanged but the harness decoder drops them.
 //
-// Live deployments forward accepted events to the active fleet
-// harness. A deployment without a compatible harness returns
-// FeatureUnavailable.
+// No deployment forwards input events. This endpoint returns
+// FeatureUnavailable (503) on every call, in every mode — the
+// harness transport has no control-plane surface.
 //
 // Returns 409 ConflictError if the session is not active OR is
 // in mode="ai" (input-event requires manual or pair mode).
-// Returns 503 FeatureUnavailableError when input forwarding is
-// unavailable on the selected deployment.
+// Returns 503 FeatureUnavailableError on every call — input
+// forwarding is unavailable everywhere, not per-deployment.
 // SendInputEventOptions carries the optional client_id required
 // when the first input-event in a pair-mode ai-driving session
 // fires the takeover-request transition (Slice 5).

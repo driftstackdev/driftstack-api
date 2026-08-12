@@ -43,10 +43,12 @@ export type InputEvent =
  *    `ai-driving` session triggered the takeover-request transition.
  *    `pair_mode_state` carries the new state machine kind (typically
  *    `takeover-pending` or `takeover-queued`).
- *  - `'forwarded'` — event dispatched directly to the harness
- *    (manual mode OR pair-mode after takeover-grant), with the
- *    measured dispatch `duration_ms`. Deployments without a
- *    compatible harness return 503 instead.
+ *  - `'forwarded'` — reserved for direct harness dispatch, carrying
+ *    the measured `duration_ms`. No deployment forwards input events,
+ *    for two separate reasons: the harness-forward path throws
+ *    unconditionally, and the one code path that does build this reply
+ *    sits behind a pair-mode state nothing can reach. So the variant is
+ *    UNREACHABLE and `if (res.kind === 'forwarded')` is dead code.
  */
 export type SendInputEventResponse =
   | {
@@ -511,14 +513,14 @@ export class AgentSessionsResource {
    * DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
    * through the schema unchanged but the harness decoder drops them.
    *
-   * Live deployments forward accepted events to the active fleet
-   * harness. A deployment without a compatible harness returns
-   * `FeatureUnavailableError` (503).
+   * No deployment forwards input events. This endpoint returns
+   * `FeatureUnavailableError` (503) on every call, in every mode —
+   * the harness transport has no control-plane surface.
    *
    * Throws `ConflictError` (409) if the session is not 'active' OR
    * is in mode='ai' (input-event requires manual or pair mode).
-   * Throws `FeatureUnavailableError` (503) when input forwarding is
-   * unavailable on the selected deployment.
+   * Throws `FeatureUnavailableError` (503) on every call — input
+   * forwarding is unavailable everywhere, not per-deployment.
    */
   sendInputEvent(
     id: string,

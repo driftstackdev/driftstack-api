@@ -266,8 +266,8 @@ class AgentSessionsResource:
         - ``pair-mode-takeover-fired`` (Slice 5 takeover-trigger) —
           ``pair_mode_state`` populated with the new state kind.
         - ``forwarded`` (Slice 4 forward-to-harness) — ``duration_ms``
-          populated. Deployments without a compatible harness return
-          503 instead.
+          populated. No deployment forwards input events, so this
+          variant is UNREACHABLE and every call returns 503.
 
         Raises ``ConflictError`` (409) if the session is not active OR
         is in mode='ai' (input-event requires manual or pair mode), OR

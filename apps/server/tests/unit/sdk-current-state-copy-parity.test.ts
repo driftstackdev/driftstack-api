@@ -36,8 +36,35 @@ describe('SDK and OpenAPI current-state copy', () => {
   it('keeps deployment-dependent FeatureUnavailable guidance honest and actionable', () => {
     expect(joined).toMatch(/BYOK Anthropic key storage is unavailable on deployments without/);
     expect(joined).toMatch(/No compatible egress backend is available on this deployment/);
-    expect(joined).toMatch(/deployment without a compatible harness returns/);
+    // The input-event statement moved to its own PER-SDK check below. It was
+    // /deployment without a compatible harness returns/ asserted against `joined`, which was
+    // wrong twice over: the wording required the SDKs to frame input forwarding as
+    // deployment-dependent when the route throws unconditionally, and a `joined` match is
+    // satisfied by ANY ONE of the 13 files — so two of the three SDKs could drift back to
+    // the false framing with this still green.
     expect(joined).toMatch(/bundled Anthropic access or provide a valid BYOK Anthropic key/);
     expect(joined).toMatch(/choose another supported proxy scheme/);
+  });
+
+  it("CRITICAL EVERY SDK says input forwarding is unavailable everywhere, not per-deployment. Checked per file rather than over the joined corpus: 'forwarded' is unreachable in all three SDKs for the same reason, so one of them carrying the sentence says nothing about the other two.", () => {
+    // The route throws FeatureUnavailable unconditionally, and the one code path that
+    // constructs { kind: 'forwarded' } sits behind the pair-mode `human-driving` state,
+    // which only `takeover-grant` produces and nothing emits. So a customer branching on
+    // `'forwarded'` is writing dead code, in every SDK, on every deployment.
+    const SDK_SURFACES = [
+      'packages/sdk-go/agent_sessions.go',
+      'packages/sdk-python/src/driftstack/resources/agent_sessions.py',
+      'packages/sdk-typescript/src/resources/agent-sessions.ts',
+    ] as const;
+
+    const silent = SDK_SURFACES.filter(
+      (path) =>
+        !/No deployment forwards input events/.test(readFileSync(resolve(ROOT, path), 'utf8')),
+    );
+
+    expect(
+      silent,
+      "SDK(s) not stating that input forwarding is unavailable on every deployment — do not reintroduce 'a deployment without a compatible harness', which implies another one forwards:",
+    ).toEqual([]);
   });
 });
