@@ -193,6 +193,72 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(page3.data.map((r) => r.id)).toEqual([a]);
       expect(page3.nextCursor).toBeNull();
     });
+
+    // The sibling above removes a row mid-loop. This one ADDS rows mid-loop,
+    // which is the case the customer documentation actually promises: "cursor
+    // pagination is stable under concurrent inserts (page 2 doesn't shift just
+    // because page 1 grew); offset pagination isn't, and we don't want to
+    // expose customers to that footgun."
+    //
+    // Nothing checked it against real Postgres. The in-memory repo is not
+    // evidence here — the property belongs to the shipped keyset SQL, and an
+    // offset-based rewrite would keep every in-memory test passing while
+    // duplicating rows for a customer driving a list to completion.
+    it('does not repeat or drop a row when profiles are inserted mid-loop (the documented concurrent-insert promise)', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG concurrent-insert test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const sql = client;
+      const db = drizzle(sql) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client: sql, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await sql`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`insert-${accountId}@test.local`})`;
+
+      const base = Date.UTC(2026, 5, 2, 0, 0, 0);
+      const insert = async (name: string, ms: number): Promise<string> => {
+        const [row] = await sql`
+          INSERT INTO profiles (account_id, name, created_at)
+          VALUES (${accountId}, ${name}, ${new Date(base + ms).toISOString()})
+          RETURNING id`;
+        return row?.id as string;
+      };
+
+      const originals: string[] = [];
+      for (let i = 0; i < 5; i += 1) originals.push(await insert(`orig-${String(i)}`, i * 1000));
+
+      const page1 = await repo.list({ accountId, limit: 2 });
+      expect(page1.data, 'page 1 is full').toHaveLength(2);
+
+      // Page 1 "grows": three rows newer than anything already returned. Under
+      // offset pagination these shift every later window and the loop re-reads
+      // rows it has already handed the caller.
+      for (let i = 0; i < 3; i += 1) await insert(`inserted-${String(i)}`, 10_000 + i * 1000);
+
+      const seen = [...page1.data.map((r) => r.id)];
+      let cursor = page1.nextCursor;
+      for (let guard = 0; guard < 10 && cursor !== null; guard += 1) {
+        const next = await repo.list({ accountId, limit: 2, cursor });
+        seen.push(...next.data.map((r) => r.id));
+        cursor = next.nextCursor;
+      }
+
+      expect(
+        seen.filter((id, i) => seen.indexOf(id) !== i),
+        'no row may be returned twice — the offset footgun the docs promise customers are spared',
+      ).toEqual([]);
+      expect(
+        originals.filter((id) => !seen.includes(id)),
+        'and no original may be skipped by the window moving underneath the loop',
+      ).toEqual([]);
+      expect(cursor, 'the drive-to-completion loop terminated on its own').toBeNull();
+    });
   },
 );
 
