@@ -21,7 +21,7 @@ Register an HTTPS endpoint for one or both event types — the same
 `POST /v1/webhooks` call as any other subscription
 ([endpoint management](/webhooks/endpoints/)):
 
-```json
+```http
 POST /v1/webhooks
 {
   "url": "https://example.com/webhooks/driftstack",
