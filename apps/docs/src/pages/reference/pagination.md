@@ -145,8 +145,16 @@ Per-endpoint `limit` ranges:
 - Maximum: `100` on most endpoints; a few admin list endpoints
   (e.g. status subscribers) allow `200` where ops tooling
   reasonably batches.
-- Out-of-range values surface as `400 ValidationFailed` problem+json
-  with the per-endpoint bound in the `detail` field.
+- Out-of-range values surface as `400` problem+json. The problem `type`
+  varies by endpoint — `.../validation-failed` where the query schema is
+  parsed directly, `.../bad-request` where it is safe-parsed and re-raised
+  (the audit-log endpoint used in the examples above is the latter), so
+  branch on the `400` status rather than on one type.
+- The per-endpoint bound is in the **`issues`** extension, not in `detail`.
+  `detail` is a fixed human sentence ("One or more fields failed
+  validation."); `issues` carries the field-level detail, including the
+  maximum a rejected `limit` exceeded. Read `issues` if you want to show
+  the bound.
 
 ## Anti-patterns
 

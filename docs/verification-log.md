@@ -33025,3 +33025,40 @@ _before_ running anything, which is what V-763a cost me for not doing.
 Still unresolved and NOT claimed as fixed: the transfer-path import (`profiles.ts`) records a bare
 uuid rather than either prefixed form, so a join across that particular path still needs
 normalisation. The export→envelope→import path is the one this closes.
+
+## V-765 — the pagination page named the wrong problem type and pointed at a field that cannot carry the bound (2026-08-12)
+
+`reference/pagination.md` said: "Out-of-range values surface as `400 ValidationFailed` problem+json
+with the per-endpoint bound in the `detail` field." Both halves are wrong, and wrong for the exact
+endpoint the page builds all three of its examples on.
+
+- **`detail` cannot carry a bound.** `lib/errors.ts`'s `ValidationError` hardcodes
+  `detail: 'One or more fields failed validation.'`. The Zod flatten — the only place a bound
+  appears — goes into the `issues` **extension**. Code written from that sentence renders a generic
+  sentence where the developer expected a number.
+- **The problem type varies per endpoint.** `routes/account-audit.ts` safe-parses and re-raises
+  `BadRequestError`, so it emits `.../bad-request`, not `.../validation-failed`. Measured across
+  the routes: 36 bare `.parse()` call sites (which produce `ValidationFailed`) against 94
+  `safeParse` sites. So an `instanceof ValidationError` branch silently never fires for an
+  out-of-range audit-log `limit`, and the page told the reader to write exactly that branch.
+
+The corrected text says to branch on the `400` status rather than one type, and names `issues` as
+where the bound lives. Naming it was necessary rather than optional: **no page under
+`apps/docs/src/pages` documents the `issues` extension at all**, so "the bound is in `issues`"
+would otherwise have been a dangling reference to an undocumented field.
+
+**No pin existed on that sentence** — verified across all 27 assertions in
+`docs-pagination-content-parity.test.ts` — which is why it drifted quietly and why the correction
+would have been just as free to drift back. The new guard
+(`no-doc-claims-the-bound-lives-in-detail.test.ts`) is derived rather than pinned: it reads the
+literal `detail` string out of `ValidationError` and fails any doc page that mentions `detail`
+within 120 characters of a bound-word. If `ValidationError` ever does start interpolating the
+constraint, the premise check reds loudly instead of the rule quietly outliving its reason.
+
+The first version of that guard split text on `/(?<=\.)\s+/` to find "the same sentence" and
+produced **two false positives** — markdown has no sentence boundaries, so an entire section
+collapsed into one "sentence" and a distant `detail` paired with an unrelated "cap". A proximity
+window is what actually models the claim. Mutation-proved both ways: restoring the original
+sentence reds the offender check, and making `detail` interpolate reds the premise check.
+
+`EXPECTED_TEST_FILES` 2646 → 2647.
