@@ -183,6 +183,90 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
     );
   });
 
+  // ── The other half of the policy: names claimed to be ALWAYS sent ──────────────────
+  //
+  // The checks above prove the six opt-outable events are consistent everywhere, and that no
+  // critical-path name has leaked INTO that enum. Neither notices the opposite failure, which
+  // is the one that actually happened: a name stays on the "always go out" list after its
+  // template is deleted. `subscription cancellation` sat in the settings copy — and in the
+  // vendor-facing Postmark deliverability request — long after the S44 2026-07-07 trim removed
+  // its template as unused. The page promised mail no code path can send, immediately above the
+  // toggle that suppresses `tier-changed`, the only message a cancellation actually produces.
+
+  /** Emails a customer surface claims are always sent, and what would send each. */
+  const ALWAYS_SENT: ReadonlyArray<{ phrase: string; template: string | null; why?: string }> = [
+    { phrase: 'signup verification', template: 'signup-verification' },
+    { phrase: 'password reset', template: 'password-reset' },
+    { phrase: 'billing failure', template: 'billing-failure' },
+    {
+      phrase: 'support replies',
+      template: null,
+      why: 'Answered by a person at info@driftstack.dev rather than by a template. The automated support-acknowledgement template was deleted in the same S44 trim; a human reply is not preference-gated, so the clause stays true.',
+    },
+  ];
+
+  function templateKeys(): Set<string> {
+    const src = readFileSync(resolve(REPO_ROOT, 'apps/server/src/services/email.ts'), 'utf8');
+    const start = src.indexOf('const TEMPLATES');
+    const block = src.slice(start, src.indexOf('\n};', start));
+    return new Set([...block.matchAll(/^ {2}'?([a-z][a-zA-Z-]*)'?:/gm)].map((m) => m[1]!));
+  }
+
+  it('CRITICAL the TEMPLATES scan found the real map. An empty set would make both checks below vacuously true, and the defect they exist for is a name outliving its template — so a silent scan failure would hide exactly what it is meant to catch.', () => {
+    const keys = templateKeys();
+    expect(keys.size, 'TEMPLATES entries in services/email.ts').toBeGreaterThan(10);
+    expect(keys, 'anchor on a template known to exist').toContain('tier-changed');
+    // And the deleted ones must still be absent, or the premise has changed.
+    expect([...keys].filter((k) => /cancel|support-ack|quota/i.test(k))).toEqual([]);
+  });
+
+  it('CRITICAL every email named as ALWAYS SENT still has a template, and none of them is opt-outable. A name that outlives its template promises mail no code path can send; a name that becomes preference-gated promises mail the customer has already switched off.', () => {
+    const keys = templateKeys();
+
+    const missing = ALWAYS_SENT.filter((e) => e.template !== null && !keys.has(e.template)).map(
+      (e) => `${e.phrase} -> ${String(e.template)}`,
+    );
+    expect(missing, 'always-sent email(s) whose template does not exist:').toEqual([]);
+
+    const gated = ALWAYS_SENT.filter(
+      (e) => e.template !== null && (OPT_OUTABLE_EVENTS as readonly string[]).includes(e.template),
+    ).map((e) => `${e.phrase} (${String(e.template)})`);
+    expect(gated, 'always-sent claim(s) that are actually opt-outable:').toEqual([]);
+
+    // A `null` template must be explained, so it cannot become a quiet way to keep naming
+    // something that nothing sends.
+    const unexplained = ALWAYS_SENT.filter(
+      (e) => e.template === null && (e.why ?? '').length < 40,
+    ).map((e) => e.phrase);
+    expect(unexplained, 'template-less entr(ies) without a stated reason:').toEqual([]);
+  });
+
+  it('CRITICAL no customer- or vendor-facing surface lists a cancellation email as always-sent while no template can send one. Derived from the TEMPLATES map rather than pinned as prose, so the day a cancellation template is actually added, the copy is free to say so.', () => {
+    const SURFACES = [
+      'apps/customer-dashboard/src/pages/settings.astro',
+      'docs/internal/postmark-approval-request.md',
+    ] as const;
+    const hasCancellationTemplate = [...templateKeys()].some((k) => /cancel/i.test(k));
+
+    const offenders: string[] = [];
+    for (const path of SURFACES) {
+      const text = readFileSync(resolve(REPO_ROOT, path), 'utf8');
+      // Only the sentence that makes the always-sent claim, not the whole page — elsewhere
+      // these files legitimately discuss cancellation.
+      const claim =
+        /(?:Security \+ financial emails|Critical emails) \(([^)]*)\)/s.exec(text)?.[1] ?? null;
+      if (claim === null) {
+        offenders.push(`${path}: the always-sent sentence could not be read`);
+        continue;
+      }
+      if (!hasCancellationTemplate && /cancel/i.test(claim)) {
+        offenders.push(`${path}: lists cancellation as always-sent, but no template sends one`);
+      }
+    }
+
+    expect(offenders.sort(), 'surface(s) advertising an email nothing can send:').toEqual([]);
+  });
+
   it('test file metadata — file exists at canonical path', () => {
     expect(
       existsSync(

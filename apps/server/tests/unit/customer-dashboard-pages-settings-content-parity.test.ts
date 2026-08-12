@@ -52,9 +52,16 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
   });
 
   it("Security-vs-lifecycle email framing pinned: 'Security + financial emails (signup verification, password reset, billing failure, subscription cancellation, support replies) always go out. Below are the optional lifecycle emails — toggle off any you don't want.' — pinned so the must-deliver vs. opt-outable distinction stays explicit (drift to dropping the security/financial framing would let customers think they can opt out of billing-failure or password-reset emails, breaking the security model)", () => {
+    // "subscription cancellation" was removed from this list, and the pin with it. No
+    // cancellation template exists — it was deleted as unused — so the page was promising
+    // mail no code path can send, directly above the toggle that suppresses the only message
+    // a cancellation actually produces. The always-send list is now checked against the
+    // TEMPLATES map in opt-outable-email-event-cross-source-invariant.test.ts, so a name
+    // outliving its template fails there rather than being frozen here.
     expect(body).toMatch(
-      /Security \+ financial emails \(signup verification, password reset,\s*\n?\s*billing failure, subscription cancellation, support replies\) always\s*\n?\s*go out\. Below are the optional lifecycle emails — toggle off any\s*\n?\s*you don't want\./,
+      /Security \+ financial emails \(signup verification, password reset,\s*\n?\s*billing failure, support replies\) always go out\. Below are the\s*\n?\s*optional lifecycle emails — toggle off any you don't want\./,
     );
+    expect(body).toMatch(/Cancelling a subscription sends no email of its own\./);
   });
 
   it("V-352 + V-298a + V-298b profile form contract: PATCH /v1/account/me { name, timezone, slug?, region? } with null-on-empty + IANA timezone hint — pinned so the 4-field profile mutation contract stays consistent (drift to dropping null-on-empty would force customers to keep filling fields they've cleared; drift to dropping region would orphan the V-298b data-residency preference UI)", () => {

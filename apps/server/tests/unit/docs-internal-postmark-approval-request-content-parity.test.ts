@@ -10,7 +10,9 @@
 //   • 12 transactional templates production today.
 //   • 100% application sign-ups; no lists / scraping / co-reg.
 //   • Critical emails (verify + password + billing-fail + sub-cancel
-//     + support-ack) NOT opt-outable by design.
+//     NOT opt-outable by design. (The subscription-cancellation and
+//     support-ack templates were DELETED in the S44 2026-07-07 trim, so
+//     naming them here claimed transactional mail the product cannot send.)
 //   • 4 follow-up TODOs (smoke-test + bounce-webhook + DPA-Annex-3 +
 //     Outbound-Starter upgrade).
 
@@ -75,7 +77,7 @@ describe('W563.B /docs/internal/postmark-approval-request.md content parity', ()
     expect(body).toMatch(/All sent via the default `outbound` Message Stream\./);
   });
 
-  it("Q3 acquisition + bounce + suppression + DKIM-verified + 4-follow-up framing pinned: '**Acquisition:** 100% application sign-ups at' + 'https://app.driftstack.dev/signup' + 'No lead-generation' + 'services, no list purchases, no scraped contacts, no co-registration.' + '**Bounce handling:** Postmark's hard-bounce + spam-complaint' + 'suppression list is automatically honored by Postmark' + 'wire Postmark's bounce webhook' + '(POST to `https://api.driftstack.dev/v1/internal/postmark-webhook`)' + 'hard bounces immediately mark the account's email as `invalid`' + '**Suppression / opt-out:** customers can opt out of non-critical' + 'app.driftstack.dev/settings → Email Preferences' + 'Critical emails (signup verification, password' + 'reset, billing failure, subscription cancellation,' + 'support-acknowledgement) are not opt-outable by design' + '**Domain verification status:** `driftstack.dev` DKIM + Return-Path' + 'DNS records are verified at the Postmark sender-signatures dashboard.' + '`noreply@driftstack.dev` (transactional default) +' + '`info@driftstack.dev` (support/reply).' + 'DPA is in place per' + 'https://driftstack.dev/legal/dpa with Postmark listed as a' + 'sub-processor in Annex 3.' + '## Follow-up TODOs once Postmark approves' + 'Smoke-test signup with a real external email' + 'Wire the Postmark bounce webhook' + 'Confirm DPA Annex 3 lists Postmark accurately' + 'scripts/check-subprocessor-mirror.mjs' + 'Consider upgrading to Outbound Starter ($15/mo, 10k emails)' + 'Free tier (100/mo) hits the cap quickly' — pinned so the 100%-app-signup + no-list/scrape/co-reg + auto-honored-suppression-list + /v1/internal/postmark-webhook + email-invalid-flag + 5-critical-non-opt-outable + noreply+info-driftstack.dev + DPA-Annex-3 + 4-follow-up-TODO commitment survives", () => {
+  it("Q3 acquisition + bounce + suppression + DKIM-verified + 4-follow-up framing pinned: '**Acquisition:** 100% application sign-ups at' + 'https://app.driftstack.dev/signup' + 'No lead-generation' + 'services, no list purchases, no scraped contacts, no co-registration.' + '**Bounce handling:** Postmark's hard-bounce + spam-complaint' + 'suppression list is automatically honored by Postmark' + 'wire Postmark's bounce webhook' + '(POST to `https://api.driftstack.dev/v1/internal/postmark-webhook`)' + 'hard bounces immediately mark the account's email as `invalid`' + '**Suppression / opt-out:** customers can opt out of non-critical' + 'app.driftstack.dev/settings → Email Preferences' + 'Critical emails (signup verification, password' + 'reset, billing failure) are not opt-outable by design' + '**Domain verification status:** `driftstack.dev` DKIM + Return-Path' + 'DNS records are verified at the Postmark sender-signatures dashboard.' + '`noreply@driftstack.dev` (transactional default) +' + '`info@driftstack.dev` (support/reply).' + 'DPA is in place per' + 'https://driftstack.dev/legal/dpa with Postmark listed as a' + 'sub-processor in Annex 3.' + '## Follow-up TODOs once Postmark approves' + 'Smoke-test signup with a real external email' + 'Wire the Postmark bounce webhook' + 'Confirm DPA Annex 3 lists Postmark accurately' + 'scripts/check-subprocessor-mirror.mjs' + 'Consider upgrading to Outbound Starter ($15/mo, 10k emails)' + 'Free tier (100/mo) hits the cap quickly' — pinned so the 100%-app-signup + no-list/scrape/co-reg + auto-honored-suppression-list + /v1/internal/postmark-webhook + email-invalid-flag + 3-critical-non-opt-outable + noreply+info-driftstack.dev + DPA-Annex-3 + 4-follow-up-TODO commitment survives", () => {
     expect(body).toMatch(/\*\*Acquisition:\*\* 100% application sign-ups at/);
     expect(body).toMatch(/https:\/\/app\.driftstack\.dev\/signup/);
     expect(body).toMatch(/No lead-generation/);
@@ -90,8 +92,18 @@ describe('W563.B /docs/internal/postmark-approval-request.md content parity', ()
     expect(body).toMatch(/\*\*Suppression \/ opt-out:\*\* customers can opt out of non-critical/);
     expect(body).toMatch(/app\.driftstack\.dev\/settings → Email Preferences/);
     expect(body).toMatch(/Critical emails \(signup verification, password/);
-    expect(body).toMatch(/reset, billing failure, subscription cancellation,/);
-    expect(body).toMatch(/support-acknowledgement\) are not opt-outable by design/);
+    // Was /reset, billing failure, subscription cancellation,/. The subscription-cancellation
+    // and support-acknowledgement templates were deleted as unused, and the quota-warning
+    // drafts never had send methods — so this vendor-facing deliverability request named three
+    // transactional emails the product cannot send. The list now matches the six real toggles
+    // and the three real critical templates.
+    expect(body).toMatch(/reset, billing failure\) are not opt-outable by design/);
+    // The companion half of the same removal: support-acknowledgement was deleted in the S44
+    // trim too, so the vendor list named it as a critical transactional email the product
+    // cannot send. Human support replies from info@driftstack.dev are what actually happens.
+    expect(body).toMatch(
+      /Support replies are\s*\n?\s*answered by a person at info@driftstack\.dev/,
+    );
     expect(body).toMatch(
       /\*\*Domain verification status:\*\* `driftstack\.dev` DKIM \+ Return-Path/,
     );

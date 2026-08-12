@@ -78,12 +78,14 @@ in our database, halting further sends to that address until the
 customer corrects it through their account settings.
 
 **Suppression / opt-out:** customers can opt out of non-critical
-email events at app.driftstack.dev/settings → Email Preferences
-(per-event toggles for billing reminders, activation nudges, quota
-warnings, etc.). Critical emails (signup verification, password
-reset, billing failure, subscription cancellation,
-support-acknowledgement) are not opt-outable by design — they are
-required for the customer to use their account.
+email events at app.driftstack.dev/settings → Email Preferences (six
+per-event toggles: signup welcome, first session failure, first
+session success, subscription tier changed, billing receipt, billing
+renewal reminder). Critical emails (signup verification, password
+reset, billing failure) are not opt-outable by design — they are
+required for the customer to use their account. Support replies are
+answered by a person at info@driftstack.dev and are likewise not
+preference-gated.
 
 **Domain verification status:** `driftstack.dev` DKIM + Return-Path
 DNS records are verified at the Postmark sender-signatures dashboard.

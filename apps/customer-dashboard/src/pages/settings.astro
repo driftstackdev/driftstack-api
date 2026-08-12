@@ -502,9 +502,15 @@ const EMAIL_EVENTS = [
       </h2>
       <p class="mt-2 text-sm text-tk-ink-3">
         Security + financial emails (signup verification, password reset,
-        billing failure, subscription cancellation, support replies) always
-        go out. Below are the optional lifecycle emails — toggle off any
-        you don't want.
+        billing failure, support replies) always go out. Below are the
+        optional lifecycle emails — toggle off any you don't want.
+      </p>
+      <p class="mt-2 text-sm text-tk-ink-3">
+        Cancelling a subscription sends no email of its own. The only
+        message it can produce is "Subscription tier changed" below, so
+        switching that off means no email arrives when a subscription ends.
+        Either way the change is recorded in your billing state and your
+        audit log.
       </p>
       <div class="mt-6 space-y-3" data-list="email-prefs">
         {

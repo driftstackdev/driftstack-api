@@ -32851,3 +32851,58 @@ while takeover cannot complete — dead code awaiting the emitter, not a bug, an
 would make the button lie.
 
 No new test file, so `EXPECTED_TEST_FILES` is unchanged.
+
+## V-762 — three surfaces advertised email templates that had been deleted (2026-08-12)
+
+`services/email.ts:27-32` records an approved trim (S44 2026-07-07): the
+subscription-cancellation and support-acknowledgement templates and their send methods were
+DELETED as unused (zero callers since V-057), along with never-wired quota-warning drafts. Two
+surfaces kept advertising them.
+
+**Customer-facing.** `settings.astro` listed "subscription cancellation" among the emails that
+"always go out". No template can send one. The only message a cancellation produces is
+`tier-changed` — and that toggle sits **on the same screen**, presented as optional lifecycle
+mail. So the page's own reassurance ("these always go out") invited a customer to switch off the
+one message a cancellation would actually send. The copy now says plainly that cancelling sends
+no email of its own, that "Subscription tier changed" is the only message it produces, and that
+the change is recorded in billing state and the audit log regardless — the audit row is written
+**before** the opt-out check (`account-lifecycle.ts` ~305-315, `subscription.tier_changed`,
+system actor), so that last claim is true even with every toggle off.
+
+**Vendor-facing, and worse.** `docs/internal/postmark-approval-request.md` is a deliverability
+approval request describing what transactional mail the product sends. It named
+`subscription cancellation` AND `support-acknowledgement` as critical non-opt-outable emails —
+both deleted — and described a "quota warnings" per-event toggle that never existed. Three
+claimed transactional emails the product cannot send, in a document submitted to a third party.
+It now lists the six real toggles by name and the three real critical templates.
+
+`packages/api-types/src/accounts.ts` was already correct — its `OptOutableEmailEventSchema` JSDoc
+even records the S44 deletion — and so is `apps/docs/src/pages/reference/emails.md`. The
+opt-outable set was verified **two independent ways** that agree exactly on the same six:
+every `shouldSend(accountId, '…')` call site in `apps/server/src`, and the api-types enum.
+
+**Correction to my own process, caught by running rather than reading.** My edit script fixed
+one pin assertion; the same test file held a **second** assertion on the same sentence
+(`/support-acknowledgement\) are not opt-outable by design/`), plus a stale `it()` title
+enumerating the removed text and a header comment repeating it. The audit report named only one
+pin. Replacing "the pin" is not the same as replacing every assertion over the text — the test
+run is what found the rest.
+
+**The guard extends the existing cross-source invariant rather than adding a file.**
+`opt-outable-email-event-cross-source-invariant.test.ts` already proved the six opt-outable
+events consistent across api-types, the server defaults and the dashboard toggles, and that no
+critical-path name leaks INTO that enum. Nothing checked the inverse — a name staying on the
+always-sent list after its template is deleted, which is the failure that actually occurred. It
+now derives the `TEMPLATES` keys and requires every always-sent name to have a sender and to be
+absent from the opt-outable set, with a stated reason required for the one entry that is
+legitimately template-less (support replies come from a person, not a template). The
+cancellation check is derived, not pinned: the day a real cancellation template is added, the
+copy is free to advertise it again.
+
+Mutation-proved both directions: restoring "subscription cancellation" to the always-sent
+sentence reds the surface check, and renaming the `billing-failure` template key reds the
+template-existence check. `EXPECTED_TEST_FILES` unchanged — no new test file.
+
+Operational note: `apps/customer-dashboard` needs `PUBLIC_API_BASE_URL` set for `astro build`,
+and its page tests execute the BUILT `dist/`, so a settings edit is not gated until the app is
+rebuilt.
