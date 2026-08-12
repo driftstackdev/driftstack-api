@@ -76,6 +76,9 @@ interface Attempt {
 /** Foreign-vs-nonexistent responses for each idempotent delete. */
 const indistinguishability = new Map<string, { foreign: string; absent: string }>();
 
+/** family -> the id its create returned. '' means the create failed. */
+const created = new Map<string, string>();
+
 const attempts: Attempt[] = [];
 /** `label -> body A sees` before B interferes, and again after. */
 const before = new Map<string, string>();
@@ -103,16 +106,26 @@ beforeAll(async () => {
     }
   };
 
-  const profile = await create('/v1/profiles', { name: 'a-profile' });
-  const session = await create('/v1/sessions', { label: 'a-session' });
-  const webhook = await create('/v1/webhooks', {
-    url: 'https://example.com/a-hook',
-    events: ['session.completed'],
-  });
-  const apiKey = await create('/v1/api-keys', { name: 'a-key', scopes: ['read'] });
-  const agent = await create('/v1/agent-sessions', {});
-  const snapshot =
-    profile === '' ? '' : await create(`/v1/profiles/${profile}/snapshots`, { label: 'a-snap' });
+  const track = (family: string, id: string): string => {
+    created.set(family, id);
+    return id;
+  };
+
+  const profile = track('profile', await create('/v1/profiles', { name: 'a-profile' }));
+  const session = track('session', await create('/v1/sessions', { label: 'a-session' }));
+  const webhook = track(
+    'webhook',
+    await create('/v1/webhooks', {
+      url: 'https://example.com/a-hook',
+      events: ['session.completed'],
+    }),
+  );
+  const apiKey = track('apiKey', await create('/v1/api-keys', { name: 'a-key', scopes: ['read'] }));
+  const agent = track('agent', await create('/v1/agent-sessions', {}));
+  const snapshot = track(
+    'snapshot',
+    profile === '' ? '' : await create(`/v1/profiles/${profile}/snapshots`, { label: 'a-snap' }),
+  );
 
   // Read-back routes for the resources whose integrity is checked at the end.
   if (webhook !== '') OWNED.push({ label: 'webhook', read: `/v1/webhooks/${webhook}` });
@@ -197,6 +210,22 @@ afterAll(async () => {
 
 describe('no account can reach another account resource, in any creatable family', () => {
   it('CRITICAL both accounts and every resource were really created, and B holds a working credential of its own. Every assertion below reports an ABSENCE, so a sweep whose creates all failed — or whose second token was never issued — would pass having attempted nothing.', async () => {
+    // EVERY family must have produced a real id. A failed create yields '' and
+    // its probes are skipped, so the family silently leaves the sweep — and the
+    // floors below cannot see it: losing snapshots costs 2 of 17 attempts and
+    // one of six owned resources, which both floors still clear. Measured on
+    // this very file: breaking the snapshot create left it reporting 5 of 5
+    // green with that family entirely unprobed. The same defect was fixed in
+    // no-response-leaks-a-credential one commit earlier and did not propagate
+    // here on its own.
+    expect(
+      [...created.entries()]
+        .filter(([, id]) => id === '')
+        .map(([family]) => family)
+        .sort(),
+      'famil(ies) whose resource was never created — their cross-account probes never ran:',
+    ).toEqual([]);
+
     expect(attempts.length, 'cross-account attempts made').toBeGreaterThanOrEqual(15);
     expect(OWNED.length, 'resources owned by A and re-read afterwards').toBeGreaterThanOrEqual(5);
     for (const [label, body] of before) {
