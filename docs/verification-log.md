@@ -32583,3 +32583,55 @@ and `billing-documents-its-real-errors.test.ts:76` builds a `SubscriptionMirror`
 missing five required fields. Both are in tracked, clean, peer-committed files; my diff
 touches `SubscriptionMirror` on zero lines. CI runs that typecheck, so it will fail until
 they land the fix.
+
+## V-759 — V-748 corrected: both disclosed deletions are structurally impossible
+
+Started implementing the privacy-§9 retention deletions and found that **the plan recorded
+in V-748 and V-750 would have breached a 7-year statutory retention obligation.** Recording
+the correction before writing any code, because the change is irreversible and because my
+own earlier entries say "implement the deletions".
+
+**Enumerated every FK pointing at the two tables**, which is what changed the design:
+
+- **→ `sessions.id`**: `session_events` cascade, `session_operations` cascade,
+  `agent_sessions` set null, and **`usage_records` CASCADE**.
+- **→ `api_keys.id`**: `oauth_access_tokens` cascade, `account_audit_log` set null, and
+  **RESTRICT** from `sessions`, `admin_audit_log`, `rate_limit_overrides`, `incidents`,
+  `incident_updates`.
+
+**Deleting a 90-day-old session would delete its usage records**, because
+`usage_records.session_id` cascades — and §9's own table requires "Billing data | 7 years
+post-transaction (Dutch tax law, AWR Art 52)". A naive session purge would break a 7-year
+statutory obligation to satisfy a 90-day one. Strictly worse than the gap it closes.
+
+**Deleting a revoked API key is blocked by design, and not by the constraint I originally
+named.** V-748 recorded `sessions.api_key_id` as the coupling. It is not the binding one:
+`admin_audit_log` also RESTRICTs, and audit rows outlive the key by years precisely so an
+audit entry can never point at a vanished actor. Even with sessions purged first, the key
+cannot be deleted. My earlier "sessions must be purged first, then the keys become
+deletable" was wrong.
+
+**Resolution — anonymise in place, which §9 already authorises.** Its closing paragraph
+reads: "Driftstack deletes the Personal Data **or anonymises it** (rendering it no longer
+attributable to a Data Subject). Anonymised aggregates may be retained for capacity
+planning." So this is the disclosed alternative, not a workaround — and the Session-metadata
+row's own "aggregated counters retained indefinitely" clause is satisfied by keeping the row
+while scrubbing what identifies it.
+
+Planned: DELETE `session_operations` rows (FK-safe, nothing references that table, and
+`request_fingerprint`/`result`/`error` are the payload traces); SCRUB `sessions.purpose`
+(notNull → sentinel), `label`, `metadata` while keeping the row so `usage_records` survive;
+SCRUB `api_keys.name` and `key_hash` while keeping the row for audit attribution. Session
+cutoff runs from `destroyed_at`, so a live session is never touched and rows with a NULL
+`destroyed_at` stay the duration/orphan sweepers' business.
+
+Full design, including the notNull sentinel requirement and the two guards this needs beyond
+the existing sweeper template — a test that nothing INSIDE the window is touched, and a test
+that `usage_records` SURVIVE a session scrub — is in
+`docs/internal/2026-08-12-retention-anonymisation-design.md`.
+
+**Implementation deliberately not rushed into the same turn as the analysis.** The change is
+irreversible and the analysis changed its shape twice: first from "delete" to "cannot
+delete", then from "sessions are the blocker" to "the audit log is the blocker". Writing a
+destructive sweeper at the end of that would be the wrong instinct. The design record exists
+so the next iteration — or a peer — implements the correct version rather than the naive one.
