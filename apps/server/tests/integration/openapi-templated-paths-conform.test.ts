@@ -78,16 +78,40 @@ function validate(schema: unknown, body: unknown): string[] {
 
 const auth = (): { authorization: string } => ({ authorization: `Bearer ${fx.plaintext}` });
 
+/**
+ * True when an operation streams rather than returning a body.
+ *
+ * `GET /v1/agent-sessions/{id}/transcript` declares `text/event-stream` and
+ * holds the connection open by design, so requesting it hangs the sweep — which
+ * is exactly what happened the moment the agent-session family was added: two
+ * arms timed out at 120s and 60s with no failure message worth reading. Read
+ * off the spec so a stream added later is skipped automatically.
+ */
+function isStreaming(op: Operation | undefined): boolean {
+  return Object.values(op?.responses ?? {}).some(
+    (r) => r.content?.['text/event-stream'] !== undefined,
+  );
+}
+
 /** The id family a templated path belongs to, or null if unreachable here. */
 function familyOf(path: string): string | null {
   if (path.startsWith('/v1/profiles/')) return 'profile';
   if (path.startsWith('/v1/sessions/')) return 'session';
   if (path.startsWith('/v1/webhooks/')) return 'webhook';
+  if (path.startsWith('/v1/agent-sessions/')) return 'agent';
   return null;
 }
 
 beforeAll(async () => {
-  fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+  // The gated surfaces are wired, which is what makes the agent-session family
+  // reachable at all: without `enableAgentRuntime` every one of those routes
+  // answers 503 and the whole family is invisible here.
+  fx = await buildTestApp({
+    scopes: ['read', 'write', 'account_owner'],
+    withOauthStore: true,
+    enableAgentRuntime: true,
+    enableByokAnthropic: true,
+  });
   spec = (await fx.app.inject({ method: 'GET', url: '/openapi.json' })).json<SpecDocument>();
 
   const create = async (url: string, payload: Record<string, unknown>): Promise<string> => {
@@ -110,6 +134,7 @@ beforeAll(async () => {
       url: 'https://example.com/hook',
       events: ['session.completed'],
     }),
+    agent: await create('/v1/agent-sessions', {}),
   };
 }, 60_000);
 
@@ -126,6 +151,7 @@ describe('templated-path responses conform to the spec', () => {
     expect(ids['profile'], 'profile id shape').toMatch(/^prof_/);
     expect(ids['session'], 'session id shape').toMatch(/^ses_/);
     expect(ids['webhook'], 'webhook id shape').toMatch(/^whk_/);
+    expect(ids['agent'], 'agent-session id shape').toMatch(/^agt_/);
   });
 
   it('CRITICAL the validator still rejects a body that violates a real schema. Everything below reports an absence of errors, so a validator that could not fail would satisfy it having checked nothing.', () => {
@@ -145,6 +171,21 @@ describe('templated-path responses conform to the spec', () => {
       if (family === null) continue;
       for (const method of ['get', 'post', 'patch', 'delete'] as const) {
         if (spec.paths?.[path]?.[method] === undefined) continue;
+        if (isStreaming(spec.paths[path]?.[method])) continue;
+        // Skip routes this fixture does not REGISTER. `livekit-token` is wired
+        // only on a complete LiveKit config ("Partial config = unregistered
+        // route", app.ts), so it answers 404 here and carries no rate-limit
+        // headers — because the route does not exist, not because a gate is
+        // missing. Asked of fastify directly rather than inferred from a 404,
+        // which a real missing resource also produces.
+        if (
+          !fx.app.hasRoute({
+            method: method.toUpperCase(),
+            url: path.replace(/\{([^}]+)\}/g, ':$1'),
+          })
+        ) {
+          continue;
+        }
         const url = path.replace(/\{[^}]+\}/, ids[family] ?? '');
         if (url.includes('{')) continue;
         const payload = method === 'get' ? {} : { payload: {} };
@@ -171,7 +212,8 @@ describe('templated-path responses conform to the spec', () => {
       }
     }
 
-    // MEASURED: 29 templated operations are reachable with these fixtures.
+    // MEASURED: 45 templated operations exercised, up from 29 with the
+    // agent-session family.
     // Floored, because both assertions below report an ABSENCE and a sweep that
     // substituted a broken id would reach nothing and report both as clean.
     //
@@ -185,7 +227,7 @@ describe('templated-path responses conform to the spec', () => {
     // mutation-proved on the parameterless population in
     // security-declaration-matches-enforcement, where a route that really does
     // serve anonymously exists to trip it.
-    expect(reached, 'templated operations exercised').toBeGreaterThanOrEqual(25);
+    expect(reached, 'templated operations exercised').toBeGreaterThanOrEqual(40);
     expect(servedAnonymously, '/{id} route(s) served without credentials:').toEqual([]);
     expect(unlimited, '/{id} route(s) with no rate-limit headers:').toEqual([]);
   }, 120_000);
@@ -197,6 +239,7 @@ describe('templated-path responses conform to the spec', () => {
 
     for (const path of Object.keys(spec.paths ?? {})) {
       if (!path.includes('{') || spec.paths?.[path]?.['get'] === undefined) continue;
+      if (isStreaming(spec.paths[path]?.['get'])) continue;
       const family = familyOf(path);
       if (family === null) continue;
       const url = path.replace(/\{[^}]+\}/, ids[family] ?? '');
@@ -215,10 +258,13 @@ describe('templated-path responses conform to the spec', () => {
       if (errors.length > 0) violations.push(`${path} -> ${status}: ${errors.join('; ')}`);
     }
 
-    // MEASURED: 7 of the reachable templated GETs validate today. Pinned so a
-    // regression that stops creating fixtures — or stops matching families —
-    // fails loudly instead of sweeping nothing and reporting success.
-    expect(validated, 'templated endpoints actually validated').toBeGreaterThanOrEqual(7);
+    // MEASURED: 14 templated GETs validate, up from 7 — the agent-session
+    // family became reachable once `enableAgentRuntime` was wired, and it had
+    // never been conformance-checked by anything. Pinned so a regression that
+    // stops creating fixtures, stops matching families, or quietly loses the
+    // runtime wiring fails loudly instead of sweeping less and reporting
+    // success.
+    expect(validated, 'templated endpoints actually validated').toBeGreaterThanOrEqual(12);
     expect(violations, 'templated response(s) that violate their own schema:').toEqual([]);
     // Surfaced rather than asserted: a status with no schema for this media
     // type is usually a fixture-disabled dependency (503), not a contract fault.
