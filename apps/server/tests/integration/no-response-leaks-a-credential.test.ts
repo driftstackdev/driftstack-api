@@ -137,6 +137,17 @@ function walk(node: unknown, path: string, op: string, out: Hit[]): void {
   }
 }
 
+/** Read an id off a create response. Only a string counts — `String(unknown)`
+ *  would yield "[object Object]" and the sweep would probe a URL that 404s,
+ *  dropping the family without a sound. */
+function idFrom(body: Record<string, unknown>, ...keys: string[]): string {
+  for (const k of keys) {
+    const v = body[k];
+    if (typeof v === 'string' && v !== '') return v;
+  }
+  return '';
+}
+
 const auth = (): { authorization: string } => ({ authorization: `Bearer ${fx.plaintext}` });
 
 /**
@@ -162,6 +173,7 @@ function familyOf(path: string): string | null {
   if (path.startsWith('/v1/webhooks/')) return 'webhook';
   if (path.startsWith('/v1/api-keys/')) return 'apikey';
   if (path.startsWith('/v1/agent-sessions/')) return 'agent';
+  if (path.startsWith('/v1/billing/crypto-orders/')) return 'cryptoOrder';
   return null;
 }
 
@@ -191,6 +203,40 @@ beforeAll(async () => {
       return '';
     }
   };
+  /**
+   * Same, against the STAFF app.
+   *
+   * `staff` is a separate buildTestApp instance with its own in-memory stores,
+   * so a resource created through `fx` does not exist there. Reusing an `fx` id
+   * on the admin arm would 404 and the operation would drop out of the sweep
+   * silently — indistinguishable from a body that was scanned and found clean.
+   */
+  const createAsStaff = async (url: string, payload: Record<string, unknown>): Promise<string> => {
+    const res = await staff.app.inject({
+      method: 'POST',
+      url,
+      headers: { authorization: `Bearer ${staff.plaintext}` },
+      payload,
+    });
+    try {
+      return idFrom(res.json<Record<string, unknown>>(), 'id', 'order_id');
+    } catch {
+      return '';
+    }
+  };
+  const createAsCustomerOrder = async (): Promise<string> => {
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: auth(),
+      payload: { product: 'api_starter', price_cents: 1000, price_currency: 'USD' },
+    });
+    try {
+      return idFrom(res.json<Record<string, unknown>>(), 'order_id');
+    } catch {
+      return '';
+    }
+  };
   ids = {
     profile: await create('/v1/profiles', { name: 'leak-probe' }),
     session: await create('/v1/sessions', {}),
@@ -200,6 +246,10 @@ beforeAll(async () => {
     }),
     apikey: await create('/v1/api-keys', { name: 'leak-probe-detail', scopes: ['read'] }),
     agent: await create('/v1/agent-sessions', {}),
+    // A real crypto order. Its detail and receipt routes return payment state
+    // — provider references, amounts, addresses — which is exactly the shape of
+    // body worth scanning, and none of it had ever been read.
+    cryptoOrder: await createAsCustomerOrder(),
   };
   // Snapshots hang off a profile, so this one is created second and only if
   // the parent exists — a snapshot id derived from an empty profile id would
@@ -256,13 +306,43 @@ beforeAll(async () => {
   // every one of these as a 403 and would report them clean having read no body
   // at all — the shape of false green this whole file exists to avoid.
   const staffAuth = { authorization: `Bearer ${staff.plaintext}` };
+  // Ids that exist inside the STAFF instance. The admin arm skipped every
+  // templated path, so the routes that read one account's stored state — the
+  // account record, its usage and cost rollups, a crypto order and its event
+  // log — had never had a body read. Those are the admin bodies most likely to
+  // carry something they should not.
+  const staffAccount = `acc_${String((staff as { accountId?: string }).accountId ?? '')}`;
+  const staffOrder = await createAsStaff('/v1/billing/crypto-checkout', {
+    product: 'api_starter',
+    price_cents: 1000,
+    price_currency: 'USD',
+  });
+  const adminId = (path: string): string | null => {
+    if (path.startsWith('/v1/admin/accounts/')) return staffAccount;
+    if (path.startsWith('/v1/admin/cost/accounts/')) return staffAccount;
+    if (path.startsWith('/v1/admin/usage/accounts/')) return staffAccount;
+    if (path.startsWith('/v1/admin/crypto-orders/')) return staffOrder;
+    return null;
+  };
+
   for (const path of Object.keys(spec.paths ?? {})) {
-    if (!path.startsWith('/v1/admin/') || path.includes('{')) continue;
+    if (!path.startsWith('/v1/admin/')) continue;
+    // Templated admin paths are probed with GET ONLY, deliberately. The POST
+    // surface here is /suspend, /delete, /tier and /refund-record against the
+    // one account this fixture runs as — firing those mid-sweep would mutate
+    // the state every later probe depends on, and an order-dependent security
+    // sweep is worse than a narrower one. Reads are also where stored data
+    // actually surfaces.
+    const templated = path.includes('{');
+    const substitute = templated ? adminId(path) : '';
+    if (templated && (substitute === null || substitute === 'acc_' || substitute === '')) continue;
     for (const method of ['get', 'post'] as const) {
+      if (templated && method === 'post') continue;
       if (spec.paths?.[path]?.[method] === undefined) continue;
+      const url = templated ? path.replace(/\{[^}]+\}/g, substitute ?? '') : path;
       const res = await staff.app.inject({
         method: method.toUpperCase() as 'GET',
-        url: path,
+        url,
         headers: staffAuth,
         ...(method === 'get' ? {} : { payload: {} }),
       });
@@ -293,11 +373,14 @@ describe('no successful response leaks a credential', () => {
     // rather than the old one, so a family dropping back out of `familyOf`
     // fails here instead of quietly shrinking the population — which is what
     // the old floor of 50 would have allowed all the way back down.
-    expect(scanned, 'customer-surface 2xx bodies scanned').toBeGreaterThan(58);
+    expect(scanned, 'customer-surface 2xx bodies scanned').toBeGreaterThan(64);
     // Floored separately: a staff credential that stopped working would turn
     // every admin route back into a 403 and this sweep would silently return to
     // reading nothing while still reporting clean.
-    expect(adminScanned, 'admin-surface 2xx bodies scanned').toBeGreaterThan(15);
+    // MEASURED 25, up from 21 when the admin arm skipped every templated path.
+    // Raised with the widening: a floor left at the pre-widening number lets the
+    // whole templated admin surface drop back out and still pass.
+    expect(adminScanned, 'admin-surface 2xx bodies scanned').toBeGreaterThan(23);
 
     // The detector, on a body whose verdict is not in doubt.
     const probe: Hit[] = [];
