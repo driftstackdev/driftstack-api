@@ -89,7 +89,7 @@ describe('the suite verifier refuses to call an under-run green', () => {
     expect(
       judge({ output: CLEAN, exitCode: 0, expectedFiles: CLEAN_EXPECTED_FILES }),
       'the complete run passes',
-    ).toEqual({
+    ).toMatchObject({
       ok: true,
       problems: [],
     });
@@ -119,6 +119,21 @@ describe('the suite verifier refuses to call an under-run green', () => {
     expect(judge({ output: 'CACError: Unknown option `--minWorkers`', exitCode: 1 }).ok).toBe(
       false,
     );
+  });
+
+  it('CRITICAL a run that SKIPPED files reports how many, because "2576 passed" reads identically whether 63 files ran or not. Both fixtures below are real output from the same tree minutes apart: without DATABASE_URL, 56 files gate themselves off and 2642 files / 26,802 tests run; with it pointed at the local Postgres, 2645 files / 27,066 tests run. The 264-test difference is the real-database guards on keyset SQL, concurrency and idempotency — legitimate to skip on a machine with no Postgres, and the reason the verdict stays ok, but not something a reader should have to infer.', () => {
+    const withoutPostgres =
+      ' Test Files  2576 passed | 63 skipped (2642)\n      Tests  26802 passed | 252 skipped (27059)\n';
+    const withPostgres =
+      ' Test Files  2645 passed (2645)\n      Tests  27066 passed | 2 skipped (27069)\n';
+
+    const partial = judge({ output: withoutPostgres, exitCode: 0, expectedFiles: 2642 });
+    expect(partial.ok, 'skipping is legitimate — this must not fail the run').toBe(true);
+    expect(partial.skippedFiles, 'but the count is reported').toBe(63);
+
+    const complete = judge({ output: withPostgres, exitCode: 0, expectedFiles: 2645 });
+    expect(complete.ok).toBe(true);
+    expect(complete.skippedFiles, 'a complete run reports none').toBe(0);
   });
 
   it('CRITICAL the pin matches the test files that exist ON DISK right now. Counted from the project s own include globs rather than compared to a frozen fixture: a pin checked against captured output only stays correct until the next test file is added, and a pin left behind the real number silently stops detecting shortfalls — the exact failure this file guards against. Adding a test fails here until the pin is raised, which is the point.', () => {
