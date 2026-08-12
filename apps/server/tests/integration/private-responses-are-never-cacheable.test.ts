@@ -77,6 +77,9 @@ const PUBLICLY_CACHEABLE = [
 beforeAll(async () => {
   fx = await buildTestApp({
     scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+    withOauthStore: true,
+    enableAgentRuntime: true,
+    enableByokAnthropic: true,
   });
   spec = (await fx.app.inject({ method: 'GET', url: '/openapi.json' })).json<SpecDocument>();
 

@@ -2099,6 +2099,12 @@ function buildRegistry(): OpenAPIRegistry {
           'For an authenticated client: active=true with metadata for its own token, OR active=false when the token is unknown, inactive, or belongs to another client.',
         content: { 'application/json': { schema: OAuthIntrospectResponseOpenApi } },
       },
+      // `parseOrThrow` on the request body: a malformed or missing
+      // parameter is a normal client error here, and RFC 7662/7009 make 400
+      // the standard answer. The sibling POST /v1/oauth/token already
+      // documented it; these two did not, so a third-party integrator
+      // building against this contract had no branch for it.
+      400: { description: 'Malformed request body.', content: problemContent },
       401: { description: 'Invalid or revoked client credentials.', content: problemContent },
     },
   });
@@ -2116,6 +2122,12 @@ function buildRegistry(): OpenAPIRegistry {
           'For an authenticated client, always 200 whether its token was revoked, unknown, or belongs to another client. This prevents token enumeration.',
         content: { 'application/json': { schema: z.object({}) } },
       },
+      // `parseOrThrow` on the request body: a malformed or missing
+      // parameter is a normal client error here, and RFC 7662/7009 make 400
+      // the standard answer. The sibling POST /v1/oauth/token already
+      // documented it; these two did not, so a third-party integrator
+      // building against this contract had no branch for it.
+      400: { description: 'Malformed request body.', content: problemContent },
       401: { description: 'Invalid or revoked client credentials.', content: problemContent },
     },
   });

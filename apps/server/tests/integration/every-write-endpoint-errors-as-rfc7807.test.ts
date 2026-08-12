@@ -41,7 +41,12 @@ interface Probe {
 const probes: Probe[] = [];
 
 beforeAll(async () => {
-  fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+  fx = await buildTestApp({
+    scopes: ['read', 'write', 'account_owner'],
+    withOauthStore: true,
+    enableAgentRuntime: true,
+    enableByokAnthropic: true,
+  });
   const spec = (await fx.app.inject({ method: 'GET', url: '/openapi.json' })).json<{
     paths?: Record<string, Record<string, unknown>>;
   }>();

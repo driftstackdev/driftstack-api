@@ -13832,6 +13832,16 @@
               }
             }
           },
+          "400": {
+            "description": "Malformed request body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Invalid or revoked client credentials.",
             "content": {
@@ -13888,6 +13898,16 @@
                 "schema": {
                   "type": "object",
                   "properties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }

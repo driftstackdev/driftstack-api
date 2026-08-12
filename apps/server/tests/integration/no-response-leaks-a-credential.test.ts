@@ -136,9 +136,20 @@ function familyOf(path: string): string | null {
 }
 
 beforeAll(async () => {
-  fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+  // The conditionally-wired surfaces are switched ON. OAuth answers 404 and the
+  // agent-runtime and BYOK routes answer 503 without them, so this sweep — whose
+  // whole subject is credential exposure — had never read a body from the BYOK
+  // surface, which exists to hold a CUSTOMER'S OWN provider key.
+  const WIRED = {
+    withOauthStore: true,
+    enableAgentRuntime: true,
+    enableByokAnthropic: true,
+  } as const;
+
+  fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'], ...WIRED });
   staff = await buildTestApp({
     scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+    ...WIRED,
   });
   spec = (await fx.app.inject({ method: 'GET', url: '/openapi.json' })).json<SpecDocument>();
 
@@ -235,7 +246,9 @@ afterAll(async () => {
 
 describe('no successful response leaks a credential', () => {
   it('CRITICAL the sweep reached real bodies AND the detector fires. Every assertion below reports an ABSENCE, so a sweep that scanned nothing — or a pattern that matched nothing — would satisfy them having proved nothing.', () => {
-    expect(scanned, 'customer-surface 2xx bodies scanned').toBeGreaterThan(40);
+    // MEASURED: 54 with the gated surfaces wired, 50 without — the wiring is
+    // what lets this sweep read the BYOK bodies at all.
+    expect(scanned, 'customer-surface 2xx bodies scanned').toBeGreaterThan(50);
     // Floored separately: a staff credential that stopped working would turn
     // every admin route back into a 403 and this sweep would silently return to
     // reading nothing while still reporting clean.

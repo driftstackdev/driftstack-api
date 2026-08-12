@@ -70,12 +70,20 @@ function flatten(tree: string): Set<string> {
 }
 
 beforeAll(async () => {
-  fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+  fx = await buildTestApp({
+    scopes: ['read', 'write', 'account_owner'],
+    withOauthStore: true,
+    enableAgentRuntime: true,
+    enableByokAnthropic: true,
+  });
   // A staff credential for the admin surface. With a customer key those routes
   // answer 403 — which IS documented — so this sweep confirmed the 403 and
   // never observed a single admin SUCCESS status.
   staff = await buildTestApp({
     scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+    withOauthStore: true,
+    enableAgentRuntime: true,
+    enableByokAnthropic: true,
   });
   served = flatten(fx.app.printRoutes({ commonPrefix: false }));
   spec = (await fx.app.inject({ method: 'GET', url: '/openapi.json' })).json<SpecDocument>();
