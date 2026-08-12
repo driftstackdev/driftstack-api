@@ -167,7 +167,7 @@ describe('routes whose foreign-reference contract is not 404 are still safe', ()
     expect(ownerRead.statusCode, "the owner's profile must survive a foreign delete").toBe(200);
   });
 
-  it('CRITICAL a foreign snapshot listing returns NO rows. A 200 is acceptable only because the page is empty; leaking another account’s snapshot list would expose their browsing identity history.', async () => {
+  it('CRITICAL a foreign snapshot listing is NOT FOUND, and carries no rows. This used to answer 200 with an empty page — safe, but it confirmed the profile existed, and this test said so: "a 200 is acceptable only because the page is empty". The parent is now resolved account-scoped before anything is listed, so a foreign id is indistinguishable from one that was never created. Both halves are asserted: the status, and the absence of any row in the body.', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const profileId = await createProfileForAccountA(fx);
     const other = await seedAdditionalAccount(fx, {
@@ -181,8 +181,12 @@ describe('routes whose foreign-reference contract is not 404 are still safe', ()
       url: `/v1/profiles/${profileId}/snapshots`,
       headers: { authorization: `Bearer ${other.plaintext}` },
     });
+    expect(res.statusCode, 'a foreign profile id must not resolve').toBe(404);
+    // The status is the new half; this is the original guarantee and it still
+    // has to hold. Asserting only the 404 would stop checking the body, which
+    // is where a leak would actually appear.
     expect(
-      res.json<{ data: unknown[] }>().data,
+      res.json<{ data?: unknown[] }>().data ?? [],
       'no snapshot may cross an account boundary',
     ).toEqual([]);
   });

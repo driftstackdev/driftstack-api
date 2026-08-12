@@ -36,6 +36,10 @@ const NO_404_BY_DESIGN: ReadonlyMap<string, string> = new Map([
     'idempotent delete — profiles service does `if (!ok) return`, so a missing profile is a 204',
   ],
   [
+    'DELETE /v1/admin/oauth/clients/{id}',
+    'idempotent delete — revokeClient returns void and both stores no-op on an unknown id, so a missing client is a 204. This one DOCUMENTED a 404 it could never return, which is why it never surfaced here: the check below asks whether 404 is documented, and it was.',
+  ],
+  [
     'POST /v1/admin/oauth/clients/{id}/rotate-secret',
     'unknown client throws OAuthError(invalid_client), which oauthErrorToHttp maps to 401 — not 404',
   ],

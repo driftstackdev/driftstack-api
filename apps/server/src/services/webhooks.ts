@@ -680,7 +680,7 @@ export class WebhooksService {
     return n;
   }
 
-  listDeliveries(
+  async listDeliveries(
     ctx: AccountContext,
     endpointId: string,
     opts: {
@@ -696,6 +696,15 @@ export class WebhooksService {
     // 2026-07-02; the sibling reads all enforce this, this one was the oversight).
     throwIfMissingScope(ctx, 'read:webhooks');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    // A sub-resource listing must not imply that its parent exists. Without
+    // this check the route answered 200 with an empty page for an endpoint
+    // that does not exist — indistinguishable from a real endpoint that has
+    // never fired, so a customer debugging a mistyped id was shown "no
+    // deliveries" instead of "no such webhook". It also contradicted the 404
+    // the route's own contract documents. `get()` above resolves the same id
+    // and throws; this read was the one that did not.
+    const endpoint = await this.repo.findEndpoint(endpointId, accountId);
+    if (!endpoint) throw new NotFoundError(`Webhook endpoint "${endpointId}" not found.`);
     return this.repo.listDeliveriesForEndpoint(endpointId, accountId, opts);
   }
 

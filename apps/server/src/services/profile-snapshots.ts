@@ -137,7 +137,24 @@ export class ProfileSnapshotsService {
     return row;
   }
 
-  list(args: ListSnapshotsArgs): Promise<ListSnapshotsPage> {
+  async list(args: ListSnapshotsArgs): Promise<ListSnapshotsPage> {
+    // A sub-resource listing must not imply that its parent exists. Without
+    // this check `GET /v1/profiles/{id}/snapshots` answered 200 with an empty
+    // page for a profile that does not exist — indistinguishable from a real
+    // profile that simply has no snapshots, so a customer who mistyped an id
+    // was told "no snapshots" rather than "no such profile". It also
+    // contradicted the 404 the route's own contract documents.
+    //
+    // `capture()` above already performs exactly this lookup before writing;
+    // only the read path skipped it. The account-wide listing passes no parent
+    // and has nothing to verify.
+    if (args.parentProfileId !== undefined) {
+      const profile = await this.profilesRepo.findById({
+        id: args.parentProfileId,
+        accountId: args.accountId,
+      });
+      if (!profile) throw new NotFoundError('Profile not found.');
+    }
     return this.snapshotsRepo.list(args);
   }
 

@@ -17767,7 +17767,7 @@
         ],
         "responses": {
           "204": {
-            "description": "OAuth client revoked."
+            "description": "OAuth client revoked. Idempotent: an unknown id also answers 204."
           },
           "400": {
             "description": "Validation failed.",
@@ -17791,16 +17791,6 @@
           },
           "403": {
             "description": "Caller not permitted.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "OAuth client not found.",
             "content": {
               "application/problem+json": {
                 "schema": {

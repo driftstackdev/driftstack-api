@@ -253,9 +253,44 @@ describe('V-553.B-19 ProfileSnapshotsService.list', () => {
       makeSnapshot({ id: 'psnap_a', parentProfileId: 'prof_1' }),
       makeSnapshot({ id: 'psnap_b', parentProfileId: 'prof_2' }),
     ];
-    const { snapshotsRepo, profilesRepo } = makeRepos({ snapshots: snaps });
+    // The parent must exist for this case to be about FILTERING. Listing under
+    // a profile that is not there is now a 404, so without this the test would
+    // pass or fail for the wrong reason.
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      profiles: [makeProfile({ id: 'prof_1' })],
+      snapshots: snaps,
+    });
     const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
     const page = await svc.list({ accountId: 'acc_1', parentProfileId: 'prof_1' });
+    expect(page.data.map((s) => s.id)).toEqual(['psnap_a']);
+  });
+
+  it('CRITICAL throws NotFound when the parent profile does not exist, instead of an empty page. An empty 200 asserts the parent is real and simply has nothing — so a mistyped id read as "no snapshots" rather than "no such profile", and the route contradicted the 404 its own contract documents.', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      snapshots: [makeSnapshot({ id: 'psnap_a', parentProfileId: 'prof_1' })],
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(svc.list({ accountId: 'acc_1', parentProfileId: 'prof_absent' })).rejects.toThrow(
+      NotFoundError,
+    );
+  });
+
+  it('CRITICAL a parent owned by ANOTHER account is not found either. The lookup is account-scoped, so a foreign id cannot be used to prove a profile exists.', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      profiles: [makeProfile({ id: 'prof_other', accountId: 'acc_other' })],
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(svc.list({ accountId: 'acc_1', parentProfileId: 'prof_other' })).rejects.toThrow(
+      NotFoundError,
+    );
+  });
+
+  it('the account-wide listing has no parent to verify and still returns rows', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      snapshots: [makeSnapshot({ id: 'psnap_a', parentProfileId: 'prof_1' })],
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    const page = await svc.list({ accountId: 'acc_1' });
     expect(page.data.map((s) => s.id)).toEqual(['psnap_a']);
   });
 });

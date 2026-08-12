@@ -2927,8 +2927,17 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin', 'oauth'],
     security: auth,
     responses: {
-      404: { description: 'OAuth client not found.', content: problemContent },
-      204: { description: 'OAuth client revoked.' },
+      // Deliberately no 404. This is an idempotent delete: `revokeClient`
+      // returns void and BOTH stores no-op on an unknown id — the in-memory one
+      // does `if (c === undefined) return`, the Postgres one the same inside its
+      // transaction — so an absent client answers 204 like any other. The 404
+      // documented here until now was unreachable, which told every generated
+      // SDK to model a branch the server cannot produce. DELETE /v1/profiles/{id}
+      // is the same pattern and is already recorded as 404-free in
+      // parameterised-routes-document-404.
+      204: {
+        description: 'OAuth client revoked. Idempotent: an unknown id also answers 204.',
+      },
       ...errors4xx,
     },
   });
