@@ -218,10 +218,13 @@ until you release it).
 
 ## Two habits worth starting now
 
-- **Send an `Idempotency-Key` header on create-style POSTs.** If the
-  network drops mid-request, the retry replays the original response
-  instead of minting a duplicate session. See
-  [Idempotency keys](/reference/idempotency/).
+- **Know which POSTs are safe to retry.** `Idempotency-Key` is honoured
+  on four endpoints — agent-session creation, agent-session messages,
+  and the two billing checkouts — where a retry replays the original
+  response. It is **not** honoured on `POST /v1/sessions`: retrying that
+  after a dropped connection mints a second session and takes another
+  concurrent slot. See [Idempotency keys](/reference/idempotency/) for
+  the exact list.
 - **Prefer webhooks to polling.** `POST /v1/webhooks` subscribes an
   HTTPS endpoint of yours to events like `session.completed` and
   `session.failed`. See [Webhook endpoints](/webhooks/endpoints/).

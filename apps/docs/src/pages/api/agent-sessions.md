@@ -108,7 +108,9 @@ Headers:
 
 - `Idempotency-Key: <string>` (optional, Stripe-pattern) — retries
   with the same key replay the original 201 instead of minting a
-  duplicate row.
+  duplicate row. This endpoint is one of the four that honour the
+  header; see [Idempotency keys](/reference/idempotency/) for the full
+  list and the endpoints that ignore it.
 
 Response `201 Created` returns the resource above.
 

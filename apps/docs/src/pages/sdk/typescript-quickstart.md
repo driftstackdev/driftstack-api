@@ -241,8 +241,9 @@ The TS SDK re-exports `CANONICAL_MODIFIER_NAMES` from
   [BYOK Anthropic](/api/byok-anthropic/) — the two LLM rails
   agent sessions can use; bring your own key OR consent to the
   deployment-fallback budget.
-- [Idempotency keys](/reference/idempotency/) — `Idempotency-Key`
-  header on create-style POSTs makes retries safe.
+- [Idempotency keys](/reference/idempotency/) — `Idempotency-Key` is
+  honoured on agent sessions and the billing checkouts, and NOT on
+  `POST /v1/sessions`; retrying that one mints a second session.
 - [Webhook event catalog](/webhooks/events/) — every event the
   platform can push.
 - [Error catalogue](/sdk/error-handling/) — every problem-type

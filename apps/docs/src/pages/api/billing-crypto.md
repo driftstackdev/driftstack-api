@@ -55,7 +55,9 @@ order and then 403 on every status poll, so mint checkout keys with
 both, or with `account_owner`.) Idempotent — pass an `Idempotency-Key` header to
 make retries safe; a repeated key returns the original order
 verbatim (with an `Idempotent-Replayed: 1` response header) for as
-long as the order row exists — there is no 24-hour expiry.
+long as the order row exists — there is no 24-hour expiry. See
+[Idempotency keys](/reference/idempotency/) for which endpoints honour
+the header and which ignore it.
 
 Returns:
 

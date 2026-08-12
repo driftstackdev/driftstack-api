@@ -147,7 +147,7 @@ func main() {
 - **[Session lifecycle](/guides/session-lifecycle/)** — full lifecycle reference (states, the free-tier 20-minute duration cap, recovery on reconnect).
 - **[Agent sessions](/api/agent-sessions/)** — natural-language decompose-and-execute on top of any driver session. Three operational modes: AI (default), manual (pass-through), pair (interactive takeover state machine). Live transcript stream via Server-Sent Events.
 - **[Bundled LLM](/api/bundled-llm/)** and **[BYOK Anthropic](/api/byok-anthropic/)** — the two LLM rails agent sessions can use. BYOK encrypts your Anthropic key at rest + decrypts in-memory only at execution; the bundled rail uses a deployment-managed budget for accounts that don't want to manage their own key.
-- **[Idempotency keys](/reference/idempotency/)** — send an `Idempotency-Key` header on create-style POSTs so a network retry replays the original response instead of minting a duplicate session.
+- **[Idempotency keys](/reference/idempotency/)** — `Idempotency-Key` is honoured on four endpoints: agent-session creation, agent-session messages, and the two billing checkouts. It is **not** honoured on `POST /v1/sessions` — the `sessions.create()` call above. Retrying that after a timeout mints a second session and takes another concurrent slot, so guard it yourself (reuse the session id you already got back, or check `client.sessions.list()` before retrying).
 - **[Webhook event catalog](/webhooks/events/)** — push notifications when sessions transition state, billing events fire, etc.
 - **[API versioning policy](/api/versioning/)** — what changes are additive, what triggers `/v2/*`, deprecation cycles.
 

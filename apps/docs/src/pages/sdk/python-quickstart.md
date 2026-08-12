@@ -252,8 +252,9 @@ through the schema unchanged but the harness decoder drops them.
 - [Bundled LLM](/api/bundled-llm/) and
   [BYOK Anthropic](/api/byok-anthropic/) — the two LLM rails
   agent sessions can use.
-- [Idempotency keys](/reference/idempotency/) — `Idempotency-Key`
-  header on create-style POSTs makes retries safe.
+- [Idempotency keys](/reference/idempotency/) — `Idempotency-Key` is
+  honoured on agent sessions and the billing checkouts, and NOT on
+  `POST /v1/sessions`; retrying that one mints a second session.
 - [Webhook event catalog](/webhooks/events/) — every event the
   platform can push.
 - [Error catalogue](/sdk/error-handling/) — every problem-type you
