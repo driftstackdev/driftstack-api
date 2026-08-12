@@ -821,9 +821,18 @@ export class ProfilesService {
   async exportProfile(args: { id: string; accountId: string }): Promise<ProfileRecord> {
     const row = await this.repo.findById({ id: args.id, accountId: args.accountId });
     if (row === null) throw new NotFoundError('Profile not found.');
+    // The lineage keys are the ENVELOPE's own values (routes/profiles.ts builds
+    // `source_profile_id: `prof_${row.id}`` / `source_account_id: row.accountId`), not the
+    // internal `profile_<uuid>` form used for targetResourceId. That is deliberate and it is
+    // the whole point: `profile.imported` records whatever the envelope carried, so recording
+    // the same string here is what lets a consumer join an export to the import that consumed
+    // it. Using the internal form would satisfy the documented key names while leaving the
+    // join silently broken.
     await this.emitAuditBestEffort(args.accountId, 'profile.exported', `profile_${row.id}`, {
       name: row.name,
       archetype: row.archetype,
+      source_profile_id: `prof_${row.id}`,
+      source_account_id: row.accountId,
     });
     return row;
   }

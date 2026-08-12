@@ -204,12 +204,32 @@ function makeRepo(
 
 function makeAudit(): {
   audit: AccountAuditService;
-  calls: Array<{ action: string; payload: Record<string, unknown> | null | undefined }>;
+  calls: Array<{
+    action: string;
+    payload: Record<string, unknown> | null | undefined;
+    // Captured so a test can tell the INTERNAL id form on the target apart from the PUBLIC
+    // form in the payload. profile.exported deliberately uses both: `profile_<uuid>` as the
+    // target, `prof_<uuid>` in the lineage keys, because the latter is what the export
+    // envelope carries and therefore what a later profile.imported echoes back.
+    targetResourceId: string | null | undefined;
+  }>;
 } {
-  const calls: Array<{ action: string; payload: Record<string, unknown> | null | undefined }> = [];
+  const calls: Array<{
+    action: string;
+    payload: Record<string, unknown> | null | undefined;
+    targetResourceId: string | null | undefined;
+  }> = [];
   const audit = {
-    record: (args: { action: string; payload?: Record<string, unknown> | null }) => {
-      calls.push({ action: args.action, payload: args.payload });
+    record: (args: {
+      action: string;
+      payload?: Record<string, unknown> | null;
+      targetResourceId?: string | null;
+    }) => {
+      calls.push({
+        action: args.action,
+        payload: args.payload,
+        targetResourceId: args.targetResourceId,
+      });
       return Promise.resolve();
     },
     // 2026-05-22 — V-666 import-cycle quota guard. Mock returns 0 so
@@ -572,6 +592,26 @@ describe('V-553.B-21 ProfilesService.exportProfile', () => {
     const row = await svc.exportProfile({ id: 'p1', accountId: 'acc_1' });
     expect(row.name).toBe('exp');
     expect(calls[0]?.action).toBe('profile.exported');
+  });
+
+  it('CRITICAL profile.exported carries the documented lineage keys, in the PUBLIC `prof_` form the export envelope uses — the form is what makes an export joinable to the import that consumed it', async () => {
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_1', name: 'exp' })]);
+    const { audit, calls } = makeAudit();
+    const svc = new ProfilesService(repo, audit);
+    await svc.exportProfile({ id: 'p1', accountId: 'acc_1' });
+
+    const payload = calls[0]?.payload as Record<string, unknown> | undefined;
+    // Documented at apps/docs/src/pages/api/audit-log.md as "Payload carries
+    // source_profile_id + source_account_id for portability lineage". Before this, a
+    // compliance consumer reading either key got undefined in the list JSON, the JSON export
+    // and the CSV payload column.
+    expect(payload?.source_profile_id, 'must match the envelope, not the internal id').toBe(
+      'prof_p1',
+    );
+    expect(payload?.source_account_id).toBe('acc_1');
+    // The internal `profile_` prefix stays on targetResourceId; mixing the two is what would
+    // break the join against profile.imported.
+    expect(calls[0]?.targetResourceId).toBe('profile_p1');
   });
 });
 

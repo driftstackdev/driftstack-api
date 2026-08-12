@@ -169,8 +169,11 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     expect(body).toMatch(
       /V-480 — export a profile's metadata as an envelope payload \(no\s*\n?\s*\*\s*envelope-versioning here — that lives at the route layer where the\s*\n?\s*\*\s*api-types schema is the canonical shape\)\./,
     );
+    // This pin used to end at `archetype: row.archetype,` — freezing a payload that omitted
+    // the two lineage keys the customer docs promise. It was the only thing blocking the fix;
+    // the two doc pins the audit named were fine, because the DOCS were the true half.
     expect(body).toMatch(
-      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.exported', `profile_\$\{row\.id\}`, \{\s*\n?\s*name: row\.name,\s*\n?\s*archetype: row\.archetype,\s*\n?\s*\}\);/,
+      /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.exported', `profile_\$\{row\.id\}`, \{\s*\n?\s*name: row\.name,\s*\n?\s*archetype: row\.archetype,\s*\n?\s*source_profile_id: `prof_\$\{row\.id\}`,\s*\n?\s*source_account_id: row\.accountId,\s*\n?\s*\}\);/,
     );
   });
 

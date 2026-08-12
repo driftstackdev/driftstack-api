@@ -32988,3 +32988,40 @@ Note also what those two pins were freezing: "only `aiAgent` is gated" was alrea
 V-763 — `apiAccess` had been gated for some time. So this is another instance of the session's
 dominant defect, a parity pin holding a claim that had quietly stopped being true, and it is the
 reason the comment could not be corrected without touching them.
+
+## V-764 — `profile.exported` omitted both lineage keys its own docs promise (2026-08-12)
+
+`apps/docs/src/pages/api/audit-log.md` says the `profile.exported` payload "carries
+`source_profile_id` + `source_account_id` for portability lineage", and
+`packages/api-types/src/accounts.ts` carries a pinned claim that **both** `profile.exported` and
+`profile.imported` do so. The only emit (`services/profiles.ts`) wrote `{ name, archetype }`. A
+compliance consumer reading either key got `undefined` — in the list JSON, the JSON export and the
+CSV `payload` column alike. `profile.imported` _does_ write both, which is why the asymmetry
+survived: whichever one you looked at first, it worked.
+
+Fixed in CODE rather than DOC, because the fix is purely additive and no consumer breaks.
+
+**The values are the export envelope's own, and that choice is the substance of the fix rather
+than a detail.** `routes/profiles.ts` builds the envelope with `source_profile_id:
+`prof*${row.id}``and`source_account_id: row.accountId`. The audit payload now records exactly
+those. That is what makes the pair joinable: a later import of that envelope echoes the same
+string into its own payload, so an export can actually be followed to the import that consumed
+it. Recording the internal `profile*<uuid>`form — the one already used for`targetResourceId` —
+would have satisfied the documented key names while leaving the join silently broken. Mutation-
+proved: switching to the internal form reds both the runtime test and the source pin.
+
+The `targetResourceId` deliberately keeps the internal `profile_` form, so the row carries both
+id shapes on purpose. The unit test's audit mock did not capture `targetResourceId` at all, so it
+was extended (additively — existing tests read only `action`/`payload`) to let the test assert the
+two forms are not mixed up.
+
+**The blocking pin was not one of the two the audit named.** It listed
+`docs-pages-api-audit-log-content-parity.test.ts` and `cross-sdk-audit-action-roster-parity.test.ts`
+— both fine, because the docs were the TRUE half here and stay unchanged. What blocked the change
+was `services-profiles-content-parity.test.ts`, which regex-pinned the emit's source text down to
+the closing brace of the two-key payload. This time I enumerated the readers of the edited path
+_before_ running anything, which is what V-763a cost me for not doing.
+
+Still unresolved and NOT claimed as fixed: the transfer-path import (`profiles.ts`) records a bare
+uuid rather than either prefixed form, so a join across that particular path still needs
+normalisation. The export→envelope→import path is the one this closes.
