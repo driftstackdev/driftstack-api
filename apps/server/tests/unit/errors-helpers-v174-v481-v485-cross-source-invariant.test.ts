@@ -30,11 +30,12 @@
 //   'Throws ForbiddenError when the given tier does NOT have the
 //   requested boolean feature enabled'.
 //
-//   V-485 feature-matrix framing — 'Today's matrix: only aiAgent
-//   is gated this way. trialPack is exposed mainly for read-side
-//   decisions (apiKeyEnvironment). Future features
-//   (customArchetypes, multiRegion, …) extend TierFeatures and
-//   pass through the same guard'.
+//   V-485 feature-matrix framing — 'Today's matrix: apiAccess,
+//   aiAgent and vpnEgress are gated this way — every boolean field
+//   on TierFeatures. Future features extend TierFeatures and pass
+//   through the same guard'. V-763 corrected this from 'only
+//   aiAgent': apiAccess was already gated, and vpnEgress was
+//   published as a paid-tier difference nothing enforced.
 //
 //   Re-exports NotFoundError from errors.ts.
 //
@@ -163,11 +164,12 @@ describe('W967 errors-helpers V-174 + V-481 + V-485 cross-source invariant', () 
     expect(p).toMatch(/call site picks it up automatically\./);
   });
 
-  it("CRITICAL V-485 feature-matrix framing — 'Today's matrix: only aiAgent is gated this way. Future features (customArchetypes, multiRegion, …) extend TierFeatures and pass through the same guard'. The aiAgent-only-today + extensible-via-TierFeatures is the V-485 scope. (trialPack reference removed 2026-05-27.)", () => {
+  it("CRITICAL V-485 feature-matrix framing — 'Today's matrix: apiAccess, aiAgent and vpnEgress are gated this way — every boolean field on TierFeatures'. V-763 corrected this from 'only aiAgent', which had gone stale in BOTH directions: apiAccess was already gated, and vpnEgress was published as a paid-tier difference that nothing enforced. Two pins froze the stale sentence, so the comment could not be corrected without them. (trialPack reference removed 2026-05-27.)", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors-helpers.ts'));
-    expect(p).toMatch(/Today's matrix: only `aiAgent` is gated this way\. Future features/);
-    expect(p).toMatch(/\(`customArchetypes`, `multiRegion`, …\) extend `TierFeatures` and pass/);
-    expect(p).toMatch(/through the same guard\./);
+    expect(p).toMatch(/Today's matrix: `apiAccess`, `aiAgent` and `vpnEgress` are gated this/);
+    expect(p).toMatch(
+      /Future\s*\n?\s*\*\s*features extend `TierFeatures` and pass through the same guard/,
+    );
     expect(p).not.toMatch(/trialPack/);
   });
 

@@ -14,8 +14,9 @@
 //   • V-485 requireTierFeature: throws when TIER_FEATURES[tier]
 //     [feature] is false; replaces scattered `if (tier==='X' || …)`
 //     conditionals.
-//   • Today's gated feature: only `aiAgent`. `trialPack` is read-side
-//     decision (apiKeyEnvironment).
+//   • Today's gated features: `apiAccess`, `aiAgent`, `vpnEgress` — every
+//     boolean field on TierFeatures (V-763; was 'only aiAgent', stale).
+//     `trialPack` is read-side decision (apiKeyEnvironment).
 //   • Re-exports NotFoundError for ergonomic single-import.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -109,14 +110,14 @@ describe('W392.C apps/server/src/lib/errors-helpers.ts content parity', () => {
     );
   });
 
-  it('V-485 requireTierFeature framing + today-only-aiAgent-gated note', () => {
+  it('V-485 requireTierFeature framing + the all-three-boolean-features-gated note (V-763 corrected this from only-aiAgent)', () => {
     expect(body).toMatch(
       /V-485 — per-tier feature guard\. Throws `ForbiddenError` when the\s*\n?\s*\*\s*given tier does NOT have the requested boolean feature enabled/,
     );
     expect(body).toMatch(
       /The single guard call replaces\s*\n?\s*\*\s*`if \(tier === 'X' \|\| tier === 'Y'\) throw …` style scattered\s*\n?\s*\*\s*conditionals — when a tier's feature row in\s*\n?\s*\*\s*`packages\/api-types\/src\/common\.ts:TIER_FEATURES` flips, every\s*\n?\s*\*\s*call site picks it up automatically/,
     );
-    expect(body).toMatch(/Today's matrix: only `aiAgent` is gated this way\. Future features/);
+    expect(body).toMatch(/Today's matrix: `apiAccess`, `aiAgent` and `vpnEgress` are gated this/);
     expect(body).not.toMatch(/trialPack/);
   });
 

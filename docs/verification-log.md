@@ -32963,3 +32963,28 @@ exist without reading customer data. The exposure is bounded: free has `apiAcces
 through the desktop client. New state is fully closed; the residual is pre-existing rows.
 
 `EXPECTED_TEST_FILES` 2645 → 2646 for the one new guard file.
+
+## V-763a — correction: two pins froze the stale feature-matrix comment, and I broke them (2026-08-12)
+
+V-763 corrected a stale comment in `lib/errors-helpers.ts` ("Today's matrix: only `aiAgent` is
+gated this way") and I committed it without running the pins on that file. The gate then reported
+two failures, both mine: `errors-helpers-v174-v481-v485-cross-source-invariant.test.ts:168` and
+`lib-errors-helpers-content-parity.test.ts:119` each froze that sentence verbatim.
+
+Both are now updated to the corrected text, along with their `it()` titles and two file-header
+comments that restated the old claim as documentation. One assertion was dropped rather than
+rewritten: the comment's `(customArchetypes, multiRegion, …)` example list is gone, so a pin on
+it would have been pinning text that no longer exists.
+
+**Worth recording because the miss is exactly the failure I had just written down.** Minutes
+earlier, while preparing the `profile.exported` fix, I noted that the pin which actually blocks a
+change is usually a source-text pin on the CODE rather than the doc pins an audit names — and then
+edited `errors-helpers.ts` without grepping for its own source-text pins. I ran the tests my
+change was _about_ (the proxy gate, the new feature guard) and not the tests that merely _read_
+the file I touched. Knowing the rule and applying it are separate steps; the applying step is
+"grep the edited path against `tests/` before committing", every time.
+
+Note also what those two pins were freezing: "only `aiAgent` is gated" was already false before
+V-763 — `apiAccess` had been gated for some time. So this is another instance of the session's
+dominant defect, a parity pin holding a claim that had quietly stopped being true, and it is the
+reason the comment could not be corrected without touching them.
