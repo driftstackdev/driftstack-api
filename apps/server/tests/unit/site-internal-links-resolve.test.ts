@@ -76,6 +76,22 @@ function walk(dir: string): string[] {
   return out;
 }
 
+/**
+ * Every file that can CONTAIN a link, across the whole `src` tree.
+ *
+ * Not just `src/pages`. Layouts and components are where the highest-leverage
+ * links live — a nav entry in a layout appears on every page of that site, so a
+ * broken one there is the worst case, and it was invisible while this scanned
+ * pages alone. Measured: 48 links outside `src/pages` (marketing 32 across
+ * components/layouts/data, dashboard 7, docs 4, admin 3, status 2).
+ */
+const LINK_SOURCE_EXTENSIONS = new Set(['.astro', '.md', '.mdx', '.ts', '.tsx']);
+
+function linkSources(site: string): string[] {
+  const src = resolve(REPO_ROOT, 'apps', site, 'src');
+  return walkAll(src).filter((f) => LINK_SOURCE_EXTENSIONS.has(extname(f)));
+}
+
 /** The routes a site serves, split into literal paths and dynamic patterns. */
 function routesOf(site: string): { staticRoutes: Set<string>; dynamic: RegExp[] } {
   const root = resolve(REPO_ROOT, 'apps', site, 'src', 'pages');
@@ -121,9 +137,9 @@ interface Link {
 
 /** Literal same-site hrefs. Anything script-built is deliberately skipped. */
 function linksOf(site: string): Link[] {
-  const root = resolve(REPO_ROOT, 'apps', site, 'src', 'pages');
+  const root = resolve(REPO_ROOT, 'apps', site, 'src');
   const out: Link[] = [];
-  for (const file of walk(root)) {
+  for (const file of linkSources(site)) {
     const text = readFileSync(file, 'utf8');
     for (const m of text.matchAll(SAME_SITE_LINK)) {
       const raw = m[1] ?? m[2] ?? '';
@@ -149,9 +165,9 @@ interface CrossLink {
 
 /** Literal absolute links from one site into another first-party app. */
 function crossSiteLinksOf(site: string): CrossLink[] {
-  const root = resolve(REPO_ROOT, 'apps', site, 'src', 'pages');
+  const root = resolve(REPO_ROOT, 'apps', site, 'src');
   const out: CrossLink[] = [];
-  for (const file of walk(root)) {
+  for (const file of linkSources(site)) {
     const text = readFileSync(file, 'utf8');
     for (const m of text.matchAll(CROSS_SITE_LINK)) {
       const host = m[1] ?? m[3] ?? '';
@@ -192,16 +208,18 @@ describe('every internal site link resolves to a page that exists', () => {
     // panel is low because most of its links ARE script-built, which is the
     // case this guard deliberately skips.
     //
-    // Docs moved from 48 to 267 when the markdown syntax was added — it is a
-    // markdown site, so an href-only matcher was reading 18% of it. Floors are
-    // set against the post-fix numbers so that regression is visible if the
-    // matcher ever narrows again.
+    // Two widenings are baked into these numbers, each measured. Docs moved
+    // from 48 to 267 when the markdown syntax was added (it is a markdown site,
+    // so an href-only matcher read 18% of it), and every site moved again when
+    // the scan stopped being limited to `src/pages`: marketing 264 -> 296,
+    // dashboard 49 -> 56, docs 267 -> 271, status 8 -> 10, admin 4 -> 7. Floors
+    // sit against the post-fix numbers so either narrowing is visible.
     const MIN_LINKS: Record<string, number> = {
-      'marketing-site': 200,
-      docs: 200,
-      'customer-dashboard': 30,
-      'admin-panel': 3,
-      'status-site': 5,
+      'marketing-site': 250,
+      docs: 220,
+      'customer-dashboard': 40,
+      'admin-panel': 5,
+      'status-site': 8,
     };
     for (const site of SITES) {
       const { staticRoutes, dynamic } = routesOf(site);
@@ -211,7 +229,7 @@ describe('every internal site link resolves to a page that exists', () => {
       );
     }
     const total = SITES.reduce((n, s) => n + linksOf(s).length, 0);
-    expect(total, 'literal internal links across all sites').toBeGreaterThan(500);
+    expect(total, 'literal internal links across all sites').toBeGreaterThan(600);
 
     // The resolver, on cases whose verdict is not in doubt. `docs` has both a
     // nested route and an index, which is where an off-by-one in the index
@@ -225,9 +243,9 @@ describe('every internal site link resolves to a page that exists', () => {
 
   it('CRITICAL every FIRST-PARTY cross-site link resolves against the app that serves it. This is the adoption path — marketing sends people to docs, docs sends them to the dashboard — so a dead link here is a dead end at the moment someone is trying to use the product.', () => {
     const total = SITES.reduce((n, s) => n + crossSiteLinksOf(s).length, 0);
-    // MEASURED: 120 first-party cross-site links, up from 83 when the markdown
-    // syntax was added.
-    expect(total, 'first-party cross-site links found').toBeGreaterThan(100);
+    // MEASURED: 146 first-party cross-site links — 83 originally, 120 after the
+    // markdown syntax, 146 once layouts and components were included.
+    expect(total, 'first-party cross-site links found').toBeGreaterThan(130);
     expect(
       SITES.flatMap((site) => unresolvedCrossSite(site)),
       'cross-site link(s) pointing at a page the target app does not serve:',

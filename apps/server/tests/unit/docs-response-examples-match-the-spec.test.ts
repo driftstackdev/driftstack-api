@@ -7,6 +7,21 @@
 // in five survived. Nothing noticed, because docs prose is not executable and
 // no test compared an example to the contract.
 //
+// A LIMIT THIS CANNOT CROSS, measured rather than assumed. 101 of the 129
+// templated endpoint references in docs use colon style (`/v1/x/:id`) while the
+// spec keys them in braces, so their examples are skipped. Normalising the two
+// looked like free coverage — 31 examples to 38 — and produced TWO false
+// positives instead, because attribution is by nearest preceding endpoint and
+// this corpus breaks that assumption in both directions: account-rate-limits.md
+// names an unrelated endpoint parenthetically mid-sentence, and mfa.md puts the
+// login-challenge endpoint AFTER the example it belongs to. Requiring the
+// reference to start its line fixed the first and caused the second.
+//
+// So the coverage stays where attribution is sound. Raising it needs a docs
+// convention — the endpoint named on its own line before its example — which is
+// a docs-side change to propose, not something to force by loosening a matcher
+// until it reports numbers it cannot justify.
+//
 // READ THE COVERAGE BEFORE TRUSTING A GREEN HERE. Only examples introduced by
 // the literal `Response (\`NNN\`):` marker can be tied to an endpoint, and only
 // 4 of the 26 API doc pages use that marker at all — 9 examples in total. So
@@ -20,14 +35,18 @@
 // docs promise a field the API never sends). The reverse — a spec field absent
 // from the example — is normal, because examples elide optional fields.
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const DOCS = resolve(REPO_ROOT, 'apps/docs/src/pages/api');
+// The whole docs tree, not just `api/`. Measured: 43 of the 44 labelled
+// response examples live under `api/`; the 44th is a real API response (the
+// webhook replay endpoint in `webhooks/replay.md`). The directory filter was an
+// assumption rather than a property of the corpus.
+const DOCS = resolve(REPO_ROOT, 'apps/docs/src/pages');
 const SPEC = resolve(REPO_ROOT, 'packages/sdk-python/openapi.json');
 
 interface Spec {
@@ -129,6 +148,18 @@ const VERIFIED_UNDOCUMENTED: Record<string, string> = {
     'Same union member and the same passthrough schema as the entry above.',
 };
 
+/** Every markdown file under the docs tree, at any depth. */
+function markdownFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = resolve(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...markdownFiles(full));
+    else if (full.endsWith('.md')) out.push(full);
+  }
+  return out;
+}
+
 interface Pair {
   file: string;
   endpoint: string;
@@ -141,8 +172,8 @@ function scan(): { pairs: Pair[]; matched: number; labelled: number } {
   let labelled = 0;
   if (!existsSync(DOCS)) return { pairs, matched, labelled };
 
-  for (const file of readdirSync(DOCS).filter((f) => f.endsWith('.md'))) {
-    const text = readFileSync(resolve(DOCS, file), 'utf8');
+  for (const file of markdownFiles(DOCS)) {
+    const text = readFileSync(file, 'utf8');
     // BOTH marker spellings. The original regex required the status in
     // backticks — `Response (`200`):` — which is the MINORITY form: the corpus
     // uses the bare `Response (200):` 27 times against 10 backticked. So the
@@ -193,8 +224,8 @@ function scan(): { pairs: Pair[]; matched: number; labelled: number } {
 function scanRaw(): Set<string> {
   const out = new Set<string>();
   if (!existsSync(DOCS)) return out;
-  for (const file of readdirSync(DOCS).filter((f) => f.endsWith('.md'))) {
-    const text = readFileSync(resolve(DOCS, file), 'utf8');
+  for (const file of markdownFiles(DOCS)) {
+    const text = readFileSync(file, 'utf8');
     for (const m of text.matchAll(/Response \(`?(\d{3})`?\)[^\n]*:\s*\n+```json\n([\s\S]*?)```/g)) {
       const status = m[1] ?? '';
       const before = text.slice(0, m.index ?? 0);
