@@ -18,6 +18,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleApiKeysRepo } from '../../src/db/api-keys-repo.js';
+import { assertStableUnderMidWalkInserts } from './_helpers/keyset-stable-under-inserts.js';
 import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -123,6 +124,49 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           collected[i - 1]!.createdAt.getTime(),
         );
       }
+    });
+
+    // The case above pages a fixed set. This one adds keys WHILE the walk is in
+    // progress. See _helpers/keyset-stable-under-inserts.ts for why this
+    // belongs against real Postgres rather than the in-memory twin.
+    it('does not repeat or drop a key when api keys are created mid-walk (the documented concurrent-insert promise)', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG concurrent-insert test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const sql = client;
+      const db = drizzle(sql) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleApiKeysRepo({ client: sql, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seededAccountIds.push(accountId);
+      await sql`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`midwalk-${accountId}@test.local`})`;
+
+      const base = Date.UTC(2026, 4, 1, 0, 0, 0);
+      await assertStableUnderMidWalkInserts({
+        noun: 'api key',
+        seed: async (offsetMs) => {
+          const kid = randomUUID();
+          const [row] = await sql`
+            INSERT INTO api_keys (account_id, name, key_prefix, key_hash, created_at)
+            VALUES (${accountId}, 'midwalk', ${`dsk_${kid.slice(0, 8)}`}, ${`hash_${kid}`}, ${new Date(base + offsetMs).toISOString()})
+            RETURNING id`;
+          return row?.id as string;
+        },
+        list: async ({ limit, cursor }) => {
+          // Single options object, and `accountId` MUST be inside it: passing it
+          // positionally silently drops `limit`, the walk returns every key in
+          // the database in one page, and the absence assertions all pass.
+          const page = await repo.listAllApiKeys(
+            cursor === undefined ? { limit, accountId } : { limit, accountId, cursor },
+          );
+          return { ids: page.items.map((r) => r.id), nextCursor: page.nextCursor };
+        },
+      });
     });
   },
 );

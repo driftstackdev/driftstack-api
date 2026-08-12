@@ -19,6 +19,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleRateLimitOverridesRepo } from '../../src/db/rate-limit-overrides-repo.js';
+import { assertStableUnderMidWalkInserts } from './_helpers/keyset-stable-under-inserts.js';
 import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -133,6 +134,49 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           collected[i - 1]!.createdAt.getTime(),
         );
       }
+    });
+
+    // The case above pages a fixed set. This one adds overrides WHILE the walk
+    // is in progress. See _helpers/keyset-stable-under-inserts.ts for why this
+    // belongs against real Postgres rather than the in-memory twin.
+    it('does not repeat or drop an override when overrides are created mid-walk (the documented concurrent-insert promise)', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG concurrent-insert test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const sql = client;
+      const db = drizzle(sql) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleRateLimitOverridesRepo({ client: sql, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      const apiKeyId = randomUUID();
+      seeded.push({ accountId, apiKeyId });
+      await sql`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`midwalk-rlo-${accountId}@test.local`})`;
+      await sql`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+        VALUES (${apiKeyId}, ${accountId}, 'midwalk', ${`dsk_${apiKeyId.slice(0, 8)}`}, ${`hash_${apiKeyId}`})`;
+
+      const base = Date.UTC(2026, 4, 1, 0, 0, 0);
+      const expires = new Date(Date.UTC(2030, 0, 1));
+      let n = 0;
+      await assertStableUnderMidWalkInserts({
+        noun: 'override',
+        seed: async (offsetMs) => {
+          const [row] = await sql`
+            INSERT INTO rate_limit_overrides
+              (account_id, bucket_key, capacity, refill_per_second_centi, expires_at, set_by_key_id, created_at)
+            VALUES (${accountId}, ${`midwalk-bucket-${n++}`}, 100, 100, ${expires.toISOString()}, ${apiKeyId}, ${new Date(base + offsetMs).toISOString()})
+            RETURNING id`;
+          return row?.id as string;
+        },
+        list: async ({ limit, cursor }) => {
+          const page = await repo.listAll(cursor === undefined ? { limit } : { limit, cursor });
+          return { ids: page.items.map((r) => r.id), nextCursor: page.nextCursor };
+        },
+      });
     });
   },
 );

@@ -21,6 +21,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DurableWebhookDeliveryService } from '../../src/services/durable-webhook-delivery.js';
+import { assertStableUnderMidWalkInserts } from './_helpers/keyset-stable-under-inserts.js';
 import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -131,6 +132,55 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(collected).toHaveLength(9);
       expect(new Set(collected).size).toBe(9);
       expect([...collected].sort()).toEqual([...inserted].sort());
+    });
+
+    // The case above pages a fixed set. This one enqueues deliveries WHILE the
+    // walk runs — the ordinary state of a delivery list, which grows every time
+    // the endpoint fires. See _helpers/keyset-stable-under-inserts.ts.
+    it('does not repeat or drop a delivery when deliveries are enqueued mid-walk (the documented concurrent-insert promise)', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG concurrent-enqueue test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const sql = client;
+      const db = drizzle(sql) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const svc = new DurableWebhookDeliveryService(
+        { client: sql, db, close: async () => {} },
+        () => Date.now(),
+      );
+
+      const accountId = randomUUID();
+      const webhookId = randomUUID();
+      seeded.push({ accountId, webhookId });
+      await sql`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`midwalk-wh-${accountId}@test.local`})`;
+      await sql`INSERT INTO webhook_endpoints (id, account_id, url, secret, secret_prefix, events)
+        VALUES (${webhookId}, ${accountId}, 'https://example.test/hook', 'whsec_abcdefghijklmnopqrstuvwxyz234567', 'whsec_test',
+                ARRAY['session.completed']::webhook_event_type[])`;
+
+      const base = Date.UTC(2026, 4, 1, 0, 0, 0);
+      await assertStableUnderMidWalkInserts({
+        noun: 'delivery',
+        seed: async (offsetMs) => {
+          const [row] = await sql`
+            INSERT INTO webhook_deliveries (webhook_id, event_id, event_type, payload, created_at)
+            VALUES (${webhookId}, ${randomUUID()}, 'session.completed',
+                    ${JSON.stringify({ body: '{}', emittedAtSec: 1 })}::text::jsonb, ${new Date(base + offsetMs).toISOString()})
+            RETURNING id`;
+          return row?.id as string;
+        },
+        list: async ({ limit, cursor }) => {
+          const page = await svc.list(
+            cursor === undefined
+              ? { endpointId: webhookId, limit }
+              : { endpointId: webhookId, limit, cursor },
+          );
+          return { ids: page.data.map((d) => d.id), nextCursor: page.nextCursor };
+        },
+      });
     });
   },
 );

@@ -21,6 +21,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleAdminAuditLogRepo } from '../../src/db/admin-audit-repo.js';
+import { assertStableUnderMidWalkInserts } from './_helpers/keyset-stable-under-inserts.js';
 import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -138,6 +139,50 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           collected[i - 1]!.timestamp.getTime(),
         );
       }
+    });
+
+    // The case above pages a fixed set. This one appends WHILE the walk runs.
+    // See _helpers/keyset-stable-under-inserts.ts for why this belongs against
+    // real Postgres rather than the in-memory twin.
+    it('does not repeat or drop an entry when the admin log is appended to mid-walk (the documented concurrent-insert promise)', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG concurrent-append test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const sql = client;
+      const db = drizzle(sql) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAdminAuditLogRepo({ client: sql, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      const apiKeyId = randomUUID();
+      seeded.push({ accountId, apiKeyId });
+      await sql`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`midwalk-admin-${accountId}@test.local`})`;
+      await sql`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+        VALUES (${apiKeyId}, ${accountId}, 'midwalk', ${`dsk_${apiKeyId.slice(0, 8)}`}, ${`hash_${apiKeyId}`})`;
+
+      const base = Date.UTC(2026, 4, 1, 0, 0, 0);
+      await assertStableUnderMidWalkInserts({
+        noun: 'admin audit entry',
+        seed: async (offsetMs) => {
+          const [row] = await sql`
+            INSERT INTO admin_audit_log (admin_account_id, admin_key_id, action, result, timestamp)
+            VALUES (${accountId}, ${apiKeyId}, 'account.suspended', 'ok', ${new Date(base + offsetMs).toISOString()})
+            RETURNING id`;
+          return row?.id as string;
+        },
+        list: async ({ limit, cursor }) => {
+          const page = await repo.list(
+            cursor === undefined
+              ? { limit, adminAccountId: accountId }
+              : { limit, adminAccountId: accountId, cursor },
+          );
+          return { ids: page.items.map((r) => r.id), nextCursor: page.nextCursor };
+        },
+      });
     });
   },
 );
