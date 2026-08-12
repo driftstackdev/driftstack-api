@@ -52,6 +52,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from '../lib/errors.js';
+import { requireTierFeature } from '../lib/errors-helpers.js';
 
 /** V-352b — avatar presigned-GET TTL. 1h is long enough that a single
  *  dashboard render doesn't churn signed URLs but short enough that
@@ -560,6 +561,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid proxy.');
       }
       assertSafeProxyHost(parsed.data.host);
+      // 6.g — OpenVPN / WireGuard egress is a paid-tier feature. `TIER_FEATURES.vpnEgress`
+      // has said so since it was introduced ("`false` on free (SOCKS5 proxy only)"), and the
+      // dashboard pricing table paints its Access column straight from that flag — but nothing
+      // enforced it, so a free account could register a VPN profile and egress through it.
+      // Free still gets its one proxy (PROXIES_PER_TIER.free === 1); it has to be socks5/http.
+      if (parsed.data.scheme === 'openvpn' || parsed.data.scheme === 'wireguard') {
+        requireTierFeature(ctx.account.tier, 'vpnEgress');
+      }
       const id = randomUUID();
       // VPN schemes carry an encrypted secret (config_blob / private_key) + a
       // non-secret config block; socks5/http use the write-only password.
@@ -617,6 +626,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         );
       }
       if (parsed.data.host !== undefined) assertSafeProxyHost(parsed.data.host);
+      // Gate on the scheme the row would END UP with, not the one submitted. That keeps the
+      // remediation path open: an account whose tier lacks vpnEgress can still PUT
+      // `scheme: 'socks5'` over a VPN row it registered before this gate existed (or delete
+      // it). What it cannot do is keep a VPN row alive by editing around the restriction.
+      const effectiveScheme = parsed.data.scheme ?? existing.scheme;
+      if (effectiveScheme === 'openvpn' || effectiveScheme === 'wireguard') {
+        requireTierFeature(ctx.account.tier, 'vpnEgress');
+      }
       const updates: AccountProxyRowUpdates = {};
       if (parsed.data.label !== undefined) updates.label = parsed.data.label;
       if (parsed.data.scheme !== undefined) updates.scheme = parsed.data.scheme;

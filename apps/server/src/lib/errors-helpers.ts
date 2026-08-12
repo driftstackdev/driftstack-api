@@ -99,9 +99,13 @@ export function scopesSatisfy(scopes: readonly ApiKeyScope[], required: ApiKeySc
  * `packages/api-types/src/common.ts:TIER_FEATURES` flips, every
  * call site picks it up automatically.
  *
- * Today's matrix: only `aiAgent` is gated this way. Future features
- * (`customArchetypes`, `multiRegion`, …) extend `TierFeatures` and pass
- * through the same guard.
+ * Today's matrix: `apiAccess`, `aiAgent` and `vpnEgress` are gated this
+ * way — every boolean field on `TierFeatures`. (This comment previously
+ * said "only `aiAgent`", which had gone stale: `apiAccess` was already
+ * gated, and `vpnEgress` was published as a paid-tier difference while
+ * nothing enforced it.) `every-boolean-tier-feature-is-enforced.test.ts`
+ * now fails if a new boolean feature is added without a gate. Future
+ * features extend `TierFeatures` and pass through the same guard.
  */
 export function requireTierFeature(tier: AccountTier, feature: TierBooleanFeature): void {
   if (TIER_FEATURES[tier][feature]) return;

@@ -355,6 +355,120 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
   const WG_PUB = 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=';
   const OVPN_BLOB = 'client\nremote vpn.example.com 1194 udp\ndev tun\n';
 
+  // V-763 — `TIER_FEATURES.vpnEgress` is false only on free, and its doc has always read
+  // "OpenVPN / WireGuard egress profiles allowed on this tier. `false` on free (SOCKS5 proxy
+  // only)". Nothing enforced it: a free account could register a VPN profile and egress through
+  // it end to end, so the paid tiers' differentiator was not real. The published pricing table
+  // reads that flag directly, which is what made it a customer-facing claim rather than an
+  // internal note.
+  it('CRITICAL free tier CANNOT register a VPN proxy — the flag every pricing surface renders is now enforced', async () => {
+    fx = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' });
+    for (const payload of [
+      {
+        label: 'wg-free',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      },
+      {
+        label: 'ovpn-free',
+        scheme: 'openvpn',
+        host: 'vpn.example.com',
+        port: 1194,
+        openvpn: { config_blob: OVPN_BLOB },
+      },
+    ]) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/account/me/proxies',
+        headers: auth(fx),
+        payload,
+      });
+      expect(res.statusCode, `${String(payload.scheme)} must be refused on free`).toBe(403);
+      expect(res.body).toContain('vpnEgress');
+    }
+  });
+
+  it('free tier keeps its one SOCKS5 proxy — the gate is scheme-specific, not a proxy ban', async () => {
+    // PROXIES_PER_TIER.free === 1 and the free-desktop route policy allowlists proxy writes on
+    // purpose. Refusing socks5 here would break a documented free-tier capability, so this is
+    // the other half of the guard: it pins that the gate narrowed nothing else.
+    fx = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: { label: 'socks-free', host: 'one.proxy.example', port: 1080 },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json<ProxyMeta>().scheme).toBe('socks5');
+  });
+
+  it('CRITICAL free tier cannot PUT a socks5 proxy UP to a VPN scheme — gating create alone would leave the restriction trivially bypassable', async () => {
+    fx = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' });
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: { label: 'starts-socks', host: 'one.proxy.example', port: 1080 },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json<ProxyMeta>().id;
+
+    const upgraded = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: auth(fx),
+      payload: {
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      },
+    });
+    expect(upgraded.statusCode).toBe(403);
+    expect(upgraded.body).toContain('vpnEgress');
+
+    // Not re-read through GET to confirm the row is untouched: the free-desktop route policy
+    // deliberately allowlists only POST/PUT/DELETE on proxies, not GET, so a free cli_device
+    // key cannot list them. Non-mutation is structural instead — the gate sits above
+    // `const updates`, so the refusal happens before any field is staged.
+  });
+
+  it('a paid tier is unaffected — wireguard still registers', async () => {
+    fx = await buildTestApp({ tier: 'api_starter' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'wg-paid',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json<ProxyMeta>().scheme).toBe('wireguard');
+  });
+
   it('creates a WireGuard proxy — private_key is NEVER echoed (has_secret=true)', async () => {
     fx = await buildTestApp();
     const create = await fx.app.inject({

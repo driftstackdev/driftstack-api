@@ -32906,3 +32906,60 @@ template-existence check. `EXPECTED_TEST_FILES` unchanged — no new test file.
 Operational note: `apps/customer-dashboard` needs `PUBLIC_API_BASE_URL` set for `astro build`,
 and its page tests execute the BUILT `dist/`, so a settings edit is not gated until the app is
 rebuilt.
+
+## V-763 — `vpnEgress` was a published paid-tier difference that nothing enforced (2026-08-12)
+
+`TIER_FEATURES` has exactly three boolean features. `apiAccess` is enforced (`middleware/auth.ts`,
+`routes/oauth.ts`, `services/api-keys.ts`) and `aiAgent` is enforced. `vpnEgress` had **zero**
+enforcement sites — no `requireTierFeature`, no `tierHasFeature`, nothing — while
+`apps/customer-dashboard/src/pages/select-tier.astro` reads the flag directly to paint the pricing
+table's Access column. So a free account could register an OpenVPN or WireGuard proxy and egress
+through it, and the paid tiers' differentiator was decoration.
+
+**The distinction that decided the fix: this was an unimplemented restriction, not a
+mis-documented capability — and my first reading was the opposite.** Two facts look like evidence
+that free VPN access is intended: `middleware/free-desktop-route-policy.ts` deliberately
+allowlists `POST`/`PUT`/`DELETE` on `/v1/account/me/proxies` for free, and
+`PROXIES_PER_TIER.free` is `1`, not `0`. I initially read those as "the code deliberately grants
+free accounts proxies, so the pricing metadata is what's wrong". They are in fact perfectly
+consistent with the flag's own doc, which has always read "OpenVPN / WireGuard egress profiles
+allowed on this tier. `false` on free (**SOCKS5 proxy only** — see PROXIES_PER_TIER)". Free gets
+one proxy; it was always meant to be SOCKS5. Nothing contradicted the restriction — it simply was
+never wired.
+
+Gated on both write paths, and each is mutation-proved to red its own test, so neither is
+redundant:
+
+- **create** — a VPN scheme requires the feature.
+- **update** — gated on the scheme the row would END UP with (`parsed.data.scheme ??
+existing.scheme`). Gating create alone is trivially bypassable: register socks5, then PUT it up
+  to wireguard. Using the _effective_ scheme also keeps the remediation path open — an account
+  whose tier lacks the feature can still PUT `scheme: 'socks5'` over a VPN row registered before
+  this gate, or delete it.
+
+**A wrong turn worth recording, because checking cost one command and would have cost real
+churn.** I concluded the integration suite encoded free-tier VPN registration as correct — it
+builds an app with `tier: 'free'` and asserts `201` for both VPN schemes — and started planning
+how to rework five fixtures. Wrong: that `tier: 'free'` is a per-test override inside the
+proxy-cap test, and every VPN case uses `buildTestApp()`, whose default is `api_builder`, a paid
+tier. Zero fixture churn was needed. "The suite asserts X" is a claim about which fixture each
+test actually built, not about which strings appear in the file.
+
+`errors-helpers.ts` also carried a stale claim — "Today's matrix: only `aiAgent` is gated this
+way" — when `apiAccess` already was. Corrected, and the correction recorded in place.
+
+**Guard:** `every-boolean-tier-feature-is-enforced.test.ts` derives the boolean fields from the
+`TierFeatures` interface and the enforcement sites from the server's own call sites, and fails on
+any feature with neither a gate nor an entry in `UNENFORCED_BY_DESIGN` (empty, and it may only
+shrink). Written red-first: it flagged exactly `vpnEgress` before the gate went in, which is also
+an independent confirmation of the enumeration.
+
+**Deliberately NOT closed, and the fix would be wrong to make unilaterally.** Proxy rows
+registered before this gate still work at egress time — `services/account-proxies.ts` dispatches
+on `row.scheme` and takes no tier argument. Closing that means a tier check on the dispatch path,
+which can cut off a session that is running right now, and I cannot measure how many such rows
+exist without reading customer data. The exposure is bounded: free has `apiAccess: false`
+(enforced), so a free account cannot drive API sessions at all — any legacy row is reachable only
+through the desktop client. New state is fully closed; the residual is pre-existing rows.
+
+`EXPECTED_TEST_FILES` 2645 → 2646 for the one new guard file.
