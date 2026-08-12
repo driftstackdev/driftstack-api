@@ -83,6 +83,17 @@ const INTENTIONAL: Record<string, Record<string, string>> = {
       'whole contract — and its presence on any OTHER operation would mean a ' +
       'key became retrievable after creation.',
   },
+  'POST /v1/api-keys/{id}/rotate': {
+    plaintext:
+      'The successor key, revealed once by a rotation — the same contract as ' +
+      'creation above. Only visible since the api-key family was wired into ' +
+      'the templated sweep; before that the rotation response was never read, ' +
+      'so the one operation besides create that legitimately mints a key was ' +
+      'also the one nothing checked. There is no GET /v1/api-keys/{id} — the ' +
+      'templated api-key surface is exactly this rotate plus a DELETE that ' +
+      'returns 204 — so "the key is unrecoverable after creation" now rests on ' +
+      'a swept rotate and the list endpoint, not on an unread detail route.',
+  },
   'POST /v1/webhooks': {
     secret:
       'The signing secret, revealed once at creation so the caller can verify ' +
@@ -128,10 +139,29 @@ function walk(node: unknown, path: string, op: string, out: Hit[]): void {
 
 const auth = (): { authorization: string } => ({ authorization: `Bearer ${fx.plaintext}` });
 
+/**
+ * Templated families this sweep can reach, each keyed to a resource it creates.
+ *
+ * The first three were the original set. The other three were added because the
+ * exemption above states the api-key plaintext's containment as "its presence
+ * on any OTHER operation would mean a key became retrievable after creation" —
+ * and that was not actually being checked. `GET /v1/api-keys/{id}` had no
+ * family, so the detail route for the one resource whose whole security model
+ * is "revealed once, never again" was never read. Agent sessions and profile
+ * snapshots are here for the same reason: they hold, respectively, live control
+ * state and sealed profile blobs.
+ *
+ * More specific prefixes must come first — `/v1/profile-snapshots/` would
+ * otherwise never be reached, because it does not start with `/v1/profiles/`
+ * but a looser ordering makes that easy to get wrong.
+ */
 function familyOf(path: string): string | null {
+  if (path.startsWith('/v1/profile-snapshots/')) return 'snapshot';
   if (path.startsWith('/v1/profiles/')) return 'profile';
   if (path.startsWith('/v1/sessions/')) return 'session';
   if (path.startsWith('/v1/webhooks/')) return 'webhook';
+  if (path.startsWith('/v1/api-keys/')) return 'apikey';
+  if (path.startsWith('/v1/agent-sessions/')) return 'agent';
   return null;
 }
 
@@ -168,7 +198,17 @@ beforeAll(async () => {
       url: 'https://example.com/hook',
       events: ['session.completed'],
     }),
+    apikey: await create('/v1/api-keys', { name: 'leak-probe-detail', scopes: ['read'] }),
+    agent: await create('/v1/agent-sessions', {}),
   };
+  // Snapshots hang off a profile, so this one is created second and only if
+  // the parent exists — a snapshot id derived from an empty profile id would
+  // silently drop the whole family out of the sweep.
+  if (ids['profile'] !== '') {
+    ids['snapshot'] = await create(`/v1/profiles/${ids['profile']}/snapshots`, {
+      label: 'leak-probe-snap',
+    });
+  }
 
   // Bodies that make the interesting operations actually succeed. Without
   // these the api-key create 400s and the one-time `plaintext` — the field
@@ -248,7 +288,12 @@ describe('no successful response leaks a credential', () => {
   it('CRITICAL the sweep reached real bodies AND the detector fires. Every assertion below reports an ABSENCE, so a sweep that scanned nothing — or a pattern that matched nothing — would satisfy them having proved nothing.', () => {
     // MEASURED: 54 with the gated surfaces wired, 50 without — the wiring is
     // what lets this sweep read the BYOK bodies at all.
-    expect(scanned, 'customer-surface 2xx bodies scanned').toBeGreaterThan(50);
+    // MEASURED: 62 bodies, up from 54 when the templated sweep reached only
+    // profiles/sessions/webhooks. The floor sits just under the new number
+    // rather than the old one, so a family dropping back out of `familyOf`
+    // fails here instead of quietly shrinking the population — which is what
+    // the old floor of 50 would have allowed all the way back down.
+    expect(scanned, 'customer-surface 2xx bodies scanned').toBeGreaterThan(58);
     // Floored separately: a staff credential that stopped working would turn
     // every admin route back into a 403 and this sweep would silently return to
     // reading nothing while still reporting clean.
