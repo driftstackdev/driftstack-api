@@ -128,9 +128,27 @@ function registeredOps(tree: string): Set<string> {
   return out;
 }
 
+/**
+ * Exempt routes this fixture cannot exercise, so their auth cannot be observed.
+ *
+ * The internal fleet plane needs an atlas-priority repo that `buildTestApp`
+ * does not wire, so every one of these answers 503 before any gate runs. They
+ * are named rather than tolerated: a 503 satisfies "never serves 2xx" perfectly
+ * while proving nothing, and pinning the set means a route that starts 503ing
+ * for some other reason fails instead of quietly joining the excused.
+ */
+const UNWIRED_HERE: ReadonlySet<string> = new Set([
+  'GET /v1/internal/atlas-priority/queue',
+  'GET /v1/internal/atlas-priority/event/:id',
+  'POST /v1/internal/atlas-priority/event-status',
+  'POST /v1/internal/atlas-priority/probe-signature',
+]);
+
 let registered: Set<string>;
 let documented: Set<string>;
 const anonymousStatus = new Map<string, number>();
+/** `op -> cache-control` for uncontracted routes that served an authenticated 2xx. */
+const authorisedCaching = new Map<string, string>();
 
 beforeAll(async () => {
   fx = await buildTestApp({
@@ -165,6 +183,45 @@ beforeAll(async () => {
       ...(method === 'GET' ? {} : { payload: {} }),
     });
     anonymousStatus.set(op, res.statusCode);
+  }
+
+  // And again WITH credentials and real ids, because two of these serve real
+  // secrets: gui-control-key mints a session control token, and whoami returns
+  // the account id, key id, tier and scope set. A synthetic id only ever gets
+  // 404 out of them, so the response that actually matters is never seen.
+  const auth = { authorization: `Bearer ${fx.plaintext}` };
+  const newId = async (url: string): Promise<string> => {
+    const res = await fx.app.inject({ method: 'POST', url, headers: auth, payload: {} });
+    if (res.statusCode !== 201) return '';
+    return res.json<{ id?: string }>().id ?? '';
+  };
+  const agentId = await newId('/v1/agent-sessions');
+  const sessionId = await newId('/v1/sessions');
+
+  const withRealIds: [string, string, boolean][] = [
+    ['GET /v1/whoami', '/v1/whoami', false],
+    [
+      'GET /v1/agent-sessions/:id/gui-control-key',
+      `/v1/agent-sessions/${agentId}/gui-control-key`,
+      false,
+    ],
+    [
+      'POST /v1/agent-sessions/:id/transport-report',
+      `/v1/agent-sessions/${agentId}/transport-report`,
+      true,
+    ],
+    ['POST /v1/sessions/:id/gui-input', `/v1/sessions/${sessionId}/gui-input`, true],
+  ];
+  for (const [op, url, isPost] of withRealIds) {
+    if (url.includes('//')) continue; // a create failed; no id to substitute
+    const res = await fx.app.inject({
+      method: isPost ? 'POST' : 'GET',
+      url,
+      headers: auth,
+      ...(isPost ? { payload: {} } : {}),
+    });
+    if (res.statusCode < 200 || res.statusCode >= 300) continue;
+    authorisedCaching.set(op, String(res.headers['cache-control'] ?? '<none>'));
   }
 }, 180_000);
 
@@ -216,12 +273,44 @@ describe('every registered route is accounted for', () => {
     expect(stale.sort(), 'exemption(s) that no longer describe reality:').toEqual([]);
   });
 
-  it('CRITICAL no exempt /v1 route serves an anonymous caller. These are exactly the routes security-declaration-matches-enforcement cannot reach, because it reads the contract — and one of them mints a session control token while another relays input into a live browser session.', () => {
-    expect(anonymousStatus.size, 'exempt /v1 routes probed anonymously').toBeGreaterThanOrEqual(6);
-    const served = [...anonymousStatus.entries()]
-      .filter(([, status]) => status >= 200 && status < 300)
-      .map(([op, status]) => `${op} -> ${String(status)}`)
+  it('CRITICAL every REACHABLE exempt /v1 route answers exactly 401 or 403 anonymously. Stated as an allowlist, not as "never 2xx": the first version of this assertion only forbade 2xx, and a 503 from an unwired route satisfied that having proved nothing. Four of the ten probes were exactly that. These routes are also the ones security-declaration-matches-enforcement cannot reach, because it reads the contract — and one of them mints a session control token while another relays raw input into a live browser session.', () => {
+    const reachable = [...anonymousStatus.entries()].filter(([op]) => !UNWIRED_HERE.has(op));
+    expect(reachable.length, 'exempt /v1 routes actually reachable in this fixture').toBe(6);
+    expect(
+      reachable
+        .filter(([, status]) => status !== 401 && status !== 403)
+        .map(([op, status]) => `${op} -> ${String(status)}`)
+        .sort(),
+      'uncontracted /v1 route(s) answering something other than 401/403 to a caller with NO credentials:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL uncontracted routes that serve real data are never publicly cacheable. private-responses-are-never-cacheable reads the contract, so it has never seen these — and one of them mints a session control token while another returns the account id, key id, tier and scope set. A shared cache holding either is a credential handed to the next caller.', () => {
+    // MEASURED: 2 of the four reach a 2xx here — whoami and gui-control-key.
+    // The other two need live session state the fixture does not have, so they
+    // answer 404/403; floored at 2 so a probe that stopped reaching ANY body
+    // cannot pass as "nothing was cacheable".
+    expect(
+      authorisedCaching.size,
+      'uncontracted routes that returned an authenticated 2xx',
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      [...authorisedCaching.entries()]
+        .filter(([, cc]) => !(cc.includes('no-store') && cc.includes('private')))
+        .map(([op, cc]) => `${op} -> ${cc}`)
+        .sort(),
+      'uncontracted route(s) serving real data without no-store + private:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the set of exempt routes this fixture cannot reach is EXACTLY the internal fleet plane. Without pinning it, any route that started answering 503 would quietly move from "checked" to "excused" — which is how the arm above was vacuous for four routes before anyone looked.', () => {
+    const unreachable = [...anonymousStatus.entries()]
+      .filter(([, status]) => status === 503)
+      .map(([op]) => op)
       .sort();
-    expect(served, 'uncontracted /v1 route(s) serving a caller with NO credentials:').toEqual([]);
+    expect(
+      unreachable,
+      'routes excused from the auth check because they are unwired here:',
+    ).toEqual([...UNWIRED_HERE].sort());
   });
 });
