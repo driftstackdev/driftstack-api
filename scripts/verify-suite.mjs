@@ -29,7 +29,7 @@
 import { spawn } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 2644;
+export const EXPECTED_TEST_FILES = 2645;
 
 /**
  * Judge a completed vitest run.
@@ -66,7 +66,22 @@ export function judge({ output, exitCode, expectedFiles = EXPECTED_TEST_FILES })
     }
   }
 
-  return { ok: problems.length === 0, problems };
+  // Files vitest COLLECTED but did not execute. Legitimate — 56 files gate
+  // themselves on `!process.env.CI && !process.env.DATABASE_URL` so a checkout
+  // without Postgres still runs — but invisible in a way that matters: the
+  // summary reports "2571 passed" either way, and a reader takes that as the
+  // whole suite. Measured: with DATABASE_URL pointing at the local Postgres,
+  // the same tree runs 2645 files and 27,066 tests instead of 2642 and 26,802.
+  // That is 264 tests, and they are the ones locking the shipped keyset SQL,
+  // concurrency semantics and idempotency uniqueness against a real database.
+  //
+  // NOT a problem — refusing a green on a machine with no Postgres would make
+  // this tool unusable there — but it is reported, because the one thing this
+  // file exists to prevent is a partial run reading as a complete one.
+  const skipped = /Test Files\s+.*?(\d+) skipped/.exec(output);
+  const skippedFiles = skipped === null ? 0 : Number(skipped[1]);
+
+  return { ok: problems.length === 0, problems, skippedFiles };
 }
 
 /* c8 ignore start — CLI wiring; the judgement above is what the tests drive. */
@@ -88,6 +103,12 @@ if (process.argv[1]?.endsWith('verify-suite.mjs') === true) {
     const verdict = judge({ output, exitCode: code ?? 1 });
     if (verdict.ok) {
       console.log('\nverify-suite: OK — exit 0, no unhandled errors, full file count');
+      if (verdict.skippedFiles > 0) {
+        console.log(
+          `verify-suite: NOTE — ${String(verdict.skippedFiles)} test file(s) were collected but ` +
+            'never executed. Most gate on DATABASE_URL; set it to the local Postgres to run them.',
+        );
+      }
       process.exit(0);
     }
     console.error('\nverify-suite: NOT TRUSTWORTHY');

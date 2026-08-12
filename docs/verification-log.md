@@ -32744,3 +32744,63 @@ on a clean checkout, verified by excluding exactly that one foreign file.
 Consequence to expect locally, not a defect in this work: `verify-suite.test.ts` will report
 2646 against the committed 2644 for as long as that untracked scratch file and the item-3 guard
 sit in the tree. Both are accounted for above.
+
+## V-760 — dead granular scopes were advertised as capabilities on three customer surfaces (2026-08-12)
+
+`admin:profiles` was documented as "All admin operations on profiles." while **no route
+enforces it anywhere**. A customer who read that row, minted a key with it, and called any
+profile endpoint got a 403 on every request. Its own siblings on the same page already showed
+the honest convention — `admin:webhooks` and `admin:api-keys` read "Reserved.", `write:webhooks`
+reads "enforced on no route today" — so the rule existed and had simply been applied unevenly.
+
+It fails **closed**: the key grants less than advertised, so there is no privilege exposure.
+The defect is that the docs sent the customer down a path that cannot work, and the 403 names a
+scope the page says they hold.
+
+**Two corrections to the incoming audit, both verified against source myself.** It cited
+`lib/errors-helpers.ts:77-83` as "granular never satisfies granular"; that is not what the code
+says — there IS an `admin` branch, so a broad `admin` key does satisfy `admin:profiles`. The
+real defect is narrower and simpler: nothing ever _requires_ the scope. It also missed that the
+same false-capability shape applies to three more scopes on the two marketing pages.
+
+**And a correction to my own first pass, which was wrong in the more dangerous direction.** I
+grepped `routes/` and `middleware/` only, and concluded `read:webhooks`, `read:api-keys` and
+`read:audit` were dead too — which would have been four bogus findings and four unnecessary doc
+edits. They are enforced in the SERVICE layer, through `requireScope` imported under the alias
+`throwIfMissingScope` (`services/webhooks.ts:446`, `services/api-keys.ts:372`,
+`services/account-audit.ts:148`). An enforcement mechanism reached by an aliased import is
+invisible to a grep for the original name. Enumerating against the whole of `apps/server/src`
+gives the real set, and it is exactly four: `admin:profiles`, `write:webhooks`,
+`admin:webhooks`, `admin:api-keys`.
+
+So: `scopes.md` was false on one row of four; both marketing pages were false on all four —
+nine false capability descriptions, all nine corrected here to state what actually gates the
+operation (`write:profiles` for profile mutation; `account_owner` for webhook endpoint
+management and for API-key mint/revoke, verified at `services/webhooks.ts:394`, `:507` and
+`services/api-keys.ts:271`, `:424`, `:539`).
+
+**The guard is cross-source, not a wording pin**
+(`apps/server/tests/unit/dead-scopes-are-labelled-on-customer-surfaces.test.ts`). It derives the
+enforced set from the server's own call sites, subtracts it from the `api_key_scope` enum, and
+requires every customer surface that _describes_ a leftover to say it is unenforced. The next
+dead scope is therefore caught the day it enters the enum, with nobody needing to remember this
+rule.
+
+Written red-first, which immediately earned its keep: the first version reported **12**
+occurrences, and **3 were false positives** — a prose line listing scope names as examples, and
+the footnote that exists precisely to explain the restriction, whose qualifying clause sits on
+the line _above_ the mention my forward-only window read. Narrowing the subject from "any
+mention" to "a row that describes what the scope does" gives exactly the 9 real ones. Also
+mutation-proved in the derivation direction: breaking the enforcement-site scan reds the vacuity
+test rather than passing everything as enforced.
+
+**Surface list is the complete set, not a sample.** Every non-test file under `apps/`,
+`packages/` and `docs/` naming any of the four was enumerated; the other five
+(`apps/admin-panel`, `apps/customer-dashboard`, `packages/api-types/src/common.ts`,
+`packages/sdk-python/openapi.json` and its generated `models.py`) list scope NAMES with no
+description, so they assert nothing that can be false. Recorded in the test header so the list
+is justified rather than arbitrary.
+
+`dist-reading-suites-have-fresh-artifacts` fired for `docs` and `marketing-site` after the
+source edits, as it should have. Both apps were REBUILT rather than having assertions repinned
+onto stale markup. `EXPECTED_TEST_FILES` 2644 → 2645 for the one new test file.
