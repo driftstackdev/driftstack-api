@@ -61,10 +61,10 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
   it("CRITICAL commit-msg V-211 4-reject-pattern set pinned — Founder + Joel + Theunissen + Joeltheunissen with word-boundary [^[:alnum:]] guards. The (^|[^[:alnum:]])X([^[:alnum:]]|$) shape lets compounds like 'foundered' / 'foundation' / 'Joeline' through while catching the bare tokens.", () => {
     const p = read(HOOK);
     expect(p).toMatch(/REJECT_PATTERNS_V211=\(/);
-    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Ff\]ounder\(\[\^\[:alnum:\]\]\|\$\)'/);
-    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oel\(\[\^\[:alnum:\]\]\|\$\)'/);
-    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Tt\]heunissen\(\[\^\[:alnum:\]\]\|\$\)'/);
-    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oeltheunissen\(\[\^\[:alnum:\]\]\|\$\)'/);
+    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Ff\]ounder\(\[\^\[:alpha:\]\]\|\$\)'/);
+    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oel\(\[\^\[:alpha:\]\]\|\$\)'/);
+    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Tt\]heunissen\(\[\^\[:alpha:\]\]\|\$\)'/);
+    expect(p).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oeltheunissen\(\[\^\[:alpha:\]\]\|\$\)'/);
   });
 
   it('CRITICAL commit-msg V-205 uses grep -iqE (case-INsensitive) vs V-211 uses grep -qE (case-SENsitive). The case-distinction matters because V-211 patterns already include [Ff]/[Jj]/[Tt] character-classes that would over-match if -i were added.', () => {

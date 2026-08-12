@@ -70,9 +70,9 @@ function hookPatterns(): { group: string; pattern: string }[] {
  * have to — and means a new name added there is probed automatically.
  */
 function probeFor(pattern: string): string {
-  // `(^|[^[:alnum:]])[Ff]ounder([^[:alnum:]]|$)` — a word with a case-either
+  // `(^|[^[:alnum:]])[Ff]ounder([^[:alpha:]]|$)` — a word with a case-either
   // first letter, delimited. Take the lowercase branch and pad it.
-  const word = /^\(\^\|\[\^\[:alnum:\]\]\)\[(\w)(\w)\](\w+)\(\[\^\[:alnum:\]\]\|\$\)$/.exec(
+  const word = /^\(\^\|\[\^\[:alnum:\]\]\)\[(\w)(\w)\](\w+)\(\[\^\[:alpha:\]\]\|\$\)$/.exec(
     pattern,
   );
   if (word !== null) return `context ${word[2]!}${word[3]!} context`;
@@ -87,7 +87,7 @@ function probeFor(pattern: string): string {
  * governing what may appear in a commit message moved, which is exactly the
  * moment someone should look at the diff.
  */
-const PATTERN_DIGEST = '6a3836c2fd58cb45';
+const PATTERN_DIGEST = '61cece28233556e4';
 
 /** Attribution forms V-205 forbids, each in the shape a tool actually emits. */
 const BANNED_MESSAGES: [string, string][] = [

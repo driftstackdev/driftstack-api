@@ -34,11 +34,17 @@ REJECT_PATTERNS_V205=(
 
 # V-211 anonymity patterns. Match standalone tokens — avoid biting
 # "foundered" / "foundation" / "Joeline" inside larger words.
+# Trailing boundary is [^[:alpha:]] rather than [^[:alnum:]] deliberately.
+# Excluding digits as well as letters let a name followed immediately by digits
+# through — which is the form a real address takes — while the documented
+# purpose of the boundary is only to avoid biting "foundered", "foundation" and
+# "Joeline" inside larger WORDS. Those three still do not match; a name followed
+# by digits now does.
 REJECT_PATTERNS_V211=(
-  '(^|[^[:alnum:]])[Ff]ounder([^[:alnum:]]|$)'
-  '(^|[^[:alnum:]])[Jj]oel([^[:alnum:]]|$)'
-  '(^|[^[:alnum:]])[Tt]heunissen([^[:alnum:]]|$)'
-  '(^|[^[:alnum:]])[Jj]oeltheunissen([^[:alnum:]]|$)'
+  '(^|[^[:alnum:]])[Ff]ounder([^[:alpha:]]|$)'
+  '(^|[^[:alnum:]])[Jj]oel([^[:alpha:]]|$)'
+  '(^|[^[:alnum:]])[Tt]heunissen([^[:alpha:]]|$)'
+  '(^|[^[:alnum:]])[Jj]oeltheunissen([^[:alpha:]]|$)'
 )
 
 fail() {

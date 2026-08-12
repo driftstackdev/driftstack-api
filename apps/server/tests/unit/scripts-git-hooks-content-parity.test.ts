@@ -61,10 +61,10 @@ describe('W609 scripts/git-hooks + install-git-hooks content parity', () => {
     expect(body).toMatch(/^# V-211 anonymity patterns\. Match standalone tokens — avoid biting$/m);
     expect(body).toMatch(/^# "foundered" \/ "foundation" \/ "Joeline" inside larger words\.$/m);
     expect(body).toMatch(/^REJECT_PATTERNS_V211=\($/m);
-    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Ff\]ounder\(\[\^\[:alnum:\]\]\|\$\)'/);
-    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oel\(\[\^\[:alnum:\]\]\|\$\)'/);
-    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Tt\]heunissen\(\[\^\[:alnum:\]\]\|\$\)'/);
-    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oeltheunissen\(\[\^\[:alnum:\]\]\|\$\)'/);
+    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Ff\]ounder\(\[\^\[:alpha:\]\]\|\$\)'/);
+    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oel\(\[\^\[:alpha:\]\]\|\$\)'/);
+    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Tt\]heunissen\(\[\^\[:alpha:\]\]\|\$\)'/);
+    expect(body).toMatch(/'\(\^\|\[\^\[:alnum:\]\]\)\[Jj\]oeltheunissen\(\[\^\[:alpha:\]\]\|\$\)'/);
     expect(body).toMatch(/^fail\(\) \{$/m);
     expect(body).toMatch(/echo "✗ commit-msg HOOK REJECTED: contains banned pattern" >&2/);
     expect(body).toMatch(/grep -iqE "\$PATTERN"; then/);

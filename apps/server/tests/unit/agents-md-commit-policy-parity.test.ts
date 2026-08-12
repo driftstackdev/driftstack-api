@@ -21,9 +21,14 @@
 //   3. The classifier is version-controlled (scripts/git-hooks/) +
 //      installed per-clone via install-git-hooks.sh (NOT a Husky
 //      hook that ships in node_modules).
-//   4. V-211 patterns use `[^[:alnum:]]` token-boundaries to avoid
-//      biting "foundered"/"foundation"/"Joeline" inside larger
-//      words.
+//   4. V-211 patterns use a LEADING `[^[:alnum:]]` and a TRAILING
+//      `[^[:alpha:]]` token boundary. Both still avoid biting
+//      "foundered"/"foundation"/"Joeline" inside larger words —
+//      that protection only needs to exclude LETTERS. Excluding
+//      digits on the trailing side as well let a name followed
+//      immediately by digits through, which is the form a real
+//      address takes, so the guard missed the very shape it exists
+//      to catch.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -111,10 +116,10 @@ describe('W721 AGENTS.md commit-policy + V-205/V-211 classifier parity', () => {
     const h = read(HOOK);
 
     const v211Patterns = [
-      "'(^|[^[:alnum:]])[Ff]ounder([^[:alnum:]]|$)'",
-      "'(^|[^[:alnum:]])[Jj]oel([^[:alnum:]]|$)'",
-      "'(^|[^[:alnum:]])[Tt]heunissen([^[:alnum:]]|$)'",
-      "'(^|[^[:alnum:]])[Jj]oeltheunissen([^[:alnum:]]|$)'",
+      "'(^|[^[:alnum:]])[Ff]ounder([^[:alpha:]]|$)'",
+      "'(^|[^[:alnum:]])[Jj]oel([^[:alpha:]]|$)'",
+      "'(^|[^[:alnum:]])[Tt]heunissen([^[:alpha:]]|$)'",
+      "'(^|[^[:alnum:]])[Jj]oeltheunissen([^[:alpha:]]|$)'",
     ];
 
     for (const pat of v211Patterns) {
