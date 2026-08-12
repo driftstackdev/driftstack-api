@@ -160,7 +160,14 @@ describe('W574.C /docs/legal/acceptable-use-policy.md content parity', () => {
     expect(body).toMatch(/the API rejects authenticated requests/);
     expect(body).toMatch(/with HTTP 403 carrying a problem type/);
     expect(body).toMatch(/`https:\/\/errors\.driftstack\.dev\/forbidden`/);
-    expect(body).toMatch(/Suspension typically lasts up to 30 days/);
+    expect(body).toMatch(/Suspension typically lasts up\s*\n?\s*to 30 days/);
+    // V-758 — the billing-pauses clause now states its mechanism, because it is finally
+    // implemented: suspend() sets pause_collection with Stripe's `void` behaviour and
+    // unsuspend() clears it. `void` rather than deferral is the part that matters to a
+    // customer — they are not billed retroactively for a window in which every request
+    // 403'd.
+    expect(body).toMatch(/Driftstack sets `pause_collection` on the/);
+    expect(body).toMatch(/voided rather than deferred/);
     expect(body).toMatch(/3\. \*\*Termination\.\*\* A severe violation under Section 1/);
     expect(body).toMatch(/Driftstack terminates the Subscription per Section 16 of the ToS\./);
     expect(body).toMatch(/### 5\.4 Discretion to skip steps/);

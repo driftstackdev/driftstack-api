@@ -67,6 +67,8 @@ export interface InMemoryProviderState {
     kind: 'subscription';
   }>;
   portalSessions: Array<{ id: string; customerId: string }>;
+  /** V-758 — subscription ids currently pause_collection'd, for suspension assertions. */
+  pausedSubscriptions: Set<string>;
 }
 
 export class InMemoryBillingProvider implements BillingProvider {
@@ -74,6 +76,7 @@ export class InMemoryBillingProvider implements BillingProvider {
     customers: new Map(),
     checkoutSessions: [],
     portalSessions: [],
+    pausedSubscriptions: new Set(),
   };
 
   ensureCustomer(args: { accountId: string; email: string; name: string | null }): Promise<string> {
@@ -123,5 +126,18 @@ export class InMemoryBillingProvider implements BillingProvider {
     return Promise.resolve({
       url: `https://billing.stripe.example/p/${id}`,
     });
+  }
+
+  // V-758 — mirrors the Stripe provider's pause/resume. Idempotent in both directions,
+  // matching the real API: re-pausing an already-paused sub and clearing an unpaused one
+  // are both no-ops server-side.
+  pauseSubscriptionCollection(args: { subscriptionId: string }): Promise<void> {
+    this.state.pausedSubscriptions.add(args.subscriptionId);
+    return Promise.resolve();
+  }
+
+  resumeSubscriptionCollection(args: { subscriptionId: string }): Promise<void> {
+    this.state.pausedSubscriptions.delete(args.subscriptionId);
+    return Promise.resolve();
   }
 }

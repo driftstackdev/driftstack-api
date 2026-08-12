@@ -135,7 +135,15 @@ describe('W505.C apps/marketing-site/src/pages/legal/aup.md content parity', () 
       /the API rejects authenticated requests\s*\n?\s*with HTTP 403 carrying a problem type\s*\n?\s*`https:\/\/errors\.driftstack\.dev\/forbidden`/,
     );
     expect(body).toMatch(/Customer-Provided Secrets are NOT\s*\n?\s*deleted/);
-    expect(body).toMatch(/Suspension typically lasts up to 30 days/);
+    expect(body).toMatch(/Suspension typically lasts up\s*\n?\s*to 30 days/);
+    // V-758 — the "billing pauses" promise is now TRUE (suspend() sets pause_collection
+    // via BillingCollectionPauser) and the copy states the mechanism, so the pin requires
+    // the specificity rather than the bare phrase. `void` not `keep_as_draft` is the
+    // load-bearing part: deferral would bill a suspended customer retroactically, which is
+    // the opposite of what this clause tells them.
+    expect(body).toMatch(/Driftstack sets `pause_collection` on the/);
+    expect(body).toMatch(/voided rather than deferred/);
+    expect(body).toMatch(/not\s*\n?\s*billed retroactively on reinstatement/);
     expect(body).toMatch(/\*\*Termination\.\*\*/);
     expect(body).toMatch(/Driftstack terminates the Subscription per Section 16 of the ToS\./);
   });

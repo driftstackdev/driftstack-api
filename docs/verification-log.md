@@ -32516,3 +32516,70 @@ semicolons — leaving a 1-element set that would have made the whole comparison
 assertions need that floor; without it this guard would have shipped green and blind.
 
 Gate: **2780 files, 28,539 passing, 0 failures**, uncontended.
+
+## V-758 — the AUP's "billing pauses" promise, implemented rather than deleted
+
+This was one of two items held back for an owner decision. Decision taken: **implement**.
+
+**The reasoning, because the alternative was defensible too.** The AUP is published, binding
+copy. Deleting a customer-favourable promise is a downgrade of a commitment, and charging
+for a service that 403s every authenticated request is hard to defend under EU consumer
+protection. Three things made implementing the safer half of the choice:
+
+- The codebase had already reasoned about the mechanism's blast radius: the C7 note in
+  `stripe-webhooks.ts` records that a `pause_collection`'d subscription keeps
+  `status: 'active'`, so pausing cannot perturb `downgradeAccountTierToBestRemaining` or
+  the tier mirror. Entitlement during suspension is denied by the account-status check in
+  `auth.ts`, not by the subscription.
+- A symmetric `unsuspend` route already existed, so resume is implementable. **Pausing
+  without resuming would be a worse defect than the current state** — a reinstated customer
+  would be permanently unbilled.
+- Pre-launch with no paying customers is the safest possible moment to land it.
+
+**What shipped.** `pauseSubscriptionCollection` / `resumeSubscriptionCollection` on
+`BillingProvider`, implemented in `StripeBillingProvider` over a new
+`setSubscriptionPauseCollection` on the Stripe client; `pauseCollectionForAccount` /
+`resumeCollectionForAccount` on `BillingService`; and a narrow structural
+`BillingCollectionPauser` dep on `AccountsAdminService`, wired into `suspend()` and
+`unsuspend()` through the **existing** `reclaim()` helper so a failure is best-effort but
+raises the named `account_reclaim_failed` alarm.
+
+**The product choice, stated so it can be reversed in one constant.** `behavior: 'void'`,
+not `keep_as_draft`. Deferral would bill a suspended customer retroactively on
+reinstatement, which is the opposite of what "billing pauses" tells them for a window in
+which every request 403'd. `PAUSE_COLLECTION_BEHAVIOR` in `stripe-api.ts` is the whole
+change if the business prefers deferral. The AUP now states the mechanism rather than the
+bare promise, so the copy and the code assert the same thing.
+
+**Wiring detail worth recording.** `BillingService` is constructed ~400 lines AFTER
+`AccountsAdminService` and only inside the Stripe-configured branch, so a positional
+argument was impossible. The declaration is hoisted and the dep is a lazy adapter resolving
+at request time — which is also the honest shape, because billing may never be configured
+on a deployment, in which case `pauseCollectionForAccount` reports `no_subscription` and
+suspension behaves exactly as before.
+
+**Proof.** 6 behavioural tests. Mutation-proved twice, byte-identical restores: making
+`unsuspend()` call pause instead of resume (a realistic copy-paste bug) reds the two resume
+tests; swallowing the pause failure instead of routing it through `reclaim()` reds the alarm
+test. `no_subscription` is asserted NOT to alarm — free-tier and never-subscribed accounts
+are the common case, and alarming on them would train an operator to ignore the alarm that
+matters. Five pins updated in the same commit (two AUP copies, the docs/legal copy, the
+bootstrap construction, the constructor signature) — the constructor pin now also requires
+BOTH `reclaim('billing_pause')` and `reclaim('billing_resume')` to be present, so the
+asymmetric-pause defect cannot be reintroduced.
+
+**Not verified by me, and it needs to be before launch:** the real Stripe call path. I have
+no credentials and must not touch them, so the provider is exercised only against the
+in-memory double. A staging suspension against test-mode Stripe should confirm the
+`pause_collection[behavior]=void` form encoding and that clearing sends
+`pause_collection=""`.
+
+Gate: **2802 files, 28,627 passing**. The single failing file is a peer's in-flight edit to
+`no-response-leaks-a-credential.test.ts` (modified in the worktree, not by me); its two
+failures are that test's own vacuity self-checks, characteristic of a mid-edit allowlist,
+and my changes add no response fields. Also flagged: `npm run typecheck` is currently RED
+from peer-committed work — `openapi-templated-paths-conform.test.ts` uses `Ajv` as a type,
+and `billing-documents-its-real-errors.test.ts:76` builds a `SubscriptionMirror` literal
+missing five required fields. Both are in tracked, clean, peer-committed files; my diff
+touches `SubscriptionMirror` on zero lines. CI runs that typecheck, so it will fail until
+they land the fix.

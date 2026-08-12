@@ -118,8 +118,22 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
   it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer + optional GDPR Article 17 delete-reclaim trio (web sessions / API keys / webhooks)', () => {
     expect(body).toMatch(/export class AccountsAdminService \{/);
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly repo: AccountsAdminRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*\n?\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*\n?\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*\n?\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,[\s\S]*?private readonly logger: \{[\s\S]*?\} \| null = null,\s*\n?\s*\) \{\}/,
+      /constructor\(\s*\n?\s*private readonly repo: AccountsAdminRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*\n?\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*\n?\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*\n?\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,[\s\S]*?private readonly logger: \{[\s\S]*?\} \| null = null,[\s\S]*?private readonly billing: BillingCollectionPauser \| null = null,\s*\n?\s*\) \{\}/,
     );
+    // V-758 — the pauser is the dependency that makes AUP §5.2 true. Optional so every
+    // existing construction site and test double keeps working; when absent, suspension
+    // behaves exactly as before.
+    expect(body).toMatch(/export interface BillingCollectionPauser \{/);
+    expect(body).toMatch(
+      /pauseCollectionForAccount\(accountId: string\): Promise<'paused' \| 'no_subscription'>;/,
+    );
+    expect(body).toMatch(
+      /resumeCollectionForAccount\(accountId: string\): Promise<'resumed' \| 'no_subscription'>;/,
+    );
+    // Both halves must be wired: a pause with no resume leaves a reinstated customer
+    // permanently unbilled, which is worse than the defect the pause fixes.
+    expect(body).toMatch(/this\.reclaim\('billing_pause'/);
+    expect(body).toMatch(/this\.reclaim\('billing_resume'/);
     expect(body).toMatch(
       /export interface SuspendSessionReclaimer \{\s*\n?\s*destroyAllForAccount\(accountId: string\): Promise<number>;\s*\n?\s*\}/,
     );

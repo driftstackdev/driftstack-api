@@ -70,4 +70,18 @@ export class StripeBillingProvider implements BillingProvider {
     });
     return { url: result.url };
   }
+
+  async pauseSubscriptionCollection(args: { subscriptionId: string }): Promise<void> {
+    await this.client.setSubscriptionPauseCollection({
+      subscriptionId: args.subscriptionId,
+      pause: true,
+    });
+  }
+
+  async resumeSubscriptionCollection(args: { subscriptionId: string }): Promise<void> {
+    await this.client.setSubscriptionPauseCollection({
+      subscriptionId: args.subscriptionId,
+      pause: false,
+    });
+  }
 }

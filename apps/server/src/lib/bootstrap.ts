@@ -1436,6 +1436,13 @@ export async function createProductionDeps(
   // defined by this point. suspend()/unsuspend() only ever needed
   // sessionsService, which was available earlier, but delete() extends the
   // reclaim to web sessions + API keys + webhooks too.
+  // V-758 — hoisted above accountsAdminService. BillingService is constructed much later
+  // and only inside the Stripe-configured branch, but the suspension lifecycle needs to
+  // reach it, so the declaration must precede the closure that captures it. The adapter
+  // below resolves lazily at request time, which is also the honest shape: billing may
+  // never be configured on a given deployment.
+  let billingService: BillingService | undefined;
+
   const accountsAdminService = new AccountsAdminService(
     accountsAdminRepo,
     authCache,
@@ -1447,6 +1454,19 @@ export async function createProductionDeps(
     // a GDPR termination returns success whether or not each surface was
     // actually reclaimed. Without this the failure is written down nowhere.
     logger,
+    // V-758 — AUP §5.2 promises suspension pauses billing. Resolved lazily because
+    // BillingService is built later and only when Stripe is configured; when it is not,
+    // pauseCollectionForAccount reports no_subscription and suspension behaves as before.
+    {
+      pauseCollectionForAccount: async (accountId: string) =>
+        billingService === undefined
+          ? ('no_subscription' as const)
+          : billingService.pauseCollectionForAccount(accountId),
+      resumeCollectionForAccount: async (accountId: string) =>
+        billingService === undefined
+          ? ('no_subscription' as const)
+          : billingService.resumeCollectionForAccount(accountId),
+    },
   );
 
   // 2026-05-20 — auth-tokens sweeper. Periodic DELETE of stale rows
@@ -1835,7 +1855,6 @@ export async function createProductionDeps(
   // price ids are needed to map tier → Stripe Checkout price). When
   // either is missing, billingService is undefined and routes simply
   // don't register.
-  let billingService: BillingService | undefined;
   if (config.stripe?.secretKey !== undefined && config.stripe.tierPrices !== undefined) {
     const stripeApi = new StripeApiClient({
       secretKey: config.stripe.secretKey,

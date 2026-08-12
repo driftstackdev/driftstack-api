@@ -645,8 +645,14 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // parameter is optional — so dropping this argument leaves every unit test
     // for that reporting green while production goes silent again.
     expect(body).toMatch(
-      /const accountsAdminService = new AccountsAdminService\(\s*\n?\s*accountsAdminRepo,[\s\S]*?webhooksService,[\s\S]*?\n\s*logger,\s*\n?\s*\);/,
+      /const accountsAdminService = new AccountsAdminService\(\s*\n?\s*accountsAdminRepo,[\s\S]*?webhooksService,[\s\S]*?\n\s*logger,/,
     );
+    // V-758 — the suspension lifecycle now also needs a billing pauser, or the AUP's
+    // "billing pauses" promise silently becomes untrue again. Resolved lazily because
+    // BillingService is constructed later and only when Stripe is configured.
+    expect(body).toMatch(/pauseCollectionForAccount: async \(accountId: string\) =>/);
+    expect(body).toMatch(/resumeCollectionForAccount: async \(accountId: string\) =>/);
+    expect(body).toMatch(/let billingService: BillingService \| undefined;/);
   });
 
   it('file exists at canonical path', () => {

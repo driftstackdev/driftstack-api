@@ -194,8 +194,11 @@ subject to the discretion in Section 5.4 below:
    with HTTP 403 carrying a problem type
    `https://errors.driftstack.dev/forbidden`, (c) Customer-Provided Secrets are NOT
    deleted (Customer may need them to migrate workflows), and (d)
-   billing pauses. Suspension typically lasts up to 30 days, during
-   which Customer may dispute or remediate.
+   billing pauses — Driftstack sets `pause_collection` on the
+   Subscription with Stripe's `void` behaviour, so invoices for the
+   suspended period are voided rather than deferred and Customer is not
+   billed retroactively on reinstatement. Suspension typically lasts up
+   to 30 days, during which Customer may dispute or remediate.
 
    The 403 carries the standard RFC 9457 fields only (`type`, `title`,
    `status`, `detail`) — there is no `reason` extension naming an AUP

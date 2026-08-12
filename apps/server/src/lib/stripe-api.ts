@@ -63,6 +63,13 @@ export interface StripeApiError extends Error {
 
 const DEFAULT_API_VERSION = '2024-12-18.acacia';
 const DEFAULT_TIMEOUT_MS = 10_000;
+/**
+ * Stripe pause_collection behavior used when an account is suspended. 'void' means the
+ * customer is not billed for the suspended period at all — see
+ * setSubscriptionPauseCollection for why that, and not 'keep_as_draft'.
+ */
+const PAUSE_COLLECTION_BEHAVIOR = 'void';
+
 const DEFAULT_BASE_URL = 'https://api.stripe.com';
 const MAX_STRIPE_RESPONSE_BODY_BYTES = 256 * 1024;
 
@@ -174,6 +181,34 @@ export class StripeApiClient {
       return_url: args.returnUrl,
     };
     return this.post<{ id: string; url: string }>('/v1/billing_portal/sessions', body);
+  }
+
+  /**
+   * V-758 — set or clear `pause_collection` on a subscription, used by the account
+   * suspension lifecycle to honour the AUP's "billing pauses" promise.
+   *
+   * `behavior: 'void'` is deliberate and is the load-bearing product choice here: it
+   * VOIDS invoices for the paused period rather than deferring them. `keep_as_draft`
+   * would bill the customer retroactively on resume, which is the opposite of what
+   * "billing pauses" tells a suspended customer, and they cannot use the service during
+   * the window (every authenticated request 403s). If the business prefers deferral,
+   * changing this one constant is the whole change.
+   *
+   * Passing `pause: false` sends `pause_collection=""`, which is how the Stripe form API
+   * expresses clearing the field. Both directions are idempotent — re-pausing an already
+   * paused sub and clearing an unpaused one are both no-ops server-side.
+   */
+  async setSubscriptionPauseCollection(args: {
+    subscriptionId: string;
+    pause: boolean;
+  }): Promise<{ id: string }> {
+    const body: Record<string, string> = args.pause
+      ? { 'pause_collection[behavior]': PAUSE_COLLECTION_BEHAVIOR }
+      : { pause_collection: '' };
+    return this.post<{ id: string }>(
+      `/v1/subscriptions/${encodeURIComponent(args.subscriptionId)}`,
+      body,
+    );
   }
 
   // ── Internal request plumbing ─────────────────────────────────────────

@@ -64,6 +64,20 @@ export interface SuspendSessionReclaimer {
 }
 
 /**
+ * V-758 — minimal billing surface the suspension lifecycle depends on. The AUP §5.2 tells
+ * customers that suspension pauses billing; until this dep existed the promise was untrue,
+ * because `suspend()` had no billing dependency of any kind and a suspended account kept
+ * renewing a flat monthly subscription while every authenticated request 403'd.
+ *
+ * Deliberately narrow and structural, like the reclaimers above: this service should not
+ * learn the whole BillingService surface to pause an invoice.
+ */
+export interface BillingCollectionPauser {
+  pauseCollectionForAccount(accountId: string): Promise<'paused' | 'no_subscription'>;
+  resumeCollectionForAccount(accountId: string): Promise<'resumed' | 'no_subscription'>;
+}
+
+/**
  * GDPR Article 17 — minimal auth-flows-service surface the delete-
  * reclaim path depends on. Bulk-revokes every dashboard web session
  * for the account (no exclusion — contrast with the customer "sign
@@ -104,6 +118,13 @@ export class AccountsAdminService {
     private readonly logger: {
       error?: (obj: Record<string, unknown>, msg: string) => void;
     } | null = null,
+    /**
+     * V-758 — optional so every existing construction site and test double keeps working;
+     * when absent, suspension behaves exactly as before and the pause is simply skipped.
+     * Production wires it (bootstrap.ts) — an unwired pauser would make the AUP promise
+     * untrue again, silently, which is why the wiring is asserted in the tests.
+     */
+    private readonly billing: BillingCollectionPauser | null = null,
   ) {}
 
   /**
@@ -217,6 +238,17 @@ export class AccountsAdminService {
         suspendSessions.destroyAllForAccount(accountId),
       );
     }
+    // V-758 — honour the AUP §5.2 "billing pauses" promise. Best-effort like every other
+    // step here: the suspension itself is already committed and must not be undone by a
+    // Stripe outage. But a FAILURE here is the one that costs the customer money — they
+    // keep being invoiced for a service that 403s — so it goes through the same alarm,
+    // which names the step, rather than being swallowed.
+    const pauser = this.billing;
+    if (pauser) {
+      await this.reclaim('billing_pause', accountId, () =>
+        pauser.pauseCollectionForAccount(accountId),
+      );
+    }
     return updated;
   }
 
@@ -225,6 +257,16 @@ export class AccountsAdminService {
     const updated = await this.repo.setStatus(accountId, 'active', new Date());
     if (!updated) throw new NotFoundError(`Account "${accountId}" not found.`);
     await this.invalidateCache(accountId);
+    // V-758 — symmetric resume. This is not optional politeness: pausing collection
+    // without ever clearing it would leave a reinstated customer permanently unbilled,
+    // which is a worse defect than the one the pause fixes. Same best-effort + named
+    // alarm, so a failed resume is visible rather than becoming silent free service.
+    const pauser = this.billing;
+    if (pauser) {
+      await this.reclaim('billing_resume', accountId, () =>
+        pauser.resumeCollectionForAccount(accountId),
+      );
+    }
     return updated;
   }
 

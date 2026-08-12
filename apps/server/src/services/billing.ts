@@ -50,6 +50,24 @@ export interface BillingProvider {
 
   /** Open a Stripe Customer Portal session for the given customer. */
   createPortalSession(args: { customerId: string; returnUrl: string }): Promise<{ url: string }>;
+
+  /**
+   * V-758 — pause/resume invoice collection on a subscription, for the account
+   * suspension lifecycle. The AUP (§5.2) promises that suspension pauses billing;
+   * before this existed the promise was simply untrue — `suspend()` had no billing
+   * dependency at all, so a suspended account kept renewing a flat monthly
+   * subscription while every authenticated request 403'd.
+   *
+   * Pausing does NOT change the subscription's `status`: Stripe keeps a
+   * pause_collection'd sub `active`, which is why this is safe against the tier
+   * mirror (see the C7 note in stripe-webhooks.ts — `downgradeAccountTierToBestRemaining`
+   * would otherwise be perturbed). Entitlement during suspension is already denied by
+   * the account-status check in auth.ts, not by the subscription.
+   */
+  pauseSubscriptionCollection(args: { subscriptionId: string }): Promise<void>;
+
+  /** Clear a pause set by {@link pauseSubscriptionCollection}. Must be idempotent. */
+  resumeSubscriptionCollection(args: { subscriptionId: string }): Promise<void>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -242,5 +260,29 @@ export class BillingService {
     });
     await this.repo.setStripeCustomerId({ accountId: account.id, customerId });
     return customerId;
+  }
+
+  /**
+   * V-758 — pause invoice collection for an account being suspended, honouring the AUP
+   * §5.2 promise that "billing pauses". Returns which case applied so the caller can
+   * report it: a free-tier or never-subscribed account has nothing to pause, and that is
+   * a normal outcome, not a failure.
+   *
+   * Uses findCurrentSubscription (not findActiveSubscription) on purpose: a `past_due`
+   * sub is exactly the one you most want to stop dunning while the account is suspended.
+   */
+  async pauseCollectionForAccount(accountId: string): Promise<'paused' | 'no_subscription'> {
+    const sub = await this.repo.findCurrentSubscription(accountId);
+    if (sub === null) return 'no_subscription';
+    await this.provider.pauseSubscriptionCollection({ subscriptionId: sub.stripeSubscriptionId });
+    return 'paused';
+  }
+
+  /** Inverse of {@link pauseCollectionForAccount}, for the unsuspend path. Idempotent. */
+  async resumeCollectionForAccount(accountId: string): Promise<'resumed' | 'no_subscription'> {
+    const sub = await this.repo.findCurrentSubscription(accountId);
+    if (sub === null) return 'no_subscription';
+    await this.provider.resumeSubscriptionCollection({ subscriptionId: sub.stripeSubscriptionId });
+    return 'resumed';
   }
 }
