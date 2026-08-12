@@ -11,16 +11,25 @@
 // templated endpoint references in docs use colon style (`/v1/x/:id`) while the
 // spec keys them in braces, so their examples are skipped. Normalising the two
 // looked like free coverage — 31 examples to 38 — and produced TWO false
-// positives instead, because attribution is by nearest preceding endpoint and
-// this corpus breaks that assumption in both directions: account-rate-limits.md
-// names an unrelated endpoint parenthetically mid-sentence, and mfa.md puts the
-// login-challenge endpoint AFTER the example it belongs to. Requiring the
-// reference to start its line fixed the first and caused the second.
+// positives instead — both from ATTRIBUTION, neither a docs defect:
 //
-// So the coverage stays where attribution is sound. Raising it needs a docs
-// convention — the endpoint named on its own line before its example — which is
-// a docs-side change to propose, not something to force by loosening a matcher
-// until it reports numbers it cannot justify.
+//   - account-rate-limits.md names an unrelated endpoint parenthetically
+//     mid-sentence, nearer to the example than the section's own endpoint.
+//   - mfa.md documents four responses in one page, and `POST /v1/auth/login` is
+//     named INLINE in the sentence introducing its example.
+//
+// Three attribution rules were tried and each traded one error for another:
+// nearest-preceding gets mfa.md right and account-rate-limits wrong; requiring
+// the reference to start its line reverses that; skipping parenthesised
+// references picks up a still-earlier unrelated endpoint. The tuning was
+// stopped there rather than continued — a matcher tuned until it stops
+// complaining is one nobody can trust.
+//
+// An earlier version of this comment said mfa.md names its endpoint AFTER the
+// example. That was a misreading: the endpoint appears before it, inline, and
+// the later `/v1/auth/mfa/challenge` is the NEXT step in the flow. The prose is
+// good documentation as written, so the docs are not reshaped to suit a parser.
+// Coverage stays where attribution is sound.
 //
 // READ THE COVERAGE BEFORE TRUSTING A GREEN HERE. Only examples introduced by
 // the literal `Response (\`NNN\`):` marker can be tied to an endpoint, and only

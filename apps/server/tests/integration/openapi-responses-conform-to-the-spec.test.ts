@@ -135,13 +135,24 @@ function validate(path: string, method: string, status: string, body: unknown): 
 }
 
 beforeAll(async () => {
-  fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+  // The conditionally-wired surfaces are switched ON. Without them OAuth
+  // answers 404 and the agent-runtime and BYOK routes answer 503, so those
+  // operations have never been conformance-checked by anything — a whole
+  // surface reachable in production and invisible to every sweep here.
+  const WIRED = {
+    withOauthStore: true,
+    enableAgentRuntime: true,
+    enableByokAnthropic: true,
+  } as const;
+
+  fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'], ...WIRED });
   // A staff credential too. With a customer key every /v1/admin route answers
   // 403 — which IS documented, so the sweep validated the problem body and
   // moved on, never reading a single admin SUCCESS shape. Two real contract
   // defects were sitting behind that 403 the whole time.
   staff = await buildTestApp({
     scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+    ...WIRED,
   });
   // The SERVED spec, not the checked-in file: this is the contract a customer
   // fetches and points a generator at.
@@ -256,8 +267,11 @@ describe('real responses conform to the OpenAPI spec that generates the SDKs', (
       if (errors.length > 0) violations.push(`${path} -> ${status}: ${errors.join('; ')}`);
     }
 
-    // MEASURED, not assumed: 63 of the 68 swept endpoints are actually
-    // validated. It was 34 of 65 until the lookup started reading
+    // MEASURED, not assumed: 65 of the 68 swept endpoints are actually
+    // validated. It has moved three times — 34 of 65 originally, 63 once
+    // problem+json was read, and 65 once the conditionally-wired surfaces
+    // (OAuth, agent runtime, BYOK) were switched on in the fixture instead of
+    // answering 404/503 to every sweep. It was 34 of 65 until the lookup started reading
     // `application/problem+json` as well — the admin routes this customer key
     // cannot reach answer 403 with a documented problem body, so they were
     // being skipped as "undocumented" when the contract described them all
@@ -270,7 +284,7 @@ describe('real responses conform to the OpenAPI spec that generates the SDKs', (
     // ordinary drift does not trip it, high enough that a collapse in
     // reachability fails loudly instead of quietly checking almost nothing.
     expect(validated, `endpoints actually validated (of ${paths.length} swept)`).toBeGreaterThan(
-      55,
+      60,
     );
     expect(violations, 'response(s) that violate the schema documenting them:').toEqual([]);
     // Not asserted: `undocumented` — a status the spec does not describe is
