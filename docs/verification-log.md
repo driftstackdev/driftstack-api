@@ -32635,3 +32635,112 @@ irreversible and the analysis changed its shape twice: first from "delete" to "c
 delete", then from "sessions are the blocker" to "the audit log is the blocker". Writing a
 destructive sweeper at the end of that would be the wrong instinct. The design record exists
 so the next iteration — or a peer — implements the correct version rather than the naive one.
+
+## V-759 — privacy-policy §9 retention windows, implemented as anonymisation (2026-08-12)
+
+Implements the design recorded under V-758's correction
+(`docs/internal/2026-08-12-retention-anonymisation-design.md`). §9 disclosed two windows that
+nothing enforced — revoked API-key records "retained 90 days for audit then deleted", and
+session metadata "90 days operational". Both are now swept daily.
+
+**New:** `apps/server/src/db/retention-scrub-repo.ts`,
+`apps/server/src/services/retention-scrub-sweeper.ts`, wired unconditionally in
+`apps/server/src/lib/bootstrap.ts` (`privacy.retention_scrub`, 24h interval, batch 500,
+self-re-arming enqueue, `FOR UPDATE SKIP LOCKED` with the window predicate re-checked inside
+the UPDATE rather than trusted from the CTE snapshot, per #79).
+
+Shape, unchanged from the design except where the database corrected it: `session_operations`
+rows are DELETEd (FK-safe, nothing references that table); `sessions.label` and
+`sessions.metadata` are NULLed while **the row survives**; `api_keys.name` and `key_hash` are
+scrubbed to sentinels while **the row survives**. Session cutoff runs from `destroyed_at`, so
+a live session is never touched; key cutoff from `revoked_at`.
+
+**Correction on the design, found by the database: `sessions.purpose` must NOT be scrubbed.**
+The plan said to scrub it to a sentinel because it is `notNull`. The seed failed with
+`invalid input value for enum session_purpose`. `purpose` is a Postgres enum whose whole
+vocabulary is `production_customer | cumulative_rig_validation | test_domain_probe` — so it
+cannot hold a sentinel, and more importantly it is a closed internal vocabulary and therefore
+**not personal data**. Scrubbing it would have destroyed exactly the "aggregated counters (no
+PII) retained indefinitely for capacity planning" that §9 says may be kept, to satisfy an
+obligation it was never subject to. The lesson worth carrying: `notNull` was read as "needs a
+sentinel" when the deciding question is "is this personal data?" — and for a closed enum the
+answer is nearly always no. `api_keys.key_prefix` is likewise left intact, for a different
+reason: it is uniquely indexed, so a shared sentinel would collide on the second row.
+
+**Both guards the design demanded exist, against a real Postgres**
+(`apps/server/tests/integration/db-retention-scrub-drizzle.test.ts`, isolated
+`CREATE SCHEMA` + `LIKE ... INCLUDING ALL`, dropped after). `LIKE` does **not** copy foreign
+keys, so the two FKs are re-added by hand — without that the `usage_records` guard would have
+passed while the real database lost billing data.
+
+Both were mutation-proved, and each redded the guard it was supposed to:
+
+- Removing the 90-day window predicate → reds the in-window guard (the 10-day-old session
+  gets scrubbed). Over-scrubbing is irreversible, which is why this is the first guard.
+- Replacing the scrub with the naive `DELETE FROM sessions` → reds the `usage_records`
+  survival guard. That is the catastrophe the whole design exists to avoid: `usage_records`
+  CASCADEs from `sessions`, and §9 keeps billing data 7 years (AWR Art 52).
+
+**Also fixed in this commit — the guard protecting retention sweeps could not see this one.**
+`retention-sweeps-are-unconditional-invariant.test.ts` matched only
+`register*(Sweep|Purge|Reap|Prune)*Job(`, so `registerRetentionScrubJob` was exempt **by
+default**: a new retention job enforcing a published window was invisible to the check written
+to protect exactly that. Enumerated all ten `register*Job(` calls in bootstrap; the old
+pattern missed two — the new scrub job and `registerCostNightlyJob`. The scan is now
+fail-closed over every `register*Job(`, with an explicit `NOT_A_RETENTION_JOB` map that must
+state a reason; `CostNightlyJob` is entered there, verified truthfully (its source contains no
+delete/purge/scrub/expire — it evaluates cost thresholds and notifies). Mutation-proved:
+indenting the scrub registration into a conditional reds the conditional guard, and renaming
+the registration reds the vacuity floor.
+
+**Cross-source pin instead of a text pin** —
+`apps/server/tests/unit/privacy-retention-window-matches-the-sweeper.test.ts` reads the day
+count _out of_ both published policy copies (`docs/legal/privacy-policy.md` and
+`apps/marketing-site/src/pages/legal/privacy.md`) and compares it to `RETENTION_WINDOW_DAYS`,
+so the published number and the enforced number cannot drift in either direction. It also
+pins §9's closing sentence authorising anonymisation, because literal deletion is structurally
+impossible here and that clause is the only thing making a scrub-in-place _disclosed_
+behaviour rather than undisclosed processing. All three mutation-proved (policy → 30 days;
+row label renamed; clause deleted).
+
+One of those mutations initially **failed to apply**, and that mattered: my first attempt
+mutated a bolded form of the clause that does not exist in either copy, so the test stayed
+green and would have read as "the guard does not work". The guard's own regex carried a
+bolded alternative that could never match — removed, leaving the single real form. The design
+record's quote is now marked "(emphasis added)", since the bold was mine and the doc claimed
+verbatim.
+
+Service-level failure behaviour is covered separately in
+`apps/server/tests/unit/retention-scrub-sweeper.test.ts` (6 tests): one failing step does not
+strand the other two and alarms `retention_scrub_step_failed` naming the step; a thrown tick
+still re-arms its successor with the run-anchored dedup; `capped` is honest; and a no-op tick
+stays silent so a log line genuinely means personal data was touched.
+
+**A third guard caught a real gap I had not seen, and it was right.**
+`job-chain-liveness.test.ts` derives the set of `*_JOB_TYPE` constants exported under
+`src/services/` and compares it to `EXPECTED_RECURRING_JOB_TYPES` — so registering a sweeper
+without a roster entry fails, because "a chain nobody is watching" is invisible otherwise.
+`privacy.retention_scrub` was missing from both the roster in
+`src/services/job-chain-liveness.ts` and its literal pin, so this new chain would have had no
+liveness metric and no alert if it ever stopped re-arming. Added to both. That file
+deliberately keeps a hand-written pin AND a derived check, on the stated grounds that "a list
+restated from itself agrees with itself" — and the derived half is what caught this.
+
+**`EXPECTED_TEST_FILES` raised 2641 → 2644 in this commit, which the suite requires.** My
+first reading of `scripts/verify-suite.mjs` was wrong: I saw only the `collected < expectedFiles`
+floor inside `judge()` and concluded three new test files could not fail it. There is a second,
+stricter guard — `scripts/tests/verify-suite.test.ts` counts the `*.test.ts` population on disk
+with the project's own globs and asserts the pin **equals** it, with the message "raise
+EXPECTED_TEST_FILES in the same commit that adds or removes a test file". So the bump belongs
+here, not in a follow-up. A floor and an equality check on the same constant read very
+differently, and only one of them was in the file I looked at.
+
+The value was derived by re-running that test's own `countTestFiles()` walk rather than by
+arithmetic, because arithmetic on this number was misleading twice: a peer committed their own
+`+1` mid-session (so `HEAD` had already moved from 2640 to 2641), and they have an untracked
+scratch test file on disk that inflates any local count. 2644 is the population of this commit
+on a clean checkout, verified by excluding exactly that one foreign file.
+
+Consequence to expect locally, not a defect in this work: `verify-suite.test.ts` will report
+2646 against the committed 2644 for as long as that untracked scratch file and the item-3 guard
+sit in the tree. Both are accounted for above.

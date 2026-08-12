@@ -39,7 +39,7 @@ the binding one. Even with sessions purged first, the key cannot be deleted.
 
 ## Resolution: anonymise in place — which §9 already authorises
 
-§9's closing paragraph, verbatim:
+§9's closing paragraph, verbatim (emphasis added):
 
 > When the retention period for a category expires, Driftstack deletes the Personal Data
 > **or anonymises it** (rendering it no longer attributable to a Data Subject). Anonymised
@@ -54,7 +54,7 @@ explicitly satisfied by keeping the row while scrubbing what identifies it.
 | Table                | Action past the window                                                                                                                   | Cutoff basis                          |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
 | `session_operations` | **DELETE** rows — nothing references this table, so it is FK-safe, and `request_fingerprint` / `result` / `error` are the payload traces | parent session's `destroyed_at`       |
-| `sessions`           | **SCRUB** `purpose` (notNull → sentinel), `label`, `metadata`; keep the row so `usage_records` survive                                   | `destroyed_at` (never a live session) |
+| `sessions`           | **SCRUB** `label` and `metadata` to NULL; keep the row so `usage_records` survive (see the correction below — `purpose` is NOT scrubbed) | `destroyed_at` (never a live session) |
 | `api_keys`           | **SCRUB** `name` (customer-supplied), `key_hash` (credential material, pointless to keep for years); keep the row for audit attribution  | `revoked_at`                          |
 
 Cutoff basis for sessions is `destroyed_at`, deliberately: a session that has not ended is
@@ -62,9 +62,9 @@ never touched, and "90 days operational" most defensibly runs from when the sess
 being operational. Rows with a NULL `destroyed_at` are the duration-sweeper's and the
 orphan-sweeper's business, not this one's.
 
-`purpose`, `request_fingerprint`, `name`, `key_prefix` and `key_hash` are all `notNull`, so
-scrubbing writes a sentinel rather than NULL. The sentinel must be recognisable in a
-support conversation ("this was scrubbed on schedule", not "this was corrupted").
+`name` and `key_hash` are `notNull`, so scrubbing those writes a sentinel rather than NULL.
+The sentinel must be recognisable in a support conversation ("this was scrubbed on
+schedule", not "this was corrupted").
 
 ### Implementation constraints to carry over
 
@@ -81,7 +81,46 @@ Two guards this needs that the existing sweepers do not:
 2. **A test proving `usage_records` SURVIVE a session scrub.** That is the specific
    catastrophe this design exists to avoid, so it must be pinned, not merely intended.
 
+## Correction found during implementation: `sessions.purpose` must NOT be scrubbed
+
+The plan above said to scrub `sessions.purpose` to a sentinel because it is `notNull`. That
+is wrong, and the database said so directly — the seed failed with:
+
+```
+invalid input value for enum session_purpose: "customer typed a business purpose here"
+```
+
+`purpose` is a Postgres **enum** (`session_purpose`), whose entire vocabulary is
+`production_customer | cumulative_rig_validation | test_domain_probe`. Two consequences,
+and the second matters more than the first:
+
+1. The column **cannot hold a sentinel** at all, so the planned statement could never have
+   run. A type error, caught immediately.
+2. More importantly, being a closed internal vocabulary means `purpose` **is not personal
+   data**. It records which of three operating modes a session ran in. Scrubbing it would
+   have destroyed an operational signal — the "aggregated counters (no PII) retained
+   indefinitely for capacity planning" that §9 explicitly says may be kept — to satisfy a
+   privacy obligation it was never subject to.
+
+So the customer-supplied fields on `sessions` are exactly `label` (text) and `metadata`
+(jsonb). Both are NULLABLE, so that scrub needs **no sentinel at all**; the sentinel is only
+needed for `api_keys.name` and `api_keys.key_hash`.
+
+`api_keys.key_prefix` is also left intact, for a different reason: it carries
+`uniqueIndex('api_keys_prefix_unique')`, so a shared sentinel would collide on the second
+row. It is a non-secret lookup fragment rather than credential material. `key_hash`'s
+sentinel is made per-row unique (`scrubbed:<id>`) so that adding a unique index there later
+cannot silently start failing the sweep.
+
+The general lesson, which is why this is written down rather than just fixed: `notNull` was
+read as "needs a sentinel" when the question that actually decides it is "is this personal
+data?". A closed enum is nearly always the answer "no".
+
 ## Status
 
-Design settled; implementation deliberately not rushed into the same turn as the analysis,
-because the change is irreversible and the analysis changed its shape twice.
+**Implemented** (V-759): `db/retention-scrub-repo.ts`, `services/retention-scrub-sweeper.ts`,
+wired unconditionally in `lib/bootstrap.ts`. Both demanded guards exist in
+`tests/integration/db-retention-scrub-drizzle.test.ts` against a real Postgres, and both were
+mutation-proved to fail when the behaviour they pin is removed — removing the window
+predicate reds the in-window guard, and replacing the scrub with the naive `DELETE` reds the
+`usage_records` survival guard.

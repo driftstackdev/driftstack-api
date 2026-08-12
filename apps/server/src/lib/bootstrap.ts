@@ -187,6 +187,12 @@ import {
   registerCryptoEntitlementExpirySweepJob,
 } from '../services/crypto-entitlement-expiry-sweeper.js';
 import {
+  RetentionScrubSweeperService,
+  registerRetentionScrubJob,
+  enqueueNextRetentionScrub,
+} from '../services/retention-scrub-sweeper.js';
+import { DrizzleRetentionScrubRepo } from '../db/retention-scrub-repo.js';
+import {
   enqueueNextScheduledJobsPrune,
   registerScheduledJobsPruneJob,
 } from '../services/scheduled-jobs-prune-sweeper.js';
@@ -1590,6 +1596,22 @@ export async function createProductionDeps(
     logger, // chain survival: a swallowed tick failure is logged, then re-armed
   });
   await enqueueNextCryptoEntitlementExpirySweep({ scheduledJobs: scheduledJobsService });
+
+  // V-759 — privacy-policy §9 retention enforcement. ANONYMISES rather than deletes:
+  // usage_records cascades from sessions and §9 requires billing data be kept 7 years, and
+  // revoked api_keys are RESTRICT-referenced by admin_audit_log so the row cannot be
+  // removed at all. §9's closing paragraph authorises anonymisation as the alternative.
+  // Daily; a no-op on a deployment with nothing past the 90-day window. Re-arms itself.
+  const retentionScrubSweeper = new RetentionScrubSweeperService({
+    repo: new DrizzleRetentionScrubRepo(dbHandle),
+    logger,
+  });
+  registerRetentionScrubJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: retentionScrubSweeper,
+    logger, // a failed retention step means data held past its disclosed window — alarm it
+  });
+  await enqueueNextRetentionScrub({ scheduledJobs: scheduledJobsService });
 
   // V-081: Profiles service.
   // V-225 — accountAudit wired for profile.{created,deleted}.
