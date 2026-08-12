@@ -191,7 +191,7 @@ Tier-cap + name-conflict apply the same way as create. The audit-log entry on th
 
 **Delete.** `DELETE /v1/profile-snapshots/:id`.
 
-Snapshots have no automatic lifecycle. Capture as many as you want; they sit until you delete them. Deleting the parent profile sets `parent_profile_id` to `null` but keeps the snapshot — the captured `parent_archetype`, `parent_name`, and `description` remain restorable.
+Snapshots have no automatic lifecycle. Capture as many as you want; they sit until you delete them. Deleting the parent profile keeps the snapshot — the captured `parent_archetype`, `parent_name`, and `description` remain restorable. Because customer `DELETE` is a soft delete into the 30-day recycle bin, `parent_profile_id` stays populated while the parent sits in the bin and only becomes `null` at hard purge, so a non-null value is not proof the parent is still reachable.
 
 **A snapshot does NOT preserve browser state.** `state_blob` is a forward-compatibility slot that is always written empty in v1, and restore never reads it, so a restored profile starts with no cookies, no `localStorage`, no `IndexedDB` and a freshly minted encryption key. Do not treat a snapshot as a backup of a logged-in session, and do not delete a parent profile expecting its storage to survive in a snapshot — that data is not recoverable from one. What a snapshot restores is the profile's identity and metadata, not its contents. (Customer `DELETE` on a profile is a soft-delete into a 30-day recycle bin; `parent_profile_id` is nulled at hard purge.)
 

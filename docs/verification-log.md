@@ -33062,3 +33062,36 @@ window is what actually models the claim. Mutation-proved both ways: restoring t
 sentence reds the offender check, and making `detail` interpolate reds the premise check.
 
 `EXPECTED_TEST_FILES` 2646 → 2647.
+
+## V-766 — "deleting the parent nulls `parent_profile_id`" was false on both pages that said it (2026-08-12)
+
+`api/profiles.md` and `guides/profile-management.md` both told customers that deleting a parent
+profile sets the snapshot's `parent_profile_id` to `null`. Customer `DELETE` is a **soft** delete:
+`db/profiles-repo.ts` runs an UPDATE setting `deletedAt` and never deletes the row, and the
+snapshots FK is `onDelete: 'set null'`, which fires only on a HARD purge (`purgeTrashed` /
+`purgeTrashedBefore`). So for up to 30 days the column stays populated while a `GET` on that
+profile 404s — a consumer branching on `parent_profile_id === null` never trips, and a non-null
+value is not proof the parent is reachable. Both pages now say that, and both pins were updated
+with them.
+
+`api/profiles.md` contradicted itself thirteen lines below its own false sentence, where the Delete
+section reads "**Soft-deletes** the profile — it moves to the **recycle bin**".
+
+**Correction to the audit that surfaced this: it was wrong to drop the second page.** The report
+excluded `guides/profile-management.md` on the grounds that the claim is "self-corrected two lines
+later". It is not. Line 194 states the falsehood as the paragraph's primary claim; the correcting
+parenthetical sits at the **end of line 196**, inside a paragraph about browser state and
+`state_blob`. A reader following the snapshot-lifecycle paragraph — the one that answers this
+question — never reaches it. Two sentences on one page that disagree is the defect, not the cure,
+and a second pin (`docs-pages-guides-profile-management-content-parity.test.ts`) was freezing the
+false one. Found by enumerating every test that reads each page before editing, which is the habit
+V-763a cost me for skipping.
+
+Both updated pins mutation-proved: reverting either page to its original sentence reds that page's
+own pin. No new test file, so `EXPECTED_TEST_FILES` is unchanged.
+
+**This closes the second-sweep backlog.** All eight items are resolved: 1 was already closed by
+V-757 (verified, not assumed), 2 → V-761, 3 → V-760, 4 → V-762, 5 → V-765, 6 → V-763, 7 → V-764,
+8 → this entry. Two residuals are recorded rather than claimed fixed: pre-existing free-tier VPN
+proxy rows still egress (V-763), and the transfer-path import records a bare uuid so a join across
+that path still needs normalisation (V-764).

@@ -225,9 +225,14 @@ describe('W782 docs /guides/profile-management content parity', () => {
     expect(p).toMatch(
       /Snapshots have no automatic lifecycle\. Capture as many as you want; they sit until you delete them\./,
     );
+    // Was "Deleting the parent profile sets `parent_profile_id` to `null`", which is false for
+    // the customer-visible DELETE — that is a soft delete into the recycle bin, and the FK is
+    // onDelete 'set null', firing only at hard purge. The page already said so, but only in a
+    // parenthetical at the end of the following paragraph, which is about browser state.
     expect(p).toMatch(
-      /Deleting the parent profile sets `parent_profile_id` to `null` but keeps the snapshot — the captured `parent_archetype`, `parent_name`, and `description` remain restorable\./,
+      /Deleting the parent profile keeps the snapshot — the captured `parent_archetype`, `parent_name`, and `description` remain restorable\./,
     );
+    expect(p).toMatch(/only becomes `null` at hard purge/);
     // V-752 — the destructive misreading this guards: "state stay restorable" invited a
     // customer to delete the parent. profile-snapshots.ts:135 writes `stateBlob: {}` and
     // restore reads only parentArchetype + description, so no browser state ever existed.

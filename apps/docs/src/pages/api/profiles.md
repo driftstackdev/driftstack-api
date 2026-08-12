@@ -421,10 +421,15 @@ psnap_<id>`.
 `DELETE /v1/profile-snapshots/:id` → `204 No Content`.
 
 Snapshots have no automatic lifecycle. Capture as many as you want;
-they sit until you delete them. Deleting the parent profile sets
-the snapshot's `parent_profile_id` to `null` but does NOT delete
-the snapshot — the captured `parent_archetype` + `parent_name` +
-description remain restorable.
+they sit until you delete them. Deleting the parent profile does NOT
+delete the snapshot — the captured `parent_archetype` + `parent_name` +
+description remain restorable. Note that `DELETE /v1/profiles/:id` is a
+soft delete into the 30-day recycle bin (see below), so the snapshot's
+`parent_profile_id` stays populated while the parent sits in the bin —
+it only becomes `null` once the profile is purged, restored, or the bin
+expires it. Until then the id is present but a `GET` on that profile
+404s, so do not treat a non-null `parent_profile_id` as proof the parent
+is reachable.
 
 ## Stored-archetype compatibility
 

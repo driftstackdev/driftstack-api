@@ -232,9 +232,15 @@ describe('W763 docs /api/profiles content parity', () => {
   it("CRITICAL snapshot-orphans-on-parent-delete framing pinned. S36 2026-07-07 (fable-truth-audit): '+ state remain restorable' → '+ description remain restorable' — no state is ever captured at v1 (stateBlob always {}), so only archetype/name/description survive into a restore. Matches W756 dashboard '(parent profile deleted)' inline indicator.", () => {
     const p = read(PAGE);
 
+    // This pin used to require "Deleting the parent profile sets the snapshot's
+    // parent_profile_id to `null`", which was false for the customer-visible DELETE: that is a
+    // soft delete into the 30-day recycle bin (db/profiles-repo.ts sets deletedAt), and the
+    // snapshots FK is onDelete 'set null', which fires only on a HARD purge. The page
+    // contradicted itself thirteen lines below, where it says "Soft-deletes the profile".
     expect(p).toMatch(
-      /Deleting the parent profile sets\s*\n?the snapshot's `parent_profile_id` to `null` but does NOT delete\s*\n?the snapshot — the captured `parent_archetype` \+ `parent_name` \+\s*\n?description remain restorable\./,
+      /Deleting the parent profile does NOT\s*\n?delete the snapshot — the captured `parent_archetype` \+ `parent_name` \+\s*\n?description remain restorable\./,
     );
+    expect(p).toMatch(/it only becomes `null` once the profile is purged/);
     // Negative pin — the retired restorable-state fiction must not come back.
     expect(p).not.toMatch(/\+\s*\n?state remain restorable/);
   });
