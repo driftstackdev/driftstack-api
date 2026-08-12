@@ -141,5 +141,72 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         );
       }
     });
+
+    // The case above seeds a fixed set and pages it. This one lets the log GROW
+    // mid-walk, which is what an audit log actually does: it is append-only and
+    // written on every account action, so a customer exporting theirs is paging
+    // a table that is still receiving rows.
+    //
+    // The pagination reference promises exactly this — "cursor pagination is
+    // stable under concurrent inserts (page 2 doesn't shift just because page 1
+    // grew)" — and names the audit log among the endpoints it governs. Nothing
+    // checked it here. An export that returns an entry twice, or walks past one,
+    // is a defect a customer discovers while reconciling records, which is the
+    // worst possible moment.
+    it('does not repeat or drop an entry when the log is appended to mid-walk (the documented concurrent-insert promise)', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG concurrent-append test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAccountAuditRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seededAccountIds.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`append-${accountId}@test.local`})`;
+
+      const base = Date.UTC(2026, 2, 1, 0, 0, 0);
+      // Capture into a non-null local: the `client` field is `... | null` and
+      // a closure does not carry the narrowing from the guard above.
+      const sql = client;
+      const write = async (offsetMs: number): Promise<string> => {
+        const [row] = await sql`
+          INSERT INTO account_audit_log (account_id, actor_type, action, timestamp)
+          VALUES (${accountId}, 'system', 'webhook_endpoint.created', ${new Date(base + offsetMs).toISOString()})
+          RETURNING id`;
+        return row?.id as string;
+      };
+
+      const originals: string[] = [];
+      for (let i = 0; i < 5; i++) originals.push(await write(i * 1000));
+
+      const first = await repo.list(accountId, { limit: 2 });
+      expect(first.items, 'page 1 is full').toHaveLength(2);
+
+      // The log grows: three entries NEWER than anything returned so far.
+      for (let i = 0; i < 3; i++) await write(10_000 + i * 1000);
+
+      const seen = first.items.map((r) => r.id);
+      let cursor = first.nextCursor;
+      for (let guard = 0; guard < 50 && cursor !== null; guard++) {
+        const page = await repo.list(accountId, { limit: 2, cursor });
+        seen.push(...page.items.map((r) => r.id));
+        cursor = page.nextCursor;
+      }
+
+      expect(
+        seen.filter((id, i) => seen.indexOf(id) !== i),
+        'no audit entry may be returned twice — a duplicated row in an export is a reconciliation defect',
+      ).toEqual([]);
+      expect(
+        originals.filter((id) => !seen.includes(id)),
+        'and no entry present before the walk began may be skipped',
+      ).toEqual([]);
+      expect(cursor, 'the export loop terminated on its own').toBeNull();
+    });
   },
 );

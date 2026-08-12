@@ -130,5 +130,74 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         );
       }
     });
+
+    // The case above pages a fixed set. This one creates sessions WHILE the
+    // walk is in progress, which is the ordinary state of this list: a customer
+    // driving `sessions.list()` to completion is usually also starting
+    // sessions, and every new one sorts ahead of the whole page they are on.
+    //
+    // The pagination reference promises "page 2 doesn't shift just because page
+    // 1 grew". Nothing checked it for sessions, and the failure would be
+    // invisible in aggregate — a duplicated session id in a reconciliation loop
+    // reads as a real second session.
+    it('does not repeat or drop a session when sessions are created mid-walk (the documented concurrent-insert promise)', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG concurrent-create test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      const apiKeyId = randomUUID();
+      seeded.push({ accountId, apiKeyId });
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`create-${accountId}@test.local`})`;
+      await client`
+        INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+        VALUES (${apiKeyId}, ${accountId}, 'concurrent-probe', ${`dsk_${apiKeyId.slice(0, 8)}`}, ${`hash_${apiKeyId}`})`;
+
+      const base = Date.UTC(2026, 3, 1, 0, 0, 0);
+      // Capture into a non-null local: the `client` field is `... | null` and
+      // a closure does not carry the narrowing from the guard above.
+      const sql = client;
+      const start = async (offsetMs: number): Promise<string> => {
+        const [row] = await sql`
+          INSERT INTO sessions (account_id, api_key_id, driver_session_id, created_at)
+          VALUES (${accountId}, ${apiKeyId}, ${`drv_${randomUUID()}`}, ${new Date(base + offsetMs).toISOString()})
+          RETURNING id`;
+        return row?.id as string;
+      };
+
+      const originals: string[] = [];
+      for (let i = 0; i < 5; i++) originals.push(await start(i * 1000));
+
+      const first = await repo.listSessions(accountId, { limit: 2 });
+      expect(first.items, 'page 1 is full').toHaveLength(2);
+
+      // Three sessions started while the customer is still paging.
+      for (let i = 0; i < 3; i++) await start(10_000 + i * 1000);
+
+      const seen = first.items.map((r) => r.id);
+      let cursor = first.nextCursor;
+      for (let guard = 0; guard < 50 && cursor !== null; guard++) {
+        const page = await repo.listSessions(accountId, { limit: 2, cursor });
+        seen.push(...page.items.map((r) => r.id));
+        cursor = page.nextCursor;
+      }
+
+      expect(
+        seen.filter((id, i) => seen.indexOf(id) !== i),
+        'no session may be returned twice — a duplicate reads as a real second session',
+      ).toEqual([]);
+      expect(
+        originals.filter((id) => !seen.includes(id)),
+        'and no session that existed before the walk may be skipped',
+      ).toEqual([]);
+      expect(cursor, 'the walk terminated on its own').toBeNull();
+    });
   },
 );
