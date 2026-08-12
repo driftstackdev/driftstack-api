@@ -87,7 +87,7 @@ function probeFor(pattern: string): string {
  * governing what may appear in a commit message moved, which is exactly the
  * moment someone should look at the diff.
  */
-const PATTERN_DIGEST = '61cece28233556e4';
+const PATTERN_DIGEST = 'ebf1789ff4ce21dd';
 
 /** Attribution forms V-205 forbids, each in the shape a tool actually emits. */
 const BANNED_MESSAGES: [string, string][] = [
@@ -149,7 +149,7 @@ describe('the commit-msg attribution hook is reachable and enforcing', () => {
     // make presence mean something.
     const v205 = declared.filter((d) => d.group === 'REJECT_PATTERNS_V205');
     const v211 = declared.filter((d) => d.group === 'REJECT_PATTERNS_V211');
-    expect(v205.length, 'V-205 attribution patterns declared by the hook').toBe(9);
+    expect(v205.length, 'V-205 attribution patterns declared by the hook').toBe(12);
     expect(v211.length, 'V-211 anonymity patterns declared by the hook').toBe(4);
 
     // And a digest, because an EDIT changes neither count: weakening a pattern

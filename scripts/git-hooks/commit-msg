@@ -20,6 +20,18 @@ MSG_FILE="${1:?commit-msg hook needs message file}"
 MSG=$(cat "$MSG_FILE")
 
 # V-205 attribution patterns (case-insensitive).
+# The first nine patterns match the canonical trailer and footer forms only, so
+# any OTHER phrasing passed: prose attribution, a footer without its emoji or
+# markdown brackets, and a differently-named `*-By:` trailer were all accepted.
+# The three added below close that, and are deliberately CONTEXT-based rather
+# than bare vendor words: this product integrates both vendors, so `claude`
+# appears in 34 legitimate commit messages and `anthropic` in 73 (BYOK route
+# names). A bare-word rule for those would reject real work. Bare words ARE used
+# for the two vendors with zero legitimate uses in 4000 commits.
+#
+# POSIX ERE only — `grep -E` has no `\b`, which is why the boundaries here read
+# `[^[:alnum:]]`. Validated against all 4000 historical messages through grep
+# itself: zero flagged.
 REJECT_PATTERNS_V205=(
   'Co-Authored-By: Claude'
   'Co-Authored-By:.*claude'
@@ -30,6 +42,9 @@ REJECT_PATTERNS_V205=(
   'Generated with \[Claude'
   'noreply@anthropic\.com'
   'noreply@github\.com'
+  '(generated|written|authored|assisted|created|built|made|paired)[^\n]{0,24}(by|with)[^\n]{0,24}(Claude|GPT|Copilot|anthropic)'
+  '^[A-Za-z-]*-[Bb]y:.*(Claude|GPT|Copilot|anthropic)'
+  '(^|[^[:alnum:]])(GPT|Copilot)([^[:alnum:]]|$)'
 )
 
 # V-211 anonymity patterns. Match standalone tokens — avoid biting
