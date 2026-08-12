@@ -373,6 +373,22 @@ describe('no successful response leaks a credential', () => {
     // rather than the old one, so a family dropping back out of `familyOf`
     // fails here instead of quietly shrinking the population — which is what
     // the old floor of 50 would have allowed all the way back down.
+    // EVERY declared family must have produced a real id. A create that fails
+    // yields '' and its whole family is skipped by `familyOf` — silently, and
+    // the absence assertions below then pass having read none of those bodies.
+    // That is not hypothetical: three families have failed this way while being
+    // added. A snapshot whose parent profile failed, a proxy whose host was
+    // refused by the SSRF guard, a recipe missing its agent-session id — each
+    // looked exactly like a clean sweep. A family that cannot be created must
+    // fail here rather than disappear.
+    expect(
+      Object.entries(ids)
+        .filter(([, id]) => id === '')
+        .map(([family]) => family)
+        .sort(),
+      'declared famil(ies) whose resource was never created — the sweep skipped them entirely:',
+    ).toEqual([]);
+
     expect(scanned, 'customer-surface 2xx bodies scanned').toBeGreaterThan(64);
     // Floored separately: a staff credential that stopped working would turn
     // every admin route back into a 403 and this sweep would silently return to
