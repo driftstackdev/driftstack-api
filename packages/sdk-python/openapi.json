@@ -15308,7 +15308,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 254
             },
             "required": false,
             "name": "email_contains",
@@ -21601,11 +21603,13 @@
                 "properties": {
                   "driftstack_session_id": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 100
                   },
                   "token_budget": {
                     "type": "integer",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "maximum": 10000000
                   },
                   "mode": {
                     "type": "string",
@@ -21650,7 +21654,8 @@
                       },
                       "accuracy": {
                         "type": "number",
-                        "exclusiveMinimum": 0
+                        "exclusiveMinimum": 0,
+                        "maximum": 100000
                       }
                     },
                     "required": ["latitude", "longitude"]

@@ -2540,7 +2540,7 @@ function buildRegistry(): OpenAPIRegistry {
         cursor: z.string().optional(),
         status: z.enum(['active', 'suspended', 'deleted']).optional(),
         tier: z.string().optional(),
-        email_contains: z.string().optional(),
+        email_contains: z.string().min(1).max(254).optional(),
       }),
     },
     responses: {
@@ -3838,8 +3838,8 @@ function buildRegistry(): OpenAPIRegistry {
         content: {
           'application/json': {
             schema: z.object({
-              driftstack_session_id: z.string().min(1).optional(),
-              token_budget: z.number().int().positive().optional(),
+              driftstack_session_id: z.string().min(1).max(100).optional(),
+              token_budget: z.number().int().positive().max(10_000_000).optional(),
               mode: z.enum(['manual', 'ai', 'pair']).optional(),
               model: AgentModelSchema.optional(),
               // file 57 — attach a saved profile (persistent browser identity).
@@ -3866,7 +3866,7 @@ function buildRegistry(): OpenAPIRegistry {
                 .object({
                   latitude: z.number().min(-90).max(90),
                   longitude: z.number().min(-180).max(180),
-                  accuracy: z.number().positive().optional(),
+                  accuracy: z.number().positive().max(100_000).optional(),
                 })
                 .optional(),
             }),
