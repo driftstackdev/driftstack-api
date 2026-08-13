@@ -378,9 +378,18 @@ export interface CryptoOrdersServiceOpts {
 
 /**
  * Billing-integrity (amount reconciliation) — tolerance for the
- * actually_paid >= price_amount check, as a fraction of price_amount. Crypto
- * payments routinely settle a hair under the quoted fiat amount due to
- * exchange-rate slippage between quote + settlement and on-chain fee
+ * `actually_paid >= pay_amount` check, as a fraction of pay_amount. BOTH are
+ * CRYPTO-denominated, in the order's pay_currency.
+ *
+ * This comment used to say `price_amount`, which is the FIAT figure and is
+ * incomparable to `actually_paid`. That is not a wording quibble: comparing the
+ * two is the exact bug this code was fixed for, and the fix's own inline note
+ * records the symptom — it "left every full payment stuck 'partial'". The code
+ * was corrected and this description was not, so it survived describing the
+ * defect as though it were the design.
+ *
+ * Crypto payments routinely settle a hair under the quoted amount due to
+ * exchange-rate slippage between quote and settlement, and on-chain fee
  * rounding; 1% absorbs that without letting a real short-pay through.
  */
 const AMOUNT_RECONCILE_TOLERANCE_FRACTION = 0.01;
