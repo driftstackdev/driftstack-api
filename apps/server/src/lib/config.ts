@@ -487,7 +487,7 @@ function deriveAuthFlowUrls(env: NodeJS.ProcessEnv): {
     verifyEmail: env.AUTH_VERIFY_EMAIL_URL ?? fromOrigin('/verify-email'),
     magicLink: env.AUTH_MAGIC_LINK_URL ?? fromOrigin('/auth/magic-link'),
     passwordReset: env.AUTH_PASSWORD_RESET_URL ?? fromOrigin('/reset-password'),
-    exposeDebugToken: env.AUTH_EXPOSE_DEBUG_TOKEN === 'true',
+    exposeDebugToken: envFlag(env.AUTH_EXPOSE_DEBUG_TOKEN),
   };
   if (env.NODE_ENV === 'production') {
     if (resolved.exposeDebugToken) {
@@ -590,6 +590,27 @@ function readSentryConfig(env: NodeJS.ProcessEnv): SentryConfig | null {
  * (`'1'`) → number of trusted hops. Anything else → the raw string (an IP /
  * CIDR / 'loopback' trust list). Mirrors the repo's explicit env-coercion style.
  */
+/**
+ * The single truthiness rule for boolean environment variables.
+ *
+ * Every boolean flag went through its own comparison before this existed, and
+ * they did not agree. Six compared directly against the literal 'true', so a
+ * value of `TRUE` silently did nothing. `PERMISSIVE_CORS` lowercased first and
+ * so it alone accepted
+ * `True`. And `DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS` compared against `'1'`,
+ * so the value that works for every other flag — `true` — silently left the
+ * reminders running. None of these fail: they are read, they do not match, and
+ * the operator is told nothing.
+ *
+ * Accepts `true`, `1`, `yes` and `on`, case-insensitively and with surrounding
+ * whitespace trimmed, because a value pasted out of a secret store often carries
+ * a trailing newline. Anything else, including an unset variable, is false.
+ */
+export function envFlag(raw: string | undefined): boolean {
+  if (raw === undefined) return false;
+  return ['true', '1', 'yes', 'on'].includes(raw.trim().toLowerCase());
+}
+
 function coerceTrustProxy(raw: string | undefined): boolean | number | string {
   if (raw === undefined || raw.length === 0) return false;
   if (raw === 'true') return true;
@@ -642,7 +663,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (
     env.NODE_ENV === 'production' &&
     env.DRIFTSTACK_DEPLOY_ENV !== 'staging' &&
-    env.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK === 'true'
+    envFlag(env.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK)
   ) {
     throw new Error(
       'Refusing to boot: DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK=true is staging-only and would bypass customer BYOK or bundled-LLM consent in production.',
@@ -660,11 +681,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     driver: env.DRIVER,
     // tri-state: unset env → undefined (inferred); 'true'/'false' → explicit.
     sessionProxyRequired:
-      env.SESSION_PROXY_REQUIRED === undefined ? undefined : env.SESSION_PROXY_REQUIRED === 'true',
+      env.SESSION_PROXY_REQUIRED === undefined ? undefined : envFlag(env.SESSION_PROXY_REQUIRED),
     mockNavigateLatencyMs: env.MOCK_NAVIGATE_LATENCY_MS,
     mockInteractLatencyMs: env.MOCK_INTERACT_LATENCY_MS,
     playwrightBrowser: env.PLAYWRIGHT_BROWSER,
-    playwrightHeaded: env.PLAYWRIGHT_HEADED === 'true',
+    playwrightHeaded: envFlag(env.PLAYWRIGHT_HEADED),
     slowQueryLogThresholdMs: env.SLOW_QUERY_LOG_THRESHOLD_MS,
     dbStatementTimeoutMs: env.DB_STATEMENT_TIMEOUT_MS,
     r2: readR2Config(env),
@@ -717,8 +738,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             ...(env.DRIFTSTACK_AGENT_DECOMPOSER_FORCE === 'deterministic'
               ? { forceImpl: 'deterministic' as const }
               : {}),
-            useFallbackForUnconfiguredCustomers:
-              env.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK === 'true',
+            useFallbackForUnconfiguredCustomers: envFlag(
+              env.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK,
+            ),
           }
         : undefined,
     // Founder safeguard (2026-06-24) — per-account in-flight upload cap (bytes).
@@ -740,7 +762,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     fleetInternalToken: env.DRIFTSTACK_FLEET_INTERNAL_TOKEN,
     // V-820 — fleet control-plane activation. Boolean via `=== 'true'`
     // (z.coerce.boolean would invert FLEET_CONTROL_PLANE_ENABLED=false).
-    fleetControlPlaneEnabled: env.FLEET_CONTROL_PLANE_ENABLED === 'true',
+    fleetControlPlaneEnabled: envFlag(env.FLEET_CONTROL_PLANE_ENABLED),
     // V-487 — NowPayments scaffold. All fields optional; presence of
     // BOTH apiKey + ipnSecret is what the route registration checks.
     nowpayments:

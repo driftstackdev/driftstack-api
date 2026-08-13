@@ -451,12 +451,14 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toContain('export const REDIS_QUIT_DEADLINE_MS = 2_000;');
   });
 
-  it('v2-#17 rotation-reminder daily sweeps framing pinned: pure-sweep nags (no auto-rotation); 24h cadence matches the V-295c3-tombstone status-purge poller; default-on; DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 opts out; both timers .unref()-ed; clearInterval in teardown', () => {
+  it('v2-#17 rotation-reminder daily sweeps framing pinned: pure-sweep nags (no auto-rotation); 24h cadence matches the V-295c3-tombstone status-purge poller; default-on; DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS opts out via envFlag (true/1/yes/on); both timers .unref()-ed; clearInterval in teardown', () => {
     expect(body).toMatch(
       /\/\/ v2-#17 — daily rotation-reminder sweeps for webhook signing secrets\s*\n?\s*\/\/ \(v2-#10\/#10\.5\/#10\.6\) and BYOK Anthropic API keys \(v2-#11\/#11\.5\/#11\.6\)\.\s*\n?\s*\/\/ Both reminder services are pure-sweep nags \(no auto-rotation\); the\s*\n?\s*\/\/ services skip rows that don't need a reminder yet, so the per-tick\s*\n?\s*\/\/ burst is bounded by perTickLimit \(default 50\)\. Default-on for\s*\n?\s*\/\/ production; the operator can flip\s*\n?\s*\/\/ DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 to suppress when a\s*\n?\s*\/\/ customer-quiet account wants to silence the nag/,
     );
     expect(body).toMatch(/const ROTATION_REMINDER_INTERVAL_MS = 24 \* 60 \* 60 \* 1000;/);
-    expect(body).toMatch(/process\.env\.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS === '1'/);
+    expect(body).toMatch(
+      /envFlag\(\s*process\.env\.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS,?\s*\)/,
+    );
     expect(body).toMatch(
       /new WebhookRotationReminderService\(\s*\n?\s*new DrizzleWebhookRotationReminderRepo\(dbHandle, \{[\s\S]*?secretEncryptionKeyBase64: config\.mfaEncryptionKey[\s\S]*?\}\),/,
     );

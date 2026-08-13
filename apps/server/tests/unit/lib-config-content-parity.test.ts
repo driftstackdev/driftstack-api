@@ -204,7 +204,7 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
       /When true, signup \/ magic-link \/ password-reset responses include\s*\n?\s*\*\s*a `debug_token` field containing the plaintext token\. ENABLE ONLY\s*\n?\s*\*\s*in dev \/ test — production must never leak these tokens via the\s*\n?\s*\*\s*response body\. Default false/,
     );
     expect(body).toMatch(/exposeDebugToken: z\.boolean\(\)\.default\(false\),/);
-    expect(body).toMatch(/exposeDebugToken: env\.AUTH_EXPOSE_DEBUG_TOKEN === 'true'/);
+    expect(body).toMatch(/exposeDebugToken: envFlag\(env\.AUTH_EXPOSE_DEBUG_TOKEN\)/);
     expect(body).toMatch(
       /if \(resolved\.exposeDebugToken\) \{\s*throw new Error\(\s*'Refusing to boot: AUTH_EXPOSE_DEBUG_TOKEN=true is development\/test-only and would expose plaintext one-time authentication tokens in production responses\.'/,
     );
@@ -212,12 +212,12 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('fails closed when the staging-only decomposer fallback is enabled in production', () => {
     expect(body).toMatch(
-      /env\.NODE_ENV === 'production' &&\s*env\.DRIFTSTACK_DEPLOY_ENV !== 'staging' &&\s*env\.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK === 'true'/,
+      /env\.NODE_ENV === 'production' &&\s*env\.DRIFTSTACK_DEPLOY_ENV !== 'staging' &&\s*envFlag\(env\.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK\)/,
     );
     expect(body).toMatch(
       /Refusing to boot: DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK=true is staging-only and would bypass customer BYOK or bundled-LLM consent in production/,
     );
-    expect(body).toMatch(/env\.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK === 'true'/);
+    expect(body).toMatch(/envFlag\(env\.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK\)/);
   });
 
   it('exported types: Config + R2Config + PostmarkConfig + SentryConfig (NonNullable shorthand)', () => {

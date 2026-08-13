@@ -130,6 +130,14 @@ function readVariables(): Set<string> {
         continue;
       }
       if (!entry.endsWith('.ts')) continue;
+      // Comments are NOT stripped, and that is deliberate after trying it. A
+      // naive `/\*[\s\S]*?\*\//` strip swallowed fourteen real reads in
+      // `bootstrap.ts` — a `/*` inside a string or regex literal opens a comment
+      // the regex then closes somewhere far below — and the count fell from 94
+      // to 80 while looking like a clean improvement. Correctly stripping
+      // comments needs a tokeniser, and prose mentioning `env.SOMETHING` is a
+      // much smaller problem than silently unseeing a whole file, so the prose
+      // is written to avoid the pattern instead.
       const src = readFileSync(full, 'utf8');
       // `process.env.FOO` and the parameter form `env.FOO` that config.ts uses.
       for (const m of src.matchAll(/\bprocess\.env\.([A-Z_][A-Z0-9_]*)/g)) out.add(m[1]!);

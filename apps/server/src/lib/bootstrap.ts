@@ -233,6 +233,7 @@ import {
 import { initSentry, type SentryClient } from './sentry.js';
 import type { AppDeps, ReadinessCheck } from './app.js';
 import type { Config } from './config.js';
+import { envFlag } from './config.js';
 import { decodeMasterKey } from './profile-key-hierarchy.js';
 import type { Logger } from './logger.js';
 import { assertCorsPosture } from './cors-posture.js';
@@ -2097,7 +2098,7 @@ export async function createProductionDeps(
   // CORS posture guard — PERMISSIVE_CORS=true echoes any Origin while
   // credentials:true remains enabled. The complete first-party allow-list is
   // the production boundary, so refuse boot if an env regression bypasses it.
-  const permissiveCors = (process.env.PERMISSIVE_CORS ?? '').toLowerCase() === 'true';
+  const permissiveCors = envFlag(process.env.PERMISSIVE_CORS);
   assertCorsPosture(permissiveCors, config.nodeEnv);
 
   // LK.2 + V-820 — the Drizzle fleet_nodes repo constructed before the
@@ -2841,7 +2842,7 @@ export async function createProductionDeps(
   // status-purge poller — no need for finer granularity since the
   // services' cooldown windows are days, not minutes.
   const ROTATION_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
-  const rotationRemindersDisabled = process.env.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS === '1';
+  const rotationRemindersDisabled = envFlag(process.env.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS);
   const webhookRotationReminderService = new WebhookRotationReminderService(
     new DrizzleWebhookRotationReminderRepo(dbHandle, {
       ...(config.mfaEncryptionKey !== undefined
