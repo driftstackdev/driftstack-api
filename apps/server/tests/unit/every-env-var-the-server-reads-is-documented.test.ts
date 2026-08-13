@@ -16,12 +16,18 @@
 // nobody is told about.
 //
 // MEASURED: the server reads 94 variables; the four documents between them name
-// 103; 40 are read and documented in none of them. Among those 40 are
-// `PROFILE_MASTER_KEY`, `OAUTH_CLIENT_SIGNING_SECRET`, `NOWPAYMENTS_IPN_SECRET`,
-// `METRICS_SCRAPE_TOKEN`, the three LiveKit variables and both OAuth client
-// pairs — each of them the trigger for exactly the silent-disable above.
+// 121; 22 are read and documented in none of them. The remaining ones are
+// tuning knobs with safe defaults — inflight caps, sweep intervals, probe
+// timeouts — plus the fleet-node identity trio and two test-only switches.
 //
-// This file does not fix that. It fixes the direction of travel: the 40 are
+// The eighteen that mattered ARE now documented, in both templates, with the
+// behaviour verified from source rather than assumed: LiveKit needs all three
+// or streaming is off; the NOWPayments IPN route is not registered at all
+// without its secret, so callbacks 404 rather than being accepted unverified;
+// an OAuth provider needs BOTH id and secret; `PROFILE_MASTER_KEY_CMD` is
+// fail-closed at boot; `PERMISSIVE_CORS` must stay unset in production.
+//
+// What remains is the direction of travel: the 22 are
 // enumerated by name, so a NEW undocumented variable fails immediately, and an
 // entry that later gets documented, or stops being read, is reported as stale
 // rather than sitting on a list describing work already done. Documenting them
@@ -44,7 +50,7 @@
 // first version read only the three template files, reported 58 undocumented,
 // and named `POSTMARK_API_TOKEN` among them. `docs/deployment/env-vars.md` — a
 // 53KB reference that `config.ts` itself cites in a comment — documents that
-// variable and seventeen others. The gap is 40, not 58. An audit is only as
+// variable and seventeen others. The gap was 40 of 94 when this landed, and 18 of them have since been documented. An audit is only as
 // honest as its enumeration of where the answer could live, and the reference
 // was found by reading the source comment rather than by the audit noticing its
 // own blind spot.
@@ -72,7 +78,7 @@ const ENV_REFERENCE = resolve(REPO, 'docs', 'deployment', 'env-vars.md');
 /**
  * Variables the server reads that no env document names.
  *
- * MEASURED at 40. Enumerated rather than counted so a new one fails loudly
+ * MEASURED at 22. Enumerated rather than counted so a new one fails loudly
  * instead of joining a number, and checked in both directions so an entry that
  * gets documented — or stops being read — is reported as stale.
  */
@@ -90,33 +96,15 @@ const UNDOCUMENTED_ENV = new Set([
   'DRIFTSTACK_AGENT_SESSION_PAGE_STATE_MAX_AGE_SECONDS',
   'DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY',
   'DRIFTSTACK_ANTHROPIC_MODEL',
-  'DRIFTSTACK_FLEET_INTERNAL_TOKEN',
   'DRIFTSTACK_OWNER_EMAIL',
   'DRIFTSTACK_PROXY_PRELAUNCH_PROBE',
   'DRIFTSTACK_PROXY_PROBE_TARGET_URL',
   'DRIFTSTACK_PROXY_PROBE_TIMEOUT_MS',
   'DRIFTSTACK_WORKER_DISCONNECT_GRACE_SECONDS',
-  'FLEET_CONTROL_PLANE_ENABLED',
   'FLEET_NODE_DISPLAY_NAME',
   'FLEET_NODE_HARDWARE_CLASS',
   'FLEET_NODE_REGION',
-  'GITHUB_OAUTH_CLIENT_ID',
-  'GITHUB_OAUTH_CLIENT_SECRET',
-  'GOOGLE_OAUTH_CLIENT_ID',
-  'GOOGLE_OAUTH_CLIENT_SECRET',
-  'LIVEKIT_API_KEY',
-  'LIVEKIT_API_SECRET',
-  'LIVEKIT_WS_URL',
-  'METRICS_SCRAPE_TOKEN',
-  'NOWPAYMENTS_API_KEY',
-  'NOWPAYMENTS_IPN_SECRET',
-  'OAUTH_CLIENT_CALLBACK_URL_BASE',
-  'OAUTH_CLIENT_SIGNING_SECRET',
-  'PERMISSIVE_CORS',
   'PLAYWRIGHT_HEADED',
-  'PROFILE_MASTER_KEY',
-  'PROFILE_MASTER_KEY_CMD',
-  'R2_BUCKET_PUBLIC',
 ]);
 
 /** Every environment variable name the server source reads, in either form. */
@@ -167,7 +155,7 @@ function documentedVariables(): Set<string> {
 
 describe('every environment variable the server reads is documented', () => {
   it('CRITICAL both sides were read and are non-trivial. The comparison reports an absence, and an absence measured against an empty set is every variable — a reader that found nothing would either report the whole environment undocumented or, with the baseline absorbing it, report everything fine.', () => {
-    // MEASURED: 94 read, 103 documented across the four sources.
+    // MEASURED: 94 read, 121 documented across the four sources.
     expect(readVariables().size, 'environment variables read by the server').toBeGreaterThanOrEqual(
       90,
     );
