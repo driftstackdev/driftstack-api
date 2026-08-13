@@ -119,16 +119,58 @@ const FREE_TEXT_TOKEN_RE =
 // base64 and can surface in the same upstream error/header dumps; require a
 // plausible 8+ character payload so ordinary prose such as "basic auth failed"
 // is not needlessly consumed.
+/**
+ * Credentials recognised by their own prefix, wherever they appear.
+ *
+ * The other patterns here only fire when a credential sits in a POSITION they
+ * know — after `bearer`, as a named query parameter, in URL userinfo. A bare
+ * literal in prose is invisible to all of them, and that is precisely the case
+ * this module exists for: the logger runs `redactText` over every string in a
+ * serialized error because "a caught error citing a credential" cannot be
+ * reached by key-based redaction. An upstream `Invalid API key: ds_live_…` or a
+ * request body echoed into an error message is exactly that shape.
+ *
+ * An ALLOWLIST of prefixes, deliberately. The system mints many prefixed
+ * identifiers — `acc_`, `prof_`, `ses_`, `mem_`, `inc_`, `agt_`, `key_` — and
+ * every one of them is a PUBLIC id that belongs in a log; scrubbing by a generic
+ * `word_` shape would blind the logs to the identifiers used to debug with.
+ * Only values that are secret by construction are listed:
+ *
+ *   ds_live_ / ds_test_   API keys (generateApiKey)
+ *   gck_                  per-session GUI control keys
+ *   whsec_                webhook signing secrets — ours and Stripe's share it
+ *   sk_ / rk_             Stripe secret + restricted keys, which arrive in
+ *                         upstream error text rather than being minted here
+ *
+ * Our bodies are lowercase base32 (`a-z2-7`); Stripe's are mixed alphanumeric,
+ * so the body class is broad and the minimum length is what keeps prose out.
+ * The prefix is preserved so a log still says WHICH credential was scrubbed.
+ *
+ * Not covered, and worth knowing: `generateAuthToken` emits bare base64url with
+ * no prefix at all. Nothing distinguishes it from any other random string, so no
+ * pattern can catch it without eating ordinary text.
+ */
+const FREE_TEXT_PREFIXED_SECRET_RE =
+  /(ds_(?:live|test)_|gck_|whsec_|sk_(?:live|test)_|rk_(?:live|test)_)[A-Za-z0-9]{12,}/g;
+
 const FREE_TEXT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi;
 const FREE_TEXT_BASIC_RE = /(basic\s+)[A-Za-z0-9+/]{8,}={0,2}/gi;
 
 export function redactText(s: string): string {
   if (typeof s !== 'string' || s.length === 0) return s;
-  return s
-    .replace(FREE_TEXT_TOKEN_RE, '$1[redacted]')
-    .replace(FREE_TEXT_BEARER_RE, '$1[redacted]')
-    .replace(FREE_TEXT_BASIC_RE, '$1[redacted]')
-    .replace(URL_USERINFO_RE, '$1[redacted]@');
+  return (
+    s
+      .replace(FREE_TEXT_TOKEN_RE, '$1[redacted]')
+      // Positional patterns run BEFORE the prefix pattern. Reversed, a bearer
+      // credential is rewritten to `ds_live_[redacted]` first and the bearer
+      // pattern then stops at the `[`, leaving `Bearer [redacted][redacted]` —
+      // still fully scrubbed, but a doubled marker reads as a bug and invites a
+      // wrong fix.
+      .replace(FREE_TEXT_BEARER_RE, '$1[redacted]')
+      .replace(FREE_TEXT_BASIC_RE, '$1[redacted]')
+      .replace(FREE_TEXT_PREFIXED_SECRET_RE, '$1[redacted]')
+      .replace(URL_USERINFO_RE, '$1[redacted]@')
+  );
 }
 
 // GDPR / data-minimization — customer email addresses are personal data and
