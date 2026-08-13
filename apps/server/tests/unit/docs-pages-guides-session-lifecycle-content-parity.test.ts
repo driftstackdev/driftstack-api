@@ -100,7 +100,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
       ['API Starter', '2'],
       ['API Builder', '8'],
       ['API Scale', '24'],
-      ['Enterprise', 'Custom'],
+      ['Enterprise', '32'],
     ];
     for (const [tier, cap] of tierCaps) {
       expect(p, `${tier} → ${cap}`).toMatch(new RegExp(`\\| ${tier}\\s+\\|\\s+${cap}\\s+\\|`));

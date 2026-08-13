@@ -51,7 +51,10 @@ Each tier has a hard cap on simultaneously-active sessions. Exceeding the cap re
 | API Starter | 2                   |
 | API Builder | 8                   |
 | API Scale   | 24                  |
-| Enterprise  | Custom              |
+| Enterprise  | 32                  |
+
+Enterprise's 32 is a contract floor — per-account overrides raise it
+further, and until one is applied the cap behaves like every other tier's.
 
 Concurrent caps are the only metering on paid tiers — there are no hour caps and no overage charges. Run sessions for as long as your workflow needs within your concurrent cap.
 

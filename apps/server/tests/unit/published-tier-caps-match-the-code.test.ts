@@ -1,34 +1,45 @@
-// The per-tier caps published in the customer guides are the caps the server
-// enforces — read as numbers, from the pages customers actually land on.
+// The per-tier caps published in the customer docs are the caps the server
+// enforces — every surface, read as numbers.
 //
-// Two guides publish a full tier table each: `guides/concurrency.md` gives the
-// concurrent-session cap for all eight tiers, and `guides/profile-management.md`
-// gives the profile cap. Sixteen figures, and nothing compares either table to
+// SIX pages republish the same two facts. Concurrency appears in
+// `guides/concurrency.md`, `api/sessions.md`, `api/usage.md` and
+// `guides/session-lifecycle.md`; the profile cap in
+// `guides/profile-management.md`, `api/profiles.md` and `api/usage.md` again.
+// Forty-eight figures across six files, and nothing read any of them against
 // `TIER_CONCURRENT_SESSION_LIMITS` or `PROFILES_PER_TIER`.
 //
-// This exact failure has already happened on one of these pages. The header of
-// `concurrency-doc-parity` records that a previous revision "asserted tier caps
+// Finding them one page per session was the actual problem. Three consecutive
+// sessions each turned up one more surface stating the same numbers, so this is
+// written surface-driven: adding a seventh page is one row in the table below,
+// and the comparison, the tier-completeness check and the floors come with it.
+//
+// One page was wrong. `guides/session-lifecycle.md` published Enterprise
+// concurrency as "Custom" while the server enforces 32 — on a page whose own
+// sentence calls these "a hard cap ... exceeding the cap returns 429". Its
+// sibling `guides/concurrency.md` states 32 with "contract floor — per-account
+// overrides raise it further", so the two guides contradicted each other and an
+// enterprise reader had no way to learn which number produces the 429 they will
+// actually hit. The profile cap for that tier IS a `custom` sentinel, which is
+// where the wrong convention was borrowed from.
+//
+// This exact failure has history on the concurrency page too:
+// `concurrency-doc-parity`'s header records a revision that "asserted tier caps
 // (Trial Pack: 2, Solo: 5, API Starter: 10, Team: 20, etc.) that are all higher
-// than what the server actually enforces" — customers sizing work against those
-// numbers hit refusals they had planned around. It was resolved by deleting the
-// stale marketing mirror, and that guard now checks the mirror is gone and the
-// successor exists. It does not read the successor's numbers, and neither does
-// anything else: both files mention the constants only in comments.
+// than what the server actually enforces". That was fixed by deleting the stale
+// mirror; the guard written afterwards checks the mirror is gone, not that the
+// successor is right.
 //
 // `tier-limits-server-side-parity` does compare these constants numerically —
-// against `marketing-site/src/data/pricing.ts`. The docs guides are a third
-// surface it never sees.
+// against `marketing-site/src/data/pricing.ts`. The docs are surfaces it never
+// sees.
 //
-// This is the third page in three fires with the same shape: names or existence
-// checked, values not. A content-parity pin proves a page still says what it
-// said; only reading the numbers says whether it was ever true.
-//
-// The profile table is keyed by DISPLAY name — Free, Personal, Team — while the
-// constants are keyed by slug. The mapping is derived from
-// `pricing.ts` (`id` / `name` pairs), never written out here, because a
-// hand-kept mapping is the thing that goes stale while every test stays green.
-// Enterprise publishes "Custom" against a `custom` sentinel, so it is compared
-// as that rather than forced into a number.
+// Two pages key rows by DISPLAY name — Free, Personal, Team — while the
+// constants key by slug. That mapping is derived from `pricing.ts` (`id` /
+// `name` pairs), never written out here: a hand-kept mapping goes stale while
+// every test stays green, and the failure is silent in the worst way, because
+// an unmappable row is skipped and a skipped row looks exactly like a correct
+// one. Enterprise publishes "Custom" for profiles against a `custom` sentinel
+// and is compared as that, not coerced into a NaN that matches nothing.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -38,9 +49,53 @@ import { PROFILES_PER_TIER, TIER_CONCURRENT_SESSION_LIMITS } from '@driftstack/a
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..', '..');
-const CONCURRENCY = resolve(REPO, 'apps/docs/src/pages/guides/concurrency.md');
-const PROFILES = resolve(REPO, 'apps/docs/src/pages/guides/profile-management.md');
+const DOCS = resolve(REPO, 'apps/docs/src/pages');
 const PRICING = resolve(REPO, 'apps/marketing-site/src/data/pricing.ts');
+
+type Cap = 'concurrency' | 'profiles';
+
+/**
+ * Every page that republishes a tier cap, and which column states what.
+ *
+ * `column` is the zero-based index among the cells AFTER the tier cell, so a
+ * page that adds a Notes column keeps working and a page that reorders its
+ * columns fails loudly rather than comparing the wrong pair.
+ */
+const SURFACES: { file: string; key: 'slug' | 'name'; columns: { column: number; cap: Cap }[] }[] =
+  [
+    { file: 'guides/concurrency.md', key: 'slug', columns: [{ column: 0, cap: 'concurrency' }] },
+    { file: 'api/sessions.md', key: 'slug', columns: [{ column: 0, cap: 'concurrency' }] },
+    { file: 'api/profiles.md', key: 'slug', columns: [{ column: 0, cap: 'profiles' }] },
+    {
+      file: 'api/usage.md',
+      key: 'slug',
+      columns: [
+        { column: 0, cap: 'concurrency' },
+        { column: 1, cap: 'profiles' },
+      ],
+    },
+    {
+      file: 'guides/profile-management.md',
+      key: 'name',
+      columns: [{ column: 0, cap: 'profiles' }],
+    },
+    {
+      file: 'guides/session-lifecycle.md',
+      key: 'name',
+      columns: [{ column: 0, cap: 'concurrency' }],
+    },
+  ];
+
+const DISPLAY_NAMES = new Set([
+  'Free',
+  'Personal',
+  'Team',
+  'Agency',
+  'API Starter',
+  'API Builder',
+  'API Scale',
+  'Enterprise',
+]);
 
 /** Display name -> tier slug, derived from the pricing data rather than restated. */
 function displayNameToSlug(): Map<string, string> {
@@ -52,100 +107,93 @@ function displayNameToSlug(): Map<string, string> {
   return out;
 }
 
-/** `| `slug` | 24 |` rows — the concurrency guide keys by slug. */
-function capsBySlug(file: string): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const line of readFileSync(file, 'utf8').split('\n')) {
-    const m = /^\|\s*`([a-z_]+)`\s*\|\s*([\d,]+)\s*\|/.exec(line);
-    if (m !== null) out.set(m[1]!, Number(m[2]!.replace(/,/g, '')));
+interface Row {
+  slug: string;
+  cells: string[];
+}
+
+/** Tier rows of one page, keyed by slug however the page spells them. */
+function rowsOf(surface: (typeof SURFACES)[number], names: Map<string, string>): Row[] {
+  const md = readFileSync(resolve(DOCS, surface.file), 'utf8');
+  const out: Row[] = [];
+  for (const line of md.split('\n')) {
+    const m =
+      surface.key === 'slug'
+        ? /^\|\s*`([a-z_]+)`\s*\|(.+)\|\s*$/.exec(line)
+        : /^\|\s*([A-Z][A-Za-z ]+?)\s*\|(.+)\|\s*$/.exec(line);
+    if (m === null) continue;
+    const label = m[1]!;
+    if (surface.key === 'name' && !DISPLAY_NAMES.has(label)) continue;
+    const slug = surface.key === 'slug' ? label : names.get(label);
+    if (slug === undefined) continue;
+    out.push({ slug, cells: (m[2] ?? '').split('|').map((c) => c.trim()) });
   }
   return out;
 }
 
-/** `| Personal | 10 |` rows — the profile guide keys by display name. */
-function capsByDisplayName(file: string): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const line of readFileSync(file, 'utf8').split('\n')) {
-    const m = /^\|\s*([A-Z][A-Za-z ]+?)\s*\|\s*([\d,]+|Custom)\s*\|/.exec(line);
-    if (m !== null && m[1] !== 'Tier') out.set(m[1]!, m[2]!.replace(/,/g, ''));
-  }
-  return out;
-}
+const CAPS: Record<Cap, Record<string, number | string>> = {
+  concurrency: TIER_CONCURRENT_SESSION_LIMITS,
+  profiles: PROFILES_PER_TIER,
+};
 
-describe('the tier caps published in the guides match the code', () => {
-  it('CRITICAL both tables and the name mapping parsed. Every comparison below reports disagreement, and an empty table disagrees with nothing — a reformatted page would report its caps verified having read none of them.', () => {
-    const concurrency = capsBySlug(CONCURRENCY);
-    const profiles = capsByDisplayName(PROFILES);
+describe('the tier caps published across the docs match the code', () => {
+  it('CRITICAL every surface parsed a full tier table, and every display name resolved. A comparison walks only the rows it found, so a reformatted page or an unmappable name reports its caps verified having read none of them.', () => {
     const names = displayNameToSlug();
-
-    expect(concurrency.size, 'tier rows parsed from the concurrency guide').toBe(
-      Object.keys(TIER_CONCURRENT_SESSION_LIMITS).length,
-    );
-    expect(profiles.size, 'tier rows parsed from the profile guide').toBe(
-      Object.keys(PROFILES_PER_TIER).length,
-    );
     expect(names.size, 'display-name to slug pairs derived from pricing.ts').toBeGreaterThanOrEqual(
       7,
     );
-    // Every display name on the profile page must resolve, or the comparison
-    // below silently skips the rows it cannot map — which looks identical to
-    // finding them all correct.
-    expect(
-      [...profiles.keys()].filter((n) => !names.has(n)).sort(),
-      'display name(s) on the profile page with no tier in pricing.ts:',
-    ).toEqual([]);
+    const tierCount = Object.keys(TIER_CONCURRENT_SESSION_LIMITS).length;
+    const short = SURFACES.filter((s) => rowsOf(s, names).length !== tierCount).map(
+      (s) => `${s.file}: ${String(rowsOf(s, names).length)} of ${String(tierCount)} tiers`,
+    );
+    expect(short, 'page(s) whose tier table did not parse in full:').toEqual([]);
+
+    // A display-name page whose labels stopped resolving would parse to zero
+    // rows and be caught above — this states the mapping direction explicitly
+    // so the reason is visible in the failure rather than inferred.
+    const unmapped = SURFACES.filter((s) => s.key === 'name').flatMap((s) => {
+      const md = readFileSync(resolve(DOCS, s.file), 'utf8');
+      return [...md.matchAll(/^\|\s*([A-Z][A-Za-z ]+?)\s*\|/gm)]
+        .map((m) => m[1]!)
+        .filter((n) => DISPLAY_NAMES.has(n) && !names.has(n))
+        .map((n) => `${s.file}: ${n}`);
+    });
+    expect(unmapped.sort(), 'display name(s) with no tier in pricing.ts:').toEqual([]);
   });
 
-  it('CRITICAL every published concurrent-session cap is the cap enforced. This page has already shipped caps higher than the server allowed — the guard written after that incident checks the stale mirror is gone, not that the successor is right.', () => {
-    const published = capsBySlug(CONCURRENCY);
-    const actual = TIER_CONCURRENT_SESSION_LIMITS as Record<string, number>;
-    const wrong = [...published.entries()]
-      .filter(([slug, cap]) => actual[slug] !== cap)
-      .map(
-        ([slug, cap]) =>
-          `${slug}: page says ${String(cap)}, server enforces ${String(actual[slug])}`,
-      )
-      .sort();
-    expect(wrong, 'published concurrency cap(s) the server does not enforce:').toEqual([]);
-  });
-
-  it('CRITICAL every published profile cap is the cap enforced. Enterprise publishes "Custom" against the `custom` sentinel and is compared as that, rather than coerced into a number that would quietly become NaN and match nothing.', () => {
-    const published = capsByDisplayName(PROFILES);
+  it('CRITICAL every published cap on every surface equals what the server enforces. Six pages restate these numbers; before this only two of them were read, and each session of looking turned up another page saying the same thing unchecked.', () => {
     const names = displayNameToSlug();
-    const actual = PROFILES_PER_TIER as Record<string, number | string>;
     const wrong: string[] = [];
-    for (const [display, claimed] of published) {
-      const slug = names.get(display);
-      if (slug === undefined) continue;
-      const enforced = actual[slug];
-      const agrees = claimed === 'Custom' ? enforced === 'custom' : String(enforced) === claimed;
-      if (!agrees) {
-        wrong.push(
-          `${display} (${slug}): page says ${claimed}, server enforces ${String(enforced)}`,
-        );
+    for (const surface of SURFACES) {
+      for (const row of rowsOf(surface, names)) {
+        for (const col of surface.columns) {
+          const claimed = (row.cells[col.column] ?? '').replace(/,/g, '');
+          if (claimed === '') continue;
+          const enforced = CAPS[col.cap][row.slug];
+          const agrees =
+            claimed === 'Custom' ? enforced === 'custom' : String(enforced) === claimed;
+          if (!agrees) {
+            wrong.push(
+              `${surface.file} ${row.slug} ${col.cap}: page says ${claimed}, server enforces ${String(enforced)}`,
+            );
+          }
+        }
       }
     }
-    expect(wrong.sort(), 'published profile cap(s) the server does not enforce:').toEqual([]);
+    expect(wrong.sort(), 'published cap(s) the server does not enforce:').toEqual([]);
   });
 
-  it('CRITICAL every tier the server knows is published in both guides. A tier absent from a page is a customer with no published cap at all, and the omission is invisible in a comparison that only walks the rows the page happens to have.', () => {
-    const concurrency = capsBySlug(CONCURRENCY);
-    const profiles = capsByDisplayName(PROFILES);
+  it('CRITICAL every tier the server knows appears on every surface that publishes that cap. A tier missing from a page is a customer with no published cap at all, and an omission is invisible to a comparison that only walks the rows a page happens to have.', () => {
     const names = displayNameToSlug();
-    const publishedProfileSlugs = new Set(
-      [...profiles.keys()].map((n) => names.get(n)).filter((s): s is string => s !== undefined),
-    );
-    expect(
-      Object.keys(TIER_CONCURRENT_SESSION_LIMITS)
-        .filter((t) => !concurrency.has(t))
-        .sort(),
-      'tier(s) missing from the concurrency guide:',
-    ).toEqual([]);
-    expect(
-      Object.keys(PROFILES_PER_TIER)
-        .filter((t) => !publishedProfileSlugs.has(t))
-        .sort(),
-      'tier(s) missing from the profile guide:',
-    ).toEqual([]);
+    const missing: string[] = [];
+    for (const surface of SURFACES) {
+      const published = new Set(rowsOf(surface, names).map((r) => r.slug));
+      for (const cap of new Set(surface.columns.map((c) => c.cap))) {
+        for (const tier of Object.keys(CAPS[cap])) {
+          if (!published.has(tier)) missing.push(`${surface.file}: ${tier} (${cap})`);
+        }
+      }
+    }
+    expect(missing.sort(), 'tier(s) absent from a page that publishes their cap:').toEqual([]);
   });
 });

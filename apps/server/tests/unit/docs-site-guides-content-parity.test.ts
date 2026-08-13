@@ -138,7 +138,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(body).toMatch(/\| API Starter\s+\| 2\s+\|/);
     expect(body).toMatch(/\| API Builder\s+\| 8\s+\|/);
     expect(body).toMatch(/\| API Scale\s+\| 24\s+\|/);
-    expect(body).toMatch(/\| Enterprise\s+\| Custom\s+\|/);
+    expect(body).toMatch(/\| Enterprise\s+\| 32\s+\|/);
     expect(body).toMatch(
       /Concurrent caps are the only metering on paid tiers — there are no hour caps and no overage charges\./,
     );
