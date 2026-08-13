@@ -155,6 +155,7 @@ import {
 // control protocol (the routes' own single source of truth) rather than
 // re-declared here, so a wire-shape change flows into the spec.
 import { CookieSchema } from '../schemas/harness-control-protocol.js';
+import { PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES } from './platform-secret-value-encryption.js';
 
 const PaginatedSessionsSchema = z.object({
   data: z.array(SessionSchema),
@@ -3002,7 +3003,7 @@ function buildRegistry(): OpenAPIRegistry {
         content: {
           'application/json': {
             schema: z.object({
-              value: z.string().min(1).max(8192),
+              value: z.string().min(1).max(PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES),
               description: z.string().max(256).nullable().optional(),
             }),
           },

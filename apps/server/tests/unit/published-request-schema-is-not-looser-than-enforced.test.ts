@@ -36,8 +36,39 @@
 // Only fields declared exactly once on each side are compared. A name used with
 // two different chains in the same file is a different question — which
 // endpoint's copy is authoritative — and guessing would manufacture findings.
-// The count of skipped-as-ambiguous is floored so that a parser change which
-// quietly made everything ambiguous cannot pass as a clean comparison.
+//
+// COVERAGE, measured rather than assumed, and lower than it first looked. Of 43
+// published request field names, 34 have a same-named declaration in a route
+// file, but only 22 are unambiguous on BOTH sides and therefore actually
+// compared — roughly half. The first floor written here said 34 and failed,
+// which is the useful kind of failure: name-matching and comparability are
+// different questions, and the gap between them was invisible until asserted.
+//
+//   22  compared
+//    9  no route-side declaration this parser can see — four are structural
+//       wrappers (`params`, `query`, `schema`, `event`, which are
+//       `z.object({...})` containers rather than fields) and five are written
+//       across several lines or declared elsewhere (`initial_url`, `value`)
+//    4  the document declares the name with more than one chain
+//       (`days`, `limit`, `cursor`, `description`)
+//    8  a route declares the name with more than one chain (`email`,
+//       `account_id`, `client_id`, `format`, `status`, `mode`, `mime`,
+//       `payment_id`)
+//
+// The ambiguous twelve are not a parser weakness so much as a real question this
+// file declines to guess at: the same field name means different things on
+// different endpoints, and picking one chain to compare would manufacture
+// findings. Both numbers are floored, because a comparison that quietly covers
+// less reads exactly like one that finds nothing.
+//
+// Two blind spots worth naming rather than leaving to be discovered. `.refine()`
+// is not treated as a narrowing constraint: it carries an arbitrary predicate
+// that OpenAPI cannot express anyway, so `initial_url`'s http/https restriction
+// is enforced and unpublishable rather than a drift. And a multi-line chain is
+// invisible on both sides — `value` in the platform-secret body is one, which is
+// why its published `max` was a hardcoded 8192 sitting beside a
+// `PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES` of 8192; that literal now derives from
+// the constant, so there is one fewer copy for this file to fail to check.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -99,6 +130,30 @@ function enforcedFields(): Map<string, { chain: string; file: string }[]> {
 }
 
 /**
+ * Field names where a published request declaration and an enforced declaration
+ * are BOTH unambiguous, so the two can actually be compared.
+ *
+ * This is the comparison's coverage, and it is floored below. A field that
+ * becomes uncomparable — a one-line chain reformatted across several lines —
+ * silently reduces this file to checking less, which reads exactly like a clean
+ * run.
+ */
+function comparablePairs(): { name: string; pub: string; run: string; file: string }[] {
+  const published = publishedFields();
+  const enforced = enforcedFields();
+  const out: { name: string; pub: string; run: string; file: string }[] = [];
+  for (const [name, decls] of published) {
+    const chains = new Set(decls.filter((d) => d.request).map((d) => d.chain));
+    const enc = enforced.get(name);
+    if (enc === undefined || chains.size !== 1) continue;
+    const encChains = new Set(enc.map((e) => e.chain));
+    if (encChains.size !== 1) continue;
+    out.push({ name, pub: [...chains][0]!, run: [...encChains][0]!, file: enc[0]!.file });
+  }
+  return out;
+}
+
+/**
  * Constraints a route enforces that the document does not publish.
  *
  * `requestOnly` is the real comparison; passing false is used only to prove the
@@ -127,6 +182,24 @@ function looserThanEnforced(requestOnly: boolean): string[] {
   return findings.sort();
 }
 
+/**
+ * The other direction: constraints the document PUBLISHES that no route
+ * enforces — a validation customers are promised and never receive.
+ */
+function stricterThanEnforced(): string[] {
+  return comparablePairs()
+    .flatMap((p) => {
+      const rc = constraintsOf(p.run);
+      const extra = [...constraintsOf(p.pub)].filter((c) => !rc.has(c));
+      return extra.length === 0
+        ? []
+        : [
+            `${p.name} [routes/${p.file}]: the spec promises ${extra.join(', ')} but the route does not enforce it — published ${p.pub}, enforced ${p.run}`,
+          ];
+    })
+    .sort();
+}
+
 describe('the published request schema is not looser than the enforced one', () => {
   it('CRITICAL both documents parsed into real field declarations. The comparison reports disagreement, so a parse that recovered nothing would agree with nothing and report every request field verified having read none of them.', () => {
     const published = publishedFields();
@@ -153,6 +226,31 @@ describe('the published request schema is not looser than the enforced one', () 
       all.length,
       'findings before the request/response filter — a floor on the filter having work to do',
     ).toBeGreaterThan(requestOnly.length);
+  });
+
+  it('CRITICAL the comparison still covers the request surface it did. MEASURED at 22 of 43 published request field names actually compared — the rest have no visible route-side declaration or are declared with more than one chain, which this file will not guess between. Reformatting a one-line chain silently shrinks what is checked, and a comparison covering less reads exactly like a comparison finding nothing.', () => {
+    const pairs = comparablePairs();
+    const publishedRequestNames = new Set(
+      [...publishedFields()]
+        .filter(([, decls]) => decls.some((d) => d.request))
+        .map(([name]) => name),
+    );
+
+    expect(
+      pairs.length,
+      'published request fields with an unambiguous enforced counterpart',
+    ).toBeGreaterThanOrEqual(22);
+    expect(
+      publishedRequestNames.size,
+      'published request field names in total',
+    ).toBeGreaterThanOrEqual(43);
+  });
+
+  it('CRITICAL the document does not promise a validation the route skips. The reverse of the arm below and the more dangerous direction to get wrong quietly: a published max that nothing enforces is a limit customers are told about and rely on, while the server accepts anything. MEASURED at zero.', () => {
+    expect(
+      stricterThanEnforced(),
+      'constraint(s) the published schema promises but no route enforces:',
+    ).toEqual([]);
   });
 
   it('CRITICAL every constraint a route enforces is published. The published document is what customers generate clients from, so a rule that exists only in the route is a 400 the caller could not have predicted — the four found when this was written were all in that direction, including a token budget cap the route deliberately imposes and the spec never mentioned.', () => {
