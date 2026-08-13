@@ -13,6 +13,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -1186,6 +1187,12 @@ export const apiKeys = pgTable(
   (t) => [
     uniqueIndex('api_keys_prefix_unique').on(t.keyPrefix),
     index('api_keys_account_idx').on(t.accountId),
+    // Migration 0111 — partial index backing the team-RBAC "keys created BY this
+    // member" read. Mirrors the migration's
+    // `WHERE created_by_account_id IS NOT NULL AND revoked_at IS NULL`.
+    index('api_keys_account_created_by_idx')
+      .on(t.accountId, t.createdByAccountId)
+      .where(sql`${t.createdByAccountId} IS NOT NULL AND ${t.revokedAt} IS NULL`),
   ],
 );
 
@@ -1840,16 +1847,26 @@ export const scheduledJobs = pgTable(
       .default(sql`now()`),
   },
   (t) => [
-    index('scheduled_jobs_due_idx').on(t.runAt),
-    index('scheduled_jobs_account_type_pending_idx').on(t.accountId, t.jobType),
-    // W415 — the worker claim (run_at <= now AND completed_at IS NULL AND
-    // failed_at IS NULL ORDER BY run_at FOR UPDATE SKIP LOCKED) is backed by a
-    // PARTIAL index `scheduled_jobs_claim_idx (run_at) WHERE completed_at IS NULL
-    // AND failed_at IS NULL` (raw SQL, migration 0071) so the claim stays
-    // O(due-unfinished) as finished jobs accumulate. drizzle's index() can't
-    // express the partial WHERE — same pattern as the agent_sessions
-    // idempotency partial-unique in 0047. (A retention sweep for finished jobs
-    // is still an open design decision — see the W415 backlog note.)
+    // Both of these are PARTIAL in the database and were declared here as if
+    // they covered the whole table. Migration 0021 created them
+    // `WHERE completed_at IS NULL AND failed_at IS NULL` precisely so the worker
+    // claim (run_at <= now AND completed_at IS NULL AND failed_at IS NULL
+    // ORDER BY run_at FOR UPDATE SKIP LOCKED) stays O(due-unfinished) as
+    // finished jobs accumulate.
+    //
+    // The note that used to sit here said drizzle's index() "can't express the
+    // partial WHERE". It can, and does — five indexes in this file use
+    // `.where()`. Believing otherwise is what produced migration 0071, which
+    // added `scheduled_jobs_claim_idx` as a byte-identical second copy of
+    // `scheduled_jobs_due_idx` to solve a problem 0021 had already solved; its
+    // rationale describes the existing index as "that full index", which it
+    // never was. Migration 0112 drops the duplicate.
+    index('scheduled_jobs_due_idx')
+      .on(t.runAt)
+      .where(sql`${t.completedAt} IS NULL AND ${t.failedAt} IS NULL`),
+    index('scheduled_jobs_account_type_pending_idx')
+      .on(t.accountId, t.jobType)
+      .where(sql`${t.completedAt} IS NULL AND ${t.failedAt} IS NULL`),
   ],
 );
 
@@ -2276,6 +2293,23 @@ export const agentSessions = pgTable(
     index('agent_sessions_profile_id_active_idx')
       .on(t.profileId)
       .where(sql`${t.status} = 'active'`),
+    // Migration 0042 — the account-scoped list read, and the harness-side
+    // lookup-by-driftstack-session. Both partial forms mirror their migration.
+    index('agent_sessions_account_id_idx').on(t.accountId),
+    index('agent_sessions_active_idx')
+      .on(t.status)
+      .where(sql`${t.status} = 'active'`),
+    index('agent_sessions_driftstack_session_id_idx')
+      .on(t.driftstackSessionId)
+      .where(sql`${t.driftstackSessionId} IS NOT NULL`),
+    // Migration 0047 — the constraint the `idempotencyKey` comment above has
+    // always described ("partial unique on (account_id, idempotency_key) when
+    // key is non-null") and which the schema never declared. It is what makes a
+    // retried POST /v1/agent-sessions return the first session instead of
+    // creating a second billable one.
+    uniqueIndex('agent_sessions_idempotency_key_unique')
+      .on(t.accountId, t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} IS NOT NULL`),
     check('agent_sessions_authority_revision_nonnegative', sql`${t.authorityRevision} >= 0`),
   ],
 );
@@ -2419,27 +2453,38 @@ export type NewFleetNodeRow = typeof fleetNodes.$inferInsert;
 // cleanup. CHECK constraints on label (1..120) + description (<=2000)
 // match the SQL migration; the InMemoryRecipesRepo's
 // validateLabelAndDescription enforces the same at the service layer.
-export const recipes = pgTable('recipes', {
-  id: text('id').primaryKey(),
-  accountId: uuid('account_id')
-    .notNull()
-    .references(() => accounts.id, { onDelete: 'cascade' }),
-  agentSessionId: text('agent_session_id').references(() => agentSessions.id, {
-    onDelete: 'set null',
-  }),
-  label: text('label').notNull(),
-  description: text('description'),
-  intentLog: jsonb('intent_log').notNull(),
-  transcriptSnapshot: jsonb('transcript_snapshot')
-    .notNull()
-    .default(sql`'[]'::jsonb`),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-});
+export const recipes = pgTable(
+  'recipes',
+  {
+    id: text('id').primaryKey(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    agentSessionId: text('agent_session_id').references(() => agentSessions.id, {
+      onDelete: 'set null',
+    }),
+    label: text('label').notNull(),
+    description: text('description'),
+    intentLog: jsonb('intent_log').notNull(),
+    transcriptSnapshot: jsonb('transcript_snapshot')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  // Migration 0044 — this table was declared with no index block at all, so
+  // both of its reads were undeclared. The partial form mirrors the migration.
+  (t) => [
+    index('recipes_account_id_idx').on(t.accountId),
+    index('recipes_agent_session_id_idx')
+      .on(t.agentSessionId)
+      .where(sql`${t.agentSessionId} IS NOT NULL`),
+  ],
+);
 
 export type RecipeRow = typeof recipes.$inferSelect;
 export type NewRecipeRow = typeof recipes.$inferInsert;
@@ -2515,6 +2560,10 @@ export const atlasPriorityEvents = pgTable(
     index('atlas_priority_events_status_emitted_at_idx').on(t.status, t.emittedAt),
     index('atlas_priority_events_customer_emitted_at_idx').on(t.customerId, t.emittedAt),
     index('atlas_priority_events_session_id_idx').on(t.sessionId),
+    // Migration 0058 — the dedup triple. Declared as a constraint because that
+    // is what the migration writes; it is what stops one re-emitted probe
+    // signature entering the auto-learn queue twice.
+    unique('atlas_priority_events_dedup_triple_unique').on(t.opSeqSha, t.archetypeId, t.emittedAt),
   ],
 );
 

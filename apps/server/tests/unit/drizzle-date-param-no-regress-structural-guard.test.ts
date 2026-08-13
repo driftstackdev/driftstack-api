@@ -116,6 +116,13 @@ const ALLOW_LIST: Record<string, string[]> = {
     // C1 crypto_entitlements expiry-sweep partial index predicate
     // `expired_processed_at IS NULL` — a column REFERENCE, not a JS Date value.
     't.expiredProcessedAt',
+    // The two scheduled_jobs partial indexes, whose predicate is
+    // `completed_at IS NULL AND failed_at IS NULL` (migration 0021). Column
+    // REFERENCES rendering as identifiers — the same shape as every entry
+    // above, and never a bound Date. These were declared without their
+    // `.where()` until the schema/database index comparison caught it.
+    't.completedAt',
+    't.failedAt',
     // Agent-turn receipt terminal-shape CHECK references this timestamp
     // COLUMN twice (IS NULL / IS NOT NULL); it is never a bound Date value.
     't.completedAt',

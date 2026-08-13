@@ -1,8 +1,8 @@
 // The Drizzle schema and the migrated database describe the same tables,
-// columns, types, nullability and foreign keys — derived from both sides,
-// against a real Postgres.
+// columns, types, nullability, foreign keys and indexes — derived from both
+// sides, against a real Postgres.
 //
-// `schema.ts` is what every repo in the server queries through, and the 112
+// `schema.ts` is what every repo in the server queries through, and the 113
 // migration files are what actually shapes the database. Nothing compared them.
 // The per-migration tests in this directory each verify one migration's data
 // behaviour — an envelope re-encryption, a transcript backfill — and none asks
@@ -45,6 +45,26 @@
 // a forward declaration that was not in the code. Behaviour was correct — the
 // database had the constraint — but only the hand-written migration was holding
 // the invariant the schema claimed to express.
+//
+// Indexes are the arm that found the most, and it took three corrections to the
+// instrument before any of it was true. Keying on the index NAME reported 11
+// gaps, two of them a drizzle `uniqueIndex()` and a migration's `UNIQUE(a, b)`
+// under different generated names. Reading only `indexes` and
+// `uniqueConstraints` missed column-level `.unique()`, which invented a twelfth.
+// And a Map keyed on (table, columns, unique) silently discarded duplicates,
+// which is how the real find nearly stayed hidden. Eight of the survivors were
+// genuine: indexes created by migration and never declared, including the
+// partial unique behind agent-session idempotency — the constraint that makes a
+// retried create return the first session rather than a second billable one,
+// described in the schema's own comment and declared nowhere.
+//
+// Comparing partiality then found two more, in the other direction, and through
+// them a duplicate index: `scheduled_jobs_claim_idx` was byte-identical to
+// `scheduled_jobs_due_idx`, so the job queue maintained two copies of the same
+// btree on every write. Migration 0071 added it believing the existing index was
+// "that full index"; migration 0021 had created it partial with the identical
+// predicate. The belief came from a comment claiming drizzle's `index()` cannot
+// express a partial WHERE — it can, and five indexes in `schema.ts` use it.
 //
 // Neither side is restated here. Tables and columns come from Drizzle's own
 // `getTableConfig` rather than from parsing `schema.ts` — an early attempt at
@@ -300,6 +320,127 @@ describe('the drizzle schema matches the migrated database', () => {
       if (!declared.has(key)) problems.push(`${key} exists in the database but not in the schema`);
     }
     expect(problems.sort(), 'foreign key(s) that differ between schema and database:').toEqual([]);
+  });
+
+  it('CRITICAL every index and unique constraint exists on both sides, keyed by what it is rather than what it is called. The unique ones are correctness: the partial unique behind agent-session idempotency is what makes a retried create return the first session instead of a second billable one, and it lived only in migration 0047.', async () => {
+    if (guardUnreachable()) return;
+
+    // Keyed on (table, columns in index order, uniqueness, partiality) — NOT on
+    // the name. A drizzle `uniqueIndex()` and a migration's `UNIQUE(a, b)` are
+    // the same constraint under different generated names, and keying on the
+    // name reported both of them as gaps. Primary keys are excluded: they are
+    // declared separately and compared by the column arms above.
+    //
+    // COUNTED, not set-keyed, because that key is not unique. Two indexes can
+    // share it: `scheduled_jobs` had two identical ones, and `fleet_nodes` has a
+    // legitimate pair on `region` differing only in predicate. A Map keyed this
+    // way keeps the last and silently discards the rest, which hides exactly the
+    // duplicate-index case this arm should be able to see.
+    //
+    // The PREDICATE BODY is deliberately not compared. Drizzle emits
+    // `"status" = 'active'` where Postgres stores the normalised
+    // `((status)::text = 'active'::text)`, and matching those textually is a
+    // false-positive generator. So partiality is compared and the predicate is
+    // not: two partial indexes on the same columns with DIFFERENT predicates
+    // agree here. That is this arm's blind spot, stated rather than implied.
+    const rows = await client!<
+      { tbl: string; name: string; uniq: boolean; partial: boolean; cols: string[] | null }[]
+    >`
+      SELECT t.relname AS tbl, c.relname AS name, ix.indisunique AS uniq,
+             (ix.indpred IS NOT NULL) AS partial,
+             (SELECT array_agg(a.attname ORDER BY k.ord)
+                FROM unnest(ix.indkey) WITH ORDINALITY AS k(attnum, ord)
+                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum) AS cols
+      FROM pg_index ix
+      JOIN pg_class c ON c.oid = ix.indexrelid
+      JOIN pg_class t ON t.oid = ix.indrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      WHERE n.nspname = 'public' AND NOT ix.indisprimary`;
+
+    const key = (tbl: string, cols: string[], uniq: boolean, partial: boolean): string =>
+      `${tbl}(${cols.join(',')}) unique=${String(uniq)} partial=${String(partial)}`;
+
+    const actual = new Map<string, string[]>();
+    for (const row of rows) {
+      if (MIGRATOR_TABLES.has(row.tbl)) continue;
+      const k = key(row.tbl, row.cols ?? [], row.uniq, row.partial);
+      actual.set(k, [...(actual.get(k) ?? []), row.name]);
+    }
+
+    const declared = new Map<string, number>();
+    let columnLevelUnique = 0;
+    for (const value of Object.values(schema)) {
+      let cfg;
+      try {
+        cfg = getTableConfig(value as never);
+      } catch {
+        continue;
+      }
+      if (typeof cfg.name !== 'string' || cfg.name === '') continue;
+      const bump = (k: string): void => {
+        declared.set(k, (declared.get(k) ?? 0) + 1);
+      };
+      for (const idx of cfg.indexes) {
+        const cols = idx.config.columns.map((c) => (c as { name?: string }).name ?? '?');
+        bump(key(cfg.name, cols, Boolean(idx.config.unique), idx.config.where !== undefined));
+      }
+      for (const u of cfg.uniqueConstraints) {
+        bump(
+          key(
+            cfg.name,
+            u.columns.map((c) => c.name),
+            true,
+            false,
+          ),
+        );
+      }
+      // Column-level `.unique()` lives on the COLUMN and is absent from both
+      // `indexes` and `uniqueConstraints`. Missing it is what made a first
+      // version report `status_subscribers(email)` as an undeclared unique — a
+      // finding produced entirely by the instrument.
+      for (const col of cfg.columns) {
+        if (!col.isUnique) continue;
+        columnLevelUnique += 1;
+        bump(key(cfg.name, [col.name], true, false));
+      }
+    }
+
+    const declaredTotal = [...declared.values()].reduce((a, b) => a + b, 0);
+
+    // MEASURED: 122 on each side, 28 of them unique. Floored on the TOTAL rather
+    // than the key count, because counts are what this arm compares and two
+    // empty maps agree perfectly. The column-level tally is floored separately:
+    // that extraction path failing silently is the known way this comparison
+    // invents gaps rather than missing them.
+    expect(
+      declaredTotal,
+      'indexes and unique constraints declared in the schema',
+    ).toBeGreaterThanOrEqual(110);
+    expect(
+      [...actual.values()].reduce((a, b) => a + b.length, 0),
+      'indexes and unique constraints in the migrated database',
+    ).toBeGreaterThanOrEqual(110);
+    expect(
+      columnLevelUnique,
+      'column-level .unique() declarations read from drizzle',
+    ).toBeGreaterThan(0);
+
+    const problems: string[] = [];
+    for (const k of new Set([...declared.keys(), ...actual.keys()])) {
+      const want = declared.get(k) ?? 0;
+      const got = actual.get(k) ?? [];
+      if (want === got.length) continue;
+      if (got.length === 0) {
+        problems.push(`${k} is declared but no such index exists in the database`);
+      } else if (want === 0) {
+        problems.push(`${k} exists in the database but not in the schema [${got.join(', ')}]`);
+      } else {
+        problems.push(
+          `${k}: schema declares ${String(want)}, database has ${String(got.length)} [${got.join(', ')}]`,
+        );
+      }
+    }
+    expect(problems.sort(), 'index(es) that differ between schema and database:').toEqual([]);
   });
 
   it('CRITICAL the type normaliser distinguishes types rather than collapsing them. Run on pairs whose answer is not in doubt, because a normaliser that returned the same token for everything would report all 539 columns in agreement and read exactly as a clean schema.', () => {

@@ -1,0 +1,33 @@
+-- 2026-08-13 — drop `scheduled_jobs_claim_idx`, a byte-identical duplicate of
+-- `scheduled_jobs_due_idx`.
+--
+-- Migration 0071 added it to make the worker claim O(due-unfinished), on the
+-- stated premise that the claim "was backed only by scheduled_jobs_due_idx
+-- (run_at)" and that this was a "full index" increasingly pointing at
+-- completed/failed rows. That premise was wrong. Migration 0021 created
+-- scheduled_jobs_due_idx as
+--
+--   CREATE INDEX scheduled_jobs_due_idx ON scheduled_jobs (run_at)
+--     WHERE completed_at IS NULL AND failed_at IS NULL;
+--
+-- — already partial, with the identical predicate, and 0021's own comment says
+-- so ("Partial index keeps it small (only unfinished rows)"). Postgres reports
+-- the two definitions as the same index in different names:
+--
+--   CREATE INDEX scheduled_jobs_due_idx   ON public.scheduled_jobs USING btree (run_at) WHERE ((completed_at IS NULL) AND (failed_at IS NULL))
+--   CREATE INDEX scheduled_jobs_claim_idx ON public.scheduled_jobs USING btree (run_at) WHERE ((completed_at IS NULL) AND (failed_at IS NULL))
+--
+-- Nothing is incorrect today — the claim query is served either way. The cost is
+-- that scheduled_jobs is the job queue, so every insert and every status
+-- transition has been maintaining two identical btrees on the hottest write path
+-- in the scheduler, for no read benefit, plus the storage.
+--
+-- The older name is kept because it is the one `schema.ts` declares and the one
+-- 0021 documents. Nothing references either name outside SQL and comments.
+--
+-- DROP INDEX takes a brief ACCESS EXCLUSIVE lock on the table. That is safe
+-- here: the surviving index has the same definition, so no plan loses its
+-- support, and the table is small. If this is ever replayed against a large
+-- table under load, switch to DROP INDEX CONCURRENTLY outside a transaction —
+-- the same caveat 0071 recorded for its CREATE.
+DROP INDEX IF EXISTS "scheduled_jobs_claim_idx";
