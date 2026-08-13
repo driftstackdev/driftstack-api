@@ -35,6 +35,10 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'cookie',
   'set-cookie',
   'stripe-signature',
+  // The NOWPayments IPN signature — the same class as stripe-signature, and
+  // mirrored here because a field scrubbed from Pino but not from Sentry is
+  // still a field that leaves the process.
+  'x-nowpayments-sig',
   'password',
   'new_password',
   'current_password',

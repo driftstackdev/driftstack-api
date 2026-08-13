@@ -164,6 +164,12 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'req.headers.cookie',
         'res.headers["set-cookie"]',
         'req.headers["stripe-signature"]',
+        // The NOWPayments equivalent of stripe-signature: the HMAC-SHA512 of
+        // the IPN payload. Redacted on the same footing — a logged signature
+        // plus the logged payload is a replayable pair, and treating one
+        // provider's webhook signature as sensitive while logging another's is
+        // an inconsistency rather than a decision.
+        'req.headers["x-nowpayments-sig"]',
         // Arc 7 obs.2 — v2-#8 BYOK per-request header. Customers'
         // Anthropic keys arrive in this header on agent-session
         // message turns; MUST scrub even though the route never
