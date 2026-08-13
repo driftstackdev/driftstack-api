@@ -11,8 +11,11 @@ type ProfilesResource struct {
 	client *Client
 }
 
-// Create makes a new profile. Tier-limit enforced server-side; throws
-// a TierLimitError when the cap is hit.
+// Create makes a new profile. Tier-limit enforced server-side; returns a
+// *QuotaExceededError when the cap is hit — the `tier-limit` problem type maps
+// to QuotaExceededError in this SDK. (It said "throws a TierLimitError", which
+// named a type this SDK does not define: TierLimitError exists only in the
+// TypeScript SDK, and Go returns errors rather than throwing.)
 func (r *ProfilesResource) Create(ctx context.Context, body *CreateProfileRequest) (*Profile, error) {
 	var out Profile
 	if err := r.client.do(ctx, requestOptions{

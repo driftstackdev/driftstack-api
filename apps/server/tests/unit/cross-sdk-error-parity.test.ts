@@ -152,7 +152,7 @@ describe('W675 cross-SDK error-class parity', () => {
     expect(py.size, `sdk-python error class count`).toBeGreaterThanOrEqual(21);
   });
 
-  it("SDK-extras roster pinned per SDK — drift to dropping any extra would silently shrink that SDK's typed-error surface. sdk-typescript: BadRequestError + InternalError + TierLimitError. sdk-go: BadRequestError + QuotaExceededError + UnknownError + InternalError + TierLimitError. sdk-python: BadRequestError + QuotaExceededError + SessionNotFoundError. (BadRequestError now exists in ALL 3 SDKs — the generic-400 `bad-request` problem-type maps to it everywhere, distinct from `validation-failed` → ValidationError.)", () => {
+  it("SDK-extras roster pinned per SDK — drift to dropping any extra would silently shrink that SDK's typed-error surface. sdk-typescript: BadRequestError + InternalError + TierLimitError. sdk-go: BadRequestError + QuotaExceededError + UnknownError + InternalError (NOT TierLimitError — that type exists only in the TypeScript SDK; Go maps `tier-limit` to QuotaExceededError). sdk-python: BadRequestError + QuotaExceededError + SessionNotFoundError. (BadRequestError now exists in ALL 3 SDKs — the generic-400 `bad-request` problem-type maps to it everywhere, distinct from `validation-failed` → ValidationError.)", () => {
     const ts = extractTsErrorClasses(read(TS_ERRORS));
     // sdk-typescript extras: BadRequestError (4xx generic) + InternalError (5xx generic) + TierLimitError.
     expect(ts.has('BadRequestError'), 'sdk-typescript should declare BadRequestError').toBe(true);

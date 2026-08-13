@@ -44,11 +44,11 @@ describe('W591.B packages/sdk-go/profiles.go content parity', () => {
     expect(body).toMatch(/^type ProfilesResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
   });
 
-  it('Create — POST /v1/profiles + TierLimitError invariant ("Tier-limit enforced server-side; throws a TierLimitError when the cap is hit"). Drift to a different error class would break the catch-block in customer dashboard code that maps the error to a "you\'ve hit your profile cap" UX.', () => {
+  it('Create — POST /v1/profiles + the tier-cap error invariant. The doc must name the type this SDK ACTUALLY returns, because a caller writes their profile-cap branch from it. It said "throws a TierLimitError", and Go defines no TierLimitError at all — that type exists only in the TypeScript SDK, and `tier-limit` maps to QuotaExceededError here. The old pin froze the wrong name and justified it with a catch-block that could never have matched.', () => {
     expect(body).toMatch(
-      /\/\/ Create makes a new profile\. Tier-limit enforced server-side; throws/,
+      /\/\/ Create makes a new profile\. Tier-limit enforced server-side; returns a/,
     );
-    expect(body).toMatch(/\/\/ a TierLimitError when the cap is hit\./);
+    expect(body).toMatch(/\*QuotaExceededError when the cap is hit/);
     expect(body).toMatch(
       /func \(r \*ProfilesResource\) Create\(ctx context\.Context, body \*CreateProfileRequest\) \(\*Profile, error\)/,
     );
