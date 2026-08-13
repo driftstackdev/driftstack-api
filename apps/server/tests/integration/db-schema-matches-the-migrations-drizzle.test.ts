@@ -76,9 +76,28 @@
 // grep for `check('` missed it, and the runtime `getTableConfig` did not. The
 // arm caught its own input, which is the argument for deriving both sides.
 //
-// The predicate text is deliberately not compared, for the same reason index
-// predicates are not: drizzle emits what the author wrote and Postgres stores a
-// normalised form, and matching those textually manufactures failures.
+// The predicate text is deliberately not compared, and that is now MEASURED
+// rather than assumed. Rendering every declared check through drizzle's own
+// `PgDialect` and comparing it to `pg_get_constraintdef` — after lowercasing,
+// stripping casts, quotes, parens and whitespace — makes ALL NINE differ, for
+// three reasons only one of which is cosmetic:
+//
+//   qualification   drizzle renders `agent_sessions.authority_revision`,
+//                   Postgres renders `authority_revision`
+//   rewriting       `BETWEEN 1 AND 255` becomes `>= 1 AND <= 255`
+//   rewriting       `IN ('a','b')` becomes `= ANY (ARRAY['a','b'])`
+//
+// The last two are Postgres rewriting the expression TREE, so the stored text is
+// not recoverable from what the author wrote. Matching them would mean
+// reimplementing that normaliser, and a comparison built on a partial one fails
+// on correct code — the fastest way to get a guard switched off.
+//
+// This is also the answer to "why not just declare the other twenty". A
+// transcription cannot be verified by comparison, so twenty hand-written
+// predicates would be twenty unverifiable claims; the arm below would confirm
+// only that a constraint of that NAME exists. Declaring them is worth doing when
+// each can be checked, and the arm after next fails if that ever becomes
+// possible.
 //
 // Neither side is restated here. Tables and columns come from Drizzle's own
 // `getTableConfig` rather than from parsing `schema.ts` — an early attempt at
@@ -546,6 +565,57 @@ describe('the drizzle schema matches the migrated database', () => {
       }
     }
     expect(problems.sort(), 'CHECK constraint(s) unaccounted for on either side:').toEqual([]);
+  });
+
+  it('CRITICAL comparing check predicates textually is still infeasible. The arm above compares NAMES and says so; this is the evidence for that choice, and it fails if the evidence stops holding — if drizzle and Postgres ever agree textually, the twenty undeclared predicates become verifiable and worth declaring.', async () => {
+    if (guardUnreachable()) return;
+
+    const { PgDialect } = await import('drizzle-orm/pg-core');
+    const dialect = new PgDialect();
+    const rows = await client!<{ name: string; def: string }[]>`
+      SELECT c.conname AS name, pg_get_constraintdef(c.oid) AS def
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      WHERE c.contype = 'c' AND n.nspname = 'public'`;
+    const actual = new Map(rows.map((r) => [r.name, r.def]));
+
+    // The most generous normalisation that is not itself a Postgres rewriter:
+    // case, casts, quotes, parens and whitespace all collapsed.
+    const norm = (text: string): string =>
+      text
+        .toLowerCase()
+        .replace(/::[a-z ]+/g, '')
+        .replace(/"/g, '')
+        .replace(/\s+/g, ' ')
+        .replace(/[()]/g, '')
+        .trim();
+
+    const compared: string[] = [];
+    const matched: string[] = [];
+    for (const value of Object.values(schema)) {
+      let cfg;
+      try {
+        cfg = getTableConfig(value as never);
+      } catch {
+        continue;
+      }
+      for (const chk of cfg.checks) {
+        const stored = actual.get(chk.name);
+        if (stored === undefined) continue;
+        compared.push(chk.name);
+        const rendered = norm(dialect.sqlToQuery(chk.value).sql);
+        if (rendered === norm(stored.replace(/^check\s*/i, ''))) matched.push(chk.name);
+      }
+    }
+
+    // MEASURED: 9 declared checks compared, 0 textual matches. Floored so this
+    // cannot pass by comparing nothing — an empty set has no matches either.
+    expect(compared.length, 'declared checks rendered and compared').toBeGreaterThanOrEqual(9);
+    expect(
+      matched,
+      'check(s) whose drizzle rendering now matches Postgres textually — predicate comparison may be viable, revisit the twenty undeclared:',
+    ).toEqual([]);
   });
 
   it('CRITICAL the type normaliser distinguishes types rather than collapsing them. Run on pairs whose answer is not in doubt, because a normaliser that returned the same token for everything would report all 539 columns in agreement and read exactly as a clean schema.', () => {
