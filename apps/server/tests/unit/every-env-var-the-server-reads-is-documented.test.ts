@@ -1,10 +1,10 @@
 // Every environment variable the server reads is documented somewhere an
 // operator will look.
 //
-// Production `.env` is written from `DEPLOY_DOTENV_BASE64` and the three files
-// in the repo — `.env.example` and the production/staging templates — are the
-// only guidance for what belongs in it. A variable the code reads and none of
-// them names is one an operator has no reason to set.
+// Production `.env` is written from `DEPLOY_DOTENV_BASE64`, and four files
+// describe what belongs in it: `.env.example`, the production and staging
+// templates, and the prose reference `docs/deployment/env-vars.md`. A variable
+// the code reads and none of them names is one an operator has no reason to set.
 //
 // That matters more here than in a codebase that fails fast, because
 // `loadConfig` deliberately does not. Optional subsystems are all-or-nothing
@@ -15,28 +15,39 @@
 // undocumented variable and the silent-disable design compose into a failure
 // nobody is told about.
 //
-// MEASURED: the server reads 94 variables; the three documents name 54 as
-// `NAME=` assignments; 58 are read and documented in none of them. Among them
-// are `POSTMARK_API_TOKEN`, `PROFILE_MASTER_KEY`, `OAUTH_CLIENT_SIGNING_SECRET`,
-// `NOWPAYMENTS_IPN_SECRET`, `METRICS_SCRAPE_TOKEN` and both OAuth client pairs —
-// every one of them the trigger for exactly the silent-disable above.
+// MEASURED: the server reads 94 variables; the four documents between them name
+// 103; 40 are read and documented in none of them. Among those 40 are
+// `PROFILE_MASTER_KEY`, `OAUTH_CLIENT_SIGNING_SECRET`, `NOWPAYMENTS_IPN_SECRET`,
+// `METRICS_SCRAPE_TOKEN`, the three LiveKit variables and both OAuth client
+// pairs — each of them the trigger for exactly the silent-disable above.
 //
-// This file does not fix that. It fixes the direction of travel: the 58 are
+// This file does not fix that. It fixes the direction of travel: the 40 are
 // enumerated by name, so a NEW undocumented variable fails immediately, and an
 // entry that later gets documented, or stops being read, is reported as stale
-// rather than sitting on a list describing work already done. Documenting the
-// existing 58 is a separate change that needs a judgement per variable about
-// whether it is operator-facing, has a safe default, or is a tuning knob — and
-// two of them, `PLAYWRIGHT_BROWSER` and `PLAYWRIGHT_HEADED`, legitimately belong
-// to nobody's production environment at all.
+// rather than sitting on a list describing work already done. Documenting them
+// is a separate change needing a judgement per variable about whether it is
+// operator-facing, has a safe default, or is a tuning knob — and
+// `PLAYWRIGHT_HEADED` belongs in nobody's production environment at all.
 //
-// WHAT THIS READS, stated because the first measurement was wrong by a factor of
-// four. `config.ts` does not touch `process.env` directly: `loadConfig(env:
-// NodeJS.ProcessEnv = process.env)` takes the environment as a PARAMETER and
-// reads `env.DATABASE_URL`. A scan for `process.env.X` alone found 22 variables
-// and missed the entire central config, which is where most of them live. Both
-// forms are read here, and the total is floored so that a refactor which moves
-// reads behind a helper cannot quietly reduce this to checking nothing.
+// WHERE TO LOOK is itself the thing this file got wrong twice, so both mistakes
+// are now assertions rather than lessons.
+//
+// The first was the READING side. `config.ts` does not touch `process.env`
+// directly: `loadConfig(env: NodeJS.ProcessEnv = process.env)` takes the
+// environment as a PARAMETER and reads `env.DATABASE_URL`. A scan for
+// `process.env.X` alone found 22 variables and missed the entire central config,
+// which is where most of them live. Both forms are read here and the total is
+// floored, so a refactor moving reads behind a helper cannot quietly reduce this
+// to checking nothing.
+//
+// The second was the DOCUMENTATION side, and it produced a real overstatement: a
+// first version read only the three template files, reported 58 undocumented,
+// and named `POSTMARK_API_TOKEN` among them. `docs/deployment/env-vars.md` — a
+// 53KB reference that `config.ts` itself cites in a comment — documents that
+// variable and seventeen others. The gap is 40, not 58. An audit is only as
+// honest as its enumeration of where the answer could live, and the reference
+// was found by reading the source comment rather than by the audit noticing its
+// own blind spot.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -53,9 +64,15 @@ const ENV_DOCS = [
 ];
 
 /**
+ * The prose reference. Not a template, so a variable counts as documented when
+ * its NAME appears anywhere — that is what a reader looking it up would find.
+ */
+const ENV_REFERENCE = resolve(REPO, 'docs', 'deployment', 'env-vars.md');
+
+/**
  * Variables the server reads that no env document names.
  *
- * MEASURED at 58. Enumerated rather than counted so a new one fails loudly
+ * MEASURED at 40. Enumerated rather than counted so a new one fails loudly
  * instead of joining a number, and checked in both directions so an entry that
  * gets documented — or stops being read — is reported as stale.
  */
@@ -65,26 +82,19 @@ const UNDOCUMENTED_ENV = new Set([
   'AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES',
   'AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT',
   'APP_VERSION',
-  'BROADCAST_GENERIC_WEBHOOK_URL',
-  'BROADCAST_SLACK_WEBHOOK_URL',
   'BUNDLED_TURN_MAX_CONCURRENCY',
   'BYOK_ANTHROPIC_FALLBACK_KEY',
   'DB_STATEMENT_TIMEOUT_MS',
   'DRIFTSTACK_AGENT_DECOMPOSER_FORCE',
-  'DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK',
   'DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS',
   'DRIFTSTACK_AGENT_SESSION_PAGE_STATE_MAX_AGE_SECONDS',
   'DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY',
   'DRIFTSTACK_ANTHROPIC_MODEL',
-  'DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS',
   'DRIFTSTACK_FLEET_INTERNAL_TOKEN',
   'DRIFTSTACK_OWNER_EMAIL',
   'DRIFTSTACK_PROXY_PRELAUNCH_PROBE',
   'DRIFTSTACK_PROXY_PROBE_TARGET_URL',
   'DRIFTSTACK_PROXY_PROBE_TIMEOUT_MS',
-  'DRIFTSTACK_STAFF_EMAILS',
-  'DRIFTSTACK_TASK_REFUSAL_PATTERNS',
-  'DRIFTSTACK_TIER_PRICE_IDS',
   'DRIFTSTACK_WORKER_DISCONNECT_GRACE_SECONDS',
   'FLEET_CONTROL_PLANE_ENABLED',
   'FLEET_NODE_DISPLAY_NAME',
@@ -99,25 +109,14 @@ const UNDOCUMENTED_ENV = new Set([
   'LIVEKIT_WS_URL',
   'METRICS_SCRAPE_TOKEN',
   'NOWPAYMENTS_API_KEY',
-  'NOWPAYMENTS_IPN_CALLBACK_URL',
   'NOWPAYMENTS_IPN_SECRET',
   'OAUTH_CLIENT_CALLBACK_URL_BASE',
   'OAUTH_CLIENT_SIGNING_SECRET',
   'PERMISSIVE_CORS',
-  'PLAYWRIGHT_BROWSER',
   'PLAYWRIGHT_HEADED',
-  'POSTMARK_API_TOKEN',
-  'POSTMARK_FROM',
-  'POSTMARK_REPLY_TO',
   'PROFILE_MASTER_KEY',
   'PROFILE_MASTER_KEY_CMD',
-  'PUBLIC_API_BASE_URL',
-  'PUBLIC_STATUS_PAGE_URL',
   'R2_BUCKET_PUBLIC',
-  'R2_BUCKET_RECORDINGS',
-  'R2_ENDPOINT_URL',
-  'SESSION_PROXY_REQUIRED',
-  'STRIPE_API_VERSION',
 ]);
 
 /** Every environment variable name the server source reads, in either form. */
@@ -142,7 +141,10 @@ function readVariables(): Set<string> {
   return out;
 }
 
-/** Names an operator would copy: `NAME=` lines, commented out or not. */
+/**
+ * Everywhere a variable can be documented: `NAME=` lines an operator copies from
+ * the templates, plus any mention by name in the deployment reference.
+ */
 function documentedVariables(): Set<string> {
   const out = new Set<string>();
   for (const file of ENV_DOCS) {
@@ -150,19 +152,21 @@ function documentedVariables(): Set<string> {
       out.add(m[1]!);
     }
   }
+  const reference = readFileSync(ENV_REFERENCE, 'utf8');
+  for (const m of reference.matchAll(/\b([A-Z][A-Z0-9_]{3,})\b/g)) out.add(m[1]!);
   return out;
 }
 
 describe('every environment variable the server reads is documented', () => {
   it('CRITICAL both sides were read and are non-trivial. The comparison reports an absence, and an absence measured against an empty set is every variable — a reader that found nothing would either report the whole environment undocumented or, with the baseline absorbing it, report everything fine.', () => {
-    // MEASURED: 94 read, 54 documented as assignments.
+    // MEASURED: 94 read, 103 documented across the four sources.
     expect(readVariables().size, 'environment variables read by the server').toBeGreaterThanOrEqual(
       90,
     );
     expect(
       documentedVariables().size,
       'variables named in the env documents',
-    ).toBeGreaterThanOrEqual(50);
+    ).toBeGreaterThanOrEqual(100);
 
     // The parameter form is the one a naive scan misses, checked on a variable
     // whose answer is not in doubt: config.ts reads `env.DATABASE_URL`, never
