@@ -36,7 +36,17 @@ export class SessionCapabilityReportStore {
       proxy_udp_supported: frame.proxyUdpSupported,
       transport_mode_requested: frame.transportModeRequested,
       transport_mode_active: frame.transportModeActive,
-      safeguards_passed: frame.safeguardChecks.every((check) => check.passed),
+      // `every` on an EMPTY array is true, so a frame carrying no safeguard
+      // checks previously reported `safeguards_passed: true` — a positive
+      // safety claim asserted from no evidence, indistinguishable to a customer
+      // from every check having run and passed. The schema permits it:
+      // `safeguardChecks` is `.max(16)` with no `.min(1)`, so an older or
+      // misbehaving node sending `[]` validates cleanly. At least one check must
+      // have run before this asserts anything, and the relay emits
+      // `safeguards_unreported` so "we do not know" stays distinguishable from
+      // "a check failed".
+      safeguards_passed:
+        frame.safeguardChecks.length > 0 && frame.safeguardChecks.every((check) => check.passed),
     });
     if (this.map.size > this.maxEntries) {
       const oldest = this.map.keys().next().value;

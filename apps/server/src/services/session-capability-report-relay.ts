@@ -39,6 +39,12 @@ function deriveWarnings(frame: CapabilityReport): string[] {
   if (frame.transportModeActive === 'h2-and-h3' && !frame.h3InterposeLoaded) {
     warnings.push('h3_interpose_unavailable');
   }
+  // No checks at all is its OWN signal, not silence. Without this the empty
+  // case produced zero warnings AND a true `safeguards_passed`, so a session
+  // whose safeguards never ran looked exactly like a verified healthy one.
+  if (frame.safeguardChecks.length === 0) {
+    warnings.push('safeguards_unreported');
+  }
   for (const check of frame.safeguardChecks) {
     if (!check.passed) warnings.push(`safeguard_failed:${check.layer}`);
   }
