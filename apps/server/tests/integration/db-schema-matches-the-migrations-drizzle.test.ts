@@ -1,6 +1,6 @@
 // The Drizzle schema and the migrated database describe the same tables,
-// columns, types and nullability — derived from both sides, against a real
-// Postgres.
+// columns, types, nullability and foreign keys — derived from both sides,
+// against a real Postgres.
 //
 // `schema.ts` is what every repo in the server queries through, and the 112
 // migration files are what actually shapes the database. Nothing compared them.
@@ -32,6 +32,19 @@
 // mismatched, every one of them spelling differences. So: `data_type` for
 // scalars, `udt_name` for enums and arrays, and drizzle's `numeric(38, 18)`
 // loses its precision because `data_type` does not carry it.
+//
+// Foreign keys are compared with their ON DELETE action, because the action is
+// the part that carries data-integrity meaning. A cascade the schema does not
+// know about is not a harmless omission: migrations regenerated from the schema
+// would drop it, and the rows it was protecting become orphans quietly.
+//
+// This arm found one. `incident_update_notifications.subscriber_id` had the
+// cascade in migration 0040 and no `.references()` in the schema at all, while
+// the comment directly above the table said "cascade-delete from either side so
+// purged subscribers / deleted incidents don't leave orphan rows" and described
+// a forward declaration that was not in the code. Behaviour was correct — the
+// database had the constraint — but only the hand-written migration was holding
+// the invariant the schema claimed to express.
 //
 // Neither side is restated here. Tables and columns come from Drizzle's own
 // `getTableConfig` rather than from parsing `schema.ts` — an early attempt at
@@ -223,6 +236,70 @@ describe('the drizzle schema matches the migrated database', () => {
       }
     }
     expect(undeclared.sort(), 'database object(s) the schema does not declare:').toEqual([]);
+  });
+
+  it('CRITICAL every foreign key exists on both sides with the same ON DELETE action. The action is the part that matters: a cascade the schema does not declare survives only in the hand-written migration, so a schema-generated migration drops it and the rows it protected become orphans without an error anywhere.', async () => {
+    if (guardUnreachable()) return;
+
+    // Postgres stores the action as a single character.
+    const ACTION: Record<string, string> = {
+      a: 'no action',
+      r: 'restrict',
+      c: 'cascade',
+      n: 'set null',
+      d: 'set default',
+    };
+
+    const rows = await client!<{ tbl: string; cols: string; ftbl: string; del: string }[]>`
+      SELECT c.conrelid::regclass::text AS tbl,
+             (SELECT string_agg(a.attname, ',' ORDER BY a.attname)
+                FROM unnest(c.conkey) k
+                JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k) AS cols,
+             c.confrelid::regclass::text AS ftbl,
+             c.confdeltype AS del
+      FROM pg_constraint c
+      WHERE c.contype = 'f'`;
+    const actual = new Map<string, string>();
+    for (const row of rows)
+      actual.set(`${row.tbl}.${row.cols}->${row.ftbl}`, ACTION[row.del] ?? row.del);
+
+    const declared = new Map<string, string>();
+    for (const value of Object.values(schema)) {
+      try {
+        const cfg = getTableConfig(value as never);
+        if (typeof cfg.name !== 'string' || cfg.name === '') continue;
+        for (const fk of cfg.foreignKeys) {
+          const ref = fk.reference();
+          const cols = ref.columns
+            .map((c) => c.name)
+            .sort()
+            .join(',');
+          const target = getTableConfig(ref.foreignTable as never).name;
+          declared.set(`${cfg.name}.${cols}->${target}`, fk.onDelete ?? 'no action');
+        }
+      } catch {
+        // Not a table export.
+      }
+    }
+
+    // MEASURED: 66 foreign keys on both sides. Floored because two empty maps
+    // agree perfectly and would report every relationship verified.
+    expect(declared.size, 'foreign keys declared in the schema').toBeGreaterThanOrEqual(60);
+    expect(actual.size, 'foreign keys in the migrated database').toBeGreaterThanOrEqual(60);
+
+    const problems: string[] = [];
+    for (const [key, action] of declared) {
+      const dbAction = actual.get(key);
+      if (dbAction === undefined)
+        problems.push(`${key} is declared but has no database constraint`);
+      else if (dbAction !== action) {
+        problems.push(`${key}: declared ON DELETE ${action}, database has ${dbAction}`);
+      }
+    }
+    for (const key of actual.keys()) {
+      if (!declared.has(key)) problems.push(`${key} exists in the database but not in the schema`);
+    }
+    expect(problems.sort(), 'foreign key(s) that differ between schema and database:').toEqual([]);
   });
 
   it('CRITICAL the type normaliser distinguishes types rather than collapsing them. Run on pairs whose answer is not in doubt, because a normaliser that returned the same token for everything would report all 539 columns in agreement and read exactly as a clean schema.', () => {

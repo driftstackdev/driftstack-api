@@ -1965,7 +1965,9 @@ export const incidentUpdateNotifications = pgTable(
     id: uuid('id')
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    subscriberId: uuid('subscriber_id').notNull(),
+    subscriberId: uuid('subscriber_id')
+      .notNull()
+      .references(() => statusSubscribers.id, { onDelete: 'cascade' }),
     incidentId: uuid('incident_id')
       .notNull()
       .references(() => incidents.id, { onDelete: 'cascade' }),
