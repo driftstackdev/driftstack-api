@@ -77,10 +77,26 @@ describe('LK.2 mac_node.livekit_registered audit parity', () => {
     expect(body).toMatch(/inputPayload:\s*\{\s*ws_url:\s*body\.livekit\.ws_url\s*\}/);
     // Belt-and-suspenders: ensure the secret material never appears
     // in any audit-emission payload literal.
-    const auditRecordSlice = body.slice(
-      body.indexOf('deps.adminAudit.record('),
-      body.indexOf('// Response is intentionally minimal'),
-    );
+    const auditStart = body.indexOf('deps.adminAudit.record(');
+    const auditEnd = body.indexOf('// Response is intentionally minimal');
+    // Both anchors are located and ORDERED before slicing, and the result is
+    // bounded. `deps.adminAudit.record(` appears TWICE in this route, so a
+    // second emission added ahead of this one silently re-points the slice —
+    // and if the end anchor ever preceded the start, `slice` returns '' and
+    // every assertion below passes while inspecting nothing. A negative
+    // containment over an empty string is the quietest way for a secrecy check
+    // to stop checking.
+    expect(auditStart, 'the audit emission was located').toBeGreaterThan(-1);
+    expect(auditEnd, 'and the block terminator after it').toBeGreaterThan(auditStart);
+    const auditRecordSlice = body.slice(auditStart, auditEnd);
+    expect(
+      auditRecordSlice.length,
+      'the slice covers a real emission block, not an empty or runaway region',
+    ).toBeGreaterThan(120);
+    expect(
+      auditRecordSlice.length,
+      'and stops at the block, not the rest of the file',
+    ).toBeLessThan(2000);
     expect(auditRecordSlice).not.toMatch(/api_key/);
     expect(auditRecordSlice).not.toMatch(/api_secret/);
     expect(auditRecordSlice).not.toMatch(/ciphertextBase64/);
@@ -94,9 +110,16 @@ describe('LK.2 mac_node.livekit_registered audit parity', () => {
 
   it('app.ts threads deps.adminAuditService into the registerMacNodesRoutes call', () => {
     const body = readFileSync(APP_TS, 'utf8');
-    const slice = body.slice(
-      body.indexOf('registerMacNodesRoutes(app, {'),
-      body.indexOf('// LK.3'),
+    const start = body.indexOf('registerMacNodesRoutes(app, {');
+    const end = body.indexOf('// LK.3');
+    expect(start, 'the registration call was located').toBeGreaterThan(-1);
+    expect(end, 'and the terminator after it').toBeGreaterThan(start);
+    const slice = body.slice(start, end);
+    // A positive containment fails differently from the negative ones above: it
+    // gets WEAKER as the slice grows, because the pattern may match something
+    // far outside the call being checked.
+    expect(slice.length, 'the slice is the registration call, not a swathe of app.ts').toBeLessThan(
+      2000,
     );
     expect(slice).toMatch(/adminAudit:\s*deps\.adminAuditService/);
   });
