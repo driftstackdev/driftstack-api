@@ -1,6 +1,6 @@
 // The Drizzle schema and the migrated database describe the same tables,
-// columns, types, nullability, foreign keys and indexes — derived from both
-// sides, against a real Postgres.
+// columns, types, nullability, foreign keys, indexes and check constraints —
+// derived from both sides, against a real Postgres.
 //
 // `schema.ts` is what every repo in the server queries through, and the 113
 // migration files are what actually shapes the database. Nothing compared them.
@@ -66,6 +66,20 @@
 // predicate. The belief came from a comment claiming drizzle's `index()` cannot
 // express a partial WHERE — it can, and five indexes in `schema.ts` use it.
 //
+// Check constraints are compared by NAME rather than by predicate, and only 9
+// of 29 are declared. The twenty that are not are enumerated by name rather than
+// counted, so a NEW undeclared constraint fails immediately while the existing
+// backlog stays visible — and the list is checked in both directions, so an
+// entry that gets declared, or one whose constraint is dropped, is reported as
+// stale rather than sitting there forever. That seeding was wrong on its first
+// run: `agent_turn_receipts_terminal_shape` was listed as undeclared because a
+// grep for `check('` missed it, and the runtime `getTableConfig` did not. The
+// arm caught its own input, which is the argument for deriving both sides.
+//
+// The predicate text is deliberately not compared, for the same reason index
+// predicates are not: drizzle emits what the author wrote and Postgres stores a
+// normalised form, and matching those textually manufactures failures.
+//
 // Neither side is restated here. Tables and columns come from Drizzle's own
 // `getTableConfig` rather than from parsing `schema.ts` — an early attempt at
 // the regex version recovered 27 of 539 columns and would have reported almost
@@ -83,6 +97,45 @@ const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 
 /** Drizzle's own bookkeeping; not an application table. */
 const MIGRATOR_TABLES = new Set(['__drizzle_migrations']);
+
+/**
+ * CHECK constraints the migrations create and `schema.ts` does not declare.
+ *
+ * MEASURED at 20 of 29. Named individually rather than counted, because the
+ * point of listing them is that a NEW undeclared constraint fails loudly instead
+ * of joining a number nobody reads. Declaring them is mechanical and safe —
+ * drizzle does not evaluate checks at query time, so a declaration changes
+ * nothing at runtime — but transcribing twenty SQL predicates by hand is how a
+ * subtly different one gets written, so they are enumerated here and moved out
+ * as they are declared and verified rather than in one unreviewable sweep.
+ *
+ * Three of these are proved unviolatable elsewhere and are the reason this is
+ * debt rather than risk: every write to `token_budget_remaining` is either
+ * `= token_budget_total` at creation or `Math.max(0, remaining - tokens)`, and
+ * no top-up path exists, so `>= 0`, `> 0` and `remaining <= total` cannot fail.
+ */
+const UNDECLARED_CHECKS = new Set([
+  'accounts_bundled_llm_monthly_cap_usd_cents_check',
+  'agent_sessions_mode_check',
+  'agent_sessions_model_check',
+  'agent_sessions_remaining_le_total',
+  'agent_sessions_status_check',
+  'agent_sessions_token_budget_remaining_check',
+  'agent_sessions_token_budget_total_check',
+  'atlas_priority_events_api_check',
+  'atlas_priority_events_status_check',
+  'crypto_orders_status_check',
+  'fleet_nodes_livekit_all_or_none',
+  'fleet_nodes_public_key_format',
+  'recipes_description_check',
+  'recipes_label_check',
+  'session_operations_idempotency_key_hash_shape',
+  'session_operations_kind',
+  'session_operations_request_fingerprint_shape',
+  'session_operations_retention_after_settlement',
+  'session_operations_status',
+  'session_operations_terminal_shape',
+]);
 
 let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
@@ -441,6 +494,58 @@ describe('the drizzle schema matches the migrated database', () => {
       }
     }
     expect(problems.sort(), 'index(es) that differ between schema and database:').toEqual([]);
+  });
+
+  it('CRITICAL every CHECK constraint is either declared or named as knowingly undeclared. A check lives only in the migration that wrote it, so an undeclared one is an invariant the schema does not express — the same shape as the cascade and the idempotency unique this file already found, and the only reason it is debt rather than risk is that the ones that matter are proved unviolatable in code.', async () => {
+    if (guardUnreachable()) return;
+
+    const rows = await client!<{ name: string; tbl: string }[]>`
+      SELECT c.conname AS name, t.relname AS tbl
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      WHERE c.contype = 'c' AND n.nspname = 'public'`;
+    const actual = new Map(
+      rows.filter((r) => !MIGRATOR_TABLES.has(r.tbl)).map((r) => [r.name, r.tbl]),
+    );
+
+    const declared = new Set<string>();
+    for (const value of Object.values(schema)) {
+      try {
+        const cfg = getTableConfig(value as never);
+        for (const chk of cfg.checks) declared.add(chk.name);
+      } catch {
+        // Not a table export.
+      }
+    }
+
+    // MEASURED: 29 in the database, 9 declared. Floored because an empty set
+    // disagrees with nothing and would report every constraint accounted for.
+    expect(actual.size, 'CHECK constraints in the migrated database').toBeGreaterThanOrEqual(29);
+    expect(declared.size, 'CHECK constraints declared in the schema').toBeGreaterThanOrEqual(9);
+
+    const problems: string[] = [];
+    for (const [name, tbl] of actual) {
+      if (!declared.has(name) && !UNDECLARED_CHECKS.has(name)) {
+        problems.push(
+          `${tbl}.${name} exists in the database, is not declared, and is not listed as knowingly undeclared`,
+        );
+      }
+    }
+    for (const name of declared) {
+      if (!actual.has(name)) problems.push(`${name} is declared but has no database constraint`);
+    }
+    // An entry that has since been declared is stale: leaving it there would
+    // keep a now-closed item on a list read as outstanding work.
+    for (const name of UNDECLARED_CHECKS) {
+      if (declared.has(name)) {
+        problems.push(`${name} is now declared — remove it from UNDECLARED_CHECKS`);
+      }
+      if (!actual.has(name)) {
+        problems.push(`${name} is listed as undeclared but no longer exists in the database`);
+      }
+    }
+    expect(problems.sort(), 'CHECK constraint(s) unaccounted for on either side:').toEqual([]);
   });
 
   it('CRITICAL the type normaliser distinguishes types rather than collapsing them. Run on pairs whose answer is not in doubt, because a normaliser that returned the same token for everything would report all 539 columns in agreement and read exactly as a clean schema.', () => {
