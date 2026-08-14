@@ -25,6 +25,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp } from './_helpers/build-test-app.js';
+import { seedActiveSubscription } from './_helpers/scenarios.js';
 
 let fx: Awaited<ReturnType<typeof buildTestApp>>;
 let disabled: Awaited<ReturnType<typeof buildTestApp>>;
@@ -73,13 +74,16 @@ describe('the billing endpoints document what they really return', () => {
   it('CRITICAL an account that already has an active subscription really gets 409 from checkout, and the spec documents it. Without that refusal Stripe would mint a SECOND concurrently-billed subscription, so this is the contract for the guard that prevents it.', async () => {
     // Drive the precondition through the repo the app is actually using,
     // rather than asserting the branch from source.
-    fx.billingRepo.upsertSubscription({
-      accountId: fx.accountId,
+    //
+    // Via the shared seeder rather than a literal: SubscriptionMirror has
+    // eleven fields and this call supplied six, which type-checks nowhere and
+    // had `npm run typecheck` -- a CI gate -- failing since 2026-08-11. The
+    // helper already builds the full row and is what every other test uses.
+    seedActiveSubscription(fx, {
+      id: 'sub_active_probe',
       stripeSubscriptionId: 'sub_active_probe',
-      status: 'active',
       tier: 'api_scale',
-      currentPeriodEnd: new Date(Date.now() + 86_400_000),
-      cancelAtPeriodEnd: false,
+      status: 'active',
     });
 
     const res = await fx.app.inject({

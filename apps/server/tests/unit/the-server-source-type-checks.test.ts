@@ -27,14 +27,23 @@
 // `apps/server/src` including a named one. Exit 0 over nothing is the failure
 // mode this guard exists to avoid in itself.
 //
-// SCOPE, stated rather than implied: `tsconfig.json` (the SERVER SOURCE) only.
-// `tsconfig.test.json` is deliberately excluded because it has pre-existing
-// errors — an in-flight billing fixture and an `Ajv` namespace import — that
-// belong to work I do not own. Extending this file to cover tests today would
-// red for reasons unrelated to whatever change is being made, which is how a
-// guard gets disabled. The last assertion is self-obsoleting: it asserts that
-// exclusion is STILL justified, so when those errors are fixed this fails and
-// says to widen rather than quietly guarding half of what it names.
+// SCOPE — now BOTH projects, and the way that happened is the point.
+//
+// This file originally covered `tsconfig.json` (server source) only, because
+// `tsconfig.test.json` carried 17 pre-existing errors: an Ajv namespace import
+// written three times, and one incomplete billing fixture. Covering tests then
+// would have redded for reasons unrelated to whatever change was being made,
+// which is how a guard gets switched off.
+//
+// So the exclusion was written as a SELF-OBSOLETING assertion — it asserted the
+// exclusion was still justified, and said in its own message to widen the guard
+// when it stopped being. It fired on 2026-08-15, in the same run that made the
+// last of those errors go away. That is the whole argument for writing a caveat
+// as an assertion instead of a comment: a comment would still say "excluded
+// because of pre-existing errors" today, and be quietly false.
+//
+// `npm run typecheck` runs both projects and is a CI gate. It had been failing
+// on main since 2026-08-11 -- four days -- for the single remaining fixture.
 
 import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
@@ -76,11 +85,8 @@ describe('the server source type-checks', () => {
     expect(result.code, `tsc reported:\n${result.out}`).toBe(0);
   }, 300_000);
 
-  it('CRITICAL the reason tests are excluded still holds. This is the caveat asserting itself: tsconfig.test.json has pre-existing errors outside my scope, so it is not covered here — and when someone fixes them this fails, which is the signal to widen this guard rather than leave it silently narrower than its name.', () => {
+  it('CRITICAL the TESTS type-check too. vitest transpiles them without checking, so a test file can reference a renamed export, build a fixture missing half its fields, or call a method that no longer exists, and stay green while `npm run typecheck` — a CI gate — fails. That is not hypothetical: it is exactly what had main red for four days.', () => {
     const result = typeCheck('tsconfig.test.json');
-    expect(
-      result.code,
-      'tsconfig.test.json still has pre-existing errors — if this passes, widen the guard above to cover tests too',
-    ).not.toBe(0);
+    expect(result.code, `tsc reported:\n${result.out}`).toBe(0);
   }, 300_000);
 });
