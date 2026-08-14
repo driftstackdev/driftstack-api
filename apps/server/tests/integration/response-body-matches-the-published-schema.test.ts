@@ -30,10 +30,23 @@
 // Optional fields are allowed to be absent, which is what optional means. Only
 // the spec's own `required` list is demanded.
 //
-// Four of the twenty-nine, each an authenticated GET whose whole body is one
+// Eight of the twenty-nine, each an authenticated GET whose whole body is one
 // unpaired schema: the account profile a dashboard reads on every load, the cost
-// summary, the audit-log page and the bundled-LLM status. The table takes a row
-// per endpoint, so the cost of the next one is that row.
+// summary, the audit-log page and its export, the bundled-LLM status and
+// settings, the profile organization tree and the proxy list. The table takes a
+// row per endpoint, so the cost of the next one is that row.
+//
+// The four added second were picked by listing every GET in the spec whose whole
+// 200 body is a `$ref` to one component schema, subtracting the ones already
+// here, and keeping those the default fixture can reach. `read` satisfies
+// `read:profiles` (V-481 broad-satisfies-granular), so the organization endpoint
+// needs no extra scope, and the export defaults to `format: json` rather than
+// csv. Each carries a non-empty `required` list — 2, 1, 2 and 5 fields — so none
+// of them is a row that compares an empty set to an empty set.
+//
+// The remaining unpaired GETs need credentials this fixture does not issue:
+// `/v1/admin/owner/platform-status`, `/v1/admin/owner/pricing` and
+// `/v1/admin/billing/subscriptions/stats` are owner/admin surfaces.
 //
 // TWO CANDIDATES ARE DELIBERATELY ABSENT, and the reasons differ.
 //
@@ -81,6 +94,18 @@ const CASES = [
     schema: 'BundledLlmStatus',
     method: 'GET' as const,
     url: '/v1/account/me/bundled-llm-status',
+  },
+  { schema: 'AccountOrganization', method: 'GET' as const, url: '/v1/account/me/organization' },
+  { schema: 'AccountProxyList', method: 'GET' as const, url: '/v1/account/me/proxies' },
+  {
+    schema: 'BundledLlmSettings',
+    method: 'GET' as const,
+    url: '/v1/account/me/bundled-llm-settings',
+  },
+  {
+    schema: 'ExportAccountAuditResponse',
+    method: 'GET' as const,
+    url: '/v1/account/audit-log/export',
   },
 ];
 
