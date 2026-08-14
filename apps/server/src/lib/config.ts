@@ -736,10 +736,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY ||
       env.DRIFTSTACK_ANTHROPIC_MODEL
         ? {
-            ...((env.BYOK_ANTHROPIC_FALLBACK_KEY ?? env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY)
+            // ONE notion of empty. The guard three lines above uses `||`,
+            // which skips an empty string; this used `??`, which does not.
+            // So `BYOK_ANTHROPIC_FALLBACK_KEY=` with a real
+            // DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY produced `'' ?? 'sk-…'`
+            // = `''`, the ternary saw a falsy value, and the key was dropped
+            // — while the outer `||` had already fallen through to the real
+            // one, so the group WAS built. An operator who set the key under
+            // the documented alias got no key at all, and nothing said so.
+            // Both names hold a SECRET: an empty secret is not a secret, and
+            // trimmed so a value pasted with trailing whitespace behaves the
+            // same. A real primary still wins — precedence is the point of
+            // having two names.
+            ...(env.BYOK_ANTHROPIC_FALLBACK_KEY?.trim() ||
+            env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY?.trim()
               ? {
-                  fallbackApiKey: (env.BYOK_ANTHROPIC_FALLBACK_KEY ??
-                    env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY) as string,
+                  fallbackApiKey: (env.BYOK_ANTHROPIC_FALLBACK_KEY?.trim() ||
+                    env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY?.trim()) as string,
                 }
               : {}),
             ...(env.DRIFTSTACK_ANTHROPIC_MODEL ? { model: env.DRIFTSTACK_ANTHROPIC_MODEL } : {}),
