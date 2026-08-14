@@ -59,9 +59,20 @@
 // alongside 200 — it simply cannot be compared without a fixture that activates
 // the feature.
 //
-// The team member and invite lists need state the fixture cannot seed: it takes
-// tier, scopes, account status and key flags, but no team, so those rows need a
-// test that creates an invite through the API and accepts it first.
+// ELEMENT-LEVEL rows exist because the top-level comparison is nearly empty for
+// a list endpoint. `AccountProxyList` declares exactly ONE property, `data`, so
+// comparing top-level keys compares {data} against {data} and learns nothing;
+// the contract a customer actually consumes is the shape of the items. Three of
+// the rows above are list-shaped and were being checked at the envelope only.
+//
+// Every list endpoint returns ZERO items on a fresh fixture — measured, all five
+// of them — so an element comparison added without seeding would compare nothing
+// and pass. LIST_CASES therefore seeds first, and an explicit arm asserts each
+// element row actually had an item to read.
+//
+// The team rows used to be excluded here with a note saying the fixture could
+// not seed a team. That was wrong: one POST /v1/team/invites is enough, and the
+// same call also writes the audit row that gives AccountAuditEntry its coverage.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -132,6 +143,15 @@ const OWNER_CASES = [
   },
 ];
 
+/**
+ * Endpoints whose body is `{data: [...]}`. The envelope carries no contract worth
+ * checking; the item schema does, so these are compared element-first.
+ */
+const LIST_CASES = [
+  { schema: 'TeamInvite', method: 'GET' as const, url: '/v1/team/invites' },
+  { schema: 'AccountAuditEntry', method: 'GET' as const, url: '/v1/account/audit-log' },
+];
+
 let fx: TestAppFixture;
 
 afterEach(async () => {
@@ -155,6 +175,26 @@ async function ownerBodyFor(method: 'GET', url: string): Promise<Record<string, 
   const res = await fx.app.inject({ method, url, headers: auth(fx) });
   expect(res.statusCode, `${method} ${url} answered 200`).toBe(200);
   return res.json<Record<string, unknown>>();
+}
+
+/**
+ * A fixture with one team invite already created. That single POST seeds BOTH
+ * list endpoints compared below — the invite itself, and the audit row the
+ * server writes for it — so one action covers two item schemas.
+ */
+async function seededListItems(url: string): Promise<Record<string, unknown>[]> {
+  fx = await buildTestApp({ tier: 'api_builder' });
+  const created = await fx.app.inject({
+    method: 'POST',
+    url: '/v1/team/invites',
+    headers: auth(fx),
+    payload: { email: 'invitee@driftstack.local', role: 'admin' },
+  });
+  expect(created.statusCode, 'the seeding invite was accepted').toBe(202);
+
+  const res = await fx.app.inject({ method: 'GET', url, headers: auth(fx) });
+  expect(res.statusCode, `GET ${url} answered 200`).toBe(200);
+  return res.json<{ data?: Record<string, unknown>[] }>().data ?? [];
 }
 
 describe('a live response body matches its published schema', () => {
@@ -239,6 +279,42 @@ describe('a live response body matches its published schema', () => {
       const present = new Set(Object.keys(body));
       const missing = (schema.required ?? []).filter((k) => !present.has(k)).sort();
       expect(missing, `required field(s) ${name} promises that ${url} did not send:`).toEqual([]);
+    },
+  );
+  it.each(LIST_CASES)(
+    'CRITICAL $url returns at least one item to compare. Every list endpoint answers with an empty array on a fresh fixture — all five, measured — so the two element comparisons below would read undefined and agree perfectly, reporting the item contract verified having never seen an item.',
+    async ({ url }) => {
+      const items = await seededListItems(url);
+      expect(items.length, `items returned by ${url} after seeding`).toBeGreaterThan(0);
+    },
+  );
+
+  it.each(LIST_CASES)(
+    'CRITICAL an item from $url carries no field its schema does not declare. The envelope for a list endpoint is one `data` key, so the top-level comparison passes on {data} vs {data}; everything a customer actually reads is in here.',
+    async ({ schema: name, url }) => {
+      const declared = new Set(Object.keys(declaredSchema(name).properties ?? {}));
+      const [item] = await seededListItems(url);
+      const undocumented = Object.keys(item ?? {})
+        .filter((k) => !declared.has(k))
+        .sort();
+      expect(
+        undocumented,
+        `field(s) on an item from ${url} that ${name} does not declare:`,
+      ).toEqual([]);
+    },
+  );
+
+  it.each(LIST_CASES)(
+    'CRITICAL an item from $url carries every field its schema marks required. A generated client types these as present on each element of the array, so a promised-but-absent one is read as undefined inside a loop the compiler said was safe.',
+    async ({ schema: name, url }) => {
+      const schema = declaredSchema(name);
+      const [item] = await seededListItems(url);
+      const present = new Set(Object.keys(item ?? {}));
+      const missing = (schema.required ?? []).filter((k) => !present.has(k)).sort();
+      expect(
+        missing,
+        `required field(s) ${name} promises that an item from ${url} omitted:`,
+      ).toEqual([]);
     },
   );
 });
