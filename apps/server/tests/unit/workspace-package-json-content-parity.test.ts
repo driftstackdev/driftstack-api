@@ -69,7 +69,7 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     expect(pkg.scripts['dev:status']).toBe('npm run dev --workspace @driftstack/status-site');
   });
 
-  it("test + pretest + lint + typecheck framing pinned: 'pretest: npm run build --workspaces --if-present' (fresh-build hook before vitest) + 'test: vitest run' + 'test:watch: vitest' + 'bench: vitest bench --run' + 'bench:check-regression: node scripts/check-bench-regression.mjs' + 'typecheck: npm run typecheck --workspaces --if-present' + 'lint: eslint . && node scripts/check-subprocessor-mirror.mjs' + 'format: prettier --write .' + 'format:check: prettier --check .' — pinned so the pretest-build-hook + test/bench/typecheck/lint workspace propagation + check-subprocessor-mirror lint-companion commitment survives", () => {
+  it("test + pretest + lint + typecheck framing pinned: 'pretest: npm run build --workspaces --if-present' (fresh-build hook before vitest) + 'test: vitest run' + 'test:watch: vitest' + 'bench: vitest bench --run' + 'bench:check-regression: node scripts/check-bench-regression.mjs' + 'typecheck: npm run typecheck --workspaces --if-present' + 'lint: eslint . && node scripts/check-subprocessor-mirror.mjs' + format/format:check running prettier through node with an explicit heap — pinned so the pretest-build-hook + test/bench/typecheck/lint workspace propagation + check-subprocessor-mirror lint-companion commitment survives", () => {
     // 2026-05-20 — pretest wraps the workspace build in a
     // PUBLIC_API_BASE_URL default so astro builds don't crash when
     // the env var is unset (pre-push gate guarantee per task #45);
@@ -91,8 +91,22 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     expect(pkg.scripts['bench:check-regression']).toBe('node scripts/check-bench-regression.mjs');
     expect(pkg.scripts.typecheck).toBe('npm run typecheck --workspaces --if-present');
     expect(pkg.scripts.lint).toBe('eslint . && node scripts/check-subprocessor-mirror.mjs');
-    expect(pkg.scripts.format).toBe('prettier --write .');
-    expect(pkg.scripts['format:check']).toBe('prettier --check .');
+    // Both format scripts invoke prettier's CJS entry through node with an
+    // explicit --max-old-space-size. Bare `prettier --check .` ABORTS with a
+    // heap OOM on this repo at Node's default limit (measured: 4288 MB here,
+    // exit 134) — the gate could not be run locally at all, and formatting was
+    // never the problem: with a larger heap it reports zero violations.
+    //
+    // Pinned on the SHAPE rather than the exact byte string, so raising the
+    // ceiling later is not a test edit, while dropping the heap flag — which is
+    // the regression, since it silently restores an unrunnable gate — still is.
+    for (const script of ['format', 'format:check'] as const) {
+      expect(pkg.scripts[script], `${script} runs prettier through node`).toMatch(
+        /^node --max-old-space-size=\d+ \.\/node_modules\/prettier\/bin\/prettier\.cjs /,
+      );
+    }
+    expect(pkg.scripts.format, 'format still writes').toMatch(/--write \.$/);
+    expect(pkg.scripts['format:check'], 'format:check still checks').toMatch(/--check \.$/);
   });
 
   it("db + sdk:python framing pinned: 'db:generate: drizzle-kit generate' + 'db:migrate: npm run db:migrate --workspace apps/server' + 'db:seed: npm run db:seed --workspace apps/server' + 'db:studio: drizzle-kit studio' + 'sdk:python:dump-spec: tsx apps/server/src/lib/dump-openapi.ts packages/sdk-python/openapi.json' + 'sdk:python:generate: bash packages/sdk-python/scripts/generate.sh' + 'sdk:python:test: cd packages/sdk-python && .venv/bin/pytest' + 'sdk:python:lint: cd packages/sdk-python && .venv/bin/ruff check . && .venv/bin/ruff format --check .' — pinned so the 4-db-script + 4-sdk:python-script ladder (dump-spec → generate → test → lint) commitment survives", () => {
