@@ -9,7 +9,7 @@
 
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
-import type { Problem } from '@driftstack/api-types';
+import { PROBLEM_TYPES, type Problem } from '@driftstack/api-types';
 import { ApiError, InternalError, ValidationError } from '../lib/errors.js';
 import { redactUrlQueryTokens } from '../lib/redact-url.js';
 
@@ -19,7 +19,10 @@ export function registerErrorHandler(app: FastifyInstance): void {
   // Replace the default 404 handler so every miss is also problem+json.
   app.setNotFoundHandler((request, reply) => {
     void replyWithProblem(reply, {
-      type: 'https://errors.driftstack.dev/not-found',
+      // PROBLEM_TYPES rather than the literal: `Problem.type` is
+      // `z.string().url()`, not the closed `ProblemType` union, so a typo in
+      // this URI would compile and ship a problem class no client can switch on.
+      type: PROBLEM_TYPES.NotFound,
       title: 'Not Found',
       status: 404,
       // Redact credential query tokens (the SSE `?ds_token=`, OAuth `?code=`)
@@ -88,14 +91,23 @@ function normaliseError(err: FastifyError | Error, _request: FastifyRequest): Ap
   // and a code like 'FST_ERR_VALIDATION'. Treat those as 400s.
   const fastifyErr = err as FastifyError;
   if (typeof fastifyErr.statusCode === 'number' && fastifyErr.statusCode < 500) {
+    // Type and title are chosen TOGETHER. They used to be two independent
+    // ternaries over the same status: the type had three arms (401 / 403 /
+    // else), the title had two. A 403 therefore shipped
+    // `{type: .../forbidden, title: 'Bad Request', status: 403}` — a title
+    // naming a different problem class than the URI beside it, which is the one
+    // thing RFC 7807 §3.1 says a title must not be (it summarises the TYPE).
+    // Pairing them removes the failure mode rather than adding the third arm:
+    // one expression cannot disagree with itself.
+    const [type, title] =
+      fastifyErr.statusCode === 401
+        ? ([PROBLEM_TYPES.Unauthorized, 'Unauthorized'] as const)
+        : fastifyErr.statusCode === 403
+          ? ([PROBLEM_TYPES.Forbidden, 'Forbidden'] as const)
+          : ([PROBLEM_TYPES.BadRequest, 'Bad Request'] as const);
     return new ApiError({
-      type:
-        fastifyErr.statusCode === 401
-          ? 'https://errors.driftstack.dev/unauthorized'
-          : fastifyErr.statusCode === 403
-            ? 'https://errors.driftstack.dev/forbidden'
-            : 'https://errors.driftstack.dev/bad-request',
-      title: fastifyErr.statusCode === 401 ? 'Unauthorized' : 'Bad Request',
+      type,
+      title,
       status: fastifyErr.statusCode,
       detail: fastifyErr.message,
     });

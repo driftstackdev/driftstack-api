@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PROBLEM_TYPES } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -47,6 +48,12 @@ describe('problem+json content-type cross-source invariant', () => {
     expect(handler).toMatch(
       /Replace the default 404 handler so every miss is also problem\+json\./,
     );
-    expect(handler).toMatch(/type: 'https:\/\/errors\.driftstack\.dev\/not-found',/);
+    // The URI moved behind PROBLEM_TYPES so a typo in it cannot compile —
+    // `Problem.type` is `z.string().url()`, not the closed `ProblemType` union,
+    // so this call site was the one building an envelope from an unchecked
+    // literal. The claim splits: the handler uses the constant, and the constant
+    // still holds the canonical URI.
+    expect(handler).toMatch(/type: PROBLEM_TYPES\.NotFound,/);
+    expect(PROBLEM_TYPES.NotFound).toBe('https://errors.driftstack.dev/not-found');
   });
 });

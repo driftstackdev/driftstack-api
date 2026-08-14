@@ -30,11 +30,21 @@
 //     1. ApiError instance → return as-is.
 //     2. ZodError → new ValidationError(err.flatten()).
 //     3. Fastify validation/parser error (numeric statusCode <500) →
-//        ApiError with status-code-derived type:
+//        ApiError with status-code-derived type + title, chosen as ONE
+//        pair so they cannot disagree:
 //          - 401 → 'unauthorized' + title 'Unauthorized'.
-//          - 403 → 'forbidden' + title 'Bad Request' (note: the
-//            title is shared with the else branch — see source).
+//          - 403 → 'forbidden'    + title 'Forbidden'.
 //          - else → 'bad-request' + title 'Bad Request'.
+//
+//        CORRECTED 2026-08-14. This said "403 → 'forbidden' + title 'Bad
+//        Request' (note: the title is shared with the else branch — see
+//        source)". That was accurate about the code and wrong about the
+//        contract: RFC 7807 §3.1 makes `title` a summary of the TYPE, and
+//        a forbidden problem titled "Bad Request" names a different class
+//        than the URI beside it. The note recorded the defect and the pin
+//        then protected it, which is worse than not noticing — it makes
+//        the fix look like the drift. Fixed in the source; type and title
+//        now come from one tuple, so a future arm cannot reintroduce it.
 //     4. Anything else → InternalError (hides internals).
 //
 //   replyWithProblem sets:
@@ -49,6 +59,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PROBLEM_TYPES } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -84,7 +95,12 @@ describe('W979 error-handler RFC 7807 cross-source invariant', () => {
 
   it("CRITICAL 404 NotFoundHandler emits problem with type:'https://errors.driftstack.dev/not-found' + title:'Not Found' + status:404 + detail:`No route for ${method} ${url}.` + instance:request.id. The 5-field problem matches the V-204 RFC 7807 envelope shape.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/error-handler.ts'));
-    expect(p).toMatch(/type: 'https:\/\/errors\.driftstack\.dev\/not-found',/);
+    // The URI moved behind PROBLEM_TYPES, so the claim splits: the handler uses
+    // the constant, and the constant still holds the pinned URI. Asserting the
+    // literal alone would now fail on a change that made the code SAFER, and
+    // asserting the constant alone would stop pinning the value.
+    expect(p).toMatch(/type: PROBLEM_TYPES\.NotFound,/);
+    expect(PROBLEM_TYPES.NotFound).toBe('https://errors.driftstack.dev/not-found');
     expect(p).toMatch(/title: 'Not Found',/);
     expect(p).toMatch(/status: 404,/);
     expect(p).toMatch(
@@ -133,13 +149,17 @@ describe('W979 error-handler RFC 7807 cross-source invariant', () => {
     );
   });
 
-  it("CRITICAL normaliseError branch 3 status-code → type-URL ladder — 401 → 'unauthorized', 403 → 'forbidden', else → 'bad-request'. The nested ternary picks the correct errors.driftstack.dev/* URL from status code.", () => {
+  it("CRITICAL normaliseError branch 3 status-code → type ladder — 401 → 'unauthorized', 403 → 'forbidden', else → 'bad-request', each PAIRED with the matching title. The ladder picks the correct errors.driftstack.dev/* class from the status code.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/error-handler.ts'));
     expect(p).toMatch(/fastifyErr\.statusCode === 401/);
-    expect(p).toMatch(/'https:\/\/errors\.driftstack\.dev\/unauthorized'/);
+    expect(p).toMatch(/\[PROBLEM_TYPES\.Unauthorized, 'Unauthorized'\] as const/);
     expect(p).toMatch(/fastifyErr\.statusCode === 403/);
-    expect(p).toMatch(/'https:\/\/errors\.driftstack\.dev\/forbidden'/);
-    expect(p).toMatch(/'https:\/\/errors\.driftstack\.dev\/bad-request'/);
+    expect(p).toMatch(/\[PROBLEM_TYPES\.Forbidden, 'Forbidden'\] as const/);
+    expect(p).toMatch(/\[PROBLEM_TYPES\.BadRequest, 'Bad Request'\] as const/);
+    // The pinned URIs, still pinned — now via the constants the source uses.
+    expect(PROBLEM_TYPES.Unauthorized).toBe('https://errors.driftstack.dev/unauthorized');
+    expect(PROBLEM_TYPES.Forbidden).toBe('https://errors.driftstack.dev/forbidden');
+    expect(PROBLEM_TYPES.BadRequest).toBe('https://errors.driftstack.dev/bad-request');
   });
 
   it("CRITICAL normaliseError branch 4 framing — 'Anything else: hide internals'. The else → InternalError + original-err-as-cause design prevents leaking stack traces / module names to clients.", () => {

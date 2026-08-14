@@ -32,6 +32,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PROBLEM_TYPES } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -63,7 +64,8 @@ describe('W711 server-side error-handler middleware parity', () => {
 
   it('CRITICAL 404 handler emits problem+json with /not-found problem-type. The 404 shape is what tells customers a route-miss; drift to a plain JSON 404 or a 500 would change customer error-handling.', () => {
     const src = read(ERROR_HANDLER);
-    expect(src).toMatch(/type: 'https:\/\/errors\.driftstack\.dev\/not-found'/);
+    expect(src).toMatch(/type: PROBLEM_TYPES\.NotFound,/);
+    expect(PROBLEM_TYPES.NotFound).toBe('https://errors.driftstack.dev/not-found');
     expect(src).toMatch(/title: 'Not Found'/);
     expect(src).toMatch(/status: 404/);
     expect(src).toMatch(
@@ -100,12 +102,12 @@ describe('W711 server-side error-handler middleware parity', () => {
 
     // Status-derived problem-type mapping.
     expect(src).toMatch(
-      /fastifyErr\.statusCode === 401\s*\n?\s*\?\s*'https:\/\/errors\.driftstack\.dev\/unauthorized'/,
+      /fastifyErr\.statusCode === 401\s*\n?\s*\?\s*\(\[PROBLEM_TYPES\.Unauthorized, 'Unauthorized'\] as const\)/,
     );
     expect(src).toMatch(
-      /fastifyErr\.statusCode === 403\s*\n?\s*\?\s*'https:\/\/errors\.driftstack\.dev\/forbidden'/,
+      /fastifyErr\.statusCode === 403\s*\n?\s*\?\s*\(\[PROBLEM_TYPES\.Forbidden, 'Forbidden'\] as const\)/,
     );
-    expect(src).toMatch(/'https:\/\/errors\.driftstack\.dev\/bad-request'/);
+    expect(src).toMatch(/\(\[PROBLEM_TYPES\.BadRequest, 'Bad Request'\] as const\)/);
   });
 
   it('CRITICAL `fastifyErr.statusCode < 500` cap pinned. Only 1xx-4xx pass through as ApiError-with-status-derived-type; 5xx Fastify errors fall through to InternalError. Drift to allowing 5xx to pass would let internal Fastify errors leak their detail (e.g. crypto failure messages).', () => {
