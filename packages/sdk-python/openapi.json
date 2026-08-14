@@ -25094,6 +25094,22 @@
         "responses": {
           "200": {
             "description": "Verification email sent; account is unverified until /v1/auth/verify-email.",
+            "headers": {
+              "X-RateLimit-Daily-Remaining": {
+                "description": "Signups left for this IP inside the rolling 24-hour ceiling of 25. Sent on every signup that clears the per-minute burst gate, so a high-volume IP can slow down before the daily limit refuses it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Daily-Reset": {
+                "description": "Unix time in seconds when the oldest signup leaves the rolling 24-hour window, freeing capacity.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {

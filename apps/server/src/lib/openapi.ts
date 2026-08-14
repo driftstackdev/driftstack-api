@@ -355,6 +355,23 @@ function buildRegistry(): OpenAPIRegistry {
     },
   } as const;
 
+  // Only /v1/auth/signup has a per-IP daily ceiling, so this is deliberately NOT
+  // folded into errors4xx — declaring it on every route would advertise a limit
+  // the other 200-odd paths do not enforce, which is the same class of untruth
+  // as leaving a real header undeclared.
+  const dailyIpCeilingHeaders = {
+    'X-RateLimit-Daily-Remaining': {
+      description:
+        'Signups left for this IP inside the rolling 24-hour ceiling of 25. Sent on every signup that clears the per-minute burst gate, so a high-volume IP can slow down before the daily limit refuses it.',
+      schema: { type: 'integer', minimum: 0 },
+    },
+    'X-RateLimit-Daily-Reset': {
+      description:
+        'Unix time in seconds when the oldest signup leaves the rolling 24-hour window, freeing capacity.',
+      schema: { type: 'integer', minimum: 0 },
+    },
+  } as const;
+
   const errors4xx = {
     400: { description: 'Validation failed.', content: problemContent },
     401: {
@@ -3594,6 +3611,14 @@ function buildRegistry(): OpenAPIRegistry {
             example: { verification_email_expires_at: '2026-06-01T12:00:00Z' },
           },
         },
+        // Signup is the ONLY route with a per-IP DAILY ceiling (25/day, on top
+        // of the per-minute burst gate). The 2026-07-01 security audit added
+        // these two headers precisely so a high-volume IP gets advance warning
+        // instead of an abrupt 429 on request 26 — and then they were published
+        // nowhere: not the spec, not the docs, not any SDK. A warning nobody can
+        // discover is not a warning. Sent on every signup that passes the burst
+        // gate, not only on the refusal.
+        headers: dailyIpCeilingHeaders,
       },
       ...errors4xx,
       409: {
