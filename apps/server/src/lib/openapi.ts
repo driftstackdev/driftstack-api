@@ -337,7 +337,11 @@ function buildRegistry(): OpenAPIRegistry {
         'Which bucket was charged, e.g. `global` or `sessions:create`. Sent alongside the X-RateLimit-* aliases of the three headers above, kept for existing clients.',
       schema: { type: 'string' },
     },
-  };
+    // `as const` so the `type` literals stay 'integer' / 'string' rather than
+    // widening to `string`, which does not satisfy the response config's schema
+    // union. Vitest does not type-check, so the suite is green either way — the
+    // build is what catches this.
+  } as const;
 
   const errors4xx = {
     400: { description: 'Validation failed.', content: problemContent },
