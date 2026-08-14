@@ -24,7 +24,21 @@ const ConfigSchema = z.object({
   // GLOBAL_IP_RATE_LIMIT_DEFAULT in app.ts). Set
   // GLOBAL_IP_RATE_LIMIT_PER_MIN=0 to disable the gate entirely. coerce so
   // the env string parses to a number.
-  globalIpRateLimitPerMin: z.coerce.number().int().nonnegative().default(600),
+  // A BLANK value means unset, not zero. `z.coerce.number()` runs Number('')
+  // which is 0, and `.default()` only fires on undefined — so
+  // `GLOBAL_IP_RATE_LIMIT_PER_MIN=` with nothing after the `=` coerced to 0,
+  // and 0 here means DISABLED: bootstrap maps `<= 0` to null and the app-wide
+  // onRequest IP gate is then never registered. A blank line in a .env — a key
+  // copied from the template and not filled in — silently removed the
+  // pre-auth DoS cap, with no error and a normal boot. Whitespace-only did the
+  // same. The other coerced numbers do not need this: the `.positive()` ones
+  // REJECT 0 and fail the boot loudly, and 0 is harmless for the mock
+  // latencies and the Sentry sample rate. This is the only field where 0 is a
+  // meaningful instruction rather than an invalid value.
+  globalIpRateLimitPerMin: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.coerce.number().int().nonnegative().default(600),
+  ),
   databaseUrl: z.string().url(),
   redisUrl: z.string().url(),
   driver: z.enum(['mock', 'webkit', 'playwright']).default('mock'),
