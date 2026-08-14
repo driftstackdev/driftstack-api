@@ -2312,6 +2312,23 @@ function buildRegistry(): OpenAPIRegistry {
           'application/json': { schema: ExportAccountAuditResponseOpenApi },
           'text/csv': { schema: { type: 'string' } },
         },
+        // The description above has always MENTIONED this header, but prose is
+        // not something a code generator can use. For `format=csv` it is the
+        // ONLY truncation signal — the JSON envelope carries a `truncated`
+        // field, a CSV attachment has nowhere to put one — so a client built
+        // from the spec had no typed way to learn its export stopped at the
+        // 10,000-row ceiling, and would process a partial audit log as complete.
+        headers: {
+          'X-Driftstack-Export-Truncated': {
+            description:
+              '`true` when the export stopped at the 10,000-row ceiling and is INCOMPLETE, `false` otherwise. Always sent. For format=csv this is the only truncation signal; the JSON envelope also carries a `truncated` field.',
+            schema: { type: 'string', enum: ['true', 'false'] },
+          },
+          'Content-Disposition': {
+            description: 'Attachment filename, e.g. `attachment; filename="audit-log.csv"`.',
+            schema: { type: 'string' },
+          },
+        },
       },
       ...errors4xx,
     },
@@ -5040,6 +5057,18 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           'Order minted; response carries payment context for the customer. On a replayed key, the response also sets `Idempotent-Replayed: 1`.',
         content: { 'application/json': { schema: CreateCryptoCheckoutResponseSchema } },
+        // Same shape as the export's truncation header: the description already
+        // told customers this exists, in prose a generated client cannot reach.
+        // It is the only way to distinguish a restored order from a freshly
+        // minted one — the body is identical either way, which is what makes
+        // the replay safe and the header necessary.
+        headers: {
+          'Idempotent-Replayed': {
+            description:
+              '`1` when this response was restored from a previous request carrying the same Idempotency-Key rather than minting a new order. Absent on a first execution. The body is identical in both cases, so this header is the only way to tell them apart.',
+            schema: { type: 'string', enum: ['1'] },
+          },
+        },
       },
       ...errors4xx,
     },

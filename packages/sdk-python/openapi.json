@@ -16876,6 +16876,21 @@
         "responses": {
           "200": {
             "description": "JSON envelope when format=json (or omitted); text/csv attachment when format=csv. The `x-driftstack-export-truncated` response header signals when the 10,000-row ceiling was hit.",
+            "headers": {
+              "X-Driftstack-Export-Truncated": {
+                "description": "`true` when the export stopped at the 10,000-row ceiling and is INCOMPLETE, `false` otherwise. Always sent. For format=csv this is the only truncation signal; the JSON envelope also carries a `truncated` field.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              },
+              "Content-Disposition": {
+                "description": "Attachment filename, e.g. `attachment; filename=\"audit-log.csv\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -32079,6 +32094,15 @@
         "responses": {
           "201": {
             "description": "Order minted; response carries payment context for the customer. On a replayed key, the response also sets `Idempotent-Replayed: 1`.",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "`1` when this response was restored from a previous request carrying the same Idempotency-Key rather than minting a new order. Absent on a first execution. The body is identical in both cases, so this header is the only way to tell them apart.",
+                "schema": {
+                  "type": "string",
+                  "enum": ["1"]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
