@@ -249,6 +249,14 @@ export class DurableWebhookDeliveryService implements WebhookDeliveryService {
       .update(webhookDeliveries)
       .set({
         status: 'pending',
+        // V-771 — the retry BUDGET resets; the attempt LOG does not. `attempts` is the
+        // counter column the worker gates on (`attemptNumber = attempts + 1` vs
+        // DEFAULT_MAX_ATTEMPTS); the per-attempt history lives in the separate
+        // webhook_delivery_attempts table, so zeroing this preserves postmortem while
+        // honouring the interface's "resets attempt counter". Without it a requeued
+        // delivery got ONE attempt instead of six, and a row that failed on attempt 6 was
+        // sent straight back to DLQ by its first replay failure.
+        attempts: 0,
         nextAttemptAt: new Date(nowMs),
         deliveredAt: null,
       })
@@ -380,6 +388,14 @@ export class DurableDlqManager implements DlqManager {
       .update(webhookDeliveries)
       .set({
         status: 'pending',
+        // V-771 — the retry BUDGET resets; the attempt LOG does not. `attempts` is the
+        // counter column the worker gates on (`attemptNumber = attempts + 1` vs
+        // DEFAULT_MAX_ATTEMPTS); the per-attempt history lives in the separate
+        // webhook_delivery_attempts table, so zeroing this preserves postmortem while
+        // honouring the interface's "resets attempt counter". Without it a requeued
+        // delivery got ONE attempt instead of six, and a row that failed on attempt 6 was
+        // sent straight back to DLQ by its first replay failure.
+        attempts: 0,
         nextAttemptAt: new Date(nowMs),
         deliveredAt: null,
       })

@@ -33284,3 +33284,52 @@ in the unit reds the derivation rather than passing quietly.
 treated as unit names; the bare word is never matched. Exactly two lines needed to change.
 
 Third and fourth of six findings from the parallel sweep. `EXPECTED_TEST_FILES` → 2675.
+
+## V-771 — requeue and replay never reset the retry budget they promise to reset (2026-08-14)
+
+`DlqManager.requeue` documents "Resets attempt counter; new attempts append to the existing
+attempt log so postmortem stays intact". `WebhookDeliveryService.replay` documents "Resets
+attempts". The admin panel tells a staff operator, in the DLQ screen itself, "delivery resets to
+attempt=1 + retry budget refreshes". The durable implementation set only `status`,
+`nextAttemptAt` and `deliveredAt` — the `attempts` counter was untouched.
+
+`attempts` is the exact column the worker gates on: `attemptNumber = delivery.attempts + 1`
+against `DEFAULT_MAX_ATTEMPTS = 6`. So a DLQ'd delivery requeued after six failures got ONE more
+attempt with no backoff curve, and replaying a row that failed on attempt 6 sent it straight back
+to DLQ on its first failure. For an operator recovering webhooks from a customer endpoint that is
+still flapping, that is a single shot instead of a retry budget — while the screen in front of
+them says the budget refreshed.
+
+**Latent, not live, and worth being precise about**: the currently-wired path is
+`webhooks-repo.resetDeliveryToPending`, which does set `attempts: 0`. `packages/webhook-delivery`
+is `"private": true` with no production call sites. This is the V-173 forward path, so the defect
+would land at cutover rather than today. Fixed now because that is when it is cheap.
+
+The fix is `attempts: 0` in both `.set({…})` blocks. The Postgres schema already separates the
+counter (`webhook_deliveries.attempts`) from the log (`webhook_delivery_attempts`), so zeroing
+the counter honours "resets attempt counter" while "new attempts append to the existing attempt
+log" stays true — and the test asserts BOTH halves separately, because a fix that truncated the
+log would satisfy the first and destroy the second.
+
+**A content-parity pin froze the bug, and froze it twice.**
+`services-durable-webhook-delivery-content-parity.test.ts` pinned the exact three-key
+`.set({ status, nextAttemptAt, deliveredAt })`. Because it is a `toMatch`, one regex covered both
+the requeue and the replay call sites — so a single pin blocked the fix in two places. Updated in
+the same commit.
+
+Proven against real Postgres (`db-durable-webhook-requeue-resets-budget-drizzle.test.ts`), and
+mutation-proved. The mutation is worth recording: my first attempt removed every
+`attempts: 0,` followed by `nextAttemptAt`, and an assertion caught that this matched **three**
+sites — the third being `enqueue`'s insert, where `attempts: 0` is correct on creation. A blanket
+mutation would have proved the wrong thing. Narrowed to the two `.set` blocks, both tests red.
+
+**NOT fixed, and recorded rather than glossed:** the `in-memory` and `mock` implementations in
+`packages/webhook-delivery` still do not reset. They cannot honour this contract as written —
+`DeliveryRecord.attempts` is a single `readonly DeliveryAttempt[]` serving as both counter and
+log, so "reset the counter, keep the log" has nowhere to live. Fixing them needs a structural
+change (a `budgetBaseIndex` set to `attempts.length` on requeue/replay, with
+`attemptNumber = attempts.length - budgetBaseIndex + 1`). Until then those doubles diverge from
+the contract and from the durable implementation, which is the shape that hid the V-758 billing
+defect: a double that behaves differently from the real thing makes a green test meaningless.
+
+Sixth of six findings from the parallel sweep. `EXPECTED_TEST_FILES` → 2676.

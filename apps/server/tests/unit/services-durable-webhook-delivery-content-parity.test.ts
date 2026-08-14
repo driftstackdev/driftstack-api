@@ -106,8 +106,11 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(
       /\.insert\(webhookDeliveries\)\s*\n?\s*\.values\(\{\s*\n?\s*webhookId: opts\.endpoint\.id,\s*\n?\s*eventId: opts\.payload\.eventId,\s*\n?\s*eventType: opts\.payload\.eventType as WebhookEventType,\s*\n?\s*payload: \{ body: opts\.payload\.body, emittedAtSec: opts\.payload\.emittedAtSec \},\s*\n?\s*status: 'pending',\s*\n?\s*attempts: 0,\s*\n?\s*nextAttemptAt: new Date\(nowMs\),/,
     );
+    // V-771 — this pinned a 3-key set that did NOT reset `attempts`, while the interface
+    // promised "resets attempt counter" and the admin panel promised "retry budget refreshes".
+    // One `toMatch` covers both the requeue and replay call sites, so it froze the bug twice.
     expect(body).toMatch(
-      /\.update\(webhookDeliveries\)\s*\n?\s*\.set\(\{\s*\n?\s*status: 'pending',\s*\n?\s*nextAttemptAt: new Date\(nowMs\),\s*\n?\s*deliveredAt: null,\s*\n?\s*\}\)/,
+      /\.update\(webhookDeliveries\)\s*\n?\s*\.set\(\{\s*\n?\s*status: 'pending',[\s\S]{0,600}?attempts: 0,\s*\n?\s*nextAttemptAt: new Date\(nowMs\),\s*\n?\s*deliveredAt: null,\s*\n?\s*\}\)/,
     );
   });
 
