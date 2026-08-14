@@ -33146,3 +33146,48 @@ the same commit — it enumerates the interface, so a new method breaks it by de
 Still unverified, and unchanged by this: no call has been made against test-mode Stripe. This
 correction is about choosing the right subscription; whether Stripe accepts the request shape
 still wants a staging suspension.
+
+## V-768 — the status site promised a two-email cap that production does not honour (2026-08-14)
+
+Three status-site strings and the subscription welcome email told subscribers they would get at
+most two emails per incident — posted and resolved, "nothing else". A **third** subscriber email
+kind is wired in production.
+
+`bootstrap.ts` constructs `IncidentNotificationsService` **with** `incidentUpdateNotificationsRepo`,
+so the `if (!this.throttle) return;` no-op at the top of `notifyUpdated` is never taken, and it
+registers `onPublicUpdated` → `notifyUpdated`, which fans out the `status-incident-updated`
+template on every operator update to a public incident. The only bound is a **sliding** one-hour
+window per subscriber per incident (`UPDATE_THROTTLE_MS`); there is no total cap. The marketing
+incident policy separately commits to updates "every 60 min", so the stream is not hypothetical:
+an eight-hour Major incident sends roughly ten emails, not two.
+
+Why this outranked the other findings: the promise is the stated consent basis for a public
+double-opt-in list. Volume far above what was promised invites spam complaints, and a Postmark
+suppression would then silently kill the created/resolved emails the subscriber actually wanted —
+the failure lands on the notifications they chose, not the ones they did not.
+
+The first-party catalog was already correct — `apps/docs/src/pages/reference/emails.md:85-86`
+documents the update email and says "One subscription covers posted + update + resolved". So the
+code and the docs agreed; the status site and the welcome email were the outliers. All five
+occurrences (subscribe.astro ×2, subscribe/confirm.astro, and the welcome email's text and html
+bodies) now state posted / at most hourly while open / resolved.
+
+**Four pins froze the false claim**, and the fourth is the lesson. I enumerated pins by grepping
+the distinctive phrase ("emails per incident") and updated three. A fourth assertion —
+`status-site-subscribe-page-content-parity.test.ts:181` "'service-status incident' framing — not
+marketing comms" — pinned the _sentence prefix_ instead, and only the test run found it. When a
+sentence changes, grep several fragments of it, not just the claim you came for. That pin's own
+subject is the scope word "service-status incident", so it now matches that rather than the whole
+sentence it happened to sit inside.
+
+**Guard is cross-source** (`incident-email-volume-claims-match-wired-kinds.test.ts`): it derives
+the subscriber-facing incident email kinds from the template registry AND from the bootstrap hook
+registrations, then fails any subscriber-facing surface that states a numeric per-incident cap at
+all — because with an uncapped per-update fan-out no total number is honest — and separately
+fails a welcome body that says posted+resolved is everything. Mutation-proved three ways:
+restoring the cap reds the surface check, reverting the welcome body reds the welcome check, and
+unwiring `onPublicUpdated` reds the derivation check rather than silently lowering the floor.
+
+Found by a parallel claim-vs-code sweep of the four surfaces the earlier sweeps never reached
+(docs/internal runbooks, package contracts, status-site, e2e specs): 12 candidates, 6 surviving
+adversarial refutation. This was the highest-ranked. `EXPECTED_TEST_FILES` 2672 → 2673.

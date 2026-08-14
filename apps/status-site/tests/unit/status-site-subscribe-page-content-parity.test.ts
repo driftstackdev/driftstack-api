@@ -108,7 +108,13 @@ describe('W369.C status-site /subscribe page content parity', () => {
     // Spam-folder fallback.
     expect(body).toMatch(/check your\s+spam folder/);
     // Volume-promise reminder so the customer doesn't need to scroll back up to verify.
-    expect(body).toMatch(/2 emails per incident maximum/);
+    // V-768 — the "two emails per incident maximum" cap was FALSE. A third subscriber email
+    // kind (status-incident-updated) is wired in production: bootstrap constructs
+    // IncidentNotificationsService WITH the throttle repo and registers onPublicUpdated, so
+    // notifyUpdated fans out one email per operator update, bounded only by a sliding 1-hour
+    // window per subscriber per incident — no total cap. An 8-hour Major incident with the
+    // documented hourly cadence sends ~10, not 2. apps/docs reference/emails.md already said so.
+    expect(body).toMatch(/at most hourly while open/);
     // "Subscribe another address" button (lets a customer add a teammate without page reload).
     expect(body).toMatch(/<button\s+id="subscribe-another-btn"[\s\S]*?Subscribe another address/);
     // 202 handler swaps the form for the pane.
@@ -141,8 +147,9 @@ describe('W369.C status-site /subscribe page content parity', () => {
     );
   });
 
-  it('"Two emails per incident maximum" volume promise pinned', () => {
-    expect(body).toMatch(/Two emails\s+per incident maximum/);
+  it('volume promise pinned — posted, at most hourly while open, resolved (V-768: was "Two emails per incident maximum", which the wired per-update fan-out made false)', () => {
+    expect(body).toMatch(/at most\s+once an hour while it stays open/);
+    expect(body).not.toMatch(/emails per incident maximum/i);
   });
 
   it('"never send marketing or promotional email from the status list" pinned (no cross-mixing)', () => {
@@ -174,9 +181,11 @@ describe('W369.C status-site /subscribe page content parity', () => {
   it("'service-status incident' framing — not marketing comms", () => {
     // Pin so a future "we'll also email you about new features"
     // copy add forces a discussion about the status-list scope.
-    expect(body).toMatch(
-      /We'll email you when we post a service-status incident, and again\s+when it resolves/,
-    );
+    // V-768 reworded the middle of this sentence (the false two-email cap); the
+    // load-bearing part for THIS pin is the scope word "service-status incident",
+    // so it now matches that rather than the full sentence it happened to sit in.
+    expect(body).toMatch(/We'll email you when we post a service-status incident/);
+    expect(body).toMatch(/and again when it resolves/);
   });
 
   it('V-657 comment pinned (V-540.B-11-tested double-opt-in flow)', () => {

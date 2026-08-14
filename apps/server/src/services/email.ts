@@ -477,9 +477,9 @@ const TEMPLATES = {
   'status-subscription-welcome': {
     subject: 'You’re subscribed to Driftstack status',
     text: (v) =>
-      `You're now subscribed to Driftstack service-status updates. We'll email you when an incident is posted and again when it's resolved — nothing else.\n\nLive status: ${v.statusPageUrl}\nUnsubscribe (one click): ${v.unsubscribeLink}\n\n— Driftstack`,
+      `You're now subscribed to Driftstack service-status updates. We'll email you when an incident is posted, at most once an hour while it stays open, and again when it's resolved — nothing else.\n\nLive status: ${v.statusPageUrl}\nUnsubscribe (one click): ${v.unsubscribeLink}\n\n— Driftstack`,
     html: (v) =>
-      `<p>You're now subscribed to Driftstack service-status updates. We'll email you when an incident is posted and again when it's resolved — nothing else.</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe (one click): <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
+      `<p>You're now subscribed to Driftstack service-status updates. We'll email you when an incident is posted, at most once an hour while it stays open, and again when it's resolved — nothing else.</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe (one click): <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
   },
   // V-298b — DRAFT copy. Team invite email.
   'team-invite': {

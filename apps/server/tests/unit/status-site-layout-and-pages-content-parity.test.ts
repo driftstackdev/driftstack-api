@@ -241,12 +241,13 @@ describe('W790 status-site src content parity bundle', () => {
     );
   });
 
-  it("CRITICAL subscribe two-emails-per-incident-max framing pinned. The 'We\\'ll email you when we post a service-status incident, and again when it resolves. We won\\'t email you for anything else. Two emails per incident maximum.' wording is the load-bearing customer-comms-cap promise.", () => {
+  it("CRITICAL subscribe volume-promise framing pinned. V-768 — this pin previously REQUIRED 'Two emails per incident maximum', a cap production does not honour: a third subscriber email kind (status-incident-updated) is wired, throttled to one per hour per subscriber per incident with no total cap. The pin froze the false claim and had to move with it.", () => {
     const p = read(PAGE_SUB);
 
     expect(p).toMatch(
-      /We'll email you when we post a service-status incident, and again\s*\n\s+when it resolves\. We won't email you for anything else\. Two emails\s*\n\s+per incident maximum\./,
+      /We'll email you when we post a service-status incident, at most\s*\n\s+once an hour while it stays open, and again when it resolves\./,
     );
+    expect(p, 'the retired cap must not come back').not.toMatch(/emails per incident maximum/i);
   });
 
   it('CRITICAL subscribe 202+400+429 status-code branches pinned. 202=confirmation-sent, 400=invalid-email, 429=rate-limit-by-IP. Drift to dropping any would lose customer-facing recoverability. Wave 1119 / Slice 1119.3 C1: 202 branch swaps the form for a dedicated confirm pane with sender hint + spam-folder fallback + "subscribe another address" affordance (replaces the prior single setStatus line). 400 + 429 still surface inline status text.', () => {

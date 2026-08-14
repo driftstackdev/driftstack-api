@@ -24,9 +24,9 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       Get incident emails
     </h1>
     <p class="mt-3 max-w-prose text-sm text-ink-secondary">
-      We'll email you when we post a service-status incident, and again
-      when it resolves. We won't email you for anything else. Two emails
-      per incident maximum.
+      We'll email you when we post a service-status incident, at most
+      once an hour while it stays open, and again when it resolves. We
+      won't email you for anything else.
     </p>
   </section>
 
@@ -87,8 +87,8 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       </p>
       <p class="mt-3 text-xs text-ink-muted">
         Already confirmed? You can close this page. We'll only email you
-        when we post an incident (2 emails per incident maximum) and
-        every email carries a one-click unsubscribe link.
+        about incidents — posted, at most hourly while open, and resolved —
+        and every email carries a one-click unsubscribe link.
       </p>
       <button
         id="subscribe-another-btn"

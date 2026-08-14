@@ -77,9 +77,10 @@ describe('W353.B status-site /subscribe parity', () => {
     expect(body).not.toMatch(/Successfully subscribed/i);
   });
 
-  it('unsubscribe + frequency claim pinned (one-click unsubscribe, two emails per incident max)', () => {
+  it('unsubscribe + frequency claim pinned (one-click unsubscribe; posted / at most hourly while open / resolved — V-768 corrected the false two-email cap)', () => {
     expect(body).toMatch(/[Uu]nsubscribe with one\s*click/);
-    expect(body).toMatch(/Two emails\s*per incident maximum/i);
+    expect(body).toMatch(/at most\s*once an hour while it stays open/);
+    expect(body).not.toMatch(/emails per incident maximum/i);
   });
 
   it('no marketing/promotional email claim stays pinned', () => {
