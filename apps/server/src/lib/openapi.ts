@@ -300,11 +300,54 @@ function buildRegistry(): OpenAPIRegistry {
     'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } },
   };
 
+  // Headers a 429 can carry. The server has always sent these; the spec never
+  // declared them, so a generated client could not see the one signal the
+  // response exists to give. `Retry-After` in particular is set specifically so
+  // an SDK can schedule the next attempt without parsing the problem body — and
+  // without it declared, a typed client falls back to a hard-coded default.
+  //
+  // NONE is marked required, because none is always present, and saying
+  // otherwise would publish a promise the server does not keep:
+  //   - `Retry-After` accompanies a rate-limit 429. The same status also covers
+  //     concurrency-limit and tier-limit refusals, where there is no honest
+  //     number to give — a slot frees when another session ends, and a tier
+  //     quota resets on a billing boundary.
+  //   - the policy headers are REMOVED on an effective-owner denial, on purpose:
+  //     the actor's own remaining/limit must not be read as the owner's.
+  const rateLimitHeaders = {
+    'Retry-After': {
+      description:
+        'Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.',
+      schema: { type: 'integer', minimum: 0 },
+    },
+    'RateLimit-Limit': {
+      description: 'Request capacity of the bucket this call was charged to.',
+      schema: { type: 'integer', minimum: 0 },
+    },
+    'RateLimit-Remaining': {
+      description: 'Requests left in that bucket.',
+      schema: { type: 'integer', minimum: 0 },
+    },
+    'RateLimit-Reset': {
+      description: 'Seconds until that bucket refills.',
+      schema: { type: 'integer', minimum: 0 },
+    },
+    'X-RateLimit-Bucket': {
+      description:
+        'Which bucket was charged, e.g. `global` or `sessions:create`. Sent alongside the X-RateLimit-* aliases of the three headers above, kept for existing clients.',
+      schema: { type: 'string' },
+    },
+  };
+
   const errors4xx = {
     400: { description: 'Validation failed.', content: problemContent },
     401: { description: 'Authentication failed.', content: problemContent },
     403: { description: 'Caller not permitted.', content: problemContent },
-    429: { description: 'Rate limit or concurrency limit hit.', content: problemContent },
+    429: {
+      description: 'Rate limit or concurrency limit hit.',
+      content: problemContent,
+      headers: rateLimitHeaders,
+    },
   };
 
   const directSessionOperationErrors = {
