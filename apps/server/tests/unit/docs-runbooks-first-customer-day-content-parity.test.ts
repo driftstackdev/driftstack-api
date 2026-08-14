@@ -59,11 +59,15 @@ describe('W555.C /docs/runbooks/first-customer-day.md content parity', () => {
     expect(body).toMatch(/the founder's known-staff baseline\./);
   });
 
-  it("Hour 0 watch + touch framing pinned: '## Hour 0 — first 60 minutes' + '### Watch (don't touch)' + '**Sentry breadcrumbs**' + '**Pino structured logs** — `journalctl -u driftstack-server -f`' + 'no V-494 redacted fields appear in plaintext.' + '**DLQ depth** at `/v1/admin/overview` — should remain 0. Any non-zero value during their first hour is a P-1 incident (per V-513 alert rules).' + '**Webhook deliveries**' + '### Touch (intentionally)' + '**Welcome email** — send a personal, non-templated email from `support@driftstack.dev` within 1 hour. Don't be promotional.' + '\"Welcome aboard. I'm John, the founder.' + '**Status page check-in**' — pinned so the Hour-0-Watch-Touch-split + journalctl-driftstack-server + V-494-redacted-fields + DLQ-non-zero=P-1 + V-513-alert-rules + welcome-email-not-promotional + I'm-John-the-founder + status-page-check-in commitment survives", () => {
+  it("Hour 0 watch + touch framing pinned: '## Hour 0 — first 60 minutes' + '### Watch (don't touch)' + '**Sentry breadcrumbs**' + '**Pino structured logs** — `journalctl -u driftstack-api -f`' (V-770: was driftstack-server, a unit that does not exist — the Hour-0 log window was permanently blank) + 'no V-494 redacted fields appear in plaintext.' + '**DLQ depth** at `/v1/admin/overview` — should remain 0. Any non-zero value during their first hour is a P-1 incident (per V-513 alert rules).' + '**Webhook deliveries**' + '### Touch (intentionally)' + '**Welcome email** — send a personal, non-templated email from `support@driftstack.dev` within 1 hour. Don't be promotional.' + '\"Welcome aboard. I'm John, the founder.' + '**Status page check-in**' — pinned so the Hour-0-Watch-Touch-split + journalctl-driftstack-server + V-494-redacted-fields + DLQ-non-zero=P-1 + V-513-alert-rules + welcome-email-not-promotional + I'm-John-the-founder + status-page-check-in commitment survives", () => {
     expect(body).toMatch(/## Hour 0 — first 60 minutes/);
     expect(body).toMatch(/### Watch \(don't touch\)/);
     expect(body).toMatch(/- \*\*Sentry breadcrumbs\*\*/);
-    expect(body).toMatch(/- \*\*Pino structured logs\*\* — `journalctl -u driftstack-server -f`/);
+    // V-770 — was `driftstack-server`. The only unit in the repo is driftstack-api.service, so
+    // this told the operator to tail a unit that does not exist: journalctl does not error on an
+    // unknown unit, it blocks with zero output, so the first paying customer's first hour was
+    // watched through a permanently blank window.
+    expect(body).toMatch(/- \*\*Pino structured logs\*\* — `journalctl -u driftstack-api -f`/);
     expect(body).toMatch(/no V-494 redacted fields appear in plaintext\./);
     expect(body).toMatch(/- \*\*DLQ depth\*\* at `\/v1\/admin\/overview` — should remain 0\. Any/);
     expect(body).toMatch(/non-zero value during their first hour is a P-1 incident/);

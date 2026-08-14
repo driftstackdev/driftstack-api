@@ -30,7 +30,7 @@ perpetual free tier or choose a recurring paid tier. Watch but don't intervene.
 - **Sentry breadcrumbs** — every breadcrumb tagged with the new
   account_id. Watch for any `level: error` or `level: fatal`
   events. If nothing fires, that's the right outcome.
-- **Pino structured logs** — `journalctl -u driftstack-server -f`
+- **Pino structured logs** — `journalctl -u driftstack-api -f`
   on the Hetzner VM. Filter for the customer's account_id. Check
   that no requests are returning 5xx; that auth-cache hits look
   normal; that no V-494 redacted fields appear in plaintext.

@@ -111,7 +111,7 @@ time"`. Or via the Neon CLI:
 4. **Decide the recovery path** — there are two:
    - **Cut over to the branch** (fast; loses everything that
      happened post-incident-time). SSH-write the new
-     `DATABASE_URL` into `/opt/driftstack/.env` on prod;
+     `DATABASE_URL` into `/opt/driftstack/api/.env` on prod;
      `systemctl restart driftstack-api`. Verify `/ready` returns
      `postgres: operational` against the branch.
    - **Surgical patch** (slow; preserves post-incident writes).
@@ -168,10 +168,10 @@ disruptive but recoverable: auth path falls back to Postgres
    password):
 
    ```
-   ssh root@128.140.37.74 'cat /opt/driftstack/.env' \
+   ssh root@128.140.37.74 'cat /opt/driftstack/api/.env' \
      | sed 's|^REDIS_URL=.*|REDIS_URL=rediss://default:<token>@<host>:6379|' \
      > /tmp/new.env
-   scp /tmp/new.env root@128.140.37.74:/opt/driftstack/.env
+   scp /tmp/new.env root@128.140.37.74:/opt/driftstack/api/.env
    ssh root@128.140.37.74 'systemctl restart driftstack-api'
    ```
 
@@ -489,9 +489,10 @@ forged.
    the OLD secret continue signing for a configurable overlap
    window (default 24h) — DO take the overlap.
 2. **SSH-write the new secret** to Hetzner production (per
-   `docs/deployment/stripe-webhook-testing.md`); reload the
-   server (`systemctl reload driftstack-server` — pino logs
-   confirm new secret loaded).
+   `docs/deployment/stripe-webhook-testing.md`); restart the
+   server (`systemctl restart driftstack-api`). Confirm with a
+   Stripe test-event replay, NOT with the logs — secrets are read
+   at process start, so nothing is logged when one changes.
 3. **The verifier code** at `apps/server/src/lib/webhook-signing.ts`
    already accepts an array of secrets. Drop the old secret from
    the env file as soon as the overlap window passes.

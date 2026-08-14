@@ -33242,3 +33242,45 @@ correctly tells the operator to create it.
 
 Second of six findings from the parallel sweep. No new test file, so `EXPECTED_TEST_FILES` is
 unchanged.
+
+## V-770 — the runbooks named a systemd unit and an env file that do not exist (2026-08-14)
+
+Two facts live in exactly one place, `infra/systemd/driftstack-api.service`, and the procedures a
+human follows under pressure had both wrong.
+
+**The Hour-0 log window was permanently blank.** `docs/runbooks/first-customer-day.md` told the
+operator to run `journalctl -u driftstack-server -f` for the first paying customer's first sixty
+minutes. There is no such unit — the only `*.service` in the repo is `driftstack-api`, installed
+under that name by `infra/bootstrap/deploy-api.sh`. `journalctl` does **not** error on an unknown
+unit; it blocks with zero output. So the operator watches an empty terminal, and the V-494
+plaintext-redaction check assigned to that window cannot be performed at all. A thrown 5xx still
+pages via Sentry, so this is a partial blind spot rather than a total one — but a redaction
+regression putting a secret in a log line is exactly what that bullet existed to catch.
+
+**The DR rotations wrote credentials to a path nothing reads.** `docs/deployment/dr-runbook.md`
+Scenario 2 (database cut-over) and Scenario 4 (Redis loss) write to `/opt/driftstack/.env`; the
+unit reads `/opt/driftstack/api/.env`. The Redis step is the worst shape: it `cat`s the wrong
+path, seds the missing content, scps the result back, and restarts. `systemctl restart` exits 0
+and the service returns on the OLD credential. Mid-disaster-recovery, the operator has every
+signal of success and has rotated nothing. Seventeen references in every other operator doc use
+the correct path — the DR runbook was the lone outlier on both facts.
+
+Also corrected: the Stripe-webhook-secret rotation step said `systemctl reload`, which is invalid
+under any name — the unit declares no `ExecReload=` and the process handles only SIGTERM/SIGINT —
+and promised "pino logs confirm new secret loaded", which cannot happen because secrets are read
+at process start. It now says restart, and to confirm with a Stripe test-event replay.
+
+**Guard derives both facts from the unit file** (`docs-systemd-facts-match-the-unit-file.test.ts`):
+unit names from the `*.service` basenames, the env path from `EnvironmentFile=`, and whether
+`ExecReload=` exists. So renaming the unit or moving its env file fails here instead of silently
+invalidating every runbook. Four checks, each mutation-proved: restoring the bad unit name, the
+bad env path, and the unsupported reload each red their own check, and moving `EnvironmentFile=`
+in the unit reds the derivation rather than passing quietly.
+
+**The matcher is deliberately narrow, because a sweep-rename here would have been wrong.**
+`driftstack-server` is a legitimate **Sentry project slug**
+(`scripts/sentry-create-per-service-projects.mjs`), correctly used and correctly pinned in
+`docs/runbooks/observability.md`. Only tokens following `journalctl -u` or `systemctl <verb>` are
+treated as unit names; the bare word is never matched. Exactly two lines needed to change.
+
+Third and fourth of six findings from the parallel sweep. `EXPECTED_TEST_FILES` → 2675.
