@@ -530,9 +530,11 @@ regional outage requires cross-region failover.
 **Recovery path**
 
 1. **Status page**: post a "regional infrastructure outage at our
-   primary provider" incident on the trust center
-   (`apps/marketing-site/src/data/incidents.ts`) within 30 min;
-   StatusBadge flips red. Customers see a real cause, not a vague
+   primary provider" incident within 30 min — admin panel
+   `/incidents`, or `POST /v1/admin/incidents` with
+   `severity: 'outage'` and `public: true`. StatusBadge flips red
+   because `/v1/status` derives `overall_status` from open public
+   incidents. Customers see a real cause, not a vague
    "we're having issues."
 2. **Stand up replacement compute** in Hetzner Nuremberg or Helsinki
    (both EU; both in the Hetzner DPA scope). Process is the same

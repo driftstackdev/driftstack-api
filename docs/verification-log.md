@@ -33191,3 +33191,54 @@ unwiring `onPublicUpdated` reds the derivation check rather than silently loweri
 Found by a parallel claim-vs-code sweep of the four surfaces the earlier sweeps never reached
 (docs/internal runbooks, package contracts, status-site, e2e specs): 12 candidates, 6 surviving
 adversarial refutation. This was the highest-ranked. `EXPECTED_TEST_FILES` 2672 → 2673.
+
+## V-769 — the P-0 customer-comms step told the operator to edit a file that has never existed (2026-08-14)
+
+Three operator procedures routed incident publishing through
+`apps/marketing-site/src/data/incidents.ts`. That path is not on disk and **`git log --all` on it
+is empty — it has never existed in this repo.**
+
+- `docs/runbooks/incidents.md` step 4 — the FIRST customer-facing action of a P-0 / P-1.
+- `docs/runbooks/incidents.md` §4 — the sub-processor forwarding step, which also told the
+  operator to set `kind: 'sub_processor'`, a field that exists on no surface (the canonical
+  schema in `packages/api-types/src/incidents.ts` has no `kind` at all).
+- `docs/deployment/dr-runbook.md` Scenario 11 — the 30-minute status post during a multi-day
+  regional outage.
+
+The real mechanism is the admin API: `POST /v1/admin/incidents` (severity `minor|major|outage`,
+`public: true`), `POST /v1/admin/incidents/:id/updates`, `POST /v1/admin/incidents/:id/resolve`,
+with the admin panel at `/incidents`. All three steps now say that.
+
+**The failure mode is worse than a broken link.** `routes/status.ts` derives `overall_status` from
+the incident DB, so an operator who followed the runbook — even by finding the nearest real file
+and editing it — would move nothing: the status page stays green while they believe they have
+posted, and the 60-minute Notification SLA in the same runbook keeps running.
+
+**Guard: widened `docs-runbooks-file-references-exist.test.ts`, which existed and could not see
+this on either axis.** It scanned only `docs/runbooks/` (so `dr-runbook.md` was out of scope) and
+matched only `scripts/<path>` and `docker-compose*.yml` shapes (so an `apps/...` path was out of
+scope even in the files it did read). It now scans `docs/deployment/` too and matches any
+backticked `apps|packages|scripts|infra` path with a file extension. Mutation-proved: restoring
+the dead path to step 4 reds it.
+
+`docs/internal/` is deliberately NOT scanned, and that is a measured decision rather than an
+omission: widening to it surfaces 19 further broken references, all inside dated wave reports and
+design records where a reference to a since-deleted file is an accurate historical record. Adding
+them would bury the operator-facing signal.
+
+**Four further broken references found by the widening, and NOT fixed here.** Each cites a
+mechanism that no longer exists under that name and needs its own investigation, so each is
+recorded in `KNOWN_ABSENT` with its reason — visible, shrink-only, and failing the build if a
+fifth appears:
+
+- `apps/gui-client/src/views/LiveSessionView.tsx` ← `docs/runbooks/livekit-go-live.md`
+- `apps/marketing-site/src/pages/legal/sla.astro` ← `docs/deployment/dr-runbook.md` (there is no
+  SLA document in `legal/` at all, so this needs a decision before it can be corrected)
+- `apps/server/drizzle.config.ts` ← `docs/deployment/migration-rehearsal.md`
+- `apps/server/src/lib/synthetic-checks.ts` ← `docs/runbooks/observability.md`
+
+`apps/server/.env` is also listed, but as intentionally absent: it is gitignored and the runbook
+correctly tells the operator to create it.
+
+Second of six findings from the parallel sweep. No new test file, so `EXPECTED_TEST_FILES` is
+unchanged.

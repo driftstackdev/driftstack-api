@@ -36,6 +36,45 @@ function runbookFiles(): string[] {
     .map((f) => join(RUNBOOKS_DIR, f));
 }
 
+/**
+ * V-769 — the operator-facing procedure docs. `docs/deployment/` is in scope for the same
+ * reason `docs/runbooks/` is: a human follows it during an incident. `docs/internal/` is
+ * deliberately NOT scanned — those are dated wave reports and design records, where a
+ * reference to a since-deleted file is an accurate historical record rather than a defect.
+ * (Measured: widening to docs/internal surfaced 19 such references, none operator-facing.)
+ */
+function procedureDocs(): string[] {
+  const out: string[] = [];
+  for (const dir of [RUNBOOKS_DIR, resolve(REPO_ROOT, 'docs/deployment')]) {
+    if (!existsSync(dir)) continue;
+    for (const f of readdirSync(dir)) {
+      if (f.endsWith('.md')) out.push(join(dir, f));
+    }
+  }
+  return out;
+}
+
+/**
+ * Repo paths cited in a procedure doc that are absent ON PURPOSE, or that are known-broken and
+ * awaiting their own fix. Each needs a reason. This map may only SHRINK.
+ *
+ * The four known-broken entries are real defects found by widening this guard (V-769); each
+ * cites a mechanism that no longer exists under that name and needs its own investigation to
+ * rewrite, so they are tracked here rather than silently passing.
+ */
+const KNOWN_ABSENT: Record<string, string> = {
+  'apps/server/.env':
+    'Gitignored by design — the runbook correctly instructs the operator to CREATE it.',
+  'apps/gui-client/src/views/LiveSessionView.tsx':
+    'V-769 known-broken: docs/runbooks/livekit-go-live.md cites a view that no longer exists under any name. Needs the current LiveKit view path.',
+  'apps/marketing-site/src/pages/legal/sla.astro':
+    'V-769 known-broken: docs/deployment/dr-runbook.md cites an SLA page that does not exist; the legal directory has no SLA document at all. Needs a decision on whether an SLA exists before the reference can be corrected.',
+  'apps/server/drizzle.config.ts':
+    'V-769 known-broken: docs/deployment/migration-rehearsal.md cites a drizzle-kit config file that is not in the repo. Needs the real migration-run invocation.',
+  'apps/server/src/lib/synthetic-checks.ts':
+    'V-769 known-broken: docs/runbooks/observability.md cites a synthetic-checks module that does not exist. Needs the current synthetic-probe mechanism.',
+};
+
 describe('docs/runbooks file-reference existence', () => {
   const bodies = runbookFiles().map((f) => ({
     rel: f.slice(REPO_ROOT.length + 1),
@@ -63,6 +102,43 @@ describe('docs/runbooks file-reference existence', () => {
       missing,
       `runbook script references with no file on disk:\n${missing.join('\n')}`,
     ).toEqual([]);
+  });
+
+  it('CRITICAL every repo path cited in an operator procedure doc exists — the P-0 customer-comms step told the operator to edit apps/marketing-site/src/data/incidents.ts, a file that has never existed in this repo, so the first customer-facing action of a Sev-0 was unperformable', () => {
+    // Backticked `apps|packages|scripts|infra/...` paths with a file extension. Globs are
+    // skipped (a `*` is a pattern, not a path a human opens).
+    const pathRe = /`((?:apps|packages|scripts|infra)\/[A-Za-z0-9._/-]+\.[A-Za-z0-9]+)`/g;
+    const missing: string[] = [];
+    let scanned = 0;
+    for (const file of procedureDocs()) {
+      const rel = file.slice(REPO_ROOT.length + 1);
+      for (const m of readFileSync(file, 'utf8').matchAll(pathRe)) {
+        const ref = m[1]!;
+        if (ref.includes('*')) continue;
+        scanned += 1;
+        if (KNOWN_ABSENT[ref] !== undefined) continue;
+        if (!existsSync(resolve(REPO_ROOT, ref))) missing.push(`${ref}  (${rel})`);
+      }
+    }
+
+    expect(scanned, 'expected procedure docs to cite repo paths').toBeGreaterThan(20);
+    expect(
+      missing,
+      `operator procedure doc(s) citing a repo path with no file on disk:\n${missing.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the known-absent list may only SHRINK, and every entry states why. An entry whose file now exists is a fix that was made without retiring its exemption.', () => {
+    const resurrected = Object.keys(KNOWN_ABSENT)
+      .filter((ref) => existsSync(resolve(REPO_ROOT, ref)))
+      .sort();
+    expect(resurrected, 'these exist now — remove them from KNOWN_ABSENT:').toEqual([]);
+
+    const unexplained = Object.entries(KNOWN_ABSENT)
+      .filter(([, why]) => why.trim().length < 40)
+      .map(([ref]) => ref)
+      .sort();
+    expect(unexplained, 'KNOWN_ABSENT entr(ies) without a stated reason:').toEqual([]);
   });
 
   it('every docker-compose*.yml referenced in a runbook exists on disk', () => {

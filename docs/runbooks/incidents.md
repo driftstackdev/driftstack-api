@@ -78,10 +78,14 @@ Customer reports arrive through three channels:
 
 3. **Classify** per the table above.
 
-4. **For P-0 / P-1**: open an incident in the trust center
-   (`apps/marketing-site/src/data/incidents.ts` — V-477) and
-   start the timeline. Status site banner goes amber/red via the
-   already-shipped `/v1/status` -> StatusBadge wire (V-474).
+4. **For P-0 / P-1**: file the incident in the admin panel
+   (`/incidents`), or `POST /v1/admin/incidents` with `severity`
+   one of `minor` / `major` / `outage` and `public: true`; post
+   progress with `POST /v1/admin/incidents/:id/updates` and close
+   with `POST /v1/admin/incidents/:id/resolve`. The status-site
+   banner follows automatically — `/v1/status` derives
+   `overall_status` from open public incidents (V-474 StatusBadge
+   wire). Filing it anywhere else moves nothing.
 
 5. **Fix or workaround.** Always prefer an immediate workaround
    the customer can deploy themselves (env flag, alternate
@@ -223,9 +227,9 @@ When one of these has an incident:
 1. **Forward without filtering** to the trust center as soon as
    the upstream incident is confirmed. Customers learn about
    sub-processor incidents from us, not from upstream status
-   pages they don't follow. Update
-   `apps/marketing-site/src/data/incidents.ts` with `kind:
-'sub_processor'`, link to upstream status URL.
+   pages they don't follow. File it with `POST /v1/admin/incidents`
+   (`public: true`) and put the upstream status URL in the
+   description — there is no sub-processor incident type.
 2. **Translate impact.** Hetzner network blip in Falkenstein =
    "API control plane may have elevated latency for the next
    ~30 min" — not "Hetzner Falkenstein is degraded". Customers
