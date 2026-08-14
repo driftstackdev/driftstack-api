@@ -82,26 +82,16 @@ const ENV_REFERENCE = resolve(REPO, 'docs', 'deployment', 'env-vars.md');
  * instead of joining a number, and checked in both directions so an entry that
  * gets documented — or stops being read — is reported as stale.
  */
-const UNDOCUMENTED_ENV = new Set([
-  'AGENT_RELAY_MAX_ACCOUNT_INFLIGHT',
-  'AGENT_TURN_MAX_ACCOUNT_INFLIGHT',
-  'AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES',
-  'AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT',
-  'APP_VERSION',
-  'BUNDLED_TURN_MAX_CONCURRENCY',
-  'DB_STATEMENT_TIMEOUT_MS',
-  'DRIFTSTACK_AGENT_DECOMPOSER_FORCE',
-  'DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS',
-  'DRIFTSTACK_AGENT_SESSION_PAGE_STATE_MAX_AGE_SECONDS',
-  'DRIFTSTACK_OWNER_EMAIL',
-  'DRIFTSTACK_PROXY_PRELAUNCH_PROBE',
-  'DRIFTSTACK_PROXY_PROBE_TARGET_URL',
-  'DRIFTSTACK_PROXY_PROBE_TIMEOUT_MS',
-  'DRIFTSTACK_WORKER_DISCONNECT_GRACE_SECONDS',
-  'FLEET_NODE_DISPLAY_NAME',
-  'FLEET_NODE_HARDWARE_CLASS',
-  'FLEET_NODE_REGION',
-  'PLAYWRIGHT_HEADED',
+const UNDOCUMENTED_ENV = new Set<string>([
+  // EMPTIED 2026-08-14. This list held 19 variables the server reads and no
+  // document described. Every one is now in docs/deployment/env-vars.md, and
+  // the exemption is gone rather than kept "just in case" — an allow-list that
+  // outlives its entries is a place the next undocumented variable lands
+  // quietly, which is exactly how this list reached 19.
+  //
+  // The doc's own rule is that a new env var lands there in the same commit.
+  // With this set empty, that rule is now enforced instead of stated: adding a
+  // variable without documenting it fails here.
 ]);
 
 /** Every environment variable name the server source reads, in either form. */
