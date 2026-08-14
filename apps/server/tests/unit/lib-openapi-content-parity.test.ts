@@ -130,8 +130,26 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     expect(body).toMatch(
       /const problemContent = \{\s*\n?\s*'application\/problem\+json': \{ schema: \{ \$ref: '#\/components\/schemas\/Problem' \} \},\s*\n?\s*\};/,
     );
+    // SPLIT. The chain ran 400 and 401 as consecutive one-line entries, so
+    // declaring the RFC 7235 challenge on the 401 — which makes that entry
+    // multi-line — broke a pin about the Problem $ref. Each status is pinned on
+    // its own, and the 401's headers get their own assertion rather than being
+    // load-bearing for a claim about $ref shape.
     expect(body).toMatch(
-      /const errors4xx = \{\s*\n?\s*400: \{ description: 'Validation failed\.', content: problemContent \},\s*\n?\s*401: \{ description: 'Authentication failed\.', content: problemContent \},/,
+      /const errors4xx = \{\s*\n?\s*400: \{ description: 'Validation failed\.', content: problemContent \},/,
+    );
+    expect(body).toMatch(
+      /401: \{\s*\n?\s*description: 'Authentication failed\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: unauthorizedHeaders,\s*\n?\s*\},/,
+    );
+  });
+
+  it('errors4xx 429 declares the rate-limit headers, and 401 the WWW-Authenticate challenge — one shared helper each, so every route inherits them rather than 213 declarations drifting apart', () => {
+    expect(body).toMatch(/const rateLimitHeaders = \{/);
+    expect(body).toMatch(/'Retry-After': \{/);
+    expect(body).toMatch(/const unauthorizedHeaders = \{/);
+    expect(body).toMatch(/'WWW-Authenticate': \{/);
+    expect(body).toMatch(
+      /429: \{\s*\n?\s*description: 'Rate limit or concurrency limit hit\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: rateLimitHeaders,\s*\n?\s*\},/,
     );
   });
 

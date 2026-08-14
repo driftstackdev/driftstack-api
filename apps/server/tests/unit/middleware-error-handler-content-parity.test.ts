@@ -133,9 +133,23 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
     expect(body).toMatch(/return new InternalError\('An unexpected error occurred\.', err\);/);
   });
 
+  // SPLIT. The single regex ran from the signature through to the closing brace
+  // as consecutive lines, so adding the RFC 7235 challenge INSIDE the function
+  // broke a pin about how the reply is SENT. The signature and the send chain
+  // are pinned separately; the 401 challenge has its own assertion below, and
+  // its behaviour is covered by `a-401-carries-the-challenge-rfc7235-requires`.
   it('replyWithProblem: reply.code(problem.status).header("content-type", "application/problem+json; charset=utf-8").send(problem)', () => {
     expect(body).toMatch(
-      /async function replyWithProblem\(reply: FastifyReply, problem: Problem\): Promise<FastifyReply> \{\s*\n?\s*return reply\s*\n?\s*\.code\(problem\.status\)\s*\n?\s*\.header\('content-type', 'application\/problem\+json; charset=utf-8'\)\s*\n?\s*\.send\(problem\);\s*\n?\s*\}/,
+      /async function replyWithProblem\(reply: FastifyReply, problem: Problem\): Promise<FastifyReply> \{/,
+    );
+    expect(body).toMatch(
+      /return reply\s*\n?\s*\.code\(problem\.status\)\s*\n?\s*\.header\('content-type', 'application\/problem\+json; charset=utf-8'\)\s*\n?\s*\.send\(problem\);/,
+    );
+  });
+
+  it('replyWithProblem: a 401 gets a WWW-Authenticate challenge (RFC 7235 §3.1), set only when absent so a route-specific challenge is not overwritten', () => {
+    expect(body).toMatch(
+      /if \(problem\.status === 401 && !reply\.hasHeader\('www-authenticate'\)\) \{\s*\n?\s*reply\.header\('www-authenticate', 'Bearer'\);\s*\n?\s*\}/,
     );
   });
 

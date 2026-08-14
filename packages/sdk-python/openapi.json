@@ -5749,6 +5749,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5987,6 +5995,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6148,6 +6164,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6433,6 +6457,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6701,6 +6733,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6963,6 +7003,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7074,6 +7122,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7268,6 +7324,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7481,6 +7545,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7736,6 +7808,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7985,6 +8065,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8265,6 +8353,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8555,6 +8651,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8745,6 +8849,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8848,6 +8960,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8990,6 +9110,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9183,6 +9311,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9322,6 +9458,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9436,6 +9580,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9542,6 +9694,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9656,6 +9816,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9784,6 +9952,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9892,6 +10068,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9994,6 +10178,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10209,6 +10401,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10384,6 +10584,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10559,6 +10767,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10734,6 +10950,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10937,6 +11161,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11133,6 +11365,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11252,6 +11492,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11447,6 +11695,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11640,6 +11896,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11866,6 +12130,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12049,6 +12321,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12255,6 +12535,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12571,6 +12859,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12758,6 +13054,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12926,6 +13230,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13030,6 +13342,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13157,6 +13477,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13370,6 +13698,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13612,6 +13948,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13743,6 +14087,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13853,6 +14205,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -13989,6 +14349,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14088,6 +14456,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14204,6 +14580,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14304,6 +14688,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14437,6 +14829,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14546,6 +14946,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14652,6 +15060,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14752,6 +15168,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14859,6 +15283,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14958,6 +15390,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15064,6 +15504,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15184,6 +15632,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15296,6 +15752,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15417,6 +15881,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15526,6 +15998,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16163,6 +16643,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16290,6 +16778,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16405,6 +16901,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16530,6 +17034,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16646,6 +17158,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16755,6 +17275,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16854,6 +17382,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17044,6 +17580,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17261,6 +17805,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17511,6 +18063,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17628,6 +18188,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17787,6 +18355,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -17997,6 +18573,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18149,6 +18733,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18294,6 +18886,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18451,6 +19051,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18579,6 +19187,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18707,6 +19323,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18951,6 +19575,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -19189,6 +19821,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -19553,6 +20193,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -19776,6 +20424,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -19939,6 +20595,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20168,6 +20832,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20325,6 +20997,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20443,6 +21123,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20593,6 +21281,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20732,6 +21428,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20876,6 +21580,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20988,6 +21700,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21105,6 +21825,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21234,6 +21962,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21403,6 +22139,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21515,6 +22259,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21648,6 +22400,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21847,6 +22607,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21957,6 +22725,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -22151,6 +22927,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -22296,6 +23080,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -22470,6 +23262,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -22603,6 +23403,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -22833,6 +23641,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -22976,6 +23792,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23093,6 +23917,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23228,6 +24060,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23334,6 +24174,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23460,6 +24308,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23594,6 +24450,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23702,6 +24566,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23810,6 +24682,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23948,6 +24828,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24075,6 +24963,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24218,6 +25114,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24371,6 +25275,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24506,6 +25418,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24670,6 +25590,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24801,6 +25729,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24919,6 +25855,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -25065,6 +26009,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -25191,6 +26143,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -25312,6 +26272,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -25501,6 +26469,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -25809,6 +26785,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -25964,6 +26948,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -26354,6 +27346,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -26677,6 +27677,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -26999,6 +28007,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -27121,6 +28137,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -27250,6 +28274,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -27444,6 +28476,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -27623,6 +28663,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -27782,6 +28830,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -27931,6 +28987,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28086,6 +29150,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28258,6 +29330,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28421,6 +29501,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28598,6 +29686,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28790,6 +29886,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28952,6 +30056,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29136,6 +30248,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29293,6 +30413,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29472,6 +30600,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29665,6 +30801,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29787,6 +30931,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29968,6 +31120,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30156,6 +31316,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30426,6 +31594,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30546,6 +31722,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30768,6 +31952,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30953,6 +32145,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31203,6 +32403,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31390,6 +32598,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31601,6 +32817,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31765,6 +32989,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31889,6 +33121,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -32013,6 +33253,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -32210,6 +33458,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -32515,6 +33771,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -32710,6 +33974,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -32863,6 +34135,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33084,6 +34364,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33224,6 +34512,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33385,6 +34681,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33484,6 +34788,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33583,6 +34895,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33682,6 +35002,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33802,6 +35130,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33947,6 +35283,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -34074,6 +35418,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -34188,6 +35540,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -34345,6 +35705,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -34558,6 +35926,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -34698,6 +36074,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -34856,6 +36240,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -34986,6 +36378,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35151,6 +36551,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35286,6 +36694,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35455,6 +36871,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35618,6 +37042,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35757,6 +37189,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35872,6 +37312,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35974,6 +37422,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -36903,6 +38359,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -37035,6 +38499,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -37188,6 +38660,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -37467,6 +38947,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -37675,6 +39163,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -37906,6 +39402,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -38168,6 +39672,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -38279,6 +39791,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -38515,6 +40035,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -38648,6 +40176,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -38799,6 +40335,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -39044,6 +40588,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -39265,6 +40817,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -39450,6 +41010,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -39686,6 +41254,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -39807,6 +41383,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -40028,6 +41612,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -40203,6 +41795,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -40377,6 +41977,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -40528,6 +42136,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -40651,6 +42267,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -40818,6 +42442,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -41037,6 +42669,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -41226,6 +42866,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -41378,6 +43026,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -41559,6 +43215,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -41749,6 +43413,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -41933,6 +43605,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42079,6 +43759,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42190,6 +43878,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42369,6 +44065,14 @@
           },
           "401": {
             "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {

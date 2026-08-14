@@ -343,9 +343,25 @@ function buildRegistry(): OpenAPIRegistry {
     // build is what catches this.
   } as const;
 
+  // RFC 7235 §3.1 makes this challenge mandatory on a 401, and the server sets
+  // it on every one. Declared here for the same reason the 429 headers are:
+  // fixing the conformance while leaving the header undeclared would just move
+  // the gap, from "not sent" to "sent but invisible to a generated client".
+  const unauthorizedHeaders = {
+    'WWW-Authenticate': {
+      description:
+        'Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm="metrics"`.',
+      schema: { type: 'string' },
+    },
+  } as const;
+
   const errors4xx = {
     400: { description: 'Validation failed.', content: problemContent },
-    401: { description: 'Authentication failed.', content: problemContent },
+    401: {
+      description: 'Authentication failed.',
+      content: problemContent,
+      headers: unauthorizedHeaders,
+    },
     403: { description: 'Caller not permitted.', content: problemContent },
     429: {
       description: 'Rate limit or concurrency limit hit.',

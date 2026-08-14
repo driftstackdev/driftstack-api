@@ -118,6 +118,20 @@ function normaliseError(err: FastifyError | Error, _request: FastifyRequest): Ap
 }
 
 async function replyWithProblem(reply: FastifyReply, problem: Problem): Promise<FastifyReply> {
+  // RFC 7235 §3.1: a 401 MUST carry a WWW-Authenticate challenge. Exactly one
+  // route was doing it — /metrics — while 218 paths declare a 401, so the
+  // conformance was not a decision anyone had made, it was one route someone
+  // happened to look at. Set here, in the single funnel every problem response
+  // passes through, so it cannot be added to some 401s and forgotten on others.
+  //
+  // Only when absent. /metrics sets `Bearer realm="metrics"` and THEN throws, so
+  // this sees the same reply with the header already on it; overwriting would
+  // replace a specific challenge with a bare one and weaken it while looking
+  // like added conformance. A route that says something more precise keeps
+  // saying it.
+  if (problem.status === 401 && !reply.hasHeader('www-authenticate')) {
+    reply.header('www-authenticate', 'Bearer');
+  }
   return reply
     .code(problem.status)
     .header('content-type', 'application/problem+json; charset=utf-8')
