@@ -588,7 +588,12 @@ function readSentryConfig(env: NodeJS.ProcessEnv): SentryConfig | null {
   // GET /version. No fallback to 'unknown' here — better to emit
   // events with `release: undefined` than to ship a misleading
   // sentinel that pretends to identify a build.
-  const release = env.SENTRY_RELEASE ?? env.GIT_SHA;
+  // Same one-notion-of-empty rule as the BYOK fallback key above: `??` keeps an
+  // empty string, so a blank `SENTRY_RELEASE=` shadowed a correctly-set GIT_SHA
+  // and the `release ? …` spread below then dropped the tag entirely. Events
+  // arrived with no release, so error grouping lost its build attribution —
+  // quietly, since an untagged event looks exactly like a normal one.
+  const release = env.SENTRY_RELEASE?.trim() || env.GIT_SHA?.trim();
   const tracesSampleRate = env.SENTRY_TRACES_SAMPLE_RATE;
   return {
     dsn,

@@ -35,6 +35,19 @@ const fallbackKeyFor = (env: NodeJS.ProcessEnv): string | undefined =>
   (loadConfig({ ...BASE, ...env }) as { byokAnthropic?: { fallbackApiKey?: string } }).byokAnthropic
     ?.fallbackApiKey;
 
+/** The Sentry release tag, chosen from the same primary/alias pair shape. */
+const releaseFor = (env: NodeJS.ProcessEnv): string | undefined =>
+  (
+    loadConfig({
+      ...BASE,
+      SENTRY_DSN: 'https://k@o1.ingest.de.sentry.io/1',
+      SENTRY_ENVIRONMENT: 'production',
+      ...env,
+    }) as {
+      sentry?: { release?: string };
+    }
+  ).sentry?.release;
+
 describe('a blank primary key does not shadow a working alias', () => {
   it('CRITICAL each name alone still supplies the key. These are the baselines — if either stopped working on its own, every assertion below would be measuring against a broken alias rather than the shadowing this file is about.', () => {
     expect(fallbackKeyFor({ BYOK_ANTHROPIC_FALLBACK_KEY: 'sk-primary' }), 'primary alone').toBe(
@@ -84,5 +97,16 @@ describe('a blank primary key does not shadow a working alias', () => {
       }),
       'no key is configured',
     ).toBeUndefined();
+  });
+  it('CRITICAL the Sentry release tag has the same rule. `SENTRY_RELEASE ?? GIT_SHA` kept a blank primary and the `release ? …` spread then dropped the tag, so events arrived with no build attribution — quietly, because an untagged event looks exactly like a normal one.', () => {
+    expect(releaseFor({ GIT_SHA: 'abc1234' }), 'GIT_SHA alone tags the release').toBe('abc1234');
+    expect(
+      releaseFor({ SENTRY_RELEASE: '', GIT_SHA: 'abc1234' }),
+      'a blank SENTRY_RELEASE falls through to GIT_SHA',
+    ).toBe('abc1234');
+    expect(
+      releaseFor({ SENTRY_RELEASE: 'v2.1.0', GIT_SHA: 'abc1234' }),
+      'and an explicit release still wins',
+    ).toBe('v2.1.0');
   });
 });
