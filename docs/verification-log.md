@@ -33373,3 +33373,26 @@ mentions any member of it.
 
 Fifth and final finding from the parallel sweep implemented; P3's code half is the one item
 deliberately left as a decision. No new test file, so `EXPECTED_TEST_FILES` is unchanged.
+
+## V-772a — correction: the marketing app has its OWN test suite, and I did not check it (2026-08-14)
+
+V-772 renamed the published severity ladder's top row and I updated the six assertions in
+`apps/server/tests/unit/marketing-site-pages-docs-incident-policy-content-parity.test.ts`. The
+gate then failed on `apps/marketing-site/tests/unit/docs-incident-policy-parity.test.ts` — a
+SECOND parity suite, living in the marketing app itself, pinning the same page: the four-tier
+list, the ≤15-minute/30-minute cadence keyed on "Critical", and the postmortem commitment.
+
+Updated there too, with the cadence assertions carried over unchanged — the point of V-772 is
+that the label was wrong, not the commitment.
+
+**The lesson is the repo's shape, and this is the second time this session it has cost me.**
+Fifteen directories match `apps/*/tests` or `packages/*/tests`. `apps/server/tests` holds the
+cross-app content-parity pins, but `marketing-site`, `status-site`, `customer-dashboard`,
+`admin-panel`, `gui-client`, `docs` and seven packages each have their own suite, and those
+suites pin their own app's files. Grepping `apps/server/tests/` for a phrase feels like a
+repo-wide enumeration and is not one.
+
+Swept all fifteen for every string this session changed — the two-email cap, the `journalctl`
+unit name, the `/opt/driftstack/.env` path, and the Critical/Major postmortem wording. The only
+remaining hits are inside the guards I added, where the phrases appear in negative assertions
+("the retired cap must not come back") and in header comments explaining the defect. Clean.

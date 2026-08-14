@@ -1,7 +1,8 @@
 // W344.A — drift guard for /docs/incident-policy. The page makes
 // concrete claims about:
 //
-//   • severity ladder (Critical / Major / Minor / Maintenance)
+//   • severity ladder (Outage / Major / Minor), matching the incident_severity enum.
+//     Maintenance is listed but labelled NOT an incident severity (V-772).
 //     with response-time + cadence commitments
 //   • status-page endpoints — GET /v1/status, GET /v1/status/incidents,
 //     POST /v1/status/subscribe, GET /v1/status/sla — all must be
@@ -54,17 +55,17 @@ describe('W344.A /docs/incident-policy parity', () => {
     }
   });
 
-  it('lists every severity tier (Critical / Major / Minor / Maintenance)', () => {
-    for (const sev of ['Critical', 'Major', 'Minor', 'Maintenance']) {
+  it('lists every severity tier (Outage / Major / Minor), plus Maintenance marked as not one — V-772: the top row said Critical, which no code path can file (enum is minor|major|outage)', () => {
+    for (const sev of ['Outage', 'Major', 'Minor', 'Maintenance']) {
       expect(body).toMatch(new RegExp(`<strong>${sev}</strong>`));
     }
   });
 
-  it('Critical commits to a ≤ 15-minute first-update SLO and 30-min cadence', () => {
+  it('Outage commits to a ≤ 15-minute first-update SLO and 30-min cadence — the cadence is UNCHANGED by V-772, only the label now matches what is filed', () => {
     // The most customer-visible promise; if a comms revamp tones it
     // down, the test catches it.
-    expect(body).toMatch(/Critical[\s\S]{0,400}≤ 15 min/);
-    expect(body).toMatch(/Critical[\s\S]{0,400}Every 30 min/);
+    expect(body).toMatch(/Outage[\s\S]{0,400}≤ 15 min/);
+    expect(body).toMatch(/Outage[\s\S]{0,400}Every 30 min/);
   });
 
   it('Maintenance is announced ≥ 48 hours in advance', () => {
@@ -116,7 +117,7 @@ describe('W344.A /docs/incident-policy parity', () => {
     expect(body).toContain('security@driftstack.dev');
   });
 
-  it('postmortem commitment for Critical/Major within 7 business days', () => {
-    expect(body).toMatch(/Critical \/ Major incidents[\s\S]{0,200}within 7 business days/);
+  it('postmortem commitment for Outage/Major within 7 business days', () => {
+    expect(body).toMatch(/Outage \/ Major incidents[\s\S]{0,200}within 7 business days/);
   });
 });
