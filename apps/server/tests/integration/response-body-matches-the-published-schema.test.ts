@@ -152,6 +152,42 @@ const LIST_CASES = [
   { schema: 'AccountAuditEntry', method: 'GET' as const, url: '/v1/account/audit-log' },
 ];
 
+/**
+ * Object-valued properties that carry their own component schema. The top-level
+ * comparison sees `breakdown` as one key and stops; everything inside it — the
+ * seven money fields a customer reads to understand a bill — was never compared
+ * to what the spec publishes.
+ *
+ * `AccountProxyMetadata` is the other nested schema in the table and is absent
+ * here: the proxy routes throw FeatureUnavailableError unless the fixture wires
+ * accountProxiesRepo, so its list is not merely empty, it is unreachable.
+ */
+const NESTED_CASES = [
+  {
+    parent: 'AccountCostResponse',
+    property: 'breakdown',
+    schema: 'CostBreakdown',
+    method: 'GET' as const,
+    url: '/v1/account/cost',
+  },
+];
+
+/**
+ * Scalar properties whose schema constrains the FORMAT rather than a key set.
+ * A key-set comparison passes on any string at all, so `billing_cycle` could
+ * return a timestamp, an empty string, or last month and nothing here would
+ * notice — the published `pattern` is the whole contract for a value like this.
+ */
+const PATTERN_CASES = [
+  {
+    parent: 'AccountCostResponse',
+    property: 'billing_cycle',
+    schema: 'BillingCycle',
+    method: 'GET' as const,
+    url: '/v1/account/cost',
+  },
+];
+
 let fx: TestAppFixture;
 
 afterEach(async () => {
@@ -315,6 +351,61 @@ describe('a live response body matches its published schema', () => {
         missing,
         `required field(s) ${name} promises that an item from ${url} omitted:`,
       ).toEqual([]);
+    },
+  );
+  it.each(NESTED_CASES)(
+    'CRITICAL $property ($parent) is a real object with fields to compare. The two arms below compare key SETS, and an absent or empty nested object makes both agree perfectly — reporting the money breakdown verified while never reading a single field of it.',
+    async ({ property, schema: name, method, url }) => {
+      const body = await bodyFor(method, url);
+      const nested = body[property];
+      expect(typeof nested, `${property} is an object`).toBe('object');
+      expect(nested, `${property} is not null`).not.toBeNull();
+      expect(
+        Object.keys(nested as object).length,
+        `fields on the live ${property}`,
+      ).toBeGreaterThan(0);
+      expect(
+        Object.keys(declaredSchema(name).properties ?? {}).length,
+        `fields ${name} declares`,
+      ).toBeGreaterThan(0);
+    },
+  );
+
+  it.each(NESTED_CASES)(
+    'CRITICAL $property ($parent) carries no field $schema does not declare. Every one of these is a money figure rendered on a bill, and an undocumented one is shipped to whoever finds it.',
+    async ({ property, schema: name, method, url }) => {
+      const declared = new Set(Object.keys(declaredSchema(name).properties ?? {}));
+      const body = await bodyFor(method, url);
+      const undocumented = Object.keys(body[property] ?? {})
+        .filter((k) => !declared.has(k))
+        .sort();
+      expect(undocumented, `field(s) on ${property} that ${name} does not declare:`).toEqual([]);
+    },
+  );
+
+  it.each(NESTED_CASES)(
+    'CRITICAL $property ($parent) carries every field $schema marks required. A generated client types these as present, so a renamed money field reads as undefined and renders as blank or NaN on a bill rather than failing loudly.',
+    async ({ property, schema: name, method, url }) => {
+      const schema = declaredSchema(name);
+      const body = await bodyFor(method, url);
+      const present = new Set(Object.keys(body[property] ?? {}));
+      const missing = (schema.required ?? []).filter((k) => !present.has(k)).sort();
+      expect(missing, `required field(s) ${name} promises that ${property} omitted:`).toEqual([]);
+    },
+  );
+
+  it.each(PATTERN_CASES)(
+    'CRITICAL $property ($parent) matches the pattern $schema publishes. A key-set comparison accepts any string here, so the format is the only contract this value has — and the pattern is read from the spec rather than restated, so widening the published one is what changes this test.',
+    async ({ property, schema: name, method, url }) => {
+      const declared = declaredSchema(name) as SpecSchema & { pattern?: string };
+      expect(declared.pattern, `${name} publishes a pattern`).toBeDefined();
+
+      const body = await bodyFor(method, url);
+      const value = body[property];
+      expect(typeof value, `${property} is a string`).toBe('string');
+      expect(String(value), `${property} matches ${name}'s published pattern`).toMatch(
+        new RegExp(declared.pattern!),
+      );
     },
   );
 });
