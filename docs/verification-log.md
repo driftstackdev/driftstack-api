@@ -33333,3 +33333,43 @@ the contract and from the durable implementation, which is the shape that hid th
 defect: a double that behaves differently from the real thing makes a green test meaningless.
 
 Sixth of six findings from the parallel sweep. `EXPECTED_TEST_FILES` → 2676.
+
+## V-772 — the published incident-severity ladder was not the enum, and named a tier that cannot be filed (2026-08-14)
+
+`/docs/incident-policy` published a four-tier ladder — Critical / Major / Minor / Maintenance —
+against an `incident_severity` enum of exactly `minor | major | outage`. "Critical" is not a value
+anything can file: the only two create call sites are `health-probe.ts` and `admin-incidents.ts`,
+both constrained to the enum, and the admin UI offers Minor / Major / Outage.
+
+The page also stated a code behaviour that is false: "Three consecutive failures auto-create a
+**Critical** incident." `services/health-probe.ts:262` hardcodes `severity: 'major'`.
+
+**The customer-visible consequence is a mismatch at exactly the wrong moment.** In a total API
+outage the auto-filed incident is `major`, so `routes/status.ts` reports `degraded` — only an open
+`outage`-severity incident sets `major_outage`. A customer reading the MAJOR badge on the status
+page and matching it to this table landed on the weaker row (≤30 min first update, 60-minute
+cadence) rather than the top row's commitments, while the on-call looked for a "Critical" control
+that no interface offers.
+
+Fixed as DOC. The top row is now **Outage**, matching the enum and therefore matching the badge a
+customer actually sees. **No cadence changed** — the ≤15-minute first update and 30-minute
+cadence carry over exactly, so the commitment is identical and only the label is now true.
+Maintenance stays on the page, because ≥48h notice is a real commitment, but is explicitly
+labelled "(not an incident severity)" so it no longer implies a fourth tier. The auto-create
+sentence now says Major, and adds the honest disclosure that follows from it: escalation to
+Outage is a human judgement, so a probe trip alone will not turn the status page red.
+
+**Deliberately NOT changed: the automation still cannot reach the red state.** Making a
+three-consecutive-failure trip file `outage` would let a transient blip headline a full outage
+publicly, and the runbooks already put a human in that loop. That is a product judgement rather
+than a defect, so the page now discloses the behaviour instead of the code being changed to match
+a sentence. If the owner wants automation to escalate, it is one literal in `health-probe.ts:262`.
+
+**Six assertions in one pin file froze the old ladder**, and I found them the same way as V-768 —
+by running, not by grepping. The first pass updated the two that mentioned the severity table;
+the run then failed on the auto-create sentence, the Maintenance row, the postmortem list item and
+two `it()` titles. When a vocabulary changes, the pins on it are spread across every section that
+mentions any member of it.
+
+Fifth and final finding from the parallel sweep implemented; P3's code half is the one item
+deliberately left as a decision. No new test file, so `EXPECTED_TEST_FILES` is unchanged.

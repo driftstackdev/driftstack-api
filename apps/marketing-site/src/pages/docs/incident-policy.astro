@@ -41,7 +41,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </thead>
       <tbody>
         <tr>
-          <td><strong>Critical</strong></td>
+          <td><strong>Outage</strong></td>
           <td>Core API down across all customers, or data-loss risk.</td>
           <td>≤ 15 min</td>
           <td>Every 30 min until resolved.</td>
@@ -60,9 +60,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <td>At resolution.</td>
         </tr>
         <tr>
-          <td><strong>Maintenance</strong></td>
+          <td><strong>Maintenance</strong> (not an incident severity)</td>
           <td>Planned change with potential impact. Always announced
-            ≥48h in advance.</td>
+            ≥48h in advance. Announced by email and a status post; it is
+            not one of the three incident severities above.</td>
           <td>Pre-announced</td>
           <td>Start + end.</td>
         </tr>
@@ -76,7 +77,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <ul>
       <li><strong>Automated health probes:</strong> 60-second poller
         against <code>/health</code> + per-region API endpoints.
-        Three consecutive failures auto-create a Critical incident.</li>
+        Three consecutive failures auto-create a <strong>Major</strong>
+        incident. Escalation to <strong>Outage</strong> is a human
+        judgement — automation never files one, so a probe trip alone
+        will not turn the status page red.</li>
       <li><strong>Customer reports:</strong> emails to
         <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
         and Slack channel monitoring. We acknowledge within 30 min
@@ -98,7 +102,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li><strong>Resolution</strong> marks the incident resolved and
         triggers a final email to subscribers with a root-cause
         summary + remediation steps.</li>
-      <li><strong>Postmortem</strong> for Critical / Major incidents
+      <li><strong>Postmortem</strong> for Outage / Major incidents
         published within 7 business days on the
         <a href="https://status.driftstack.dev">public status page</a>
         as a permanent entry under the resolved incident. Minor
@@ -152,7 +156,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>Postmortems</h2>
     <p>
-      Public postmortems for Critical + Major incidents live on the
+      Public postmortems for Outage + Major incidents live on the
       <a href="https://status.driftstack.dev">public status page</a>,
       attached to the resolved incident entry. Each follows the same
       template: timeline, root cause, what we changed to prevent

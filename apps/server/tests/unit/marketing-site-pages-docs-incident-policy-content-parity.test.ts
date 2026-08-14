@@ -9,12 +9,14 @@
 //     no ?window_days param).
 //   • status.driftstack.dev + 3-endpoint surface: GET /v1/status, GET
 //     /v1/status/incidents, POST /v1/status/subscribe.
-//   • 4-severity ladder: Critical (≤15min, every 30min) / Major (≤30min,
-//     every 60min) / Minor (≤60min, at resolution) / Maintenance (≥48h notice).
+//   • 3-severity ladder matching the incident_severity enum: Outage (≤15min,
+//     every 30min) / Major (≤30min,
+//     every 60min) / Minor (≤60min, at resolution). Maintenance (≥48h notice) is
+//     labelled NOT an incident severity — the enum has only minor|major|outage.
 //   • Detection 3-signal: V-295b probes (60s, 3-consecutive → critical) +
 //     customer reports (support@, ≤30min EU biz hrs) + internal alerting.
 //   • 5-step customer comms: file → email fan-out → progress → resolution →
-//     postmortem within 7 business days for Critical/Major.
+//     postmortem within 7 business days for Outage/Major.
 //   • incident.created/updated/resolved NOT in SubscribableWebhookEventTypeSchema.
 //   • /v1/status/sla 9-field camelCase response + 30-day rolling window + no-auth.
 //   • 3-contact ladder: urgent@ (acute) / support@ (non-acute) / security@ (PGP).
@@ -55,9 +57,9 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     );
   });
 
-  it('4-severity ladder pinned: Critical (≤15min, every 30min) + Major (5%+ error rate / sub-customer auth-sessions outage, ≤30min, every 60min) + Minor (single non-critical surface, ≤60min, at resolution) + Maintenance (≥48h notice) — pinned so the 4-row severity table + update-cadences + 48h-maintenance-notice survive (drift to softening any cadence would put Driftstack on the hook for slower comms than promised)', () => {
+  it('severity ladder pinned: Outage (≤15min, every 30min) + Major (5%+ error rate / sub-customer auth-sessions outage, ≤30min, every 60min) + Minor (single non-critical surface, ≤60min, at resolution), plus Maintenance labelled NOT an incident severity (≥48h notice) — V-772 renamed the top row from Critical, which was not a value of the incident_severity enum (minor|major|outage), so a customer matching the badge on the status page to this table landed on the wrong row. Cadences are unchanged: the commitment is identical, only the label now matches what is actually filed.', () => {
     expect(body).toMatch(
-      /<td><strong>Critical<\/strong><\/td>\s*\n?\s*<td>Core API down across all customers, or data-loss risk\.<\/td>\s*\n?\s*<td>≤ 15 min<\/td>\s*\n?\s*<td>Every 30 min until resolved\.<\/td>/,
+      /<td><strong>Outage<\/strong><\/td>\s*\n?\s*<td>Core API down across all customers, or data-loss risk\.<\/td>\s*\n?\s*<td>≤ 15 min<\/td>\s*\n?\s*<td>Every 30 min until resolved\.<\/td>/,
     );
     expect(body).toMatch(
       /<td><strong>Major<\/strong><\/td>\s*\n?\s*<td>API degraded \(\{'>'\}5% error rate\) OR a critical surface\s*\n?\s*\(auth, sessions\) unavailable for a subset of customers\.<\/td>\s*\n?\s*<td>≤ 30 min<\/td>\s*\n?\s*<td>Every 60 min\.<\/td>/,
@@ -66,13 +68,13 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
       /<td><strong>Minor<\/strong><\/td>\s*\n?\s*<td>Single non-critical surface \(dashboard, an SDK build pipeline\) degraded\.<\/td>\s*\n?\s*<td>≤ 60 min<\/td>\s*\n?\s*<td>At resolution\.<\/td>/,
     );
     expect(body).toMatch(
-      /<td><strong>Maintenance<\/strong><\/td>\s*\n?\s*<td>Planned change with potential impact\. Always announced\s*\n?\s*≥48h in advance\.<\/td>/,
+      /<td><strong>Maintenance<\/strong> \(not an incident severity\)<\/td>\s*\n?\s*<td>Planned change with potential impact\. Always announced\s*\n?\s*≥48h in advance\./,
     );
   });
 
   it('Detection 3-signal behavior pinned without internal work-item labels', () => {
     expect(body).toMatch(
-      /<strong>Automated health probes:<\/strong> 60-second poller\s*\n?\s*against <code>\/health<\/code> \+ per-region API endpoints\.\s*\n?\s*Three consecutive failures auto-create a Critical incident/,
+      /<strong>Automated health probes:<\/strong> 60-second poller\s*\n?\s*against <code>\/health<\/code> \+ per-region API endpoints\.\s*\n?\s*Three consecutive failures auto-create a <strong>Major<\/strong>/,
     );
     expect(body).toMatch(
       /<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*and Slack channel monitoring\. We acknowledge within 30 min\s*\n?\s*during EU business hours\./,
@@ -82,7 +84,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     );
   });
 
-  it('5-step customer comms pinned: 1) status-page entry filed + 2) email fan-out to /v1/status/subscribe subscribers + 3) progress updates per cadence + 4) resolution + final email with root-cause + 5) postmortem within 7 business days for Critical/Major — pinned so the 5-step comms cascade + 7-business-day postmortem SLA + inline-summary-for-Minor framing survives (drift to a longer postmortem SLA would create marketing↔ops divergence)', () => {
+  it('5-step customer comms pinned: 1) status-page entry filed + 2) email fan-out to /v1/status/subscribe subscribers + 3) progress updates per cadence + 4) resolution + final email with root-cause + 5) postmortem within 7 business days for Outage/Major — pinned so the 5-step comms cascade + 7-business-day postmortem SLA + inline-summary-for-Minor framing survives (drift to a longer postmortem SLA would create marketing↔ops divergence)', () => {
     expect(body).toMatch(
       /<strong>Status page entry filed<\/strong> with severity \+\s*\n?\s*title \+ affected components\./,
     );
@@ -90,7 +92,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
       /<strong>Email fan-out<\/strong> to confirmed\s*\n?\s*<code>\/v1\/status\/subscribe<\/code> subscribers\./,
     );
     expect(body).toMatch(
-      /<strong>Postmortem<\/strong> for Critical \/ Major incidents\s*\n?\s*published within 7 business days/,
+      /<strong>Postmortem<\/strong> for Outage \/ Major incidents\s*\n?\s*published within 7 business days/,
     );
     expect(body).toMatch(
       /Minor\s*\n?\s*incidents get an inline summary on the resolved status entry\./,
@@ -127,7 +129,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     );
   });
 
-  it("Postmortems blameless framing pinned: 'Public postmortems for Critical + Major incidents live on the public status page, attached to the resolved incident entry. Each follows the same template: timeline, root cause, what we changed to prevent recurrence. Postmortems are blameless and detailed enough to be useful — we'd rather over-share than under-share.' — pinned so the 3-template-field (timeline/root-cause/prevention) + blameless + over-share commitment survives", () => {
+  it("Postmortems blameless framing pinned: 'Public postmortems for Outage + Major incidents live on the public status page, attached to the resolved incident entry. Each follows the same template: timeline, root cause, what we changed to prevent recurrence. Postmortems are blameless and detailed enough to be useful — we'd rather over-share than under-share.' — pinned so the 3-template-field (timeline/root-cause/prevention) + blameless + over-share commitment survives", () => {
     expect(body).toMatch(
       /Each follows the same\s*\n?\s*template: timeline, root cause, what we changed to prevent\s*\n?\s*recurrence\. Postmortems are blameless and detailed enough to be\s*\n?\s*useful — we'd rather over-share than under-share\./,
     );
