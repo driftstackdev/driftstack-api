@@ -33095,3 +33095,54 @@ V-757 (verified, not assumed), 2 → V-761, 3 → V-760, 4 → V-762, 5 → V-76
 8 → this entry. Two residuals are recorded rather than claimed fixed: pre-existing free-tier VPN
 proxy rows still egress (V-763), and the transfer-path import records a bare uuid so a join across
 that path still needs normalisation (V-764).
+
+## V-767 — CORRECTION to V-758: the billing pause used a DISPLAY lookup, and could pause the wrong subscription (2026-08-14)
+
+V-758 made the AUP §5.2 promise ("suspension pauses billing") true. Verifying the one link its
+unit tests faked — the adapter chain down to Stripe — found that the link itself was wrong.
+
+`pauseCollectionForAccount` / `resumeCollectionForAccount` called
+`repo.findCurrentSubscription()`. That method applies **no status filter at all**; its own doc
+says it exists so "the dashboard can surface 'your last subscription was canceled on X'". It is a
+display helper. Two live consequences:
+
+1. **Spurious alarms.** An account whose only subscription is `canceled` (or `unpaid`, or
+   `incomplete_expired`) returned that row instead of null, so suspension called Stripe's pause on
+   a dead subscription, which errors, which raised `account_reclaim_failed` — on _every_ such
+   suspension. V-758's own test asserts "an account with no subscription is a NORMAL outcome, not
+   an alarm"; it passed because it faked the pauser and never reached this lookup. The alarm that
+   was designed to mean "a customer is being charged while suspended" would have been firing
+   routinely, which is how an operator learns to ignore it.
+2. **The money case.** `billing-repo.ts` already documents the hazard under V-741: `created_at` is
+   frozen at first-webhook insert, so a replayed event for an OLD canceled subscription can sort
+   NEWER than a live one. Recency-then-inspect therefore returns the canceled row — the pause hits
+   a dead subscription and **the live one keeps billing a suspended customer**. That is precisely
+   the promise V-758 exists to keep, silently unfulfilled in the case that matters most.
+
+**My first fix was wrong and reading the rationale caught it.** The obvious move is
+`findActiveSubscription`, which filters to `active|trialing`. But V-758's comment explains why it
+was not used: a `past_due` subscription "is exactly the one you most want to stop dunning while
+the account is suspended", and `findActiveSubscription` drops it. That half of the reasoning was
+right. The error was reaching for the _unfiltered_ helper to keep `past_due` rather than for the
+correct set.
+
+So the fix is a third lookup, `findCollectingSubscription` — status in
+(`active`, `trialing`, `past_due`), the set whose collection is still running and therefore the
+only set that can be paused. It filters the SET before ordering, per the V-741 note, so a newer
+canceled row cannot win. Both call sites now use it; the in-memory twin mirrors the SQL exactly.
+
+Proven, not assumed. `db-billing-subscription-lookups-drizzle.test.ts` is new and covers all three
+lookups against real Postgres — nothing did before, which is how a display helper came to be used
+for a money operation. Its third test is the replay case: a live subscription plus a canceled row
+with a newer `created_at`, asserting the LIVE one is chosen, and asserting that
+`findCurrentSubscription` returns the canceled one (pinning the trap itself). Behavioural service
+tests in `billing.test.ts` prove a canceled-only account never reaches Stripe and that the live
+subscription is the one paused. Mutation-proved: reverting the call site to
+`findCurrentSubscription` reds both money tests.
+
+The `BillingRepo: 4-method` pin in `services-billing-content-parity.test.ts` moved to 5-method in
+the same commit — it enumerates the interface, so a new method breaks it by design.
+
+Still unverified, and unchanged by this: no call has been made against test-mode Stripe. This
+correction is about choosing the right subscription; whether Stripe accepts the request shape
+still wants a staging suspension.

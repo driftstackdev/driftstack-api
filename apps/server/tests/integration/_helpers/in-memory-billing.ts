@@ -46,6 +46,19 @@ export class InMemoryBillingRepo implements BillingRepo {
     return Promise.resolve(found);
   }
 
+  /** V-767 twin — the set whose collection is still running. Mirrors the SQL exactly:
+   *  filters status FIRST, then picks the newest of what survives, so a canceled row
+   *  sorting newer than a live one cannot win. */
+  findCollectingSubscription(accountId: string): Promise<SubscriptionMirror | null> {
+    let found: SubscriptionMirror | null = null;
+    for (const s of this.subscriptions.values()) {
+      if (s.accountId !== accountId) continue;
+      if (s.status !== 'active' && s.status !== 'trialing' && s.status !== 'past_due') continue;
+      if (found === null || s.createdAt.getTime() > found.createdAt.getTime()) found = s;
+    }
+    return Promise.resolve(found);
+  }
+
   findCurrentSubscription(accountId: string): Promise<SubscriptionMirror | null> {
     let latest: SubscriptionMirror | null = null;
     for (const s of this.subscriptions.values()) {

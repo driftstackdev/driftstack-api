@@ -6,11 +6,13 @@
 // the BadRequestError raised when `tierPrices` is missing an entry
 // for a self-serve tier.
 
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   BillingService,
   type BillingProvider,
   type BillingRepo,
+  type SubscriptionMirror,
 } from '../../src/services/billing.js';
 import {
   InMemoryBillingProvider,
@@ -252,5 +254,65 @@ describe('BillingService.createPortalSession', () => {
     await expect(service.createPortalSession('no-such-account')).rejects.toMatchObject({
       status: 404,
     });
+  });
+});
+
+describe('BillingService billing-pause lookup (V-767)', () => {
+  const ACC = '00000000-0000-4000-8000-0000000007c7';
+
+  function mirror(over: Partial<SubscriptionMirror>): SubscriptionMirror {
+    return {
+      id: randomUUID(),
+      accountId: ACC,
+      stripeSubscriptionId: `sub_${randomUUID().slice(0, 8)}`,
+      stripePriceId: 'price_test',
+      tier: 'api_builder',
+      status: 'active',
+      currentPeriodEnd: new Date('2026-09-01T00:00:00.000Z'),
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+      createdAt: new Date('2026-07-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-01T00:00:00.000Z'),
+      ...over,
+    };
+  }
+
+  it('CRITICAL a canceled-only account is "no_subscription" and never reaches Stripe. V-758 used findCurrentSubscription, which has no status filter, so this called pause on a canceled subscription — Stripe errors, and every suspension of such an account raised account_reclaim_failed.', async () => {
+    const repo = new InMemoryBillingRepo();
+    const provider = new InMemoryBillingProvider();
+    seedAccount(repo, ACC);
+    repo.upsertSubscription(mirror({ status: 'canceled' }));
+
+    const service = makeService(repo, provider, {});
+
+    expect(await service.pauseCollectionForAccount(ACC)).toBe('no_subscription');
+    expect(provider.state.pausedSubscriptions.size, 'Stripe must not be called').toBe(0);
+  });
+
+  it('CRITICAL pauses the LIVE subscription even when a canceled row sorts NEWER — created_at is frozen at first-webhook insert, so a replayed event inverts the order and the customer keeps being billed while suspended', async () => {
+    const repo = new InMemoryBillingRepo();
+    const provider = new InMemoryBillingProvider();
+    seedAccount(repo, ACC);
+    const live = mirror({ status: 'active', createdAt: new Date('2026-06-01T00:00:00.000Z') });
+    repo.upsertSubscription(live);
+    repo.upsertSubscription(
+      mirror({ status: 'canceled', createdAt: new Date('2026-07-20T00:00:00.000Z') }),
+    );
+
+    const service = makeService(repo, provider, {});
+    expect(await service.pauseCollectionForAccount(ACC)).toBe('paused');
+    expect([...provider.state.pausedSubscriptions]).toEqual([live.stripeSubscriptionId]);
+  });
+
+  it('still pauses a past_due subscription — the half of the original reasoning that was right, and what findActiveSubscription would have dropped', async () => {
+    const repo = new InMemoryBillingRepo();
+    const provider = new InMemoryBillingProvider();
+    seedAccount(repo, ACC);
+    const due = mirror({ status: 'past_due' });
+    repo.upsertSubscription(due);
+
+    const service = makeService(repo, provider, {});
+    expect(await service.pauseCollectionForAccount(ACC)).toBe('paused');
+    expect([...provider.state.pausedSubscriptions]).toEqual([due.stripeSubscriptionId]);
   });
 });

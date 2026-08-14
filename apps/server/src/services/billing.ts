@@ -121,6 +121,11 @@ export interface BillingRepo {
    */
   findCurrentSubscription(accountId: string): Promise<SubscriptionMirror | null>;
   /**
+   * V-767 — the subscription whose collection is still running (`active` | `trialing` |
+   * `past_due`). The only correct lookup for a billing-pause: see the note on the repo method.
+   */
+  findCollectingSubscription(accountId: string): Promise<SubscriptionMirror | null>;
+  /**
    * V-741 — any `active` or `trialing` subscription for the account, or null.
    *
    * Filters the SET rather than picking a row by recency and inspecting it.
@@ -268,11 +273,23 @@ export class BillingService {
    * report it: a free-tier or never-subscribed account has nothing to pause, and that is
    * a normal outcome, not a failure.
    *
-   * Uses findCurrentSubscription (not findActiveSubscription) on purpose: a `past_due`
-   * sub is exactly the one you most want to stop dunning while the account is suspended.
+   * V-767 — uses findCollectingSubscription. The original V-758 implementation used
+   * findCurrentSubscription, and half of that reasoning was right: a `past_due` sub is exactly
+   * the one you most want to stop dunning, and findActiveSubscription would have skipped it.
+   * The other half was wrong. findCurrentSubscription applies NO status filter — it is the
+   * dashboard's "your last subscription was canceled on X" helper — so it also returned
+   * `canceled` / `unpaid` / `incomplete_expired` rows. Two consequences, both live:
+   *
+   *   1. Suspending an account whose only subscription is canceled called Stripe's pause on a
+   *      canceled subscription, which errors, which raised `account_reclaim_failed` on every
+   *      such suspension — training an operator to ignore the one alarm that matters.
+   *   2. Worse, per the V-741 note on the repo: `created_at` is frozen at first-webhook
+   *      insert, so a replayed event for an OLD canceled subscription can sort newer than a
+   *      live one. The pause then hit the canceled row and the LIVE subscription kept billing
+   *      a suspended customer — the exact AUP §5.2 promise this method exists to keep.
    */
   async pauseCollectionForAccount(accountId: string): Promise<'paused' | 'no_subscription'> {
-    const sub = await this.repo.findCurrentSubscription(accountId);
+    const sub = await this.repo.findCollectingSubscription(accountId);
     if (sub === null) return 'no_subscription';
     await this.provider.pauseSubscriptionCollection({ subscriptionId: sub.stripeSubscriptionId });
     return 'paused';
@@ -280,7 +297,7 @@ export class BillingService {
 
   /** Inverse of {@link pauseCollectionForAccount}, for the unsuspend path. Idempotent. */
   async resumeCollectionForAccount(accountId: string): Promise<'resumed' | 'no_subscription'> {
-    const sub = await this.repo.findCurrentSubscription(accountId);
+    const sub = await this.repo.findCollectingSubscription(accountId);
     if (sub === null) return 'no_subscription';
     await this.provider.resumeSubscriptionCollection({ subscriptionId: sub.stripeSubscriptionId });
     return 'resumed';

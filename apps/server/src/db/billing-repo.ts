@@ -82,6 +82,35 @@ export class DrizzleBillingRepo implements BillingRepo {
     return row ? toSubscription(row) : null;
   }
 
+  /**
+   * V-767 — the subscription whose COLLECTION is still running: `active`, `trialing` or
+   * `past_due`. This is the set that can be paused, and the only set that should be.
+   *
+   * Neither existing lookup is right for a billing-pause. `findActiveSubscription` excludes
+   * `past_due`, which is exactly the subscription you most want to stop dunning while an
+   * account is suspended. `findCurrentSubscription` applies no status filter at all — it is a
+   * DISPLAY helper ("your last subscription was canceled on X") — so it hands back `canceled`,
+   * `unpaid` and `incomplete_expired` rows, and pausing one of those is a Stripe error.
+   *
+   * Filters the SET rather than picking by recency and inspecting, for the V-741 reason
+   * recorded on findActiveSubscription: `created_at` is frozen at first-webhook insert, so a
+   * replayed event for an old canceled subscription can sort NEWER than a live one.
+   */
+  async findCollectingSubscription(accountId: string): Promise<SubscriptionMirror | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.accountId, accountId),
+          inArray(subscriptions.status, ['active', 'trialing', 'past_due']),
+        ),
+      )
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+    return row ? toSubscription(row) : null;
+  }
+
   async findCurrentSubscription(accountId: string): Promise<SubscriptionMirror | null> {
     // Most-recent first by created_at; route layer can filter to active
     // statuses if it cares. We don't filter here so the dashboard can

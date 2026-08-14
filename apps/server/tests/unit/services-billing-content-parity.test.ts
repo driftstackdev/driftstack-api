@@ -157,7 +157,7 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     );
   });
 
-  it('BillingRepo: 4-method (getAccount + setStripeCustomerId + findCurrentSubscription returning the newest row + findActiveSubscription filtering the set)', () => {
+  it('BillingRepo: 5-method (getAccount + setStripeCustomerId + findCurrentSubscription returning the newest row + findActiveSubscription filtering to active|trialing + V-767 findCollectingSubscription filtering to the set whose collection is still running, which is the only correct lookup for a billing-pause)', () => {
     expect(body).toMatch(/export interface BillingRepo \{/);
     expect(body).toMatch(
       /getAccount\(accountId: string\): Promise<BillingAccountSnapshot \| null>;/,
@@ -179,6 +179,13 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     );
     expect(body).toMatch(
       /findActiveSubscription\(accountId: string\): Promise<SubscriptionMirror \| null>;/,
+    );
+    // V-767 — a third lookup, because neither of the other two is correct for a billing-pause:
+    // findActiveSubscription drops `past_due` (the sub you most want to stop dunning) and
+    // findCurrentSubscription filters nothing at all (so it hands back canceled rows, which
+    // Stripe refuses to pause).
+    expect(body).toMatch(
+      /findCollectingSubscription\(accountId: string\): Promise<SubscriptionMirror \| null>;/,
     );
   });
 
