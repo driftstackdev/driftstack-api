@@ -30,9 +30,12 @@
 // Optional fields are allowed to be absent, which is what optional means. Only
 // the spec's own `required` list is demanded.
 //
-// One endpoint to start, chosen because it is the widest customer-facing shape
-// among the unpaired schemas and the one a dashboard reads on every load. The
-// table below takes a row per endpoint; the cost of the next one is that row.
+// Three of the twenty-nine, each an authenticated GET whose whole body is one
+// unpaired schema: the account profile a dashboard reads on every load, the
+// cost summary, and the audit-log page. The table takes a row per endpoint, so
+// the cost of the next one is that row — the remaining candidates are the team
+// member and invite lists, the bundled-LLM status and the avatar upload
+// response, all of which need a fixture that seeds their state first.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -59,7 +62,11 @@ function declaredSchema(name: string): SpecSchema {
 }
 
 /** Endpoints whose live response body is compared to its published schema. */
-const CASES = [{ schema: 'AccountMeResponse', method: 'GET' as const, url: '/v1/account/me' }];
+const CASES = [
+  { schema: 'AccountMeResponse', method: 'GET' as const, url: '/v1/account/me' },
+  { schema: 'AccountCostResponse', method: 'GET' as const, url: '/v1/account/cost' },
+  { schema: 'ListAccountAuditResponse', method: 'GET' as const, url: '/v1/account/audit-log' },
+];
 
 let fx: TestAppFixture;
 
