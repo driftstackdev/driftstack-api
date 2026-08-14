@@ -120,7 +120,16 @@ describe('W965 errors lib RFC 7807 cross-source invariant', () => {
     expect(p).toMatch(/status: this\.status,/);
     expect(p).toMatch(/\.\.\.\(this\.detail !== undefined \? \{ detail: this\.detail \} : \{\}\),/);
     expect(p).toMatch(/\.\.\.\(instance !== undefined \? \{ instance \} : \{\}\),/);
-    expect(p).toMatch(/\.\.\.this\.extensions,/);
+    // CORRECTED 2026-08-14. This pinned `...this.extensions,` as the LAST
+    // member of the returned object. That order let an extension named
+    // type/title/status/detail/instance silently replace the real member — and
+    // the error handler reads problem.status to set the response code, so an
+    // extension could set the HTTP status. Extensions are now stripped of
+    // reserved names and spread FIRST; the pin follows the corrected source.
+    expect(p).toMatch(/\.\.\.safeExtensions,/);
+    expect(p).toMatch(
+      /Object\.entries\(this\.extensions\)\.filter\(\(\[key\]\) => !RESERVED_PROBLEM_MEMBERS\.has\(key\)\)/,
+    );
   });
 
   // ─── BadRequestError 400 + 'Bad Request' ─────────────────────
@@ -182,7 +191,11 @@ describe('W965 errors lib RFC 7807 cross-source invariant', () => {
   it('CRITICAL imports PROBLEM_TYPES (value) + Problem (type) + ProblemType (type) from @driftstack/api-types — single-source-of-truth for the problem-type vocabulary.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
     expect(p).toMatch(
-      /import \{ PROBLEM_TYPES, type Problem, type ProblemType \} from '@driftstack\/api-types';/,
+      // ProblemSchema is now a VALUE import too: `toProblem` derives the
+      // reserved RFC 7807 member names from `ProblemSchema.shape` rather than
+      // restating them, so a member added to the schema is protected with no
+      // second list to keep in step.
+      /import \{\s*\n?\s*PROBLEM_TYPES,\s*\n?\s*ProblemSchema,\s*\n?\s*type Problem,\s*\n?\s*type ProblemType,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
   });
 

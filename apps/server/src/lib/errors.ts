@@ -8,7 +8,18 @@
 // is logged at error level and replied as Internal (500) with a stable
 // problem-type. We never leak raw error messages to clients.
 
-import { PROBLEM_TYPES, type Problem, type ProblemType } from '@driftstack/api-types';
+import {
+  PROBLEM_TYPES,
+  ProblemSchema,
+  type Problem,
+  type ProblemType,
+} from '@driftstack/api-types';
+
+// RFC 7807 §3.2 reserves the envelope's own member names; an extension may not
+// shadow one. Derived from the schema rather than restated, so adding a member
+// to ProblemSchema protects it here automatically instead of leaving a second
+// list to drift.
+const RESERVED_PROBLEM_MEMBERS: ReadonlySet<string> = new Set(Object.keys(ProblemSchema.shape));
 
 export interface ApiErrorOptions {
   type: ProblemType;
@@ -37,13 +48,22 @@ export class ApiError extends Error {
   }
 
   toProblem(instance?: string): Problem {
+    // Extensions are spread FIRST and stripped of reserved names, so an
+    // extension can neither shadow a member below nor supply one the error
+    // itself omitted. `extensions` is an open Record filled per call site; it
+    // used to be spread LAST, which made `extensions: {status: …}` silently
+    // replace the real status — and the error handler reads `problem.status`
+    // to set the response code, so that changed the HTTP status too.
+    const safeExtensions = Object.fromEntries(
+      Object.entries(this.extensions).filter(([key]) => !RESERVED_PROBLEM_MEMBERS.has(key)),
+    );
     return {
+      ...safeExtensions,
       type: this.type,
       title: this.title,
       status: this.status,
       ...(this.detail !== undefined ? { detail: this.detail } : {}),
       ...(instance !== undefined ? { instance } : {}),
-      ...this.extensions,
     };
   }
 }

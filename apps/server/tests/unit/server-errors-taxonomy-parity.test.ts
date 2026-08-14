@@ -172,7 +172,13 @@ describe('W710 server-side ApiError taxonomy parity', () => {
       /\.\.\.\(this\.detail !== undefined \? \{ detail: this\.detail \} : \{\}\)/,
     );
     expect(src).toMatch(/\.\.\.\(instance !== undefined \? \{ instance \} : \{\}\)/);
-    expect(src).toMatch(/\.\.\.this\.extensions/);
+    // CORRECTED 2026-08-14 from `...this.extensions`. The extension set is now
+    // stripped of reserved RFC 7807 member names and spread FIRST — spread last,
+    // an extension named status/title/type/detail/instance replaced the real
+    // member, and the error handler reads problem.status to set the response
+    // code. The conditional spreads above are unchanged and still do the job
+    // this test is named for; only the extension spread moved.
+    expect(src).toMatch(/\.\.\.safeExtensions,/);
   });
 
   it('CRITICAL ApiError v ValidationError extension shape pinned — `extensions: { issues }`. The `issues` extension is what carries the Zod-issue array on validation failures (so clients can render per-field errors). Drift to dropping would force clients to hand-parse the detail.', () => {

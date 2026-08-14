@@ -58,7 +58,16 @@ describe('W389.A apps/server/src/lib/errors.ts content parity', () => {
       /\.\.\.\(this\.detail !== undefined \? \{ detail: this\.detail \} : \{\}\),/,
     );
     expect(body).toMatch(/\.\.\.\(instance !== undefined \? \{ instance \} : \{\}\),/);
-    expect(body).toMatch(/\.\.\.this\.extensions,/);
+    // CORRECTED 2026-08-14. This pinned `...this.extensions,` as the LAST
+    // member of the returned object. That order let an extension named
+    // type/title/status/detail/instance silently replace the real member — and
+    // the error handler reads problem.status to set the response code, so an
+    // extension could set the HTTP status. Extensions are now stripped of
+    // reserved names and spread FIRST; the pin follows the corrected source.
+    expect(body).toMatch(/\.\.\.safeExtensions,/);
+    expect(body).toMatch(
+      /Object\.entries\(this\.extensions\)\.filter\(\(\[key\]\) => !RESERVED_PROBLEM_MEMBERS\.has\(key\)\)/,
+    );
   });
 
   it('BadRequestError = 400 BadRequest', () => {
@@ -214,7 +223,11 @@ describe('W389.A apps/server/src/lib/errors.ts content parity', () => {
 
   it('imports: PROBLEM_TYPES + Problem + ProblemType from @driftstack/api-types (single source of truth)', () => {
     expect(body).toMatch(
-      /import \{ PROBLEM_TYPES, type Problem, type ProblemType \} from '@driftstack\/api-types';/,
+      // ProblemSchema is now a VALUE import too: `toProblem` derives the
+      // reserved RFC 7807 member names from `ProblemSchema.shape` rather than
+      // restating them, so a member added to the schema is protected with no
+      // second list to keep in step.
+      /import \{\s*\n?\s*PROBLEM_TYPES,\s*\n?\s*ProblemSchema,\s*\n?\s*type Problem,\s*\n?\s*type ProblemType,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
   });
 
