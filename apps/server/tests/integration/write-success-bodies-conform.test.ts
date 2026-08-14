@@ -19,13 +19,13 @@
 // new write endpoint is covered the day it is documented rather than the day
 // someone remembers to add it here.
 
-import Ajv from 'ajv';
+import { createSpecAjv, type AjvInstance } from './_helpers/ajv.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp } from './_helpers/build-test-app.js';
 
 let fx: Awaited<ReturnType<typeof buildTestApp>>;
 let spec: SpecDocument;
-let ajvInstance: Ajv | null = null;
+let ajvInstance: AjvInstance | null = null;
 
 const DEFS_ID = 'https://driftstack.test/write-components';
 
@@ -106,9 +106,9 @@ function synthesise(schema: unknown, depth = 0): unknown {
   return 'probe';
 }
 
-function ajv(): Ajv {
+function ajv(): AjvInstance {
   if (ajvInstance) return ajvInstance;
-  ajvInstance = new Ajv({ allErrors: true, strict: false, validateFormats: false });
+  ajvInstance = createSpecAjv();
   ajvInstance.addSchema({ $id: DEFS_ID, definitions: toDraft07(spec.components?.schemas ?? {}) });
   return ajvInstance;
 }

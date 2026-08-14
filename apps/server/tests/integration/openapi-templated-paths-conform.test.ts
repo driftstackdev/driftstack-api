@@ -17,13 +17,13 @@
 // because that service is not wired into this fixture — neither would validate
 // an object shape, which is the entire point of this file.
 
-import Ajv from 'ajv';
+import { createSpecAjv, type AjvInstance } from './_helpers/ajv.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp } from './_helpers/build-test-app.js';
 
 let fx: Awaited<ReturnType<typeof buildTestApp>>;
 let spec: SpecDocument;
-let ajvInstance: Ajv | null = null;
+let ajvInstance: AjvInstance | null = null;
 let ids: Record<string, string> = {};
 
 const DEFS_ID = 'https://driftstack.test/templated-components';
@@ -56,9 +56,9 @@ function toDraft07(node: unknown): unknown {
   return out;
 }
 
-function ajv(): Ajv {
+function ajv(): AjvInstance {
   if (ajvInstance) return ajvInstance;
-  ajvInstance = new Ajv({ allErrors: true, strict: false, validateFormats: false });
+  ajvInstance = createSpecAjv();
   ajvInstance.addSchema({ $id: DEFS_ID, definitions: toDraft07(spec.components?.schemas ?? {}) });
   return ajvInstance;
 }

@@ -23,14 +23,14 @@
 //     The data reaches the customer's process and their SDK discards it.
 // Both are real; the first is louder and the second is worse.
 
-import Ajv from 'ajv';
+import { createSpecAjv, type AjvInstance } from './_helpers/ajv.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp } from './_helpers/build-test-app.js';
 
 let fx: Awaited<ReturnType<typeof buildTestApp>>;
 let staff: Awaited<ReturnType<typeof buildTestApp>>;
 let spec: SpecDocument;
-let ajvInstance: Ajv | null = null;
+let ajvInstance: AjvInstance | null = null;
 
 /** Where the spec's component schemas are registered for ref resolution. */
 const DEFS_ID = 'https://driftstack.test/openapi-components';
@@ -112,9 +112,9 @@ function schemaFor(path: string, method: string, status: string): unknown {
  * `strict: false` for the same reason — OpenAPI carries annotation keywords
  * (`example`, `discriminator`) that strict mode rejects outright.
  */
-function ajv(): Ajv {
+function ajv(): AjvInstance {
   if (ajvInstance) return ajvInstance;
-  ajvInstance = new Ajv({ allErrors: true, strict: false, validateFormats: false });
+  ajvInstance = createSpecAjv();
   ajvInstance.addSchema({
     $id: DEFS_ID,
     definitions: toDraft07(spec.components?.schemas ?? {}),
