@@ -30,12 +30,23 @@
 // Optional fields are allowed to be absent, which is what optional means. Only
 // the spec's own `required` list is demanded.
 //
-// Three of the twenty-nine, each an authenticated GET whose whole body is one
-// unpaired schema: the account profile a dashboard reads on every load, the
-// cost summary, and the audit-log page. The table takes a row per endpoint, so
-// the cost of the next one is that row — the remaining candidates are the team
-// member and invite lists, the bundled-LLM status and the avatar upload
-// response, all of which need a fixture that seeds their state first.
+// Four of the twenty-nine, each an authenticated GET whose whole body is one
+// unpaired schema: the account profile a dashboard reads on every load, the cost
+// summary, the audit-log page and the bundled-LLM status. The table takes a row
+// per endpoint, so the cost of the next one is that row.
+//
+// TWO CANDIDATES ARE DELIBERATELY ABSENT, and the reasons differ.
+//
+// `GET /v1/account/me/byok-anthropic-key` returns ByokAnthropicMetadata and was
+// tried here: it answers 503 on a default fixture, because BYOK is
+// activation-gated and stays in its stub posture until a fallback key is
+// configured. That is not a contract gap — the spec documents 503 on that path
+// alongside 200 — it simply cannot be compared without a fixture that activates
+// the feature.
+//
+// The team member and invite lists need state the fixture cannot seed: it takes
+// tier, scopes, account status and key flags, but no team, so those rows need a
+// test that creates an invite through the API and accepts it first.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -66,6 +77,11 @@ const CASES = [
   { schema: 'AccountMeResponse', method: 'GET' as const, url: '/v1/account/me' },
   { schema: 'AccountCostResponse', method: 'GET' as const, url: '/v1/account/cost' },
   { schema: 'ListAccountAuditResponse', method: 'GET' as const, url: '/v1/account/audit-log' },
+  {
+    schema: 'BundledLlmStatus',
+    method: 'GET' as const,
+    url: '/v1/account/me/bundled-llm-status',
+  },
 ];
 
 let fx: TestAppFixture;
