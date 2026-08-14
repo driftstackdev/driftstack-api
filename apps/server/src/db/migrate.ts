@@ -42,7 +42,30 @@ async function main(): Promise<void> {
   const journal = JSON.parse(journalRaw) as { entries: unknown[] };
   const expectedCount = journal.entries.length;
 
-  const client = postgres(config.databaseUrl, { max: 1 });
+  // Every other line this script writes is one-line JSON, deliberately, so a
+  // deploy's log collector can parse the migration step. postgres-js's DEFAULT
+  // notice handler writes a raw, ANSI-coloured object dump to the same stream —
+  // `relation "__drizzle_migrations" already exists, skipping` arrives as a
+  // multi-line blob with `file`, `line` and `routine` fields — which breaks that
+  // contract precisely where it matters, in the output of a deploy step.
+  //
+  // Re-emitted as structured JSON rather than swallowed. `client.ts` swallows
+  // notices because Pino carries real operational signal there; here there is no
+  // Pino and the notices are worth keeping — "already exists, skipping" is how an
+  // operator sees that a re-run was the no-op it should have been.
+  const client = postgres(config.databaseUrl, {
+    max: 1,
+    onnotice: (notice) => {
+      console.warn(
+        JSON.stringify({
+          msg: 'postgres notice during migration',
+          severity: notice.severity,
+          code: notice.code,
+          detail: notice.message,
+        }),
+      );
+    },
+  });
   const db = drizzle(client);
 
   console.warn(JSON.stringify({ msg: 'applying migrations', migrationsFolder, expectedCount }));

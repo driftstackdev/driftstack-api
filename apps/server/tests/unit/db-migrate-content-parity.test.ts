@@ -64,7 +64,13 @@ describe('W441.A apps/server/src/db/migrate.ts content parity', () => {
   });
 
   it('postgres client max:1 (single connection — migration tooling contract); drizzle wires client', () => {
-    expect(body).toMatch(/const client = postgres\(config\.databaseUrl, \{ max: 1 \}\);/);
+    // The options object is multi-line now: `onnotice` was added so migration
+    // notices arrive as one-line JSON like every other line this script writes,
+    // instead of postgres-js's raw ANSI object dump landing between them. Each
+    // property is pinned on its own, so adding a third does not break a claim
+    // about the first two.
+    expect(body).toMatch(/const client = postgres\(config\.databaseUrl, \{/);
+    expect(body, 'single connection — migration tooling contract').toMatch(/^\s*max: 1,\s*$/m);
     expect(body).toMatch(/const db = drizzle\(client\);/);
   });
 
