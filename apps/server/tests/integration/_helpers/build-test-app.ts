@@ -236,6 +236,9 @@ export interface TestAppOptions {
    */
   readinessChecks?: ReadinessCheck[];
   tier?: AccountTier;
+  /** Email admitted by the requireOwner gate. Unset → the gate stays
+   *  fail-closed, which is the default posture for every other suite. */
+  ownerEmail?: string;
   scopes?: ApiKeyScope[];
   accountStatus?: 'active' | 'suspended' | 'deleted';
   keyRevoked?: boolean;
@@ -1502,6 +1505,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // unchanged.
     ...(opts.withOauthStore === true ? { oauthStore: new InMemoryOAuthStore() } : {}),
     trustProxy: opts.trustProxy ?? false,
+    // requireOwner admits exactly one email and fails CLOSED when this is
+    // unset, so every fixture-built app forbade the owner-only admin surface
+    // and nothing could reach it. Off by default, which keeps that posture for
+    // suites that are not about the owner gate; a suite that needs the surface
+    // passes the account's own email and gets in.
+    ...(opts.ownerEmail !== undefined ? { ownerEmail: opts.ownerEmail } : {}),
     authRepo,
     authCache,
     authCoalescer,

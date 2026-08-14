@@ -44,9 +44,11 @@
 // csv. Each carries a non-empty `required` list — 2, 1, 2 and 5 fields — so none
 // of them is a row that compares an empty set to an empty set.
 //
-// The remaining unpaired GETs need credentials this fixture does not issue:
-// `/v1/admin/owner/platform-status`, `/v1/admin/owner/pricing` and
-// `/v1/admin/billing/subscriptions/stats` are owner/admin surfaces.
+// The last three unpaired GETs are owner/admin surfaces, and the note here used
+// to say the fixture could not issue their credentials. That was true and is no
+// longer: `requireOwner` admits exactly one email and fails CLOSED when unset,
+// so the fixture simply never passed one. It threads `ownerEmail` now, and the
+// three are compared below on the same terms as the rest.
 //
 // TWO CANDIDATES ARE DELIBERATELY ABSENT, and the reasons differ.
 //
@@ -109,6 +111,27 @@ const CASES = [
   },
 ];
 
+/**
+ * Endpoints behind the requireOwner gate. Same comparison, different fixture:
+ * that gate admits exactly one email and fails CLOSED when unset, so every
+ * fixture-built app forbade this surface and these three schemas could not be
+ * reached at all. The fixture now threads `ownerEmail`, and passing the test
+ * account's own address is what opens the door.
+ */
+const OWNER_CASES = [
+  {
+    schema: 'OwnerPlatformStatusResponse',
+    method: 'GET' as const,
+    url: '/v1/admin/owner/platform-status',
+  },
+  { schema: 'OwnerPricingResponse', method: 'GET' as const, url: '/v1/admin/owner/pricing' },
+  {
+    schema: 'AdminSubscriptionStatsResponse',
+    method: 'GET' as const,
+    url: '/v1/admin/billing/subscriptions/stats',
+  },
+];
+
 let fx: TestAppFixture;
 
 afterEach(async () => {
@@ -121,6 +144,14 @@ const auth = (fixture: TestAppFixture): { authorization: string } => ({
 
 async function bodyFor(method: 'GET', url: string): Promise<Record<string, unknown>> {
   fx = await buildTestApp({ tier: 'api_builder' });
+  const res = await fx.app.inject({ method, url, headers: auth(fx) });
+  expect(res.statusCode, `${method} ${url} answered 200`).toBe(200);
+  return res.json<Record<string, unknown>>();
+}
+
+async function ownerBodyFor(method: 'GET', url: string): Promise<Record<string, unknown>> {
+  const email = 'owner-probe@driftstack.local';
+  fx = await buildTestApp({ tier: 'api_builder', email, ownerEmail: email });
   const res = await fx.app.inject({ method, url, headers: auth(fx) });
   expect(res.statusCode, `${method} ${url} answered 200`).toBe(200);
   return res.json<Record<string, unknown>>();
@@ -160,6 +191,51 @@ describe('a live response body matches its published schema', () => {
     async ({ schema: name, method, url }) => {
       const schema = declaredSchema(name);
       const body = await bodyFor(method, url);
+      const present = new Set(Object.keys(body));
+      const missing = (schema.required ?? []).filter((k) => !present.has(k)).sort();
+      expect(missing, `required field(s) ${name} promises that ${url} did not send:`).toEqual([]);
+    },
+  );
+  it('CRITICAL the owner gate is REACHED, not bypassed. It fails closed when ownerEmail is unset, so a fixture that forgot to pass it would 403 — and a 403 body has none of the fields the schema declares, which would make the two comparisons below agree about nothing.', async () => {
+    const email = 'owner-probe@driftstack.local';
+    fx = await buildTestApp({ tier: 'api_builder', email, ownerEmail: email });
+    const admitted = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/owner/pricing',
+      headers: auth(fx),
+    });
+    expect(admitted.statusCode, 'the owner is admitted when the email matches').toBe(200);
+  });
+
+  it('CRITICAL a NON-owner is still refused. The fixture change opens this surface deliberately; if passing any account made the gate admit, these rows would be testing an authorization hole rather than a response shape.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder', email: 'not-the-owner@driftstack.local' });
+    const refused = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/owner/pricing',
+      headers: auth(fx),
+    });
+    expect(refused.statusCode, 'a non-owner does not reach the owner surface').not.toBe(200);
+  });
+
+  it.each(OWNER_CASES)(
+    'CRITICAL $method $url returns no field its schema does not declare. Owner surfaces drift the same way customer ones do, and they are read by the operator console rather than by a customer, so nothing complains when they do.',
+    async ({ schema: name, method, url }) => {
+      const declared = new Set(Object.keys(declaredSchema(name).properties ?? {}));
+      const body = await ownerBodyFor(method, url);
+      const undocumented = Object.keys(body)
+        .filter((k) => !declared.has(k))
+        .sort();
+      expect(undocumented, `field(s) returned by ${url} that ${name} does not declare:`).toEqual(
+        [],
+      );
+    },
+  );
+
+  it.each(OWNER_CASES)(
+    'CRITICAL $method $url returns every field its schema marks required.',
+    async ({ schema: name, method, url }) => {
+      const schema = declaredSchema(name);
+      const body = await ownerBodyFor(method, url);
       const present = new Set(Object.keys(body));
       const missing = (schema.required ?? []).filter((k) => !present.has(k)).sort();
       expect(missing, `required field(s) ${name} promises that ${url} did not send:`).toEqual([]);
