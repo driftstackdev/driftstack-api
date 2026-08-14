@@ -100,6 +100,41 @@ audit was written. It is append-heavy, account-scoped, and has no retention
 mechanism: precisely the class this document exists to catch, added after the last
 sweep. Treat the "the rest are covered" line above as scoped to 2026-06-10.
 
+### V-759 update 2026-08-14 — all three 2026-08-07 findings RESOLVED
+
+`retention-scrub-sweeper.ts` + `db/retention-scrub-repo.ts` landed **2026-08-12**, after
+the re-audit above was written. Verified against the code, not against a changelog:
+
+- **Finding 1 (revoked API keys)** — covered. The sweep's third step reaches keys.
+- **Finding 2 (session metadata)** — covered. Second step, `sessions`.
+- **Stale-audit note (`session_operations`)** — covered. First step, and the fixed
+  order (operations → sessions → keys) is load-bearing: operations are found
+  _through_ their session, so scrubbing the session first would orphan them.
+
+Resolved by **anonymisation for `sessions` and `api_keys`, deletion for
+`session_operations`** — which is why the "deliberately NOT implemented" section
+below reads as still-open and is not. The split is deliberate, not incidental:
+an operation row is not required by any longer-lived record, so it can go; a
+session row cannot. That section's own
+reasoning is what the design answers:
+
+- deleting a session would take its `usage_records` with it, and §9's table requires
+  those kept for **7 years**;
+- finding 3 above — the `sessions.api_key_id → api_keys.id` `onDelete: 'restrict'`
+  coupling — makes a revoked key undeletable while any session references it.
+
+§9's closing paragraph authorises the alternative: personal data is deleted or
+anonymised, and non-identifying aggregates may be retained. Keeping the row and
+scrubbing the customer-supplied fields to `[scrubbed: retention]` satisfies the
+disclosure without destroying the seven-year billing record. Window is 90 days,
+matching the disclosed promise.
+
+Design record: `docs/internal/2026-08-12-retention-anonymisation-design.md`.
+
+The founder decision the section below asks for was therefore taken — the third way,
+neither "implement the deletions" nor "amend §9". Left in place rather than deleted
+because the reasoning still explains why a _deletion_ sweeper was the wrong shape.
+
 ### Deliberately NOT implemented — needs a founder decision
 
 Two legitimate resolutions, and choosing is not an engineering call:
