@@ -20,6 +20,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { hijackedReplyHeaders } from '../lib/hijacked-reply.js';
 import {
   AgentModelSchema,
   ConsequentialActionCategorySchema,
@@ -3429,6 +3430,10 @@ export function registerAgentSessionsRoutes(
 
         try {
           reply.raw.writeHead(200, {
+            // Hijack drops everything the pipeline set — the request id and the
+            // rate-limit accounting for the token this connection just spent.
+            // Spread FIRST so this route's own content-type and cache-control win.
+            ...hijackedReplyHeaders(reply),
             'content-type': 'text/event-stream; charset=utf-8',
             'cache-control': 'no-cache, no-store, private, no-transform',
             connection: 'keep-alive',
@@ -4985,12 +4990,11 @@ export function registerAgentSessionsRoutes(
       // The underlying turn deliberately continues after a viewer disconnects:
       // abandoning it halfway would leave already-dispatched browser actions,
       // transcript, token debit, and cost recording in an ambiguous state.
-      const responseHeaders: Record<string, string | number | string[]> = {};
-      for (const [name, value] of Object.entries(reply.getHeaders())) {
-        if (name !== 'content-length' && value !== undefined) responseHeaders[name] = value;
-      }
       reply.raw.writeHead(200, {
-        ...responseHeaders,
+        // Was a bespoke copy of reply.getHeaders() minus content-length — the
+        // right idea, but it still missed x-request-id, which an onSend hook
+        // sets, so it is not on the reply at hijack time. Shared helper now.
+        ...hijackedReplyHeaders(reply),
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-cache, no-store, no-transform',
         connection: 'keep-alive',

@@ -18,6 +18,7 @@ import { FeatureUnavailableError } from '../lib/errors.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { IncidentEvent, IncidentEventBus } from '../services/incident-event-bus.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
+import { hijackedReplyHeaders } from '../lib/hijacked-reply.js';
 import type { SlaReportingService } from '../services/sla-reporting.js';
 import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 
@@ -85,6 +86,10 @@ export function registerStatusStreamRoutes(
     };
     // Hijack the reply so Fastify doesn't auto-finish the response.
     reply.raw.writeHead(200, {
+      // Hijack drops everything the pipeline set — the request id and the
+      // rate-limit accounting for the token this connection just spent.
+      // Spread FIRST so this route's own content-type and cache-control win.
+      ...hijackedReplyHeaders(reply),
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache, no-transform',
       connection: 'keep-alive',

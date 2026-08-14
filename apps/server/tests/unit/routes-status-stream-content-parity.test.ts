@@ -85,9 +85,14 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     expect(body).toMatch(/const heartbeatMs = opts\.heartbeatMs \?\? 30_000;/);
   });
 
+  // SPLIT. The chain ran from `writeHead(200, {` straight into `content-type` as
+  // consecutive lines, so inheriting the pipeline's headers — which must be
+  // spread FIRST, before the route's own values — broke a pin about which
+  // headers the stream sets. The entry list is pinned on its own below.
   it('SSE response headers: text/event-stream utf-8 + no-cache,no-transform + keep-alive + x-accel-buffering:no + W586 CORS spread', () => {
+    expect(body).toMatch(/reply\.raw\.writeHead\(200, \{/);
     expect(body).toMatch(
-      /reply\.raw\.writeHead\(200, \{\s*\n?\s*'content-type': 'text\/event-stream; charset=utf-8',\s*\n?\s*'cache-control': 'no-cache, no-transform',\s*\n?\s*connection: 'keep-alive',\s*\n?\s*'x-accel-buffering': 'no',\s*\/\/\s*disable nginx-style buffering/,
+      /'content-type': 'text\/event-stream; charset=utf-8',\s*\n?\s*'cache-control': 'no-cache, no-transform',\s*\n?\s*connection: 'keep-alive',\s*\n?\s*'x-accel-buffering': 'no',\s*\/\/\s*disable nginx-style buffering/,
     );
     // W586 — hijacked SSE reply must reflect ACAO itself (bypasses cors hook).
     expect(body).toMatch(/\.\.\.sseCorsHeaders\(request\.headers\.origin, opts\.cors \?\? \{\}\)/);

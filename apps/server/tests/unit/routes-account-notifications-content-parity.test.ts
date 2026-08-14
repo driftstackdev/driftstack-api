@@ -50,6 +50,12 @@ interface CapturedReplyRaw {
 interface CapturedReply {
   raw: CapturedReplyRaw;
   hijack: () => void;
+  // A real FastifyReply carries both of these at hijack time, and the route
+  // reads them to forward the request id + rate-limit accounting the hijack
+  // would otherwise drop. The double lacked them, so it modelled a reply that
+  // cannot exist; the omission only surfaced when the route began using them.
+  getHeaders: () => Record<string, string | number | string[] | undefined>;
+  request: { id: string };
 }
 
 type CapturedHandler = (request: CapturedRequest, reply: CapturedReply) => void;
@@ -142,6 +148,8 @@ function makeConnection(
       hijack: () => {
         hijackCount += 1;
       },
+      getHeaders: () => ({ 'x-ratelimit-limit': '100', 'x-ratelimit-remaining': '99' }),
+      request: { id: 'req-captured-stub' },
     },
     writes,
     get writesAfterEnd() {

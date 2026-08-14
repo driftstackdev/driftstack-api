@@ -24,6 +24,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { NotificationEventBus } from '../services/notification-event-bus.js';
 import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 import { RateLimitedError } from '../lib/errors.js';
+import { hijackedReplyHeaders } from '../lib/hijacked-reply.js';
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
@@ -104,6 +105,22 @@ export function registerAccountNotificationsRoutes(
       // decrement it → that account permanently loses a slot (audit pre-push, w83xq1aht).
 
       reply.raw.writeHead(200, {
+        // Same bypass, same fix, for two things the note above stopped short of.
+        // Both were COMPUTED by the pipeline and then discarded by the hijack:
+        //
+        //   x-request-id   set by an onSend hook, which never runs here. So the
+        //                  one response a customer is most likely to report — a
+        //                  long-lived stream that dropped, hard to reproduce —
+        //                  was the only one with no id to quote to support.
+        //   rate-limit set this route runs `app.rateLimit('global')`, so the
+        //                  request spends a real bucket token. The limiter put
+        //                  remaining/limit/reset on the reply and the hijack
+        //                  dropped them, leaving the client no visibility into a
+        //                  bucket it is actually paying into.
+        //
+        // Forwarded off the reply rather than recomputed, so they carry what the
+        // pipeline actually decided rather than a second opinion about it.
+        ...hijackedReplyHeaders(reply),
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-cache, no-store, private, no-transform',
         connection: 'keep-alive',
