@@ -1703,7 +1703,13 @@ function buildRegistry(): OpenAPIRegistry {
       cap_cents: z.number().int().min(0),
       used_this_month_cents: z.number().int().min(0),
       remaining_cents: z.number().int().min(0),
-      refused_count_this_month: z.number().int().min(0),
+      refused_count_this_month: z
+        .number()
+        .int()
+        .min(0)
+        .describe(
+          'NOT YET IMPLEMENTED — always 0. Refusals do occur: a turn past the monthly cap is rejected with a bundled-LLM budget-exhausted error, and that is counted for operators in Prometheus, but no per-account counter is persisted, so this field cannot report them. Do not reconcile it against errors you received.',
+        ),
       month_started_at: z.string(),
     })
     .openapi('BundledLlmStatus');

@@ -74,11 +74,13 @@ export function registerAccountBundledLlmRoutes(
 
   // Arc 1 sub-slice 6.7 (v2-#6) — dashboard data endpoint. Returns
   // consent / cap / month-to-date spend / remaining headroom. The
-  // refused_count_this_month field tracks BundledLlmBudgetExhausted
-  // throws; today the route layer doesn't write an audit row for
-  // these (audit wire is a follow-up slice), so the field reports 0
-  // as a stable schema placeholder. Customer + dashboard can branch
-  // on `remaining_cents <= 0` for the same "you've hit the cap" UX.
+  // refused_count_this_month field does NOT track anything: refusals
+  // do occur — a turn past the cap throws BundledLlmBudgetExhausted
+  // and is counted for operators in Prometheus — but no per-account
+  // counter is persisted anywhere, so the field reports 0 as a
+  // placeholder and the published schema discloses that. Customer +
+  // dashboard can branch on `remaining_cents <= 0` for the same
+  // "you've hit the cap" UX.
   app.get(
     '/v1/account/me/bundled-llm-status',
     { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
@@ -99,6 +101,9 @@ export function registerAccountBundledLlmRoutes(
         cap_cents: capCents,
         used_this_month_cents: usedCents,
         remaining_cents: remaining,
+        // Placeholder, not a measurement — see the header comment. When a real
+        // counter lands, remove the schema disclosure with it (a guard fails
+        // if this stops being a literal, and says so).
         refused_count_this_month: 0,
         // ISO-8601 calendar-month-start so the dashboard can render
         // "resets on <date>" without re-deriving the boundary itself.

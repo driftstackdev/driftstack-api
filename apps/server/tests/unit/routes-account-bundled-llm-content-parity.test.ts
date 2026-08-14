@@ -69,16 +69,38 @@ describe('routes/account-bundled-llm content parity', () => {
     );
   });
 
-  it("Arc 1 sub-slice 6.7 GET /bundled-llm-status framing pinned: 'dashboard data endpoint. Returns consent / cap / month-to-date spend / remaining headroom. The refused_count_this_month field tracks BundledLlmBudgetExhausted throws; today the route layer doesn't write an audit row for these (audit wire is a follow-up slice), so the field reports 0 as a stable schema placeholder. Customer + dashboard can branch on `remaining_cents <= 0` for the same \"you've hit the cap\" UX.' — pinned so the dashboard-data + refused_count-stable-0-placeholder + remaining-cents-<=-0-cap-UX contract all stay documented", () => {
+  // CORRECTED 2026-08-14. This pin used to freeze the sentence "The
+  // refused_count_this_month field tracks BundledLlmBudgetExhausted throws;
+  // today the route layer doesn't write an audit row for these (audit wire is a
+  // follow-up slice)". That was not true, and the pin was protecting it.
+  //
+  // The field tracks nothing. Refusals genuinely occur — a turn past the cap
+  // throws and the same path increments a Prometheus counter — but no
+  // per-account count is persisted ANYWHERE, so the gap is not a missing audit
+  // row that a follow-up slice would close; there is no counter to read at all.
+  // The old wording made a placeholder sound like a nearly-finished feature, to
+  // the one reader most likely to act on it: whoever picks this up next.
+  //
+  // A pin records what the text SAID, never whether it was TRUE. When a pin and
+  // reality disagree, suspect the pin.
+  it("Arc 1 sub-slice 6.7 GET /bundled-llm-status framing pinned: 'dashboard data endpoint. Returns consent / cap / month-to-date spend / remaining headroom. The refused_count_this_month field does NOT track anything: refusals do occur — a turn past the cap throws BundledLlmBudgetExhausted and is counted for operators in Prometheus — but no per-account counter is persisted anywhere, so the field reports 0 as a placeholder and the published schema discloses that. Customer + dashboard can branch on `remaining_cents <= 0` for the same \"you've hit the cap\" UX.' — pinned so the dashboard-data + not-a-tracker + schema-discloses-it + remaining-cents-<=-0-cap-UX contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Arc 1 sub-slice 6\.7 \(v2-#6\) — dashboard data endpoint\. Returns\s*\n?\s*\/\/ consent \/ cap \/ month-to-date spend \/ remaining headroom\. The\s*\n?\s*\/\/ refused_count_this_month field tracks BundledLlmBudgetExhausted\s*\n?\s*\/\/ throws; today the route layer doesn't write an audit row for\s*\n?\s*\/\/ these \(audit wire is a follow-up slice\), so the field reports 0\s*\n?\s*\/\/ as a stable schema placeholder\./,
+      /\/\/ Arc 1 sub-slice 6\.7 \(v2-#6\) — dashboard data endpoint\. Returns\s*\n?\s*\/\/ consent \/ cap \/ month-to-date spend \/ remaining headroom\. The\s*\n?\s*\/\/ refused_count_this_month field does NOT track anything: refusals\s*\n?\s*\/\/ do occur/,
+    );
+    expect(body).toMatch(
+      /\/\/ counter is persisted anywhere, so the field reports 0 as a\s*\n?\s*\/\/ placeholder and the published schema discloses that\./,
     );
   });
 
   it('Status response 6-field shape pinned: consent + cap_cents + used_this_month_cents + remaining_cents + refused_count_this_month + month_started_at (ISO-8601 calendar-month-start). + Math.max(0, capCents - usedCents) clamp + Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0).toISOString() month-boundary derivation. Drift to dropping month_started_at would force the dashboard to re-derive the boundary itself (timezone-dance bug invitation)', () => {
+    // SPLIT from one chain. The single regex ran from the clamp straight through
+    // to `refused_count_this_month: 0,` as consecutive lines, so a comment
+    // documenting that field — the honest thing to add — broke a pin about the
+    // response SHAPE. A chain that long fails for reasons it is not about.
     expect(body).toMatch(
-      /const remaining = Math\.max\(0, capCents - usedCents\);\s*\n?\s*return \{\s*\n?\s*consent,\s*\n?\s*cap_cents: capCents,\s*\n?\s*used_this_month_cents: usedCents,\s*\n?\s*remaining_cents: remaining,\s*\n?\s*refused_count_this_month: 0,/,
+      /const remaining = Math\.max\(0, capCents - usedCents\);\s*\n?\s*return \{\s*\n?\s*consent,\s*\n?\s*cap_cents: capCents,\s*\n?\s*used_this_month_cents: usedCents,\s*\n?\s*remaining_cents: remaining,/,
     );
+    expect(body).toMatch(/^\s*refused_count_this_month: 0,\s*$/m);
     expect(body).toMatch(
       /\/\/ ISO-8601 calendar-month-start so the dashboard can render\s*\n?\s*\/\/ "resets on <date>" without re-deriving the boundary itself\./,
     );

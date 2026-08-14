@@ -3301,7 +3301,8 @@
           },
           "refused_count_this_month": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "NOT YET IMPLEMENTED — always 0. Refusals do occur: a turn past the monthly cap is rejected with a bundled-LLM budget-exhausted error, and that is counted for operators in Prometheus, but no per-account counter is persisted, so this field cannot report them. Do not reconcile it against errors you received."
           },
           "month_started_at": {
             "type": "string"

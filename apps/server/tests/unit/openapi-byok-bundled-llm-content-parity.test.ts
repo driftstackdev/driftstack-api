@@ -78,9 +78,44 @@ describe('OpenAPI — BYOK Anthropic + Bundled LLM endpoints', () => {
     );
   });
 
-  it('Bundled-LLM status response includes all 6 fields (consent, cap_cents, used_this_month_cents, remaining_cents, refused_count_this_month, month_started_at)', () => {
-    expect(src).toMatch(
-      /BundledLlmStatusOpenApi[\s\S]{0,500}consent[\s\S]{0,100}cap_cents[\s\S]{0,100}used_this_month_cents[\s\S]{0,100}remaining_cents[\s\S]{0,100}refused_count_this_month[\s\S]{0,100}month_started_at/,
+  // REWRITTEN 2026-08-14 from a chain of `[\s\S]{0,100}` gaps between the field
+  // names. Documenting `refused_count_this_month` — a ~370-char `.describe()`
+  // saying the field is unimplemented — pushed `month_started_at` past the
+  // hundred-character bound and failed a pin about which FIELDS EXIST. Raising
+  // the number would only move the tripwire, and each raise silently weakens the
+  // ordering claim for every other gap.
+  //
+  // So the block is sliced at its own delimiters and the names are compared by
+  // position. That states the claim directly and does not care how much prose
+  // sits between two fields. The slice is bounded at BOTH ends: a slice that
+  // grew to the whole file would still contain all six names in order and pass
+  // having verified nothing about this schema.
+  it('Bundled-LLM status response includes all 6 fields, in order (consent, cap_cents, used_this_month_cents, remaining_cents, refused_count_this_month, month_started_at)', () => {
+    const start = src.indexOf('BundledLlmStatusOpenApi');
+    expect(start, 'the schema declaration was found').toBeGreaterThan(-1);
+    const end = src.indexOf(".openapi('BundledLlmStatus')", start);
+    expect(end, 'its closing .openapi() call was found').toBeGreaterThan(start);
+
+    const block = src.slice(start, end);
+    // MEASURED: 705 chars. A floor catches an anchor that stopped matching; the
+    // ceiling catches a slice that swallowed neighbouring schemas.
+    expect(block.length, 'the sliced schema block is a plausible size').toBeGreaterThan(200);
+    expect(block.length, 'and did not run past this schema').toBeLessThan(3000);
+
+    const FIELDS = [
+      'consent',
+      'cap_cents',
+      'used_this_month_cents',
+      'remaining_cents',
+      'refused_count_this_month',
+      'month_started_at',
+    ];
+    const missing = FIELDS.filter((f) => !new RegExp(`^\\s*${f}:`, 'm').test(block));
+    expect(missing, 'field(s) the status schema no longer declares:').toEqual([]);
+
+    const positions = FIELDS.map((f) => block.search(new RegExp(`^\\s*${f}:`, 'm')));
+    expect(positions, 'the fields are declared in the documented order').toEqual(
+      [...positions].sort((a, b) => a - b),
     );
   });
 
