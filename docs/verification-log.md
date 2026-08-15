@@ -33981,3 +33981,80 @@ of the retracted sentence, plus a positive requiring the retraction to stay. My 
 quoted the frozen phrase back and tripped its own negative, which is the correct behaviour.
 
 `EXPECTED_TEST_FILES` 2725 → 2726.
+
+## V-784 — five daily sweeps whose schedule lived only in process memory (2026-08-15)
+
+Eleven recurring sweeps run as self-re-arming `scheduled_jobs` rows. Five did not. They ran on
+`setInterval(fn, 24 * 60 * 60 * 1000)` created during bootstrap: the status-subscriber email purge
+(Privacy §3.10's 90-day zero-out), the webhook signing-secret rotation reminder, the BYOK Anthropic
+key rotation reminder, the webhook grace-expiring notice, and the stale `secret_prev` cleanup.
+
+`setInterval` does not fire until a full period has elapsed. **A process that restarts more often
+than once a day never reaches the first tick**, so on a normal deploy cadence these did not run
+late — they did not run at all, and nothing about that state differs from a quiet day. The schedule
+was also process-local, so every restart discarded whatever progress the timer had made and began
+the 24 hours again.
+
+**The reason it stayed invisible is the interesting half.** `job-chain-liveness` exists precisely so
+a dead recurring sweep reports 0 instead of reporting nothing; its own header says a gauge built
+from "what the table contains" would emit no series for the job type in trouble, and a missing
+series reads as healthy on every dashboard. But its roster is derived from the `*_JOB_TYPE`
+constants the sweepers export. A sweep that was never a job had no constant, no pending row, and no
+series. It was not a dead chain — it was not a chain. **The watchdog covered exactly the sweeps that
+had already opted into durability**, which is the same self-agreeing shape as V-759/V-769/V-777: a
+check derived by pattern-matching source is only as complete as its pattern, and its own greenness
+cannot reveal what the pattern never reached.
+
+All five now register and arm alongside the other eleven, and appear on the roster (11 → 16).
+`notRunHere` is wired for the first time so a deployment with
+`DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1` omits those four chains rather than reporting 0 — the
+gauge's own test has always exercised that capability and bootstrap never used it, so a
+kill-switched deployment would have paged for four sweeps that were off on purpose.
+
+**An ordering hazard this created, and where the fix had to go.** `ScheduledJobsService.processTick`
+marks a job FAILED when its type has no registered handler — a claim landing before registration
+does not retry, it kills the chain. The five services used to be constructed 800 lines below the
+poller. Rather than move the poller, the constructions moved up to sit with the other eleven
+registrations, so "every handler is registered before the poller starts" stays structurally true
+instead of depending on a 60-second head start.
+
+**Nothing in this repository executed the production dependency graph.** Four test files import from
+`lib/bootstrap.js` and all four take a helper out of it; the integration harness builds its own dep
+graph and the e2e suite calls `buildApp` with deps already built. So the ~3200-line factory that
+opens every connection and arms every sweep was verified by content-parity regex alone — and a pin
+can prove a line of text is present, never that the function runs. That is the same gap that let
+`setInterval(fn, 24h)` sit there being faithfully frozen by a pin for months.
+`production-bootstrap-arms-every-chain.test.ts` now boots it for real and asserts every rostered
+chain has a pending row afterwards. Verified against a throwaway database created, migrated,
+asserted from an empty `scheduled_jobs` table, and dropped: all 16 chains armed.
+
+Mutation-proved three ways: registering the status purge without enqueueing it reds the new boot
+test with the exact missing job type; re-arming only on success reds the chain-survival case;
+reintroducing any day-cadence `setInterval` in bootstrap reds the roster case.
+
+Pins updated in the same commit, all with per-occurrence negatives: the V-295c3 pin (which froze
+both the V-783 audit claim and "first tick fires 24h after boot", the latter true of the timer and
+precisely the bug), the v2-#17 rotation-reminder pin (interval constant, both `.unref()`s, both
+teardown `clearInterval`s), the force-rotation pin (`clearStaleSecretPrev` call shape), and the
+rotation-reminder service header — which has now been wrong twice in the same sentence, first
+calling the wiring dormant after the timer shipped, then describing the timer after it was replaced.
+
+**The gate caught one thing my own reader enumeration did not.**
+`every-background-timer-is-crash-safe.test.ts` carries a vacuity floor — "MEASURED: 11 setInterval
+pollers" — and removing five of them tripped it. That is the guard working exactly as designed: it
+exists so a scan that has stopped finding anything cannot keep passing, and a population drop is
+indistinguishable from a broken matcher unless someone states the reason. Floors moved 11 → 6 with
+the reason recorded inline, the header's list of eleven timers was corrected, and a new assertion
+requires the two independent counts (brace-matched bodies, timer consts) to AGREE — a drift between
+them means one matcher broke, and every arm below iterates whichever is smaller, silently checking
+fewer timers than exist.
+
+Worth recording WHY I missed it: my pin sweep greps `lib/bootstrap` against the test dirs, and that
+file builds the path from segments — `resolve(HERE, '..', '..', 'src', 'lib', 'bootstrap.ts')` —
+so the substring never appears. Re-running with `'bootstrap\.ts'` added found **eight** readers the
+first pattern missed, including this one, `bootstrap-wires-the-required-readiness-checks` and
+`retention-sweeps-are-unconditional-invariant`. Same lesson as V-759/V-769/V-777 turned on my own
+tooling: the enumeration is only as complete as its pattern, and a green run of the files it did
+find says nothing about the ones it did not.
+
+Fifth of seven findings from the concurrency/recovery sweep. `EXPECTED_TEST_FILES` 2726 → 2728.

@@ -101,6 +101,15 @@ import { InMemoryPairModeHeartbeatTracker } from '../services/agent-pair-mode-he
 import { PairModeHeartbeatSweep } from '../services/agent-pair-mode-heartbeat-sweep.js';
 import { MetricsRegistry, METRIC_NAMES } from '../services/metrics-registry.js';
 import { refreshJobChainLiveness } from '../services/job-chain-liveness.js';
+import {
+  wireDailyMaintenanceSweep,
+  ROTATION_REMINDER_JOB_TYPES,
+  STATUS_SUBSCRIBER_PURGE_JOB_TYPE,
+  WEBHOOK_ROTATION_REMINDER_JOB_TYPE,
+  BYOK_ANTHROPIC_ROTATION_REMINDER_JOB_TYPE,
+  WEBHOOK_GRACE_EXPIRING_NOTICE_JOB_TYPE,
+  WEBHOOK_SECRET_PREV_CLEANUP_JOB_TYPE,
+} from '../services/daily-maintenance-jobs.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import {
@@ -2107,6 +2116,158 @@ export async function createProductionDeps(
   });
   await enqueueNextNightlyRun({ scheduledJobs: scheduledJobsService });
 
+  // v2-#17 — daily rotation-reminder sweeps for webhook signing secrets
+  // (v2-#10/#10.5/#10.6) and BYOK Anthropic API keys (v2-#11/#11.5/#11.6).
+  // Both reminder services are pure-sweep nags (no auto-rotation); the
+  // services skip rows that don't need a reminder yet, so the per-tick
+  // burst is bounded by perTickLimit (default 50). Default-on for
+  // production; the operator can flip
+  // DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 to suppress when a
+  // customer-quiet account wants to silence the nag (e.g. canary
+  // deployments).
+  const rotationRemindersDisabled = envFlag(process.env.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS);
+  const webhookRotationReminderService = new WebhookRotationReminderService(
+    new DrizzleWebhookRotationReminderRepo(dbHandle, {
+      ...(config.mfaEncryptionKey !== undefined
+        ? { secretEncryptionKeyBase64: config.mfaEncryptionKey }
+        : {}),
+    }),
+    email,
+    logger,
+    // v2-#36 — thread DASHBOARD_ORIGIN-driven config so rotation
+    // reminder emails link to the right host on each env.
+    { dashboardUrl: config.dashboardOrigin },
+  );
+  const byokAnthropicRotationReminderService = new ByokAnthropicRotationReminderService(
+    new DrizzleByokAnthropicRotationReminderRepo(dbHandle),
+    email,
+    logger,
+    { dashboardUrl: config.dashboardOrigin },
+  );
+  // Arc 3 sub-slice 28.5 follow-up (v2-#28) — 24h-before-grace-expiry
+  // last-chance email for any already-persisted force-rotation window.
+  // Keep this recovery path and secret-prev cleanup active even though the
+  // unrecoverable 91-day force-rotation producer is deliberately not wired:
+  // the plaintext-once API has no authenticated channel that can reveal the
+  // producer's generated secret to its customer. Reuses webhooksRepo directly
+  // (DrizzleWebhooksRepo structurally satisfies
+  // WebhookGraceExpiringNoticeRepo) and shares the reminder opt-out/cadence.
+  const webhookGraceExpiringNoticeService = new WebhookGraceExpiringNoticeService(
+    webhooksRepo,
+    email,
+    logger,
+    { dashboardUrl: config.dashboardOrigin },
+  );
+
+  // V-784 — the five daily sweeps below run as durable, self-re-arming
+  // scheduled_jobs rows rather than the bare 24h setInterval timers they used
+  // to be. A setInterval fires its first tick a full period after it is
+  // created, so a process that restarts more often than once a day never
+  // reached the first tick and these did not run at all; the schedule also
+  // lived only in process memory, and none of them appeared on the
+  // job-chain-liveness roster, which is derived from the *_JOB_TYPE constants
+  // and therefore watched exactly the sweeps that were already durable. See
+  // services/daily-maintenance-jobs.ts.
+  //
+  // Wired HERE, alongside the other eleven chains and above the poller that
+  // dispatches them, because ScheduledJobsService.processTick markFailed()s a
+  // job whose type has no registered handler — a claim that lands before
+  // registration does not retry, it kills the chain.
+  //
+  // V-295c3-tombstone — status-subscriber email purge. Privacy §3.10 promises
+  // 90d post-unsubscribe email zero-out.
+  //
+  // V-783 — this used to claim the purge records each row in the admin audit
+  // log as an actor-less system action. That was false, and unachievable:
+  // admin_audit_log.admin_account_id and .admin_key_id are both NOT NULL with
+  // FKs, account_audit_log requires an accountId, and a status subscriber is an
+  // anonymous email fired at by a sweep with no actor — there is no row that
+  // could be inserted. Migration 0027 reserved the 'status_subscriber.purged'
+  // enum value for a write that nothing has ever performed. The log line below
+  // is the only evidence the purge ran; see the admin-audit reachability guard.
+  await wireDailyMaintenanceSweep({
+    scheduledJobs: scheduledJobsService,
+    logger,
+    sweep: {
+      jobType: STATUS_SUBSCRIBER_PURGE_JOB_TYPE,
+      component: 'status-subscriber-purge',
+      run: async (now) => {
+        const result = await statusSubscribersService.processPurge(now);
+        if (result.purged.length > 0) {
+          logger.info(
+            { component: 'status-subscriber-purge', count: result.purged.length },
+            'purged status-subscriber emails (90d post-unsubscribe)',
+          );
+        }
+      },
+    },
+  });
+
+  if (rotationRemindersDisabled) {
+    logger.warn(
+      { component: 'rotation-reminders' },
+      'DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 — webhook + BYOK Anthropic key rotation reminder sweeps disabled at boot',
+    );
+  } else {
+    await wireDailyMaintenanceSweep({
+      scheduledJobs: scheduledJobsService,
+      logger,
+      sweep: {
+        jobType: WEBHOOK_ROTATION_REMINDER_JOB_TYPE,
+        component: 'webhook-rotation-reminder',
+        run: async (now) => {
+          await webhookRotationReminderService.tickOnce(now);
+        },
+      },
+    });
+    await wireDailyMaintenanceSweep({
+      scheduledJobs: scheduledJobsService,
+      logger,
+      sweep: {
+        jobType: BYOK_ANTHROPIC_ROTATION_REMINDER_JOB_TYPE,
+        component: 'byok-anthropic-rotation-reminder',
+        run: async (now) => {
+          await byokAnthropicRotationReminderService.tickOnce(now);
+        },
+      },
+    });
+    await wireDailyMaintenanceSweep({
+      scheduledJobs: scheduledJobsService,
+      logger,
+      sweep: {
+        jobType: WEBHOOK_GRACE_EXPIRING_NOTICE_JOB_TYPE,
+        component: 'webhook-grace-expiring-notice',
+        run: async (now) => {
+          await webhookGraceExpiringNoticeService.tickOnce(now);
+        },
+      },
+    });
+    // v2-#29 — daily stale-secret_prev cleanup. v2-#20's worker fix
+    // already stops emitting the prev signature past the grace window;
+    // this sweep is a data-hygiene follow-up that nulls the row columns
+    // so a leaked DB snapshot can no longer surface the old plaintext.
+    // Shares the same daily cadence + opt-out as the rotation reminders;
+    // a deploy that wants no automatic mutations sets
+    // DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1.
+    await wireDailyMaintenanceSweep({
+      scheduledJobs: scheduledJobsService,
+      logger,
+      sweep: {
+        jobType: WEBHOOK_SECRET_PREV_CLEANUP_JOB_TYPE,
+        component: 'webhook-secret-prev-cleanup',
+        run: async (now) => {
+          const result = await webhooksRepo.clearStaleSecretPrev({ now });
+          if (result.cleared > 0) {
+            logger.info(
+              { component: 'webhook-secret-prev-cleanup', cleared: result.cleared },
+              'webhook secret_prev cleanup nulled stale rows',
+            );
+          }
+        },
+      },
+    });
+  }
+
   // Readiness checks. Postgres + Redis are required; R2 only checked
   // if configured. Postmark + Sentry are never readiness-gated.
   const readinessChecks: ReadinessCheck[] = [
@@ -2544,8 +2705,18 @@ export async function createProductionDeps(
           // Chain-liveness gauge, refreshed at scrape time. Deliberately NOT
           // driven from a job tick: a watchdog that rides on a chain dies with
           // the chain it is meant to be watching.
+          // V-784 — a deployment with the rotation-reminder kill-switch set
+          // neither registers nor enqueues those four chains, so they are
+          // OMITTED rather than reported as 0: zero means "this chain died"
+          // and would page for a sweep that was switched off on purpose.
           metricsRefreshGauges: () =>
-            refreshJobChainLiveness({ repo: scheduledJobsRepo, metrics: metricsRegistry }),
+            refreshJobChainLiveness({
+              repo: scheduledJobsRepo,
+              metrics: metricsRegistry,
+              ...(rotationRemindersDisabled
+                ? { notRunHere: new Set(ROTATION_REMINDER_JOB_TYPES) }
+                : {}),
+            }),
         }
       : {}),
     // Arc 2 sub-slice 8.4 (v2-#8) — gui_control_key encryption.
@@ -2829,135 +3000,6 @@ export async function createProductionDeps(
     : null;
   statusSnapshotTimer?.unref();
 
-  // V-295c3-tombstone — daily status-subscriber email-purge poller.
-  // Privacy §3.10 promises 90d post-unsubscribe email zero-out. Runs
-  // every 24 hours; first tick fires 24h after boot (acceptable —
-  // rows that just unsubscribed have 90 days before they're eligible
-  // anyway).
-  //
-  // V-783 — this comment used to claim the purge records each row in the admin
-  // audit log as an actor-less system action. That was false, and unachievable:
-  // admin_audit_log.admin_account_id and .admin_key_id are both NOT NULL with
-  // FKs, account_audit_log requires an accountId, and a status subscriber is an
-  // anonymous email fired at by a timer — there is no actor to attribute the
-  // row to. Migration 0027 reserved the 'status_subscriber.purged' enum value
-  // for a write that nothing has ever performed. The log line below is the only
-  // evidence the purge ran; see the admin-audit reachability guard.
-  const STATUS_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
-  const statusPurgeTimer = setInterval(() => {
-    void (async () => {
-      try {
-        const result = await statusSubscribersService.processPurge(new Date());
-        if (result.purged.length > 0) {
-          logger.info(
-            { component: 'status-subscriber-purge', count: result.purged.length },
-            'purged status-subscriber emails (90d post-unsubscribe)',
-          );
-        }
-      } catch (err) {
-        logger.warn(
-          {
-            component: 'status-subscriber-purge',
-            err:
-              err instanceof Error
-                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
-                : { value: err },
-          },
-          'status-subscriber-purge threw unexpectedly (interval continues)',
-        );
-      }
-    })();
-  }, STATUS_PURGE_INTERVAL_MS);
-  statusPurgeTimer.unref();
-
-  // v2-#17 — daily rotation-reminder sweeps for webhook signing secrets
-  // (v2-#10/#10.5/#10.6) and BYOK Anthropic API keys (v2-#11/#11.5/#11.6).
-  // Both reminder services are pure-sweep nags (no auto-rotation); the
-  // services skip rows that don't need a reminder yet, so the per-tick
-  // burst is bounded by perTickLimit (default 50). Default-on for
-  // production; the operator can flip
-  // DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 to suppress when a
-  // customer-quiet account wants to silence the nag (e.g. canary
-  // deployments). Daily cadence (24h) matches the V-295c3-tombstone
-  // status-purge poller — no need for finer granularity since the
-  // services' cooldown windows are days, not minutes.
-  const ROTATION_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
-  const rotationRemindersDisabled = envFlag(process.env.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS);
-  const webhookRotationReminderService = new WebhookRotationReminderService(
-    new DrizzleWebhookRotationReminderRepo(dbHandle, {
-      ...(config.mfaEncryptionKey !== undefined
-        ? { secretEncryptionKeyBase64: config.mfaEncryptionKey }
-        : {}),
-    }),
-    email,
-    logger,
-    // v2-#36 — thread DASHBOARD_ORIGIN-driven config so rotation
-    // reminder emails link to the right host on each env.
-    { dashboardUrl: config.dashboardOrigin },
-  );
-  const byokAnthropicRotationReminderService = new ByokAnthropicRotationReminderService(
-    new DrizzleByokAnthropicRotationReminderRepo(dbHandle),
-    email,
-    logger,
-    { dashboardUrl: config.dashboardOrigin },
-  );
-  // Arc 3 sub-slice 28.5 follow-up (v2-#28) — 24h-before-grace-expiry
-  // last-chance email for any already-persisted force-rotation window.
-  // Keep this recovery path and secret-prev cleanup active even though the
-  // unrecoverable 91-day force-rotation producer is deliberately not wired:
-  // the plaintext-once API has no authenticated channel that can reveal the
-  // producer's generated secret to its customer. Reuses webhooksRepo directly
-  // (DrizzleWebhooksRepo structurally satisfies
-  // WebhookGraceExpiringNoticeRepo) and shares the reminder opt-out/cadence.
-  const webhookGraceExpiringNoticeService = new WebhookGraceExpiringNoticeService(
-    webhooksRepo,
-    email,
-    logger,
-    { dashboardUrl: config.dashboardOrigin },
-  );
-  const webhookRotationReminderTimer = rotationRemindersDisabled
-    ? null
-    : setInterval(() => {
-        void (async () => {
-          try {
-            await webhookRotationReminderService.tickOnce(new Date());
-          } catch (err) {
-            logger.warn(
-              {
-                component: 'webhook-rotation-reminder-poller',
-                err:
-                  err instanceof Error
-                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
-                    : { value: err },
-              },
-              'webhook-rotation-reminder tickOnce threw unexpectedly (interval continues)',
-            );
-          }
-        })();
-      }, ROTATION_REMINDER_INTERVAL_MS);
-  webhookRotationReminderTimer?.unref();
-  const byokAnthropicRotationReminderTimer = rotationRemindersDisabled
-    ? null
-    : setInterval(() => {
-        void (async () => {
-          try {
-            await byokAnthropicRotationReminderService.tickOnce(new Date());
-          } catch (err) {
-            logger.warn(
-              {
-                component: 'byok-anthropic-rotation-reminder-poller',
-                err:
-                  err instanceof Error
-                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
-                    : { value: err },
-              },
-              'byok-anthropic-rotation-reminder tickOnce threw unexpectedly (interval continues)',
-            );
-          }
-        })();
-      }, ROTATION_REMINDER_INTERVAL_MS);
-  byokAnthropicRotationReminderTimer?.unref();
-
   // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
   // sweep. Tick every 5 seconds: walks tracker.findStaleSessions()
   // + fires heartbeat-timeout transition + agent_session.pair_mode.timeout
@@ -3059,72 +3101,6 @@ export async function createProductionDeps(
   }, POLLER_INTERVAL_MS);
   webhookDeliveryTimer.unref();
 
-  // Arc 3 sub-slice 28.5 follow-up (v2-#28) — daily grace-expiring
-  // notice sweep. See webhookGraceExpiringNoticeService construction
-  // above for why this was previously unwired.
-  const webhookGraceExpiringNoticeTimer = rotationRemindersDisabled
-    ? null
-    : setInterval(() => {
-        void (async () => {
-          try {
-            await webhookGraceExpiringNoticeService.tickOnce(new Date());
-          } catch (err) {
-            logger.warn(
-              {
-                component: 'webhook-grace-expiring-notice-poller',
-                err:
-                  err instanceof Error
-                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
-                    : { value: err },
-              },
-              'webhook-grace-expiring-notice tickOnce threw unexpectedly (interval continues)',
-            );
-          }
-        })();
-      }, ROTATION_REMINDER_INTERVAL_MS);
-  webhookGraceExpiringNoticeTimer?.unref();
-
-  // v2-#29 — daily stale-secret_prev cleanup. v2-#20's worker fix
-  // already stops emitting the prev signature past the grace window;
-  // this sweep is a data-hygiene follow-up that nulls the row columns
-  // so a leaked DB snapshot can no longer surface the old plaintext.
-  // Shares the same daily cadence + opt-out as the rotation reminders;
-  // a deploy that wants no automatic mutations sets
-  // DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1.
-  const webhookSecretPrevCleanupTimer = rotationRemindersDisabled
-    ? null
-    : setInterval(() => {
-        void (async () => {
-          try {
-            const result = await webhooksRepo.clearStaleSecretPrev({ now: new Date() });
-            if (result.cleared > 0) {
-              logger.info(
-                { component: 'webhook-secret-prev-cleanup', cleared: result.cleared },
-                'webhook secret_prev cleanup nulled stale rows',
-              );
-            }
-          } catch (err) {
-            logger.warn(
-              {
-                component: 'webhook-secret-prev-cleanup',
-                err:
-                  err instanceof Error
-                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
-                    : { value: err },
-              },
-              'webhook secret_prev cleanup threw unexpectedly (interval continues)',
-            );
-          }
-        })();
-      }, ROTATION_REMINDER_INTERVAL_MS);
-  webhookSecretPrevCleanupTimer?.unref();
-  if (rotationRemindersDisabled) {
-    logger.warn(
-      { component: 'rotation-reminders' },
-      'DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 — webhook + BYOK Anthropic key rotation reminder sweeps disabled at boot',
-    );
-  }
-
   const teardown = shareFirstAsyncCall(async () => {
     logger.info({ component: 'bootstrap' }, 'tearing down');
     // V-232 — stop pollers BEFORE other teardown so no new tick is admitted
@@ -3135,11 +3111,6 @@ export async function createProductionDeps(
     clearInterval(validationHarnessTimer);
     if (healthProbeTimer) clearInterval(healthProbeTimer);
     if (statusSnapshotTimer) clearInterval(statusSnapshotTimer);
-    clearInterval(statusPurgeTimer);
-    if (webhookRotationReminderTimer) clearInterval(webhookRotationReminderTimer);
-    if (byokAnthropicRotationReminderTimer) clearInterval(byokAnthropicRotationReminderTimer);
-    if (webhookGraceExpiringNoticeTimer) clearInterval(webhookGraceExpiringNoticeTimer);
-    if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
     clearInterval(pairModeHeartbeatSweepTimer);
     clearInterval(webhookDeliveryTimer);
     // The three closes are INDEPENDENT — a Redis client, a Postgres pool and

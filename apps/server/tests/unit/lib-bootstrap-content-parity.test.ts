@@ -334,20 +334,27 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
-  it('V-295c3-tombstone framing pinned: Privacy §3.10 90d post-unsubscribe email zero-out; daily 24h cadence; first tick fires 24h after boot (acceptable — rows just unsubscribed have 90d before eligible). V-783 REPLACED the audit claim this used to freeze: the comment asserted the purge writes admin_audit_log with adminAccountId=null and that the repo accepts null for system actions, and BOTH were false — the column is NOT NULL with an FK, so no such write has ever happened or could. This pin now requires the correction to stay put.', () => {
+  it('V-295c3-tombstone framing pinned: Privacy §3.10 90d post-unsubscribe email zero-out, now a durable daily job chain. TWO claims were retracted here and both are held down per-occurrence. V-783: the comment asserted the purge writes admin_audit_log with a null adminAccountId and that the repo accepts null for system actions — both false, the column is NOT NULL with an FK, so no such write has ever happened or could. V-784: it also said the first tick fires 24h after boot and called that acceptable, which was true of the setInterval and was exactly the bug — a process restarting more often than daily never reached the first tick, so the §3.10 sweep did not run at all.', () => {
     expect(body).toMatch(
-      /\/\/ V-295c3-tombstone — daily status-subscriber email-purge poller\.\s*\n?\s*\/\/ Privacy §3\.10 promises 90d post-unsubscribe email zero-out\. Runs\s*\n?\s*\/\/ every 24 hours; first tick fires 24h after boot \(acceptable —\s*\n?\s*\/\/ rows that just unsubscribed have 90 days before they're eligible\s*\n?\s*\/\/ anyway\)\./,
+      /\/\/ V-295c3-tombstone — status-subscriber email purge\. Privacy §3\.10 promises\s*\n?\s*\/\/ 90d post-unsubscribe email zero-out\./,
     );
-    expect(body).toMatch(/const STATUS_PURGE_INTERVAL_MS = 24 \* 60 \* 60 \* 1000;/);
+    expect(body).toMatch(/jobType: STATUS_SUBSCRIBER_PURGE_JOB_TYPE,/);
 
-    // Per-occurrence negatives on the retracted claim. The regex above would
+    // Per-occurrence negatives on both retracted claims. A positive regex would
     // still match if the false sentences were merely moved further down, so the
-    // correction is asserted as the ABSENCE of each half of it.
+    // corrections are asserted as the ABSENCE of each half of each one.
     expect(body).not.toMatch(/Audit-logs each purge as a system action/);
     expect(body).not.toMatch(/adminAccountId set to null/);
     expect(body).not.toMatch(/audit-log repo accepts null adminAccountId/);
-    expect(body, 'the retraction itself must be present, not just the old text absent').toMatch(
-      /V-783 — this comment used to claim the purge records each row in the admin/,
+    expect(body).not.toMatch(/first tick fires 24h after boot/);
+    expect(body).not.toMatch(/STATUS_PURGE_INTERVAL_MS/);
+    expect(body).not.toMatch(/statusPurgeTimer/);
+    expect(
+      body,
+      'the V-783 retraction itself must be present, not just the old text absent',
+    ).toMatch(/V-783 — this used to claim the purge records each row in the admin audit/);
+    expect(body, 'and the V-784 reason the timer had to go').toMatch(
+      /a process that restarts more often than once a day never/,
     );
   });
 
@@ -464,11 +471,10 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toContain('export const REDIS_QUIT_DEADLINE_MS = 2_000;');
   });
 
-  it('v2-#17 rotation-reminder daily sweeps framing pinned: pure-sweep nags (no auto-rotation); 24h cadence matches the V-295c3-tombstone status-purge poller; default-on; DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS opts out via envFlag (true/1/yes/on); both timers .unref()-ed; clearInterval in teardown', () => {
+  it('v2-#17 rotation-reminder daily sweeps framing pinned: pure-sweep nags (no auto-rotation); default-on; DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS opts out via envFlag (true/1/yes/on). V-784 replaced the two 24h setInterval timers with durable job chains, so the interval constant, the .unref()s and the teardown clearIntervals this used to pin are gone and are asserted absent instead — a reintroduced timer would mean a reminder that never fires on a sub-daily deploy cadence.', () => {
     expect(body).toMatch(
       /\/\/ v2-#17 — daily rotation-reminder sweeps for webhook signing secrets\s*\n?\s*\/\/ \(v2-#10\/#10\.5\/#10\.6\) and BYOK Anthropic API keys \(v2-#11\/#11\.5\/#11\.6\)\.\s*\n?\s*\/\/ Both reminder services are pure-sweep nags \(no auto-rotation\); the\s*\n?\s*\/\/ services skip rows that don't need a reminder yet, so the per-tick\s*\n?\s*\/\/ burst is bounded by perTickLimit \(default 50\)\. Default-on for\s*\n?\s*\/\/ production; the operator can flip\s*\n?\s*\/\/ DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 to suppress when a\s*\n?\s*\/\/ customer-quiet account wants to silence the nag/,
     );
-    expect(body).toMatch(/const ROTATION_REMINDER_INTERVAL_MS = 24 \* 60 \* 60 \* 1000;/);
     expect(body).toMatch(
       /envFlag\(\s*process\.env\.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS,?\s*\)/,
     );
@@ -478,14 +484,14 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(
       /new ByokAnthropicRotationReminderService\(\s*\n?\s*new DrizzleByokAnthropicRotationReminderRepo\(dbHandle\),/,
     );
-    expect(body).toMatch(/webhookRotationReminderTimer\?\.unref\(\);/);
-    expect(body).toMatch(/byokAnthropicRotationReminderTimer\?\.unref\(\);/);
-    expect(body).toMatch(
-      /if \(webhookRotationReminderTimer\) clearInterval\(webhookRotationReminderTimer\);/,
-    );
-    expect(body).toMatch(
-      /if \(byokAnthropicRotationReminderTimer\) clearInterval\(byokAnthropicRotationReminderTimer\);/,
-    );
+    // V-784 — both reminders are now durable chains, armed at boot alongside
+    // the other eleven. Asserted as the wiring call plus the per-occurrence
+    // absence of every timer artefact this pin used to freeze.
+    expect(body).toMatch(/jobType: WEBHOOK_ROTATION_REMINDER_JOB_TYPE,/);
+    expect(body).toMatch(/jobType: BYOK_ANTHROPIC_ROTATION_REMINDER_JOB_TYPE,/);
+    expect(body).not.toMatch(/ROTATION_REMINDER_INTERVAL_MS/);
+    expect(body).not.toMatch(/webhookRotationReminderTimer/);
+    expect(body).not.toMatch(/byokAnthropicRotationReminderTimer/);
   });
 
   it('v2-#27 bootstrap-complete log line surfaces rotationReminders state alongside the other activation flags so ops can confirm the v2-#17 daily sweeps are live', () => {

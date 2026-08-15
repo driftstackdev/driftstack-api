@@ -1,11 +1,20 @@
 // Every background timer survives a bad tick, releases the event loop, and is
 // cleared on shutdown.
 //
-// bootstrap.ts runs eleven `setInterval` pollers — scheduled jobs, validation
-// harness, health probes, status snapshots, subscriber purge, two rotation
-// reminders, pair-mode heartbeat sweep, webhook delivery, grace notices, and
-// secret cleanup. All eleven hold all three properties today. Nothing asserted
+// bootstrap.ts runs six `setInterval` pollers — scheduled jobs, validation
+// harness, health probes, status snapshots, pair-mode heartbeat sweep, and
+// webhook delivery. All six hold all three properties today. Nothing asserted
 // any of them, and each has a distinct and severe failure mode:
+//
+// It was eleven until V-784. The other five — subscriber purge, two rotation
+// reminders, grace notices, secret cleanup — were all on a 24h period, and a
+// `setInterval` does not fire until a full period has elapsed, so a process
+// restarting more often than daily never reached their first tick. They are
+// durable `scheduled_jobs` chains now, covered by `job-chain-liveness` instead
+// of by this file. Crash-safety was never their problem; being scheduled at all
+// was. The floors below moved 11 → 6 with them, and that is the one edit this
+// guard invites abuse through: lowering the floor is how a scan that has stopped
+// finding anything keeps passing. Each drop needs a reason, and this is the one.
 //
 //   async callback     `setInterval(async () => …)` returns a promise nobody
 //                      awaits. A rejected tick is an unhandled rejection, which
@@ -25,8 +34,8 @@
 //                      work against a pool that is closing.
 //
 // This is a structural guard over one file rather than a behavioural one, and
-// that is deliberate: the failure it prevents is someone ADDING a twelfth timer
-// in the wrong shape, which no behavioural test of the existing eleven would
+// that is deliberate: the failure it prevents is someone ADDING a seventh timer
+// in the wrong shape, which no behavioural test of the existing six would
 // notice.
 //
 // The last arm covers a DIFFERENT population with a different failure mode: the
@@ -89,11 +98,16 @@ function intervalBodies(src: string): string[] {
 describe('every background timer is crash-safe', () => {
   it('CRITICAL the scan found the pollers. Every arm below reports "none violating", and a scan that matched nothing has none of anything — it would pass having read no timers at all.', () => {
     const src = source();
-    // MEASURED: 11 setInterval pollers, 11 timer consts.
+    // MEASURED: 6 setInterval pollers, 6 timer consts (11 before V-784 moved the
+    // five day-cadence sweeps onto durable job chains).
     expect(intervalBodies(src).length, 'setInterval bodies brace-matched').toBeGreaterThanOrEqual(
-      11,
+      6,
     );
-    expect(timerNames(src).length, 'timer consts found').toBeGreaterThanOrEqual(11);
+    expect(timerNames(src).length, 'timer consts found').toBeGreaterThanOrEqual(6);
+    // The two counts describe the same population and must agree. A drift between
+    // them means one matcher broke, and the arms below iterate whichever is
+    // smaller — silently checking fewer timers than exist.
+    expect(intervalBodies(src).length, 'one body per timer const').toBe(timerNames(src).length);
     // And the matcher must actually capture a body, not an empty slice.
     expect(
       intervalBodies(src).every((b) => b.length > 40),

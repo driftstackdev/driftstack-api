@@ -110,6 +110,7 @@ describe('a dead job chain is reported as 0, not as an absent series', () => {
       'account_deletion.purge',
       'agent_session.orphan_reap',
       'auth_tokens.sweep',
+      'byok_anthropic.rotation_reminder',
       'cost.recompute_nightly',
       'crypto.entitlement_expiry_sweep',
       'crypto.entitlement_reconcile',
@@ -118,7 +119,53 @@ describe('a dead job chain is reported as 0, not as an absent series', () => {
       'profile_trash.purge',
       'scheduled_jobs.prune',
       'sessions.duration_sweep',
+      'status_subscriber.purge',
+      'webhook.grace_expiring_notice',
+      'webhook.rotation_reminder',
+      'webhook.secret_prev_cleanup',
     ]);
+  });
+
+  it('CRITICAL no recurring sweep runs on a bare setInterval instead of a job chain. This is the hole V-784 closed and the one neither case above can see: the derived check reads *_JOB_TYPE constants, so a sweep that never became a job is not a dead chain — it is not a chain, and it is absent from the roster by construction rather than by mistake. Registering the handler is not enough either; a handler nobody enqueues has no pending row and reports 0 forever.', () => {
+    const bootstrap = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'lib', 'bootstrap.ts'),
+      'utf8',
+    );
+
+    // Every timer bootstrap creates, with its interval expression.
+    const timers = [...bootstrap.matchAll(/setInterval\(\(\) => \{[\s\S]*?\n {2}\}, ([A-Z_]+)\)/g)]
+      .map((m) => m[1]!)
+      .filter((name) => name !== undefined);
+
+    // Vacuity: bootstrap does still create timers, so an empty match set would
+    // mean the regex broke rather than that no daily timer exists.
+    expect(timers.length, 'setInterval call sites found in bootstrap').toBeGreaterThan(3);
+
+    // A recurring sweep on a >=1h cadence belongs on the durable chain: an
+    // interval that long is never reached by a process that restarts more
+    // often, because setInterval does not fire until a full period has passed.
+    const dailyish = timers.filter((name) => /DAY|DAILY|PURGE|REMINDER|CLEANUP|NOTICE/.test(name));
+    expect(
+      dailyish,
+      'day-cadence work still driven by setInterval — move it onto scheduled_jobs so it survives a restart and appears on this roster:',
+    ).toEqual([]);
+
+    // And the five V-784 chains must be armed, not merely registered.
+    for (const jobType of [
+      'status_subscriber.purge',
+      'webhook.rotation_reminder',
+      'byok_anthropic.rotation_reminder',
+      'webhook.grace_expiring_notice',
+      'webhook.secret_prev_cleanup',
+    ]) {
+      expect(EXPECTED_RECURRING_JOB_TYPES, `${jobType} must be on the liveness roster`).toContain(
+        jobType,
+      );
+    }
+    expect(
+      (bootstrap.match(/await wireDailyMaintenanceSweep\(\{/g) ?? []).length,
+      'each of the five daily sweeps is registered AND enqueued at boot',
+    ).toBe(5);
   });
 
   it('CRITICAL the roster covers every recurring sweep the server actually registers. Each sweeper exports its own `*_JOB_TYPE` constant, so that set is what the server really schedules — a new sweeper added without a roster entry is a chain nobody is watching, and the literal pin above cannot see it because a list restated from itself is always in agreement.', () => {

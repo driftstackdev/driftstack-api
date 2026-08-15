@@ -10,12 +10,20 @@
 // nag, not a side-effecting action; the existing V-359 dual-sign
 // machinery handles the actual rotation with zero customer downtime.
 //
-// Wiring (LIVE since the bootstrap timer landed): bootstrap.ts runs
-// tickOnce once per day via a setInterval (ROTATION_REMINDER_INTERVAL_MS,
+// Wiring (LIVE as a durable job chain): bootstrap.ts runs tickOnce once
+// per day as a self-re-arming scheduled_jobs row
+// (WEBHOOK_ROTATION_REMINDER_JOB_TYPE, DAILY_MAINTENANCE_INTERVAL_MS =
 // 24h), gated off by DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 (the
-// kill-switch shared with the BYOK/API-key reminder timers). The schema
-// is v2-#10 migration 0048. (An earlier revision of this header said the
-// wiring was deferred/dormant — stale since the timer shipped.)
+// kill-switch shared with the BYOK/API-key reminder sweeps). The schema
+// is v2-#10 migration 0048.
+//
+// V-784 replaced a bare 24h setInterval here. That timer fired its first
+// tick a full day after boot and kept the schedule only in memory, so a
+// deploy cadence under 24 hours meant this reminder never sent at all —
+// and because chain liveness is rostered from *_JOB_TYPE constants, a
+// sweep that was not a job had no series to report zero on. (An earlier
+// revision of this header said the wiring was deferred/dormant — stale
+// since the timer shipped, and the timer itself is now gone too.)
 
 import type { Logger } from '../lib/logger.js';
 import type { EmailService } from './email.js';

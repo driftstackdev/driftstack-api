@@ -35,10 +35,15 @@ describe('services/webhook-rotation-reminder content parity', () => {
     );
   });
 
-  it("Wiring-LIVE framing pinned: the header documents the bootstrap setInterval (24h ROTATION_REMINDER_INTERVAL_MS) + the DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS kill-switch + migration 0048 — corrected 2026-06-12 from the stale 'deferred/dormant' text (the timer shipped after that header was written)", () => {
+  it('Wiring-LIVE framing pinned: the header documents the durable daily job chain (WEBHOOK_ROTATION_REMINDER_JOB_TYPE, 24h DAILY_MAINTENANCE_INTERVAL_MS) + the DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS kill-switch + migration 0048. This header has now been wrong twice in the same place: it first said the wiring was deferred/dormant after the timer shipped (corrected 2026-06-12), and then described a setInterval after V-784 replaced it with a job chain. Both halves are pinned — the current text positively, the setInterval per-occurrence negatively — because the failure mode is a header that keeps describing whichever wiring it was written against.', () => {
     expect(body).toMatch(
-      /\/\/ Wiring \(LIVE since the bootstrap timer landed\): bootstrap\.ts runs\s*\n?\s*\/\/ tickOnce once per day via a setInterval \(ROTATION_REMINDER_INTERVAL_MS,\s*\n?\s*\/\/ 24h\), gated off by DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1/,
+      /\/\/ Wiring \(LIVE as a durable job chain\): bootstrap\.ts runs tickOnce once\s*\n?\s*\/\/ per day as a self-re-arming scheduled_jobs row\s*\n?\s*\/\/ \(WEBHOOK_ROTATION_REMINDER_JOB_TYPE, DAILY_MAINTENANCE_INTERVAL_MS =\s*\n?\s*\/\/ 24h\), gated off by DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1/,
     );
+    expect(body).toMatch(/V-784 replaced a bare 24h setInterval here\./);
+    expect(body, 'the retracted wiring claim must not survive anywhere in the header').not.toMatch(
+      /LIVE since the bootstrap timer landed/,
+    );
+    expect(body).not.toMatch(/via a setInterval \(ROTATION_REMINDER_INTERVAL_MS/);
   });
 
   it('4-constant catalog pinned: REMINDER_THRESHOLD_DAYS=60 + COOLDOWN_DAYS=7 + MS_PER_DAY = 24*60*60*1000 + ROTATION_TARGET_DAYS=90. Drift would diverge from the email-template + dashboard-side rotation-status display that all assume these exact values', () => {

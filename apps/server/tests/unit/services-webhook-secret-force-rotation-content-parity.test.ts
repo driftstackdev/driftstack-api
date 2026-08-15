@@ -29,7 +29,14 @@ describe('services/webhook-secret-force-rotation content parity', () => {
     expect(bootstrap).not.toContain('webhook-force-rotation-poller');
     expect(bootstrap).toContain('new WebhookRotationReminderService(');
     expect(bootstrap).toContain('new WebhookGraceExpiringNoticeService(');
-    expect(bootstrap).toContain('webhooksRepo.clearStaleSecretPrev({ now: new Date() })');
+    // V-784 — the cleanup is now a daily job chain rather than a setInterval,
+    // so the tick's `now` arrives as the handler argument instead of being
+    // constructed at the call site. What this case is really asserting is that
+    // the recovery-path cleanup stays wired while the force-rotation PRODUCER
+    // stays unwired, and that survives the call-shape change.
+    expect(bootstrap).toContain('webhooksRepo.clearStaleSecretPrev({ now })');
+    expect(bootstrap).toContain('jobType: WEBHOOK_SECRET_PREV_CLEANUP_JOB_TYPE,');
+    expect(bootstrap).not.toContain('webhookSecretPrevCleanupTimer');
   });
 
   it('file exists at canonical path', () => {

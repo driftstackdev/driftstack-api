@@ -32,6 +32,7 @@ export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
   'account_deletion.purge',
   'agent_session.orphan_reap',
   'auth_tokens.sweep',
+  'byok_anthropic.rotation_reminder',
   'cost.recompute_nightly',
   'crypto.entitlement_expiry_sweep',
   'crypto.entitlement_reconcile',
@@ -40,7 +41,19 @@ export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
   'profile_trash.purge',
   'scheduled_jobs.prune',
   'sessions.duration_sweep',
+  'status_subscriber.purge',
+  'webhook.grace_expiring_notice',
+  'webhook.rotation_reminder',
+  'webhook.secret_prev_cleanup',
 ];
+
+// V-784 — the last five entries were absent because those sweeps were not jobs.
+// They ran on bare 24h setInterval timers, so they had no pending row to report
+// on and no *_JOB_TYPE constant for the derived roster check to find. That is
+// the failure this file's header warns about, one level up: the gauge reported
+// nothing rather than 0, and a missing series reads as healthy — except here the
+// omission was structural, so no amount of watching the gauge would have shown
+// it. The watchdog covered exactly the sweeps that had already opted in.
 
 export interface JobChainLivenessDeps {
   readonly repo: { jobTypesWithPendingWork(): Promise<string[]> };
