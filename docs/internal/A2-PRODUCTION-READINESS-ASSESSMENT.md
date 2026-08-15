@@ -2587,3 +2587,53 @@ a mutation that reds a test you did not write is a prior-art signal, not noise.
 Related: the same-day tool `scripts/which-pins-cover.mjs` answers the file-level
 version of this question but not the behaviour-level one; grepping the message
 text a guard produces would have.
+
+## 5y — mutation ledgers for the record-bound secret-encryption modules
+
+Two modules that seal customer secrets under the tenant master key, measured by
+neutralising every `throw new ` one at a time (`throw new ` → `void new `, which
+keeps the syntax valid across multi-line call sites) and recording which sites no
+test notices. A probe whose test TOTAL differs from the control is invalid, not a
+finding; every probe below matched its control.
+
+**`lib/webhook-secret-encryption.ts` — 10 sites, control 7. 7 covered, 3 not.**
+One of the three was reachable and is now pinned (an input secret that is not
+exact UTF-8). The other two are **structurally unreachable**, both because the
+fixed 88-char shape check runs first and pins every downstream size:
+
+- _"ciphertext is not canonical base64"_ — 66 bytes encodes to exactly 88 base64
+  chars with no leftover padding bits, so every string that passes the shape
+  check round-trips identically. Verified over 200,000 random 88-char samples:
+  zero non-canonical, zero wrong-length.
+- _"plaintext has the wrong authenticated byte length"_ — the shape check forces a
+  66-byte blob, so the ciphertext is 66−12−16 = 38 bytes, and AES-GCM preserves
+  length. An authenticated plaintext can only ever be 38 bytes.
+
+Neither can be exercised without first disabling the guard above it. Left alone
+deliberately rather than pinned with a test that proves nothing.
+
+**`lib/account-proxy-secret-encryption.ts` — 15 sites, control 52 → 57. Was 7
+covered, now 12.** Five reachable encrypt-path refusals had no test: unknown slot,
+empty plaintext, OpenVPN secret that is not JSON, a JSON array where an object is
+required (`typeof [] === 'object'`, so that is a real branch), and a right-key-set
+/ wrong-value-type secret that only the schema check can catch. Each fixture is
+valid in every respect except the guard under test. Re-running the same ledger
+after the fix flipped exactly those five to COVERED at one test each.
+
+Still unmeasured, and named rather than quietly dropped: the three read-path
+guards at `:122`, `:130`, `:153`. They need a forged envelope, and because this
+module's base64 is _bounded_ rather than fixed-width, their reachability has to be
+settled empirically the way the webhook module's was before a test is written.
+
+### On the instrument itself
+
+The census that found these first reported **403 of 863** sites uncovered by
+matching the full source message against the test corpus. Four sampled entries
+were four false positives, and the fourth showed why: tests assert a distinctive
+FRAGMENT (`.toThrow('accountId must be a UUID')`) of a longer message
+(`'Recipe payload accountId must be a UUID.'`). Matching contiguous fragments
+instead cut it to 150. Two further blind spots remain and are the reason the
+output is split by directory: route-level refusals are frequently asserted by HTTP
+status with no message at all, and a message built from a template collapses to a
+short static prefix that cannot be fragment-matched. The census is a pre-filter
+for where to spend mutation time — mutation is the verdict.

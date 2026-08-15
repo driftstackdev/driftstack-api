@@ -193,3 +193,71 @@ describe('account proxy secret v2 encryption', () => {
     ).toThrow(/UUID/);
   });
 });
+
+// Found by neutralising every `throw new ` in the module one at a time and
+// recording which ones no test notices, run against ALL FOUR unit files that
+// import it — not just this one, because "unnoticed by one file" is not
+// "uncovered". 15 sites, control total 52: 7 covered, 8 unnoticed.
+//
+// These five are the reachable ones on the ENCRYPT path. Each fixture is valid
+// in every respect except the one guard under test, so an earlier refusal cannot
+// answer in its place — the master key is well-formed, the ids are UUIDs, and
+// the slot is real unless the slot is what is being tested.
+//
+// This module seals VPN credentials and proxy passwords under the tenant master
+// key. A guard that silently stops refusing here does not throw anything a
+// customer sees; it stores something that cannot be read back.
+//
+// STILL UNMEASURED, deliberately left for a following pass rather than claimed:
+// the three read-path guards at :122, :130 and :153 (canonical bounded base64 and
+// the plaintext bound after decrypt). They need a forged envelope, and the
+// bounded — not fixed — base64 shape means their reachability has to be settled
+// the way the webhook module's was, empirically, before a test is written.
+describe('account-proxy-secret-encryption — unnoticed encrypt-path refusals', () => {
+  const ctx = (slot: AccountProxySecretContext['slot']): AccountProxySecretContext => ({
+    accountId: ACCOUNT_A,
+    proxyId: PROXY_A,
+    slot,
+  });
+
+  it('CRITICAL refuses an unknown secret slot. The slot is AAD, so a slot the reader does not know is a blob that authenticates under a tuple nobody can reproduce — sealed and permanently unreadable.', () => {
+    expect(() =>
+      encryptAccountProxySecret(
+        MASTER,
+        // A non-TS caller, or drift in the slot union, is the case this defends.
+        {
+          accountId: ACCOUNT_A,
+          proxyId: PROXY_A,
+          slot: 'totally-not-a-slot',
+        } as unknown as AccountProxySecretContext,
+        'anything',
+      ),
+    ).toThrow(/slot is invalid/);
+  });
+
+  it('CRITICAL refuses an empty plaintext before the per-slot rules. An empty password would seal to a valid envelope that reads back as the empty string, which dispatch cannot distinguish from "no password configured".', () => {
+    expect(() => encryptAccountProxySecret(MASTER, ctx('password'), '')).toThrow(
+      /outside its byte bound/,
+    );
+  });
+
+  it('CRITICAL refuses an OpenVPN secret that is not JSON, rather than sealing an opaque string the reader will fail on later', () => {
+    expect(() =>
+      encryptAccountProxySecret(MASTER, ctx('openvpn-config'), 'client\nremote vpn.example.com'),
+    ).toThrow(/not valid JSON/);
+  });
+
+  it('CRITICAL refuses a JSON array for an OpenVPN secret — `typeof [] === "object"`, so an Array-vs-object check is a real branch and not a formality', () => {
+    expect(() => encryptAccountProxySecret(MASTER, ctx('openvpn-config'), '[]')).toThrow(
+      /must be an object/,
+    );
+  });
+
+  it('CRITICAL refuses an OpenVPN secret whose key set is right but whose value type is wrong — the shape check passes, so only the schema check can catch this', () => {
+    // Exactly the allowed key set, so the shape guard above it is satisfied and
+    // the refusal can only come from the schema parse.
+    expect(() =>
+      encryptAccountProxySecret(MASTER, ctx('openvpn-config'), '{"config_blob":123}'),
+    ).toThrow(/is invalid/);
+  });
+});

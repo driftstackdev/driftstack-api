@@ -173,3 +173,32 @@ describe('webhook-secret-encryption — over-long key', () => {
     );
   });
 });
+
+// The exact-UTF-8 check on the INPUT secret (validatePlaintext). Found by
+// mutating every throw in the module and recording which ones no test notices:
+// 7 of 10 were covered, and this was the only uncovered one that is actually
+// reachable.
+//
+// The other two zero-red sites are NOT coverage gaps, they are structurally
+// unreachable, and both are unreachable for the same reason — the fixed 88-char
+// shape check runs first and pins every downstream size:
+//
+//   "ciphertext is not canonical base64" — 66 bytes encodes to exactly 88 base64
+//     chars with no leftover padding bits, so every string passing the shape
+//     check round-trips identically. Verified over 200k random 88-char samples:
+//     zero non-canonical, zero wrong-length.
+//   "plaintext has the wrong authenticated byte length" — the shape check forces
+//     a 66-byte blob, so the ciphertext is 66-12-16 = 38 bytes, and AES-GCM
+//     preserves length. An authenticated plaintext can only ever be 38 bytes.
+//
+// Neither can be tested without first disabling the guard above it, so they are
+// left alone deliberately rather than pinned with a test that proves nothing.
+describe('webhook-secret-encryption — non-round-trippable input secret', () => {
+  it('CRITICAL refuses a signing secret that is not exact UTF-8. A lone surrogate encodes to U+FFFD replacement bytes, so the value sealed into the envelope is NOT the value the caller passed — the secret would be stored and dual-signed against a string nobody holds, and every delivery signature would verify for no one.', () => {
+    const loneSurrogate = `whsec_${'\uD800'.repeat(32)}`;
+    // The premise of the arm, asserted rather than assumed: this string does not
+    // survive a UTF-8 round trip.
+    expect(Buffer.from(loneSurrogate, 'utf8').toString('utf8')).not.toBe(loneSurrogate);
+    expect(() => encryptWebhookSecret(loneSurrogate, KEY, CONTEXT)).toThrow(/not exact UTF-8/);
+  });
+});
