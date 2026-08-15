@@ -3962,3 +3962,64 @@ and the release are three ordered steps with no cross-callback assignment at all
 That reads better than what I started with, and the mutation was re-proved
 afterwards rather than assumed to survive the rewrite — the arm still reds with
 `.for('update')` deleted.
+
+## 6t — auditing the claim I made about other people's tests, and a second lock proved
+
+6s ended with a claim about the rest of the suite: "every 'does it block on the
+parent row' test in this repo has the same trap." That was an assertion about code
+I had not read, so checking it came first.
+
+### The claim was too broad, and the real problem is elsewhere
+
+The FK/KEY-SHARE trap needs a specific shape — a holder locking a PARENT row while
+the operation under test INSERTS a child. Of the 15 integration files that take an
+explicit lock, none of the existing ones has it. They race and assert an outcome
+instead, which is the better shape.
+
+⭐ But auditing them surfaced something more useful.
+`db-agent-sessions-concurrency` races two `debitTokens` and asserts
+`100-30-40 = 30` — a value unreachable if a debit were lost, so it is
+self-evidencing by my own taxonomy, and its pool is `max: 5`, so the calls really
+can overlap. **It still does not detect its lock's removal**: deleting
+`.for('update')` from `debitTokens` leaves it at 10 passed.
+
+Read the method before concluding: `debitTokens` IS a read-modify-write in
+application code — SELECT, compute `remaining - tokens` in JS, write back — so the
+lock is genuinely load-bearing and the test simply never hits the window. On
+localhost a whole transaction completes in well under a millisecond, so the second
+SELECT lands after the first COMMIT.
+
+That makes it a PATTERN rather than a quirk of the profile cap: **a race-based test
+in this repo cannot be relied on to demonstrate a lock, because the round-trip is
+faster than the interleaving the defect needs.** Two independent instances now,
+both money-adjacent — a tier cap and a token budget.
+
+### The second proof
+
+Forced ordering with the isolating mode, applied to `debitTokens`. The holder takes
+`FOR KEY SHARE` on the `agent_sessions` row:
+
+- it conflicts with the repo's `FOR UPDATE`, so the guarded path blocks;
+- an unguarded path does a plain SELECT and then an UPDATE, which takes
+  `FOR NO KEY UPDATE` — compatible with KEY SHARE — so it sails through.
+
+Lock present: blocks, then debits 100 → 70 once the holder commits. Lock deleted:
+_"debitTokens must be waiting on the session row lock, not reading a balance past
+it."_
+
+Under-billing is the failure this protects: a lost debit is budget served and not
+charged for. It is now measured on the same footing as the tier cap.
+
+### Where this leaves the concurrency question
+
+Three shapes, and only the third proves a lock:
+
+1. **race + assert a final count** — proves nothing if the pool serialises it (6r);
+2. **race + assert a serialisation-only value** — better, but still silent when the
+   window is missed (this entry, twice);
+3. **forced ordering + a holder mode that conflicts with the guard and nothing
+   else** — deterministic in both directions.
+
+The remaining `.for('update')` sites are candidates for (3), and the isolating mode
+has to be chosen per site: it depends on what other locks the unguarded path would
+take.
