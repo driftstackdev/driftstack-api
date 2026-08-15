@@ -1,7 +1,11 @@
 // V-298c — Team RBAC routes integration tests.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import {
+  buildTestApp,
+  seedAdditionalAccount,
+  type TestAppFixture,
+} from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
 
@@ -255,5 +259,103 @@ describe('DELETE /v1/team/members/:id', () => {
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+// ─── an unrelated account cannot remove a member from someone else's team ───
+//
+// `DELETE /v1/team/members/:id` scopes its delete by
+// `ownerAccountId: ctx.account.id`, so a foreign membership id finds no row and
+// answers 404. Nothing had ever checked that: the isolation census
+// (70 customer-facing parameterised routes) flagged this route, and confirming
+// it meant looking at every test that touches `team/members/` — five files, none
+// of which seeds a second account.
+//
+// The stake is not disclosure, it is availability. A successful cross-account
+// delete evicts a real person from a customer's team: their act-as access to the
+// owner's sessions, profiles and keys stops working, and the owner has no signal
+// beyond a member who suddenly cannot log in to their work.
+//
+// ⭐ Order matters here and is the reason this is one test rather than two. B's
+// attempt runs FIRST and must 404; A then deletes the SAME membership and must
+// get 204. Without the second half the arm is satisfied by a build where the
+// membership never existed, or where every delete 404s — the same
+// refuses-everything trap that a bare refusal assertion cannot see.
+//
+// LEDGER — control 19/19:
+//
+//   removeMember stops scoping by owner              SURVIVES
+//   removeMemberWithInvites stops scoping by owner   1 red
+//
+// ⚠️ The survivor is not a coverage gap — it is the ledger identifying which
+// function is actually live. `TeamMembersService.removeMember` calls
+// `removeMemberWithInvites` (one transaction that also cancels the member's
+// pending invites and revokes the keys they minted), so the plain `removeMember`
+// on the repo is not on this path at all. Mutating it changes nothing a request
+// can observe. That is worth knowing before someone "fixes" a scoping bug in the
+// function nobody calls and watches the tests stay green either way.
+//
+// The anchor for that mutation also matched TWICE on first attempt — the same
+// `m.id === … && m.ownerAccountId === …` predicate appears at three sites in the
+// fixture repo — and the run aborted rather than mutating an arbitrary one.
+describe("DELETE /v1/team/members/:id — another account's membership", () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  /** Invite + accept against A's own email, which is the shortest real membership. */
+  async function membershipOwnedByA(fixture: TestAppFixture): Promise<string> {
+    const ownerEmail = 'tester@driftstack.local'; // build-test-app default
+    const invite = await fixture.app.inject({
+      method: 'POST',
+      url: '/v1/team/invites',
+      headers: { authorization: `Bearer ${fixture.plaintext}`, 'content-type': 'application/json' },
+      payload: { email: ownerEmail },
+    });
+    expect(invite.statusCode, `invite returned ${invite.statusCode}`).toBe(202);
+    const sent = fixture.emailSends[fixture.emailSends.length - 1]!;
+    const token = new URL(sent.vars.acceptLink as string).searchParams.get('token');
+    expect(token, 'invite email must carry an accept token').toBeTruthy();
+
+    const accepted = await fixture.app.inject({
+      method: 'POST',
+      url: '/v1/team/invites/accept',
+      headers: { authorization: `Bearer ${fixture.plaintext}`, 'content-type': 'application/json' },
+      payload: { token },
+    });
+    expect(accepted.statusCode, `accept returned ${accepted.statusCode}`).toBe(200);
+    return accepted.json<{ membership: { id: string } }>().membership.id;
+  }
+
+  it('CRITICAL 404 for an unrelated account, and the OWNER can still remove the same membership afterwards — so the refusal is ownership and not a build that refuses every delete', async () => {
+    fx = await buildTestApp();
+    const membershipId = await membershipOwnedByA(fx);
+    const other = await seedAdditionalAccount(fx, {
+      email: 'b@team-isolation.test',
+      tier: 'api_builder',
+      scopes: ['read', 'write', 'account_owner'],
+    });
+
+    const asB = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/team/members/${membershipId}`,
+      headers: { authorization: `Bearer ${other.plaintext}` },
+    });
+    expect(asB.statusCode, `B removing A's member returned ${asB.statusCode}`).toBe(404);
+
+    // 404 rather than 403 on purpose: a 403 confirms the membership exists and
+    // turns a guessed id into an existence oracle over other customers' teams.
+    expect(asB.json<{ type: string }>().type).toContain('not-found');
+
+    const asA = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/team/members/${membershipId}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(asA.statusCode, `the owner removing its own member returned ${asA.statusCode}`).toBe(
+      204,
+    );
   });
 });

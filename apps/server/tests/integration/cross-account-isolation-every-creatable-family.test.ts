@@ -126,6 +126,31 @@ beforeAll(async () => {
     'snapshot',
     profile === '' ? '' : await create(`/v1/profiles/${profile}/snapshots`, { label: 'a-snap' }),
   );
+  // 2026-08-15 — recipes were on the isolation census's unmentioned list: 70
+  // customer-facing parameterised routes, 63 mentioned by some cross-account
+  // test, 7 not. A recipe is a saved navigation flow lifted from a session's
+  // intent log and transcript, so reading one back is reading what that browser
+  // actually did.
+  //
+  // It is derived FROM an agent session, so it can only be created once `agent`
+  // exists; the empty-string guard keeps a failed prerequisite from silently
+  // becoming a skipped probe, and the created-families assertion below turns that
+  // into a red instead.
+  //
+  // LEDGER — control 5/5:
+  //
+  //   getById stops scoping by account      2 red
+  //   deleteById stops scoping by account   3 red
+  //
+  // The delete mutation reddens one arm the read mutation does not: the
+  // byte-identity check on A's resources afterwards. That is the whole reason
+  // this file re-reads everything at the end — a handler that deletes and THEN
+  // fails to find a row to return answers 404 having already done the damage, so
+  // the status alone would report the boundary held.
+  const recipe = track(
+    'recipe',
+    agent === '' ? '' : await create('/v1/recipes', { agent_session_id: agent, label: 'a-recipe' }),
+  );
 
   // Read-back routes for the resources whose integrity is checked at the end.
   if (webhook !== '') OWNED.push({ label: 'webhook', read: `/v1/webhooks/${webhook}` });
@@ -133,6 +158,7 @@ beforeAll(async () => {
   if (session !== '') OWNED.push({ label: 'session', read: `/v1/sessions/${session}` });
   if (snapshot !== '') OWNED.push({ label: 'snapshot', read: `/v1/profile-snapshots/${snapshot}` });
   if (agent !== '') OWNED.push({ label: 'agent-session', read: `/v1/agent-sessions/${agent}` });
+  if (recipe !== '') OWNED.push({ label: 'recipe', read: `/v1/recipes/${recipe}` });
   // API keys have no detail route; the list is what proves the key survived.
   OWNED.push({ label: 'api-key list', read: '/v1/api-keys' });
 
@@ -169,6 +195,10 @@ beforeAll(async () => {
     { method: 'DELETE', url: `/v1/profile-snapshots/${snapshot}` },
     { method: 'GET', url: `/v1/agent-sessions/${agent}` },
     { method: 'DELETE', url: `/v1/agent-sessions/${agent}` },
+    // A recipe is a saved navigation flow lifted from a session's intent log and
+    // transcript, so reading one back is reading what that browser actually did.
+    { method: 'GET', url: `/v1/recipes/${recipe}` },
+    { method: 'DELETE', url: `/v1/recipes/${recipe}` },
   ];
 
   for (const p of probes) {
@@ -226,7 +256,7 @@ describe('no account can reach another account resource, in any creatable family
       'famil(ies) whose resource was never created — their cross-account probes never ran:',
     ).toEqual([]);
 
-    expect(attempts.length, 'cross-account attempts made').toBeGreaterThanOrEqual(15);
+    expect(attempts.length, 'cross-account attempts made').toBeGreaterThanOrEqual(17);
     expect(OWNED.length, 'resources owned by A and re-read afterwards').toBeGreaterThanOrEqual(5);
     for (const [label, body] of before) {
       expect(body.startsWith('200'), `A could read its own ${label} before the sweep`).toBe(true);
