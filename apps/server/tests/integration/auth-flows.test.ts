@@ -522,6 +522,162 @@ describe('POST /v1/auth/verify-email', () => {
     ).rejects.toMatchObject({ code: 'account_suspended' });
     expect(insertSession).not.toHaveBeenCalled();
   });
+
+  // ─── "a suspended account cannot mint a session", through its other doors ──
+  //
+  // The property is enforced at several sites in auth-flows.ts, one per way in,
+  // plus a shared chokepoint in `issueWebSession` (:1560) whose own comment says
+  // callers may keep their local checks for flow clarity but none can
+  // accidentally mint a 30-day row for a suspended account.
+  //
+  // Cold sites at HEAD, from a v8 coverage run — the only instrument that could
+  // tell. `account_suspended` appears in three test files, so a grep for the
+  // CODE reports the property covered while individual doors stand open: one
+  // covered site satisfies a whole-code grep.
+  //
+  // ⭐ Every arm asserts `insertWebSession` was NEVER CALLED, not merely that a
+  // refusal was thrown. The property is "no session exists afterwards"; the
+  // error code is only how it is reported. A build that minted the session and
+  // then threw would satisfy an error-code assertion and still be the bug.
+  //
+  // LEDGER — control 75/75, and three of the six results are not what the arms
+  // were written expecting:
+  //
+  //   login stops checking status (:915)              1 red  (this arm)
+  //   login refuses only DELETED, admitting suspended 1 red  (this arm)
+  //   magic link stops checking status (:1126)        SURVIVES
+  //   reset's status check removed (:1211)            1 red  (a PRE-EXISTING arm)
+  //   the null-write verdict ignored (:1215)          1 red  (this arm)
+  //   the shared chokepoint removed (:1560)           1 red  (a PRE-EXISTING arm)
+  //
+  // ⚠️ The magic-link survivor is correct and is NOT a coverage gap. The arm does
+  // execute :1126 — it is simply not the only thing standing between a suspended
+  // account and a session, because :1560 catches it too. That redundancy is
+  // deliberate and documented at the chokepoint.
+  //
+  // ⚠️ The reset result is the useful one. The first draft of that arm was a
+  // strict duplicate of 'a suspended account cannot use an outstanding reset
+  // link…' — same spies, same assertions — and reading the coverage list as
+  // "the reset door is cold" is what produced it. The cold line was :1215, the
+  // verdict AFTER the write, not :1211, the check before it. The mutation is
+  // what exposed the overlap: it reddened a test I had not written.
+  //
+  // ⚠️ And the chokepoint mutation reds `consumes but does not replace a
+  // suspended account refresh token` — a door with no local check of its own,
+  // which is what makes :1560 load-bearing rather than belt-and-braces.
+
+  it('a suspended account cannot mint a session by logging in with the CORRECT password', async () => {
+    const { service, repo } = makeDirectService();
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+    const password = 'correct horse battery staple';
+    const signup = await service.signup({
+      email: 'suspended-login@driftstack.local',
+      password,
+      requestedFromIp: null,
+    });
+    await service.verifyEmail({
+      token: signup.debugToken as string,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    insertSession.mockClear();
+    repo.seedAccount({ ...signup.account, status: 'suspended' });
+
+    // The correct password on purpose. A wrong one is refused earlier as
+    // `invalid_credentials` and would prove nothing about the status check —
+    // the source says so directly: state checks come AFTER authentication so a
+    // suspended account is indistinguishable to an unauthenticated prober.
+    await expect(
+      service.login({
+        email: 'suspended-login@driftstack.local',
+        password,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'account_suspended' });
+    expect(insertSession).not.toHaveBeenCalled();
+  });
+
+  it('a suspended account cannot mint a session through a magic link issued while it was active', async () => {
+    const { service, repo } = makeDirectService();
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+    const signup = await service.signup({
+      email: 'suspended-magic@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    await service.verifyEmail({
+      token: signup.debugToken as string,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    const link = await service.requestMagicLink({
+      email: 'suspended-magic@driftstack.local',
+      requestedFromIp: null,
+    });
+    insertSession.mockClear();
+
+    // Suspended AFTER the link was issued, which is the realistic order:
+    // suspension is a response to something, and any link already in the
+    // mailbox outlives it.
+    repo.seedAccount({ ...signup.account, status: 'suspended' });
+
+    await expect(
+      service.consumeMagicLink({
+        token: link.debugToken as string,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'account_suspended' });
+    expect(insertSession).not.toHaveBeenCalled();
+  });
+
+  it('a password reset whose account disappears BETWEEN the status check and the write is refused', async () => {
+    const { service, repo } = makeDirectService();
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+    const signup = await service.signup({
+      email: 'reset-vanishes@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    await service.verifyEmail({
+      token: signup.debugToken as string,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    const reset = await service.requestPasswordReset({
+      email: 'reset-vanishes@driftstack.local',
+      requestedFromIp: null,
+    });
+    insertSession.mockClear();
+
+    // ⚠️ This is NOT the door the arm above covers. The status check at :1211 is
+    // already exercised by 'a suspended account cannot use an outstanding reset
+    // link…'; a first draft of this arm duplicated it exactly, spies and all,
+    // and the mutation ledger is what exposed the overlap — the mutation reddened
+    // that pre-existing test as well as mine.
+    //
+    // The genuinely cold line is the one AFTER the write: `setPassword` returning
+    // null. That is the account being suspended or deleted in the window between
+    // the check passing and the UPDATE landing — the window the check itself
+    // cannot close, which is why the write is conditional and its result is
+    // re-examined. Driving it needs the repo to report the miss, because no
+    // ordering of client calls can reliably hit a window this narrow.
+    vi.spyOn(repo, 'setPassword').mockResolvedValue(null);
+
+    await expect(
+      service.confirmPasswordReset({
+        token: reset.debugToken as string,
+        newPassword: 'a different sufficiently long password',
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'account_suspended' });
+
+    // The point of the branch: a conditional write that matched nothing must not
+    // be followed by a session. Reporting the refusal is not enough on its own.
+    expect(insertSession).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /v1/auth/login', () => {
