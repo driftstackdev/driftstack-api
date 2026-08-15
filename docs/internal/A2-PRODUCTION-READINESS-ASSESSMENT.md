@@ -3691,3 +3691,66 @@ was the difference between a real verdict and a flattering one.
 All five global time-bounded deletes now have real-SQL coverage or a proven reason
 they need none: `purgeTrashedBefore`, `pruneExpired` (3 tables), `pruneFinished`,
 plus `deleteStaleAuthTokens` and `pruneOlderThan` which already had it.
+
+## 6o — the Stripe replay guard was asserted against a hand-written double
+
+New axis this fire: money-path idempotency at the SQL level. The earlier
+money-surface pass predates the `DATABASE_URL` unlock, so nothing there had been
+measured against Postgres.
+
+### What the analysis found first — a design that holds
+
+`StripeWebhooksService.handle` dedupes in two steps: a `hasEvent` short-circuit,
+and for the race where two deliveries both pass it, an `INSERT … ON CONFLICT DO
+NOTHING` whose `inserted` flag decides which delivery owns the event.
+
+⚠️ Worth being precise about what that race protection does and does not do:
+`dispatch(event)` runs BEFORE the insert, so under a true race BOTH deliveries
+execute the side effects and only the reported outcome is deduped. That is safe
+here, and it is safe for a specific reason rather than by luck — every handler is
+an upsert or a set (`upsertSubscription`, `setAccountTier`,
+`activateCryptoEntitlement` under a row lock with documented lock ordering), and
+there is **no additive write anywhere in the Stripe or crypto path**. Checked
+explicitly, because "runs twice" is only harmless while that stays true. An
+additive credit added to this path later would turn a documented race into a
+double-credit.
+
+### The gap
+
+The idempotency is exercised — duplicate path and race — but only through
+`buildTestApp`, which wires an **InMemory** repo that re-implements
+`onConflictDoNothing` by hand. The shipped statement had never executed under
+test, against a real primary key.
+
+The failure that leaves is loud in the wrong place: change the conflict clause or
+its target and a duplicate delivery RAISES a unique violation instead of returning
+`inserted: false`. Stripe sees a 500, retries on its own schedule, and the event is
+never marked processed — a retry loop on an event that can never complete.
+
+### The guard
+
+Real repo, real Postgres. First delivery inserts; the replay carries a DIFFERENT
+payload hash and result on purpose, since the conflict target is the event id alone
+and a duplicate must be rejected on identity rather than on the row happening to
+match. Then it asserts the stored row still holds the FIRST delivery's outcome, and
+that exactly one row survives.
+
+Ledger: dropping the conflict clause reds with
+`duplicate key value violates unique constraint "processed_stripe_events_pkey"` —
+the production failure exactly. Switching `DO NOTHING` to `DO UPDATE` also reds:
+the returning shape changes so the `inserted` flag flips, and the stored-row
+assertions independently catch the overwrite, which is what would catch an upsert
+variant that left the flag alone.
+
+Not isolated, deliberately — a two-row insert keyed by a random event id is not a
+whole-table sweep, so it does not fall under the global-operation rule that governs
+the purge tests.
+
+⚠️ The tests-typecheck guard caught this file too — **third time this week**, and
+this one was an inconsistency inside a single file: `const [{ count }] = …`
+destructures an index access, which `noUncheckedIndexedAccess` types as
+possibly-undefined, while the same file already used the safe `const [row] = …;
+row?.field` form three lines earlier. The rule is now explicit rather than
+habitual: in a test that queries Postgres, never destructure an array index —
+index it and use optional chaining. vitest runs the unsafe form happily, so only
+`tsconfig.test.json` says otherwise.
