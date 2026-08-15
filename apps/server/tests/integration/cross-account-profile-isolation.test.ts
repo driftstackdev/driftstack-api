@@ -48,7 +48,75 @@ const PROFILE_ROUTES: ReadonlyArray<{
   { method: 'POST', suffix: '/trim', payload: {} },
   { method: 'DELETE', suffix: '/purge' },
   { method: 'POST', suffix: '/restore', payload: {} },
+  // Added 2026-08-15, from enumerating the routes the app actually registers and
+  // diffing against this table. Twelve `/v1/profiles/:id…` routes are
+  // registered; this list had ten.
+  //
+  // ⚠️ `/launch` is registered in `routes/sessions.ts`, not `routes/profiles.ts`
+  // — which is exactly why reading the profiles route file could never have
+  // produced it. A route's PATH decides whether it belongs to this boundary; the
+  // file it lives in does not. The same enumeration found two agent-session
+  // routes hiding in other files this morning.
+  //
+  // These two are also the two worst to have missed. `/launch` starts a live
+  // browser ON the profile — its cookies, its logged-in sessions, its
+  // fingerprint — so a 2xx is not a disclosure of the saved identity, it is USE
+  // of it. `/transfer` moves ownership outright.
+  //
+  // BOTH were confirmed reachable before being trusted, because an arm that
+  // 404s for everyone proves nothing: account A's own `/launch` answers 201 and
+  // A's own `/transfer` to a real recipient answers 200. So B's 404 is the
+  // ownership refusal and not an unwired route.
+  //
+  // LEDGER — control 20/20, mutating the profile lookup to drop its accountId
+  // comparison (the fixture repo's mirror of production's
+  // `and(eq(id), eq(accountId))`):
+  //
+  //   ownership scoping removed   15 red, including all four arms these two
+  //                               routes contribute
+  //
+  // ⚠️ A first attempt at that mutation SURVIVED, and it was the mutation that
+  // was wrong rather than the test: dropping `accountId` from the service's
+  // findById call passes `undefined`, which the lookup compares and still
+  // misses, so the "unscoped" version behaved identically. A mutation has to
+  // actually grant the access it claims to grant before its survival means
+  // anything.
+  { method: 'POST', suffix: '/launch', payload: { label: 'launched-by-b' } },
+  {
+    method: 'POST',
+    suffix: '/transfer',
+    // Filled per-test with B's own account id — see TRANSFER_TO_B.
+    // Filled per-test by payloadFor — see the note there.
+    payload: { recipient_account_id: 'filled-per-test' },
+  },
 ];
+
+/**
+ * The transfer probe needs a recipient that gets PAST validation, or it never
+ * reaches the ownership check at all.
+ *
+ * ⚠️ Measured, because the obvious choice is wrong. The natural attack is B
+ * naming its OWN account as recipient — steal the profile outright — and that
+ * returns 400, not 404: the route refuses a self-transfer
+ * (`recipientId === sourceAccountId`) before it ever looks up the source
+ * profile, and under B's credential the source account IS B. So the probe would
+ * have reported a refusal it never tested, the same trap as probing with an id
+ * that was never created.
+ *
+ * Naming A as the recipient clears every earlier check — recipient differs from
+ * the source, and the account exists — so the only thing left to refuse the
+ * request is B not owning the profile. That is the check under test. It is also
+ * still a real attack: moving another customer's profile anywhere, even to its
+ * own owner, is a write B must not have.
+ */
+function payloadFor(
+  route: { suffix: string; payload?: Record<string, unknown> },
+  ownerAccountId: string,
+): Record<string, unknown> | undefined {
+  return route.suffix === '/transfer'
+    ? { recipient_account_id: `acc_${ownerAccountId}` }
+    : route.payload;
+}
 
 async function createProfileForAccountA(fixture: TestAppFixture): Promise<string> {
   const res = await fixture.app.inject({
@@ -86,7 +154,7 @@ describe("account B cannot reach account A's profile on any route", () => {
         method: route.method,
         url: `/v1/profiles/${profileId}${route.suffix}`,
         headers: { authorization: `Bearer ${other.plaintext}` },
-        ...(route.payload === undefined ? {} : { payload: route.payload }),
+        ...(route.payload === undefined ? {} : { payload: payloadFor(route, fx.accountId) }),
       });
 
       expect(
@@ -113,7 +181,7 @@ describe("account B cannot reach account A's profile on any route", () => {
             method: route.method,
             url: `/v1/profiles/${id}${route.suffix}`,
             headers: { authorization: `Bearer ${other.plaintext}` },
-            ...(route.payload === undefined ? {} : { payload: route.payload }),
+            ...(route.payload === undefined ? {} : { payload: payloadFor(route, fx.accountId) }),
           })
           .then((r) => ({ statusCode: r.statusCode, body: r.body }));
 
