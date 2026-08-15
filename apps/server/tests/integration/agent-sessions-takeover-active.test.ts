@@ -334,3 +334,118 @@ describe('the pair-mode state machine refuses transitions the lock would allow',
     expect(res.json<{ detail: string }>().detail).toMatch(/mode can only be changed on active/i);
   });
 });
+
+// ─── three more refusals, and one asymmetry that made them easy to miss ─────
+//
+// Measured uncovered (each neutralized in turn against 239 tests across the
+// agent-session, pair-mode and lock files):
+//
+//   :4019  /takeover          — requires mode='pair'
+//   :3566  /gui-control-key   — requires an ACTIVE session
+//   :4249  /message           — AI control unavailable in manual/pair/transition
+//
+// ⭐ `:4019`'s sibling is the reason it went unnoticed. `/handback` carries the
+// SAME guard with the same message shape, and that one IS covered — so a reader
+// checking "is the mode precondition tested?" finds a passing arm and stops. The
+// two routes have independent copies; covering one says nothing about the other.
+// The pair is now symmetric.
+//
+// LEDGER — control 12/12:
+//
+//   :4019 takeover mode guard neutralized     1 red
+//   :3566 control-key active guard            1 red
+//   :4249 ai-control-unavailable              1 red
+//   :4019 INVERTED (refuses PAIR sessions)    6 red
+//
+// The inversion is the anti-vacuity row and it reds six arms, not one: every
+// pair-mode test in this file goes through a takeover first, so a guard that
+// refused pair sessions breaks the whole feature rather than one assertion. That
+// is what stops the three new arms from being satisfied by a build that refuses
+// takeover outright.
+describe('preconditions that are not about ownership or the lock', () => {
+  let fx4: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx4) await fx4.cleanup();
+  });
+
+  async function session(mode: 'ai' | 'manual' | 'pair'): Promise<string> {
+    const res = await fx4.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx4.plaintext}` },
+      payload: { token_budget: 50_000, mode },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json<{ id: string }>().id;
+  }
+
+  it("409: /takeover on a mode='manual' session names the mode it found — the handback sibling had this covered and takeover did not", async () => {
+    fx4 = await buildTestApp({ enableAgentRuntime: true });
+    const id = await session('manual');
+    const res = await fx4.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/takeover`,
+      headers: { authorization: `Bearer ${fx4.plaintext}` },
+      payload: { client_id: 'cli_tab_a' },
+    });
+    expect(res.statusCode, res.body).toBe(409);
+    // Naming the mode is what tells a client whether to flip mode first or give
+    // up; a bare 409 leaves it guessing which precondition it missed.
+    expect(res.json<{ detail: string }>().detail).toMatch(/mode='manual'/);
+    expect(res.json<{ detail: string }>().detail).toMatch(/takeover requires mode='pair'/);
+  });
+
+  it('409: a GUI control key cannot be minted for a session that is no longer active', async () => {
+    fx4 = await buildTestApp({ enableAgentRuntime: true });
+    const id = await session('manual');
+    const closed = await fx4.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx4.plaintext}` },
+    });
+    expect(closed.statusCode, closed.body).toBeLessThan(300);
+
+    // The key is session-scoped and long-lived; minting one for a dead session
+    // hands out a credential whose session can never check it again.
+    const res = await fx4.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/gui-control-key`,
+      headers: { authorization: `Bearer ${fx4.plaintext}` },
+    });
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json<{ detail: string }>().detail).toMatch(/require an active session/i);
+  });
+
+  it('409 with ai_control_unavailable: a message cannot be admitted while a human holds control', async () => {
+    fx4 = await buildTestApp({ enableAgentRuntime: true });
+    const id = await session('pair');
+    // ⚠️ NOT a manual-mode session. A message there answers 200
+    // `kind: 'logged-manual'` — manual appends a transcript entry and never
+    // decomposes, so it never reaches admission at all. Measured; the first
+    // draft of this arm used manual and was asserting against a success.
+    const took = await fx4.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/takeover`,
+      headers: { authorization: `Bearer ${fx4.plaintext}` },
+      payload: { client_id: 'cli_tab_a' },
+    });
+    expect(took.statusCode, took.body).toBe(200);
+
+    const res = await fx4.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx4.plaintext}` },
+      payload: { user_message: 'drive for me' },
+    });
+    expect(res.statusCode, res.body).toBe(409);
+    const body = res.json<{ detail: string; ai_control_unavailable?: boolean; phase?: string }>();
+    expect(body.detail).toMatch(/AI control is unavailable/i);
+    // ⭐ The extension fields are the contract, not decoration: the GUI branches
+    // on `ai_control_unavailable` to show "you are driving" rather than an error
+    // toast, and `phase` tells it the turn never started. A refusal that dropped
+    // them would render as a generic failure on a perfectly healthy session.
+    expect(body.ai_control_unavailable).toBe(true);
+    expect(body.phase).toBe('admission');
+  });
+});
