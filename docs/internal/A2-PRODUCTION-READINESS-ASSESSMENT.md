@@ -1667,7 +1667,60 @@ works — the same shape as item 26's "four fail-closed branches nothing could s
 The largest clusters:
 
 - `services/auth.ts` — 8+ never-executed `InvalidKeyError` / `ExpiredKeyError`
-  throws on the API-key and web-session authentication paths.
+  throws on the API-key and web-session authentication paths. **Closed
+  2026-08-15** (`auth-slow-path-denials-actually-deny`): 18 arms, 12 mutations,
+  all red, covering both slow paths end to end. These run on every cache miss —
+  every cold start, every Redis outage, every first request from any caller.
+
+  ⛔ **This is where the pin-versus-execution question stops being academic.**
+  Both existing pins over the file were run against all twelve mutations. **They
+  miss 7 of 12, and the seven are the security ones:** both anti-enumeration
+  leaks (`deleted` answering `Forbidden` instead of `InvalidKeyError`, on either
+  path), the V-174 privilege regression (the synthetic web-session key regaining
+  a bare `admin` scope), both defence-in-depth session rechecks, and the OAuth
+  fail-closed class. `services-auth-content-parity` catches 5 of 12;
+  `auth-service-v168-v326-cross-source-invariant` catches **0 of 12**.
+
+  ⭐ **The cause is structural, and it generalises.** The parity pin _does_ assert
+  the asymmetry —
+
+  ```
+  /if \(account\.status === 'deleted'\) \{\s*\n?\s*throw new InvalidKeyError\(\);/
+  ```
+
+  — but that regex matches **anywhere in the file**, and the block exists
+  **twice**, once per slow path. Mutating either occurrence alone leaves the other
+  satisfying the pattern. Verified rather than inferred: mutating **both** at once
+  _does_ red the pin (1 failed), while each on its own leaves it green. So the pin
+  claims a security property that exists in two places and can detect its loss in
+  **neither** — only in both simultaneously, which is not how a leak is
+  introduced.
+
+  A text pin over a **repeated** block asserts that the block exists somewhere,
+  not that it still guards the path it was written for. Same class as the
+  `/nextRunAt,/` anchor in `db-validation-schedules-repo`, one level up — and
+  unlike that one, this is not a slip in a single pattern: any anchor whose target
+  appears more than once has it by construction.
+
+  _Detectable mechanically, and partly measured._ A `toMatch(/…/)` anchor that
+  matches its target source **more than once** is exactly this shape. Over the two
+  pins on `services/auth.ts`: **169 anchors, 12 multi-match**, and the detector
+  independently surfaced all three anchors whose single-site mutation had already
+  been proved invisible (`suspended`, `deleted`, `baseScopes`) — so it agrees with
+  ground truth rather than merely producing a number.
+
+  ⚠️ **Repo-wide: NOT measured.** The naive sweep over every content-parity and
+  cross-source-invariant pin does not terminate in reasonable time — several
+  anchors chain unbounded wildcards (`[\s\S]*?` between many literals), which
+  backtracks exponentially against a 2000-line source. Declining those patterns
+  was not enough. No repo-wide count is claimed here; the honest statement is
+  that the class is confirmed on one file and its size elsewhere is unknown.
+
+  ⚠️ A methodology note, since the detector nearly under-reported: its first
+  version required `)` immediately after the regex, and prettier formats a
+  multi-line assertion as `toMatch(\n  /…/,\n)`. That silently skipped 52 of 169
+  anchors — **including the very anchor the tool was written to find**. A tool
+  that misses its own motivating case will happily report a clean bill of health.
 
   _Scoped 2026-08-15 for the next slice._ **All** deny throws in that file, by
   enclosing function — this is the total population, not the never-executed
