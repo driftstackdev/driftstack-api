@@ -2657,3 +2657,105 @@ describe('a lost single-use token claim is refused, and nothing is written', () 
     expect(insertSession).not.toHaveBeenCalled();
   });
 });
+
+// ─── the account disappears between issuing a token and redeeming it ────────
+//
+// Two guards refuse a session when the account row is gone by the time the
+// second half of a flow runs:
+//
+//   auth-flows.ts:1040  completeMfaChallenge — "Account is no longer active."
+//   auth-flows.ts:1546  requireAccount       — "account vanished mid-flow"
+//
+// ⚠️ Both were uncovered, measured rather than assumed: ignoring each verdict in
+// turn left 231 tests across 15 auth / MFA / web-session files green. The second
+// one's own comment says "this should not happen in practice", which is exactly
+// the kind of guard that rots — nobody writes a test for a branch the source
+// describes as impossible, and nobody notices when a refactor makes it
+// reachable.
+//
+// They are not interchangeable. `:1040` sits on the MFA completion path and is
+// reached with a VALID challenge token; `:1546` is a shared helper behind the
+// magic-link and password-reset paths. Each needs its own flow to be driven.
+//
+// ⭐ Both arms assert `insertWebSession` was never called, not just that a
+// refusal was thrown. "No session exists for an account that does not exist" is
+// the property; the error is how it is reported. And both are session-MINTING
+// paths — a build that let either through would hand out a 30-day credential
+// bound to an account id nothing else in the system can resolve.
+//
+// LEDGER — control 86/86:
+//
+//   :1040 vanished-account guard ignored    1 red
+//   :1546 requireAccount guard ignored      1 red
+//   :1040 INVERTED (refuses a LIVE account) 5 red
+//
+// The inversion is the anti-vacuity row and those 5 are pre-existing arms: they
+// red when a present account is treated as missing. Without that row, both arms
+// above would be satisfied by a build that refused every challenge.
+describe('a vanished account cannot complete a flow it started', () => {
+  it('completeMfaChallenge refuses when the account is gone by the time the code arrives', async () => {
+    // Built inline rather than through the describe-scoped `challengeFor`
+    // helper above, which is not in scope here.
+    const { repo, service } = makeMfaDirectService();
+    const signup = await service.signup({
+      email: 'mfa-vanish@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    repo.seedAccount({ ...signup.account, emailVerifiedAt: new Date() });
+    const login = await service.login({
+      email: signup.account.email,
+      password: 'correct horse battery staple',
+      issuedFromIp: '203.0.113.9',
+      userAgent: 'browser',
+    });
+    if (login.kind !== 'mfa_required') throw new Error('expected an MFA challenge');
+    const token = login.challengeToken;
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+    // Gone AFTER the challenge was issued. The challenge token itself stays
+    // valid — the account behind it is what disappeared, which is the only way
+    // to reach this branch rather than the already-used one above it.
+    vi.spyOn(repo, 'findAccountById').mockResolvedValue(null);
+
+    await expect(
+      service.completeMfaChallenge({
+        challengeToken: token,
+        code: '123456',
+        sourceIp: '203.0.113.9',
+        userAgent: 'browser',
+      }),
+    ).rejects.toThrow(/account is no longer active/i);
+    expect(insertSession).not.toHaveBeenCalled();
+  });
+
+  it('consumeMagicLink refuses when the account is gone by the time the link is clicked', async () => {
+    const { service, repo } = makeDirectService();
+    const signup = await service.signup({
+      email: 'magic-vanish@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    await service.verifyEmail({
+      token: signup.debugToken as string,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    const link = await service.requestMagicLink({
+      email: 'magic-vanish@driftstack.local',
+      requestedFromIp: null,
+    });
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+    // The link is live and its family claim will succeed; only the account
+    // lookup that follows comes back empty.
+    vi.spyOn(repo, 'findAccountById').mockResolvedValue(null);
+
+    await expect(
+      service.consumeMagicLink({
+        token: link.debugToken as string,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toThrow(/account vanished mid-flow/i);
+    expect(insertSession).not.toHaveBeenCalled();
+  });
+});
