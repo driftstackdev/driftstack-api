@@ -147,10 +147,20 @@ describe('W711 server-side error-handler middleware parity', () => {
     expect(src).toMatch(/apiError\.toProblem\(request\.id\)/);
   });
 
-  it('CRITICAL imports pinned — ApiError + InternalError + ValidationError from ../lib/errors.js. Drift to importing from anywhere else would let the middleware diverge from the canonical taxonomy (W710).', () => {
+  it('CRITICAL imports pinned — ApiError + BadRequestError + InternalError + ValidationError from ../lib/errors.js. Drift to importing from anywhere else would let the middleware diverge from the canonical taxonomy (W710).', () => {
     const src = read(ERROR_HANDLER);
+    // `BadRequestError` joined the roster with the WWW-Authenticate work
+    // (7db4eede9), which updated the OTHER guard over this same import line and
+    // not this one. Two parity files pinned the same roster; one moved with the
+    // source and one did not, so the gate went red on a stale pin rather than on
+    // a defect. That is the sibling-copy shape this codebase keeps producing,
+    // here in the guards themselves rather than in the code they guard.
+    //
+    // Pinned as an EXACT roster on purpose: a looser match (each name checked
+    // separately, or a trailing `.*`) would stop noticing an extra import, and
+    // noticing exactly that is what this guard is for.
     expect(src).toMatch(
-      /import \{ ApiError, InternalError, ValidationError \} from '\.\.\/lib\/errors\.js'/,
+      /import \{ ApiError, BadRequestError, InternalError, ValidationError \} from '\.\.\/lib\/errors\.js'/,
     );
   });
 
