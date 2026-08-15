@@ -3527,12 +3527,34 @@ export function registerAgentSessionsRoutes(
   if (guiControlKeyEncryptionKey !== undefined) {
     app.get<{ Params: { id: string } }>(
       '/v1/agent-sessions/:id/gui-control-key',
-      // requireScope('write'): the returned gui_control_key is a CONTROL credential —
-      // via the control-key path it authorizes mode/input/takeover/handback AND
-      // DELETE (all of which skip requireScope on the control-key branch). Handing it
-      // out is write-equivalent, so a read-only key must NOT be able to fetch it and
-      // escalate to full write+destroy (audit wxzlp9yiz P1 auth-bypass).
-      { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
+      // The returned gui_control_key is a CONTROL **and READ** credential, so the mint
+      // requires both verbs. Every controlKeyOrAccountAuth route `return`s on a valid
+      // control key BEFORE `app.requireScope(requiredScope)` runs, so whatever the key
+      // reaches, it reaches with no scope check at all.
+      //
+      //   write        — via the control-key path it authorizes mode/input/takeover/handback
+      //                  AND DELETE, so a read-only key must not fetch it and escalate to
+      //                  full write+destroy (audit wxzlp9yiz P1 auth-bypass).
+      //   read:sessions — V-776. The same key also reaches the five
+      //                  controlKeyOrAccountAuth('read:sessions') routes: GET /:id,
+      //                  page-state, cookies, downloads and downloads/content. Without this
+      //                  gate a bare-`write` key — refused those reads directly, since
+      //                  read:sessions needs `read` or `account_owner` — could mint its way
+      //                  into the live cookie jar (httpOnly included), page state and
+      //                  downloaded bytes. The original rationale reasoned only about the
+      //                  read→write direction and missed write→read.
+      //
+      // Unaffected: `account_owner` satisfies both verbs (the desktop device key mints with
+      // scopes:['account_owner']), as does any read+write key. Only a bare-write-without-read
+      // key loses the mint, which is the point.
+      {
+        preHandler: [
+          app.requireAuth,
+          app.requireScope('write'),
+          app.requireScope('read:sessions'),
+          app.rateLimit('global'),
+        ],
+      },
       async (req, reply) => {
         const ctx = requireCtx(req);
         const rec = await sessions.get(req.params.id);

@@ -33538,3 +33538,52 @@ de-escalation tests, and removing the minter carry-forward reds the attribution 
 
 Found by a parallel tenant-isolation / authorization / money sweep: 14 candidates, 3 surviving
 adversarial refutation. `EXPECTED_TEST_FILES` → 2723.
+
+## V-776 — a bare-`write` key could mint its way into reads it was refused directly (2026-08-15)
+
+`GET /v1/agent-sessions/:id/gui-control-key` was gated `requireScope('write')` alone, on a
+rationale that reasoned about one direction only: _"a read-only key must NOT be able to fetch it
+and escalate to full write+destroy."_ The reverse composition was never considered.
+
+The minted control key is presented as `x-driftstack-gui-control-key` with **no** Authorization
+header. `controlKeyOrAccountAuth` validates it and `return`s **before**
+`app.requireScope(requiredScope)` ever runs — so whatever a control key reaches, it reaches with
+no scope check at all. Five of those routes carry `read:sessions`: `GET /:id`, `page-state`,
+`cookies`, `downloads`, `downloads/content`.
+
+A bare-`write` key is refused those reads directly — `read:sessions` resolves to the granular
+`read` branch, satisfied only by `read` or `account_owner`. So the sequence was: hold `write`,
+be refused `/cookies` with a 403, mint a control key with that same `write`, replay it, and
+receive the live cookie jar including httpOnly, plus page state and downloaded bytes.
+
+The mint now requires **both** `write` and `read:sessions`, and the rationale comment records both
+directions. Verified not to break first-party callers before shipping: `account_owner` satisfies
+both verbs and is exactly what `cli-authorize` mints for the desktop device login, and the
+gui-client _consumes_ a handed-off control key rather than minting with a write-only credential.
+Both cases are asserted, not assumed — the suite covers bare-`write` (refused), `read`+`write`
+(mints), and `account_owner`-only (mints). Mutation-proved: removing the new gate reds the
+composition test.
+
+**The security roster that should have caught this cannot see most of these routes, and the gap is
+measured rather than described.** `customer-scope-refusal-coverage.test.ts` extracts a route's
+gate by scanning for a literal `requireScope('…')` in a window running to the next registration.
+Two consequences:
+
+- **13 routes are invisible to it** because their gate is `controlKeyOrAccountAuth('<scope>')`,
+  which contains no literal `requireScope` — including `/cookies`, `/page-state`, `/downloads`,
+  `/input-event`, `/cookies/set`, `/files` and `GET /:id`. None has refusal coverage in that
+  roster today.
+- **It records only the FIRST `requireScope` per route.** Exactly one route now has two, and it
+  is the one fixed here — so the roster still lists
+  `GET /v1/agent-sessions/:id/gui-control-key [write]` and would not notice the
+  `read:sessions` gate being removed again.
+
+Teaching the extractor to recognise `controlKeyOrAccountAuth(...)` and to collect ALL scopes per
+route would bring those 13 routes into the roster. Not done here: each new roster entry drives a
+generated refusal case against a live route, so it is its own change with its own verification,
+and folding it into a security fix would obscure both. Recorded with exact numbers so it is a
+ticket rather than a vague note.
+
+Third of three findings from the tenant-isolation / authorization sweep (14 candidates, 3
+surviving refutation). No new test file — the cases went into the existing gui-control-key suite —
+so `EXPECTED_TEST_FILES` is unchanged.
