@@ -172,6 +172,29 @@ describe('OAuth authorize accepts S256 only', () => {
 // the seam. Drop `signupTier` and the signup account falls back to `free`, the
 // approve route 403s on `apiAccess`, and no code is ever minted.
 //
+// ─── approve-path refusals, added once the seam made consent reachable ──────
+//
+// Cold sites from the same coverage run: :561 unknown authorization_id, :592/:595
+// the commit verdicts, :598 revoked client. Ledger — control 48/48 across this
+// file and tests/unit/oauth.test.ts:
+//
+//   the staged-authorization pre-check removed (:561)     2 red
+//   the atomic-consume 'unavailable' verdict ignored      2 red
+//   the revoked-client verdict ignored (:598)             1 red
+//   the store stops treating a revoked client as gone     1 red
+//   the store's consume is no longer atomic               SURVIVES
+//
+// ⚠️ The survivor is reported rather than quietly dropped, because a surviving
+// mutation is not automatically a coverage gap. Moving
+// `authorizations.delete(...)` below the expiry check changes only whether an
+// ALREADY-expired authorization is evicted on the attempt — either way it can
+// never be approved, and `getAuthorization` filters it on the next read. So the
+// two orderings are observationally identical and no test could tell them apart.
+// It also mutates `InMemoryOAuthStore`, which is a test double: production runs
+// `db/oauth-store.ts`, where the same decision is one SQL statement. Contrast the
+// mutation directly above it, which touches the same double and REDS — that one
+// mirrors a real production rule.
+//
 // ⚠️ The guard block appears at FOUR sites in this file, so the first mutation
 // anchor matched more than once and was refused rather than applied to the wrong
 // path. The `authenticateClient` line above exchangeCode's copy disambiguates
@@ -283,6 +306,133 @@ describe('OAuth token exchange refuses a bad redirect_uri and a foreign code', (
     );
     return approved.json<{ code: string }>().code;
   }
+
+  /** Stage an authorization and return its id WITHOUT approving it. */
+  async function stageAuthorization(fixture: TestAppFixture, client: Client): Promise<string> {
+    const staged = await fixture.app.inject({
+      method: 'GET',
+      url: '/v1/oauth/authorize',
+      query: {
+        client_id: client.client_id,
+        redirect_uri: 'https://app.example/cb',
+        state: 'state-value-long-enough',
+        code_challenge: REAL_CHALLENGE,
+        code_challenge_method: 'S256',
+      },
+    });
+    expect(staged.statusCode, `authorize returned ${staged.statusCode}`).toBe(200);
+    return staged.json<{ authorization_id: string }>().authorization_id;
+  }
+
+  const approve = (
+    fixture: TestAppFixture,
+    sessionToken: string,
+    authorizationId: string,
+  ): Promise<{ statusCode: number; body: string; json: <T>() => T }> =>
+    fixture.app.inject({
+      method: 'POST',
+      url: '/v1/oauth/authorize/complete',
+      headers: { authorization: `Bearer ${sessionToken}`, 'content-type': 'application/json' },
+      payload: { authorization_id: authorizationId },
+    });
+
+  it('400: consent for an authorization_id that was never staged', async () => {
+    const fx = await buildTestApp({ withOauthStore: true, signupTier: 'api_builder' });
+    try {
+      await registerFullClient(fx, 'unknown-id');
+      const session = await consentingSession(fx, 'consent-unknown@example.test');
+
+      const res = await approve(fx, session, 'oaz_never-staged-authorization-id');
+      expect(res.statusCode).toBe(400);
+      const body = res.json<{ error: string; detail: string }>();
+      expect(body.error).toBe('invalid_request');
+      expect(body.detail).toMatch(/unknown or expired authorization_id/i);
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  it('401: a client revoked after staging cannot have its consent completed', async () => {
+    const fx = await buildTestApp({ withOauthStore: true, signupTier: 'api_builder' });
+    try {
+      const client = await registerFullClient(fx, 'decommissioned');
+      const session = await consentingSession(fx, 'consent-revoked@example.test');
+      const authorizationId = await stageAuthorization(fx, client);
+
+      // Revocation is the operator's kill switch for a compromised or retired
+      // app. Staging happens before the human decides, so there is a real window
+      // between "authorization staged" and "user clicks Approve" — and revoking
+      // during it has to hold. Otherwise a client revoked in response to a
+      // compromise still collects a code from any consent already in flight, and
+      // trades it for a token that outlives the revocation.
+      const revoke = await fx.app.inject({
+        method: 'DELETE',
+        url: `/v1/admin/oauth/clients/${client.client_id}`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+      });
+      expect(revoke.statusCode, `revoke returned ${revoke.statusCode}`).toBeLessThan(300);
+
+      const res = await approve(fx, session, authorizationId);
+      // 401, not 400: `oauthErrorToHttp` maps `invalid_client` to Unauthorized,
+      // which is RFC 6749's own answer for a client that cannot be authenticated
+      // — including one that no longer exists. The first version of this arm
+      // asserted 400 by analogy with its neighbours and was wrong about the
+      // code, not about the branch.
+      expect(res.statusCode).toBe(401);
+      const body = res.json<{ error: string; detail: string }>();
+      expect(body.error).toBe('invalid_client');
+      expect(body.detail).toMatch(/unknown or revoked client_id/i);
+    } finally {
+      await fx.cleanup();
+    }
+  });
+
+  it('one consent, double-submitted, yields exactly one code', async () => {
+    const fx = await buildTestApp({ withOauthStore: true, signupTier: 'api_builder' });
+    try {
+      const client = await registerFullClient(fx, 'double-click');
+      const session = await consentingSession(fx, 'consent-race@example.test');
+      const authorizationId = await stageAuthorization(fx, client);
+
+      // A double-clicked Approve button, which is the ordinary way this happens.
+      //
+      // ⚠️ MEASURED, and not what it looks like. The intent was to land on the
+      // ATOMIC-CONSUME verdict (services/oauth.ts:595) rather than the
+      // `getAuthorization` pre-check (:561). It does not: ignoring the :595
+      // verdict entirely leaves this arm green, so the loser is refused by the
+      // pre-check — the winner finishes before the loser starts reading.
+      //
+      // It cannot be fixed by asserting harder, because **the two sites emit the
+      // same string**. From outside, `unknown or expired authorization_id` at
+      // :561 and at :595 are indistinguishable, so no HTTP-level test can prove
+      // which one fired. :595 is covered in `tests/unit/oauth.test.ts` instead,
+      // with a store that returns the racing verdict directly.
+      //
+      // The arm is kept for what it does prove end-to-end, which is worth having
+      // on its own: a double-submitted consent yields exactly ONE code.
+      const [a, b] = await Promise.all([
+        approve(fx, session, authorizationId),
+        approve(fx, session, authorizationId),
+      ]);
+
+      const statuses = [a.statusCode, b.statusCode].sort((x, y) => x - y);
+      expect(statuses, `got ${statuses.join(',')}`).toEqual([200, 400]);
+
+      // Assert the SHAPE of the loser rather than a global count: whichever
+      // request lost must be refused as a spent authorization, not as some
+      // unrelated 400 that would satisfy the status assertion just as well.
+      const loser = a.statusCode === 400 ? a : b;
+      const body = loser.json<{ error: string; detail: string }>();
+      expect(body.error).toBe('invalid_request');
+      expect(body.detail).toMatch(/unknown or expired authorization_id/i);
+
+      // And the winner's code has to be real, not a 200 with nothing behind it.
+      const winner = a.statusCode === 200 ? a : b;
+      expect(winner.json<{ code: string }>().code).toMatch(/^oac_/);
+    } finally {
+      await fx.cleanup();
+    }
+  });
 
   it('400: a code minted for one client cannot be redeemed by another', async () => {
     const fx = await buildTestApp({ withOauthStore: true, signupTier: 'api_builder' });

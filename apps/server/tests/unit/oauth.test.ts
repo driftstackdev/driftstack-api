@@ -361,6 +361,99 @@ describe('V-667 OAuthService — approveAuthorization + exchangeCode (full happy
   });
 });
 
+// ─── the approve-path verdicts that only the STORE can produce ──────────────
+//
+// `approveAuthorization` reads the authorization, checks it, then commits
+// through `consumeAuthorizationForCode`. The commit returns its own verdict, and
+// two of those verdicts had never executed at HEAD (measured with v8 coverage):
+//
+//   services/oauth.ts:592  'expired'      → authorization expired before approval
+//   services/oauth.ts:595  'unavailable'  → unknown or expired authorization_id
+//
+// Neither is reachable over HTTP, and the reason is worth writing down rather
+// than filed as "hard to test". They exist precisely for the window BETWEEN the
+// read and the commit — a concurrent approval, or a TTL that lapses mid-flight.
+// A request that arrives after that window is refused by the pre-check at :561
+// instead, and an integration attempt at the race (a double-submitted consent)
+// was measured landing on :561, not here.
+//
+// ⚠️ The reason it cannot simply be asserted harder from outside: **:561 and :595
+// emit the same string.** `unknown or expired authorization_id` is
+// indistinguishable at the HTTP boundary, so an integration arm cannot prove
+// which site fired even when it does win the race. A store that returns the
+// verdict directly is the only instrument that can — the same shape as
+// `ClientAuthorityChangeBeforeTokenStore` above, which exists for the identical
+// reason on the exchange side.
+//
+// These are not redundant with the pre-check. The pre-check is an early-exit for
+// the common case; the commit verdict is the authoritative one, and a store that
+// stops reporting it hands out a second code for one consent.
+class CommitVerdictStore extends InMemoryOAuthStore {
+  constructor(private readonly verdict: 'expired' | 'unavailable') {
+    super();
+  }
+
+  override async consumeAuthorizationForCode(args: {
+    authorization_id: string;
+    code: string;
+    account_id: string;
+    scope: readonly ApiKeyScope[];
+    created_at: number;
+    not_before: number;
+  }): Promise<'inserted' | 'expired' | 'unavailable' | 'client_unavailable' | 'account_mismatch'> {
+    // Run the real commit first, so the store is left in the state a genuine
+    // race would leave it in rather than silently skipping the write.
+    await super.consumeAuthorizationForCode(args);
+    return this.verdict;
+  }
+}
+
+describe('V-667 OAuthService — approveAuthorization commit verdicts', () => {
+  async function approveWith(verdict: 'expired' | 'unavailable'): Promise<unknown> {
+    const store = new CommitVerdictStore(verdict);
+    const svc = new OAuthService(store);
+    const reg = await svc.registerClient({
+      label: 'App',
+      redirect_uris: ['https://app.example/cb'],
+    });
+    const auth = await svc.authorize({
+      client_id: reg.client_id,
+      redirect_uri: 'https://app.example/cb',
+      state: 'st_test',
+      code_challenge: computeS256Challenge(makeVerifier()),
+      code_challenge_method: 'S256',
+      scope: ['read:sessions'],
+    });
+    return svc.approveAuthorization({
+      authorization_id: auth.authorization_id,
+      account_id: 'acc_test_001',
+    });
+  }
+
+  it('refuses when the commit reports the authorization already gone', async () => {
+    // The losing half of a double-submitted consent: the read succeeded, so the
+    // pre-check passed, and only the atomic commit can tell it lost.
+    await expect(approveWith('unavailable')).rejects.toThrow(
+      /unknown or expired authorization_id/i,
+    );
+  });
+
+  it('refuses when the commit reports the authorization expired', async () => {
+    // The TTL lapsed between the read and the write. Distinct from the
+    // pre-check's own clock comparison, which had already passed.
+    await expect(approveWith('expired')).rejects.toThrow(/authorization expired before approval/i);
+  });
+
+  it('the refusal is invalid_request in both cases, not a 500', async () => {
+    // These are client-visible OAuth errors, so they must map through
+    // `oauthErrorToHttp` rather than escaping as an unhandled fault — a race
+    // losing is an ordinary outcome, not a server bug.
+    for (const verdict of ['unavailable', 'expired'] as const) {
+      await expect(approveWith(verdict)).rejects.toMatchObject({ code: 'invalid_request' });
+    }
+  });
+});
+
 describe('V-667 OAuthService — granted scope restriction (the cross-account/escalation fix)', () => {
   async function grantedScopeFor(
     requestScope: readonly ApiKeyScope[],
