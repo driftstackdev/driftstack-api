@@ -33893,3 +33893,46 @@ Their reasoning about the SHAPE was right and is kept verbatim: two parity files
 roster, one moved with the source and one did not, so the gate went red on a stale pin rather than
 a defect. That is the sibling-copy problem this codebase keeps producing — here in the guards
 themselves rather than in the code they guard.
+
+## V-782 — an auto-destroy that failed teardown was unaudited, and the log promised a retry that cannot happen (2026-08-15)
+
+`destroySessionSerialized` commits `status='destroyed'` and only THEN reports a driver teardown
+failure. `autoDestroyExpired` rethrew that failure immediately — before the system audit write
+below it — and `listExpiredForAutoDestroy` selects only `ACTIVE_SESSION_STATUSES`
+(`creating|ready|busy`). So the row is terminal and never returned again: the rethrow was the last
+time anything would look at that session, and the one auto-destroy that failed was the one with no
+record of having happened.
+
+Meanwhile the sweeper logged "auto-destroy failed for expired session — **will retry next tick**",
+and its docstring said "the row stays eligible and is retried next tick". Both false, and false in
+the direction that stops an operator investigating: it reads as self-healing.
+
+The audit entry is now written on that branch before the rethrow, flagged
+`driver_teardown_failed` so it is distinguishable from a clean auto-destroy, and both pieces of
+sweeper text now say the row is already terminal and will not be revisited.
+
+`session.completed` is still deliberately NOT emitted — a session whose teardown failed did not
+complete, and that omission is pinned in two places. A test asserts it stays absent, so the fix
+cannot drift into announcing a completion that did not occur.
+
+**Three of my own mistakes in getting here, each caught by a different mechanism.**
+
+The first edit asserted a unique anchor and found **two** identical `driver_error` rethrows — one
+in `destroy()` at 1074, one in `autoDestroyExpired()` at 1176. Only the latter is the dead end.
+The assert is why I did not silently change both.
+
+The second: I called `autoDestroyExpired(session.id, 'duration cap')` when the signature is
+`(session: SessionRecord, opts: { maxMinutes })`. My fix-up replaced one of the two call sites, so
+one test kept the wrong shape and returned `not_found` — a string id where a record was expected.
+It presented as `{destroyed:false}` rather than a type error **because vitest transpiles tests
+without checking them**, which is precisely what the tests-type-check guard from V-779a exists to
+catch.
+
+The third: the harness only wires `accountAudit` when a recorder is passed, so my first version
+asserted against a service that had no auditor at all — it would have passed vacuously had the
+audit not been the thing under test.
+
+Mutation-proved: restoring the bare rethrow reds the audit case.
+
+Fourth of seven findings from the concurrency/recovery sweep. No new test file, so
+`EXPECTED_TEST_FILES` is unchanged.

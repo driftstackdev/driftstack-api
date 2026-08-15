@@ -78,8 +78,14 @@ export class SessionDurationSweeperService {
   /**
    * One sweep tick: find active sessions past their tier's duration cap and
    * auto-destroy each. Per-session destroy failures are caught + logged so a
-   * single stuck driver call doesn't abort the whole batch (the row stays
-   * eligible and is retried next tick).
+   * single stuck driver call doesn't abort the whole batch.
+   *
+   * V-782 — those failures are NOT retried, and this comment used to say they were. A driver
+   * teardown failure still commits `status='destroyed'` before it reports, and
+   * `listExpiredForAutoDestroy` selects only ACTIVE_SESSION_STATUSES, so the row is terminal
+   * and never returned again. The batch continues; that one session does not get another
+   * attempt. It is audited on the way out (`driver_teardown_failed`) precisely because nothing
+   * will revisit it.
    */
   async tickOnce(now: Date): Promise<DurationSweepTickResult> {
     const tierCutoffs = durationCutoffsFor(now);
@@ -118,7 +124,7 @@ export class SessionDurationSweeperService {
             account_id: session.accountId,
             err: { message },
           },
-          'auto-destroy failed for expired session — will retry next tick',
+          'auto-destroy failed for expired session — the row is already destroyed and will NOT be revisited; see the driver_teardown_failed audit entry',
         );
       }
     }

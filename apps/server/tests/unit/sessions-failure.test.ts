@@ -2322,3 +2322,42 @@ describe('SessionsService — terminal-state resurrection guard', () => {
     });
   });
 });
+
+describe('auto-destroy driver-teardown failure is audited (V-782)', () => {
+  it('CRITICAL a driver teardown failure during autoDestroyExpired still writes the system audit entry — the row is already committed `destroyed` and listExpiredForAutoDestroy selects only active statuses, so this is the LAST time anything looks at that session', async () => {
+    // accountAudit is only wired when a recorder is supplied by the harness.
+    const { service, driver, accountAuditInputs } = buildService({
+      accountAuditRecord: () => Promise.resolve(),
+    });
+    const ctx = buildCtx();
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+
+    driver.primeDestroyThrow(new Error('driver teardown faulted'));
+
+    await expect(service.autoDestroyExpired(session, { maxMinutes: 10 })).rejects.toBeInstanceOf(
+      Error,
+    );
+
+    const entry = accountAuditInputs.find((a) => a.action === 'session.destroyed');
+    expect(entry, 'the failed auto-destroy must still be recorded').toBeDefined();
+    expect(entry?.actorType).toBe('system');
+    expect(entry?.targetResourceId).toBe(`ses_${session.id}`);
+    // Distinguishable from a clean auto-destroy, so an operator can tell the two apart.
+    expect((entry?.payload as Record<string, unknown> | undefined)?.driver_teardown_failed).toBe(
+      true,
+    );
+  });
+
+  it('CRITICAL it still does NOT emit session.completed — a session whose teardown failed did not complete, and that omission is deliberate', async () => {
+    const { service, driver, webhookEvents } = buildService();
+    const ctx = buildCtx();
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+
+    driver.primeDestroyThrow(new Error('driver teardown faulted'));
+    await expect(service.autoDestroyExpired(session, { maxMinutes: 10 })).rejects.toBeInstanceOf(
+      Error,
+    );
+
+    expect(webhookEvents.filter((e) => e.eventType === 'session.completed')).toEqual([]);
+  });
+});

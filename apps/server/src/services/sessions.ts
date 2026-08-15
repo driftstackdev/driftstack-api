@@ -1173,7 +1173,37 @@ export class SessionsService {
     if (outcome.kind === 'not_found' || outcome.kind === 'already_terminal') {
       return { destroyed: false };
     }
-    if (outcome.kind === 'driver_error') throw outcome.error;
+    if (outcome.kind === 'driver_error') {
+      // V-782 — the row is ALREADY terminal here. `destroySessionSerialized` commits
+      // `status='destroyed'` and only then reports the driver failure, and
+      // `listExpiredForAutoDestroy` filters on ACTIVE_SESSION_STATUSES
+      // (creating|ready|busy), so a destroyed row is never returned again. The sweeper's
+      // "will retry next tick" was therefore false: this is the LAST time anything looks at
+      // this session.
+      //
+      // So the audit entry has to be written here rather than after the rethrow, or the one
+      // auto-destroy that failed is the one with no record of having happened — precisely the
+      // case an operator would go looking for. Flagged `driver_teardown_failed` so it is
+      // distinguishable from a clean auto-destroy.
+      //
+      // Deliberately NOT emitting `session.completed`: a session whose teardown failed did not
+      // complete, and that omission is pinned (sessions-failure.test.ts,
+      // db-session-destroy-concurrency-drizzle.test.ts).
+      if (this.deps.accountAudit) {
+        try {
+          await this.deps.accountAudit.record({
+            accountId: outcome.session.accountId,
+            actorType: 'system',
+            action: 'session.destroyed',
+            targetResourceId: `ses_${outcome.session.id}`,
+            payload: { auto_destroyed: true, reason, driver_teardown_failed: true },
+          });
+        } catch {
+          /* swallow — best-effort, exactly as on the success path below */
+        }
+      }
+      throw outcome.error;
+    }
 
     const destroyedSession = outcome.session;
     if (destroyedSession.destroyedAt === null) {
