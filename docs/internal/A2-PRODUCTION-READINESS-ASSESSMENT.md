@@ -1399,11 +1399,51 @@ exclusion to measure it reds `workspace-vitest-config-content-parity`, which pin
 the exclude list — the pin doing its job. Forcing past it would have changed what
 the thresholds mean on a number I had not yet seen.
 
-_Recommendation:_ measure it deliberately as its own piece of work, then either
-include the directory and re-baseline the thresholds upward, or keep the
-exclusion under a rationale that is actually true. **This commit corrects the
-reason only.** The exclusion is unchanged, the comment now says what is so, and
-the pin carries a negative so the expired wording cannot come back.
+**MEASURED 2026-08-16.** Taken without perturbing the tree — `--coverage.include`
+on the CLI, thresholds zeroed for the run, config and pins untouched. Three
+earlier attempts that edited the config or moved a file each tripped a guard
+(the exclude-list pin, then the on-disk file-count pin); those guards were right
+and the measurement route was wrong.
+
+| scope                      | lines     | branches  |
+| -------------------------- | --------- | --------- |
+| current gate scope         | **90.20** | **79.93** |
+| `apps/server/src/db` alone | **62.21** | **51.41** |
+
+So including the directory wholesale would pull the gate down by roughly 28
+points on lines. **Not proposed.** The useful output is which files are low, not
+the aggregate:
+
+- **Legitimately unmeasurable under vitest (2):** `migrate.ts`, `seed.ts` are CLI
+  entrypoints run as processes, exactly like the already-excluded `index.ts`.
+- **Zero, and tied to a known-unwired subsystem (1):** `audit-archive-repo.ts` —
+  `AuditArchiveService` is item 2's "built, tested, never run".
+- **Zero or near-zero Drizzle repos (8):** `admin-accounts-repo`,
+  `email-preferences-repo`, `health-probes-repo`,
+  `incident-update-notifications-repo`, `legal-repo`, `validation-schedules-repo`,
+  `cost-nightly-accounts-provider`, plus `admin-billing-repo`,
+  `byok-anthropic-rotation-reminder-repo` and `webhook-rotation-reminder-repo` at
+  8–11% (module-level code only).
+- ⚠️ **Security-adjacent and low:** `oauth-store.ts` **7.79%**, `oauth-links-repo`
+  **20%**, `auth-repo` **26.47%**, `auth-flows-repo` **42.37%**.
+
+**What this does and does not mean.** Low line coverage on a Drizzle repo does not
+mean the behaviour is untested — the service above it is usually well covered
+against an in-memory double. What is untested is **the SQL itself**, which is the
+same gap V-086's own BYOK finding closed for one query: "no test coverage of any
+kind, only in-memory doubles".
+
+_Recommendation:_ treat the 8 near-zero repos as a coverage backlog, closed the
+way the BYOK candidate query was — a `db-*` integration file per repo against
+real Postgres. Do **not** fold `src/db/**` into the gate until that work lands;
+folding it in first would force the thresholds down, and this file's own policy
+is never to ratchet downward.
+
+_No guard shipped for this._ The obvious one — "every repo is imported by some
+test, or declared" — was checked against the coverage data and disagrees on 4 of
+52 files, because a repo pulled in transitively by a service under test shows
+8–11% without any test importing it. A 92%-accurate ratchet would spend more on
+its exception list than it earns.
 
 ## Current state
 
