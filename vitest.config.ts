@@ -15,9 +15,17 @@ export default defineConfig({
       reporter: ['text', 'json-summary', 'html'],
       // Coverage scope: the meaningfully unit-/integration-tested
       // surfaces only. Excludes:
-      //   - Drizzle repos (`apps/server/src/db/`) — exercised by e2e
-      //     against real Postgres, not by vitest. V-086 audit captures
-      //     this architectural choice.
+      //   - Drizzle repos (`apps/server/src/db/`). The V-086 audit recorded
+      //     this as "exercised by e2e against real Postgres, not by vitest",
+      //     and that is NO LONGER TRUE: 66 integration files under
+      //     apps/server/tests/integration import from `src/db/`, including the
+      //     repos directly, and they run under vitest whenever DATABASE_URL is
+      //     set. 53 source files are therefore excluded from the gate on a
+      //     justification that has expired.
+      //     Left in place rather than removed, because including them changes
+      //     what the thresholds below mean and the new number is unmeasured —
+      //     see A2-PRODUCTION-READINESS-ASSESSMENT item 5e. Correcting the
+      //     reason is not the same as making the decision.
       //   - api-types schemas — Zod runtime, no .test.ts imports.
       //   - Astro apps (marketing-site, customer-dashboard) — typechecked
       //     by `astro check`, not under vitest scope.
@@ -27,7 +35,7 @@ export default defineConfig({
       exclude: [
         '**/*.test.ts',
         '**/tests/**',
-        'apps/server/src/db/**', // Drizzle repos — e2e only
+        'apps/server/src/db/**', // Drizzle repos — justification expired, see note
         'apps/server/src/index.ts', // bootstrap entry
         'apps/server/src/lib/dump-openapi.ts', // CLI tool
       ],

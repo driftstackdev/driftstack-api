@@ -1376,6 +1376,35 @@ defect in the assertion.
 suite run without `DATABASE_URL` skips this file along with the other 65, so the
 flake could not appear in any verification that reported green.
 
+### 5e. NEW — 53 source files sit outside the coverage gate on an expired reason
+
+`vitest.config.ts` excludes `apps/server/src/db/**` from coverage, justified as
+"exercised by e2e against real Postgres, **not by vitest**", captured by the V-086
+audit. That is no longer true. **66 files under `apps/server/tests/integration`
+import from `src/db/`** — `sessions-repo`, `agent-sessions-repo`, `profiles-repo`,
+`webhooks-repo` and others directly — and they run under vitest whenever
+`DATABASE_URL` is set. The audit predates the `db-*` integration suite.
+
+So **53 source files** are outside the gate for a reason that has expired, and
+nobody can see how well covered the repo layer is: a regression there moves no
+number.
+
+_What was measured:_ coverage on the current scope is lines **90.20**, statements
+**88.60**, functions **89.41**, branches **79.93**, against thresholds of
+85/83/84/75 — gaps of 5.2, 5.6, 5.4 and 4.9 points, so the config's stated "~5
+points under its own measurement" policy still holds exactly.
+
+_What was NOT measured:_ coverage with `src/db/**` included. Removing the
+exclusion to measure it reds `workspace-vitest-config-content-parity`, which pins
+the exclude list — the pin doing its job. Forcing past it would have changed what
+the thresholds mean on a number I had not yet seen.
+
+_Recommendation:_ measure it deliberately as its own piece of work, then either
+include the directory and re-baseline the thresholds upward, or keep the
+exclusion under a rationale that is actually true. **This commit corrects the
+reason only.** The exclusion is unchanged, the comment now says what is so, and
+the pin carries a negative so the expired wording cannot come back.
+
 ## Current state
 
 Node suite **2,559 files / 26,548 passing** with `DATABASE_URL` set, so the

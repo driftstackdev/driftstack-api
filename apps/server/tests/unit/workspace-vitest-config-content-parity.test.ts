@@ -47,10 +47,10 @@ describe('W528.A /vitest.node.config.ts content parity', () => {
     expect(body).toMatch(/hookTimeout: 10_000,/);
   });
 
-  it("Coverage scope + V-086 e2e-only-db exclusion framing pinned: 'Coverage scope: the meaningfully unit-/integration-tested surfaces only.' + 'Drizzle repos (`apps/server/src/db/`) — exercised by e2e against real Postgres, not by vitest. V-086 audit captures this architectural choice.' + 'api-types schemas — Zod runtime, no .test.ts imports.' + 'Astro apps (marketing-site, customer-dashboard) — typechecked by `astro check`, not under vitest scope.' + 'GUI client (Tauri) — not in scope.' + 'Generated code (sdk-python\\'s _generated/, sdk-go).' — pinned so the V-086 e2e-only-Drizzle + 4 other exclusion-rationales commitment survives", () => {
+  it("Coverage scope + the CORRECTED db-exclusion rationale pinned: 'Coverage scope: the meaningfully unit-/integration-tested surfaces only.' + the V-086 \"e2e only\" reason recorded as EXPIRED (66 integration files import src/db and run under vitest with DATABASE_URL set) + 'api-types schemas — Zod runtime, no .test.ts imports.' + 'Astro apps (marketing-site, customer-dashboard) — typechecked by `astro check`, not under vitest scope.' + 'GUI client (Tauri) — not in scope.' + 'Generated code (sdk-python\\'s _generated/, sdk-go).' — pinned so the V-086 e2e-only-Drizzle + 4 other exclusion-rationales commitment survives", () => {
     expect(body).toMatch(/\/\/ Coverage scope: the meaningfully unit-\/integration-tested/);
     expect(body).toMatch(
-      /\/\/\s+- Drizzle repos \(`apps\/server\/src\/db\/`\) — exercised by e2e\s*\n?\s*\/\/\s+against real Postgres, not by vitest\. V-086 audit captures\s*\n?\s*\/\/\s+this architectural choice\./,
+      /Drizzle repos \(`apps\/server\/src\/db\/`\)\. The V-086 audit recorded[\s\S]{0,400}?NO LONGER TRUE[\s\S]{0,400}?66 integration files/,
     );
     expect(body).toMatch(/\/\/\s+- api-types schemas — Zod runtime, no \.test\.ts imports\./);
     expect(body).toMatch(
@@ -66,7 +66,17 @@ describe('W528.A /vitest.node.config.ts content parity', () => {
     expect(body).toMatch(
       /include: \['apps\/server\/src\/\*\*\/\*\.ts', 'packages\/sdk-typescript\/src\/\*\*\/\*\.ts'\],/,
     );
-    expect(body).toMatch(/'apps\/server\/src\/db\/\*\*', \/\/ Drizzle repos — e2e only/);
+    // 2026-08-16: the "e2e only" reason expired — 66 integration files import
+    // from src/db/ and run under vitest with DATABASE_URL set. The exclusion
+    // itself is unchanged; only its stated justification moved, and the pin
+    // moves with it in the same commit.
+    expect(body).toMatch(
+      /'apps\/server\/src\/db\/\*\*', \/\/ Drizzle repos — justification expired, see note/,
+    );
+    expect(body).not.toMatch(/Drizzle repos — e2e only/);
+    expect(body).not.toMatch(
+      /exercised by e2e\s*\n?\s*\/\/\s+against real Postgres, not by vitest/,
+    );
     expect(body).toMatch(/'apps\/server\/src\/index\.ts', \/\/ bootstrap entry/);
     expect(body).toMatch(/'apps\/server\/src\/lib\/dump-openapi\.ts', \/\/ CLI tool/);
     expect(body).toMatch(/excludeAfterRemap: true,/);
