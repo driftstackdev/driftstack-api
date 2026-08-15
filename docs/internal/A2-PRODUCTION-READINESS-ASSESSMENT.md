@@ -1304,6 +1304,78 @@ a struct that later grows a field able to hold the key fails there.
   suspected root cause guessed at.
 - No widening of another agent's guard without a demonstrated gap behind it.
 
+### 5c. NEW — the suite verifier was unreachable, and I reported skipped runs as green
+
+`scripts/verify-suite.mjs` judges a run rather than its exit code: it re-reads the
+summary, compares the collected count against `EXPECTED_TEST_FILES`, and reports
+files that were **collected but never executed**. It is unit-tested. It was also
+referenced **nowhere** — no npm script, no CI step, no hook — so nothing invoked
+it. Built, tested, never run, in the same shape as item 2.
+
+⚠️ **The consequence was mine.** I verified every slice with a bare `npm test`
+and reported "suite green, 2,797 files". `DATABASE_URL` was unset in that shell,
+so **65 `db-*` integration files plus one more were silently skipped** and the
+summary line looked like a full pass — the exact caveat this document already
+carried under _Current state_, which I read past.
+
+Measured both ways on the same tree:
+
+| run                            | files                        | tests                          |
+| ------------------------------ | ---------------------------- | ------------------------------ |
+| `npm test`, no `DATABASE_URL`  | 2,797 passed, **66 skipped** | 28,675 passed, **273 skipped** |
+| `npm test` with `DATABASE_URL` | **2,863 passed, 0 skipped**  | **28,940 passed**, 8 skipped   |
+
+**265 tests never ran in any per-fire verification I reported.** All of them pass,
+so no defect was hidden — the claim was narrower than it sounded, not wrong about
+the code.
+
+Fixed by making the instrument reachable: `npm run verify` now runs it. Without a
+database it prints `NOTE — 66 test file(s) were collected but never executed`;
+with one it is silent. That NOTE is the line that would have corrected me on day
+one.
+
+_Caveat on the verifier itself:_ it spawns `vitest run --config
+vitest.node.config.ts`, so it judges the **node project only** — the 162
+gui-jsdom files are outside it, and `EXPECTED_TEST_FILES` (2,701) is a node-project
+count, not the 2,863 a full `npm test` collects. Two different numbers for two
+different runs, which is worth knowing before comparing them.
+
+### 5d. NEW — a DB-suite race that only the runs I had been skipping can show
+
+Surfaced immediately by running the `db-*` files (see 5c).
+`database-check-enums-agree-with-the-code` reads `pg_constraint` on the SHARED
+database and failed with:
+
+```
+PostgresError: could not open relation with OID 4250187
+```
+
+which is what a catalog scan returns when a relation is dropped underneath it.
+
+**Frequency, measured rather than guessed:** 3 full runs with `DATABASE_URL` set —
+**2 green, 1 red**. The file passes **3 of 3** in isolation, so it is not broken;
+it loses a race.
+
+**Mechanism, as far as it is established:** dozens of integration files share
+`DB_URL` rather than an isolated database, and several of them run **migrations**
+against it (`db-*-envelope-migration-drizzle`, `db-account-proxies-hardening`,
+`db-recipes-encryption`, `db-webhooks-concurrency` each open a `migratorClient`
+on `DB_URL`). Vitest runs files concurrently, so a migration's DDL can drop a
+relation while this file's catalog scan is walking it. Data-only writes cannot
+cause this; only DDL can.
+
+_Recommendation:_ **not fixed here, deliberately.** The candidate fixes — moving
+this file onto an isolated database, serialising the migration files, or
+retrying the catalog read — are each changes to shared test infrastructure, and
+this document's own standing rule is no speculative fix to that. The evidence
+above is enough for whoever takes it to choose without re-deriving: it is a race
+between catalog reads and concurrent migrations on one shared database, not a
+defect in the assertion.
+
+⚠️ It is worth saying plainly that **this had been invisible, not absent.** A
+suite run without `DATABASE_URL` skips this file along with the other 65, so the
+flake could not appear in any verification that reported green.
+
 ## Current state
 
 Node suite **2,559 files / 26,548 passing** with `DATABASE_URL` set, so the
