@@ -2401,6 +2401,37 @@ trend most of their residue will be invariants and schema shadows. The higher
 yield now is **property-shaped work** — asking what a subsystem must never do —
 rather than enumerating throws.
 
+### 5u. One rule, eight implementations — and a correction to 5-something
+
+The guard-condition census found `key.length !== AES_256_KEY_BYTES` at **eight
+independent modules**, one per secret type: BYOK Anthropic, platform secret,
+platform secret value, LiveKit secret, GUI control key, webhook secret, profile
+key hierarchy, recipe payload.
+
+All eight are covered for a SHORT key. Measured against the whole unit suite,
+relaxing `!==` to `<` **survived in five of the eight** — a test that only sends
+short keys cannot tell an equality from a floor, and an over-long key is the
+realistic shape (a 64-byte key pasted where 32 was wanted, base64 that decoded
+with trailing bytes).
+
+Three now carry an over-long arm as well (`platform-secret-encryption`,
+`webhook-secret-encryption`, `profile-key-hierarchy`), each mutation-proved.
+
+⛔ **Correction to the recipe-crypto commit (`ae600488d`) and its bus post.** Both
+said an over-long key "is silently truncated by the cipher". **It is not.**
+Measured: `createCipheriv('aes-256-gcm', <48 bytes>)` throws `Invalid key
+length` — node rejects 16 and 48 alike and accepts only 32. So relaxing the check
+trades a named, module-level refusal for a crypto-internal error that says
+nothing about which secret or key was misconfigured. That is the same argument as
+the `PROFILE_MASTER_KEY` fail-closed refusal — an operability property, **not a
+plaintext hazard**. The claim was wrong in the direction that made the finding
+sound worse than it is, which is the direction that most needs correcting.
+
+⭐ The uncovered five were found by asking "is this rule the same everywhere?"
+rather than "which lines are cold" — all eight lines were already _executed_.
+**Coverage and correctness are different questions, and the census asks the
+second one.**
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
