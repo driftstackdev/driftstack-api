@@ -2225,45 +2225,45 @@ reworded, because an arm that reaches a different layer than it names is worse
 than no arm: it reports the shadowed site as covered and stops anyone looking
 again.
 
-### 5p. The isolation census — every parameterised route, measured against every isolation test
+### 5p. The isolation census — what it found, and why it cannot certify anything
 
 After finding six uncovered ownership routes on agent sessions, I stopped picking
-targets by reading files and built the census instead: enumerate every
-parameterised route the running app registers, drop the staff surfaces
-(`/v1/admin/*`, `/v1/internal/*`, which are scope-gated rather than row-owned),
-and ask which are mentioned by no cross-account test.
+targets by reading files: enumerate every parameterised route the running app
+registers, drop staff surfaces (`/v1/admin/*`, `/v1/internal/*` — scope-gated
+rather than row-owned), and ask which are mentioned by no cross-account test.
 
-**70 customer-facing parameterised routes. 63 mentioned. 7 not.**
+**70 customer-facing parameterised routes. 7 unmentioned.** Final disposition:
 
-A mention is weak evidence — it proves a string appears, not that an arm drives
-it — so the output is a shortlist, not a verdict. Each still needs the owner
-differential (does A's own request succeed?) and a mutation before it can be
-called covered. Two have been closed:
+| route                                            | verdict                                                      |
+| ------------------------------------------------ | ------------------------------------------------------------ |
+| `POST /v1/profiles/:id/launch`                   | **real gap — closed** `d0b14e54a`                            |
+| `POST /v1/profiles/:id/transfer`                 | **real gap — closed** `d0b14e54a`                            |
+| `GET`+`DELETE /v1/recipes/:id`                   | **real gap — closed** `4429f4184`                            |
+| `DELETE /v1/team/members/:id`                    | **real gap — closed** `4429f4184`                            |
+| `POST /v1/webhook-deliveries/:deliveryId/replay` | **false positive** — covered all along                       |
+| `GET /v1/status/incidents/:id`                   | **not applicable** — served `publicOnly`, no per-account row |
 
-| route                                            | status                                                                                        |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `POST /v1/profiles/:id/launch`                   | **closed** — `d0b14e54a`                                                                      |
-| `POST /v1/profiles/:id/transfer`                 | **closed** — `d0b14e54a`                                                                      |
-| `GET /v1/recipes/:id`                            | open                                                                                          |
-| `DELETE /v1/recipes/:id`                         | open                                                                                          |
-| `DELETE /v1/team/members/:id`                    | open                                                                                          |
-| `POST /v1/webhook-deliveries/:deliveryId/replay` | open                                                                                          |
-| `GET /v1/status/incidents/:id`                   | **not applicable** — served `publicOnly`, a public status page with no per-account row to own |
+⛔ **The false positive is the part worth keeping, because the instrument had the
+exact bug it was built to find.** The census read only test files whose NAME
+contained `cross-account` or `isolation`. `webhook-replay-customer.test.ts`
+carries an explicit _"404 when an UNRELATED account replays the delivery"_ arm and
+was scored as uncovered — coverage living under a different filename was
+invisible. **Filtering a corpus by filename is the same wrong-scope error as
+grepping a single route file**, which is what produced the gaps this census was
+built to find in the first place.
 
-⚠️ The four open ones all need a resource that genuinely belongs to A before they
-can be probed. A recipe, a team membership and a webhook delivery each have to be
-CREATED first, and probing with an id that was never created is precisely the
-fake this whole line of work keeps finding: a nonexistent id 404s on the first
-lookup, before ownership is consulted. Writing those arms means building the
-fixtures, not shortening the probe.
+⚠️ Widening the corpus to every test carrying a cross-account signal (150 files)
+flips the answer to **70 of 70 mentioned** — which is equally useless in the other
+direction. A string match cannot tell "an arm drives this route" from "this path
+appears somewhere in a file". The census is a **discovery heuristic that produced
+four real findings**, and it certifies nothing.
 
-⭐ Both closed routes were missing for the same structural reason, and it is the
-finding worth carrying forward: **the uncovered route is the one registered in
-another file.** `/launch` lives in `routes/sessions.ts`, not `routes/profiles.ts`;
-the two agent-session routes found this morning lived in `recipes.ts` and
-`agent-sessions-transport-report.ts`. A boundary is defined by the PATH. Any
-inventory built by reading one route file inherits that file's boundaries instead
-of the API's.
+⭐ The instrument that does certify is unchanged and unglamorous: **disable the
+ownership check and see whether anything reds**, after confirming the owner's own
+request succeeds. Every route above was accepted or rejected on that basis, not
+on the census output — including `/transport-report`, which passed its arm and
+kept passing with ownership disabled because it could not see the fixture's
+session ids at all.
 
 ## Current state
 
