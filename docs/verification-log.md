@@ -33655,3 +33655,28 @@ caught only because I read it before overriding it.
 
 For whoever picks this up: the cheap next step is to log-and-rethrow inside `tryAcquire` so the
 next occurrence carries the underlying error, rather than guessing from the status code.
+
+## V-778a — CORRECTION: the Redis hypothesis in V-778 is wrong (2026-08-15)
+
+V-778 recorded an unreproduced 500 on double-takeover and offered a mechanism: `tryAcquire` sits
+outside the route's `try` block and the lock is Redis-backed, so a transient Redis error would
+escape unmapped. Both halves of that are true of PRODUCTION and neither is true of the test that
+failed.
+
+`build-test-app.ts:1101` wires `InMemoryPairModeTakeoverLock`; only `bootstrap.ts:1339` uses
+`RedisPairModeTakeoverLock`. The failing test therefore never touched Redis, and the in-memory
+implementation is pure `Map` operations that cannot throw. **So the mechanism I proposed cannot
+explain the observed failure, and the cause remains unknown.**
+
+I should have checked which implementation the fixture wires before publishing a mechanism —
+exactly the check that V-767 turned on, where a faked dependency hid what the real one did. Here
+I made the inverse error: reasoning about the real implementation when the test ran a fake.
+
+The structural observation in V-778 still stands on its own terms — `tryAcquire` IS outside the
+try block, and in production a Redis error there WOULD surface as an opaque 500. That is worth
+addressing regardless, but it is a separate production robustness question, not an explanation of
+this test failure.
+
+What actually helps next time, and is now done: the assertion carries the response body into its
+failure message. The 500 body would have named the escaping error; asserting only the status code
+discarded the one piece of evidence the run produced. Costs nothing when green.

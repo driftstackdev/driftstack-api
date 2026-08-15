@@ -115,7 +115,10 @@ describe('Arc 2 v2-#8 sub-slice 8.9 pair-mode takeover + handback routes', () =>
       headers: { authorization: `Bearer ${fx.plaintext}` },
       payload: { client_id: 'cli_a' },
     });
-    expect(r2.statusCode).toBe(409);
+    // V-778a — carry the body into the failure message. This assertion went red once with a
+    // 500 and could not be reproduced; the response body would have named the escaping error,
+    // and asserting only the status code threw it away. Costs nothing when green.
+    expect(r2.statusCode, `expected 409, got ${String(r2.statusCode)}: ${r2.body}`).toBe(409);
     const body = r2.json<{
       type: string;
       from?: string;
