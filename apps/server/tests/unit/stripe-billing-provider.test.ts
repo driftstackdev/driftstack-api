@@ -98,3 +98,45 @@ describe('StripeBillingProvider.createPortalSession', () => {
     expect(calls[0]!.body).toContain('return_url=https%3A%2F%2Fapp.driftstack.dev%2Fbilling');
   });
 });
+
+describe('StripeBillingProvider.createSubscriptionCheckout idempotency scoping (V-780)', () => {
+  const okSession = () => stubOk({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' });
+
+  async function keySentToStripe(accountId: string, customerKey: string): Promise<string> {
+    const { client, calls } = makeClient(okSession());
+    await new StripeBillingProvider(client).createSubscriptionCheckout({
+      accountId,
+      customerId: 'cus_x',
+      priceId: 'price_x',
+      successUrl: 'https://app.driftstack.dev/ok',
+      cancelUrl: 'https://app.driftstack.dev/no',
+      idempotencyKey: customerKey,
+    });
+    return calls[0]!.headers['Idempotency-Key'] ?? calls[0]!.headers['idempotency-key'] ?? '';
+  }
+
+  it('CRITICAL two accounts sending the SAME customer key get DIFFERENT keys at Stripe — one platform secret key means a single global namespace, so an unscoped key collides across tenants', async () => {
+    const a = await keySentToStripe('acc-aaa', 'order-9001');
+    const b = await keySentToStripe('acc-bbb', 'order-9001');
+
+    expect(a).not.toBe(b);
+    expect(a).toContain('acc-aaa');
+    expect(b).toContain('acc-bbb');
+    // The raw customer string must not be what Stripe sees.
+    expect(a).not.toBe('order-9001');
+  });
+
+  it('CRITICAL the same account replaying the same key sends the SAME key — scoping must not break the idempotency the customer is actually promised', async () => {
+    expect(await keySentToStripe('acc-aaa', 'order-9001')).toBe(
+      await keySentToStripe('acc-aaa', 'order-9001'),
+    );
+  });
+
+  it('CRITICAL a maximum-length customer key stays within Stripe 255-char cap — this API accepts up to 255, so prefixing rather than hashing would push a valid key over and 400 for a new reason', async () => {
+    const maxKey = 'k'.repeat(255);
+    const sent = await keySentToStripe('acc-aaa', maxKey);
+
+    expect(sent.length).toBeLessThanOrEqual(255);
+    expect(sent).not.toContain(maxKey);
+  });
+});

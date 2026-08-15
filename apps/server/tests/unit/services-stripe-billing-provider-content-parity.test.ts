@@ -88,7 +88,17 @@ describe('W410.B apps/server/src/services/stripe-billing-provider.ts content par
     );
     expect(body).toMatch(/clientReferenceId: args\.accountId,/);
     expect(body).toMatch(/metadata: \{ driftstack_account_id: args\.accountId \},/);
-    expect(body).toMatch(/\{ idempotencyKey: args\.idempotencyKey \}/);
+    // V-780 — was /{ idempotencyKey: args.idempotencyKey }/, which pinned the customer's key
+    // being forwarded to Stripe RAW. Stripe is called with one platform key and no
+    // Stripe-Account header, so that key landed in a global namespace bound to the request's
+    // exact parameters. Now scoped per account, with the customer part hashed because both
+    // sides cap keys at 255 chars.
+    expect(body).toMatch(
+      /idempotencyKey: `checkout:\$\{args\.accountId\}:\$\{createHash\('sha256'\)/,
+    );
+    expect(body, 'the raw customer key must not go back to Stripe unscoped').not.toMatch(
+      /\{ idempotencyKey: args\.idempotencyKey \}/,
+    );
     expect(body).toMatch(/return \{ url: result\.url, sessionId: result\.id \};/);
   });
 

@@ -151,3 +151,45 @@ describe('error-handler — unexpected 5xx never leaks internals to the client (
     }
   });
 });
+
+describe('an upstream 4xx is not our 500 (V-780)', () => {
+  /** Shaped exactly like lib/stripe-api.ts builds it: `status`, not Fastify's `statusCode`. */
+  function stripeError(status: number, message: string): Error {
+    const err: Error & { status: number; stripeError: Record<string, unknown> } = Object.assign(
+      new Error(message),
+      { status, stripeError: { type: 'idempotency_error' } },
+    );
+    err.name = 'StripeApiError';
+    return err;
+  }
+
+  async function statusFor(err: Error): Promise<{ code: number; body: string }> {
+    const app: FastifyInstance = Fastify();
+    registerErrorHandler(app);
+    app.get('/x', () => {
+      throw err;
+    });
+    const res = await app.inject({ method: 'GET', url: '/x' });
+    await app.close();
+    return { code: res.statusCode, body: res.body };
+  }
+
+  it('CRITICAL a Stripe 400 becomes a 4xx, not a 500 — StripeApiError carries `status` rather than Fastify\'s `statusCode`, so the numeric branch never matched it and a reused Idempotency-Key surfaced to the customer as "an unexpected error occurred"', async () => {
+    const { code } = await statusFor(
+      stripeError(400, 'Keys for idempotent requests can only be used with the same parameters.'),
+    );
+    expect(code).toBeGreaterThanOrEqual(400);
+    expect(code, 'a client-side rejection must not page an operator').toBeLessThan(500);
+  });
+
+  it('CRITICAL a Stripe 5xx STAYS a 500 — the payment provider being down really is ours to page on, so the remap is deliberately <500 only', async () => {
+    const { code } = await statusFor(stripeError(503, 'Stripe is temporarily unavailable'));
+    expect(code).toBe(500);
+  });
+
+  it('the 4xx response does not leak the raw provider payload beyond its message', async () => {
+    const { body } = await statusFor(stripeError(400, 'Keys for idempotent requests'));
+    expect(body).not.toContain('sk_');
+    expect(body).not.toContain('idempotency_error');
+  });
+});

@@ -18,6 +18,7 @@
 // returns the SAME Customer for a repeated key (~24h), so a race/retry can
 // never mint a duplicate (orphaned) Stripe customer.
 
+import { createHash } from 'node:crypto';
 import type { BillingProvider } from './billing.js';
 import type { StripeApiClient } from '../lib/stripe-api.js';
 
@@ -55,7 +56,31 @@ export class StripeBillingProvider implements BillingProvider {
       cancelUrl: args.cancelUrl,
       clientReferenceId: args.accountId,
       metadata: { driftstack_account_id: args.accountId },
-      ...(args.idempotencyKey !== undefined ? { idempotencyKey: args.idempotencyKey } : {}),
+      // V-780 — scope the customer's key to the account before it reaches Stripe.
+      //
+      // Driftstack calls Stripe with ONE platform secret key and no Stripe-Account header, so
+      // every idempotency key lands in a single global namespace. Forwarding the customer's key
+      // raw means Stripe binds it to that request's exact parameters: the same customer reusing
+      // the key after changing tier or success_url gets `idempotency_error` (400), and two
+      // accounts that happen to pick the same string collide. It fails CLOSED — Stripe refuses
+      // rather than replaying another account's session, so there is no cross-tenant leak — but
+      // it hard-blocks the paid-signup path for ~24h until the key ages out.
+      //
+      // Its sibling above already does this (`stripe-customer-create:${accountId}`); this call
+      // was the one that did not.
+      //
+      // The customer part is HASHED rather than concatenated: both this API and Stripe cap keys
+      // at 255 chars, so prefixing a maximum-length key would push it over and start failing for
+      // a new reason. sha256 keeps it deterministic — the same key from the same account still
+      // replays, which is the property the customer is promised.
+      ...(args.idempotencyKey !== undefined
+        ? {
+            idempotencyKey: `checkout:${args.accountId}:${createHash('sha256')
+              .update(args.idempotencyKey)
+              .digest('hex')
+              .slice(0, 32)}`,
+          }
+        : {}),
     });
     return { url: result.url, sessionId: result.id };
   }

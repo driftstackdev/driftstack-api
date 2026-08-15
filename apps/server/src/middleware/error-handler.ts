@@ -10,7 +10,7 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { PROBLEM_TYPES, type Problem } from '@driftstack/api-types';
-import { ApiError, InternalError, ValidationError } from '../lib/errors.js';
+import { ApiError, BadRequestError, InternalError, ValidationError } from '../lib/errors.js';
 import { redactUrlQueryTokens } from '../lib/redact-url.js';
 
 export function registerErrorHandler(app: FastifyInstance): void {
@@ -111,6 +111,22 @@ function normaliseError(err: FastifyError | Error, _request: FastifyRequest): Ap
       status: fastifyErr.statusCode,
       detail: fastifyErr.message,
     });
+  }
+
+  // V-780 — an upstream 4xx is the CALLER's problem, not ours.
+  //
+  // StripeApiError carries `status`, not Fastify's `statusCode`, so the numeric check above
+  // never matched it and every Stripe rejection became a 500 logged at ERROR. The one that
+  // actually reaches customers is `idempotency_error`: a reused Idempotency-Key with changed
+  // parameters is a 400 from Stripe, and the customer saw "an unexpected error occurred" with
+  // nothing to act on — while the operator got a paging-grade 500 for a client mistake.
+  //
+  // Only <500 is remapped. A Stripe 5xx really is our problem to page on, and stays a 500.
+  const upstream = err as { name?: string; status?: number; message?: string };
+  if (upstream.name === 'StripeApiError' && typeof upstream.status === 'number') {
+    if (upstream.status < 500) {
+      return new BadRequestError(upstream.message ?? 'The payment provider rejected this request.');
+    }
   }
 
   // Anything else: hide internals.

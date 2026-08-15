@@ -33757,3 +33757,45 @@ And the cast caused this. I added `as CryptoOrderTierActivator` to silence an es
 `no-unsafe-argument` complaint about an `as never` stub. Replacing one cast with a narrower cast
 kept the type system quiet about a member that did not exist. Implementing the interface — no cast
 at all — is what makes the stub honest, and it is what I should have reached for first.
+
+## V-780 — the customer's idempotency key reached Stripe's global namespace, and its rejection surfaced as a 500 (2026-08-15)
+
+`POST /v1/billing/checkout-session` accepts a customer `Idempotency-Key` and forwarded it to
+Stripe **unmodified**. Driftstack calls Stripe with one platform secret key and no
+`Stripe-Account` header, so every key lands in a single global namespace and Stripe binds it to
+that request's exact parameters.
+
+The primary trigger needs no adversary and no second tenant: a customer POSTs with
+`Idempotency-Key: order-9001` for `api_starter`, backs out, picks a different tier, and resends
+the same key. Stripe returns `idempotency_error` (400) because the parameters changed. Two
+accounts choosing the same string collide the same way — and that direction fails CLOSED, since
+`customer=cus_B` can never match a session bound to `cus_A`, so there is no cross-tenant leak. The
+cost is a hard block on the paid-signup path until the key ages out.
+
+Its own sibling nine lines above already did this correctly:
+`idempotencyKey: \`stripe-customer-create:${args.accountId}\``. The checkout call was the one that
+did not, with `accountId` already in scope.
+
+Now `checkout:<accountId>:<sha256(key).slice(0,32)>`. **Hashed rather than concatenated**, and
+that detail is load-bearing: this API accepts keys up to 255 chars and Stripe caps at 255, so
+prefixing a maximum-length key would push it over and start failing for a brand-new reason. The
+hash is deterministic, so the same key from the same account still replays — the property the
+customer is actually promised — while two accounts can no longer collide. A test asserts the
+255-char bound explicitly.
+
+**And the rejection was reported as our fault.** `StripeApiError` carries `status`, not Fastify's
+`statusCode`, so the error handler's `statusCode < 500` branch never matched it and every Stripe
+rejection fell through to `InternalError` — the customer saw "an unexpected error occurred" with
+nothing actionable, and the operator got a paging-grade 500 for a client mistake. Upstream 4xx now
+maps to a 400. Deliberately `< 500` only: a Stripe 5xx really is ours to page on, and a test pins
+that a 503 stays a 500.
+
+Two source-text pins moved with it — the provider's checkout body and the handler's import list.
+I edited both files before grepping for their pins, which is the habit I keep having to re-apply;
+the test run found them, as it did in V-768 and V-772.
+
+Mutation-proved on both halves: forwarding the raw key again reds the cross-account and
+max-length cases, and removing the remap reds the 4xx case while leaving the 5xx one green.
+
+Second of seven findings from the concurrency/recovery sweep. No new test file, so
+`EXPECTED_TEST_FILES` is unchanged.

@@ -153,13 +153,13 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
     );
   });
 
-  it('imports: ZodError + Problem type + ApiError/InternalError/ValidationError', () => {
+  it('imports: ZodError + Problem type + ApiError/BadRequestError/InternalError/ValidationError (V-780 added BadRequestError to remap an upstream Stripe 4xx away from a 500)', () => {
     expect(body).toMatch(/import \{ ZodError \} from 'zod';/);
     // PROBLEM_TYPES is now a VALUE import alongside the type-only Problem: the
     // handler builds envelopes from the constants rather than URI literals.
     expect(body).toMatch(/import \{ PROBLEM_TYPES, type Problem \} from '@driftstack\/api-types';/);
     expect(body).toMatch(
-      /import \{ ApiError, InternalError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ ApiError, BadRequestError, InternalError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
     );
   });
 
