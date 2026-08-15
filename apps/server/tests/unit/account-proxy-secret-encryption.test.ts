@@ -261,3 +261,56 @@ describe('account-proxy-secret-encryption — unnoticed encrypt-path refusals', 
     ).toThrow(/is invalid/);
   });
 });
+
+// The two bounded-base64 guards, made individually attributable.
+//
+// They are layered, and a mutation ledger showed why that matters: neutralising
+// either one alone reds NOTHING, because the sibling catches the same input and
+// the existing payload test asserts only `.toThrow()` with no message. Only
+// mutating BOTH together reds it. So "no test notices this line" was true and
+// would have been misleading — the pair is covered, the lines are not
+// individually attributable.
+//
+// The gap that is real: that test is named for `noncanonical` payloads and does
+// not contain one. Its four candidates are a trailing space (a SHAPE violation),
+// a truncated blob, an extended blob, and a byte-tampered blob — the last three
+// all produced by `Buffer.toString('base64')`, so every one of them is canonical
+// by construction. Non-canonical base64 — trailing bits that are not zero, which
+// decodes fine and re-encodes to a DIFFERENT string — was never exercised.
+//
+// Reachability here is unlike the webhook module's fixed-width envelope: this
+// base64 is BOUNDED and admits padding, so both branches of the second guard are
+// genuinely reachable. Each arm asserts its own message, so it names the guard
+// that answered rather than accepting any refusal.
+describe('account-proxy-secret-encryption — bounded base64, attributed', () => {
+  const C: AccountProxySecretContext = { accountId: ACCOUNT_A, proxyId: PROXY_A, slot: 'password' };
+
+  it('CRITICAL a non-canonical payload is refused by the post-decode canonicality check. Trailing bits that are not zero decode to the same bytes and re-encode to a different string, so a single stored secret would have several accepted spellings — the case the payload test is named for and does not contain.', () => {
+    const body = encryptAccountProxySecret(MASTER, C, 'hunter2').slice(
+      ACCOUNT_PROXY_SECRET_V2_PREFIX.length,
+    );
+    const nonCanonical = `${body.slice(0, -2)}R=`;
+    // The premise, asserted rather than assumed: this really is non-canonical.
+    expect(Buffer.from(nonCanonical, 'base64').toString('base64')).not.toBe(nonCanonical);
+    expect(() =>
+      readAccountProxySecret(MASTER, C, `${ACCOUNT_PROXY_SECRET_V2_PREFIX}${nonCanonical}`),
+    ).toThrow(/not canonical bounded base64/);
+  });
+
+  it('CRITICAL a payload that clears the character floor but decodes BELOW the minimum envelope is refused after decoding — the length floor is counted in characters, and padding makes those two different numbers', () => {
+    // 40 chars clears the char floor; the '==' padding drops it to 28 decoded
+    // bytes, one short of the 29-byte minimum envelope (12 IV + 16 tag + 1).
+    const shortDecode = `${'A'.repeat(38)}==`;
+    expect(shortDecode.length).toBe(40);
+    expect(Buffer.from(shortDecode, 'base64').length).toBe(28);
+    expect(() =>
+      readAccountProxySecret(MASTER, C, `${ACCOUNT_PROXY_SECRET_V2_PREFIX}${shortDecode}`),
+    ).toThrow(/not canonical bounded base64/);
+  });
+
+  it('CRITICAL a payload outside the alphabet is refused BEFORE any decode, by the shape check rather than by its sibling', () => {
+    expect(() =>
+      readAccountProxySecret(MASTER, C, `${ACCOUNT_PROXY_SECRET_V2_PREFIX}!!!!not-base64!!!!`),
+    ).toThrow(/outside its canonical bounded base64 shape/);
+  });
+});

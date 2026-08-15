@@ -2637,3 +2637,81 @@ output is split by directory: route-level refusals are frequently asserted by HT
 status with no message at all, and a message built from a template collapses to a
 short static prefix that cannot be fragment-matched. The census is a pre-filter
 for where to spend mutation time — mutation is the verdict.
+
+## 5z — the three read-path guards, settled
+
+Follow-up on 5y, which named these rather than dropping them. All three are now
+settled empirically, and none of the three was what the ledger's "UNNOTICED"
+label suggested.
+
+**`:153` plaintext exceeds its byte bound — UNREACHABLE.** Forging an
+authenticated envelope whose plaintext is one byte over the slot bound produces
+_"not canonical bounded base64"_, not this message. AES-GCM preserves length, so
+a plaintext over the bound means a blob over `maximumBytes`, which the envelope
+check rejects first. Same shape as the webhook module's length guard: a size
+check upstream pins every size downstream. Left unpinned deliberately.
+
+**`:122` and `:130` — LAYERED, not uncovered.** Neutralising either alone reds
+nothing; neutralising BOTH reds the existing payload test. The reason is that the
+test asserts `.toThrow()` with no message, so whichever guard survives satisfies
+it. "No test notices this line" was literally true and would have been misleading
+as "uncovered" — the behaviour is covered, the lines were not individually
+attributable.
+
+**The real gap was in that test's name.** It is called
+_"rejects noncanonical, truncated, extended and tampered payloads"_ and contains
+no non-canonical payload. Its four candidates are a trailing space (a SHAPE
+violation), a truncated blob, an extended blob, and a byte-tampered blob — and the
+last three are each produced by `Buffer.toString('base64')`, so they are canonical
+by construction. Non-canonical base64 — non-zero trailing bits, which decode fine
+and re-encode to a different string, meaning one stored secret has several
+accepted spellings — was never exercised.
+
+Three arms added, each asserting its own message so it names the guard that
+answered: a genuinely non-canonical payload, a payload that clears the 40-char
+floor but decodes to 28 bytes (below the 29-byte minimum envelope — the floor is
+counted in characters, and padding makes those two different numbers), and an
+out-of-alphabet payload that must be refused before any decode. After: `:122`
+reds 1, `:130` reds 2, both previously 0. Control 14 throughout.
+
+⭐ Method note: a 0-red site has three possible causes, and they need different
+responses — genuinely uncovered (write a test), structurally unreachable (leave
+it, record why), or layered behind a sibling with a message-free assertion (add
+attribution, not behaviour). Reporting all three as "uncovered" would overstate
+the first and hide the third.
+
+### Census calibration, third correction
+
+`profile-key-hierarchy.ts:65` (_"wrapped DEK is not canonical base64"_) was flagged
+by the census and is **fully covered** — `profile-key-hierarchy.test.ts:144`
+asserts `/canonical base64/` against a payload whose 80-character length is kept
+while one base64 character is replaced with `\n`, which Node's permissive decoder
+ignores. That test is better than the one I would have written: it also documents
+why replacing the final character with `=` was the wrong fixture, since for some
+preceding sextets `=` is the canonical encoding of a shorter 59-byte payload and
+the fixed-length guard fires first.
+
+The census missed it because the test asserts a TWO-WORD fragment
+(`/canonical base64/`) and the matcher's floor is four words — the floor that
+exists to stop a generic tail like "is invalid" from matching everything. Lower
+it and precision collapses; keep it and short assertions are invisible. That is a
+floor, not a bug, and it is the fifth distinct way this census produces a false
+positive:
+
+1. full-literal matching vs. fragment assertions (fixed in v2)
+2. route refusals asserted by HTTP status, carrying no message
+3. template messages collapsing to a short static prefix
+4. guards that are structurally unreachable, so nothing CAN cover them
+5. asserted fragments shorter than the matcher's floor
+
+Worth keeping as a pre-filter, worth never quoting as a coverage number.
+
+Also settled while checking that cluster: the trailing-bits path in that same
+guard is unreachable (60-byte payload → exactly 80 base64 chars, no padding;
+100,000 random valid samples produced zero non-canonical). It is reachable only
+through characters outside the alphabet, because the length check above it tests
+length ALONE with no alphabet regex — unlike the webhook module, where the shape
+check carries `/^[A-Za-z0-9+/]{88}$/`. A DEK of 79 valid characters plus one
+invalid one decodes to a full 60 bytes and would satisfy a decoded-length check;
+only the canonicality round-trip rejects it. That guard is the de-facto alphabet
+check on this path.
