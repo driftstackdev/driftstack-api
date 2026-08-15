@@ -245,7 +245,13 @@ describe('public docs reference only surfaces that actually exist', () => {
 
   it('CRITICAL every `/v1/...` path our own first-party apps call resolves to a registered route. The customer dashboard, admin panel and desktop GUI call the API directly — a path that does not resolve is not a documentation typo, it is a broken feature the customer meets at runtime.', () => {
     const registered = registeredRoutes();
-    const appRoots = ['apps/customer-dashboard/src', 'apps/admin-panel/src', 'apps/gui-client/src'];
+    const appRoots = [
+      'apps/customer-dashboard/src',
+      'apps/admin-panel/src',
+      'apps/gui-client/src',
+      'apps/status-site/src',
+      'apps/marketing-site/src',
+    ];
     const unresolved: string[] = [];
 
     for (const root of appRoots) {
