@@ -28,8 +28,21 @@
 // that is deliberate: the failure it prevents is someone ADDING a twelfth timer
 // in the wrong shape, which no behavioural test of the existing eleven would
 // notice.
+//
+// The last arm covers a DIFFERENT population with a different failure mode: the
+// five connection-scoped intervals in the SSE and WebSocket routes. Those are
+// per-connection heartbeats, so `.unref()` is not the concern — the socket holds
+// the loop open regardless — but a missing `clearInterval` leaks one live timer
+// per connection that ever opened, forever. On a long-running server that is
+// unbounded growth in both memory and wakeups, and it is invisible until the
+// process is old.
+//
+// Swept before writing: all five are paired today. The scan initially reported a
+// sixth site in validation-harness.ts, which turned out to be a COMMENT
+// describing how bootstrap should wire the tick — comment lines are skipped now,
+// because a guard that counts prose reports a violation nobody can fix.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -123,5 +136,33 @@ describe('every background timer is crash-safe', () => {
       (n) => !src.includes(`clearInterval(${n})`) && !src.includes(`clearInterval(${n}!)`),
     );
     expect(missing, 'timer(s) never cleared:').toEqual([]);
+  });
+
+  it('CRITICAL every connection-scoped interval in a route is matched by a clearInterval in the same file. These are per-connection SSE and WebSocket heartbeats, so unref is not the issue — the socket holds the loop anyway. A missing clear leaks one live timer for every connection that ever opened, which grows without bound on a long-running process and stays invisible until it is old.', () => {
+    const ROUTES = resolve(HERE, '..', '..', 'src', 'routes');
+    const offenders: string[] = [];
+    let sites = 0;
+    for (const entry of readdirSync(ROUTES)) {
+      if (!entry.endsWith('.ts')) continue;
+      const body = readFileSync(resolve(ROUTES, entry), 'utf8');
+      // Comment lines are excluded: validation-harness.ts documents the poller
+      // shape in prose, and counting that reported a violation nobody could fix.
+      const code = body
+        .split('\n')
+        .filter((l) => {
+          const t = l.trimStart();
+          return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+        })
+        .join('\n');
+      const sets = [...code.matchAll(/setInterval\(/g)].length;
+      if (sets === 0) continue;
+      sites += sets;
+      const clears = [...code.matchAll(/clearInterval\(/g)].length;
+      if (clears < sets)
+        offenders.push(`${entry}: ${String(sets)} setInterval, ${String(clears)} clearInterval`);
+    }
+    // MEASURED: 5 connection-scoped intervals across 4 route files.
+    expect(sites, 'route-level setInterval sites found').toBeGreaterThanOrEqual(5);
+    expect(offenders, 'route file(s) leaking a per-connection timer:').toEqual([]);
   });
 });
