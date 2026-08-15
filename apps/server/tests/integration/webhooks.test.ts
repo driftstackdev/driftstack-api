@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { seedWebhookEndpoints } from './_helpers/scenarios.js';
@@ -657,5 +657,100 @@ describe('POST /v1/webhooks/:id/rotate-secret (V-359)', () => {
       headers: auth(fx),
     });
     expect(rotate.statusCode).toBe(409);
+  });
+});
+
+// ─── refusals that fire when the row moves between the read and the write ───
+//
+// Swept `services/webhooks.ts` — all 28 refusal sites, each neutralized against
+// 459 webhook tests. Six were uncovered; these are the three worth driving.
+//
+// ⭐ `:707` is a FIXED BUG with no regression test, and its own comment says so:
+// listing deliveries for an endpoint that does not exist used to answer an empty
+// list — "indistinguishable from a real endpoint that has never fired, so a
+// customer debugging a mistyped id was shown 'no deliveries' instead of 'no such
+// webhook'". The fix added the existence check. Nothing pinned it, so the bug
+// could return exactly as it left.
+//
+// `:532` and `:598` are the lost-update pair: the endpoint was found, then the
+// conditional UPDATE matched nothing. That is a delete landing between the two
+// statements, and the alternative to refusing is returning a success for a row
+// that no longer exists — or, for rotate, reporting a new secret that was never
+// stored, which is worse than an error because the customer would configure it.
+//
+// LEDGER — control 35/35:
+//
+//   :707 endpoint-existence check neutralized   1 red
+//   :532 update-vanished refusal neutralized    1 red
+//   :598 rotate-vanished refusal neutralized    1 red
+//   :707 REVERTED to the original bug shape     1 red
+//
+// The last row is the one worth having: rather than neutralizing the throw, it
+// deletes the existence check entirely and returns the empty list again — the
+// exact code that shipped before the fix. A ledger row should reproduce the
+// historical bug when one is known, not just disable the guard that fixed it.
+describe('webhook refusals for a row that is gone by the time it is written', () => {
+  let fx2: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx2) await fx2.cleanup();
+  });
+
+  async function endpoint(): Promise<string> {
+    const res = await fx2.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx2),
+      payload: { url: 'https://customer.test/hook', events: ['session.completed'] },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json<{ id: string }>().id;
+  }
+
+  it('CRITICAL 404 listing deliveries for an endpoint that does not exist — not an empty list. The empty list was the bug: it is indistinguishable from a real endpoint that has never fired, so a mistyped id read as "your webhook works, nothing happened yet".', async () => {
+    fx2 = await buildTestApp();
+    await endpoint(); // a real one exists, so this is not "no webhooks at all"
+    const res = await fx2.app.inject({
+      method: 'GET',
+      url: '/v1/webhooks/whk_00000000-0000-4000-8000-0000000000ff/deliveries',
+      headers: auth(fx2),
+    });
+    expect(res.statusCode, res.body).toBe(404);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.NotFound);
+  });
+
+  it('404 when the endpoint is deleted between the read and the UPDATE', async () => {
+    fx2 = await buildTestApp();
+    const id = await endpoint();
+    // The find succeeds; the conditional update matches nothing. That is a
+    // concurrent delete, and the only alternative to refusing is reporting a
+    // successful edit of a row that is gone.
+    vi.spyOn(fx2.webhooksRepo, 'updateEndpoint').mockResolvedValue(null);
+
+    const res = await fx2.app.inject({
+      method: 'PATCH',
+      url: `/v1/webhooks/${id}`,
+      headers: { ...auth(fx2), 'content-type': 'application/json' },
+      payload: { description: 'renamed' },
+    });
+    expect(res.statusCode, res.body).toBe(404);
+  });
+
+  it('CRITICAL 404 when the endpoint disappears mid secret-ROTATION, so no secret is reported that was never stored', async () => {
+    fx2 = await buildTestApp();
+    const id = await endpoint();
+    vi.spyOn(fx2.webhooksRepo, 'rotateSecret').mockResolvedValue(null);
+
+    const res = await fx2.app.inject({
+      method: 'POST',
+      url: `/v1/webhooks/${id}/rotate-secret`,
+      headers: { ...auth(fx2), 'content-type': 'application/json' },
+      payload: {},
+    });
+    expect(res.statusCode, res.body).toBe(404);
+    // The failure mode this prevents is worse than an error: a 200 here hands
+    // the customer a signing secret to configure that the server never saved,
+    // and every delivery signed with it would then fail verification.
+    expect(res.body).not.toContain('whsec_');
   });
 });
