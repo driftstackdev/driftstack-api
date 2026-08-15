@@ -206,6 +206,11 @@ import { BillingService, type BillingProvider } from '../services/billing.js';
 import { CryptoOrdersService } from '../services/crypto-orders.js';
 import { CryptoTierActivationService } from '../services/crypto-tier-activation.js';
 import { DrizzleCryptoOrdersRepo } from '../db/crypto-orders-repo.js';
+import {
+  CryptoEntitlementReconcileSweeper,
+  registerCryptoEntitlementReconcileJob,
+  enqueueNextCryptoEntitlementReconcile,
+} from '../services/crypto-entitlement-reconcile-sweeper.js';
 import { NowPaymentsApiClient } from './nowpayments-api.js';
 import { CostMonitoringService } from '../services/cost-monitoring.js';
 import { UsageAggregatorFromUsageRepo } from '../services/cost-aggregator.js';
@@ -1597,6 +1602,35 @@ export async function createProductionDeps(
     logger, // chain survival: a swallowed tick failure is logged, then re-armed
   });
   await enqueueNextCryptoEntitlementExpirySweep({ scheduledJobs: scheduledJobsService });
+
+  // V-779 — recover paid crypto orders whose entitlement never landed. The IPN handler commits
+  // status='paid' in one transaction and calls the tier activator in a LATER one; a process
+  // death in that window strands a PAYING customer with no entitlement and no tier, and it
+  // cannot self-heal — a re-delivered IPN reads status='paid', computes firePaid=false and
+  // skips activation forever. The handler's alarm only fires when the activator THROWS, so an
+  // abrupt death is silent.
+  //
+  // Wired UNCONDITIONALLY for the same reason as the expiry sweep directly above: a stranded
+  // paid order can exist from a deploy where the IPN intake path was configured, and must be
+  // recoverable in one where it currently is not. With no such orders the tick is a no-op.
+  // Its own repo instance because the conditional block below builds one only when NOWPAYMENTS
+  // is configured; this one takes just the db handle.
+  const cryptoEntitlementReconcileSweeper = new CryptoEntitlementReconcileSweeper({
+    repo: new DrizzleCryptoOrdersRepo(dbHandle),
+    activator: new CryptoTierActivationService(
+      stripeWebhooksRepo,
+      logger,
+      accountLifecycleService,
+      authCache,
+    ),
+    logger,
+  });
+  registerCryptoEntitlementReconcileJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: cryptoEntitlementReconcileSweeper,
+    logger, // chain survival: a swallowed tick failure is logged, then re-armed
+  });
+  await enqueueNextCryptoEntitlementReconcile({ scheduledJobs: scheduledJobsService });
 
   // V-759 — privacy-policy §9 retention enforcement. ANONYMISES rather than deletes:
   // usage_records cascades from sessions and §9 requires billing data be kept 7 years, and

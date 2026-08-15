@@ -33680,3 +33680,56 @@ this test failure.
 What actually helps next time, and is now done: the assertion carries the response body into its
 failure message. The 500 body would have named the escaping error; asserting only the status code
 discarded the one piece of evidence the run produced. Costs nothing when green.
+
+## V-779 — a paid crypto order could lose its entitlement permanently, silently (2026-08-15)
+
+The NowPayments IPN handler is a **dual write across two transactions**. `withOrderLock` opens its
+own transaction, takes `SELECT … FOR UPDATE`, writes `status='paid'` and **commits on return**.
+The tier activator is called afterwards, in a separate transaction. A process death in that window
+— OOM, SIGKILL, host loss, or a SIGTERM drain outliving the 10s deadline — leaves a paying
+customer with no entitlement and no tier.
+
+**It cannot self-heal, and that part is deliberate.** `firePaid` is computed from the LOCKED
+pre-update status (`crypto-orders.ts`: `order.status !== 'paid' && mapped === 'paid'`), which is
+what makes a re-delivered IPN a correct no-op. So the retry reads `status='paid'`, sets
+`firePaid = false`, and skips activation, the `crypto.order.paid` webhook and the receipt email.
+The handler says exactly this: _"a NowPayments retry would find the order already paid and cannot
+re-drive activation — ops must remediate from the alarm."_
+
+**The flaw is in that mitigation, not the design.** The alarm is raised by a `catch` around the
+activator call, so a failure THROWN by the activator alarms — and an abrupt death between the
+commit and the call raises nothing at all. Silent, permanent, on a customer who has paid.
+
+**The population is not hypothetical.** `migrations/0100_crypto_entitlements.sql` backfilled
+exactly this predicate once — paid, account-bound, self-serve-priced orders with no entitlement.
+Someone had to repair this set already. Nothing made the repair recurring; this is that.
+
+Added `crypto.entitlement_reconcile`: hourly, batch-bounded, per-order isolation, self-re-arming,
+and wired **unconditionally** for the same reason the expiry sweep directly above it is — a
+stranded order can exist from a deploy where the IPN intake was configured and must be recoverable
+in one where it currently is not. It gets its own `DrizzleCryptoOrdersRepo` because the crypto
+block builds one only when NOWPAYMENTS is configured. Registered in
+`EXPECTED_RECURRING_JOB_TYPES` so the chain-liveness gauge watches it.
+
+Safe to re-run: `activateCryptoEntitlement` takes the account row `FOR UPDATE` and the entitlement
+insert is `onConflictDoNothing({ target: cryptoEntitlements.orderId })`.
+
+**Two things the DB-backed test caught that a fake could not.**
+
+`InMemoryCryptoOrdersRepo` has no transaction boundary at all, so this window is structurally
+inexpressible in it — the fake cannot represent the bug, which is part of why it survived. The
+crash is simulated the only honest way available: commit the paid status, then simply never call
+the activator.
+
+And the implementation was wrong on first run, in a way only real Postgres shows. `paid_at` comes
+back from `db.execute` as a **string**, not a `Date`: raw execute does no column-type mapping, and
+drizzle-orm/postgres-js additionally replaces this client's timestamp PARSERS with a transparent
+pass-through — the same override that forces ISO strings on the write side (V-759). My sweeper
+called `.toISOString()` on it, threw, and the per-order error isolation counted it as a _failed
+order_ rather than surfacing a type bug. Normalised in the repo, so no caller can inherit it.
+Mutation-proved: reverting the normalisation reds three of the four cases, and dropping the
+`NOT EXISTS` guard reds the "second tick is a no-op" case that stops a recurring job extending a
+customer forever.
+
+First of seven findings from the concurrency/recovery sweep (15 candidates, 7 surviving
+refutation). `EXPECTED_TEST_FILES` → 2725.

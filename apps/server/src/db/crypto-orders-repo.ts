@@ -167,6 +167,83 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
   // computed against the SELECT … FOR UPDATE snapshot, so concurrent IPNs/edits serialize
   // and only the winner writes/fires side-effects. Skips the write when fn returns
   // `updated: null` (the no-op branches). The SET clause matches upsert's update set.
+  /**
+   * V-779 — paid orders that never got an entitlement.
+   *
+   * The IPN handler commits `status='paid'` in one transaction (`withOrderLock`) and calls the
+   * tier activator in a LATER one. A process death between the two strands a paying customer:
+   * the retry re-reads the order, sees `status='paid'`, computes `firePaid = false` and skips
+   * activation forever. The handler's own comment says exactly that — "a NowPayments retry would
+   * find the order already paid and cannot re-drive activation — ops must remediate from the
+   * alarm" — but the alarm is raised by a catch around the activator call, so an abrupt death
+   * raises nothing at all.
+   *
+   * The predicate is lifted from the one-time backfill in
+   * `migrations/0100_crypto_entitlements.sql`, which repaired exactly this population once.
+   * Nothing made it recurring; this is that.
+   *
+   * `payment_id` and the first paid event's timestamp are read back so the reconciler can
+   * rebuild the same activation intent the IPN path would have passed.
+   */
+  async listPaidOrdersMissingEntitlement(limit: number): Promise<
+    Array<{
+      orderId: string;
+      accountId: string;
+      product: string;
+      paymentId: string | null;
+      paidAt: Date;
+    }>
+  > {
+    const result = await this.database.db.execute<{
+      order_id: string;
+      account_id: string;
+      product: string;
+      payment_id: string | null;
+      paid_at: Date;
+    }>(sql`
+      SELECT o.order_id, o.account_id, o.product, o.payment_id,
+             COALESCE(
+               to_timestamp(
+                 (SELECT min((e->>'at')::bigint)
+                    FROM jsonb_array_elements(o.events) AS e
+                   WHERE e->>'status' = 'paid') / 1000.0
+               ),
+               o.updated_at
+             ) AS paid_at
+        FROM crypto_orders o
+       WHERE o.status = 'paid'
+         AND o.account_id IS NOT NULL
+         AND o.product IN ('solo_manual', 'team_manual', 'agency_manual',
+                           'api_starter', 'api_builder', 'api_scale')
+         AND NOT EXISTS (
+           SELECT 1 FROM crypto_entitlements ce WHERE ce.order_id = o.order_id
+         )
+       ORDER BY o.updated_at ASC
+       LIMIT ${limit};
+    `);
+    const rows = ((result as { rows?: unknown[] }).rows ?? (result as unknown[])) as Array<{
+      order_id: string;
+      account_id: string;
+      product: string;
+      payment_id: string | null;
+      paid_at: string | Date;
+    }>;
+    return rows.map((r) => ({
+      orderId: r.order_id,
+      accountId: r.account_id,
+      product: r.product,
+      paymentId: r.payment_id,
+      // `paid_at` arrives as a STRING, not a Date. Raw `db.execute` does no column-type
+      // mapping, and drizzle-orm/postgres-js additionally replaces this client's timestamp
+      // PARSERS with a transparent pass-through (the same override that forces ISO strings on
+      // the write side — see the note in db-retention-scrub-drizzle.test.ts). Normalising here
+      // rather than at the call site: a caller doing `paidAt.toISOString()` on a string throws,
+      // and per-item error isolation in the sweeper would have swallowed that as a failed
+      // order rather than surfacing a type bug.
+      paidAt: r.paid_at instanceof Date ? r.paid_at : new Date(r.paid_at),
+    }));
+  }
+
   async withOrderLock<T>(
     orderId: string,
     fn: (locked: CryptoOrder) => { updated: CryptoOrder | null; result: T },

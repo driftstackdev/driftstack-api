@@ -34,6 +34,7 @@ export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
   'auth_tokens.sweep',
   'cost.recompute_nightly',
   'crypto.entitlement_expiry_sweep',
+  'crypto.entitlement_reconcile',
   'oauth.retention_sweep',
   'privacy.retention_scrub',
   'profile_trash.purge',
