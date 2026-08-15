@@ -754,3 +754,82 @@ describe('webhook refusals for a row that is gone by the time it is written', ()
     expect(res.body).not.toContain('whsec_');
   });
 });
+
+// ─── a well-formed id with the WRONG prefix is rejected ────────────────────
+//
+// The guard-condition census found `!match || !match[1] ||
+// !value.startsWith(`${expectedPrefix}_`)` at TEN route files — ten independent
+// copies of the same prefixed-id parser. Its regex accepts any three-letter
+// prefix, so the `startsWith` clause is the ONLY thing tying an id to the
+// resource it names.
+//
+// ⚠️ Measured, and the result is why this arm exists: dropping that clause from
+// three copies AT ONCE (admin-api-keys, webhooks, admin-incidents) left the
+// entire 2,747-test integration suite green. Every existing arm probes malformed
+// junk like "not-an-id", which the REGEX rejects on its own — so none of them can
+// see the prefix check at all.
+//
+// What the clause prevents is resource confusion: `wdl_<uuid>` accepted where
+// `whk_<uuid>` is expected means a delivery id is looked up as an endpoint id.
+// Both are uuids and both exist in this system, so the wrong one does not fail
+// to parse — it addresses a different row.
+//
+// LEDGER — control 40/40:
+//
+//   prefix clause dropped                     4 red
+//   prefix compared to the value's OWN slice  4 red
+//
+// The second is the shape a refactor produces: the check is still present, still
+// calls startsWith, still reads like a prefix guard — and compares the value to
+// itself, so every prefix matches. Dropping the clause outright is the obvious
+// mutation; this is the one that would survive review.
+describe('the prefixed-id parser checks the prefix, not just the shape', () => {
+  let fx3: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx3) await fx3.cleanup();
+  });
+
+  const UUID = '11111111-1111-4111-8111-111111111111';
+
+  it.each([
+    ['GET', ''],
+    ['PATCH', ''],
+    ['DELETE', ''],
+  ])('%s /v1/webhooks/:id refuses a wdl_ id where whk_ is expected', async (method, suffix) => {
+    fx3 = await buildTestApp();
+    const res = await fx3.app.inject({
+      method: method as 'GET' | 'PATCH' | 'DELETE',
+      url: `/v1/webhooks/wdl_${UUID}${suffix}`,
+      headers: { ...auth(fx3), 'content-type': 'application/json' },
+      ...(method === 'PATCH' ? { payload: { description: 'x' } } : {}),
+    });
+    // 400 for the FORMAT, not 404 for the row: the id never becomes a lookup.
+    expect(res.statusCode, res.body).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/Expected "whk_<uuid>"/);
+  });
+
+  it('CRITICAL the same uuid under the RIGHT prefix reaches the lookup and 404s — so the refusal above is the prefix and not the uuid', async () => {
+    fx3 = await buildTestApp();
+    const res = await fx3.app.inject({
+      method: 'GET',
+      url: `/v1/webhooks/whk_${UUID}`,
+      headers: auth(fx3),
+    });
+    // Same uuid, correct prefix: parsed, looked up, not found. That contrast is
+    // what makes the 400s above mean "wrong prefix" rather than "bad uuid".
+    expect(res.statusCode, res.body).toBe(404);
+  });
+
+  it('the delivery-replay route checks its OWN prefix independently — a whk_ id is refused where wdl_ is expected', async () => {
+    fx3 = await buildTestApp();
+    const res = await fx3.app.inject({
+      method: 'POST',
+      url: `/v1/webhook-deliveries/whk_${UUID}/replay`,
+      headers: { ...auth(fx3), 'content-type': 'application/json' },
+      payload: {},
+    });
+    expect(res.statusCode, res.body).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/Expected "wdl_<uuid>"/);
+  });
+});
