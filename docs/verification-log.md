@@ -33870,3 +33870,26 @@ habit V-780a said was not sticking.
 
 Third of seven findings from the concurrency/recovery sweep. No new test file, so
 `EXPECTED_TEST_FILES` is unchanged.
+
+## V-780b — a FOURTH pin on that import, fixed by a peer, with the cause mis-attributed to me (2026-08-15)
+
+V-780 added `BadRequestError` to `middleware/error-handler.ts`'s import so an upstream Stripe 4xx
+stops surfacing as our 500. Two guards pin that import line; I updated one, the gate caught a
+second (V-780a), and there was a **fourth** — `server-error-handler-middleware-parity.test.ts`. A
+peer hit it, fixed it, and shipped `4a1c3f6a5` ("the error-handler import pin was stale and
+reddening the gate").
+
+So my incomplete pin enumeration reddened the shared gate and cost someone else a commit. That is
+the concrete price of the habit V-780a was about — it is not only my own time.
+
+Their fix records the cause as commit `7db4eede9`, the WWW-Authenticate work. That is wrong, and
+the record should not carry it: `git log -S "ApiError, BadRequestError, InternalError,
+ValidationError" -- apps/server/src/middleware/error-handler.ts` returns exactly **06aa0bde6** —
+V-780, mine — and `git show 7db4eede9` does not touch that import at all. Corrected in place,
+naming the real commit and noting what the earlier attribution said, so the next reader is not
+sent to an unrelated change.
+
+Their reasoning about the SHAPE was right and is kept verbatim: two parity files pinned the same
+roster, one moved with the source and one did not, so the gate went red on a stale pin rather than
+a defect. That is the sibling-copy problem this codebase keeps producing — here in the guards
+themselves rather than in the code they guard.

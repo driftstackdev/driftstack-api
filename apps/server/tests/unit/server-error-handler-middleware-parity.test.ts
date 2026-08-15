@@ -149,9 +149,12 @@ describe('W711 server-side error-handler middleware parity', () => {
 
   it('CRITICAL imports pinned — ApiError + BadRequestError + InternalError + ValidationError from ../lib/errors.js. Drift to importing from anywhere else would let the middleware diverge from the canonical taxonomy (W710).', () => {
     const src = read(ERROR_HANDLER);
-    // `BadRequestError` joined the roster with the WWW-Authenticate work
-    // (7db4eede9), which updated the OTHER guard over this same import line and
-    // not this one. Two parity files pinned the same roster; one moved with the
+    // `BadRequestError` joined the roster in 06aa0bde6 (V-780), which added the
+    // upstream-4xx remap so a Stripe rejection stops surfacing as our 500. That
+    // commit updated the OTHER guard over this same import line and not this one.
+    // (An earlier version of this comment credited 7db4eede9, the
+    // WWW-Authenticate work; `git log -S` on the import shows 06aa0bde6, and
+    // 7db4eede9 never touched that line.) Two parity files pinned the same roster; one moved with the
     // source and one did not, so the gate went red on a stale pin rather than on
     // a defect. That is the sibling-copy shape this codebase keeps producing,
     // here in the guards themselves rather than in the code they guard.
