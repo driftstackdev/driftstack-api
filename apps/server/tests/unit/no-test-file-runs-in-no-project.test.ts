@@ -37,10 +37,19 @@ const PROJECT_CONFIGS = [
   { config: 'apps/gui-client/vitest.config.ts', base: 'apps/gui-client' },
 ] as const;
 
-/** The `exclude:` globs declared by a vitest config. */
+/**
+ * The `exclude:` globs declared by a vitest config.
+ *
+ * Takes the array that sits nearest the TEST `include:`, not simply the first
+ * one in the file. `vitest.node.config.ts` carries two of each — one pair for
+ * tests, one for benchmarks — and reading the first blindly is the fall-through
+ * that already left an anti-vacuity arm green while it parsed bench globs.
+ */
 function excludeGlobs(configPath: string): string[] {
   const source = readFileSync(resolve(REPO_ROOT, configPath), 'utf8');
-  const block = /exclude:\s*\[([\s\S]*?)\]/.exec(source)?.[1];
+  const anchor = source.indexOf("'*.test.");
+  const from = anchor === -1 ? 0 : anchor;
+  const block = /exclude:\s*\[([\s\S]*?)\]/.exec(source.slice(from))?.[1];
   if (block === undefined) return [];
   return [...block.matchAll(/'([^']+)'/g)].map(([, g]) => g).filter((g) => g !== undefined);
 }

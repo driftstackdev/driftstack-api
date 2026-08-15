@@ -67,14 +67,34 @@ function restrictReferencesToApiKeys(): number {
   return count;
 }
 
-/** The verb the retention sweeper performs on `api_keys`. */
+/**
+ * The verb the retention sweeper performs on `api_keys`.
+ *
+ * Each `WITH due AS (…) … RETURNING` block is isolated FIRST, then the one
+ * naming `api_keys` is selected. The obvious regex — span from `WITH due AS (`
+ * to `FROM api_keys` — is wrong here and was wrong when written: the file holds
+ * THREE such statements and the first targets `sessions`, so a lazy span starts
+ * at the sessions block and runs through the api_keys one, covering all three.
+ * It returned the right verb by accident, because the span happened to contain
+ * the api_keys UPDATE. An extraction that is correct by luck is not an
+ * extraction.
+ */
 function sweeperVerb(): 'anonymise' | 'delete' | 'unknown' {
   const scrub = code(readFileSync(SCRUB, 'utf8'));
-  const statement = /WITH due AS \([\s\S]*?FROM api_keys[\s\S]*?RETURNING/.exec(scrub)?.[0];
-  if (statement === undefined) return 'unknown';
+  const blocks = [...scrub.matchAll(/WITH due AS \([\s\S]*?RETURNING/g)].map(([b]) => b);
+  const forApiKeys = blocks.filter((b) => /\bapi_keys\b/.test(b));
+  // Exactly one statement may claim api_keys; two would make "the verb"
+  // ambiguous and this guard would be picking one arbitrarily.
+  if (forApiKeys.length !== 1) return 'unknown';
+  const statement = forApiKeys[0] ?? '';
   if (/DELETE\s+FROM\s+api_keys/i.test(statement)) return 'delete';
   if (/UPDATE\s+api_keys/i.test(statement)) return 'anonymise';
   return 'unknown';
+}
+
+/** How many `WITH due AS` statements the scrub file contains, for the arm below. */
+function scrubStatementCount(): number {
+  return [...code(readFileSync(SCRUB, 'utf8')).matchAll(/WITH due AS \(/g)].length;
 }
 
 /** The §9 row covering authentication data, from a published copy. */
@@ -99,6 +119,12 @@ describe('a retention promise matches what the sweeper does', () => {
     expect(sweeperVerb(), 'the sweeper statement for api_keys was found').not.toBe('unknown');
     expect(policyRow(POLICY), 'the §9 authentication-data row was found').not.toBe('');
     expect(policyVerb(policyRow(POLICY)), 'and its verb is unambiguous').not.toBe('unknown');
+  });
+
+  it('CRITICAL the scrub file holds several statements and exactly one claims api_keys. The first version of this extraction spanned from the FIRST `WITH due AS (` — which targets `sessions` — through to the api_keys block, covering all three statements at once. It reported the right verb because the span happened to contain the right UPDATE. This arm fails if a second statement ever touches api_keys, which is the case where "the verb" stops being well defined.', () => {
+    // MEASURED: 3 statements in the file, exactly 1 naming api_keys.
+    expect(scrubStatementCount(), 'WITH due AS statements in the scrub').toBeGreaterThanOrEqual(3);
+    expect(sweeperVerb(), 'a single api_keys statement resolved to a verb').not.toBe('unknown');
   });
 
   it('CRITICAL deleting an api_keys row is still refused by the database. This is the premise the policy wording rests on — audit rows outlive the key so an audit entry can never point at a vanished actor. If these references ever become CASCADE, deletion is possible again and the wording below is no longer forced.', () => {

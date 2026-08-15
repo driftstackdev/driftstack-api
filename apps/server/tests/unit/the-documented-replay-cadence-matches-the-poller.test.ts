@@ -42,6 +42,7 @@ const BOOTSTRAP = resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts');
 const WORKER = resolve(REPO_ROOT, 'apps/server/src/services/webhook-worker.ts');
 const DOC = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/replay.md');
 const SPEC = resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts');
+const DURABLE = resolve(REPO_ROOT, 'apps/server/src/services/durable-webhook-delivery.ts');
 
 /**
  * Source with comment lines removed.
@@ -80,9 +81,9 @@ function retriesAfterFirstAttempt(): number | undefined {
   return raw === undefined ? undefined : Number(raw) - 1;
 }
 
-/** The backoff schedule in attempt order, in minutes. */
-function backoffScheduleMinutes(): number[] {
-  const block = /const BACKOFF_MS_BY_ATTEMPT[^{]*\{([\s\S]*?)\}/.exec(code(WORKER))?.[1];
+/** The backoff schedule in attempt order, in minutes, from a given file. */
+function backoffScheduleMinutesIn(file: string): number[] {
+  const block = /BACKOFF_MS_BY_ATTEMPT[^{]*\{([\s\S]*?)\}/.exec(code(file))?.[1];
   if (block === undefined) return [];
   return [...block.matchAll(/([0-9]+):\s*([0-9_*\s]+),/g)]
     .map(([, attempt, expression]) => ({
@@ -96,6 +97,9 @@ function backoffScheduleMinutes(): number[] {
     .sort((a, b) => a.attempt - b.attempt)
     .map((entry) => entry.ms / 60_000);
 }
+
+/** The live worker's schedule — the one the published numbers describe. */
+const backoffScheduleMinutes = (): number[] => backoffScheduleMinutesIn(WORKER);
 
 const doc = (): string => readFileSync(DOC, 'utf8');
 
@@ -158,5 +162,21 @@ describe('the documented replay cadence matches the poller', () => {
       `up to ${String(pollerIntervalSeconds())}s`,
     );
     expect(replayDescription, 'not the number that was never true').not.toContain('~30s');
+  });
+
+  // The V-173 successor carries its OWN copy of both numbers and is awaiting
+  // soak time. The assessment already records that its claim query is kept in
+  // step with the live one so a cutover cannot reintroduce endpoint starvation;
+  // the retry contract deserves the same treatment, because a cutover that
+  // changed the schedule would change a published customer promise without
+  // touching the page that makes it.
+  it('CRITICAL the durable successor publishes the same retry contract. It is unwired today, so nothing else would notice a divergence until the cutover — at which point the documented 1m/5m/15m/30m/60m schedule and 5 retries would silently describe the old worker.', () => {
+    const durableSchedule = backoffScheduleMinutesIn(DURABLE);
+    expect(durableSchedule, 'durable successor backoff schedule').toEqual(backoffScheduleMinutes());
+    const durableMax = /DEFAULT_MAX_ATTEMPTS = ([0-9]+)/.exec(code(DURABLE))?.[1];
+    expect(durableMax, 'durable successor DEFAULT_MAX_ATTEMPTS was found').toBeDefined();
+    expect(Number(durableMax) - 1, 'durable retries after the initial send').toBe(
+      retriesAfterFirstAttempt(),
+    );
   });
 });
