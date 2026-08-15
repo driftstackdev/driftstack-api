@@ -22,6 +22,20 @@
 // Run scope:
 //   - CI: build-test job has postgres:17-alpine migrated; this always runs.
 //   - Local: skips unless DATABASE_URL is set.
+//
+// MUTATION-PROVED against legal-repo.ts — control 7/7 green, each mutation
+// applied alone against a scratchpad snapshot and reverted:
+//
+//   the `id DESC` tiebreaker dropped                            1 red
+//   the OLDEST acceptance wins instead of the newest            2 red
+//   the account predicate dropped                               3 red
+//   DISTINCT ON removed (all history returned, not the latest)  2 red
+//
+// Ledger written 2026-08-15. The proof was run when this file was written, but
+// the result went to the agent bus instead of into the file, so nothing in the
+// repository evidenced it — and an unrecorded proof is indistinguishable from
+// an unperformed one to the next reader. Re-measured rather than transcribed
+// from memory, which would have reintroduced exactly that problem.
 
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';

@@ -1,7 +1,7 @@
 // Drizzle-backed integration test for DrizzleAccountsAdminRepo against a REAL
 // Postgres.
 //
-// Why this exists: the repo had ZERO line coverage (measured 2026-08-16, see
+// Why this exists: the repo had ZERO line coverage (measured 2026-08-15, see
 // A2-PRODUCTION-READINESS-ASSESSMENT item 5e). It backs the admin surface that
 // changes a customer's tier and suspends or deletes their account — the SQL
 // nobody had executed under vitest. The service above it is covered against an
@@ -18,6 +18,41 @@
 // Run scope:
 //   - CI: build-test job has postgres:17-alpine migrated; this always runs.
 //   - Local: skips unless DATABASE_URL is set.
+//
+// MUTATION-PROVED against admin-accounts-repo.ts — control 11/11 green:
+//
+//   the `id DESC` keyset tiebreaker dropped                     1 red
+//   the page-size cap removed                                   1 red
+//   the look-ahead row removed (hasMore always false)           2 red
+//   countByTier no longer zero-filled                           1 red
+//
+// Ledger written 2026-08-15 by re-running the proof rather than transcribing it
+// from memory — and that re-run is why two arms above exist at all, because the
+// first pass came back with 10 arms and a different result.
+//
+// ⛔ THE PAGE-SIZE CAP HAD NO ARM. Removing `Math.min(args.limit ?? 50, 100)`
+// left all ten original arms green: none had ever asked for a limit above 100.
+// The HTTP schema caps `limit` at 100 as well, so this is defence-in-depth
+// rather than the only gate — which is precisely why it was easy to leave
+// untested and precisely why it needs its own arm. Nothing on the request path
+// notices it going, and the day a second caller reaches this repo without a Zod
+// schema in front of it, one call pulls the whole accounts table into memory.
+//
+// ⚠️ THE TIEBREAKER ARM WAS PROBABILISTIC. The keyset arm caught the dropped
+// `id DESC` on 3 of 4 runs and passed on the 4th. The fixture is not at fault —
+// it forces a genuine tie — the MUTATION's effect is what varies: with a
+// timestamp-only sort Postgres may return a tie group in any order, and when
+// that order happens to stay consistent across the separate paged queries,
+// nothing is dropped and the set-completeness assertions both hold. A guard
+// that reports "fine" one run in four on a real pagination bug is not a guard.
+// It now compares the traversal against the canonical `ORDER BY created_at
+// DESC, id DESC` read from the database, which is what the compound cursor
+// promises and what a timestamp-only sort cannot deliver across queries.
+// Re-measured after the change: the same mutation reds it 5 runs out of 5.
+//
+// The general point, worth carrying: a mutation that survives sometimes is not
+// a weaker signal than one that survives always — it is a louder one, because
+// it means the guard's verdict depends on something nobody chose.
 
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
@@ -86,6 +121,9 @@ afterAll(async () => {
     for (const id of seededAccountIds) {
       await client`DELETE FROM accounts WHERE id = ${id}`.catch(() => {});
     }
+    // The page-cap arm bulk-inserts without collecting ids. MARKER is unique to
+    // this run, so sweeping by it removes those rows and can touch nothing else.
+    await client`DELETE FROM accounts WHERE email LIKE ${`${MARKER}%`}`.catch(() => {});
     await client.end({ timeout: 5 });
   }
 });
@@ -182,6 +220,27 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       }
       expect(new Set(seen).size, 'no row returned twice').toBe(seen.length);
       expect(seen.length, 'every seeded row seen').toBeGreaterThanOrEqual(seededAccountIds.length);
+
+      // Strengthened 2026-08-15. The two assertions above detect a dropped
+      // `id DESC` tiebreaker only PROBABILISTICALLY: without it Postgres may
+      // return a tie group in any order, and when that order happens to stay
+      // consistent between the paged queries, nothing is dropped and both pass.
+      // Measured — the mutation removing the tiebreaker red this arm on 3 of 4
+      // runs and passed on the 4th, which is a guard that reports "fine" one
+      // time in four on a real pagination bug.
+      //
+      // The traversal must equal the canonical total order, which is what the
+      // compound cursor promises and what a timestamp-only sort cannot deliver
+      // across separate queries. Read from the database rather than derived
+      // here, so this compares the repo against SQL rather than against a
+      // second copy of the repo's own logic.
+      const canonical = await client!<{ id: string }[]>`
+        SELECT id FROM accounts
+        WHERE email LIKE ${`${MARKER}%`}
+        ORDER BY created_at DESC, id DESC`;
+      expect(seen, 'the paged traversal matches the canonical keyset order').toEqual(
+        canonical.map((r) => r.id),
+      );
     });
 
     it('CRITICAL an unknown cursor silently restarts from page one — pinned because it is surprising. `list` looks the cursor row up and applies NO keyset filter when it is gone, so a client paging with a cursor whose account was deleted between pages restarts rather than erroring or ending. Recorded as behaviour so a change here is deliberate.', async () => {
@@ -220,6 +279,26 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         'recent creations include the row just seeded',
       ).toBeGreaterThanOrEqual(1);
       expect(seededAccountIds).toContain(id);
+    });
+
+    it('CRITICAL list caps the page size at 100 however large a limit it is handed. Added 2026-08-15 after a mutation removing `Math.min(args.limit ?? 50, 100)` left every other arm green — no arm had ever asked for more than 100. The HTTP schema caps `limit` at 100 too, so this is defence-in-depth rather than the only gate, and that is exactly why it needs its own arm: nothing on the request path would notice it going, and the day a second caller reaches this repo without a Zod schema in front of it, one request pulls the whole accounts table into memory.', async () => {
+      if (!dbReachable || !repo || !client) return;
+      // 101 rows in one statement — enough to exceed the cap, cheap enough not
+      // to add a hundred round-trips. Swept by MARKER in afterAll.
+      await client`
+        INSERT INTO accounts (id, email, name, tier, status, created_at, updated_at)
+        SELECT gen_random_uuid(),
+               ${`${MARKER}-bulk-`} || g || '@example.test',
+               ${'Admin Repo Bulk Fixture'},
+               'free'::account_tier, 'active'::account_status, now(), now()
+        FROM generate_series(1, 101) g`;
+
+      const page = await repo.list({ emailContains: MARKER, limit: 5000 });
+      expect(page.data.length, 'the oversized limit was clamped to the cap').toBe(100);
+      // Independent of the length: the look-ahead row is what sets hasMore, and
+      // an uncapped limit swallows it, so this flips too rather than merely
+      // restating the assertion above.
+      expect(page.hasMore, 'and the caller is told there is another page').toBe(true);
     });
   },
 );

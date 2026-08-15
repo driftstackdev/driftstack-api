@@ -23,6 +23,18 @@
 //
 // Shared-database discipline: every arm uses subscribers and incidents this file
 // seeded, and nothing counts rows globally.
+//
+// MUTATION-PROVED against incident-update-notifications-repo.ts — control 7/7:
+//
+//   the throttle marker stops advancing                         1 red
+//   findLastSentAt ignores the subscriber                       1 red
+//   findLastSentAt ignores the incident                         1 red
+//
+// Ledger written 2026-08-15, re-measured rather than transcribed — see the note
+// in db-legal-repo-drizzle.test.ts. The first mutation is the one this header
+// is about: `set: { lastSentAt: sql`excluded.last_sent_at` }` replaced by the
+// EXISTING row's value, so the marker never moves and the throttle keeps
+// measuring from the first send. Nothing throws; the emails just keep going.
 
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';

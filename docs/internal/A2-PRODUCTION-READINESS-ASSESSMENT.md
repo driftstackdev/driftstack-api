@@ -1470,10 +1470,76 @@ mutation ledger in their header** (`health-probes`, `validation-schedules`,
 `admin-accounts`, `legal`, `email-preferences`,
 `incident-update-notifications` — were mutation-proved when written, but the
 result was reported to the bus rather than written into the file, so **nothing
-in the repository evidences it**. That is a documentation gap rather than a
-coverage one, and the distinction is worth keeping straight: an unrecorded proof
-is indistinguishable from an unperformed one to the next reader. Backfilling
-those four headers is a small, worthwhile follow-up.
+in the repository evidences it**. An unrecorded proof is indistinguishable from
+an unperformed one to the next reader.
+
+✅ **Backfilled 2026-08-15 — all ten now carry a ledger.** Deliberately
+re-measured rather than transcribed from memory, since a ledger written from
+recollection would reintroduce the exact unverifiable claim the exercise removes.
+That decision paid for itself: it was filed as a documentation gap and **turned
+up two real defects**, both in `admin-accounts`.
+
+1. ⛔ **The page-size cap had no arm at all.** Removing
+   `Math.min(args.limit ?? 50, 100)` left all ten original arms green — none had
+   ever asked for a limit above 100. The HTTP schema caps `limit` at 100 too, so
+   this is defence-in-depth rather than the only gate, which is exactly why it
+   was easy to leave untested: nothing on the request path notices it going. The
+   day a second caller reaches this repo without a Zod schema in front of it, one
+   call pulls the whole `accounts` table into memory. Arm added; the mutation now
+   reds it.
+
+2. ⚠️ **The keyset-tiebreaker arm was probabilistic.** It caught the dropped
+   `id DESC` on 3 runs out of 4. The fixture is not at fault — it forces a real
+   tie — the _mutation's effect_ varies: under a timestamp-only sort Postgres may
+   return a tie group in any order, and when that order happens to stay
+   consistent across the separate paged queries nothing is dropped and the
+   set-completeness assertions hold. A guard that reports "fine" one run in four
+   on a live pagination bug is not a guard. It now compares the traversal against
+   the canonical `ORDER BY created_at DESC, id DESC` read from the database.
+   Re-measured after the change: **5 reds out of 5**.
+
+_Worth carrying past this item:_ **a mutation that survives _sometimes_ is a
+louder signal than one that survives always**, because it means the guard's
+verdict depends on something nobody chose. A single-run mutation ledger cannot
+see that class at all — which is an argument for re-running a ledger when the
+file it documents changes, not for trusting the number in the header forever.
+
+#### 5g. NEW — nine keyset guards seed tie groups; one was probabilistic, eight unmeasured
+
+The `admin-accounts` finding above raises an obvious question about its
+neighbours, and it should not be answered by assertion. **Nine `db-*` files seed
+a deliberate `created_at` tie group** to guard a compound-cursor tiebreaker:
+
+`db-account-audit-repo-keyset-drizzle`, `db-admin-accounts-repo-drizzle`,
+`db-admin-audit-repo-keyset-drizzle`, `db-api-keys-repo-keyset-drizzle`,
+`db-durable-webhook-list-keyset-drizzle`, `db-legal-repo-drizzle`,
+`db-profiles-repo-keyset-drizzle`, `db-rate-limit-overrides-repo-keyset-drizzle`,
+`db-sessions-repo-keyset-drizzle`.
+
+**Status: 1 measured (probabilistic, now fixed), 8 unmeasured.** No claim is made
+about the eight either way. Two things are known about them and neither settles
+it:
+
+- They are built more strongly than `admin-accounts` was — each seeds a tie group
+  **larger than the page size** (typically 5 tied rows through pages of 2), which
+  forces the group to span a page boundary, the exact condition a missing
+  tiebreaker mishandles. `admin-accounts` seeded 4 tied rows through pages of 2
+  and still passed 1 run in 4.
+- `db-legal-repo` already survived one round of this: its arm's own comment
+  records an earlier version that "passed with the tiebreaker removed", fixed by
+  making insertion order disagree with id order and repeating the read 3×.
+
+⚠️ _A methodology note on how this list was produced,_ because the first attempt
+was wrong in both directions. A grep for `tie` returned nine files — a candidate
+list, not a result. A refined detector then reported only **two** genuinely seed a
+tie, which was **also wrong**: it keyed on one variable-naming convention and
+missed seven files that seed tie groups under different names. The list above is
+the hand-verified version. Both errors are the same one — trusting a pattern's
+output as a measurement — and the second was more dangerous, because a smaller
+number reads like a more careful result.
+
+_Next:_ apply the tiebreaker mutation to each of the eight and run it 5× per
+file, hardening any whose detection is not 5/5. Estimated 40 runs.
 
 ⚠️ **`validation-schedules-repo` changed what this item means.** It was not an
 uncovered repo sitting unguarded — a source pin

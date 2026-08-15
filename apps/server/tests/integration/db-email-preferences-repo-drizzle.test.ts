@@ -19,6 +19,19 @@
 //
 // Shared-database discipline as in the other db-* files: every arm is scoped to
 // accounts this file seeded, and nothing counts rows globally.
+//
+// MUTATION-PROVED against email-preferences-repo.ts — control 7/7 green:
+//
+//   opting back IN no longer deletes the row                    1 red
+//   isOptedOut ignores the event type                           1 red
+//   isOptedOut ignores the account                              2 red
+//   list is no longer scoped to the account                     3 red
+//
+// Ledger written 2026-08-15, re-measured rather than transcribed — see the note
+// in db-legal-repo-drizzle.test.ts. The first two mutations are the pair this
+// file's header argues for separate arms: one silences every email because a
+// customer declined one, the other silences a customer because a neighbour
+// declined. A single combined arm would pass with either predicate missing.
 
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
