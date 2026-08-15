@@ -2176,6 +2176,55 @@ leaves the attack assertion passing; only the "rightful client still succeeds
 afterwards" leg tells a working binding check apart from a build that refuses
 everyone, which is why the arm spends a second exchange on it.
 
+### 5o. Two clusters that must stay cold, and how one nearly became false coverage
+
+Not every never-executed refusal is a gap. Three sets measured this fire are
+**shadowed** — a correct guard sitting behind another correct guard that HTTP
+reaches first. They are worth recording precisely because the next coverage sweep
+will surface them again.
+
+- **`account-me.ts:485 / :504 / :526`** — scheme↔config coherence.
+  `AccountProxyInputSchema` is a `.strict()` discriminated union on `scheme`, so a
+  missing or stray VPN block is rejected before the route runs. The schema's own
+  comment records that it took the job over from these lines.
+
+- **`agent-sessions.ts:3916 / :3920`** — the `/mode` flip's owner-resolution
+  refusals. The `app.rateLimit('global')` preHandler resolves the effective owner
+  first and answers **the identical message** from `middleware/rate-limit.ts:178`.
+
+- **`services/oauth.ts:518`** — PKCE downgrade, behind `z.literal('S256')`.
+
+⛔ **The second one nearly shipped as false coverage, and the way it failed is the
+point.** I wrote an arm asserting a control key cannot outlive its owner, saw a
+403 whose body read exactly `Owner account no longer exists.`, and had a green
+test naming `agent-sessions.ts:3920`. It never reached that line. Disabling
+`:3920` left the arm **green**; disabling `middleware/rate-limit.ts:178` reddened
+it. That message appears at **nine sites across five files** — `rate-limit.ts`,
+`profiles.ts` (×3), `admin.ts` (×3), `profile-snapshots.ts`, `agent-sessions.ts`
+— so matching on it identifies nothing at all.
+
+⚠️ **A response body cannot attribute a refusal when the string is shared.** The
+only instrument that can is disabling the specific site and seeing whether the
+test notices. I had grepped the message within `agent-sessions.ts`, found one
+hit, and treated that as uniqueness — the file was the wrong scope, and my own
+rule about verifying repo-wide rather than in the named file is exactly what I
+skipped.
+
+⭐ The same measurement answered the question I had actually been chasing. I
+suspected a bug: a vanished owner appearing to block a flip back to `manual`,
+against the source's rule that handback is never tier-refused. It is not a bug
+and it is not a tier refusal — it is the uniform owner-validity check in the
+rate-limit preHandler. And `rate-limit.ts` already answers the reachability
+question in its own comment: accounts are **soft-deleted**, so the production
+shape is `status === 'deleted'`, not a null row. Mutating away that half reddens
+existing tests, so the live case is covered; the null-row half is defence in
+depth for a state production does not produce.
+
+**Nothing was committed for this cluster.** The arms were dropped rather than
+reworded, because an arm that reaches a different layer than it names is worse
+than no arm: it reports the shadowed site as covered and stops anyone looking
+again.
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
