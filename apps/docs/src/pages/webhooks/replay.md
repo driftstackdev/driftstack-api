@@ -16,8 +16,9 @@ yourself rather than emailing support.
 `POST /v1/webhook-deliveries/:deliveryId/replay`
 
 Resets the delivery to `pending` so the worker re-fires it on the next
-cycle (within ~30 seconds). Account-scoped: the delivery must belong
-to a webhook endpoint your account owns. Returns the updated delivery.
+poll cycle — up to 60 seconds, since the delivery worker polls once a
+minute. Account-scoped: the delivery must belong to a webhook endpoint
+your account owns. Returns the updated delivery.
 
 Request body: `{}` (empty).
 
@@ -50,8 +51,8 @@ Response (200):
 3. List the DLQ deliveries:
    `GET /v1/webhooks/:webhookId/deliveries?status=dlq`
 4. Replay each one: `POST /v1/webhook-deliveries/:deliveryId/replay`.
-   Within ~30s the worker re-fires and (if your endpoint is healthy)
-   marks them `delivered`.
+   Within a minute the worker re-fires and (if your endpoint is
+   healthy) marks them `delivered`.
 
 ## SDK examples
 

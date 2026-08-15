@@ -747,15 +747,38 @@ rather than only here, so they cannot go quiet again.
   the seven-year billing line. Resolves itself once the archiver runs. _(This
   corrects an earlier reading of mine that called the line ambiguous.)_
 
-### 4. Webhook delivery is capped near 25 deliveries/minute
+### 4. CORRECTED — webhook delivery is capped near 500/minute, not 25
 
-`POLLER_INTERVAL_MS = 60_000` with `batchSize` 25, and the batch is delivered
-serially. Per-endpoint fairness is fixed (`84dc306b1`), so one broken endpoint no
-longer starves the rest — but the global ceiling stands. _Doing nothing:_ the
-cap binds as soon as a real customer base generates events. _Recommendation:_
-give webhook delivery its own interval rather than the shared poller constant.
-A2 did not, because it changes outbound load on customer endpoints and our
-egress.
+**This item was wrong on both of its technical claims, and overstated the
+severity by roughly 20×.** Re-read from source 2026-08-15:
+
+- **"The batch is delivered serially" — false.** `tickOnce` runs
+  `await Promise.all(claimed.map((d) => this.deliver(d)))`. Deliveries within a
+  batch are concurrent.
+- **"Capped near 25 deliveries/minute" — false.** The poller does not run one
+  batch per tick. It calls `drainWebhookDeliveries`, which drives `tickOnce`
+  until a claim comes back empty, bounded by `WEBHOOK_DRAIN_MAX_BATCHES = 20`
+  and `WEBHOOK_DRAIN_BUDGET_MS = 30_000`.
+
+So the real ceiling per 60s tick is **up to 20 × 25 = 500 deliveries globally**,
+and — because `claim` takes at most `perEndpointCap` (5) rows per call — **up to
+100/minute for any single endpoint**, whichever the 30-second wall-clock budget
+allows first. The drain was added in `dd7f4f95c` precisely because stopping on a
+partial batch drained a recovering endpoint at 5 per poll; the fairness fix
+`84dc306b1` cited here landed after it. The item was written as though neither
+existed.
+
+_Doing nothing:_ far less pressing than recorded. 500/min is not obviously
+binding for the current customer base, and the per-endpoint 100/min is the number
+that would matter first. _Recommendation:_ **no longer act on this without
+measuring** — the case for giving webhook delivery its own interval rested on a
+ceiling that is 20× off. If it is revisited, size it against the 30s drain budget
+rather than the batch size, since the budget is what actually binds under load.
+
+The three customer-facing numbers on `webhooks/replay.md` are now checked against
+these constants by `the-documented-replay-cadence-matches-the-poller`, including
+an arm that fails if webhook delivery is ever moved off the shared interval — so
+that change cannot silently invalidate the published cadence.
 
 ### 5. An abandoned paid session bills indefinitely
 

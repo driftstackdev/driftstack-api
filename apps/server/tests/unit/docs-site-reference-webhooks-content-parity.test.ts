@@ -156,7 +156,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/^## Replay a delivery$/m);
     expect(body).toMatch(/`POST \/v1\/webhook-deliveries\/:deliveryId\/replay`/);
     expect(body).toMatch(/Resets the delivery to `pending` so the worker re-fires it on the next/);
-    expect(body).toMatch(/cycle \(within ~30 seconds\)\./);
+    expect(body).toMatch(/poll cycle — up to 60 seconds/);
     expect(body).toMatch(/Account-scoped: the delivery must belong/);
     expect(body).toMatch(/Request body: `\{\}` \(empty\)\./);
     expect(body).toMatch(/"status": "pending",/);

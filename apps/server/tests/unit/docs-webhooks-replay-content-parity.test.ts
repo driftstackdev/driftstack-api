@@ -39,15 +39,32 @@ describe('docs webhooks/replay content parity', () => {
   });
 
   it("account-scoped ownership check pinned: 'delivery must belong to a webhook endpoint your account owns' — drift to cross-account replay would be a real privilege-escalation bug; pinning ensures the doc + the route stay aligned", () => {
+    // Whitespace-tolerant throughout. This pin previously hardcoded single
+    // spaces after one `\s+`, so it failed when the paragraph was re-wrapped
+    // around a corrected sentence — a cosmetic reflow, with the pinned claim
+    // completely intact. A pin that breaks on line-wrap position teaches people
+    // to avoid rewrapping rather than to keep the claim true.
     expect(body).toMatch(
-      /Account-scoped: the delivery must belong\s+to a webhook endpoint your account owns/,
+      /Account-scoped:\s+the\s+delivery\s+must\s+belong\s+to\s+a\s+webhook\s+endpoint\s+your\s+account\s+owns/,
     );
   });
 
-  it('worker re-fire timing pinned: ~30 seconds for the next cycle. Drift to a different cadence would mislead customers about how long to wait before checking delivery status', () => {
+  // This pin said "~30 seconds" from 2026-05-08 until 2026-08-15, and the
+  // poller has been 60s since 2026-05-06 — the claim was never true, so this was
+  // not drift the pin failed to catch. Its own title named the harm it was
+  // preventing ("would mislead customers about how long to wait") while holding
+  // the misleading number in place.
+  //
+  // The cadence is now checked against POLLER_INTERVAL_MS itself in
+  // `the-documented-replay-cadence-matches-the-poller`, which reads both sides.
+  // What stays here is the text, plus a negative so the old number cannot come
+  // back the next time someone tidies this sentence.
+  it('worker re-fire timing pinned: the next poll cycle, up to 60 seconds. Drift to a different cadence would mislead customers about how long to wait before checking delivery status', () => {
     expect(body).toMatch(
-      /Resets the delivery to `pending` so the worker re-fires it on the next\s+cycle \(within ~30 seconds\)/,
+      /Resets the delivery to `pending` so the worker re-fires it on the next\s+poll cycle — up to 60 seconds/,
     );
+    expect(body).not.toMatch(/within ~30 seconds/);
+    expect(body).not.toMatch(/Within ~30s the worker re-fires/);
   });
 
   it('typical recovery flow pinned: 4-step pattern (endpoint down → DLQ → fix → list DLQ → replay each). Drift to dropping the "list DLQ first" step would mislead customers into trying to replay deliveries they can\'t enumerate', () => {

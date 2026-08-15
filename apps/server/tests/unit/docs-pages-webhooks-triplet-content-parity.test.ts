@@ -225,12 +225,12 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     );
   });
 
-  it("CRITICAL POST /v1/webhook-deliveries/:deliveryId/replay endpoint pinned. The 'Resets the delivery to pending so the worker re-fires it on the next cycle (within ~30 seconds)' wording matches W753 dashboard /webhooks replay action.", () => {
+  it("CRITICAL POST /v1/webhook-deliveries/:deliveryId/replay endpoint pinned. The 'Resets the delivery to pending so the worker re-fires it on the next cycle (within ~30 seconds)' wording — corrected 2026-08-15 to the poller's real 60s cadence — matches W753 dashboard /webhooks replay action.", () => {
     const p = read(RPL);
 
     expect(p).toMatch(/`POST \/v1\/webhook-deliveries\/:deliveryId\/replay`/);
     expect(p).toMatch(
-      /Resets the delivery to `pending` so the worker re-fires it on the next\s*\n?cycle \(within ~30 seconds\)\./,
+      /Resets the delivery to `pending` so the worker re-fires it on the next\s*\n?poll cycle — up to 60 seconds/,
     );
   });
 

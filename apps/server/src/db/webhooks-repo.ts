@@ -818,10 +818,18 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
         -- whole table, and an endpoint that is DOWN is the worst possible
         -- neighbour under that rule: its retries carry the OLDEST
         -- next_attempt_at, so they sort first and fill the batch. The worker
-        -- then delivers the batch SERIALLY, so those rows also consume the
-        -- tick's wall clock timing out. One broken endpoint therefore does not
-        -- merely delay every other customer's webhooks — it stops them being
-        -- attempted at all.
+        -- delivers a batch CONCURRENTLY (Promise.all in tickOnce), so the
+        -- batch still costs the full per-attempt timeout — the slowest delivery
+        -- sets the batch's wall clock — and yields nothing. One broken endpoint
+        -- therefore does not merely delay every other customer's webhooks, it
+        -- stops them being attempted at all.
+        --
+        -- (2026-08-15: this said "delivers the batch SERIALLY", which has not
+        -- been true since delivery moved to Promise.all. The fairness argument
+        -- is unchanged — a batch full of one dead endpoint is wasted either way
+        -- — but the readiness assessment read this comment and recorded a
+        -- throughput ceiling 20× below the real one. A stale comment in a
+        -- load-bearing query does not stay local.)
         --
         -- Ranking within each endpoint and taking at most perEndpointCap per
         -- claim bounds that. A backlogged endpoint still drains, one capped

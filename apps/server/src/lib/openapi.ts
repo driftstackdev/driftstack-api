@@ -1407,7 +1407,8 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       200: {
-        description: 'Delivery reset to pending; the worker re-fires within ~30s.',
+        description:
+          'Delivery reset to pending; the worker re-fires on its next poll cycle, up to 60s.',
         content: { 'application/json': { schema: WebhookDeliverySchema } },
       },
       404: {
