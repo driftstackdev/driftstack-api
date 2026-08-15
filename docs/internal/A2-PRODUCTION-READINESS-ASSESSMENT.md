@@ -2761,3 +2761,47 @@ unit test. The established fix in this repo is extraction — `drainWebhookDeliv
 is exactly this shape, pulled out of the boot path and bound-tested directly.
 `bootstrap.ts` is A3's active area this session, so this is measured and handed to
 them on the bus with the precedent, rather than edited underneath them.
+
+## 6b — the migration journal was already guarded; I re-derived it
+
+Surveyed the drizzle migration journal this fire: 113 migrations, 0-112, no
+numbering gaps or duplicates, journal and `.sql` files in exact bijection, `idx`
+contiguous. Found the `when` timestamps non-monotonic, worked out that drizzle
+0.45.2 applies a migration only when `migration.folderMillis` exceeds the newest
+recorded `created_at` (`pg-core/dialect.js:62`, with `lastDbMigration` read once
+before the loop), concluded that a migration dated below the running maximum is
+skipped on an already-migrated database while every fresh-database check stays
+green — and wrote a four-arm guard for it.
+
+**`tests/unit/db-migration-journal-when-watermark.test.ts` already existed and is
+better.** Five arms to my four: the same forward-looking ascent check, the same
+bijection and `idx` contiguity, plus one I did not have — the newest entry must
+carry the highest `when`, so appending can never land under the head. Where I
+pinned the boundary index, it pins the anomaly SET both ways: 0022-0057 exactly,
+so a new violation cannot be absorbed into the allowlist and a future repair that
+legitimately shrinks it must say so on purpose. Its diagnosis of the root cause is
+sharper than mine too — the watermark is `0021_scheduled_jobs`'s hand-typed
+timestamp, not the journal rebuild I assumed.
+
+My file was deleted and the `EXPECTED_TEST_FILES` pin returned to 2731.
+
+⛔ **Why I missed it**: the prior-art search was
+`grep -rln "_journal" apps/server/tests | head -5`. The list was longer than five
+and the watermark test was past the cut. Same windowing error as the enum reads
+earlier today, applied to a prior-art check — where its cost is not a wrong
+finding but a day's work rebuilt. **A prior-art grep must never be truncated.**
+
+Two things from the investigation were worth keeping and are recorded here rather
+than lost with the file:
+
+1. **The deploy already catches this.** `src/db/migrate.ts` counts rows in
+   `drizzle.__drizzle_migrations` after `migrate()` returns and exits 2 when it
+   does not equal the journal entry count, with a hint naming "silent-skip from
+   drizzle-orm migrator", which fires auto-revert. My first draft of this section
+   claimed "the first symptom is a query against a column that does not exist in
+   prod"; that was wrong before I found this, and wrong again as a severity claim
+   after — the layered defence is CI-time guard plus deploy-time post-condition.
+2. **Measuring this needs high-water semantics, not adjacent pairs.** An
+   adjacent-pair scan reports ONE inversion; drizzle compares against the running
+   maximum, so the real skippable set is 36 entries, 35 of them carrying real SQL.
+   The existing guard already uses the correct semantics.
