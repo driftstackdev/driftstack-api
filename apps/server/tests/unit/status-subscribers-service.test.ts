@@ -463,3 +463,73 @@ describe('V-553.B-10 — vi.fn-style observability spy is not strictly required'
     expect(noop).toHaveBeenCalled();
   });
 });
+
+// ─── the refusals the customer path has and the admin path did not ─────────
+//
+// Swept this service's 13 refusal sites. Eight were uncovered, and they sort
+// into the shapes this codebase keeps producing:
+//
+//   the ADMIN copy of a rule whose CUSTOMER copy is tested (:220, :260)
+//   the atomic-claim loser, distinct from the pre-read (:176)
+//   defensive purge-row guards (:133, :168)
+//   internal invariants that say they cannot happen (:233, :244)
+//
+// These three are the ones with behaviour behind them.
+//
+// LEDGER — control 21/21:
+//
+//   :176 unsubscribe lost-CAS neutralized   1 red
+//   :220 admin email check neutralized      1 red
+//   :260 forceUnsubscribe not-found         1 red
+//   :220 narrowed to empty-string only      1 red
+//
+// The narrowing is the row worth keeping. Reduced to `!normalized`, the guard is
+// still present and still rejects blank input — the case anyone would try by
+// hand — while `not-an-email` passes and a staff tool creates a subscriber whose
+// address can never receive a confirm or unsubscribe mail. That is why the arm
+// sends three shapes rather than one.
+describe('status-subscriber refusals that were cold', () => {
+  it('CRITICAL an unsubscribe whose token changed between the read and the WRITE is refused. The lookup succeeded, so the pre-read cannot catch this — only the conditional update can, and without it a rotated-away token still unsubscribes the address it used to name.', async () => {
+    const { service: email } = makeEmail();
+    const token = 'live-unsub-token';
+    const row: StatusSubscriberRow = {
+      id: 's-cas',
+      email: 'racer@b.test',
+      confirmTokenHash: null,
+      confirmExpiresAt: null,
+      confirmedAt: new Date('2026-04-01Z'),
+      unsubscribeTokenHash: tokenHash(token),
+      unsubscribedAt: null,
+      createdAt: new Date(),
+    };
+    const { repo } = makeRepo([row]);
+    // The row is findable by the presented token, and the conditional write then
+    // matches nothing — exactly what a rotation landing mid-request looks like.
+    const racingRepo = {
+      ...repo,
+      markUnsubscribed: () => Promise.resolve(null),
+    };
+    const svc = new StatusSubscribersService(racingRepo, email, CONFIG);
+    await expect(svc.unsubscribe(token, NOW)).rejects.toThrow(/Unsubscribe link is invalid/i);
+  });
+
+  it('CRITICAL adminForceSubscribe rejects a malformed address — the staff copy of the check the public subscribe path already has. Two entry points, one rule, and only the public one was tested.', async () => {
+    const { service: email } = makeEmail();
+    const { repo, rows } = makeRepo([]);
+    const svc = new StatusSubscribersService(repo, email, CONFIG);
+    for (const bad of ['', '   ', 'not-an-email']) {
+      await expect(svc.adminForceSubscribe(bad, NOW)).rejects.toThrow(/Invalid email address/i);
+    }
+    // The property, not the message: a refused address creates no row. A staff
+    // tool that half-created a subscriber on bad input would leave a record
+    // nobody can confirm or unsubscribe.
+    expect(rows).toHaveLength(0);
+  });
+
+  it('forceUnsubscribe refuses an unknown subscriber id rather than reporting success for a row that does not exist', async () => {
+    const { service: email } = makeEmail();
+    const { repo } = makeRepo([]);
+    const svc = new StatusSubscribersService(repo, email, CONFIG);
+    await expect(svc.forceUnsubscribe('s-missing', NOW)).rejects.toThrow(/not found/i);
+  });
+});
