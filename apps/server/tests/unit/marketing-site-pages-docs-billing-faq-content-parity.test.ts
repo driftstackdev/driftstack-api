@@ -11,10 +11,13 @@
 //     reset (NowPayments) + downgrade at cycle end (both, no refund).
 //   • 14-day card-refund window.
 //   • Crypto non-refundable + failed-delivery re-provisioning.
-//   • Wrong-amount scenarios: partial / overpayment (credit, no expiry) /
+//   • Wrong-amount scenarios: partial / overpayment (V-790: no account-credit
+//     balance exists — the old "credit, no expiry" text promised one) /
 //     wrong currency (chain-dependent recovery).
 //   • Tax/VAT: Stripe auto + crypto VAT-exclusive + reverse-charge for B2B.
-//   • Cycle end: 7-day reminder + 48h grace + 7-day read-only.
+//   • Cycle end: V-790 retracted the "7-day reminder + 48h grace + 7-day
+//     read-only" cascade — none of the three exist. Crypto is a one-time
+//     31-day entitlement, stacking on re-purchase, swept within ~15 minutes.
 //   • billing@driftstack.dev contact.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -115,7 +118,12 @@ describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content pa
       /<strong>Underpayment:<\/strong> the order transitions to\s*\n?\s*<code>partial<\/code> and stays there\. Support reaches out to\s*\n?\s*arrange a top-up/,
     );
     expect(body).toMatch(
-      /<strong>Overpayment:<\/strong> the order completes as\s*\n?\s*<code>paid<\/code> and the difference is recorded as account\s*\n?\s*credit usable against the next renewal\. Surplus credit does\s*\n?\s*not expire\./,
+      /<strong>Overpayment:<\/strong> the order completes as\s*\n?\s*<code>paid<\/code> and the entitlement is granted in full\.\s*\n?\s*Driftstack does not keep an account-credit balance, so the\s*\n?\s*surplus is not carried forward automatically — contact\s*\n?\s*support and we will sort it out\./,
+    );
+    // V-790 — per-occurrence negative. No credit ledger exists anywhere: the only
+    // such column was trial_pack_credit_cents, dropped by migration 0065.
+    expect(body, 'the account-credit promise must not return').not.toMatch(
+      /recorded as account\s*\n?\s*credit usable against the next renewal/,
     );
     expect(body).toMatch(
       /<strong>Wrong currency \/ network:<\/strong> contact\s*\n?\s*support — recovery depends on the chain\. We can usually\s*\n?\s*recover ETH and USDC sent to the wrong address; we cannot\s*\n?\s*recover BTC sent to a Lightning address or vice versa\./,
@@ -135,13 +143,20 @@ describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content pa
     expect(body).not.toMatch(/href="\/docs\/teams"/);
   });
 
-  it('Cycle-end 3-phase framing: 7-day reminder + 48h grace + 7-day read-only state before Free-tier downgrade — pinned so the 3-phase cycle-end cascade survives (drift to a different reminder window would let crypto customers miss their renewal; drift to dropping the 7-day read-only-grace would force immediate downgrade)', () => {
+  it('Cycle-end framing, corrected by V-790. This pinned a three-phase cascade — 7-day reminder, 48h grace, 7-day read-only state — and none of the three exists. The only renewal_reminder emitter is the Stripe invoice.upcoming handler; the account status enum is [active, suspended, deleted] with no read-only state; and CRYPTO_ENTITLEMENT_EXPIRY_SWEEP_INTERVAL_MS is 15 minutes with no offset, so the downgrade lands within a quarter hour of expiry. The page promised roughly fourteen days of runway a paying customer did not have.', () => {
     expect(body).toMatch(
-      /Crypto customers receive\s*\n?\s*a renewal reminder 7 days before the cycle ends/,
+      /Crypto is not a\s*\n?\s*subscription — a payment buys a single 31-day entitlement, and\s*\n?\s*there is no auto-renew and no renewal reminder today\./,
     );
     expect(body).toMatch(
-      /If a crypto renewal is not paid within\s*\n?\s*48 hours of cycle end, the account drops to a read-only\s*\n?\s*grace state for 7 days, then is downgraded to the Free\s*\n?\s*tier until renewal\./,
+      /That happens within about 15 minutes of expiry —\s*\n?\s*there is no grace period/,
     );
+    expect(body, 'the stacking behaviour is real and worth stating').toMatch(
+      /the new 31 days\s*\n?\s*start from the existing expiry/,
+    );
+    // Per-occurrence negatives on all three retracted phases.
+    expect(body).not.toMatch(/renewal reminder 7 days before/);
+    expect(body).not.toMatch(/48 hours of cycle end/);
+    expect(body).not.toMatch(/read-only\s*\n?\s*grace state/);
   });
 
   it('pins cancellation as an end-of-cycle Free downgrade without inventing a purge or cloud recording lifecycle', () => {

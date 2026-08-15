@@ -34329,3 +34329,48 @@ before any edit — including the direction of the contradiction, since "the pol
 "the marketing page under-discloses" call for opposite fixes and only reading the code separates them.
 
 No new test file; `EXPECTED_TEST_FILES` unchanged.
+
+## V-790 — the crypto billing FAQ promised ~14 days of runway and an account credit; neither exists (2026-08-15)
+
+`docs/billing-faq.astro` told paying crypto customers two things that are not implemented anywhere.
+
+**"Crypto customers receive a renewal reminder 7 days before the cycle ends… If a crypto renewal is
+not paid within 48 hours of cycle end, the account drops to a read-only grace state for 7 days, then
+is downgraded to the Free tier."** Every clause is false:
+
+- the only emitter of `subscription.renewal_reminder` is the Stripe `invoice.upcoming` handler
+  (`services/stripe-webhooks.ts:749`); no crypto path emits it, so no reminder is ever sent;
+- there is no read-only state — `accountStatus` is `pgEnum('account_status', ['active','suspended','deleted'])`
+  (`schema.ts:36`), and suspension is admin/AUP-only;
+- there is no 48-hour window. `CRYPTO_ENTITLEMENT_EXPIRY_SWEEP_INTERVAL_MS` is **15 minutes**
+  (`crypto-entitlement-expiry-sweeper.ts:31`) and the expiry predicate carries no offset.
+
+So a customer who read this believed they had roughly a fortnight of runway plus a warning email,
+and actually lost their tier within a quarter of an hour of expiry, silently.
+
+**"the difference is recorded as account credit usable against the next renewal. Surplus credit does
+not expire."** There is no credit concept in the product. The only such column,
+`trial_pack_credit_cents`, was dropped by `migrations/0065_retire_trial_pack_free_tier.sql:22`. That
+is a money promise the system cannot honour.
+
+Corrected to what the code does, including a fact the old copy omitted and customers benefit from:
+re-purchasing before expiry **stacks** — `activateCryptoEntitlement` picks the latest unexpired
+same-tier `expiresAt` as `stackFrom` and starts the new 31 days there rather than at `paidAt`
+(`db/stripe-webhooks-repo.ts`). The page now states the 31-day one-time entitlement, the stacking,
+the absence of a reminder, the ~15-minute sweep and the absence of any grace period, and tells
+overpayers to contact support instead of promising a balance.
+
+Five occurrences moved in this commit: two page passages, two pin regexes, the pin's `it()` title,
+and **two stale bullets in the pin file's own header comment** which restated both fictions in prose
+("overpayment (credit, no expiry)" and "7-day reminder + 48h grace + 7-day read-only"). Per-occurrence
+negatives now ban all three retracted phases and the credit promise by name.
+
+Mutation-proved: reinstating the cascade reds the negatives.
+
+Third action from the parity sweep, and the one with the most direct consumer-protection exposure of
+the set. Every clause was re-verified against source before editing — the constants, the enum, the
+emitter, and the dropped column.
+
+One self-inflicted error: my patch left an orphaned `);` and the file stopped parsing, which vitest
+reported as "no tests" rather than as a failure. A suite that collects zero tests is not a pass, and
+the summary line says so only if you read it.

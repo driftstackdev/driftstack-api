@@ -96,9 +96,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         arrange a top-up (send the difference to the same address)
         or a tier downgrade.</li>
       <li><strong>Overpayment:</strong> the order completes as
-        <code>paid</code> and the difference is recorded as account
-        credit usable against the next renewal. Surplus credit does
-        not expire.</li>
+        <code>paid</code> and the entitlement is granted in full.
+        Driftstack does not keep an account-credit balance, so the
+        surplus is not carried forward automatically — contact
+        support and we will sort it out.</li>
       <li><strong>Wrong currency / network:</strong> contact
         support — recovery depends on the chain. We can usually
         recover ETH and USDC sent to the wrong address; we cannot
@@ -131,12 +132,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>What happens at the end of a billing cycle?</h2>
     <p>
       Stripe customers are auto-renewed; the new cycle starts the
-      moment the renewal payment confirms. Crypto customers receive
-      a renewal reminder 7 days before the cycle ends with a link
-      to the next checkout. If a crypto renewal is not paid within
-      48 hours of cycle end, the account drops to a read-only
-      grace state for 7 days, then is downgraded to the Free
-      tier until renewal.
+      moment the renewal payment confirms. Crypto is not a
+      subscription — a payment buys a single 31-day entitlement, and
+      there is no auto-renew and no renewal reminder today. Buying
+      again before the current one expires stacks: the new 31 days
+      start from the existing expiry rather than from the payment.
+      When an entitlement expires the account moves to whatever
+      entitlement it still holds, or to the Free tier if none
+      remains. That happens within about 15 minutes of expiry —
+      there is no grace period, so buy the next term before the
+      current one runs out.
     </p>
 
     <h2>Cancel anytime</h2>
