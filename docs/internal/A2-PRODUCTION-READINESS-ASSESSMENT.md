@@ -3511,3 +3511,55 @@ key-material paths. What remains in `profiles-repo` is the genuinely lower-conse
 tail — `countByAccount`, `listTrashed`, `findByAccountAndName`, `touch`, the list
 cursor anchor, and the cross-account-by-design `migrateWrappedDekEnvelopes` — plus
 `purgeTrashed`, which is worth a look on its own the next time this file is opened.
+
+## 6l — the only unrecoverable delete in the repo, and why it had no coverage
+
+`purgeTrashedBefore(cutoff)` is the retention sweep: the one HARD delete in
+`profiles-repo`, and the one method with no account scope at all — by design. Its
+entire safety is two predicates:
+
+```ts
+.where(and(isNotNull(profiles.deletedAt), lt(profiles.deletedAt, cutoff)))
+```
+
+Lose the second and every trashed profile for every customer is destroyed on the
+next sweep regardless of age. Everywhere else in this sweep a wrong WHERE clause
+leaks or blocks; here there is no soft-delete to reverse and no recycle bin left to
+restore from.
+
+### Why the absence of coverage was RIGHT
+
+Four unit tests name the method, all against an in-memory repo that re-implements
+the filter by hand. No integration test touched it — and
+`global-scope-db-tests-are-isolated` explains why: it forbids a real-Postgres test
+from calling a global operation on the SHARED database, because a whole-table
+delete's behaviour depends on rows owned by whatever else is running. That guard
+derives its roster from the sources, asserts the roster is non-empty and that it
+sees real integration files, then requires zero offenders.
+
+So this was a policy, not an oversight — and the policy has its own sanctioned
+escape hatch. `ensureIsolatedDatabase` exists precisely for a sweeping file, and
+the meta-guard skips any file that uses it. This test takes its own database, so
+the sweep sees only rows it created and the property holds by construction.
+Confirmed the meta-guard still passes with the new file present (3 passed).
+
+### The guard
+
+One account; a live profile, trash dated before the cutoff, trash dated after it.
+The purge must return EXACTLY the stale id — a superset would satisfy `toContain`
+while being the whole failure mode — and afterwards the live row and the fresh
+trash must both still exist.
+
+Ledger: dropping the age bound reds it. Dropping `isNotNull` does NOT, and that is
+not a gap: `NULL < cutoff` is NULL in SQL, so a live profile never matches the age
+comparison anyway. The probe proved it empirically rather than by argument — with
+`isNotNull` removed the live profile still survived.
+
+### Sweep closed
+
+Every destructive, key-material and customer-facing read/write path across
+`profiles`, `sessions` and MFA recovery codes is now proven against real SQL. What
+remains in `profiles-repo` is the low-consequence tail: `countByAccount`,
+`listTrashed`, `findByAccountAndName`, `touch`, the list cursor anchor, and
+`migrateWrappedDekEnvelopes` — which is cross-account by design and already covered
+by its own isolated-database test.
