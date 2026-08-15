@@ -168,4 +168,73 @@ describe('S42 bundled-LLM consent tier gate — PATCH /v1/account/me/bundled-llm
       expect(patch.json()).toEqual({ consent: true, monthly_cap_usd_cents: 2000 });
     },
   );
+
+  // ─── the tier-ineligible REFUSAL, on a Claude-wired deployment ───────────
+  //
+  // Added 2026-08-15. The arm above proves a downgraded account stops DRAWING on
+  // the deployment key — via a spy, because on a deterministic deployment the
+  // turn then succeeds through the generic decomposer and there is no refusal to
+  // assert. That left `routes/agent-sessions.ts:4632`, the refusal itself, never
+  // executed (assessment item 5f).
+  //
+  // It needs three conditions at once: no resolvable key,
+  // `bundledLlmTierIneligible`, and `agentDecomposerKind === 'claude'`. The third
+  // was unreachable — `buildTestApp` never passed it and `buildApp` defaults to
+  // `'deterministic'` — so the harness gained an `agentDecomposerKind` option in
+  // this commit. That flag changes only what the ROUTE believes is wired; the
+  // runtime's decomposer stays deterministic, which is faithful because this
+  // branch refuses before any decomposer call.
+  //
+  // What the refusal is FOR: consent is already on, so the blocker is the plan.
+  // Sending this customer the consent error would point them at a toggle that is
+  // already ticked, and sending them the generic ByokAnthropicRequired 502 would
+  // suggest supplying a key when upgrading is the simpler fix. It is the
+  // difference between an actionable answer and a wrong one.
+  //
+  // MUTATION-PROVED against routes/agent-sessions.ts — control 9/9:
+  //
+  //   the refusal collapses into the CONSENT error            1 red
+  //   `bundledLlmTierIneligible` is never set                 1 red
+  //   the gate stops requiring a Claude-wired deployment      1 red
+  //
+  // The third is the one that shows the harness option is load-bearing rather
+  // than cosmetic: flip the condition to `'deterministic'` and this arm reds,
+  // because it is reaching the branch through exactly the flag that was
+  // previously unreachable.
+
+  it('CRITICAL a consented-but-downgraded account gets the TIER refusal, not the consent error and not the generic 502. Consent is on, so the blocker is the plan: naming the wrong one sends the customer to a toggle that is already ticked, or tells them to supply an API key when an upgrade is the simpler fix.', async () => {
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      agentDecomposerKind: 'claude',
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 200000 },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(create.statusCode, 'session created while still entitled').toBe(201);
+    const id = create.json<{ id: string }>().id;
+
+    // Downgrade the way a failed payment does — consent stays true, and nothing
+    // in the downgrade path clears it.
+    const live = await fx.authRepo.getAccount(fx.accountId);
+    fx.authRepo.upsertAccount({ ...live!, tier: 'team_manual' });
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { user_message: 'open https://example.com and capture' },
+    });
+
+    expect(res.statusCode, 'refused as a plan problem, not a server fault').toBe(403);
+    const detail = res.json<{ detail: string }>().detail;
+    expect(detail, 'names the plan as the blocker').toMatch(/not available on this account/i);
+    expect(detail, 'and points at the two real ways out').toMatch(
+      /Upgrade to a tier|byok-anthropic-key/i,
+    );
+    expect(detail, 'never mentions consent, which is already on').not.toMatch(/consent/i);
+  });
 });

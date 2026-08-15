@@ -349,6 +349,22 @@ export interface TestAppOptions {
    * (matches prod posture until founder flips the LLM key path on).
    */
   enableAgentRuntime?: boolean;
+  /**
+   * What the ROUTE believes the deployment's decomposer is. `buildApp` defaults
+   * this to `'deterministic'`, and the route uses it to decide whether a missing
+   * Anthropic key is a real problem: on a deterministic deployment the
+   * decomposer never reads a key, so gating would raise a false alarm for a turn
+   * that would have succeeded.
+   *
+   * Setting `'claude'` does NOT change the decomposer instance the runtime uses
+   * — it stays deterministic. That is faithful rather than sloppy: the branches
+   * this flag opens all REFUSE before any decomposer call, so the instance
+   * behind it is never consulted on those paths. Without this option the
+   * `'claude'` legs of the key-resolution chain are unreachable from every
+   * integration fixture, which is how the bundled-LLM tier-ineligible refusal
+   * went unexecuted (assessment item 5f).
+   */
+  agentDecomposerKind?: 'claude' | 'deterministic';
   /** Test the fail-closed deployment posture when turn-receipt storage is absent. */
   disableAgentTurnReceipts?: boolean;
   /**
@@ -1567,6 +1583,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.sessionProxyRequired === undefined
       ? {}
       : { sessionProxyRequired: opts.sessionProxyRequired }),
+    // Spread-only-when-set, same as the line above: exactOptionalPropertyTypes
+    // rejects an explicit `undefined` here.
+    ...(opts.agentDecomposerKind === undefined
+      ? {}
+      : { agentDecomposerKind: opts.agentDecomposerKind }),
     ...(opts.enableAgentRuntime === true
       ? (() => {
           const agentSessionsRepo = new InMemoryAgentSessionsRepo();

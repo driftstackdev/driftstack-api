@@ -1504,6 +1504,47 @@ verdict depends on something nobody chose. A single-run mutation ledger cannot
 see that class at all — which is an argument for re-running a ledger when the
 file it documents changes, not for trusting the number in the header forever.
 
+#### 5i. NEW — the VPN-config SSRF/RCE guards are never CALLED by a test
+
+⛔ **The highest-value item currently open**, and a textbook instance of the
+"not CALLED" shape from 5f: the classifier works, the route's use of it is
+unexercised.
+
+`routes/account-me.ts` refuses a customer-supplied VPN proxy whose real egress
+targets something it should not:
+
+| line          | guard                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 490           | OpenVPN — private/loopback/link-local/metadata target, **or a script-executing directive** (`up`/`down`/`route-up`/`tls-verify`, `script-security 2+`) |
+| 509           | WireGuard — `endpoint`/`dns` targeting the same address classes                                                                                        |
+| 485, 504, 526 | the scheme/config mismatch refusals                                                                                                                    |
+
+The OpenVPN one is not only SSRF: a config carrying `up /bin/sh` is **remote code
+execution on the egress host**. **None of these five has ever executed**
+(2026-08-15 statementMap).
+
+⚠️ **What makes this subtle rather than an obvious hole.** Both halves look
+covered when read separately:
+
+- `classifyUnsafeVpnTargets` is thoroughly unit-tested —
+  `webhook-target-guard.test.ts:243+` drives `169.254.169.254`, `10.0.0.5` and
+  friends across `endpoint`/`dns`/`remote`.
+- `account-me-proxies.test.ts` has a 29-arm suite that **does** register OpenVPN
+  and WireGuard proxies, and a dedicated "SSRF host guard" arm.
+
+But that SSRF arm posts `{ label, host, port }` — a **socks5/http display host**.
+The route's own comment states the problem it is not testing: _"the real egress is
+the embedded `remote <host>`, NOT the display host — guard it."_ **No test ever
+posts an UNSAFE VPN config.** Delete the `classifyUnsafeVpnTargets(...)` call from
+the route and every existing test stays green: the classifier's own tests still
+pass, and the registration tests still pass because their configs are safe.
+
+_Next slice._ Post unsafe OpenVPN and WireGuard configs to
+`POST /v1/account/me/proxies` and assert the 400 — including a `script-security 2`
+blob, since that branch is RCE rather than SSRF. Mutate by removing each
+`classifyUnsafeVpnTargets` call to prove the ROUTE is what is being guarded, not
+the classifier.
+
 #### 5h. NEW — 76 text-pin anchors name a control they cannot guard
 
 Generalisation of the `services/auth.ts` finding in 5f, now measured repo-wide
@@ -1769,9 +1810,11 @@ test, or declared" — was checked against the coverage data and disagrees on 4 
 8–11% without any test importing it. A 92%-accurate ratchet would spend more on
 its exception list than it earns.
 
-### 5f. 31 of 108 security denial paths had never executed — now 13 of 108
+### 5f. 31 of 108 security denial paths had never executed — now 8, all residuals
 
-✅ **RE-MEASURED 2026-08-15 with the proper instrument: 13 of 108.** Three of those 13 were closed after that measurement was taken — `profile-snapshots.ts:44`, `services/auth.ts:398` and `:401` — so the current figure is **10 by arithmetic, not by re-measurement**: the coverage snapshot predates those tests, and no new run has been taken. Stated that way deliberately, since the whole point of this item was replacing an estimate with a measurement. The original
+✅ **RE-MEASURED 2026-08-15 with the proper instrument: 13 of 108.** Five of those 13 have since been closed — `profile-snapshots.ts:44`, `services/auth.ts:398`, `:401`, `sessions.ts:345` and `agent-sessions.ts:4632` — so the current figure is **8 by arithmetic, not by re-measurement**: the coverage snapshot predates those tests and no new run has been taken. Stated that way deliberately, since the whole point of this item was replacing an estimate with a measurement.
+
+✅ **Every ACTIONABLE site in that population is now closed.** The 8 that remain are all residuals, each verified individually below: **6** owner-vanished null checks (unreachable because `findTeamMemberships` filters owner status in SQL one layer up), **1** wiring guard (`agent-sessions.ts:3916`, `authRepo === undefined`), and **1** unreachable branch (`services/auth.ts:532`, the non-fall-through `InvalidKeyError` in `slowPathApiKey`, whose only caller always passes `fallThroughOnPrefixMiss: true`). None is a customer-reachable refusal, and each is documented rather than left as an open number. The original
 31 came from an earlier coverage snapshot; this run regenerated
 `coverage-final.json` (whole workspace, `DATABASE_URL` set so the 65 `db-*` files
 execute) and intersected its `statementMap` with every deny site, same
@@ -1830,232 +1873,28 @@ rather than a residual:
   WIRING guard (`authRepo === undefined`), fail-closed for a route registered
   without its dependency, not a customer-reachable path.
 
-- `routes/agent-sessions.ts:4632` — the bundled-LLM **tier-ineligible** refusal,
-  which deliberately differs from the consent error so a customer whose consent
-  is already on is told the blocker is their plan rather than sent to a toggle
-  that is already ticked. The "consented, then downgraded or payment lapsed"
-  case.
+- ✅ `routes/agent-sessions.ts:4632` — the bundled-LLM **tier-ineligible**
+  refusal. **Closed 2026-08-15**, 1 arm in `bundled-llm-tier-gate`, 3 mutations,
+  all red.
 
-  ⚠️ **Unreachable from the current integration harness by construction, not
-  merely untested.** Three conditions must hold at once: no resolvable key,
-  `bundledLlmTierIneligible`, and `agentDecomposerKind === 'claude'`.
-  `buildTestApp` never passes `agentDecomposerKind`, and `buildApp` defaults it
-  to `'deterministic'`, so the third can never be true in any integration
-  fixture. `bundled-llm-tier-gate` already covers the _tier re-check_ at turn
-  time — it asserts the bundled path is not taken via a spy, and its own comment
-  notes the turn can still succeed through the generic decomposer fallback, so it
-  legitimately never reaches this throw.
+  It needed three conditions at once — no resolvable key,
+  `bundledLlmTierIneligible`, and `agentDecomposerKind === 'claude'` — and the
+  third was **unreachable from every integration fixture**: `buildTestApp` never
+  passed it and `buildApp` defaults to `'deterministic'`. So the harness gained
+  an `agentDecomposerKind` option rather than the fixture being bent into
+  reaching the branch some other way.
 
-  _Closing it means extending the harness with an `agentDecomposerKind` option
-  first._ Recorded rather than attempted, since a fixture bent into reaching it
-  another way would prove less than the harness change does.
+  ⭐ That flag changes only what the **route believes** is wired; the runtime's
+  decomposer stays deterministic. Faithful rather than sloppy: every branch the
+  flag opens REFUSES before any decomposer call, so the instance behind it is
+  never consulted on those paths. The third mutation proves the option is
+  load-bearing — flip the condition to `'deterministic'` and the arm reds,
+  because it reaches the branch through exactly that flag.
 
-- ✅ `services/auth.ts:398`, `:401` — the API-key cache-revalidation branch.
-  **Closed 2026-08-15**, 4 arms appended to
-  `auth-cache-hit-revalidates-against-postgres` (which previously drove only the
-  web-session branch), 3 mutations, all red, **parity pin green on all three**.
-
-  Measured from the statementMap rather than guessed: that block executes 2,100+
-  times under the suite, its surrounding conditions run every time, and those two
-  throws were `count=0`. A branch that busy with two refusals that never fire is
-  the shape of a control nobody has watched work.
-
-  ⭐ The mutation worth remembering keeps a re-check, keeps the same error, keeps
-  the same shape — and compares the **CACHED** expiry instead of the live row,
-  i.e. the value the code already tested twenty lines earlier. The entire
-  re-validation becomes a no-op that reads correctly, and the pin sees a file that
-  still says `ExpiredKeyError` in the right place. Key expiry is the case that
-  needs it: expiry happens in Postgres on a schedule nobody triggers, so the cache
-  is never invalidated for it and the live re-read is the only thing that can
-  notice.
-
-Measured 2026-08-15 by intersecting per-line coverage with every
-`throw new <Forbidden|Unauthorized|InvalidKey|RevokedKey|Expired*|MfaStepUpRequired
-|LegalAcceptanceRequired|EmailNotVerified|InvalidCredentials|InvalidAuthToken>Error`
-in `apps/server/src`. **108 deny sites across 26 files; 31 never run under any
-test.** A refusal path nobody has watched refuse is a control nobody has shown
-works — the same shape as item 26's "four fail-closed branches nothing could see".
-
-The largest clusters:
-
-- `services/auth.ts` — 8+ never-executed `InvalidKeyError` / `ExpiredKeyError`
-  throws on the API-key and web-session authentication paths. **Closed
-  2026-08-15** (`auth-slow-path-denials-actually-deny`): 18 arms, 12 mutations,
-  all red, covering both slow paths end to end. These run on every cache miss —
-  every cold start, every Redis outage, every first request from any caller.
-
-  ⛔ **This is where the pin-versus-execution question stops being academic.**
-  Both existing pins over the file were run against all twelve mutations. **They
-  miss 7 of 12, and the seven are the security ones:** both anti-enumeration
-  leaks (`deleted` answering `Forbidden` instead of `InvalidKeyError`, on either
-  path), the V-174 privilege regression (the synthetic web-session key regaining
-  a bare `admin` scope), both defence-in-depth session rechecks, and the OAuth
-  fail-closed class. `services-auth-content-parity` catches 5 of 12;
-  `auth-service-v168-v326-cross-source-invariant` catches **0 of 12**.
-
-  ⭐ **The cause is structural, and it generalises.** The parity pin _does_ assert
-  the asymmetry —
-
-  ```
-  /if \(account\.status === 'deleted'\) \{\s*\n?\s*throw new InvalidKeyError\(\);/
-  ```
-
-  — but that regex matches **anywhere in the file**, and the block exists
-  **twice**, once per slow path. Mutating either occurrence alone leaves the other
-  satisfying the pattern. Verified rather than inferred: mutating **both** at once
-  _does_ red the pin (1 failed), while each on its own leaves it green. So the pin
-  claims a security property that exists in two places and can detect its loss in
-  **neither** — only in both simultaneously, which is not how a leak is
-  introduced.
-
-  A text pin over a **repeated** block asserts that the block exists somewhere,
-  not that it still guards the path it was written for. Same class as the
-  `/nextRunAt,/` anchor in `db-validation-schedules-repo`, one level up — and
-  unlike that one, this is not a slip in a single pattern: any anchor whose target
-  appears more than once has it by construction.
-
-  _Detectable mechanically, and partly measured._ A `toMatch(/…/)` anchor that
-  matches its target source **more than once** is exactly this shape. Over the two
-  pins on `services/auth.ts`: **169 anchors, 12 multi-match**, and the detector
-  independently surfaced all three anchors whose single-site mutation had already
-  been proved invisible (`suspended`, `deleted`, `baseScopes`) — so it agrees with
-  ground truth rather than merely producing a number.
-
-  ⚠️ **Repo-wide: NOT measured.** The naive sweep over every content-parity and
-  cross-source-invariant pin does not terminate in reasonable time — several
-  anchors chain unbounded wildcards (`[\s\S]*?` between many literals), which
-  backtracks exponentially against a 2000-line source. Declining those patterns
-  was not enough. No repo-wide count is claimed here; the honest statement is
-  that the class is confirmed on one file and its size elsewhere is unknown.
-
-  ⚠️ A methodology note, since the detector nearly under-reported: its first
-  version required `)` immediately after the regex, and prettier formats a
-  multi-line assertion as `toMatch(\n  /…/,\n)`. That silently skipped 52 of 169
-  anchors — **including the very anchor the tool was written to find**. A tool
-  that misses its own motivating case will happily report a clean bill of health.
-
-  _Scoped 2026-08-15 for the next slice._ **All** deny throws in that file, by
-  enclosing function — this is the total population, not the never-executed
-  subset, which needs the coverage intersection to separate out:
-
-  | function             | throws | Invalid / Revoked / Expired |
-  | -------------------- | ------ | --------------------------- |
-  | `authenticate`       | 14     | 9 / 2 / 3                   |
-  | `slowPathApiKey`     | 9      | 5 / 2 / 2                   |
-  | `slowPathWebSession` | 6      | 4 / 1 / 1                   |
-  | `slowPathOAuthToken` | 3      | 3 / 0 / 0                   |
-
-  ⚠️ The first grouping run reported all 32 in a single function, because the
-  pattern only matched `export function` and the three slow paths are not
-  exported. Same class as every other first-number-is-a-candidate-list miss in
-  this document; the table above is the corrected run.
-
-  The `authenticate` cluster is partly covered already by
-  `auth-cache-hit-revalidates-against-postgres` and
-  `api-key-rotation-race-revalidation`, both of which drive the
-  cache-revalidation branches. The three slow paths are the likely remainder.
-
-- `middleware/auth.ts` — both refusals of the MFA step-up gate. **Closed by this
-  commit** (`mfa-step-up-gate-actually-denies`).
-- `throw new ForbiddenError('Owner account no longer exists.')` — **enumerated
-  and closed as a VERIFIED NEGATIVE, 2026-08-15.** The count here was wrong: it
-  is **9 sites across 5 files**, not six routes — `middleware/rate-limit.ts:178`,
-  `routes/profiles.ts` ×3, `routes/admin.ts` ×3, `routes/agent-sessions.ts:3920`,
-  `routes/profile-snapshots.ts:217`. And the sites are not one population:
-  - **The 8 route sites test `!owner` only** — a null row. Accounts are
-    soft-deleted (`account_status` is active|suspended|deleted), so a deleted
-    owner still HAS a row and would slip past a null check. That looked like a
-    real hole until the layer above was read: `findTeamMemberships` filters owner
-    status **in SQL** —
-    `.where(and(eq(teamMembers.memberAccountId, …), eq(accounts.status, 'active')))`
-    — so a suspended or deleted owner produces no grant and
-    `effectiveAccountId` can never resolve to one. Both the Drizzle repo and the
-    in-memory double enforce it, and `team-auth-owner-status-authority` pins the
-    parity. The route check is therefore a genuine residual, reachable only by a
-    hard delete mid-request.
-  - **The 1 middleware site is a DIFFERENT check** and is executed. It tests
-    `account === null || account.status === 'deleted'` and answers 403 rather
-    than 429 deliberately, because the SDK retries 429 forever and a permanent
-    condition would become an infinite retry loop.
-    `team-effective-owner-rate-limit` drives it table-wise over **both**
-    `suspended` and `deleted`.
-
-  _Recorded rather than left open so the next reader does not re-derive it._
-  ⚠️ Note the shape of the near-miss: the route-level check IS insufficient on
-  its own, and reading only those 8 sites produces a confident false positive.
-  The control lives one layer up, in a `where` clause.
-
-- `routes/auth.ts:109` — `'Account is suspended.'` on the login path. **Closed
-  2026-08-15** (`auth-login-deny-paths-actually-deny`), and with it the whole
-  `mapAuthFlowError` switch: all five `AuthFlowError` codes are now driven
-  through `/v1/auth/login` against a service double and asserted on the problem
-  type the caller actually receives. 9 arms, 7 mutations, every one red.
-
-  ⭐ **Status alone would not have caught the worst case.** Two of the five codes
-  map to the same 403 — `account_suspended` → `Forbidden` and
-  `email_not_verified` → `EmailNotVerified` — differing only in the problem
-  `type`. A guard asserting status would pass with those two swapped, which is
-  not cosmetic: a suspended customer is told to verify an email they confirmed
-  long ago, and an unverified one is told their account is suspended. Neither
-  can act on the answer. The two are asserted against each other explicitly, and
-  the mutation collapsing them onto one answer reds two arms.
-
-  Also covered, because it is a deny path in its own right: the
-  `if (!(err instanceof AuthFlowError)) throw err` guard at the top of the
-  mapper. Without it a database outage inside `login()` surfaces as "email or
-  password is incorrect" — wrong, unactionable, and it hides an incident behind
-  a message the customer blames themselves for.
-
-⚠️ **What made the MFA one worth doing first is how well covered it looked.**
-`MfaStepUpRequiredError` is referenced in **seventeen** test files. Every one
-reads source text or an SDK export list — content-parity, cross-source-invariant,
-error-taxonomy. **Extensively pinned, never executed.** Text pins over a security
-gate are the most reassuring possible way to not test it.
-
-**Progress: 31 → 26 → 23 never executed.** Closed so far — the MFA step-up gate's
-two refusals, the auth-cache re-validation cluster, the API-key rotation-race
-re-read, and the rate-limiter's unauthenticated-route guard.
-
-**RESOLVED: the `'Owner account no longer exists.'` group (8 of the remaining 23)
-gets a note, not fixtures — and here is the evidence rather than the assertion.**
-
-The branch sits on the effective-account path: a team member acts for an owner,
-the route re-reads that owner with `authRepo.getAccount(eff)`, and refuses if the
-row is gone. For it to fire, the owner's account must vanish while the membership
-that authorises the header still resolves. It cannot:
-`team_members.owner_account_id` is **`onDelete: 'cascade'`**, so hard-deleting an
-owner removes the membership rows, and `resolveEffectiveAccount` validates the
-header against the memberships loaded at authentication.
-
-So the branch is reachable **only** in an intra-request race — the owner is hard
-deleted after authentication loaded the caller's teams and before the route
-re-reads the account. That is a real window and the check is correct defensive
-code, but it is not reachable from the public surface without injecting the race,
-and eight identical fixtures that each mock `getAccount` to return null would
-prove the `if` statement works rather than that the system does.
-
-_Recommendation for the remaining 15:_ they are singles across `routes/admin.ts`,
-`agent-sessions`, `profiles`, `profile-snapshots`, `oauth`, `sessions` and
-`auth.ts`. None forms a cluster with a shared mechanism, so the yield per fixture
-is much lower than the four clusters already closed. Worth taking opportunistically
-when touching those files rather than as a sweep.
-
-_Method note, since it generalises:_ file-level coverage cannot find these. The
-check is an intersection of "lines matching the deny pattern" with "statements
-whose execution count is 0" from `coverage-final.json`, and it requires first
-confirming every file appears in the report — a file never imported has no entry
-at all and would be silently omitted from the denominator.
-
-## Current state
-
-Node suite **2,559 files / 26,548 passing** with `DATABASE_URL` set, so the
-real-Postgres integration files run rather than skip. e2e **199 / 0**, from
-187/10 at the start of the run. Python SDK 337 tests + mypy strict over 43
-files; Go SDK vet and tests clean; all five Astro sites typecheck clean;
-`npm audit --omit=dev` 0 vulnerabilities.
-
-One caveat on reading any of these numbers, including mine: a suite run without
-`DATABASE_URL` silently SKIPS every `db-*` integration file, and the totals it
-prints look like a full pass. The figures above are from a run with the database
-present. See item 11 for the one intermittent failure that configuration can
-surface.
+  _Why the refusal is worth its own error:_ consent is already on, so the blocker
+  is the plan. The consent error would point the customer at a toggle that is
+  already ticked; the generic `ByokAnthropicRequired` 502 would tell them to
+  supply an API key when upgrading is the simpler fix. The existing spy-based arm
+  covers the turn-time tier RE-CHECK and legitimately never reaches this throw,
+  because on a deterministic deployment the turn succeeds through the generic
+  decomposer and there is no refusal to assert.
