@@ -53,13 +53,16 @@ const API_TYPES_SRC = resolve(REPO_ROOT, 'packages/api-types/src/common.ts');
  * `@driftstack/api-types` resolves to `dist/index.js`, and a local `npm test`
  * does not rebuild it — CI does (`npm run build` precedes the test job), but the
  * local loop does not. So a developer can change a cap in `src`, run the suite,
- * and watch every assertion about that cap pass against a build artifact from
- * days earlier.
+ * and watch assertions about that cap pass against the previous build.
  *
  * That is not hypothetical here: three mutations of this file's own cap table
  * failed to red anything until this function existed, because the test was
- * reading the built copy. The arm below compares the two so the staleness itself
- * is reported rather than quietly making everything else vacuous.
+ * reading the built copy. Demonstrated directly — edit the cap in `src` and the
+ * behavioural arm below stays green; rebuild and it reds. The window is "since
+ * your last build", not any particular age.
+ *
+ * The agreement arm compares the two so that window is reported rather than
+ * quietly making everything else vacuous.
  */
 function capsFromSource(): Record<string, number | null> {
   const block = /MAX_SESSION_MINUTES_PER_TIER[^{]*\{([\s\S]*?)\}/.exec(

@@ -837,8 +837,21 @@ reads source and asserts the built copy agrees.
 `@driftstack/api-types` declares `main: dist/index.js` and has no vitest alias, so
 every import resolves to the **built** copy. **192 test files import it** (plus 9
 importing `@driftstack/sdk`). A local `npm test` does **not** rebuild, so those
-files assert against whatever `dist/` happens to contain — here, a build dated
-**Jul 14** against source modified since.
+files assert against whatever `dist/` happens to contain — i.e. against the last
+build, whenever that was.
+
+⚠️ **Correction (2026-08-15).** This item first said the artifact was "a build
+dated Jul 14 against source modified since". **That was wrong** — Jul 14 was the
+`dist/` DIRECTORY mtime, which does not track in-place file rewrites. File-level
+mtimes were 2026-08-13, i.e. **newer** than the last `src` commit (`885caddfc`,
+08-11), and a fresh `npm run build` wrote nothing. The artifact was current; the
+staleness window is "since your last build", not weeks.
+
+The mechanism is unaffected, and is now proved directly rather than by mtime:
+edit `MAX_SESSION_MINUTES_PER_TIER` in `src`, run the suite **without** rebuilding
+— the behavioural arm that reads the built package does **not** red. Rebuild, and
+it does. So a source edit is invisible to any behavioural assertion until the
+package is rebuilt.
 
 **CI is not affected**: `.github/workflows/ci.yml` runs `npm run build` before the
 test job, so CI always tests a fresh artifact. **The local loop is the hazard** — a
