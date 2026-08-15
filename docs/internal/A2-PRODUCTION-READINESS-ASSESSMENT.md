@@ -3343,3 +3343,64 @@ worse than no test: it reports the boundary as proven when nothing ran.
 rename-on-restore, snapshot and quota paths among them. The three closed here are
 the ones the customer-facing read/write path depends on. The same question applies
 to `sessions-repo` (15 predicates) and `mfa-repo` (14), neither swept yet.
+
+## 6i — the session tenant boundary had no real-SQL coverage at all
+
+Second of the three repos named at the end of 6h, and worse than profiles:
+**nothing in the suite constructed `DrizzleSessionRepo`**, so not one line of the
+shipped session SQL had ever executed under vitest.
+
+`SessionsService` fetches with `repo.findSession(sessionId, accountId)` and throws
+NotFound purely on a null row — no independent ownership re-check — so the
+`eq(sessions.accountId, …)` predicate is the boundary, exactly as in profiles.
+
+### Measured before building
+
+Neutralising the `findSession` predicate:
+
+| detector                                                             | result                       |
+| -------------------------------------------------------------------- | ---------------------------- |
+| route + service tests (`account-web-sessions`, `sessions-lifecycle`) | **8 passed — unnoticed**     |
+| `db-sessions-repo-content-parity` + `-cross-source-invariant`        | 2 red — **source TEXT only** |
+
+The behavioural tests run against InMemory repos; the only thing that noticed was
+a pin on the characters in the file. A rewritten WHERE clause could hand account A
+account B's live browser session — its proxy configuration, archetype and the key
+material it was launched with — past a fully green suite.
+
+### The guard
+
+One integration test on the shipped repo against real Postgres, two seeded
+accounts (plus the `api_keys` row the FK requires), covering three DIFFERENT
+failure shapes rather than three variations of one:
+
+- **read** — `findSession` returns null for a stranger, owner-side positive control first;
+- **control** — `claimSessionOperation` returns `not_found`; that lock is how a
+  session is started, stopped and driven, so a stranger taking it is control of
+  someone else's browser, not merely a read;
+- **silent** — `touchSessionLastStateAt` returns void, so the column is read back
+  directly, then the owner's identical call is asserted to succeed so the arm is a
+  boundary and not a broken call.
+
+Ledger: the `findSession`, `claimSessionOperation` and `touchSessionLastStateAt`
+predicates each red it; before, none of the three reddened any behavioural test.
+
+⚠️ Two fixture errors caught by running it rather than reasoning: the export is
+`DrizzleSessionRepo`, not `DrizzleSessionsRepo` (the file is plural, the class is
+not), and `session_status` has no `active` — it is
+`creating|ready|busy|destroyed|errored`. Both would have been invisible in a test
+that never ran against a real database, which is the condition this whole entry is
+about.
+
+### Noted, not a defect
+
+`findSessionUnscoped` — deliberately account-unscoped, documented "admin
+force-actions only" and pinned by three parity/invariant tests — currently has **no
+caller anywhere in `src`**. It is not customer-reachable today. Worth knowing it
+exists: it is the one method in this repo that returns another account's session by
+construction, so it wants a scoped caller and a test the day something calls it.
+
+### Still open
+
+`mfa-repo` (14 predicates) is the last of the three named in 6h, and 16 predicates
+in `profiles-repo` remain unexercised by real SQL.
