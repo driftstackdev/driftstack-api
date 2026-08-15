@@ -1399,7 +1399,7 @@ exclusion to measure it reds `workspace-vitest-config-content-parity`, which pin
 the exclude list — the pin doing its job. Forcing past it would have changed what
 the thresholds mean on a number I had not yet seen.
 
-**MEASURED 2026-08-16.** Taken without perturbing the tree — `--coverage.include`
+**MEASURED 2026-08-15.** Taken without perturbing the tree — `--coverage.include`
 on the CLI, thresholds zeroed for the run, config and pins untouched. Three
 earlier attempts that edited the config or moved a file each tripped a guard
 (the exclude-list pin, then the on-disk file-count pin); those guards were right
@@ -1557,7 +1557,7 @@ its exception list than it earns.
 
 ### 5f. NEW — 31 of 108 security denial paths have never executed
 
-Measured 2026-08-16 by intersecting per-line coverage with every
+Measured 2026-08-15 by intersecting per-line coverage with every
 `throw new <Forbidden|Unauthorized|InvalidKey|RevokedKey|Expired*|MfaStepUpRequired
 |LegalAcceptanceRequired|EmailNotVerified|InvalidCredentials|InvalidAuthToken>Error`
 in `apps/server/src`. **108 deny sites across 26 files; 31 never run under any
@@ -1568,11 +1568,52 @@ The largest clusters:
 
 - `services/auth.ts` — 8+ never-executed `InvalidKeyError` / `ExpiredKeyError`
   throws on the API-key and web-session authentication paths.
+
+  _Scoped 2026-08-15 for the next slice._ **All** deny throws in that file, by
+  enclosing function — this is the total population, not the never-executed
+  subset, which needs the coverage intersection to separate out:
+
+  | function             | throws | Invalid / Revoked / Expired |
+  | -------------------- | ------ | --------------------------- |
+  | `authenticate`       | 14     | 9 / 2 / 3                   |
+  | `slowPathApiKey`     | 9      | 5 / 2 / 2                   |
+  | `slowPathWebSession` | 6      | 4 / 1 / 1                   |
+  | `slowPathOAuthToken` | 3      | 3 / 0 / 0                   |
+
+  ⚠️ The first grouping run reported all 32 in a single function, because the
+  pattern only matched `export function` and the three slow paths are not
+  exported. Same class as every other first-number-is-a-candidate-list miss in
+  this document; the table above is the corrected run.
+
+  The `authenticate` cluster is partly covered already by
+  `auth-cache-hit-revalidates-against-postgres` and
+  `api-key-rotation-race-revalidation`, both of which drive the
+  cache-revalidation branches. The three slow paths are the likely remainder.
+
 - `middleware/auth.ts` — both refusals of the MFA step-up gate. **Closed by this
   commit** (`mfa-step-up-gate-actually-denies`).
 - Six routes share `throw new ForbiddenError('Owner account no longer exists.')`
   — the team-owner-vanished branch, unreachable without a mid-request deletion.
-- `routes/auth.ts:109` — `'Account is suspended.'` on the login path.
+- `routes/auth.ts:109` — `'Account is suspended.'` on the login path. **Closed
+  2026-08-15** (`auth-login-deny-paths-actually-deny`), and with it the whole
+  `mapAuthFlowError` switch: all five `AuthFlowError` codes are now driven
+  through `/v1/auth/login` against a service double and asserted on the problem
+  type the caller actually receives. 9 arms, 7 mutations, every one red.
+
+  ⭐ **Status alone would not have caught the worst case.** Two of the five codes
+  map to the same 403 — `account_suspended` → `Forbidden` and
+  `email_not_verified` → `EmailNotVerified` — differing only in the problem
+  `type`. A guard asserting status would pass with those two swapped, which is
+  not cosmetic: a suspended customer is told to verify an email they confirmed
+  long ago, and an unverified one is told their account is suspended. Neither
+  can act on the answer. The two are asserted against each other explicitly, and
+  the mutation collapsing them onto one answer reds two arms.
+
+  Also covered, because it is a deny path in its own right: the
+  `if (!(err instanceof AuthFlowError)) throw err` guard at the top of the
+  mapper. Without it a database outage inside `login()` surfaces as "email or
+  password is incorrect" — wrong, unactionable, and it hides an incident behind
+  a message the customer blames themselves for.
 
 ⚠️ **What made the MFA one worth doing first is how well covered it looked.**
 `MfaStepUpRequiredError` is referenced in **seventeen** test files. Every one
