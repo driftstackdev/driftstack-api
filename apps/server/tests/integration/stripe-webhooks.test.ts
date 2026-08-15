@@ -143,6 +143,44 @@ describe('POST /v1/webhooks/stripe — signature verification', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  // The third refusal on this route, and the only one that was uncovered —
+  // measured by neutralizing each of the four in turn: the missing-header and
+  // invalid-signature refusals red existing arms, this one did not.
+  //
+  // ⚠️ It is NOT a security boundary, and saying so is the point of covering it
+  // deliberately rather than by reflex. An empty body would fail signature
+  // verification anyway, so nothing gets past by removing this. What it owns is
+  // the ORDER: a present-but-empty body is answered 400 "Empty request body."
+  // before any HMAC work, so an integrator misconfiguring their endpoint reads a
+  // sentence about their body instead of "Invalid Stripe signature" — which
+  // would send them to rotate a secret that was never the problem.
+  //
+  // LEDGER — control 13/13:
+  //
+  //   :73 empty-body guard neutralized            1 red
+  //   :89 invalid-signature guard neutralized     3 red (pre-existing)
+  //   the empty-body check moved AFTER verify     1 red
+  //
+  // The third row is why this arm signs the empty string rather than sending a
+  // bare request: with the check deleted and `rawBody ?? ''` flowing on, the
+  // request reaches signature verification and is refused THERE. Only a
+  // legitimately-signed empty body can tell the two orderings apart, and that is
+  // exactly the misconfigured-integrator case the guard exists for.
+  it('400 on a present signature with an EMPTY body, before signature verification', async () => {
+    fx = await buildTestApp();
+    // A real signature over the empty string: the header is well-formed, so the
+    // request cannot be refused for the reason the arm above covers.
+    const sig = signStripePayload({ rawBody: '', secret: fx.stripeWebhookSigningSecret });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: { 'content-type': 'application/json', 'stripe-signature': sig },
+      payload: '',
+    });
+    expect(res.statusCode, res.body).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/empty request body/i);
+  });
+
   it('401 on invalid signature (wrong secret)', async () => {
     fx = await buildTestApp();
     const raw = makeEvent('evt_003', 'customer.subscription.created');
