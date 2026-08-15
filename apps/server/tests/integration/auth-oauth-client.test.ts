@@ -477,6 +477,28 @@ describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
 describe('the OAuth callback verifies the state token itself', () => {
   const CALLBACK = '/v1/auth/oauth-client/callback';
 
+  /** A real /start flow: the state and its nonce-scoped PKCE cookie. */
+  async function startFlowFor(
+    f: TestAppFixture,
+    provider: 'google' | 'github',
+  ): Promise<{ state: string; cookie: string }> {
+    const res = await f.app.inject({
+      method: 'POST',
+      url: '/v1/auth/oauth-client/start',
+      headers,
+      payload: { provider, redirect_to: 'https://app.driftstack.test/dashboard' },
+    });
+    const state =
+      new URL(res.json<{ authorize_url: string }>().authorize_url).searchParams.get('state') ?? '';
+    const setCookie = res.headers['set-cookie'];
+    const cookie = String(
+      (Array.isArray(setCookie) ? setCookie : [setCookie ?? '']).find((c) =>
+        String(c).startsWith('ds_oauth_pkce_'),
+      ),
+    ).split(';')[0];
+    return { state, cookie: cookie ?? '' };
+  }
+
   it('CRITICAL a MALFORMED state is refused. The token is `payload.signature`; anything without that shape cannot have been minted by us, and the refusal is what stops a hand-written state from reaching the exchange.', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
     const res = await fx.app.inject({
@@ -517,6 +539,62 @@ describe('the OAuth callback verifies the state token itself', () => {
     expect(res.statusCode, 'refused').toBe(400);
     expect(res.json<{ detail: string }>().detail).toMatch(/state token invalid: expired/i);
   });
+
+  it('CRITICAL a provider de-configured BETWEEN mint and callback fails closed. /start already refuses an unconfigured provider, so a state can only be minted for one that WAS wired — this branch exists for the deploy where creds are pulled while a customer is mid-flow. Modelled by replaying a real google flow against a server that now has only github, with the same signing secret so both the state and the PKCE cookie still verify: the refusal has to come from the provider lookup, and nothing earlier.', async () => {
+    // App A: both providers wired — mint a genuine google flow.
+    const wired = await buildTestApp({ oauthClient: OAUTH });
+    const { state, cookie } = await startFlowFor(wired, 'google');
+    await wired.cleanup();
+
+    // App B: google's creds are gone; same signing secret, so state + cookie
+    // both still verify and only the provider lookup can fail.
+    fx = await buildTestApp({
+      oauthClient: {
+        signingSecret: OAUTH.signingSecret,
+        callbackUrlBase: OAUTH.callbackUrlBase,
+        dashboardOrigin: OAUTH.dashboardOrigin,
+        github: OAUTH.github,
+      },
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(state)}`,
+      headers: { cookie },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/provider "google" is not configured/i);
+  });
+
+  // MUTATION-PROVED for the provider check — control 26/26:
+  //   the unconfigured-provider check removed        1 red
+  //   the check narrowed to `creds === null`         1 red
+  //
+  // The second matters because `providers` is a Partial record: a missing key
+  // is `undefined`, not `null`, so narrowing the test to `=== null` reads as
+  // equivalent and disables the guard entirely.
+  //
+  // ⚠️ `Userinfo fetch failed:` (routes/auth-oauth-client.ts:253) is NOT covered
+  // here, and the reason is worth writing down rather than leaving as a silent
+  // gap. Driving it needs the token exchange to SUCCEED and only the userinfo
+  // call to fail, which means controlling `fetch` — and that is not possible
+  // from a test:
+  //
+  //     lib/oauth-client-exchange.ts:51
+  //     const DEFAULT_FETCH: typeof fetch = globalThis.fetch;
+  //
+  // captured once at module load. `vi.stubGlobal('fetch', …)` replaces
+  // `globalThis.fetch` afterwards, so `DEFAULT_FETCH` still points at the
+  // original. Verified rather than assumed: a module-scope capture compared
+  // against a later stub is not the same reference.
+  //
+  // The same applies to `rejectTokenExchange()` in the D2 block above — its stub
+  // cannot take effect either. Those arms pass because the exchange fails
+  // anyway, not because the helper made it fail.
+  //
+  // `exchangeCodeForTokens`/`fetchUserInfo` both accept an `opts.fetch`
+  // override; the route does not thread one through. Closing this means adding
+  // that seam to the route deps, the same shape as the `agentDecomposerKind`
+  // harness gap (assessment item 5f).
 
   it('CRITICAL a state we genuinely minted gets PAST this check. Every arm above asserts a 400, and a callback that refused all states would satisfy all three while breaking social login entirely — so this asserts the failure moves ON, to the cookie binding rather than the state.', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });

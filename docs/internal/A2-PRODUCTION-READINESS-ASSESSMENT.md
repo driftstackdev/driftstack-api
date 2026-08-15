@@ -1643,6 +1643,53 @@ The last two are CLASSIFICATION failures and both layers catch them, which is th
 division of labour working as intended: the verifier owns _is this token valid_,
 the route owns _do we act on that answer_.
 
+#### 5m. NEW — `vi.stubGlobal('fetch')` cannot reach the OAuth IDP calls
+
+⛔ **An existing test helper does not do what its name says**, and it took trying
+to use the same technique to notice.
+
+`lib/oauth-client-exchange.ts:51` captures the implementation once, at module
+load:
+
+```ts
+const DEFAULT_FETCH: typeof fetch = globalThis.fetch;
+```
+
+`vi.stubGlobal('fetch', …)` replaces `globalThis.fetch` **afterwards**, so
+`DEFAULT_FETCH` still points at the original. Verified rather than reasoned: a
+module-scope capture compared against a later stub is not the same reference.
+
+Two consequences:
+
+- **`rejectTokenExchange()` in `auth-oauth-client.test.ts` is decorative.** The
+  arms that call it pass because the exchange fails anyway, not because the
+  helper made it fail. They are not wrong about their assertions — they assert
+  the failure lands past the state/cookie binding — but they do not control the
+  IDP interaction they appear to control.
+- **`Userinfo fetch failed:` (`routes/auth-oauth-client.ts:253`) is not
+  reachable from an integration test.** Driving it needs the token exchange to
+  SUCCEED and only the userinfo call to fail, which requires controlling `fetch`.
+
+⚠️ A third observation, stated as an observation because it is not fully pinned
+down: the failure that comes back is `idp-error`, which the exchange returns only
+when an HTTP **response** arrived — `network-error` is the no-response case. That
+suggests those arms reach the real endpoint rather than being short-circuited.
+Worth confirming separately; a suite that makes outbound calls on an auth path is
+a different problem from an ineffective stub.
+
+_Fix shape:_ `exchangeCodeForTokens` and `fetchUserInfo` both already accept an
+`opts.fetch` override — the route simply does not thread one through. Adding that
+seam to the route deps closes the branch and makes the existing helper real. Same
+shape as the `agentDecomposerKind` harness gap in 5f: **the branch is unreachable
+by construction, so the honest move is to add the seam rather than bend a fixture
+into it.**
+
+_Meanwhile:_ `Provider "…" is not configured.` (`:222`) **is** now covered —
+2 mutations, both red — by replaying a genuine google flow against a server that
+has only github wired, same signing secret so state and PKCE cookie both still
+verify and only the provider lookup can fail. That models a provider being
+de-configured mid-flow, which is the deploy this branch exists for.
+
 #### 5j. NEW — the avatar upload's "invalid base64" branch is dead code
 
 Small, and recorded mainly because the investigation nearly produced a
