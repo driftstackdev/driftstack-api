@@ -12,6 +12,16 @@
 // registration paths now gate on it (`routes/account-me.ts`), and this file exists so the next
 // boolean feature added to the interface cannot repeat the omission silently.
 //
+// V-786 — and then it happened again, to the same flag, in the half this file could not see.
+// Counting call sites answers "is it enforced ANYWHERE". `vpnEgress` had two, so it read as done.
+// But both were on the path that CREATES a proxy, and a stored proxy outlives the tier that was
+// allowed to store it: an account that registered a VPN profile while paid and then downgraded to
+// free kept egressing through it, because nothing on the launch path looked and the tier-change
+// handler audits and emails without touching `account_proxies`. Enforced-on-write and
+// enforced-where-it-matters are different properties, and a call-site count cannot distinguish
+// them — the last case below asserts the second one directly, per feature, because there is no
+// derivation that can tell a create path from a use path by reading a call site.
+//
 // Deliberately derived, not a literal roster: the feature names come from the `TierFeatures`
 // interface and the enforcement sites from the server's own call sites, so adding a flag is
 // enough to bring it into scope.
@@ -93,6 +103,40 @@ describe('every boolean tier feature is enforced somewhere', () => {
       unenforced,
       'boolean tier feature(s) with no requireTierFeature / tierHasFeature site — gate them, or record them in UNENFORCED_BY_DESIGN with the reason no customer promise depends on the flag:',
     ).toEqual([]);
+  });
+
+  it('CRITICAL a feature that gates a STORED resource is enforced where the resource is USED, not only where it is created. This is the half a call-site count cannot see, and it is how vpnEgress broke twice: the create paths gated it, so the flag read as enforced, while every proxy registered before a downgrade stayed usable forever. Nothing about a call site says whether it runs at create time or at use time, so the required use-path site is named per feature.', () => {
+    /**
+     * Feature → the file that must enforce it on the USE path, and why the create-path
+     * check is not sufficient on its own. Only for features that gate a resource which
+     * outlives the request that created it.
+     */
+    const USE_PATH_ENFORCEMENT: Record<string, { file: string; because: string }> = {
+      vpnEgress: {
+        file: 'apps/server/src/services/account-proxies.ts',
+        because:
+          'resolveForDispatch is the single choke point that turns a stored account_proxies row ' +
+          'into a dispatchable egress config. A downgrade leaves the row in place, so a check ' +
+          'only at registration lapses the moment the tier changes.',
+      },
+    };
+
+    const missing = Object.entries(USE_PATH_ENFORCEMENT)
+      .filter(([feature, { file }]) => !(sites.get(feature) ?? []).includes(file))
+      .map(
+        ([feature, { file, because }]) =>
+          `${feature}: expected enforcement in ${file} — ${because}`,
+      );
+
+    expect(
+      missing,
+      'feature(s) gated only where the resource is created, so the entitlement lapses silently on downgrade:',
+    ).toEqual([]);
+
+    // Vacuity: the map is only meaningful while its features are real ones.
+    for (const feature of Object.keys(USE_PATH_ENFORCEMENT)) {
+      expect(features, `${feature} is still a boolean TierFeature`).toContain(feature);
+    }
   });
 
   it('CRITICAL the exemption list may only SHRINK — an entry that becomes enforced must leave it, and an entry naming a flag that no longer exists must go too.', () => {

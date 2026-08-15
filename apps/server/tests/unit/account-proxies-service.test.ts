@@ -47,6 +47,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = (await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
+      tier: 'api_builder',
     })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg).not.toBeNull();
     expect(cfg?.host).toBe('proxy.customer.example');
@@ -71,6 +72,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = (await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
+      tier: 'api_builder',
     })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg?.udp_capable).toBe(true);
   });
@@ -84,6 +86,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = (await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
+      tier: 'api_builder',
     })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg?.udp_capable).toBe(false);
   });
@@ -97,6 +100,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = (await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
+      tier: 'api_builder',
     })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg).not.toBeNull();
     expect(cfg?.udp_capable).toBeUndefined();
@@ -109,6 +113,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = (await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
+      tier: 'api_builder',
     })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg).not.toBeNull();
     expect(cfg?.udp_capable).toBeUndefined();
@@ -118,12 +123,16 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, MASTER);
     const row = await seed(repo, ACCT_A);
-    expect(await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_B })).toBeNull();
+    expect(
+      await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_B, tier: 'api_builder' }),
+    ).toBeNull();
   });
 
   it('unknown id → null', async () => {
     const svc = new AccountProxiesService(new InMemoryAccountProxiesRepo(), MASTER);
-    expect(await svc.resolveForDispatch({ proxyId: 'nope', accountId: ACCT_A })).toBeNull();
+    expect(
+      await svc.resolveForDispatch({ proxyId: 'nope', accountId: ACCT_A, tier: 'api_builder' }),
+    ).toBeNull();
   });
 
   it('SSRF FAIL-CLOSED: a stored private/loopback host throws UnsafeProxyHostError', async () => {
@@ -131,9 +140,9 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const svc = new AccountProxiesService(repo, MASTER);
     for (const host of ['127.0.0.1', '169.254.169.254', '10.0.0.5', 'localhost', '::1']) {
       const row = await seed(repo, ACCT_A, { host });
-      await expect(svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A })).rejects.toThrow(
-        UnsafeProxyHostError,
-      );
+      await expect(
+        svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A, tier: 'api_builder' }),
+      ).rejects.toThrow(UnsafeProxyHostError);
     }
   });
 
@@ -141,7 +150,9 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, MASTER);
     const row = await seed(repo, ACCT_A, { scheme: 'http' });
-    expect(await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A })).toBeNull();
+    expect(
+      await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A, tier: 'api_builder' }),
+    ).toBeNull();
   });
 
   it('no master key with a stored password fails closed', async () => {
@@ -151,6 +162,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
+      tier: 'api_builder',
     });
     expect(cfg).toBeNull();
   });
@@ -162,6 +174,7 @@ describe('AccountProxiesService.resolveForDispatch', () => {
     const cfg = (await svc.resolveForDispatch({
       proxyId: row.id,
       accountId: ACCT_A,
+      tier: 'api_builder',
     })) as (SocksProxyConfig & { udp_capable?: boolean | null }) | null;
     expect(cfg?.password).toBeUndefined();
     expect(cfg?.username).toBeUndefined();
@@ -193,7 +206,11 @@ describe('AccountProxiesService.resolveForDispatch', () => {
         address: '10.7.0.2/32',
       },
     });
-    const cfg = await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A });
+    const cfg = await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
     expect(cfg).toEqual({
       type: 'wireguard',
       private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
@@ -223,7 +240,11 @@ describe('AccountProxiesService.resolveForDispatch', () => {
       ),
       config: { username: 'u' },
     });
-    const cfg = await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A });
+    const cfg = await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
     expect(cfg).toEqual({
       type: 'openvpn',
       config_blob: 'client\nremote vpn.example.com 1194\n',
@@ -255,7 +276,9 @@ describe('AccountProxiesService.resolveForDispatch', () => {
         address: '10.7.0.2/32',
       },
     });
-    expect(await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_B })).toBeNull();
+    expect(
+      await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_B, tier: 'api_builder' }),
+    ).toBeNull();
   });
 });
 

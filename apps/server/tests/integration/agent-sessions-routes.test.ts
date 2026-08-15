@@ -8,6 +8,7 @@
 //      in-memory repo injected via the test helper): end-to-end
 //      decompose → execute → transcript flow exercised.
 
+import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROBLEM_TYPES, TIER_STORAGE_BYTES_CAP } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
@@ -308,6 +309,50 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.json<{ detail?: string }>().detail).toBe(
       'HTTP proxies are unsupported for browser sessions on this deployment — use a SOCKS5, OpenVPN, or WireGuard proxy.',
     );
+  });
+
+  it('V-786: create with a stored VPN proxy_id on a tier without vpnEgress → 403 at create, before any session row exists. The row is seeded directly because that is exactly how it arises in production: registration is gated, but a downgrade leaves the row in place and nothing on the tier-change path touches account_proxies.', async () => {
+    // free + a desktop device credential + mode:'manual' is the ONE reachable
+    // combination, and getting there took three corrections. `apiAccess` is false
+    // on free, so an ordinary API key 403s in the auth middleware; POST
+    // /v1/agent-sessions is on the free-desktop allowlist only for a `cli_device`
+    // credential; and every mode except 'manual' hits requireTierFeature(aiAgent)
+    // first. The first version of this case asserted 403 and passed on one of
+    // those OTHER refusals — green, and proving nothing about vpnEgress.
+    fx = await buildTestApp({
+      enableAgentRuntime: true,
+      tier: 'free',
+      keyProvenance: 'cli_device',
+    });
+    // Registered while paid, still present after the downgrade. Seeded through
+    // the repo rather than the route so the fixture reproduces the state rather
+    // than the (now-blocked) way of reaching it.
+    const stored = await fx.accountProxiesRepo.create(fx.accountId, {
+      id: randomUUID(),
+      label: 'kept after downgrade',
+      scheme: 'openvpn',
+      host: 'vpn.customer.example',
+      port: 1194,
+      username: null,
+      wrappedPassword: null,
+    });
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, mode: 'manual', proxy_id: stored.id },
+    });
+
+    expect(res.statusCode, 'refused at create, not at dispatch').toBe(403);
+    expect(
+      res.json<{ detail?: string }>().detail ?? '',
+      'refused for the VPN entitlement specifically — not for aiAgent or apiAccess, which would make this case green for the wrong reason',
+    ).toMatch(/vpn|VPN|OpenVPN|WireGuard|egress/);
+    expect(
+      await fx.agentSessionsRepo!.countActive(fx.accountId),
+      'and no session row was minted, so no phantom active slot',
+    ).toBe(0);
   });
 
   // ── #63 LIVE proxy pre-launch validation gate ─────────────────────────────

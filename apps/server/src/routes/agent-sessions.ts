@@ -105,7 +105,7 @@ import type {
   SessionCapabilityReport,
   SessionCapabilityReportStore,
 } from '../services/session-capability-report-store.js';
-import type { SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
+import type { AccountTier, SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
@@ -854,6 +854,19 @@ export async function dispatchSessionAssignOnCreate(args: {
   // create, the dispatch resolves it (owner-scoped unwrap + SSRF re-guard) and
   // injects it as the inlineProxyConfig instead of the operator default.
   proxyId?: string;
+  /**
+   * V-786 — the OWNER's tier for the vpnEgress check inside resolveForDispatch.
+   *
+   * REQUIRED, and that is the second version of this field. Making it optional
+   * and guarding the resolve on `ownerTier !== undefined` looked harmless and was
+   * strictly worse than the bug being fixed: a caller that forgot it would skip
+   * the whole proxy block and dispatch the session through the OPERATOR DEFAULT
+   * egress instead of the customer's proxy — silently, with the customer
+   * believing their proxy was in use. `agent-sessions-fleet-dispatch.test.ts`
+   * caught it in five cases. An unsuppliable argument is the point of the gate;
+   * a skippable one is a new way to fail open.
+   */
+  ownerTier: AccountTier;
   accountProxiesService?: AccountProxiesService;
   // #128 — the create-time proxy probe stashes the observed exit identity here
   // keyed by (accountId, proxyId); this dispatch reads it back to emit the
@@ -904,6 +917,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     profilesService,
     r2,
     proxyId,
+    ownerTier,
     accountProxiesService,
     exitIdentityCache,
     agentSessions,
@@ -1076,7 +1090,11 @@ export async function dispatchSessionAssignOnCreate(args: {
     // latter is the FLAT VPN wire for openvpn/wireguard — A3 W2163).
     let inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire = sessionDispatch.proxy;
     if (proxyId !== undefined && accountId !== undefined && accountProxiesService !== undefined) {
-      const resolved = await accountProxiesService.resolveForDispatch({ proxyId, accountId });
+      const resolved = await accountProxiesService.resolveForDispatch({
+        proxyId,
+        accountId,
+        tier: ownerTier,
+      });
       if (resolved === null) {
         // FAIL CLOSED: the customer explicitly requested their OWN proxy but it can't be
         // resolved (not found / non-dispatchable scheme / decrypt fail). Do NOT silently fall
@@ -1393,13 +1411,25 @@ export async function runProxyPrelaunchGate(args: {
   accountProxiesService: AccountProxiesService;
   proxyId: string;
   accountId: string;
+  /** V-786 — the OWNER's tier, threaded so resolveForDispatch can refuse a VPN
+   *  row an unentitled account still owns. Required, not optional: the point of
+   *  the gate is that a call site cannot omit it. */
+  tier: AccountTier;
   logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void };
   /** #128 — cache the probe's observed exit identity (keyed by accountId+proxyId) so
    *  the dispatch build can emit the exit_identity block for the box new-tab IP panel. */
   exitIdentityCache?: InMemoryExitIdentityCache;
 }): Promise<void> {
-  const { probe, enabled, accountProxiesService, proxyId, accountId, logger, exitIdentityCache } =
-    args;
+  const {
+    probe,
+    enabled,
+    accountProxiesService,
+    proxyId,
+    accountId,
+    tier,
+    logger,
+    exitIdentityCache,
+  } = args;
   if (probe === undefined || !enabled) return;
 
   // Resolve to the decrypted dispatch config (owner-scoped + SSRF re-guard).
@@ -1410,7 +1440,7 @@ export async function runProxyPrelaunchGate(args: {
   // active here, BLOCK at create with a clean 422 instead, so the founder gets an
   // honest, specific error before any window opens. `unreachable` is the closest
   // reason (the proxy can't be used right now); the detail spells it out.
-  const resolved = await accountProxiesService.resolveForDispatch({ proxyId, accountId });
+  const resolved = await accountProxiesService.resolveForDispatch({ proxyId, accountId, tier });
   if (resolved === null) {
     logger?.warn(
       { component: 'proxy-prelaunch-probe', proxyId },
@@ -1999,6 +2029,24 @@ export function registerAgentSessionsRoutes(
             'HTTP proxies are unsupported for browser sessions on this deployment — use a SOCKS5, OpenVPN, or WireGuard proxy.',
           );
         }
+        // V-786 — refuse a VPN row the OWNER's tier is no longer entitled to, at
+        // CREATE, so no session row and no worker spin-up happen first.
+        //
+        // `vpnEgress` was gated only where a proxy is REGISTERED (account-me POST
+        // + PUT). A stored proxy outlives the tier that was allowed to store it:
+        // an account that registered an OpenVPN or WireGuard profile while paid
+        // and then downgraded to free kept egressing through it, because nothing
+        // on the launch path looked and `handleTierChanged` audits and emails
+        // without touching account_proxies. Rows predating the registration gate
+        // were in the same position.
+        //
+        // The OWNER's tier, not the caller's: a team admin launching on the
+        // owner's behalf runs against the owner's entitlements, exactly as the
+        // rest of this create scopes to the owner. resolveForDispatch enforces
+        // the same rule again at the choke point — this one is for the clean 403.
+        if (owned.scheme === 'openvpn' || owned.scheme === 'wireguard') {
+          requireTierFeature(ownerTier, 'vpnEgress');
+        }
         // NOTE: the LIVE pre-launch probe is deliberately NOT run here. It runs
         // AFTER the idempotency replay short-circuit below, so a retry of an
         // already-succeeded create replays the cached 201 instead of re-probing
@@ -2122,6 +2170,7 @@ export function registerAgentSessionsRoutes(
         parsed.data.skip_proxy_probe !== true
       ) {
         await runProxyPrelaunchGate({
+          tier: ownerTier,
           probe: proxyConnectivityProbe,
           enabled: proxyPrelaunchProbeEnabled,
           accountProxiesService,
@@ -2310,6 +2359,7 @@ export function registerAgentSessionsRoutes(
         // region fix — otherwise the token could point at the region-nearest box
         // while the publisher landed on an online sibling → black screen).
         await dispatchSessionAssignOnCreate({
+          ownerTier,
           sessionId: created.id,
           fleetControlRegistry,
           fleetNodesRepo,

@@ -4,11 +4,12 @@
 // Encapsulates the two sensitive operations (cross-account decrypt + SSRF) in
 // one tested place, used by the agent-session dispatch.
 
-import type { InlineVpnProxyWire, SocksProxyConfig } from '@driftstack/api-types';
+import type { AccountTier, InlineVpnProxyWire, SocksProxyConfig } from '@driftstack/api-types';
 import { InlineVpnProxyWireSchema } from '@driftstack/api-types';
 import type { AccountProxiesRepo, AccountProxyRow } from '../db/account-proxies-repo.js';
 import { readAccountProxySecret } from '../lib/account-proxy-secret-encryption.js';
 import { classifyUnsafeHost, classifyUnsafeVpnTargets } from '../lib/webhook-target-guard.js';
+import { requireTierFeature } from '../lib/errors-helpers.js';
 
 /** Thrown when a stored proxy's host resolves to an internal-reachable address
  *  at dispatch time (defense-in-depth; the host is also guarded at create). The
@@ -67,6 +68,23 @@ export class AccountProxiesService {
   async resolveForDispatch(args: {
     proxyId: string;
     accountId: string;
+    /**
+     * V-786 — the OWNER account's tier, required rather than optional so a new
+     * call site cannot resolve an egress config without stating one.
+     *
+     * `vpnEgress` used to be checked only where a proxy is REGISTERED
+     * (`routes/account-me.ts` POST + PUT). A stored proxy outlives the tier that
+     * was allowed to store it: an account that registered an OpenVPN or
+     * WireGuard profile while paid and then downgraded to free kept egressing
+     * through it indefinitely, because nothing on the launch path looked, and
+     * `handleTierChanged` audits and emails without touching `account_proxies`.
+     * Rows predating the registration gate were in the same position.
+     *
+     * Enforced HERE because this is the single choke point that turns a stored
+     * row into a dispatchable egress config. A check on the create route alone
+     * is a check on one call site, which is the shape of the bug being fixed.
+     */
+    tier: AccountTier;
   }): Promise<(SocksProxyConfig & { udp_capable?: boolean | null }) | InlineVpnProxyWire | null> {
     const row = await this.repo.findById({ id: args.proxyId, accountId: args.accountId });
     if (row === null) return null;
@@ -77,6 +95,11 @@ export class AccountProxiesService {
     if (unsafe !== null) throw new UnsafeProxyHostError(unsafe);
 
     if (row.scheme === 'openvpn' || row.scheme === 'wireguard') {
+      // Throws ForbiddenError. Both launch call sites are fail-closed on a throw
+      // (the dispatch's outer wrapper skips the dispatch; the pre-launch gate
+      // surfaces it), so an unentitled account cannot egress through this row
+      // even if the create-time check is ever bypassed or removed.
+      requireTierFeature(args.tier, 'vpnEgress');
       return this.resolveVpnForDispatch(row, args.accountId);
     }
     if (row.scheme !== 'socks5') return null; // http isn't an inline-dispatch target

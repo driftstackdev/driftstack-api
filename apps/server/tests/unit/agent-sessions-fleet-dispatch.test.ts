@@ -86,6 +86,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const log = logger();
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_demo1',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -122,6 +123,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_override',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -141,6 +143,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_fallback',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -159,6 +162,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_geo',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -177,6 +181,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_nogeo',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -194,6 +199,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_idle',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -212,6 +218,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_noidle',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -229,6 +236,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_failclosed',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -261,6 +269,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     } as unknown as InstanceType<typeof InMemoryAgentSessionsRepo>;
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_failclosed_close',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -295,6 +304,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     } as unknown as InstanceType<typeof InMemoryAgentSessionsRepo>;
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_ssrf_close',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -338,6 +348,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     } as unknown as DrizzleFleetNodesRepo;
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_eu1',
       fleetControlRegistry: registry,
       fleetNodesRepo: regionalRepo,
@@ -369,6 +380,7 @@ describe('dispatchSessionAssignOnCreate', () => {
         Promise.resolve(region === 'apac' ? usNode : usNode),
     } as unknown as DrizzleFleetNodesRepo;
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_apac1',
       fleetControlRegistry: registry,
       fleetNodesRepo: regionalRepo,
@@ -392,6 +404,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       nodeId: 'mac-macstadium-us-001',
     });
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(mac),
@@ -411,6 +424,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const agentSessions = new InMemoryAgentSessionsRepo();
     const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -433,6 +447,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     vi.spyOn(agentSessions, 'setNodeId').mockRejectedValueOnce(new Error('db down'));
     await expect(
       dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: created.id,
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -467,6 +482,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     });
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -497,6 +513,7 @@ describe('dispatchSessionAssignOnCreate', () => {
         closeWithReason: () => new Promise(() => {}),
       } as unknown as InMemoryAgentSessionsRepo;
       const pending = dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: 'agt_owner_close_hangs',
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -533,6 +550,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     } as unknown as InMemoryAgentSessionsRepo;
     await expect(
       dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: 'agt_deleted_mid_dispatch',
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -557,6 +575,7 @@ describe('dispatchSessionAssignOnCreate', () => {
 
     await expect(
       dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: created.id,
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -592,6 +611,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       nodeId: 'mac-macstadium-us-001',
     });
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_byid',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(mac),
@@ -613,6 +633,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       getProfileDek: () => Promise.resolve(dek),
     } as unknown as ProfilesService;
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_p1',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -644,6 +665,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       presignPut: vi.fn().mockResolvedValue('https://r2/put'),
     } as unknown as R2;
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_p3',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -681,6 +703,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       presignPut: vi.fn().mockRejectedValue(new Error('r2 down')),
     } as unknown as R2;
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_p4',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -708,6 +731,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       getProfileDek: () => Promise.resolve(null),
     } as unknown as ProfilesService;
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_p2',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -735,6 +759,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       getProfileDek: () => Promise.resolve(null),
     } as unknown as ProfilesService;
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_arch1',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -756,6 +781,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_arch2',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -782,6 +808,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     } as unknown as ProfilesService;
     await expect(
       dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: 'agt_arch3',
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -805,6 +832,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry(); // node never registered
     const log = logger();
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_demo2',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -830,6 +858,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const sent: string[] = [];
     registry.register('some-other-node', (d) => sent.push(d)); // a DIFFERENT node is up
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_no_live_node',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()), // resolves NODE_ID, which is NOT registered
@@ -872,6 +901,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       },
     } as unknown as DrizzleFleetNodesRepo;
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: candidateRepo,
@@ -915,6 +945,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       listWithLivekitNearest: () => Promise.resolve([a, b]),
     } as unknown as DrizzleFleetNodesRepo;
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_all_offline',
       fleetControlRegistry: registry,
       fleetNodesRepo: candidateRepo,
@@ -930,6 +961,7 @@ describe('dispatchSessionAssignOnCreate', () => {
   it('is a no-op (does not even touch the fleet repo) when the registry is unwired (prod)', async () => {
     const spy = vi.fn();
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_demo3',
       fleetControlRegistry: undefined,
       fleetNodesRepo: repoReturning(macWithLivekit(), spy),
@@ -947,6 +979,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const agentSessions = new InMemoryAgentSessionsRepo();
     const created = await agentSessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(null),
@@ -973,6 +1006,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     badMac.livekit.apiSecretCiphertextBase64 = 'not-valid-ciphertext';
     await expect(
       dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: 'agt_demo5',
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(badMac),
@@ -1010,6 +1044,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     cache.set('acc_1', 'prx_1', EXIT);
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_exit1',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -1051,6 +1086,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     cache.set('acc_1', 'prx_1', EXIT);
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_exit2',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -1081,6 +1117,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     cache.set('acc_1', 'prx_vpn', EXIT);
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_exit3',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -1111,6 +1148,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const cache = new InMemoryExitIdentityCache(); // empty
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_exit4',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -1142,6 +1180,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     cache.set('acc_1', 'prx_1', EXIT);
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: 'agt_exit5',
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -1167,6 +1206,7 @@ describe('dispatchSessionAssignOnCreate', () => {
 
     await expect(
       dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: created.id,
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(badMac),
@@ -1198,6 +1238,7 @@ describe('dispatchSessionAssignOnCreate', () => {
 
     await expect(
       dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: created.id,
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -1234,6 +1275,7 @@ describe('dispatchSessionAssignOnCreate', () => {
 
     await expect(
       dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: created.id,
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -1264,6 +1306,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const created = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -1304,6 +1347,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     });
 
     await dispatchSessionAssignOnCreate({
+      ownerTier: 'api_builder',
       sessionId: created.id,
       fleetControlRegistry: registry,
       fleetNodesRepo: repoReturning(macWithLivekit()),
@@ -1338,6 +1382,7 @@ describe('dispatchSessionAssignOnCreate', () => {
 
     await expect(
       dispatchSessionAssignOnCreate({
+        ownerTier: 'api_builder',
         sessionId: 'agt_close_store_down',
         fleetControlRegistry: registry,
         fleetNodesRepo: repoReturning(macWithLivekit()),

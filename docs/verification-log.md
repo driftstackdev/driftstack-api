@@ -34104,3 +34104,57 @@ removing the seed reds it with the parked session unknown to the tracker; seedin
 reds the selection cases.
 
 Sixth of seven findings from the concurrency/recovery sweep. `EXPECTED_TEST_FILES` 2728 → 2730.
+
+## V-786 — the VPN entitlement was checked where a proxy is stored, never where it is used (2026-08-15)
+
+`TIER_FEATURES.vpnEgress` is a published claim: `select-tier.astro` paints the pricing table's
+Access column straight from it, and the flag's own comment says "`false` on free (SOCKS5 proxy
+only)". It was enforced in exactly two places, `routes/account-me.ts` POST and PUT — both on the
+path that **registers** a proxy.
+
+A stored proxy outlives the tier that was allowed to store it. `handleTierChanged` writes an audit
+row and sends an email; it touches nothing in `account_proxies`, and no code anywhere deletes or
+disables a proxy on downgrade. So an account that registered an OpenVPN or WireGuard profile while
+paid and then dropped to free kept egressing through it, indefinitely. Rows predating the
+registration gate were in the same position.
+
+**The reachable path took three corrections to establish, and the first version of the test was
+green for the wrong reason.** `apiAccess` is false on free, so an ordinary API key is refused in the
+auth middleware; `POST /v1/agent-sessions` is on the free-desktop allowlist only for a `cli_device`
+credential; and `requireTierFeature(ownerTier, 'aiAgent')` fires for every mode except `manual`. My
+first case asserted 403 and passed — on one of those _other_ refusals. Removing the fix left it
+green, which I initially read as "the pre-launch probe must be producing the 403" and then as "the
+check may be dead code". Both were wrong. The truth came from making the assertion print the status
+it actually got. With `tier: 'free'`, `keyProvenance: 'cli_device'`, `mode: 'manual'` — which is
+precisely the free desktop product's own launch path — removing the fix returns **201**. The
+exposure was real and the gate is load-bearing.
+
+Fixed in two places, deliberately:
+
+- `AccountProxiesService.resolveForDispatch` now takes a **required** `tier` and refuses a VPN row
+  the tier lacks. This is the load-bearing half: it is the single choke point that turns a stored
+  row into a dispatchable egress config, and making the argument required means a future call site
+  cannot resolve an egress config without stating a tier. TypeScript found both existing call sites
+  immediately.
+- The create route refuses with a clean 403 before any session row exists, on the **owner's** tier
+  (a team admin launching on the owner's behalf runs against the owner's entitlements).
+
+**A mistake worth recording: my first version of the threading was worse than the bug.** I made
+`ownerTier` optional on `dispatchSessionAssignOnCreate` and guarded the resolve on
+`ownerTier !== undefined`. A caller that forgot it would then skip the whole proxy block and
+dispatch through the OPERATOR DEFAULT egress while the customer believed their proxy was in use —
+silently. `agent-sessions-fleet-dispatch.test.ts` failed five cases and caught it. An unsuppliable
+argument is the point; a skippable one is a new way to fail open.
+
+**Why the existing guard could not see this.** `every-boolean-tier-feature-is-enforced.test.ts` asks
+whether each flag is enforced ANYWHERE and counts a call site as the answer. `vpnEgress` had two, so
+it read as enforced — the file's own header even names it as the flag it was written for. But
+"gated where the resource is created" and "gated where it is used" are different properties, and
+nothing about a call site says which one it is. A new case names, per feature, the file that must
+enforce it on the use path, for features gating a resource that outlives its request. Mutation:
+dropping the service-side check reds it with the feature listed.
+
+Sixteen `resolveForDispatch` / `runProxyPrelaunchGate` / `dispatchSessionAssignOnCreate` test call
+sites updated (7 + 7 + 10 + 45 across four files); all mechanical, all forced by the type checker.
+
+`EXPECTED_TEST_FILES` 2730 → 2731.

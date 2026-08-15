@@ -54,6 +54,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     const log = logger();
     await expect(
       runProxyPrelaunchGate({
+        tier: 'api_builder',
         probe,
         enabled: true,
         accountProxiesService: service,
@@ -72,6 +73,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     const { service } = makeService(null);
     try {
       await runProxyPrelaunchGate({
+        tier: 'api_builder',
         probe,
         enabled: true,
         accountProxiesService: service,
@@ -92,6 +94,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     const { service, resolveFn } = makeService(null);
     await expect(
       runProxyPrelaunchGate({
+        tier: 'api_builder',
         probe: undefined,
         enabled: true,
         accountProxiesService: service,
@@ -109,6 +112,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     const { service, resolveFn } = makeService(null);
     await expect(
       runProxyPrelaunchGate({
+        tier: 'api_builder',
         probe,
         enabled: false,
         accountProxiesService: service,
@@ -125,6 +129,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     const { service } = makeService({ type: 'wireguard' });
     await expect(
       runProxyPrelaunchGate({
+        tier: 'api_builder',
         probe,
         enabled: true,
         accountProxiesService: service,
@@ -141,6 +146,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     const { service } = makeService({ host: '203.0.113.7', port: 1080 });
     await expect(
       runProxyPrelaunchGate({
+        tier: 'api_builder',
         probe,
         enabled: true,
         accountProxiesService: service,
@@ -161,6 +167,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     const { service } = makeService({ host: '203.0.113.7', port: 1080 });
     const cache = new InMemoryExitIdentityCache();
     await runProxyPrelaunchGate({
+      tier: 'api_builder',
       probe,
       enabled: true,
       accountProxiesService: service,
@@ -177,6 +184,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     const { service } = makeService({ host: '203.0.113.7', port: 1080 });
     const cache = new InMemoryExitIdentityCache();
     await runProxyPrelaunchGate({
+      tier: 'api_builder',
       probe,
       enabled: true,
       accountProxiesService: service,
@@ -198,6 +206,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     const cache = new InMemoryExitIdentityCache();
     await expect(
       runProxyPrelaunchGate({
+        tier: 'api_builder',
         probe,
         enabled: true,
         accountProxiesService: service,
@@ -222,6 +231,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
 
     try {
       await runProxyPrelaunchGate({
+        tier: 'api_builder',
         probe,
         enabled: true,
         accountProxiesService: service,
