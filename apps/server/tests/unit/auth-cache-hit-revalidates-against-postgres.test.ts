@@ -28,6 +28,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { authenticate } from '../../src/services/auth.js';
+import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../src/lib/api-keys.js';
 import {
   ExpiredKeyError,
   ForbiddenError,
@@ -335,5 +336,153 @@ describe('an API-key cache hit is re-validated against Postgres too', () => {
     await expect(authWithKey({ liveAccountId: OTHER_ACCOUNT_ID })).rejects.toBeInstanceOf(
       InvalidKeyError,
     );
+  });
+});
+
+// ─── the WRITE side: re-validated again before anything is cached ───────────
+//
+// Everything above is the cache HIT path. A slow-path authentication has a
+// second, separate re-validation: after scrypt succeeds and before the context
+// is written to the cache, the credential is re-read and re-checked. Four of
+// those refusals had never executed — measured by neutralizing each against 593
+// tests across the auth, team and account-organization sets.
+//
+// ⚠️ The window this closes is real and is created by the verification itself.
+// scrypt is deliberately slow, so there is a ~100ms gap between "the key looked
+// valid" and "the context is cached". A revoke committing inside that gap has
+// already invalidated a cache generation that did not exist yet, so nothing
+// evicts the entry that is about to be written — and the revoked key then
+// authenticates from cache for the whole TTL. The re-read is the only thing
+// standing in that window, and it is why the source captures the generations
+// BEFORE the recheck rather than after.
+//
+// These are separate lines from the hit-path checks above, in a separate branch,
+// on the same rules. Sibling copies again.
+//
+// LEDGER — control 20/20:
+//
+//   :558 identity/hash recheck neutralized    2 red
+//   :560 revoked recheck neutralized          1 red
+//   :562 expiry recheck neutralized           1 red
+//   :667 session-branch recheck neutralized   1 red
+//   the whole capture block skipped           4 red
+//
+// The last row is the one that justifies capturing the cache generations BEFORE
+// the recheck rather than after: skipping the block entirely reds every key-path
+// arm, so the block is load-bearing as a unit and not just line by line.
+describe('a credential revoked DURING verification is not written to the cache', () => {
+  const ENV = 'test' as const;
+
+  /**
+   * A slow-path fixture: the cache MISSES (so verification actually runs), then
+   * `findApiKeyByPrefix` answers differently the second time — which is exactly
+   * what a revoke landing mid-verify looks like from here.
+   */
+  async function authWithRevalidation(second: 'missing' | 'rotated' | 'revoked' | 'expired') {
+    const plaintext = generateApiKey(ENV);
+    const keyHash = await hashApiKey(plaintext);
+    const prefix = keyPrefixFromPlaintext(plaintext);
+    const live = {
+      id: KEY_ID,
+      accountId: ACCOUNT_ID,
+      keyPrefix: prefix,
+      keyHash,
+      scopes: [],
+      revokedAt: null,
+      expiresAt: FUTURE,
+    };
+    let call = 0;
+    const repo = {
+      findApiKeyByPrefix: () => {
+        call += 1;
+        if (call === 1) return Promise.resolve(live);
+        if (second === 'missing') return Promise.resolve(null);
+        if (second === 'rotated') return Promise.resolve({ ...live, keyHash: 'hash_rotated' });
+        if (second === 'revoked') return Promise.resolve({ ...live, revokedAt: NOW });
+        return Promise.resolve({ ...live, expiresAt: PAST });
+      },
+      getAccount: () =>
+        Promise.resolve({
+          id: ACCOUNT_ID,
+          email: 'a@example.test',
+          status: 'active',
+          tier: 'free',
+        }),
+      findTeamMemberships: () => Promise.resolve([]),
+      findActiveRateLimitOverrides: () => Promise.resolve([]),
+      touchApiKeyLastUsed: () => Promise.resolve(),
+    };
+    const cache = {
+      get: () => Promise.resolve(null),
+      set: () => Promise.resolve(),
+      captureVersions: () => Promise.resolve({ accountVersion: 1, keyVersion: 1 }),
+    };
+    return authenticate(repo as never, plaintext, cache as never, NOW);
+  }
+
+  it('CRITICAL the key ROW vanishing between verify and cache-write is refused. Deleting a key and revoking it are different paths, and a row that disappears mid-verify would otherwise be cached as the valid credential it looked like 100ms earlier.', async () => {
+    await expect(authWithRevalidation('missing')).rejects.toBeInstanceOf(InvalidKeyError);
+  });
+
+  it('CRITICAL the key being ROTATED mid-verify is refused, because the hash no longer matches what scrypt just accepted. Without this the SUPERSEDED secret is cached as valid and keeps working for the TTL after its successor was issued.', async () => {
+    await expect(authWithRevalidation('rotated')).rejects.toBeInstanceOf(InvalidKeyError);
+  });
+
+  it('CRITICAL a revoke committing mid-verify is refused as Revoked, not merely invalid — this is the exact race the recheck exists for, and the distinct error is what tells the caller the credential was withdrawn rather than never valid.', async () => {
+    await expect(authWithRevalidation('revoked')).rejects.toBeInstanceOf(RevokedKeyError);
+  });
+
+  it('CRITICAL an expiry that lapses mid-verify is refused as Expired. Expiry is clock-bound and commits no mutation at all, so no invalidation is ever published for it and this re-read is the only observer.', async () => {
+    await expect(authWithRevalidation('expired')).rejects.toBeInstanceOf(ExpiredKeyError);
+  });
+
+  // The web-session branch carries the SAME pre-cache-write recheck, and it was
+  // uncovered for the same reason all day: its sibling is not the same line.
+  // Adding the key-path arms above without this one would repeat exactly the
+  // mistake they were written to correct.
+  //
+  // The window is narrower here — a session lookup is a hash read, not scrypt —
+  // but the recheck exists because the session row can still be revoked between
+  // the lookup and the cache write, and the entry about to be written would
+  // outlive the revocation by a full TTL.
+  it('CRITICAL a web session revoked between lookup and cache-write is refused, from the session branch of the same recheck', async () => {
+    const plaintext = 'a'.repeat(48); // no `ds_` prefix ⇒ the web-session path
+    const live = {
+      id: SESSION_ID,
+      accountId: ACCOUNT_ID,
+      expiresAt: FUTURE,
+      revokedAt: null,
+      lastUsedAt: null,
+      mfaSatisfiedAt: null,
+      createdAt: NOW,
+    };
+    let call = 0;
+    const repo = {
+      findApiKeyByPrefix: () => Promise.resolve(null),
+      findActiveWebSession: () => {
+        call += 1;
+        // The second read is the one the recheck makes; a revoked session is
+        // filtered by the query itself, so it comes back as nothing.
+        return Promise.resolve(call === 1 ? live : null);
+      },
+      touchWebSessionLastUsed: () => Promise.resolve(),
+      getAccount: () =>
+        Promise.resolve({
+          id: ACCOUNT_ID,
+          email: 'a@example.test',
+          status: 'active',
+          tier: 'free',
+        }),
+      findTeamMemberships: () => Promise.resolve([]),
+      findActiveRateLimitOverrides: () => Promise.resolve([]),
+    };
+    const cache = {
+      get: () => Promise.resolve(null),
+      set: () => Promise.resolve(),
+      captureVersions: () => Promise.resolve({ accountVersion: 1, keyVersion: 1 }),
+    };
+    await expect(
+      authenticate(repo as never, plaintext, cache as never, NOW),
+    ).rejects.toBeInstanceOf(InvalidKeyError);
   });
 });
