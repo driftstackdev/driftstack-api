@@ -71,3 +71,56 @@ describe('GET /v1/admin/api-keys', () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+// ─── the OTHER prefixed-id parser design, and why this arm exists ──────────
+//
+// Two designs for one rule live in this codebase, and the census grouped them
+// together because their conditions normalise alike:
+//
+//   A  `PROFILE_ID_RE = /^prof_(<uuid>)$/`   — the prefix is IN the regex.
+//      A wrong prefix simply does not match. There is no separate clause, so
+//      there is nothing to drop. Used by routes/profiles.ts and routes/team.ts.
+//
+//   B  `PUBLIC_ID_RE = /^[a-z]{3}_(<uuid>)$/` plus
+//      `value.startsWith(`${expectedPrefix}_`)` — the regex deliberately accepts
+//      ANY three-letter prefix, so correctness rests on the second condition.
+//      Used by the admin routes (and, until it was covered, routes/webhooks.ts).
+//
+// ⚠️ Measured: dropping the clause from routes/admin.ts and from this file left
+// the admin + profiles + team integration set (481 tests) entirely green. Design
+// B carries a failure mode Design A cannot have, and at these sites nothing was
+// watching it.
+//
+// Here that means an `acc_` filter is the only thing keeping this staff listing
+// scoped to an ACCOUNT id. A `key_<uuid>` accepted in its place is a uuid that
+// exists — it addresses an api-key row — so the query is not malformed, it is
+// pointed at the wrong table's identifier.
+//
+// LEDGER — control 5/5:
+//
+//   prefix clause dropped                     1 red
+//   prefix compared to the value's own slice  1 red
+describe('admin api-key listing checks the id PREFIX, not just the shape', () => {
+  const UUID = '00000000-0000-4000-8000-0000000000b1';
+
+  it('CRITICAL 400 when account_id carries a non-acc prefix. The regex accepts any three-letter prefix, so this clause is the only thing tying the filter to an account id.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/api-keys?account_id=key_${UUID}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/Expected "acc_<uuid>"/);
+  });
+
+  it('the SAME uuid under the acc_ prefix is accepted, so the refusal above is the prefix and not the uuid', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/api-keys?account_id=acc_${UUID}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+  });
+});
