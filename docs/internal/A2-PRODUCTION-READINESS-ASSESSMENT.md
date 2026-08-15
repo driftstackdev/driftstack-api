@@ -2805,3 +2805,101 @@ than lost with the file:
    adjacent-pair scan reports ONE inversion; drizzle compares against the running
    maximum, so the real skippable set is 36 entries, 35 of them carrying real SQL.
    The existing guard already uses the correct semantics.
+
+## 6c — the byte-vs-character ceiling on payment-provider responses
+
+Changed how work is picked, after two re-derivations in a day. Instead of
+hypothesising a gap and discovering prior art, enumerate the modules the test
+corpus does not reference **at all** — a question that cannot be re-derived.
+
+Census over `apps/server/src` and the workspace packages: 52 modules that no test
+imports. 49 of those are named somewhere (routes, which integration tests exercise
+over HTTP rather than by import — expected, not a gap). **Three are named
+nowhere**: `scripts/seed-local-fleet-node.ts` (a dev seed), `lib/hijacked-reply.ts`
+and `lib/bounded-response-body.ts`.
+
+`hijacked-reply.ts` turned out to be covered — 8 test files exercise the hijack
+concept including a dedicated `every-hijacked-stream-forwards-the-pipeline-headers`,
+they just reach it through the routes rather than by filename. Established by an
+exhaustive prior-art search BEFORE building anything, which is the fix for the two
+re-derivations.
+
+### `lib/bounded-response-body.ts` — a real gap, in the money path
+
+Used by `stripe-api.ts`, `nowpayments-api.ts` and the OAuth client exchange: two
+payment providers and an identity provider, none of them under our control. Its
+two refusals are covered through those callers — mutating either reds 2 tests. Its
+headline documented property was not:
+
+> "The limit is measured in wire bytes, not UTF-16 string length, so multi-byte
+> input cannot evade the ceiling."
+
+**Measured before writing anything.** Rewriting the loop to count UTF-16 units
+after appending — behaviourally identical for ASCII, which is all the existing
+fixtures use — **passed all 46 tests across the three caller suites**. The stated
+defence could be deleted and nothing would notice.
+
+It matters because the two counts diverge in the sender's favour: a UTF-8
+character costs up to 4 wire bytes and as little as one UTF-16 unit, so a body
+counted in string length carries several times the intended bytes. `é` is the
+cheapest demonstration at 2:1 — 60 of them are 60 string units and 120 bytes, so a
+100-byte ceiling counted wrongly accepts them.
+
+Six arms, and they also pin two behaviours no refusal sweep can ever reach because
+neither throws: the empty-body early return (a 204 or HEAD is not a violation) and
+the streaming decoder that reassembles a character split across chunk boundaries —
+the thing that makes byte-counting safe to combine with text output.
+
+Ledger, control 6: UTF-16 counting reds 1 (the arm that closes the gap), dropping
+the decoder's `stream: true` reds 1, neutralising the empty-body return reds 1,
+neutralising the declared-content-length refusal reds 1.
+
+⚠️ The empty-body probe first reported 0 red and was a BROKEN probe, not a finding
+— the perl pattern did not match the line, so nothing was mutated. Re-run with an
+assertion that the substitution applied, it reds correctly. An unverified mutation
+that reds nothing is indistinguishable from a real gap; the probe script now
+asserts its own anchor.
+
+### Census calibration (this instrument, like the last one, needed correcting)
+
+Two systematic errors in the "no test imports this" check, found by verifying its
+output rather than trusting it:
+
+1. **Workspace packages are imported by NAME**, not by file path —
+   `import { … } from '@driftstack/api-types'`. The check looked for `/<stem>.js'`,
+   so every module under `packages/*/src` reads as un-imported. All the
+   `api-types`, `recipe-library` and `behavioural-simulation` entries in the 49
+   are false positives.
+2. **The path form is not always single-quoted**, so at least one server module
+   (`services/oauth-client.ts`, imported by 1 test) was misfiled too.
+
+What survives both corrections and is worth the next pass: **`db/audit-archive-repo.ts`**
+— 199 lines, imported by 0 tests, named by 4. That is the shape the admin-accounts
+repo had before item 5e: a repo whose SQL nothing executes under vitest, where a
+parity pin freezes the text of a query nobody has run. Named here rather than
+started, so it is not lost.
+
+### `db/audit-archive-repo.ts` — unwired ON PURPOSE; do not "fix" it
+
+Followed the surviving candidate far enough to be sure, and the answer inverts the
+action. `DrizzleArchiveTableRepo` and `DrizzleArchiveLedgerRepo` appear nowhere
+outside their own file — nothing in `bootstrap.ts` constructs them, no job type
+registers them, and A3's new daily-maintenance sweeps do not include them. The
+service above them (`services/audit-archive.ts`) is tested against fakes, and the
+`audit_archive_runs` ledger table exists in the schema.
+
+That reads exactly like the webhook-delivery finding from earlier in this session —
+"the API enqueues but no prod driver runs it" — and the obvious next move would be
+to wire it up.
+
+⛔ **It would be wrong.** `docs/adr/ADR-006-audit-log-retention-export.md` is
+**Status: Proposed (pending founder review)**. The policy it describes archives
+audit rows to R2 and then **DELETEs them from Postgres** on a monthly sweep across
+four audit-shaped tables. Wiring the repo would enact an unapproved retention
+policy whose main effect is deleting audit data. The implementation is staged
+ahead of the decision, which is a reasonable place for it to sit.
+
+What IS true and worth stating without acting on it: while ADR-006 stays Proposed,
+those four tables have no retention at all and grow without bound —
+`webhook_deliveries` fastest. That is a decision waiting on review, not a defect to
+patch, and it belongs in the review rather than in a commit of mine.
