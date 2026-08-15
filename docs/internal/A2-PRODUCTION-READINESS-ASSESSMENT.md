@@ -1470,11 +1470,33 @@ reads source text or an SDK export list — content-parity, cross-source-invaria
 error-taxonomy. **Extensively pinned, never executed.** Text pins over a security
 gate are the most reassuring possible way to not test it.
 
-_Recommendation:_ work the `services/auth.ts` cluster next — those are the
-rejections that decide whether an expired or revoked credential is accepted, and
-they are the highest-consequence entries on the list. The
-`'Owner account no longer exists.'` group is genuinely hard to reach and may be
-better served by a note than a fixture.
+**Progress: 31 → 26 → 23 never executed.** Closed so far — the MFA step-up gate's
+two refusals, the auth-cache re-validation cluster, the API-key rotation-race
+re-read, and the rate-limiter's unauthenticated-route guard.
+
+**RESOLVED: the `'Owner account no longer exists.'` group (8 of the remaining 23)
+gets a note, not fixtures — and here is the evidence rather than the assertion.**
+
+The branch sits on the effective-account path: a team member acts for an owner,
+the route re-reads that owner with `authRepo.getAccount(eff)`, and refuses if the
+row is gone. For it to fire, the owner's account must vanish while the membership
+that authorises the header still resolves. It cannot:
+`team_members.owner_account_id` is **`onDelete: 'cascade'`**, so hard-deleting an
+owner removes the membership rows, and `resolveEffectiveAccount` validates the
+header against the memberships loaded at authentication.
+
+So the branch is reachable **only** in an intra-request race — the owner is hard
+deleted after authentication loaded the caller's teams and before the route
+re-reads the account. That is a real window and the check is correct defensive
+code, but it is not reachable from the public surface without injecting the race,
+and eight identical fixtures that each mock `getAccount` to return null would
+prove the `if` statement works rather than that the system does.
+
+_Recommendation for the remaining 15:_ they are singles across `routes/admin.ts`,
+`agent-sessions`, `profiles`, `profile-snapshots`, `oauth`, `sessions` and
+`auth.ts`. None forms a cluster with a shared mechanism, so the yield per fixture
+is much lower than the four clusters already closed. Worth taking opportunistically
+when touching those files rather than as a sweep.
 
 _Method note, since it generalises:_ file-level coverage cannot find these. The
 check is an intersection of "lines matching the deny pattern" with "statements
