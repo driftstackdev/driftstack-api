@@ -3120,3 +3120,80 @@ capitalises `generatePinchGesture`, and a ledger run against
 all-UNNOTICED column because this package keeps that file at `tests/`. The empty
 control line is what caught the second one — a ledger without a printed control is
 not evidence.
+
+## 6f — unbounded metric label cardinality, enforced instead of merely documented
+
+Yesterday's instrument fix pointed at a class rather than a file: my ledger had
+been blind to guards whose removal exhausts memory, which made allocation and DoS
+bounds the LEAST reliably measured and the most consequential in production — an
+OOM is an outage, not a 400. So this fire swept that class deliberately.
+
+Census of input-driven allocations and loops: 34 modules, 16 carrying a `MAX_`
+bound and 18 carrying none. Three of the unbounded ones were worth following, and
+two of them needed nothing:
+
+- **`sdk-typescript/src/pagination.ts`** — a bare `while (true)` auto-paginator.
+  Already guarded both ways: `next_cursor === null` returns, and a repeated cursor
+  throws rather than spinning. Covered — and the ledger classified it correctly
+  only because of yesterday's fix, since removing that guard **hangs the runner**.
+  A real case validating the repair.
+- **`sdk-typescript/src/webhook-signature.ts`** — 8 allocation/loop sites and no
+  bound, but each is proportional to input the caller already holds, so there is no
+  new exposure. Its security-relevant property is the constant-time compare, and
+  that IS pinned: `constantTimeHexEq` is named by 4 tests and the XOR-accumulate
+  shape (`diff |=`) is structurally pinned, against a convention established in 37
+  files.
+
+### `services/metrics-registry.ts` — the real one
+
+The registry states the rule in its own header: callers MUST keep label values
+bounded, and `account_id` / `session_id` WILL blow up the scrape. It deliberately
+does not enforce this at runtime, with a reason given — enforcement would punish
+legitimate dynamic label use.
+
+⛔ That comment is already pinned by `services-metrics-registry-content-parity`,
+and pinning a comment freezes what a file SAYS, never whether it is true. Nothing
+checked the registration sites. The convention holds today — all 16 label keys in
+use across 22 registrations are enum-shaped — so this is a guard against drift,
+not a live defect.
+
+Why it earns a guard: the registry keys each series by a composite of its label
+VALUES in a `Map` that is never evicted. An enum-shaped label costs a bounded
+number of entries forever; one per-account label costs an entry per account for
+the life of the process. The failure is not a wrong number, it is memory that
+climbs until restart and a scrape that grows with the customer base — silent until
+it is an outage, and invisible to every functional test.
+
+Three arms: an anti-vacuity floor (a scan that silently stops matching would
+otherwise pass everything), the identifier-shaped-key refusal, and an exact roster
+of the 16 keys so adding one is a visible decision. Ledger, control 3: a
+registration labelled `account_id` reds 2; a regex that matches nothing reds 2,
+including the anti-vacuity arm that exists for exactly that.
+
+⚠️ `prefix` looked like a violation and is not — it is the audit ACTION prefix
+(`session.`, `api_key.`), bounded by the action taxonomy, not a per-key prefix.
+Checked before writing a rule that would have blessed a real offender by name.
+
+⚠️ Restoring a mutated NEW test file needs a scratchpad snapshot: `git checkout --`
+fails on an untracked path, so the broken-regex probe survived its own cleanup
+until I noticed and put the line back by hand.
+
+### The rest of the sweep, checked and dismissed with evidence
+
+- **`webrtc-streaming/src/frame-source.ts`** — allocates `targetWidth * targetHeight * 4`
+  with no bound in the file, which reads like a straightforward DoS. It is not
+  reachable: `targetWidth` appears only in `mock-codec-wrapper.ts` with a default of
+  390, and **no file under `apps/server/src` imports the package at all**. Staged
+  ahead of integration, like the audit-archive repo. Worth re-checking the day it
+  is wired, since the allocation is exactly the shape that needs a ceiling then.
+- **`lib/livekit-token.ts`** — a census false positive; the buffer is a fixed 16
+  bytes and my loop pattern matched `bytes.length`. Its `Math.random()` fallback for
+  `randomJti()` is unreachable on Node 20+ (`globalThis.crypto` always exists), and
+  the jti is not a security control here — the token's integrity is its HMAC, and
+  the code says jtis are not reused server-side.
+
+Net for the class: 34 modules with an input-driven allocation or loop, and after
+following every candidate the only actionable one was the metrics label roster —
+a drift guard, not a live defect. The class that was least reliably measured turns
+out to be in good shape; that is worth knowing precisely rather than assuming in
+either direction.
