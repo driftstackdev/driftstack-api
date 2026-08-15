@@ -212,6 +212,8 @@ interface KeyOverrides {
   liveKeyExpiresAt?: Date | null;
   liveAccountId?: string;
   liveAccountMissing?: boolean;
+  /** Mirrors the web-session overrides above; the key path re-reads status too. */
+  liveAccountStatus?: 'active' | 'suspended' | 'deleted';
 }
 
 /** A cached context for an API-KEY credential — note `webSession: null`. */
@@ -254,7 +256,7 @@ function repoWithKey(o: KeyOverrides): unknown {
           : {
               id: o.liveAccountId ?? ACCOUNT_ID,
               email: 'a@example.test',
-              status: 'active',
+              status: o.liveAccountStatus ?? 'active',
               tier: 'free',
             },
       ),
@@ -288,6 +290,45 @@ describe('an API-key cache hit is re-validated against Postgres too', () => {
 
   it('CRITICAL a hit whose live account has VANISHED is refused. The key row and the account row are deleted by different paths, so a key surviving its account is a real intermediate state; resolving it would hand a request an AccountContext built around an account that no longer exists.', async () => {
     await expect(authWithKey({ liveAccountMissing: true })).rejects.toBeInstanceOf(InvalidKeyError);
+  });
+
+  // The two status refusals the API-key block carries and this section did not.
+  //
+  // ⚠️ Both exist verbatim in the web-session block above and are covered THERE.
+  // That is what hid them: "is a deleted account refused on a cache hit?" finds a
+  // passing arm and stops. The two blocks re-validate independently — a cached
+  // API key and a cached web session take separate 20-line paths — so covering
+  // one says nothing about the other. Measured: neutralizing the key path's
+  // deleted-account refusal left all 205 tests in the auth-cache set green.
+  //
+  // The stake is the terminal state. A deleted account whose key is still cached
+  // keeps authenticating for the remainder of the TTL, and the live re-read is
+  // the only thing that can notice — deletion invalidates on a different path
+  // than the one that wrote this entry.
+  //
+  // LEDGER — control 15/15:
+  //
+  //   key-path DELETED refusal neutralized      1 red
+  //   key-path SUSPENDED refusal neutralized    1 red
+  //   SESSION-path deleted refusal neutralized  1 red
+  //   key-path deleted mapped to FORBIDDEN      1 red
+  //
+  // The third row is the independence proof: neutralizing the session path's
+  // copy reds an arm up there and none of these, which is what "separate blocks"
+  // means in practice. The fourth is the anti-flattening check — the refusal
+  // still fires, only with the reversible error instead of the terminal one, so
+  // a caller is told to contact support about an account that no longer
+  // exists.
+  it('CRITICAL a key-path hit for a SUSPENDED account is refused with Forbidden, not Invalid — the same distinction the session path draws, from its own copy of the check.', async () => {
+    await expect(authWithKey({ liveAccountStatus: 'suspended' })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
+  });
+
+  it('CRITICAL a key-path hit for a DELETED account is refused as Invalid. Terminal, so unlike suspension it must not hint the credential could work again — and a customer who deleted their account must not keep authenticating until a cache entry ages out.', async () => {
+    await expect(authWithKey({ liveAccountStatus: 'deleted' })).rejects.toBeInstanceOf(
+      InvalidKeyError,
+    );
   });
 
   it("CRITICAL a hit whose live account does not match the live KEY is refused. Both are re-read independently, so this is the check that stops a stale cache entry from stitching one account to another account's credential — the worst outcome available on this path, and one no single-row check could catch.", async () => {
