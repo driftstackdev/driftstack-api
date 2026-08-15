@@ -3631,3 +3631,63 @@ it only because they call the client inline in the test body rather than through
 helpers. Fixed by binding a non-null local after the guard. Second time this week
 that a vitest-green file failed `tsconfig.test.json`; the suite's own type-check
 test is the authority, not a hand-run `tsc -p tsconfig.json` on the source project.
+
+## 6n — auditing my own ledgers after the false-positive probe, and closing the class
+
+### The audit came first
+
+Last entry's defect was a probe inserting `` sql`true` `` into a module that never
+imports `sql`. The obvious next question is which of MY OWN ledgers used that
+substitution against a module lacking the import — because those verdicts would be
+worthless in the same way.
+
+Checked all four ledgered modules. `profiles-repo`, `mfa-repo` and
+`scheduled-jobs-repo` import `sql`; **`sessions-repo` does not**. So the mutation
+proof published with the sessions tenant-scope guard (`56801c354`) — "all three
+predicates red it" — was invalid: each red was a `ReferenceError`, not the guard
+being caught.
+
+Re-measured with a tautology built from an import that module has
+(`eq(sessions.id, sessions.id)`): `findSession`, `claimSessionOperation` and
+`touchSessionLastStateAt` each red the guard. **The guard is sound and the
+conclusion stands — the evidence I published for it did not.** Blast radius is
+exactly one commit; the other three ledgers were valid.
+
+⭐ Worth stating plainly: a correct conclusion reached through an invalid proof is
+still a reporting failure. The measurement is the product, not the verdict.
+
+### `pruneFinished` — argued, then measured
+
+The last member of the global-DELETE class. I had recorded it as "safe by
+construction": its `IS NOT NULL` pairs mean a PENDING row can never match, so
+losing an age bound only widens the delete within already-terminal rows. That is an
+argument, and arguments about SQL null semantics are what half of this week's
+instrument failures were made of.
+
+What it protects is not history. `scheduled_jobs` is the self-arming chain table —
+deleting a PENDING row kills the chain, which never runs again and never re-arms,
+the exact dead-chain state the liveness gauge exists to detect. Retention purges,
+reminder sweeps and reconciliation jobs all live there.
+
+Ledger, isolated database, one row per branch:
+
+| mutation                     | result                                               |
+| ---------------------------- | ---------------------------------------------------- |
+| `lt(completedAt, olderThan)` | **RED** — load-bearing                               |
+| `lt(failedAt, olderThan)`    | **RED** — load-bearing                               |
+| `isNotNull(completedAt)`     | GREEN — **provably redundant**, as the argument said |
+
+The `isNotNull` green is the argument confirmed rather than a gap: `NULL < cutoff`
+is NULL, so a pending row cannot match the age comparison either way.
+
+⚠️ The fresh-FAILED fixture was added after noticing its absence would leave the
+second disjunct's age bound unmeasurable — a ledger would have reported it covered
+when the fixture simply could not tell. Same completeness lesson as the OAuth codes
+row one entry earlier, and the second time in two fires that a per-branch fixture
+was the difference between a real verdict and a flattering one.
+
+### Class closed
+
+All five global time-bounded deletes now have real-SQL coverage or a proven reason
+they need none: `purgeTrashedBefore`, `pruneExpired` (3 tables), `pruneFinished`,
+plus `deleteStaleAuthTokens` and `pruneOlderThan` which already had it.
