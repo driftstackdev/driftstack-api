@@ -165,3 +165,134 @@ describe('an auth cache hit is re-validated against Postgres', () => {
     );
   });
 });
+
+// ─── the API-KEY branch of the same fast path ─────────────────────────────────
+//
+// Everything above drives `cached.webSession !== null`. A cached API key takes a
+// separate 20-line block with its own re-validation, and two of ITS refusals had
+// never run:
+//
+//   services/auth.ts:398  throw new ExpiredKeyError()  — LIVE key past expiry
+//   services/auth.ts:401  throw new InvalidKeyError()  — live account gone or
+//                                                        pointing at a different
+//                                                        account than the key
+//
+// Measured from the coverage statementMap rather than guessed: that block
+// executes 2,100+ times under the suite, its surrounding conditions run every
+// time, and those two throws are count=0. A branch that busy with two refusals
+// that never fire is the shape of a control nobody has watched work.
+//
+// The expiry one matters most and is easy to mis-read. The cached copy is
+// checked for expiry FIRST, against the clock (auth.ts:317). These arms set the
+// cached copy to a FUTURE expiry so that check passes, and expire only the LIVE
+// row — which is the real case: a key that expired in Postgres while a fresh
+// cache entry still describes it. Without :398 that key keeps authenticating
+// until the entry ages out, which is exactly what this file's opening comment
+// promises cannot happen.
+//
+// MUTATION-PROVED against services/auth.ts — control 13/13 here, 19/19 on the
+// parity pin over the same file:
+//
+//                                                        here    parity pin
+//   the LIVE key expiry re-check removed                1 red      GREEN
+//   expiry re-checked against the CACHED copy           1 red      GREEN
+//   the account/key MISMATCH half dropped               1 red      GREEN
+//
+// The middle one is the one to remember. It keeps a re-check, keeps the same
+// error, keeps the same shape — and compares the CACHED expiry instead of the
+// live row, which is the value the code already tested twenty lines earlier. The
+// whole re-validation becomes a no-op that reads correctly, and the pin sees a
+// file that still says `ExpiredKeyError` in the right place.
+
+const KEY_ID = 'key_1';
+const KEY_PREFIX = 'ds_live_aaaa';
+const OTHER_ACCOUNT_ID = 'acc_other';
+
+interface KeyOverrides {
+  liveKeyExpiresAt?: Date | null;
+  liveAccountId?: string;
+  liveAccountMissing?: boolean;
+}
+
+/** A cached context for an API-KEY credential — note `webSession: null`. */
+function cachedApiKeyContext(): unknown {
+  return {
+    account: { id: ACCOUNT_ID, email: 'a@example.test', status: 'active', tier: 'free' },
+    apiKey: {
+      id: KEY_ID,
+      accountId: ACCOUNT_ID,
+      keyPrefix: KEY_PREFIX,
+      keyHash: 'hash_1',
+      scopes: [],
+      revokedAt: null,
+      // FUTURE on purpose: the cached-copy clock check at auth.ts:317 must pass
+      // so the LIVE re-read is what decides.
+      expiresAt: FUTURE,
+    },
+    rateLimitOverrides: {},
+    webSession: null,
+    teams: [],
+  };
+}
+
+function repoWithKey(o: KeyOverrides): unknown {
+  return {
+    findApiKeyByPrefix: () =>
+      Promise.resolve({
+        id: KEY_ID,
+        accountId: ACCOUNT_ID,
+        keyPrefix: KEY_PREFIX,
+        keyHash: 'hash_1',
+        scopes: [],
+        revokedAt: null,
+        expiresAt: o.liveKeyExpiresAt === undefined ? FUTURE : o.liveKeyExpiresAt,
+      }),
+    getAccount: () =>
+      Promise.resolve(
+        o.liveAccountMissing === true
+          ? null
+          : {
+              id: o.liveAccountId ?? ACCOUNT_ID,
+              email: 'a@example.test',
+              status: 'active',
+              tier: 'free',
+            },
+      ),
+    findTeamMemberships: () => Promise.resolve([]),
+    findActiveRateLimitOverrides: () => Promise.resolve([]),
+    findActiveWebSession: () => Promise.resolve(null),
+    touchApiKeyLastUsed: () => Promise.resolve(),
+    touchWebSessionLastUsed: () => Promise.resolve(),
+  };
+}
+
+async function authWithKey(o: KeyOverrides): Promise<unknown> {
+  return authenticate(
+    repoWithKey(o) as never,
+    TOKEN,
+    cacheReturning(cachedApiKeyContext()) as never,
+    NOW,
+  );
+}
+
+describe('an API-key cache hit is re-validated against Postgres too', () => {
+  it('CRITICAL a fully valid API-key cache hit AUTHENTICATES. Both refusals below are satisfied by an implementation that rejects every api-key hit, and that implementation would be invisible in production — it would only make the cache useless while authentication still worked through the slow path.', async () => {
+    const ctx = (await authWithKey({})) as { account: { id: string }; apiKey: { id: string } };
+    expect(ctx.account.id, 'authenticated from the hit').toBe(ACCOUNT_ID);
+    expect(ctx.apiKey.id, 'carrying the live key').toBe(KEY_ID);
+  });
+
+  it('CRITICAL a hit whose LIVE key has expired is refused, even though the cached copy still looks fresh. Expiry happens in Postgres on a schedule nobody triggers, so the cache is never invalidated for it — the live re-read is the only thing that can notice. Without this the key keeps working for the remainder of the cache TTL, and the customer sees a credential outliving its own expiry date.', async () => {
+    await expect(authWithKey({ liveKeyExpiresAt: PAST })).rejects.toBeInstanceOf(ExpiredKeyError);
+  });
+
+  it('CRITICAL a hit whose live account has VANISHED is refused. The key row and the account row are deleted by different paths, so a key surviving its account is a real intermediate state; resolving it would hand a request an AccountContext built around an account that no longer exists.', async () => {
+    await expect(authWithKey({ liveAccountMissing: true })).rejects.toBeInstanceOf(InvalidKeyError);
+  });
+
+  it("CRITICAL a hit whose live account does not match the live KEY is refused. Both are re-read independently, so this is the check that stops a stale cache entry from stitching one account to another account's credential — the worst outcome available on this path, and one no single-row check could catch.", async () => {
+    await expect(authWithKey({ liveAccountId: OTHER_ACCOUNT_ID })).rejects.toBeInstanceOf(
+      InvalidKeyError,
+    );
+  });
+});

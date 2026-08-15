@@ -1771,7 +1771,7 @@ its exception list than it earns.
 
 ### 5f. 31 of 108 security denial paths had never executed — now 13 of 108
 
-✅ **RE-MEASURED 2026-08-15 with the proper instrument: 13 of 108.** The original
+✅ **RE-MEASURED 2026-08-15 with the proper instrument: 13 of 108.** Three of those 13 were closed after that measurement was taken — `profile-snapshots.ts:44`, `services/auth.ts:398` and `:401` — so the current figure is **10 by arithmetic, not by re-measurement**: the coverage snapshot predates those tests, and no new run has been taken. Stated that way deliberately, since the whole point of this item was replacing an estimate with a measurement. The original
 31 came from an earlier coverage snapshot; this run regenerated
 `coverage-final.json` (whole workspace, `DATABASE_URL` set so the 65 `db-*` files
 execute) and intersected its `statementMap` with every deny site, same
@@ -1823,7 +1823,24 @@ admin role on that team.'` The profile-launch RBAC gate (handler at
 - `routes/agent-sessions.ts:3916` — `'Owner account tier is unavailable.'` is a
   WIRING guard (`authRepo === undefined`), fail-closed for a route registered
   without its dependency, not a customer-reachable path. Also `:4632`.
-- `services/auth.ts:398`, `:401` — the API-key cache-revalidation branch
+- ✅ `services/auth.ts:398`, `:401` — the API-key cache-revalidation branch.
+  **Closed 2026-08-15**, 4 arms appended to
+  `auth-cache-hit-revalidates-against-postgres` (which previously drove only the
+  web-session branch), 3 mutations, all red, **parity pin green on all three**.
+
+  Measured from the statementMap rather than guessed: that block executes 2,100+
+  times under the suite, its surrounding conditions run every time, and those two
+  throws were `count=0`. A branch that busy with two refusals that never fire is
+  the shape of a control nobody has watched work.
+
+  ⭐ The mutation worth remembering keeps a re-check, keeps the same error, keeps
+  the same shape — and compares the **CACHED** expiry instead of the live row,
+  i.e. the value the code already tested twenty lines earlier. The entire
+  re-validation becomes a no-op that reads correctly, and the pin sees a file that
+  still says `ExpiredKeyError` in the right place. Key expiry is the case that
+  needs it: expiry happens in Postgres on a schedule nobody triggers, so the cache
+  is never invalidated for it and the live re-read is the only thing that can
+  notice.
 
 Measured 2026-08-15 by intersecting per-line coverage with every
 `throw new <Forbidden|Unauthorized|InvalidKey|RevokedKey|Expired*|MfaStepUpRequired
