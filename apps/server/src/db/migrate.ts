@@ -56,12 +56,20 @@ async function main(): Promise<void> {
   const client = postgres(config.databaseUrl, {
     max: 1,
     onnotice: (notice) => {
+      // `detail` is a real Postgres field, and it is where the substance goes
+      // when a statement cascades: the message summarises ("drop cascades to 69
+      // other objects") and the 69 lines arrive in `detail`. Carrying only the
+      // message would log a migration's blast radius as a number — and naming
+      // the message "detail" would leave nowhere to put the real one.
       console.warn(
         JSON.stringify({
           msg: 'postgres notice during migration',
           severity: notice.severity,
           code: notice.code,
-          detail: notice.message,
+          notice: notice.message,
+          ...(typeof notice.detail === 'string' && notice.detail !== ''
+            ? { detail: notice.detail }
+            : {}),
         }),
       );
     },

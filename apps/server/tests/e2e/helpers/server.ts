@@ -10,6 +10,7 @@
 // the empirical finding that drove this design choice.
 
 import { assertLocalDestructiveTarget } from './destructive-target-guard.js';
+import { isExpectedCascadeChatter, formatNotice } from './postgres-notices.js';
 import type { AddressInfo } from 'node:net';
 import { Redis } from 'ioredis';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -165,11 +166,16 @@ export async function startTestServer(): Promise<TestServer> {
   // a skipped DDL) still prints. Doing this with `SET LOCAL` in an explicit
   // transaction is not an option — postgres.js rejects a raw BEGIN on a pooled
   // client with UNSAFE_TRANSACTION.
+  //
+  // The predicate lives in ./postgres-notices.ts with the measurement that
+  // motivated it: the first version of this filter read `notice.message` only,
+  // which missed the DROP SCHEMA notices below entirely — they summarise in
+  // `message` and list in `detail` — and those were 75% of a green run's log.
   const client = postgres(dbUrl, {
     max: 5,
     onnotice: (notice) => {
-      if (/^truncate cascades to table/i.test(String(notice.message ?? ''))) return;
-      console.warn(notice);
+      if (isExpectedCascadeChatter(notice)) return;
+      console.warn(formatNotice(notice));
     },
   });
   const db = drizzle(client, { schema });

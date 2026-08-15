@@ -4,7 +4,16 @@
 // object dump: severity, code, message, plus `file`, `line` and `routine` from
 // the Postgres source, ANSI-coloured, across several lines.
 //
-// Both places this codebase opens a connection are somewhere that output is
+// SCOPE IS SERVER SOURCE, and the boundary is deliberate rather than an
+// oversight I should be read as having covered. `apps/server/tests` opens ~150
+// more connections; they are not in scope here because their output goes to a
+// test runner, not to a log collector, and adding a handler to 150 files buys
+// nothing. The two that DO matter there — the e2e harness — are covered by
+// `the-e2e-harness-silences-the-cascades-it-provokes`, which found that its
+// notice filter missed 75% of its own output. So test-side connections are
+// excluded from this walk, not from scrutiny.
+//
+// Both places the SERVER SOURCE opens a connection are somewhere that output is
 // wrong, for different reasons:
 //
 //   db/client.ts    the server runs Pino. An un-JSON object printed straight to
@@ -37,6 +46,17 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SERVER_SRC = resolve(HERE, '..', '..', 'src');
+
+/** Source with comment lines removed, for assertions that span a distance. */
+function withoutComments(source: string): string {
+  return source
+    .split('\n')
+    .filter((line) => {
+      const t = line.trimStart();
+      return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+    })
+    .join('\n');
+}
 
 interface ClientSite {
   file: string;
@@ -116,10 +136,23 @@ describe('no Postgres client leaks raw notices', () => {
   });
 
   it('CRITICAL the migration script re-emits notices as JSON rather than swallowing them. Its whole output contract is one-line JSON per event, and a notice is the one operational signal it has: "already exists, skipping" is how a re-run is seen to be the no-op it should be. Swallowing would satisfy the arm above while throwing that away.', () => {
-    const migrate = readFileSync(resolve(SERVER_SRC, 'db', 'migrate.ts'), 'utf8');
+    // Comments stripped before matching. This assertion spans a distance —
+    // `onnotice:` to `JSON.stringify(` — and the first version measured that
+    // distance in raw characters, so writing a paragraph of explanation between
+    // the two broke it. A guard that fails when someone documents the code is
+    // training people not to document the code.
+    const migrate = withoutComments(readFileSync(resolve(SERVER_SRC, 'db', 'migrate.ts'), 'utf8'));
     expect(migrate, 'notices are re-emitted, not discarded').toMatch(
       /onnotice:[\s\S]{0,400}JSON\.stringify\(/,
     );
     expect(migrate, 'as a labelled event').toMatch(/msg: 'postgres notice during migration'/);
+  });
+
+  it("CRITICAL the migration log carries a notice's DETAIL, not just its summary. When a statement cascades, Postgres puts a count in the message and the objects in `detail` — logging the message alone reports a migration's blast radius as the number 69. Learned from the e2e harness, whose filter missed 1,988 lines by reading only the message.", () => {
+    const migrate = withoutComments(readFileSync(resolve(SERVER_SRC, 'db', 'migrate.ts'), 'utf8'));
+    expect(migrate, "the notice's detail field is read").toMatch(/notice\.detail/);
+    expect(migrate, 'and emitted under its own key rather than overwriting it').toMatch(
+      /detail: notice\.detail/,
+    );
   });
 });
