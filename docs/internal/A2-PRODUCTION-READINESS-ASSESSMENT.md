@@ -2432,6 +2432,46 @@ rather than "which lines are cold" — all eight lines were already _executed_.
 **Coverage and correctness are different questions, and the census asks the
 second one.**
 
+### 5v. Two designs for one rule — and only one of them can fail
+
+The prefixed-id parser exists in two shapes, and the difference is the whole
+finding. The guard-condition census grouped them because their conditions
+normalise alike; their risk profiles do not.
+
+**Design A — the prefix is IN the regex.**
+`PROFILE_ID_RE = /^prof_(<uuid>)$/`. A wrong prefix does not match. There is no
+separate clause, so there is nothing to drop, forget, or refactor away. Used by
+`routes/profiles.ts` and `routes/team.ts`.
+
+**Design B — a permissive regex plus a second condition.**
+`PUBLIC_ID_RE = /^[a-z]{3}_(<uuid>)$/` and then
+`value.startsWith(\`${expectedPrefix}\_\`)`. The regex deliberately accepts ANY
+three-letter prefix, so correctness rests entirely on the extra clause. Used by
+the admin routes and, until this week, `routes/webhooks.ts`.
+
+⛔ **Design B's clause was untested everywhere it was probed.** Dropping it from
+three copies at once left the 2,747-test integration suite green; dropping it
+from `admin.ts` and `admin-api-keys.ts` left the 481-test admin/profiles/team set
+green. Every existing arm probes malformed junk, which the REGEX rejects on its
+own — so none of them could see the clause at all.
+
+Two sites are now covered (`webhooks.ts`, `admin-api-keys.ts`), each with the
+same two mutations: the clause dropped, and the clause comparing the value to its
+own slice — the second being the shape a refactor produces, still present and
+still reading like a prefix guard while matching everything.
+
+⭐ **The recommendation follows from the measurement rather than from taste.**
+Design A removes the failure mode instead of testing it: the same rule, one
+fewer thing that can silently stop being true. Migrating the remaining Design-B
+parsers to a per-resource regex would delete this class of gap rather than
+covering it — worth doing when those files are next touched, and not worth a
+dedicated sweep on its own.
+
+⚠️ What Design B buys is a shared helper across resources (`expectedPrefix` is a
+parameter), so the migration is not free — it trades one generic function for a
+regex per resource. That is the actual trade, stated so the next person can weigh
+it rather than reading this as "the admin routes are wrong".
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
