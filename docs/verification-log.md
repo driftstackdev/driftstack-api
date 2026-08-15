@@ -34188,3 +34188,47 @@ Mutation-proved both directions: the lazy regex reds the nested-paren fixture; d
 function-name anchor reds the "a different function is not an enforcement site" negative.
 
 No new test file — `EXPECTED_TEST_FILES` unchanged at 2731.
+
+## V-787 — replay reset the retry budget in production and did not in the double (2026-08-15)
+
+`WebhookDeliveryService.replay`'s contract says "Resets attempts + sends back through the queue …
+New attempt rows append to the existing record". The production repo does exactly that:
+`webhooks-repo.ts` sets `attempts: 0` while the attempt log lives in its own table.
+
+`packages/webhook-delivery`'s in-memory double folds both into one array —
+`DeliveryRecord.attempts` IS the attempt log, and the worker derives the budget from it
+(`attemptNumber = attempts.length + 1`, DLQ at `>= maxAttempts`). Replay and requeue carried the log
+forward, so the history counted against the new budget. **Measured: a requeue from DLQ granted
+exactly ONE attempt where a fresh delivery gets six, then re-DLQ'd at `totalAttempts=7`.** The same
+stale number indexed `BACKOFF_MS_BY_ATTEMPT[7]` — undefined — so the one attempt it did allow waited
+the 60-minute tail instead of restarting at one minute.
+
+Fixed with a baseline on the internal `QueueEntry`: `attemptsBaseline` records
+`attempts.length` at the moment the record is armed, and the attempt number is counted from there.
+Both halves of the contract now hold at once — history still appends, budget still resets — which
+truncating the array could not do. `QueueEntry` is not exported, so no public type changed.
+
+**Three corrections on the way to this, and I reported the second one before checking it.**
+
+1. My first probe asserted "at least one fresh attempt" and _failed_ — I read that as proof of the
+   defect and said so. It was a `TypeError` in the probe itself: `captureFetch` returns
+   `{ fn, calls }`, not a vitest mock, so `fn.mock.calls` was undefined. **The probe was broken, not
+   the code.** A red is a result to be read, exactly like a green.
+2. Rewritten correctly, the probe _passed_ — one attempt does happen, because the worker attempts
+   first and only then compares against `maxAttempts`. So "zero attempts" was wrong in the other
+   direction.
+3. Only a probe that measured the budget SIZE (`attemptsAfterRequeue=1, a fresh budget would be 6`)
+   described the defect accurately. That is the number in this entry.
+
+Mutation-proved in both directions, and the second mutation is the one that matters: resetting the
+budget by TRUNCATING the log passes the budget case and reds the history case, so the two properties
+are pinned independently rather than by one assertion that a naive fix would satisfy.
+
+Scope: this package is not what bootstrap runs — `services/webhook-worker.ts` is. The cost was that
+tests written against the double would encode a replay that does not replay, and the double's own
+documented contract was false.
+
+No new test file (three cases appended); `EXPECTED_TEST_FILES` unchanged at 2731. The suite verifier
+currently reports 2732 on disk — that delta is a peer's untracked
+`migration-journal-is-applyable.test.ts`, confirmed by moving it aside and watching the check pass;
+the pin belongs with their commit, not this one.

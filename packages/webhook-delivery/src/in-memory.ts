@@ -135,6 +135,24 @@ interface QueueEntry {
   accountId: string;
   /** Lease expiry — null when not currently in_flight. */
   leasedUntilMs: number | null;
+  /**
+   * V-787 — `record.attempts.length` at the moment this record was last armed by
+   * replay/requeue. The retry budget is counted FROM here, not from zero.
+   *
+   * The production repo keeps two separate things: a numeric `attempts` column
+   * that `replay` resets to 0, and an append-only attempt log. This double folds
+   * both into one array, so "reset the counter" and "keep the history" could not
+   * both hold — and the counter lost. Carrying the log forward meant a requeued
+   * delivery computed `attempts.length + 1 = 7`, immediately exceeded
+   * `maxAttempts`, and went straight back to DLQ after ONE attempt instead of
+   * getting the fresh budget of six the production repo grants. The same stale
+   * number indexed `BACKOFF_MS_BY_ATTEMPT[7]` — undefined — so what attempt it
+   * did make waited the 60-minute tail instead of restarting at one minute.
+   *
+   * A baseline restores both properties at once: the history is still appended,
+   * and the budget still resets.
+   */
+  attemptsBaseline: number;
 }
 
 /**
@@ -223,6 +241,8 @@ export class InMemoryWebhookDeliveryService implements WebhookDeliveryService {
       endpointId: opts.endpoint.id,
       accountId: opts.endpoint.accountId,
       leasedUntilMs: null,
+      // A fresh enqueue has no history, so the budget starts at zero.
+      attemptsBaseline: 0,
     });
     return Promise.resolve(record);
   }
@@ -351,6 +371,9 @@ function replayShared(
     };
     entry.record = replayed;
     entry.leasedUntilMs = null;
+    // V-787 — same reset as the DLQ path: replaying a `failed` record that has
+    // already burned attempts must grant a full budget, not the remainder.
+    entry.attemptsBaseline = replayed.attempts.length;
     return replayed;
   }
   const dlqEntry = store.dlq.get(deliveryId);
@@ -374,6 +397,9 @@ function replayShared(
       endpointId: dlqEntry.endpointId,
       accountId: dlqEntry.accountId,
       leasedUntilMs: null,
+      // V-787 — everything already logged is HISTORY. Counting it against the
+      // new budget is what made a requeue worth one attempt instead of six.
+      attemptsBaseline: dlqEntry.attempts.length,
     });
     store.dlq.delete(dlqEntry.deliveryId);
     return reenqueued;
@@ -453,11 +479,16 @@ class DeliveryWorker {
     return { pulled: due.length, delivered, retried, dlqed };
   }
 
+  /** Attempt number WITHIN the current budget — see QueueEntry.attemptsBaseline. */
+  private attemptNumberFor(entry: QueueEntry): number {
+    return entry.record.attempts.length - entry.attemptsBaseline + 1;
+  }
+
   private async deliver(entry: QueueEntry): Promise<'delivered' | 'retried' | 'dlqed'> {
     const endpoint = this.getEndpoint(entry.endpointId);
     if (endpoint === null) {
       const attempt: DeliveryAttempt = {
-        attempt: entry.record.attempts.length + 1,
+        attempt: this.attemptNumberFor(entry),
         completedAtMs: this.now(),
         responseStatus: null,
         responseExcerpt: null,
@@ -480,7 +511,7 @@ class DeliveryWorker {
     // `!endpoint.active` the same as endpoint-not-found.
     if (!endpoint.active) {
       const attempt: DeliveryAttempt = {
-        attempt: entry.record.attempts.length + 1,
+        attempt: this.attemptNumberFor(entry),
         completedAtMs: this.now(),
         responseStatus: null,
         responseExcerpt: null,
@@ -497,7 +528,7 @@ class DeliveryWorker {
     const maxAttempts = cfg.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
 
     const startedMs = this.now();
-    const attemptNumber = entry.record.attempts.length + 1;
+    const attemptNumber = this.attemptNumberFor(entry);
     let attempt: DeliveryAttempt;
 
     try {

@@ -512,6 +512,84 @@ describe('processTick — response lifecycle bounds', () => {
 });
 
 describe('replay + DlqManager.requeue', () => {
+  // V-787 — the retry budget resets on replay/requeue, and the attempt history
+  // does not. The production repo keeps those as two separate things: a numeric
+  // `attempts` column that `replay` sets to 0, and an append-only attempt log.
+  // This double folds both into one array, so until now only one of them could
+  // hold — and the one that lost was the budget. A requeued delivery counted its
+  // carried-forward history against the new budget, computed attempt 7 of 6, and
+  // went straight back to DLQ after ONE attempt. The interface's own contract
+  // ("Resets attempts + sends back through the queue. ... New attempt rows append
+  // to the existing record") asks for BOTH, which is what these cases pin.
+  it('CRITICAL requeue from DLQ grants a FULL fresh budget, not the remainder. Before this it granted exactly one attempt: the carried-forward log made attempts.length + 1 exceed maxAttempts on the first tick, so a requeue was an expensive way to re-DLQ a delivery. The production repo sets attempts = 0 here.', async () => {
+    const { fn, calls } = captureFetch(() => ({ status: 500 }));
+    const { handles, advance } = build(fn);
+
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    for (let i = 1; i <= DEFAULT_MAX_ATTEMPTS; i += 1) {
+      await handles.processTick();
+      advance((BACKOFF_MS_BY_ATTEMPT[i] ?? 60 * 60_000) + 1);
+    }
+    expect(await handles.dlq.get(record.id), 'exhausted first').not.toBeNull();
+
+    await handles.dlq.requeue({ deliveryId: record.id });
+    const before = calls.length;
+    for (let i = 1; i <= DEFAULT_MAX_ATTEMPTS; i += 1) {
+      await handles.processTick();
+      advance((BACKOFF_MS_BY_ATTEMPT[i] ?? 60 * 60_000) + 1);
+    }
+
+    expect(
+      calls.length - before,
+      'a requeued delivery gets the same number of attempts a fresh one would',
+    ).toBe(DEFAULT_MAX_ATTEMPTS);
+  });
+
+  it('CRITICAL the attempt HISTORY survives the same requeue. Resetting the budget by clearing the log would satisfy the case above and destroy the postmortem record the DLQ surface exists to show — the two properties have to hold together, which is the whole reason the budget is tracked as a baseline rather than by truncating the array.', async () => {
+    const { fn, calls } = captureFetch(() => ({ status: 500 }));
+    const { handles, advance } = build(fn);
+
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    for (let i = 1; i <= DEFAULT_MAX_ATTEMPTS; i += 1) {
+      await handles.processTick();
+      advance((BACKOFF_MS_BY_ATTEMPT[i] ?? 60 * 60_000) + 1);
+    }
+    await handles.dlq.requeue({ deliveryId: record.id });
+    const before = calls.length;
+    await handles.processTick();
+
+    const after = await handles.deliveries.get(record.id);
+    expect(calls.length - before, 'it did attempt').toBe(1);
+    expect(
+      after?.attempts.length,
+      'history kept: six from before the requeue plus the new one',
+    ).toBe(DEFAULT_MAX_ATTEMPTS + 1);
+    expect(
+      after?.attempts.at(-1)?.attempt,
+      'and the new attempt is numbered 1 WITHIN the new budget — the number the backoff curve is indexed by',
+    ).toBe(1);
+  });
+
+  it('CRITICAL the backoff restarts at the head of the curve after a requeue. The stale number indexed BACKOFF_MS_BY_ATTEMPT past its end, fell through to the 60-minute tail, and made the one attempt a requeue did allow wait an hour.', async () => {
+    const { fn } = captureFetch(() => ({ status: 500 }));
+    const { handles, advance, nowMs } = build(fn);
+
+    const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    for (let i = 1; i <= DEFAULT_MAX_ATTEMPTS; i += 1) {
+      await handles.processTick();
+      advance((BACKOFF_MS_BY_ATTEMPT[i] ?? 60 * 60_000) + 1);
+    }
+    await handles.dlq.requeue({ deliveryId: record.id });
+    const firedAt = nowMs();
+    await handles.processTick();
+
+    const after = await handles.deliveries.get(record.id);
+    expect(
+      (after?.nextAttemptAtMs ?? 0) - firedAt,
+      'first retry after a requeue waits the FIRST backoff step, not the tail',
+    ).toBe(BACKOFF_MS_BY_ATTEMPT[1]);
+  });
+
   it('replay re-arms a delivered record', async () => {
     const { fn } = captureFetch(() => ({ status: 200 }));
     const { handles } = build(fn);
