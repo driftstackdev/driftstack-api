@@ -1504,7 +1504,7 @@ verdict depends on something nobody chose. A single-run mutation ledger cannot
 see that class at all — which is an argument for re-running a ledger when the
 file it documents changes, not for trusting the number in the header forever.
 
-#### 5i. NEW — the VPN-config SSRF/RCE guards are never CALLED by a test
+#### 5i. The VPN-config SSRF/RCE guards were never CALLED by a test — closed
 
 ⛔ **The highest-value item currently open**, and a textbook instance of the
 "not CALLED" shape from 5f: the classifier works, the route's use of it is
@@ -1539,11 +1539,63 @@ posts an UNSAFE VPN config.** Delete the `classifyUnsafeVpnTargets(...)` call fr
 the route and every existing test stays green: the classifier's own tests still
 pass, and the registration tests still pass because their configs are safe.
 
-_Next slice._ Post unsafe OpenVPN and WireGuard configs to
-`POST /v1/account/me/proxies` and assert the 400 — including a `script-security 2`
-blob, since that branch is RCE rather than SSRF. Mutate by removing each
-`classifyUnsafeVpnTargets` call to prove the ROUTE is what is being guarded, not
-the classifier.
+✅ **CLOSED 2026-08-15.** 6 arms in `account-me-proxies`, 4 mutations, all red.
+Every payload keeps a **safe display host**, so a refusal cannot be the
+already-tested host guard doing the work — only the embedded target is unsafe.
+
+|                                                 | new arms | guard-lib pin |
+| ----------------------------------------------- | -------- | ------------- |
+| the route stops calling the guard for OpenVPN   | 3 red    | **green**     |
+| the route stops calling the guard for WireGuard | 2 red    | **green**     |
+| WireGuard checks endpoint but not DNS           | 1 red    | **green**     |
+| `script-security` threshold slips `>=2` → `>=3` | 1 red    | 1 red         |
+
+The first three are the finding stated as a measurement: the classifier is
+untouched and all 32 of its own tests still pass, and what broke is that the
+ROUTE no longer asks it. Before these arms, that mutation left the entire suite
+green.
+
+The fourth is the opposite case and confirms the division of labour: a change to
+the CLASSIFICATION logic is caught by the classifier's unit test, as it should
+be. ⚠️ It took a second attempt — the RCE arm trips **both** halves of the guard
+at once (a dangerous directive AND the level), so it could not distinguish a
+slipped threshold from a working one. A level-only arm (`script-security 2` with
+no dangerous directive) was added to separate them, plus a `script-security 1`
+arm asserting the guard bounds the level rather than banning the keyword, since
+refusing level 1 would reject working configurations.
+
+#### 5j. NEW — the avatar upload's "invalid base64" branch is dead code
+
+Small, and recorded mainly because the investigation nearly produced a
+fabricated vulnerability.
+
+`routes/account-me.ts:776` refuses `'data_base64 is not valid base64.'` from
+inside a `try/catch` around `Buffer.from(x, 'base64')`. It is **unreachable, for
+two independent reasons**:
+
+1. **`Buffer.from` with `'base64'` never throws.** Verified rather than assumed —
+   it silently drops non-alphabet characters (`'!!!!'` → 0 bytes, no throw).
+2. **The schema already rejects the input.** `UploadAvatarRequestSchema` carries
+   `.regex(/^[A-Za-z0-9+/=]+$/, 'Must be base64-encoded.')`, so a non-base64
+   payload is a Zod 400 long before the route runs.
+
+⚠️ _The near-miss worth recording._ Reading only the route, the shape looked
+alarming: a `catch` that cannot fire, no magic-byte validation, and bytes handed
+straight to R2 with a **customer-supplied `content_type`** — which reads like
+stored-XSS on a public bucket. Two checks closed it: `content_type` is
+`z.enum(['image/png','image/jpeg','image/webp'])`, a closed set with no
+scriptable type, and the base64 regex means the decoded bytes cannot be arbitrary
+attacker text. **No vulnerability.** The pattern is the same one 5f produced with
+the owner-vanished checks — _the route's own guard is insufficient in isolation
+and the real control sits one layer up, in a schema this time rather than a
+`where` clause._
+
+_What IS reachable and untested:_ `:779` `'Avatar image is empty.'`, via a
+payload of pure padding (`'===='` passes both `.min(4)` and the regex and decodes
+to zero bytes). One arm, worth having.
+
+_Not proposed:_ deleting the dead branch. It costs nothing, and a future change
+to either the schema regex or the decode call would make it live again.
 
 #### 5h. NEW — 76 text-pin anchors name a control they cannot guard
 

@@ -446,6 +446,167 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
     // `const updates`, so the refusal happens before any field is staged.
   });
 
+  // ─── the guard on the REAL egress ────────────────────────────────────
+  //
+  // Added 2026-08-15. The "SSRF host guard" describe above posts
+  // `{ label, host, port }` — the socks5/http DISPLAY host. For a VPN profile
+  // that host is decorative: the connection is made to the embedded `remote` /
+  // `endpoint`, which is why the route says so in its own comment —
+  //
+  //     SSRF: the real egress is the embedded `remote <host>`, NOT the display
+  //     host — guard it.
+  //
+  // `classifyUnsafeVpnTargets` is thoroughly unit-tested and the registration
+  // arms above post SAFE configs, so both halves looked covered while **no test
+  // ever posted an unsafe VPN config**. All five refusals in
+  // `routes/account-me.ts` were unexecuted (assessment item 5i). Removing the
+  // `classifyUnsafeVpnTargets(...)` call from the route left the entire suite
+  // green — the classifier's own tests still passed, and these registration arms
+  // still passed because their configs are safe.
+  //
+  // ⭐ EVERY payload below keeps `host: 'vpn.example.com'` — a SAFE display host.
+  // That is the whole point: a refusal here cannot be the display-host guard
+  // doing the work, because that guard has nothing to complain about. Only the
+  // embedded target is unsafe.
+  //
+  // MUTATION-PROVED against routes/account-me.ts and lib/webhook-target-guard.ts
+  // — controls 35/35 here, 32/32 on the classifier's own unit test:
+  //
+  //                                                    here    guard-lib pin
+  //   the route stops calling the guard for OpenVPN    3 red       GREEN
+  //   the route stops calling the guard for WireGuard  2 red       GREEN
+  //   WireGuard checks endpoint but not DNS            1 red       GREEN
+  //   script-security threshold slips >=2 to >=3       1 red       1 red
+  //
+  // The first three are the point of this block. The classifier is untouched and
+  // its own tests all still pass; what broke is that the ROUTE no longer asks it.
+  // Before these arms existed, that mutation left the entire suite green.
+  //
+  // The fourth is the opposite case and shows the division of labour is right: a
+  // change to the CLASSIFICATION logic is caught by the classifier's unit test,
+  // as it should be, and now here as well. It took a second attempt to get there
+  // — the RCE arm below trips both halves of the guard at once (a dangerous
+  // directive AND the level), so it could not tell a slipped threshold from a
+  // working one. The level-only arm was added to separate them.
+
+  const SAFE_DISPLAY = { host: 'vpn.example.com', port: 1194 };
+
+  it('CRITICAL an OpenVPN config whose embedded `remote` is the cloud metadata address is refused, even though the display host is fine. 169.254.169.254 is the instance-credentials endpoint on every major cloud; a VPN profile that egresses there turns a customer-supplied config into a read of the fleet host’s own IAM credentials. The display host guard cannot see this — it is looking at a different field.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-metadata',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        openvpn: { config_blob: 'client\nremote 169.254.169.254 1194 udp\ndev tun\n' },
+      },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/metadata|private|loopback/i);
+  });
+
+  it('CRITICAL an OpenVPN config carrying a script-executing directive is refused. This one is not SSRF: `up /bin/sh` runs a program on the egress host when the tunnel comes up, so accepting the config is accepting remote code execution from customer input. It is refused before the target hosts are even resolved.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-rce',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        // Safe remote, safe display host — the ONLY unsafe thing is the directive.
+        openvpn: {
+          config_blob: 'client\nremote vpn.example.com 1194 udp\nscript-security 2\nup /bin/sh\n',
+        },
+      },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/script/i);
+  });
+
+  it('CRITICAL `script-security 2` alone is refused, with no dangerous directive present. The guard has two independent halves — a keyword list and a level threshold — and the arm above trips BOTH at once, so it cannot tell them apart. Measured: raising the threshold from >=2 to >=3 left that arm green while the classifier’s own unit test caught it. This arm isolates the level, so a slipped threshold reds the ROUTE too.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-level-only',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        // No up/down/route-up/tls-verify — the level is the only problem.
+        openvpn: { config_blob: 'client\nremote vpn.example.com 1194 udp\nscript-security 2\n' },
+      },
+    });
+    expect(res.statusCode, 'level 2 is refused on its own').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/script/i);
+  });
+
+  it('CRITICAL `script-security 1` is NOT refused — the guard bounds the dangerous level rather than banning the keyword. Level 1 permits only built-ins and the box floors there anyway; refusing it would reject working configurations and teach customers the validator is arbitrary.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-safe-level',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        openvpn: { config_blob: 'client\nremote vpn.example.com 1194 udp\nscript-security 1\n' },
+      },
+    });
+    expect(res.statusCode, 'accepted — level 1 is safe').toBe(201);
+  });
+
+  it('CRITICAL a WireGuard endpoint on a private address is refused. The endpoint is the real egress; a 10.0.0.0/8 target reaches whatever sits on the fleet host’s own network segment.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'wg-private',
+        scheme: 'wireguard',
+        ...SAFE_DISPLAY,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: '10.0.0.5:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/private|loopback|metadata/i);
+  });
+
+  it('CRITICAL a WireGuard DNS entry is guarded too, not just the endpoint. DNS is the second field the tunnel actually contacts, and a safe endpoint with a metadata-address resolver is the obvious way past a guard that only checked the endpoint.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'wg-dns',
+        scheme: 'wireguard',
+        ...SAFE_DISPLAY,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+          dns: '169.254.169.254',
+        },
+      },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/metadata|private|loopback/i);
+  });
+
   it('a paid tier is unaffected — wireguard still registers', async () => {
     fx = await buildTestApp({ tier: 'api_starter' });
     const res = await fx.app.inject({
