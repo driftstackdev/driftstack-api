@@ -112,3 +112,47 @@ describe('name-bound platform-secret value encryption', () => {
     }
   });
 });
+
+// The payload byte-bound on the DECRYPT path, made attributable.
+//
+// A mutation ledger over this module found 6 of 7 refusals covered and this one
+// unnoticed — not because nothing exercises it. The truncated/oversized envelope
+// test above feeds exactly these payloads, but asserts `.toThrow()` with no
+// message, so neutralising the bound still throws: the payload flows on, GCM
+// authentication fails on the empty-or-overlong ciphertext, and the test stays
+// green on a crypto-internal error instead.
+//
+// That is precisely the trade this repo already refuses elsewhere — the
+// over-long-key arm in webhook-secret-encryption exists for the same reason. A
+// named refusal says which secret and what length; "unable to authenticate data"
+// says nothing an operator can act on, and a truncated column and a wrong key
+// look identical through it.
+//
+// Reachable because the v2 envelope check upstream validates the PREFIX only.
+// Anything after it is unbounded, so a truncated row reaches here with a
+// two-byte payload.
+describe('platform-secret-value-encryption — payload bound, attributed', () => {
+  const prefix = Buffer.from(PLATFORM_SECRET_VALUE_V2_PREFIX, 'utf8');
+  // Derived, not hand-copied: raising the exported UTF-8 bound must not silently
+  // leave these arms asserting a stale byte count. The 12 + 16 is the AES-GCM IV
+  // and tag, fixed by the algorithm rather than by this module's policy.
+  const GCM_OVERHEAD_BYTES = 12 + 16;
+  const MIN_PAYLOAD = GCM_OVERHEAD_BYTES + 1;
+  const MAX_PAYLOAD = GCM_OVERHEAD_BYTES + PLATFORM_SECRET_VALUE_MAX_UTF8_BYTES;
+
+  it('CRITICAL names the byte count when a stored envelope is one byte under the minimum payload, rather than letting it fall through to a GCM authentication failure that cannot distinguish a truncated row from a wrong key', () => {
+    const short = Buffer.concat([prefix, Buffer.alloc(MIN_PAYLOAD - 1)]);
+    expect(() => decryptPlatformSecretValue(short, KEY, 'bounded_key')).toThrow(
+      new RegExp(`${(MIN_PAYLOAD - 1).toString()} bytes; expected ${MIN_PAYLOAD.toString()}\\.\\.`),
+    );
+  });
+
+  it('CRITICAL names the byte count when a stored envelope is one byte over the maximum payload', () => {
+    const long = Buffer.concat([prefix, Buffer.alloc(MAX_PAYLOAD + 1)]);
+    expect(() => decryptPlatformSecretValue(long, KEY, 'bounded_key')).toThrow(
+      new RegExp(
+        `${(MAX_PAYLOAD + 1).toString()} bytes; expected .*\\.\\.${MAX_PAYLOAD.toString()} bytes`,
+      ),
+    );
+  });
+});

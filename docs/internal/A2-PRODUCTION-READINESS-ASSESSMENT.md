@@ -2715,3 +2715,49 @@ check carries `/^[A-Za-z0-9+/]{88}$/`. A DEK of 79 valid characters plus one
 invalid one decodes to a full 60 bytes and would satisfy a decoded-length check;
 only the canonicality round-trip rejects it. That guard is the de-facto alphabet
 check on this path.
+
+## 6a — platform-secret payload bound attributed; boot-migration bounds measured and handed to A3
+
+**`lib/platform-secret-value-encryption.ts` — 7 sites, control 18 → 9 in its own
+file. 6 covered, 1 attributed.** The payload byte-bound on the decrypt path was
+the single unnoticed site, and it is the layered case again rather than an absent
+one: the existing truncated/oversized envelope test feeds exactly these payloads
+but asserts `.toThrow()` with no message, so neutralising the bound lets the
+payload flow on and GCM authentication fails instead. Verified rather than
+assumed — with the bound neutralised the thrown message is
+`"Unsupported state or unable to authenticate data"`.
+
+That is the trade this repo already refuses in `webhook-secret-encryption`'s
+over-long-key arm: a named refusal says which secret and what length; the crypto
+error says nothing actionable, and **a truncated column and a wrong key look
+identical through it**. Two arms added asserting the byte count at each bound.
+Reachable because the v2 envelope check upstream validates the PREFIX only —
+everything after it is unbounded, so a truncated row arrives with a two-byte
+payload.
+
+### `lib/bootstrap.ts` — the nine boot-migration loops (measured, NOT mine to fix)
+
+Nine value-migrations — webhook signing secrets, platform-secret values, two
+LiveKit credentials, MFA TOTP secrets, recipe payloads, agent transcripts, profile
+DEKs and account-proxy secrets — each carry the same two guards: _"made no
+progress with N rows remaining"_ and _"exceeded the N-row boot bound"_. Together
+they stop a boot that either spins forever on a row it cannot convert or runs
+unbounded work before listening.
+
+⭐ Checked for the N-places-updated-N−1 shape, since eighteen copies of one rule is
+exactly where it appears: **all nine loops carry BOTH guards.** 9/9 paired, no
+gap. The rule is complete and consistent; only its test coverage is missing.
+
+Neutralising one reds **nothing** across all four unit importers (69 tests). Note
+what that is NOT: the two content-parity pins on this file do not cover the line,
+so this is a genuine unit-level gap rather than the parity confound I expected —
+worth stating because a parity pin _would_ red on any source mutation and make
+every site look covered. The two integration importers skip without
+`DATABASE_URL`, so integration coverage is unknown from here, not absent.
+
+They are not testable without a source change: `webhooksRepo` is constructed
+inside `bootstrap()` rather than injected, so the loop cannot be driven from a
+unit test. The established fix in this repo is extraction — `drainWebhookDeliveries`
+is exactly this shape, pulled out of the boot path and bound-tested directly.
+`bootstrap.ts` is A3's active area this session, so this is measured and handed to
+them on the bus with the precedent, rather than edited underneath them.
