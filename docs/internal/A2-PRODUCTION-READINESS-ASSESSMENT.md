@@ -2555,3 +2555,35 @@ One caveat on reading any of these numbers, including mine: a suite run without
 prints look like a full pass. The figures above are from a run with the database
 present. See item 11 for the one intermittent failure that configuration can
 surface.
+
+## 5x — the Anthropic response-size cap was never uncovered (backlog item CLOSED)
+
+`agent-decomposer-claude.ts:857` sat on the open list as UNMEASURED. It is
+measured now, and the answer is that it was covered the whole time. Both
+enforcement sites already had pre-existing tests, in the same file I was about to
+add to:
+
+| mutation                                 | reds                                                                    |
+| ---------------------------------------- | ----------------------------------------------------------------------- |
+| `:855` streamed byte counter → `false`   | `cancels a chunked body on the first over-cap chunk and does not retry` |
+| `:837` declared content-length → `false` | `rejects oversized Content-Length before reading and without retry`     |
+
+Test total stayed 65 under both probes, so neither mutation was a broken
+instrument. The pre-existing streamed-body test is also STRONGER than what I
+drafted: it asserts `cancellations === 1`, the reader-cancel I had written off as
+not worth observing.
+
+The reason I believed it was uncovered is worth keeping, because the measurement
+looked conclusive and was not. I grepped for the error CLASS name,
+`AnthropicResponseTooLargeError`, and got zero hits across all test roots. That
+is true and irrelevant: both tests assert on the message via
+`/response body exceeded/i` and never name the class. A guard can be thoroughly
+covered by tests that never mention the identifier you searched for — the class
+name is an implementation detail, and the assertion surface is the message.
+
+Cost: four redundant test arms written and reverted before commit. The mutation
+run is what exposed it, by reddening pre-existing tests I had not accounted for —
+a mutation that reds a test you did not write is a prior-art signal, not noise.
+Related: the same-day tool `scripts/which-pins-cover.mjs` answers the file-level
+version of this question but not the behaviour-level one; grepping the message
+text a guard produces would have.

@@ -2,23 +2,32 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const body = readFileSync(resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/events.md'), 'utf8');
 
 describe('/webhooks/events live detail coverage', () => {
-  for (const event of [
-    'session.completed',
-    'session.failed',
-    'api_key.revoked',
+  // Derived from the schema rather than hand-listed. `test.ping` is appended
+  // because it is documented here but deliberately NOT subscribable — the test
+  // endpoint dispatches it regardless of subscription.
+  //
+  // This was nine hardcoded strings, which made the payload sections a
+  // hand-maintained copy of a schema-owned set. Measured before changing it: with
+  // a tenth value added to the subscribable enum, this file still reported 12
+  // passed — it demanded nothing. The sibling enum-coverage guard would not have
+  // caught the omission either, because its quick-index assertion is satisfied by
+  // the one-line table row and its citation assertion is a whole-body
+  // `toContain`, which that same row satisfies. So a new event could ship listed
+  // but with no documented payload — the part customers actually integrate
+  // against.
+  // Set, not a plain append: if `test.ping` ever becomes subscribable this still
+  // yields one case for it rather than two identically-named ones.
+  for (const event of new Set<string>([
+    ...SubscribableWebhookEventTypeSchema.options,
     'test.ping',
-    'session.egress_capability_changed',
-    'crypto.order.paid',
-    'crypto.order.failed',
-    'session.challenge_detected',
-    'session.profile_save_failed',
-  ]) {
+  ])) {
     it(`documents ${event}`, () => {
       expect(body).toContain(`### \`${event}\``);
     });

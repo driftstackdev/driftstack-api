@@ -62,3 +62,21 @@ The founder's one fresh-launch verify (control/cookies/stalled). File-control bu
 ## Verified-clean (don't re-audit without new signal)
 
 auth/OAuth, billing/crypto money paths, tenant isolation, deep-link boundary, webhook-delivery SSRF/signing, behavioural-sim, admin-panel authz, recipe credential-redaction, recapture selection. GUI suite green (1132 tests).
+
+## VERIFICATION 2026-08-15 (A2)
+
+Re-verified because a readiness doc's age is not evidence either way — the
+2026-06-11 doc, re-checked earlier today, listed two items as blocking that had
+in fact shipped. This one holds up: both REMAINING items are still genuinely
+blocked, and neither hides A2 work.
+
+- **File-control build** — still gated. `driftstack/docs/planning/74-storage-isolation.md`
+  is unchanged since 2026-06-23 19:06, the same day this audit was written, so the
+  detailed wire (ingest seam + download-event/fetch schema) the build waits on was
+  never pinned. The two seam questions raised on the bus (W2849) remain open.
+- **Founder fresh-launch verify** (control/cookies/stalled) — a founder action,
+  not an A2 item.
+
+Not re-audited: the Verified-clean list, per its own instruction — no new signal
+against those surfaces today. The webhook work this session was documentation
+coverage, not SSRF/signing, so it does not qualify as new signal.
