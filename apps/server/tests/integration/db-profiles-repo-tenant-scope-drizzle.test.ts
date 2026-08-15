@@ -141,5 +141,82 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(mineAfter?.last_saved_at ?? null).not.toBeNull();
       expect(Number(mineAfter?.size_bytes)).toBe(4242);
     });
+
+    // The three highest-consequence of the predicates left open when this file
+    // was first written. Chosen over the rest of the sixteen because of what they
+    // hand over, not because they were next in the list:
+    //
+    //   getWrappedDek — the profile's KEY ENVELOPE. Everything else here leaks a
+    //     row; this one leaks the wrapping of the material that decrypts it.
+    //   delete        — a soft-delete of somebody else's profile is data loss for
+    //     another customer, caused by a caller who never owned the row.
+    //   restore       — the inverse write, and the only one that also has to
+    //     resolve a NAME against the account, so an unscoped restore could collide
+    //     one account's profile with another's.
+    it("CRITICAL a stranger cannot read another account's key envelope, trash their profile, or restore it — the destructive and key-material paths, none of which any test executed against real SQL", async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG tenant-scope test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+
+      const owner = randomUUID();
+      const stranger = randomUUID();
+      seeded.push(owner, stranger);
+      await client`INSERT INTO accounts (id, email) VALUES (${owner}, ${`dek-owner-${owner}@test.local`})`;
+      await client`INSERT INTO accounts (id, email) VALUES (${stranger}, ${`dek-stranger-${stranger}@test.local`})`;
+      const [made] = await client`
+        INSERT INTO profiles (account_id, name, wrapped_dek)
+        VALUES (${owner}, ${`dek-scope-${owner}`}, ${'v2:wrapped-dek-material'})
+        RETURNING id`;
+      const id = made?.id as string;
+
+      // KEY MATERIAL — positive control first, so a null from a broken query
+      // cannot masquerade as a boundary.
+      expect(await repo.getWrappedDek({ id, accountId: owner })).toBe('v2:wrapped-dek-material');
+      expect(
+        await repo.getWrappedDek({ id, accountId: stranger }),
+        "another account's key envelope must not be readable",
+      ).toBeNull();
+
+      // DESTRUCTIVE — a stranger's delete must report failure AND leave the row
+      // alive. Checking only the boolean would miss a soft-delete that landed and
+      // then reported nothing.
+      expect(await repo.delete({ id, accountId: stranger })).toBe(false);
+      const [afterStrangerDelete] = await client`
+        SELECT deleted_at FROM profiles WHERE id = ${id}`;
+      expect(
+        afterStrangerDelete?.deleted_at ?? null,
+        "a stranger must not trash another account's profile",
+      ).toBeNull();
+
+      // The owner CAN, so the arm above is a boundary and not a broken call.
+      expect(await repo.delete({ id, accountId: owner })).toBe(true);
+      const [afterOwnerDelete] = await client`
+        SELECT deleted_at FROM profiles WHERE id = ${id}`;
+      expect(afterOwnerDelete?.deleted_at ?? null).not.toBeNull();
+
+      // RESTORE — now that the row is genuinely trashed, a stranger must not be
+      // able to bring it back. `not_found` rather than a throw is this method's
+      // way of saying the row is not theirs.
+      expect(await repo.restore({ id, accountId: stranger })).toBe('not_found');
+      const [afterStrangerRestore] = await client`
+        SELECT deleted_at FROM profiles WHERE id = ${id}`;
+      expect(
+        afterStrangerRestore?.deleted_at ?? null,
+        'a stranger must not restore it either',
+      ).not.toBeNull();
+
+      // …and the owner can, which also proves the fixture was restorable at all.
+      expect(await repo.restore({ id, accountId: owner })).toBe('restored');
+      const [afterOwnerRestore] = await client`
+        SELECT deleted_at FROM profiles WHERE id = ${id}`;
+      expect(afterOwnerRestore?.deleted_at ?? null).toBeNull();
+    });
   },
 );

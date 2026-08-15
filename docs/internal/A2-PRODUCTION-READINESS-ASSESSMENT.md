@@ -3458,3 +3458,56 @@ All three repos named in 6h are now closed at their customer-facing read/write
 paths: profiles (`db5bae456`), sessions (`56801c354`), MFA recovery codes here.
 Still open and named rather than dropped: 16 predicates in `profiles-repo`
 (trash/restore, rename, snapshot, quota) remain unexercised by real SQL.
+
+## 6k — the key envelope and the destructive paths, and a restore gated by a pair
+
+Continues 6h's open list. Rather than pin all sixteen remaining predicates, mapped
+each to its method and took the three whose consequence is different in KIND from
+"a row leaks":
+
+- **`getWrappedDek`** — everything else here leaks a row; this one leaks the
+  wrapping of the material that decrypts it.
+- **`delete`** — a soft-delete of somebody else's profile is data loss for another
+  customer, caused by a caller who never owned the row.
+- **`restore`** — the inverse write, and the only one that also resolves a NAME
+  against the account.
+
+Added to the existing tenant-scope file rather than a new one, so the related arms
+sit together and the file-count pin does not move.
+
+### Ledger
+
+| predicate                              | result                                 |
+| -------------------------------------- | -------------------------------------- |
+| `getWrappedDek` `:279`                 | **COVERED** — single-line attributable |
+| `delete` `:373`                        | **COVERED** — single-line attributable |
+| `restore` `:433` (select gate) alone   | not attributable                       |
+| `restore` `:496` (update gate) alone   | not attributable                       |
+| `restore` `:433` + `:496` **together** | **COVERED**                            |
+
+⭐ Restore is a LAYERED PAIR, and following that through was the useful part.
+Removing the select gate lets the transaction find another account's trashed row —
+but the UPDATE is still scoped, matches zero rows, and the method still answers
+`not_found`. Removing only the UPDATE gate leaves the select blocking. Neither
+single mutation changes anything observable, which is the correct shape for a
+two-gate transaction and NOT a coverage hole: mutating both together reds the arm.
+
+⚠️ Two of the four restore predicates are not gates at all, and assuming they were
+would have produced a wrong finding. `:444` is the name-conflict lookup and `:473`
+is the quota sum — removing either changes behaviour only when a name actually
+collides or a quota is actually exceeded. I checked what each line was before
+concluding anything about the ones that did not red.
+
+The delete arm asserts the boolean AND reads `deleted_at` back, because checking
+only the return value would miss a soft-delete that landed and then reported
+nothing. Each destructive arm is followed by the owner performing the same call
+successfully, so every refusal is demonstrably a boundary rather than a broken
+call.
+
+### Where the sweep stands
+
+All three repos closed at their customer-facing read, write, destructive and
+key-material paths. What remains in `profiles-repo` is the genuinely lower-consequence
+tail — `countByAccount`, `listTrashed`, `findByAccountAndName`, `touch`, the list
+cursor anchor, and the cross-account-by-design `migrateWrappedDekEnvelopes` — plus
+`purgeTrashed`, which is worth a look on its own the next time this file is opened.
