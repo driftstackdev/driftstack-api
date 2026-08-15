@@ -34,11 +34,15 @@ function streamed(chunks: Uint8Array[]): Response {
   let i = 0;
   const stream = new ReadableStream<Uint8Array>({
     pull(controller) {
-      if (i >= chunks.length) {
+      // Bind before enqueueing rather than asserting non-null: `noUncheckedIndexedAccess`
+      // types `chunks[i]` as possibly undefined, and eslint --fix strips a `!` on
+      // commit, so the assertion form type-checks locally and fails in CI.
+      const chunk = chunks[i];
+      if (chunk === undefined) {
         controller.close();
         return;
       }
-      controller.enqueue(chunks[i]);
+      controller.enqueue(chunk);
       i += 1;
     },
   });

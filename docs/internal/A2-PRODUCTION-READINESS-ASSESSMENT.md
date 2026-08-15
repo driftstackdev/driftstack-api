@@ -2903,3 +2903,153 @@ What IS true and worth stating without acting on it: while ADR-006 stays Propose
 those four tables have no retention at all and grow without bound —
 `webhook_deliveries` fastest. That is a decision waiting on review, not a defect to
 patch, and it belongs in the review rather than in a commit of mine.
+
+## 6d — six wire serializers that no test would catch a field swap in
+
+File-level census exhausted, so the same definitional question one level down:
+which EXPORTED SYMBOLS does the test corpus never name? Scoped to `lib/` and
+`services/` deliberately — routes are exercised over HTTP and packages are
+imported by name, which is what made those false signals last time.
+
+20 symbols across 11 modules. Two clusters were worth following.
+
+### `lib/loopback-host.ts` — covered, needed nothing
+
+Three unnamed exports, and the module decides whether a destructive script may
+run: it backs `db/seed-target-guard.ts`, which stops the dev seed from minting a
+full-admin API key in whatever database it was handed, and the e2e harness that
+DROPs the public schema of `DATABASE_URL`. Both critical properties turned out
+pinned through `assertSeedTarget`:
+
+- `isLoopbackHost` forced to return `true` — every host looks local, the guard can
+  never fire: **5 red**.
+- the unparseable-URL refusal replaced with `return 'localhost'` — the exact
+  "malformed input is the way past every check built on top of this" the module's
+  own comment warns about: **1 red**.
+
+Named nowhere, covered thoroughly. A symbol-name census cannot tell those apart;
+mutation can.
+
+### `services/harness-control-codec.ts` — six serializers, six gaps
+
+`serializeCookiesRequest`, `serializeSetCookies`, `serializeNavigateHistory`,
+`serializeUploadFile`, `serializeListDownloads`, `serializeFetchDownload`. All six
+are live, reached through `services/fleet-control-registry.ts`, and all six are
+named by no test.
+
+Each builds a wire envelope and re-validates it through its zod schema, so a wrong
+`type` literal cannot survive. **What zod cannot see is two same-typed fields
+swapped**: `requestId` and `sessionId` are both strings, so a swap yields a
+perfectly valid envelope naming the wrong session.
+
+Measured, enumerated rather than generalised from one: swapping those two fields
+inside EACH serializer in turn passed all 80 tests across the codec's own file and
+`fleet-control-registry`. **Six for six, nothing noticed.**
+
+It fails where CI cannot see. These envelopes go to a fleet node over WSS — a
+swapped `sessionId` names a session the harness cannot find, and a swapped
+`requestId` breaks the correlation the harness echoes on the reply, so the caller
+waits on an id it never sent. The file-control pair carries customer file bytes to
+and from the session's upload/download jail.
+
+Six arms pin each envelope field-by-field, with deliberately distinct and
+non-interchangeable ids — a fixture that reuses one id for both fields cannot
+detect the swap it exists to catch. Re-running the identical probe after: control
+80 → 86, all six COVERED at one red each.
+
+⚠️ The `setCookies` fixture failed first because `CookieSchema`'s `sameSite` enum is
+`Strict|Lax|None`, the WebKit spelling, not the lowercase form the Set-Cookie
+header uses. Worth knowing before writing another cookie fixture.
+
+### Symbol census calibration — low precision here, and why
+
+Of the 20 unreferenced symbols, **6 were real gaps and they were all in one
+cluster**. Everything else checked so far was covered through a caller:
+
+- `lib/loopback-host.ts` (3 symbols) — covered via `assertSeedTarget`.
+- `services/agent-executor.ts` `consequentialHalt` — the single-use approval
+  property is pinned by `agent-executor-control-plane.test.ts`, which runs two
+  identical "Buy Now" taps against ONE approval and expects
+  `['success', 'confirmation_required']`. It even asserts the caller's approval set
+  is unmutated. Nothing to add.
+
+The pattern: this codebase covers behaviour through the caller that uses it, so a
+symbol-name search says almost nothing on its own. It found the codec cluster only
+because those six are pure envelope builders whose callers' tests never assert the
+envelope — the caller exercises the path without checking the payload.
+
+⭐ So the census earns its keep as a **pointer to where mutation is worth spending**,
+never as a coverage claim. Three instruments now, all with the same shape: message
+census, file census, symbol census — each a pre-filter, each needing mutation to
+produce a verdict, and each with a precision problem that only showed up when its
+output was checked rather than trusted.
+
+### Measured, needs a decision before a fix: `parseSessionId` accepts a case it cannot resolve
+
+`lib/session-id.ts` parses the customer-supplied `driftstack_session_id`. Its
+`UUID_RE` carries the `/i` flag and the function returns the bare uuid
+**unchanged** — no `toLowerCase()`. `parseProfileId` mirrors it exactly.
+
+`agent_sessions.id` is `text('id')`, not `uuid`, so the lookup that follows is
+**case-sensitive**. Ids are minted lowercase. So an uppercase uuid parses
+successfully and then matches no row: the customer gets a 404 for a session that
+exists, rather than the clean 400 the parser is there to produce. Clients that
+uppercase UUIDs are not exotic.
+
+The sibling surface already disagrees: `AGENT_SESSION_ID_RE` is pinned as
+`/^agt_[0-9a-f]{8}-…$/` with **no** `/i`, so the `agt_` family rejects uppercase
+outright while the `ses_` family accepts it and then fails to resolve it.
+
+Not fixed here because the fix is a behaviour change to a customer-facing parser
+with two defensible directions — normalise with `toLowerCase()` (matching the
+"accepts EITHER form" intent), or drop `/i` to reject with a clean 400 (matching
+the `agt_` sibling). That is a call to make deliberately, not at the end of a
+fire, and it wants the same treatment applied to `parseProfileId` in the same
+commit or it becomes the N-places split all over again.
+
+### I shipped a type error last fire, and then misattributed it
+
+`npm run verify` came back **NOT TRUSTWORTHY** with one failure:
+`the-server-source-type-checks.test.ts`, the guard that runs `tsc` over the TESTS
+because vitest transpiles them without checking. The diagnostic:
+
+```
+tests/unit/bounded-response-body.test.ts(41,26): error TS2345:
+  Argument of type 'Uint8Array<ArrayBufferLike> | undefined' is not assignable…
+```
+
+That is item 6c's own test file, and the line is the one where eslint's `--fix`
+stripped a non-null assertion during the commit hook. I noticed the strip at the
+time, re-checked with `tsc --noEmit -p tsconfig.json`, and it passed — **because
+that is the SOURCE project.** Tests are covered by `tsconfig.test.json`, which I
+did not run. So the error shipped in `deaa320f8` and this suite caught it, which
+is exactly what it exists for.
+
+Fixed by binding the element before enqueueing rather than asserting non-null. The
+assertion form cannot survive here: `noUncheckedIndexedAccess` requires it and
+`eslint --fix` removes it on commit, so it type-checks locally and fails in CI
+every time.
+
+⛔ **The misattribution is the part worth recording.** While diagnosing, a separate
+manual `tsc -p tsconfig.test.json` run of mine hit
+`TS6053: File '…/zz-tmp-refute-gui-control-mint.test.ts' not found` — a genuine
+transient, another agent's scratch probe appearing and vanishing under the
+`tests/**` glob. I took that for the cause, wrote it up as a concurrent-writer
+race, and **posted it to A3 on the bus.** It was not the cause; the verify failure
+was mine both times, and re-reading the FIRST log showed the same TS2345 sitting
+in it all along.
+
+Two lessons, and the second is the one that cost something:
+
+1. `tsc -p tsconfig.json` does not check the tests. After any test edit the project
+   to run is `tsconfig.test.json` — and the suite's own type-check guard is the
+   authority, not a hand-run tsc.
+2. **A plausible transient found while diagnosing is not evidence.** I had a real
+   observation and a real failure and connected them without checking that the
+   first explained the second — the same shape as an arm that names a line it never
+   reached. Re-reading the earlier log took thirty seconds and would have prevented
+   a wrong message to another agent.
+
+The `tests/**` glob observation stands on its own and was sent to A3 as a
+correction rather than withdrawn: a scratch file under that path really is inside
+every other agent's typecheck while it exists. It just did not cause this.

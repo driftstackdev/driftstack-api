@@ -12,6 +12,12 @@ import {
   serializeSessionEnd,
   serializePauseSession,
   serializeResumeSession,
+  serializeCookiesRequest,
+  serializeSetCookies,
+  serializeNavigateHistory,
+  serializeUploadFile,
+  serializeListDownloads,
+  serializeFetchDownload,
   parseIntentResult,
   HarnessWireCodecError,
 } from '../../src/services/harness-control-codec.js';
@@ -692,5 +698,104 @@ describe('serializePauseSession / serializeResumeSession (W393 challenge-handlin
   it('rejects an empty sessionId (malformed control frame)', () => {
     expect(() => serializePauseSession('')).toThrow();
     expect(() => serializeResumeSession({ sessionId: '' })).toThrow();
+  });
+});
+
+// The six control serializers that no test named, pinned field-by-field.
+//
+// Each builds a wire envelope and re-validates it through its zod schema, which
+// is why a wrong `type` literal cannot survive. What zod cannot see is two
+// same-typed fields swapped: `requestId` and `sessionId` are both strings, so a
+// swap produces a perfectly valid envelope that names the wrong session.
+//
+// Measured before writing this: swapping those two fields inside EACH of the six
+// serializers in turn passed all 80 tests across this file and
+// fleet-control-registry. Six for six, nothing noticed.
+//
+// It fails in exactly the place CI cannot see. These envelopes go to a fleet node
+// over WSS: a swapped `sessionId` names a session the harness cannot find, and a
+// swapped `requestId` breaks the correlation the harness echoes back on the reply
+// — so the caller waits for a reply keyed to an id it never sent. The
+// file-control pair carries customer file bytes to and from the session's jail.
+//
+// Every argument below is deliberately distinct and non-interchangeable, because
+// a fixture that reuses one id for both fields cannot detect the swap it exists
+// to catch.
+describe('harness control serializers — envelope field mapping', () => {
+  const requestId = 'req-11111111-1111-4111-8111-111111111111';
+  const sessionId = 'ses-22222222-2222-4222-8222-222222222222';
+
+  it('CRITICAL serializeCookiesRequest maps requestId and sessionId to their own fields', () => {
+    expect(serializeCookiesRequest({ requestId, sessionId })).toEqual({
+      type: 'cookiesRequest',
+      requestId,
+      sessionId,
+    });
+  });
+
+  it('CRITICAL serializeSetCookies carries the jar unchanged alongside the right ids', () => {
+    const cookies = [
+      {
+        name: 'sid',
+        value: 'abc',
+        domain: 'example.com',
+        path: '/',
+        secure: true,
+        httpOnly: true,
+        // Capitalised, per CookieSchema's enum — the WebKit spelling, not the
+        // lowercase form the Set-Cookie header uses.
+        sameSite: 'Lax' as const,
+      },
+    ];
+    const wire = serializeSetCookies({ requestId, sessionId, cookies });
+    expect(wire.type).toBe('setCookies');
+    expect(wire.requestId).toBe(requestId);
+    expect(wire.sessionId).toBe(sessionId);
+    expect(wire.cookies).toEqual(cookies);
+  });
+
+  it('CRITICAL serializeNavigateHistory keeps direction and the ids distinct', () => {
+    expect(serializeNavigateHistory({ requestId, sessionId, direction: 'back' })).toEqual({
+      type: 'navigateHistory',
+      requestId,
+      sessionId,
+      direction: 'back',
+    });
+  });
+
+  it('CRITICAL serializeUploadFile maps every field of a customer file upload — name, mime and bytes each to their own slot', () => {
+    expect(
+      serializeUploadFile({
+        requestId,
+        sessionId,
+        name: 'invoice.pdf',
+        mime: 'application/pdf',
+        dataB64: 'JVBERi0=',
+      }),
+    ).toEqual({
+      type: 'uploadFile',
+      requestId,
+      sessionId,
+      name: 'invoice.pdf',
+      mime: 'application/pdf',
+      dataB64: 'JVBERi0=',
+    });
+  });
+
+  it('CRITICAL serializeListDownloads maps requestId and sessionId to their own fields', () => {
+    expect(serializeListDownloads({ requestId, sessionId })).toEqual({
+      type: 'listDownloads',
+      requestId,
+      sessionId,
+    });
+  });
+
+  it('CRITICAL serializeFetchDownload keeps the basename out of the id fields', () => {
+    expect(serializeFetchDownload({ requestId, sessionId, name: 'report.csv' })).toEqual({
+      type: 'fetchDownload',
+      requestId,
+      sessionId,
+      name: 'report.csv',
+    });
   });
 });
