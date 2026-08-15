@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { tierBlockIn } from './_helpers/pricing-tiers.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -54,16 +55,16 @@ describe('marketing-site data/pricing content parity', () => {
   });
 
   it('Personal concurrent=1 + 10 profiles pinned: the tier-defining caps. Drift would break the price-to-concurrent ratio that defines the tier ladder shape', () => {
-    expect(body).toMatch(/id: 'solo_manual',[\s\S]{0,500}profiles: 10,[\s\S]{0,200}concurrent: 1,/);
+    expect(tierBlockIn(body, 'solo_manual')).toMatch(/profiles: 10,[\s\S]*?concurrent: 1,/);
   });
 
   it("Team highlight=true pinned (the recommended Manual-tier): drift would shift the dashboard's highlighted recommendation, which affects conversion rate on the pricing page", () => {
-    expect(body).toMatch(/id: 'team_manual',[\s\S]{0,500}highlight: true,/);
+    expect(tierBlockIn(body, 'team_manual')).toMatch(/highlight: true,/);
   });
 
   it("Team aiAgent + llmBilling='byok_only' pinned: Manual ladder's only AI-agent tier requires BYOK (per ADR-004 founder Tier 3 spec). Drift to enabling AI on Solo would break the ladder differentiation; drift to bundled-LLM at this tier would create a billing-rail mismatch with the server-side tier configuration", () => {
-    expect(body).toMatch(
-      /id: 'team_manual',[\s\S]{0,800}aiAgent: true,[\s\S]{0,200}llmBilling: 'byok_only',/,
+    expect(tierBlockIn(body, 'team_manual')).toMatch(
+      /aiAgent: true,[\s\S]*?llmBilling: 'byok_only',/,
     );
   });
 });

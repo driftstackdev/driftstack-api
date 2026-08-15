@@ -24,6 +24,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { tierBlockIn, tierIdsIn } from './_helpers/pricing-tiers.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -34,32 +35,6 @@ function read(p: string): string {
 
 const PRICING = resolve(REPO_ROOT, 'apps/marketing-site/src/data/pricing.ts');
 
-/**
- * One tier's object text, bounded by the NEXT tier's `id:`.
- *
- * Every assertion below used to anchor on `id: '<tier>'` and scan forward a
- * fixed number of characters — `[\s\S]{0,600}` up to `{0,1500}`. Tier objects
- * in this file are 384–602 bytes, so 23 of those windows reached past the tier
- * they named and into the following one, and the assertion could be satisfied by
- * a NEIGHBOUR's field.
- *
- * That is not theoretical. Changing `self_hosted_solo`'s `minimumTermMonths`
- * from 3 to 6 — a customer contract term — left this file fully green, because
- * the window reached `self_hosted_pro`, which also says 3.
- *
- * Bounding each assertion to its own tier removes the class rather than the
- * instances. Which windows are exploitable depends on whether a neighbour
- * happens to share a literal, so a safe one becomes unsafe the day a tier is
- * added — the fix cannot be "widen no further".
- */
-function tierBlock(id: string): string {
-  const p = read(PRICING);
-  const start = p.indexOf(`id: '${id}'`);
-  if (start === -1) return '';
-  const next = p.indexOf("id: '", start + `id: '${id}'`.length);
-  return p.slice(start, next === -1 ? p.length : next);
-}
-
 describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
   it('pricing.ts file exists', () => {
     expect(existsSync(PRICING)).toBe(true);
@@ -67,18 +42,16 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
 
   it('CRITICAL every tier resolves to a NON-EMPTY block that stops at the next tier. Every assertion below is scoped by `tierBlock`, so a helper returning an empty string would make all of them vacuously unsatisfiable — and one returning too much would reintroduce the neighbour-matching this replaced. Both directions are checked here because both are silent.', () => {
     const p = read(PRICING);
-    const ids = [...p.matchAll(/id: '([a-z_]+)'/g)]
-      .map(([, id]) => id)
-      .filter((id): id is string => id !== undefined);
+    const ids = tierIdsIn(p);
     // MEASURED: 11 tiers — 8 hosted (free through enterprise) + 3 self-hosted.
     expect(ids.length, 'tier ids in pricing.ts').toBeGreaterThanOrEqual(11);
 
-    const empty = ids.filter((id) => tierBlock(id) === '');
+    const empty = ids.filter((id) => tierBlockIn(read(PRICING), id) === '');
     expect(empty, 'tier(s) whose block came back empty:').toEqual([]);
 
     // A block must contain its OWN id and no other — that is what bounds it.
     const leaky = ids.filter((id) => {
-      const block = tierBlock(id);
+      const block = tierBlockIn(read(PRICING), id);
       return [...block.matchAll(/id: '[a-z_]+'/g)].length !== 1;
     });
     expect(leaky, 'tier block(s) that ran into a neighbouring tier:').toEqual([]);
@@ -128,89 +101,93 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
   it('CRITICAL free-tier pricing pinned — $0 monthly + 1 profile + 1 concurrent + oneTime: false + 20-minute sessions (perpetual free tier; trial_pack retired 2026-05-27).', () => {
     const p = read(PRICING);
 
-    expect(tierBlock('free')).toMatch(/monthlyUsd: 0,/);
+    expect(tierBlockIn(read(PRICING), 'free')).toMatch(/monthlyUsd: 0,/);
     expect(p).toMatch(/profiles: 1,[\s\S]{0,200}hoursLabel: '20-minute sessions',/);
     expect(p).toMatch(/concurrent: 1,[\s\S]{0,400}oneTime: false,/);
   });
 
   it('CRITICAL Personal pricing pinned — $79/mo + $63 annual-equiv + 10 profiles + 1 concurrent.', () => {
-    expect(tierBlock('solo_manual')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'solo_manual')).toMatch(
       /monthlyUsd: 79,\s*\n\s*annualMonthlyEquivalentUsd: 63,\s*\n\s*annualUsd: 758,/,
     );
-    expect(tierBlock('solo_manual')).toMatch(/profiles: 10,/);
-    expect(tierBlock('solo_manual')).toMatch(/concurrent: 1,/);
+    expect(tierBlockIn(read(PRICING), 'solo_manual')).toMatch(/profiles: 10,/);
+    expect(tierBlockIn(read(PRICING), 'solo_manual')).toMatch(/concurrent: 1,/);
   });
 
   it('CRITICAL Team pricing pinned — $249/mo + $199 annual-equiv + 50 profiles + 3 concurrent + highlight: true.', () => {
-    expect(tierBlock('team_manual')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'team_manual')).toMatch(
       /monthlyUsd: 249,\s*\n\s*annualMonthlyEquivalentUsd: 199,\s*\n\s*annualUsd: 2_390,/,
     );
-    expect(tierBlock('team_manual')).toMatch(/profiles: 50,/);
-    expect(tierBlock('team_manual')).toMatch(/concurrent: 3,/);
-    expect(tierBlock('team_manual')).toMatch(/highlight: true,/);
+    expect(tierBlockIn(read(PRICING), 'team_manual')).toMatch(/profiles: 50,/);
+    expect(tierBlockIn(read(PRICING), 'team_manual')).toMatch(/concurrent: 3,/);
+    expect(tierBlockIn(read(PRICING), 'team_manual')).toMatch(/highlight: true,/);
   });
 
   it('CRITICAL Agency pricing pinned — $699/mo + $559 annual-equiv + 200 profiles + 8 concurrent + Email/Slack Connect channel with the 48h non-contractual target (S43 2026-07-07: ToS §9.1 disclaims a reply-time SLA on this tier, so the old "12h SLA" figure is retired).', () => {
-    expect(tierBlock('agency_manual')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'agency_manual')).toMatch(
       /monthlyUsd: 699,\s*\n\s*annualMonthlyEquivalentUsd: 559,\s*\n\s*annualUsd: 6_710,/,
     );
-    expect(tierBlock('agency_manual')).toMatch(/profiles: 200,/);
-    expect(tierBlock('agency_manual')).toMatch(/concurrent: 8,/);
-    expect(tierBlock('agency_manual')).toMatch(/support: 'Email \+ Slack Connect · 48h target',/);
+    expect(tierBlockIn(read(PRICING), 'agency_manual')).toMatch(/profiles: 200,/);
+    expect(tierBlockIn(read(PRICING), 'agency_manual')).toMatch(/concurrent: 8,/);
+    expect(tierBlockIn(read(PRICING), 'agency_manual')).toMatch(
+      /support: 'Email \+ Slack Connect · 48h target',/,
+    );
   });
 
   it('CRITICAL API Starter pricing pinned — $149/mo + $119 annual-equiv + 25 profiles + 2 concurrent.', () => {
-    expect(tierBlock('api_starter')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'api_starter')).toMatch(
       /monthlyUsd: 149,\s*\n\s*annualMonthlyEquivalentUsd: 119,\s*\n\s*annualUsd: 1_430,/,
     );
-    expect(tierBlock('api_starter')).toMatch(/profiles: 25,/);
-    expect(tierBlock('api_starter')).toMatch(/concurrent: 2,/);
+    expect(tierBlockIn(read(PRICING), 'api_starter')).toMatch(/profiles: 25,/);
+    expect(tierBlockIn(read(PRICING), 'api_starter')).toMatch(/concurrent: 2,/);
   });
 
   it('CRITICAL API Builder pricing pinned — $499/mo + $399 annual-equiv + 100 profiles + 8 concurrent + highlight: true + byok_or_bundled LLM.', () => {
-    expect(tierBlock('api_builder')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'api_builder')).toMatch(
       /monthlyUsd: 499,\s*\n\s*annualMonthlyEquivalentUsd: 399,\s*\n\s*annualUsd: 4_790,/,
     );
-    expect(tierBlock('api_builder')).toMatch(/profiles: 100,/);
-    expect(tierBlock('api_builder')).toMatch(/concurrent: 8,/);
-    expect(tierBlock('api_builder')).toMatch(/llmBilling: 'byok_or_bundled',/);
-    expect(tierBlock('api_builder')).toMatch(/highlight: true,/);
+    expect(tierBlockIn(read(PRICING), 'api_builder')).toMatch(/profiles: 100,/);
+    expect(tierBlockIn(read(PRICING), 'api_builder')).toMatch(/concurrent: 8,/);
+    expect(tierBlockIn(read(PRICING), 'api_builder')).toMatch(/llmBilling: 'byok_or_bundled',/);
+    expect(tierBlockIn(read(PRICING), 'api_builder')).toMatch(/highlight: true,/);
   });
 
   it('CRITICAL API Scale pricing pinned — $1,499/mo + $1,199 annual-equiv + 500 profiles + 24 concurrent + Slack Connect with the ToS §9.2 4h Severity-1 first-response SLA (S43 2026-07-07: the bare "4h SLA" read as an all-ticket reply SLA; the ToS grant is Severity-1 first-response).', () => {
-    expect(tierBlock('api_scale')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'api_scale')).toMatch(
       /monthlyUsd: 1_499,\s*\n\s*annualMonthlyEquivalentUsd: 1_199,\s*\n\s*annualUsd: 14_390,/,
     );
-    expect(tierBlock('api_scale')).toMatch(/profiles: 500,/);
-    expect(tierBlock('api_scale')).toMatch(/concurrent: 24,/);
-    expect(tierBlock('api_scale')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'api_scale')).toMatch(/profiles: 500,/);
+    expect(tierBlockIn(read(PRICING), 'api_scale')).toMatch(/concurrent: 24,/);
+    expect(tierBlockIn(read(PRICING), 'api_scale')).toMatch(
       /support: 'Slack Connect · 4h Severity-1 first-response SLA',/,
     );
   });
 
   it('CRITICAL Enterprise tier — monthlyUsd null + annualMonthlyEquivalentUsd 4_000 (the $4,000/mo entry floor) + annualUsd 48_000 (= 4_000 × 12, a true YEARLY total like every other tier) + Custom profiles + Custom concurrent + dedicated CSM 1h + Contact sales CTA. The $4,000/mo floor is the entry for the negotiated commitment.', () => {
-    expect(tierBlock('enterprise')).toMatch(/monthlyUsd: null,/);
-    expect(tierBlock('enterprise')).toMatch(/annualMonthlyEquivalentUsd: 4_000,/);
-    expect(tierBlock('enterprise')).toMatch(/annualUsd: 48_000,/);
-    expect(tierBlock('enterprise')).toMatch(/profiles: 'Custom',/);
-    expect(tierBlock('enterprise')).toMatch(/concurrent: 'Custom',/);
+    expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(/monthlyUsd: null,/);
+    expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(/annualMonthlyEquivalentUsd: 4_000,/);
+    expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(/annualUsd: 48_000,/);
+    expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(/profiles: 'Custom',/);
+    expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(/concurrent: 'Custom',/);
     // S43 2026-07-07 — support string states the ToS §9.2 grant
     // exactly (1h Severity-1 first-response), not a bare "1h SLA".
-    expect(tierBlock('enterprise')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(
       /support: 'Dedicated CSM · 1h Severity-1 first-response SLA',/,
     );
-    expect(tierBlock('enterprise')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(
       /cta: \{ label: 'Contact sales', href: 'mailto:sales@driftstack\.dev' \}/,
     );
-    expect(tierBlock('enterprise')).toMatch(/llmBilling: 'byok_or_bundled_custom',/);
+    expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(
+      /llmBilling: 'byok_or_bundled_custom',/,
+    );
   });
 
   it('CRITICAL aiAgent boolean gates pinned correctly — false on free + solo_manual; true on team_manual + agency_manual + all api_* + enterprise. The free/solo lock-out is per founder Tier 3 spec post-V-072.', () => {
     const p = read(PRICING);
 
     // aiAgent: false tiers.
-    expect(tierBlock('free')).toMatch(/aiAgent: false,/);
-    expect(tierBlock('solo_manual')).toMatch(/aiAgent: false,/);
+    expect(tierBlockIn(read(PRICING), 'free')).toMatch(/aiAgent: false,/);
+    expect(tierBlockIn(read(PRICING), 'solo_manual')).toMatch(/aiAgent: false,/);
 
     // aiAgent: true tiers.
     for (const tier of [
@@ -240,27 +217,27 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
 
   it('CRITICAL SELF_HOSTED_SKUS 3-tier roster pinned — solo $1k/$800 + pro $2k/$1.6k + enterprise null/$4k. The 3-month minimum on solo/pro + 12-month on enterprise pins the term shape.', () => {
     // Solo.
-    expect(tierBlock('self_hosted_solo')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'self_hosted_solo')).toMatch(
       /monthlyUsd: 1_000,\s*\n\s*annualMonthlyEquivalentUsd: 800,/,
     );
-    expect(tierBlock('self_hosted_solo')).toMatch(/profilesMax: 25,/);
-    expect(tierBlock('self_hosted_solo')).toMatch(/minimumTermMonths: 3,/);
-    expect(tierBlock('self_hosted_solo')).toMatch(/sourceEscrow: false,/);
+    expect(tierBlockIn(read(PRICING), 'self_hosted_solo')).toMatch(/profilesMax: 25,/);
+    expect(tierBlockIn(read(PRICING), 'self_hosted_solo')).toMatch(/minimumTermMonths: 3,/);
+    expect(tierBlockIn(read(PRICING), 'self_hosted_solo')).toMatch(/sourceEscrow: false,/);
 
     // Pro.
-    expect(tierBlock('self_hosted_pro')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'self_hosted_pro')).toMatch(
       /monthlyUsd: 2_000,\s*\n\s*annualMonthlyEquivalentUsd: 1_600,/,
     );
-    expect(tierBlock('self_hosted_pro')).toMatch(/profilesMax: 100,/);
-    expect(tierBlock('self_hosted_pro')).toMatch(/minimumTermMonths: 3,/);
+    expect(tierBlockIn(read(PRICING), 'self_hosted_pro')).toMatch(/profilesMax: 100,/);
+    expect(tierBlockIn(read(PRICING), 'self_hosted_pro')).toMatch(/minimumTermMonths: 3,/);
 
     // Enterprise.
-    expect(tierBlock('self_hosted_enterprise')).toMatch(
+    expect(tierBlockIn(read(PRICING), 'self_hosted_enterprise')).toMatch(
       /monthlyUsd: null,\s*\n\s*annualMonthlyEquivalentUsd: 4_000,/,
     );
-    expect(tierBlock('self_hosted_enterprise')).toMatch(/profilesMax: null,/);
-    expect(tierBlock('self_hosted_enterprise')).toMatch(/minimumTermMonths: 12,/);
-    expect(tierBlock('self_hosted_enterprise')).toMatch(/sourceEscrow: true,/);
+    expect(tierBlockIn(read(PRICING), 'self_hosted_enterprise')).toMatch(/profilesMax: null,/);
+    expect(tierBlockIn(read(PRICING), 'self_hosted_enterprise')).toMatch(/minimumTermMonths: 12,/);
+    expect(tierBlockIn(read(PRICING), 'self_hosted_enterprise')).toMatch(/sourceEscrow: true,/);
   });
 
   it('CRITICAL SELF_HOSTED differentiator records pinned — SOFTWARE_UPDATES + ARCHETYPE_UPDATES + SOURCE_ACCESS (V-131 license-tier-gate). Drift would mis-document what each self-hosted tier actually delivers.', () => {
