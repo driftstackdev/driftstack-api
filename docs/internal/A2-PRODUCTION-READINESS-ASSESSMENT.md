@@ -764,15 +764,30 @@ the keychain grants "Always Allow" pinned to the old cdhash. The per-call prompt
 storm is fixed in code; this half needs Developer ID or a stable self-signed
 identity, and touches the founder's machine and the release path.
 
-### 10. Prettier is declared `^3.4.0`
+### 10. CLOSED — Prettier is pinned exactly
 
 A caret range on a formatter. The lockfile pins 3.8.3 and the installed copy only
 caught up on 2026-07-31, at which point the format gate went red on 24 files
 formatted under an older version — while `.husky/pre-push` runs `format:check`,
-so the next push would have failed. Fixed in `940cd90d7`. _Recommendation:_ pin
-exactly, so a future minor bump cannot reformat the repo silently. A2 did not,
-because it means editing `package.json` and the lockfile while A3 was actively
-working dependencies.
+so the next push would have failed. Fixed in `940cd90d7`.
+
+**Now pinned exactly** (`"prettier": "3.8.3"`); the lockfile declaration follows,
+and no other dependency moved — the sync is a one-line diff. The blocker recorded
+here was timing, not objection: the last dependency commit was 2026-08-08 and
+nothing has touched `package.json` since except A2's own heap fix, so the
+concurrent-writer hazard had passed.
+
+Guarded by `the-formatter-cannot-change-under-us`, which derives the formatter
+from the `format*` scripts rather than naming Prettier, and asserts three things:
+it is pinned exactly, the pin agrees with the lockfile, and `format` and
+`format:check` resolve to the same binary. The reason it needs a guard rather
+than just this commit is that `^` is the default — `npm install --save-dev`
+writes a caret and nothing warns, so the property decays back without an
+assertion holding it. Proved by mutation: a caret reds the pin and lockfile arms,
+a mismatched exact version reds the lockfile arm, a divergent check binary reds
+the last arm, and de-referencing both scripts reds the anti-vacuity arm.
+
+`npm run format:check` green with the pin in place.
 
 ### 21. Item 20 closed — every parameterised route decided
 
