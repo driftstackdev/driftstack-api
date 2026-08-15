@@ -228,3 +228,109 @@ describe('a client that loses the pair-mode lock is told who holds it', () => {
     expect(res.body).toContain('cli_holder');
   });
 });
+
+// ─── the pair-mode STATE MACHINE's refusals, which are not the lock's ───────
+//
+// Three more sites, all measured uncovered (disabling each left 237 tests across
+// the agent-session, pair-mode and lock files green):
+//
+//   :4101  /takeover      — transition rejected by the state machine
+//   :3908  /mode          — the session is no longer active
+//
+// ⚠️ A third arm was written for `:3801`, the input-event route's own copy of the
+// invalid-transition catch, and then REMOVED. It never reached that line: the
+// input-event route refuses first at its "wait for the transition to settle"
+// guard, which excludes exactly the states (`takeover-pending`, `*-queued`,
+// `handback-pending`) that could produce an invalid transition. Measured twice —
+// the arm's body came back as a plain `conflict`, and disabling the settling
+// guard reds pre-existing arms, so that one is already covered. `:3801` is
+// shadowed by a guard upstream of it in the same handler.
+//
+// ⚠️ The first two are the ones the previous slice's lock arms are easy to
+// confuse with. A lock loser and a state-machine refusal are DIFFERENT branches
+// producing DIFFERENT problem types from DIFFERENT lines, and the sequential
+// case reaches the second, never the first: the lock is released in a `finally`,
+// so a second takeover acquires it cleanly and is then refused for asking for a
+// transition the current state does not allow. Both arms assert the problem TYPE
+// precisely for that reason — `pair-mode-invalid-transition` here,
+// `pair-mode-conflict` there. Asserting only "409" would let either stand in for
+// the other, and a build that collapsed them would look correct.
+//
+// LEDGER — control 9/9:
+//
+//   :4101 invalid-transition throw voided      1 red
+//   :3908 non-active guard removed             1 red
+//   :3908 INVERTED (refuses ACTIVE sessions)   1 red
+//
+// The inversion matters more than the removal. `/mode` toward manual is the
+// handback the tier gate deliberately leaves open on every tier, so a guard that
+// refused ACTIVE sessions instead of closed ones would strand every live session
+// in whatever mode it was in — a 409 on the one flip that must always work.
+describe('the pair-mode state machine refuses transitions the lock would allow', () => {
+  let fx3: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx3) await fx3.cleanup();
+  });
+
+  async function pairSession(): Promise<string> {
+    const res = await fx3.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx3.plaintext}` },
+      payload: { token_budget: 50_000, mode: 'pair' },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json<{ id: string }>().id;
+  }
+
+  it('POST /takeover twice → the SECOND is an invalid-transition, not a lock conflict', async () => {
+    fx3 = await buildTestApp({ enableAgentRuntime: true });
+    const id = await pairSession();
+    const first = await fx3.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/takeover`,
+      headers: { authorization: `Bearer ${fx3.plaintext}` },
+      payload: { client_id: 'cli_tab_a' },
+    });
+    expect(first.statusCode, first.body).toBe(200);
+
+    const second = await fx3.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/takeover`,
+      headers: { authorization: `Bearer ${fx3.plaintext}` },
+      payload: { client_id: 'cli_tab_b' },
+    });
+    expect(second.statusCode, second.body).toBe(409);
+    const body = second.json<{ type: string; from?: string; transition?: string }>();
+    // The distinction that matters: NOT pair-mode-conflict. The lock was free.
+    expect(body.type).toContain('pair-mode-invalid-transition');
+    expect(body.type).not.toContain('pair-mode-conflict');
+    // The payload names where the machine was and what was asked of it, which is
+    // what lets a client decide whether to retry or to re-read state.
+    expect(body.from).toBe('takeover-pending');
+    expect(body.transition).toBe('takeover-request');
+  });
+
+  it('POST /mode on a session that is no longer active → 409 naming the status', async () => {
+    fx3 = await buildTestApp({ enableAgentRuntime: true });
+    const id = await pairSession();
+    const closed = await fx3.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx3.plaintext}` },
+    });
+    expect(closed.statusCode, closed.body).toBeLessThan(300);
+
+    const res = await fx3.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/mode`,
+      headers: { authorization: `Bearer ${fx3.plaintext}` },
+      payload: { mode: 'manual' },
+    });
+    expect(res.statusCode, res.body).toBe(409);
+    // Naming the actual status is the useful part — "closed" and "errored" send
+    // a client to different places, and a bare 409 sends it to neither.
+    expect(res.json<{ detail: string }>().detail).toMatch(/mode can only be changed on active/i);
+  });
+});
