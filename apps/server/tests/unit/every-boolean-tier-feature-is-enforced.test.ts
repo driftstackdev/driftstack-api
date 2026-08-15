@@ -61,6 +61,24 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 /**
+ * One enforcement call, with its feature literal.
+ *
+ * V-786a — one level of nesting is allowed between the opening paren and the
+ * literal. The original `\([^)]*?'([a-zA-Z]+)'` terminates on the FIRST `)`, so
+ * it could not see `requireTierFeature(requireCtx(req).account.tier, 'aiAgent')`,
+ * a real call site in `routes/agent-sessions.ts`. Under-counting is the safe
+ * direction for the two roster cases (a missed site reports a feature as
+ * unenforced — a false alarm someone would notice), but the use-path case asks
+ * whether a SPECIFIC file enforces a feature, and there an invisible call site is
+ * a false failure that would push someone to add a duplicate check.
+ *
+ * Shared with the call-shape case below on purpose: a fixture asserted against a
+ * SECOND copy of this pattern would only prove the copy works.
+ */
+const ENFORCEMENT_CALL =
+  /(?:requireTierFeature|tierHasFeature)\((?:[^()']|\([^()]*\))*'([a-zA-Z]+)'/g;
+
+/**
  * Features the server actually gates on. Both helpers count: `requireTierFeature` throws 403,
  * and `tierHasFeature` is the branching form used where a throw is the wrong shape.
  */
@@ -70,9 +88,7 @@ function enforced(): Map<string, string[]> {
     const rel = file.slice(REPO_ROOT.length + 1);
     // The helpers' own definitions are not enforcement sites.
     if (rel.endsWith('lib/errors-helpers.ts')) continue;
-    for (const m of readFileSync(file, 'utf8').matchAll(
-      /(?:requireTierFeature|tierHasFeature)\([^)]*?'([a-zA-Z]+)'/g,
-    )) {
+    for (const m of readFileSync(file, 'utf8').matchAll(ENFORCEMENT_CALL)) {
       const list = sites.get(m[1]!) ?? [];
       list.push(rel);
       sites.set(m[1]!, list);
@@ -103,6 +119,31 @@ describe('every boolean tier feature is enforced somewhere', () => {
       unenforced,
       'boolean tier feature(s) with no requireTierFeature / tierHasFeature site — gate them, or record them in UNENFORCED_BY_DESIGN with the reason no customer promise depends on the flag:',
     ).toEqual([]);
+  });
+
+  it('CRITICAL the call-site matcher handles every call SHAPE in this repo, including a nested paren before the feature literal. Everything in this file is derived from that one regex, so a shape it silently skips makes every answer below it partial. Asserted against literal fixtures rather than against the aggregate: my first version of this case checked that agent-sessions.ts appears in the aiAgent site list, which it already did from a DIFFERENT, non-nested call on the same file — green, and blind to the exact regression it was written for.', () => {
+    const featuresIn = (source: string): string[] =>
+      [...source.matchAll(new RegExp(ENFORCEMENT_CALL.source, 'g'))].map((m) => m[1]!);
+
+    expect(featuresIn("requireTierFeature(ctx.account.tier, 'apiAccess');"), 'plain').toEqual([
+      'apiAccess',
+    ]);
+    expect(
+      featuresIn("requireTierFeature(requireCtx(req).account.tier, 'aiAgent');"),
+      'nested paren before the literal — the shape the original regex could not see',
+    ).toEqual(['aiAgent']);
+    expect(featuresIn("tierHasFeature(tier, 'vpnEgress')"), 'the branching form').toEqual([
+      'vpnEgress',
+    ]);
+    expect(
+      featuresIn("requireTierFeature(\n  ownerTier,\n  'aiAgent',\n)"),
+      'prettier-wrapped across lines',
+    ).toEqual(['aiAgent']);
+
+    // And it does not match indiscriminately: a bare literal, or a different
+    // function taking one, is not an enforcement site.
+    expect(featuresIn("const x = 'vpnEgress';"), 'a bare literal is not a call').toEqual([]);
+    expect(featuresIn("logFeature(tier, 'vpnEgress');"), 'a different function is not').toEqual([]);
   });
 
   it('CRITICAL a feature that gates a STORED resource is enforced where the resource is USED, not only where it is created. This is the half a call-site count cannot see, and it is how vpnEgress broke twice: the create paths gated it, so the flag read as enforced, while every proxy registered before a downgrade stayed usable forever. Nothing about a call site says whether it runs at create time or at use time, so the required use-path site is named per feature.', () => {

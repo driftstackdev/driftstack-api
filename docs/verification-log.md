@@ -34158,3 +34158,33 @@ Sixteen `resolveForDispatch` / `runProxyPrelaunchGate` / `dispatchSessionAssignO
 sites updated (7 + 7 + 10 + 45 across four files); all mechanical, all forced by the type checker.
 
 `EXPECTED_TEST_FILES` 2730 → 2731.
+
+## V-786a — the guard's own matcher could not see one of the call shapes it scans for (2026-08-15)
+
+`every-boolean-tier-feature-is-enforced.test.ts` derives everything it knows from one regex over
+the server source. That regex was `\((?:[^)]*?)'([a-zA-Z]+)'`, and a lazy `[^)]*?` terminates on the
+FIRST `)` — so it could not match
+`requireTierFeature(requireCtx(req).account.tier, 'aiAgent')`, a real call site in
+`routes/agent-sessions.ts`.
+
+For the two roster cases the miss was harmless in direction: an unseen site reports a feature as
+_unenforced_, a false alarm somebody would notice. It stopped being harmless with V-786's use-path
+case, which asks whether a SPECIFIC file enforces a given feature — there an invisible call site is
+a false failure that would push the next person to add a duplicate check that already exists.
+
+Widened to allow one level of nesting, and the matcher is now a named constant shared by the scan
+and by the new case rather than being restated in the test — a fixture asserted against a second
+copy of the pattern only proves the copy works.
+
+**My first version of that case was green for the wrong reason, and this is the second time in one
+session.** It asserted that `routes/agent-sessions.ts` appears in the `aiAgent` site list. It does —
+from a _different_, non-nested call in the same file — so reverting the regex left the case passing
+and blind to the exact regression it was written for. The mutation is what exposed it: a mutation
+that does not red is not a reassurance, it is a result. Rewritten to run the shared matcher over
+literal fixtures for all four call shapes in this repo (plain, nested-paren, `tierHasFeature`,
+prettier-wrapped) plus two negatives, so it measures the matcher instead of the aggregate.
+
+Mutation-proved both directions: the lazy regex reds the nested-paren fixture; dropping the
+function-name anchor reds the "a different function is not an enforcement site" negative.
+
+No new test file — `EXPECTED_TEST_FILES` unchanged at 2731.
