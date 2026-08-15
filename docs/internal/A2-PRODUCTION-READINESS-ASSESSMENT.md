@@ -2225,6 +2225,46 @@ reworded, because an arm that reaches a different layer than it names is worse
 than no arm: it reports the shadowed site as covered and stops anyone looking
 again.
 
+### 5p. The isolation census — every parameterised route, measured against every isolation test
+
+After finding six uncovered ownership routes on agent sessions, I stopped picking
+targets by reading files and built the census instead: enumerate every
+parameterised route the running app registers, drop the staff surfaces
+(`/v1/admin/*`, `/v1/internal/*`, which are scope-gated rather than row-owned),
+and ask which are mentioned by no cross-account test.
+
+**70 customer-facing parameterised routes. 63 mentioned. 7 not.**
+
+A mention is weak evidence — it proves a string appears, not that an arm drives
+it — so the output is a shortlist, not a verdict. Each still needs the owner
+differential (does A's own request succeed?) and a mutation before it can be
+called covered. Two have been closed:
+
+| route                                            | status                                                                                        |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `POST /v1/profiles/:id/launch`                   | **closed** — `d0b14e54a`                                                                      |
+| `POST /v1/profiles/:id/transfer`                 | **closed** — `d0b14e54a`                                                                      |
+| `GET /v1/recipes/:id`                            | open                                                                                          |
+| `DELETE /v1/recipes/:id`                         | open                                                                                          |
+| `DELETE /v1/team/members/:id`                    | open                                                                                          |
+| `POST /v1/webhook-deliveries/:deliveryId/replay` | open                                                                                          |
+| `GET /v1/status/incidents/:id`                   | **not applicable** — served `publicOnly`, a public status page with no per-account row to own |
+
+⚠️ The four open ones all need a resource that genuinely belongs to A before they
+can be probed. A recipe, a team membership and a webhook delivery each have to be
+CREATED first, and probing with an id that was never created is precisely the
+fake this whole line of work keeps finding: a nonexistent id 404s on the first
+lookup, before ownership is consulted. Writing those arms means building the
+fixtures, not shortening the probe.
+
+⭐ Both closed routes were missing for the same structural reason, and it is the
+finding worth carrying forward: **the uncovered route is the one registered in
+another file.** `/launch` lives in `routes/sessions.ts`, not `routes/profiles.ts`;
+the two agent-session routes found this morning lived in `recipes.ts` and
+`agent-sessions-transport-report.ts`. A boundary is defined by the PATH. Any
+inventory built by reading one route file inherits that file's boundaries instead
+of the API's.
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
