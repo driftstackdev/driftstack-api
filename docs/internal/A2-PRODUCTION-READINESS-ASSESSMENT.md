@@ -3053,3 +3053,70 @@ Two lessons, and the second is the one that cost something:
 The `tests/**` glob observation stands on its own and was sent to A3 as a
 correction rather than withdrawn: a scratch file under that path really is inside
 every other agent's typecheck while it exists. It just did not cause this.
+
+## 6e — a fire of negative results, and an instrument that was lying
+
+No new guards this fire. Five investigations, five dissolved — four of them
+correctly, and the fifth because my own tool reported a false gap. The tool fix is
+the deliverable.
+
+### The four that were genuinely fine
+
+- **`serializeTrimProfile`** — I named it last fire as a likely seventh instance of
+  the envelope gap, on the grounds that only a content-parity pin names it. Wrong:
+  swapping `requestId`/`profileId` reds 2 tests in
+  `trim-profile-request-correlator` and `profiles-trim-route`. Those two assert the
+  serialized envelope; the six I did pin had callers that never asserted the
+  payload. That is the actual discriminator, not "named by a parity pin".
+- **`parseSessionId` accepting an uppercase uuid** — I published this last fire as a
+  404-where-a-400-belongs. **It is not a defect.** I traced it to
+  `agent_sessions.id`, which is `text`, but the function's single caller passes its
+  output to `driverSessionsRepo.findSession` → `sessions.id`, which is `uuid`.
+  Postgres normalises a uuid literal, so an uppercase id resolves fine. Proving the
+  key stopped a behaviour change to a customer-facing parser that would have fixed
+  nothing. `parseProfileId` is the same shape against a `uuid` column, so the
+  "N-places split" I warned about does not exist either.
+- **`AGENT_SESSION_ID_RE` defined twice with different flags** — `/i` in
+  `agent-sessions-repo.ts:67`, none in `agent-sessions-livekit-token.ts:35`, against
+  a case-sensitive `text` PK. Real divergence, harmless: the repo's copy is followed
+  by an existence check (`if (c)`), so an uppercase cursor finds no anchor and falls
+  through to the first page — exactly what the author documented. The two copies
+  differ in flags and converge in behaviour.
+- **`scroll.ts`** — 6 of 8, and both remainders legitimate. `:160` is a
+  module-load-time self-check on constants that cannot fire today and throws at
+  IMPORT if a future edit breaks the ratio, which is louder than a test. `:234`
+  (`tickIntervalMs <= 0`) is layered behind the `MIN_TICK_INTERVAL_MS` floor at
+  `:243`, since anything <= 0 also fails < 1.
+
+### ⛔ The instrument was producing false gaps
+
+`multi-touch.ts` came back 7 of 8 with `:255` — the per-finger `samples` ceiling —
+UNNOTICED. It is not uncovered. Removing it produces:
+
+```
+FATAL ERROR: Ineffective mark-compacts near heap limit — JavaScript heap out of memory
+```
+
+The guard is holding back a 50,000,000-iteration allocation, and the existing test
+(`generatePinchGesture rejects an absurd samples value (the exact repro: 50,000,000)`)
+depends on it completely. The ledger misread it because a crashed run prints
+`Tests   (28)` with **empty counts** — which matches neither a "failed" check nor a
+total-mismatch check, so it fell through to "nothing noticed".
+
+⭐ **A mutation that crashes or hangs the runner reads exactly like an uncovered
+site.** The fix detects `heap out of memory` / `FATAL ERROR` / `timed out` and an
+empty count, and reports the crash as COVERED — the guard was doing its job. With
+it, multi-touch is **8 of 8**.
+
+Blast radius checked rather than assumed: the earlier "unnoticed" verdicts in this
+document are all validation guards on bounded inputs — none of those modules
+contains an unbounded loop, so neutralising them throws or fails authentication
+rather than exhausting memory. Those ledgers stand.
+
+⚠️ Two further self-inflicted errors while chasing this, both from a filter rather
+than the code: a `-t "pinch"` run matched a different test because the real title
+capitalises `generatePinchGesture`, and a ledger run against
+`tests/unit/multi-touch.test.ts` produced an EMPTY control and a uniform
+all-UNNOTICED column because this package keeps that file at `tests/`. The empty
+control line is what caught the second one — a ledger without a printed control is
+not evidence.
