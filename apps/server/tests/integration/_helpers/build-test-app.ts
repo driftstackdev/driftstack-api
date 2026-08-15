@@ -638,6 +638,18 @@ export interface TestAppFixture {
    * they are about to update, so the second one's expectation always matches.
    */
   accountProxiesRepo: InMemoryAccountProxiesRepo;
+  /**
+   * The pair-mode takeover lock, exposed so a test can drive the LOCK-LOSER
+   * branches on `/takeover` and `/input-event`.
+   *
+   * Those branches are unreachable by ordering requests: the routes release the
+   * lock in a `finally`, so a second sequential takeover acquires it cleanly and
+   * is refused later by the STATE MACHINE instead (a different error, from a
+   * different line). Only a lock genuinely held by another client produces the
+   * conflict — which is exactly the production condition, one tab holding
+   * control while another asks for it.
+   */
+  pairModeLock: InMemoryPairModeTakeoverLock;
   billingRepo: InMemoryBillingRepo;
   billingProvider: InMemoryBillingProvider;
   /** V-202c — lifecycle dedup state (first_failure_email_sent_at, etc.). */
@@ -1829,6 +1841,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       ? { agentTurnReceiptsRepo: agentTurnReceiptsRepoForTests }
       : {}),
     accountProxiesRepo,
+    pairModeLock,
     incidentsRepo,
     statusSubscribersRepo,
     statusSubscribersService,
