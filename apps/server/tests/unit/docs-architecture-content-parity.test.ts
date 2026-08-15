@@ -136,9 +136,27 @@ describe('W548.A /docs/architecture.md content parity', () => {
     expect(body).toMatch(
       /signature verification \(HMAC-SHA256 over `<timestamp>\.<raw body>` with replay tolerance 5 min\)/,
     );
-    expect(body).toMatch(/Always replies 200 to a verified, parseable event/);
+    // V-792 — this used to freeze "Always replies 200 to a verified, parseable
+    // event … to prevent Stripe re-delivery loops", with no mention of the
+    // deliberate 500. routes/webhooks-stripe.ts:102-113 catches a transient infra
+    // error, bumps handler_transient_error and RETHROWS, and says so in its own
+    // comment: "The one exception is a transient infra error above, which we
+    // deliberately let 500 (C5)". The sibling pin
+    // routes-webhooks-stripe-content-parity.test.ts:99-104 froze that truth, so
+    // two pins in this repo asserted opposite things and both were green. An
+    // operator triaging Stripe 500s reads this doc and treats a working retry
+    // mechanism as an outage.
     expect(body).toMatch(
-      /\(even on duplicate or ignored event types\) to prevent Stripe re-delivery loops\./,
+      /Replies 200 to a verified, parseable event that was processed — including duplicates and ignored event types/,
+    );
+    expect(body).toMatch(
+      /The one exception is a transient infrastructure error \(C5\): `handle\(\)` rethrows those/,
+    );
+    expect(body).toMatch(
+      /A permanent handler error is swallowed and recorded inside dispatch, so it still returns 200\./,
+    );
+    expect(body, 'the unqualified always-200 claim must not return').not.toMatch(
+      /Always replies 200 to a verified, parseable event/,
     );
   });
 

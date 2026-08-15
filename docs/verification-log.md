@@ -34404,3 +34404,39 @@ No behavioural change and no new file. The existing case at `:113` already asser
 fail-open while a case two hundred lines down asserted fail-closed, and both were green. That is the
 same shape as the parity sweep's systemic finding — nine pin files hold both sides of a contradiction
 green at once — and it is the cheapest possible instance of it.
+
+## V-792 — architecture.md said the Stripe webhook always 200s; the route deliberately 500s (2026-08-15)
+
+`docs/architecture.md:179` described the inbound Stripe webhook as one that "**Always** replies 200
+to a verified, parseable event (even on duplicate or ignored event types) to prevent Stripe
+re-delivery loops."
+
+`routes/webhooks-stripe.ts:102-113` catches a transient infrastructure error, bumps
+`handler_transient_error` and **rethrows**, and explains itself: "Let it surface as a 500 so Stripe
+re-delivers within its ~3-day retry window; no ledger row was written, so the retry cleanly
+re-processes the event and a paying customer isn't left un-upgraded by a one-second blip." Twenty
+lines below, the same file states the qualification the doc omitted: "The one exception is a
+transient infra error above, which we deliberately let 500 (C5)."
+
+The operator triaging Stripe 500s in the Stripe dashboard reads the architecture doc, concludes the
+webhook should never 500, and treats a working intentional retry as an outage.
+
+**This is the clearest instance of the sweep's systemic finding, and both halves are visible at
+once.** The sibling pin `routes-webhooks-stripe-content-parity.test.ts:99-104` freezes the TRUE
+version — its `it()` title literally reads "a transient rethrow 500s (C5); else always 200". So two
+pins in this repository asserted opposite things about the same route and both were green, because
+nothing in the parity mechanism ever compares two frozen sentences to each other — only each to the
+file it pins. The sweep counted nine such pairs; this one needed no inference to confirm.
+
+Corrected to state the 200 case, the deliberate 500 and its reason, and the third case the doc never
+mentioned: a _permanent_ handler error is swallowed and recorded inside dispatch, so it still
+returns 200. A negative now bans the unqualified sentence by name. Mutation-proved.
+
+Fifth action from the parity sweep.
+
+**Gate attribution.** The full gate after V-791 came back with two failures, neither mine.
+`db-profiles-repo-content-parity` fails because a peer has `apps/server/src/db/profiles-repo.ts`
+dirty — their diff replaces `eq(profiles.accountId, args.accountId)` with `sql` + backtick-true in
+the cursor branch, which is a tenant-isolation **mutation probe in progress**, not a code change.
+`cross-account-crypto-order-isolation` passes 7/7 in isolation, so that one was contention. I left
+both alone; a full gate will keep reporting the profiles pin until they restore.
