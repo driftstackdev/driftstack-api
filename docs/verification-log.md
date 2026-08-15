@@ -33625,3 +33625,33 @@ in V-759 and the doc-path guard in V-769: each was a real check that could not s
 was written to protect.
 
 No new test file, so `EXPECTED_TEST_FILES` is unchanged.
+
+## V-778 — an unreproduced 500 on double-takeover, and what the investigation did and did not establish (2026-08-15)
+
+The V-777 gate reported one failure: `v2-8-pair-mode-takeover.test.ts`, "double-takeover surfaces
+409 PairModeStateInvalidTransition", `expected 500 to be 409`. Recording it because it is NOT the
+contention class — that class presents as `Test timed out`, and this is an unexpected throw.
+
+**Not reproduced.** Passes 9/9 in isolation, 126/126 run alongside the roster suite whose change
+preceded it, and the full suite re-ran clean at 2885/2885 (29,231 passing). Observed once.
+
+**What the investigation established.** Every failure path in `commitPairModeTransition` maps to a
+handled status — `ConflictError` (409), `PairModeConflictError` (409), `NotFoundError` (404) — and
+the route's own catch maps `PairModeStateInvalidTransitionError` to 409. So the 500 did not come
+from the state machine or the compare-and-set.
+
+It did establish one structural fact: `pairModeLock.tryAcquire(...)` is called **outside** the
+`try` block that wraps the transition, and that lock is Redis-backed. So any error raised by Redis
+during acquisition escapes uncaught and becomes an opaque 500. Under a full-suite run — 2885 files
+against one local Redis — a transient failure there is exactly consistent with the observed
+symptom.
+
+**What it did not establish: that this is what happened.** The hypothesis fits and is structurally
+possible; it is not proven, and no logged Redis error was captured. So no fix has been applied.
+Mapping the lock's failures to a retryable 503 would be a real improvement — a client can act on
+503 and cannot on 500 — but applying an error-mapping change to a live auth-adjacent path on an
+unverified hypothesis is the same mistake as V-767's first fix, which the existing rationale
+caught only because I read it before overriding it.
+
+For whoever picks this up: the cheap next step is to log-and-rethrow inside `tryAcquire` so the
+next occurrence carries the underlying error, rather than guessing from the status code.
