@@ -4023,3 +4023,61 @@ Three shapes, and only the third proves a lock:
 The remaining `.for('update')` sites are candidates for (3), and the isolating mode
 has to be chosen per site: it depends on what other locks the unguarded path would
 take.
+
+## 6u — the rule that decides which locks need a forced-ordering test
+
+Two slices: an audit that closed a question, and the third lock proved.
+
+### API key revocation — checked, needs nothing, and explains the rule
+
+`revokeApiKeyAtomic` looked like the highest-consequence remaining site: a
+revocation that loses a race leaves a compromised key usable. It has no lock at
+all. It is a **conditional UPDATE** —
+`.where(and(scope, isNull(apiKeys.revokedAt))).returning()` — so exactly one of N
+concurrent revokes matches and the losers fall through to a read that returns the
+persisted timestamp. There is even a paranoid invariant for the impossible case:
+"revokeApiKeyAtomic lost its update without a persisted revocation".
+
+Its 5-way race test DOES detect the mutation: removing `isNull(revokedAt)` reds it.
+
+⭐ **That contrast is the useful part, and it decides where the remaining work
+goes:**
+
+| mechanism              | why a race can or cannot see it                                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **conditional UPDATE** | removing the predicate makes EVERY caller win, **regardless of timing** — a race detects it deterministically   |
+| **row lock**           | the failure needs one specific interleaving; on localhost the transaction finishes first, so the race is silent |
+
+Three data points agree: the profile cap (lock, race blind), the token debit (lock,
+race blind), api-key revocation (predicate, race detects). So a race-based test is
+not weak in general — it is weak for LOCKS specifically, and that is now a rule for
+choosing which sites need a forced-ordering test rather than a preference.
+
+### `setAccountTier` — the third lock, proved
+
+Read-modify-write under `FOR UPDATE`, and the source states the failure: without
+it "both deliveries could read the same old tier and each emit a duplicate
+tier-changed email/audit; the lock serializes them, so the loser reads
+previousTier === args.tier and the lifecycle no-op guard suppresses the dup." Two
+Stripe deliveries for one subscription change is ordinary. The visible failure is a
+customer receiving the same tier-change email twice.
+
+**No integration test named `setAccountTier`.** Now one does: holder takes
+`FOR KEY SHARE` on the accounts row, the call must block, and after release it
+reports `previousTier === 'free'` with the row at `api_builder`. Mutation: deleting
+`.for('update')` reds it with "setAccountTier must be waiting on the account row,
+not reading a tier past it".
+
+### Locks proved by forced ordering so far
+
+| lock                            | failure it prevents                                |
+| ------------------------------- | -------------------------------------------------- |
+| crypto order (`withOrderLock`)  | double webhook + double receipt email on one IPN   |
+| profile cap (`insertWithLimit`) | customer over their tier cap                       |
+| token debit (`debitTokens`)     | lost debit — budget served, not billed             |
+| account tier (`setAccountTier`) | duplicate tier-change email + double-counted audit |
+
+Remaining lock-based candidates, by the rule above: `mfa-repo` enrollment (2 sites),
+the `oauth-store` group (6), and `sessions-repo.claimSessionOperation` — the last of
+which already has a dedicated concurrency file worth auditing the same way before
+adding anything.
