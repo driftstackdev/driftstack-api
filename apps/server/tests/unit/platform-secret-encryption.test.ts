@@ -100,3 +100,26 @@ describe('platform-secret encryption', () => {
     expect(() => decryptPlatformSecret(blob, tooShortKey)).toThrow(/32 bytes/);
   });
 });
+
+// ─── the key-length check is an EQUALITY, not a floor ──────────────────────
+//
+// A census of guard conditions found `key.length !== AES_256_KEY_BYTES` at EIGHT
+// independent modules — one per secret type. Every one is covered for a SHORT
+// key; measured across the whole unit suite, relaxing `!==` to `<` survived in
+// five of the eight. A test that only sends short keys cannot see the
+// difference, and an over-long key is the realistic shape: a 64-byte key pasted
+// where 32 was wanted, or base64 that decoded with trailing bytes.
+//
+// ⚠️ What it costs is an opaque failure, not a silent one — measured:
+// `createCipheriv('aes-256-gcm', <48 bytes>)` throws "Invalid key length". So
+// relaxing this check trades a named, module-level refusal for a crypto-internal
+// error with no indication of which secret or which key was wrong. Same argument
+// as the PROFILE_MASTER_KEY fail-closed refusal, not a plaintext hazard.
+describe('platform-secret-encryption — over-long key', () => {
+  it('CRITICAL a 48-byte key is refused just as a 16-byte one is. The check is an equality; a floor would accept this and hand node:crypto a key it rejects with "Invalid key length", losing which secret was misconfigured.', () => {
+    // base64 STRING, matching the parameter type — a Buffer compiles under
+    // vitest and fails `npm run typecheck`, which this repo asserts as a test.
+    const LONGKEY = Buffer.alloc(48, 7).toString('base64');
+    expect(() => encryptPlatformSecret('x', LONGKEY)).toThrow(/32 bytes|must be 32|AES/i);
+  });
+});
