@@ -1564,6 +1564,67 @@ no dangerous directive) was added to separate them, plus a `script-security 1`
 arm asserting the guard bounds the level rather than banning the keyword, since
 refusing level 1 would reject working configurations.
 
+#### 5k. NEW — one query schema, two feeds, and only the route knows which params belong where
+
+✅ **Closed 2026-08-15.** 7 arms in `admin-incidents`, 5 mutations, all red,
+**parity pin green on all five**.
+
+`ListIncidentsQuerySchema` serves BOTH `/v1/admin/incidents` and the public
+`/v1/status/incidents`, so it necessarily accepts the union of what either
+understands — `window` for the public feed, `state` and `cursor` for the admin
+one. **Nothing in a shared schema can express "this half belongs to that
+endpoint."** Two route-level refusals are the entire enforcement, and neither had
+ever executed.
+
+⚠️ What their absence costs is **not an error**, which is what makes it easy to
+miss: an operator passing `window` to the admin feed would have it silently
+dropped and read an unfiltered page as filtered. _A parameter that appears to
+work and does nothing is worse than one that is rejected._ On the public side the
+same gap would hand an anonymous caller a lifecycle-state filter the status page
+never exposes, and a cursor that pages past the window the feed exists to bound.
+
+⭐ **Every refusal is paired with the same parameter SUCCEEDING on the feed that
+owns it.** Without that pair, all three refusal arms would also pass against a
+build where `window`, `state` and `cursor` simply did not work anywhere — which
+is a different bug wearing the same green.
+
+Also closed here: a malformed pagination cursor answers **400 rather than 500**
+(it is customer-supplied base64, JSON-parsed and round-trip checked against its
+own ISO timestamp — every step can fail on a hand-edited value), and idempotent
+create-by-id refuses a body with no `started_at`, without which a retry mints a
+row whose start is the moment of the retry rather than of the incident.
+
+_Note the split arms._ The public refusal is a single `||` over `state` and
+`cursor`; dropping either side leaves the other still refusing, so one combined
+arm would pass at half strength. They are asserted separately, and the mutation
+that drops only `state` proves it.
+
+#### 5l. NEXT — the OAuth state token's own verification is never driven at the route
+
+`routes/auth-oauth-client.ts` has three cold refusals, and the first is the CSRF
+defence for social login:
+
+| line | refusal                                                               |
+| ---- | --------------------------------------------------------------------- |
+| 201  | `State token invalid: ${stateRes.kind}` — signature, expiry or tamper |
+| 222  | `Provider "${provider}" is not configured.`                           |
+| 253  | `Userinfo fetch failed: ${userinfo.kind}`                             |
+
+⚠️ **Same split as 5i, on a different control.** `auth-oauth-client.test.ts` has
+21 arms and drives the callback 24 times, including a careful set on the
+nonce-scoped PKCE cookie binding — "rejects a valid state when only a DIFFERENT
+flow's cookie is present", "rejects a tampered value under the correct
+nonce-scoped cookie name", "a state+cookie from the SAME flow passes the binding
+check". Every one of them supplies a **valid state token** and exercises the
+COOKIE. `verifyOauthClientState` returning non-ok is what line 201 refuses, and
+`lib-oauth-client-state.test.ts` covers that function in isolation — so once
+again the helper is tested, the route's use of it is not.
+
+_Slice shape:_ post a callback with a forged/expired/tampered state token and
+assert the 400; mutate by making the route ignore `stateRes.kind` to show the
+ROUTE is what is guarded. Pair it with the existing valid-state arms so the
+refusal cannot be a build where no state ever verifies.
+
 #### 5j. NEW — the avatar upload's "invalid base64" branch is dead code
 
 Small, and recorded mainly because the investigation nearly produced a

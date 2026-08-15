@@ -647,3 +647,103 @@ describe('GET /v1/status/incidents/:id (V-545.A — public detail w/ timeline)',
     expect(res.statusCode).toBe(400);
   });
 });
+
+// ─── one schema, two feeds, different allowed parameters ────────────────────
+//
+// Added 2026-08-15. `ListIncidentsQuerySchema` serves BOTH `/v1/admin/incidents`
+// and the public `/v1/status/incidents`, so it accepts the union of what either
+// feed understands: `window` for the public one, `state` and `cursor` for the
+// admin one. Nothing in the schema can express "this half belongs to that
+// endpoint" — the two route-level refusals are the whole enforcement, and
+// neither had ever executed (assessment item 5f population).
+//
+// What their absence costs is not an error, which is what makes it easy to miss:
+// an operator passing `window` to the admin feed would have it silently ignored
+// and read the resulting page as filtered when it is not. A parameter that
+// appears to work and does nothing is worse than one that is rejected.
+//
+// Each refusal is paired with the SAME parameter succeeding on the feed that
+// owns it. Without that pair the arms would also pass against a build where
+// `window`, `state` and `cursor` simply did not work anywhere.
+//
+// MUTATION-PROVED against routes/admin-incidents.ts — control 26/26 here, 16/16
+// on routes-admin-incidents-content-parity:
+//
+//                                                    here    parity pin
+//   the admin feed stops refusing `window`          1 red      GREEN
+//   the public feed stops refusing state/cursor     2 red      GREEN
+//   the public feed refuses cursor but not state    1 red      GREEN
+//   a malformed cursor becomes a 500                1 red      GREEN
+//   idempotent create no longer needs started_at    1 red      GREEN
+//
+// The pin is green on all five, which is the same result this surface has
+// produced everywhere it has been measured: the text is intact and the behaviour
+// is not. The third mutation is the reason `state` and `cursor` get separate
+// arms rather than one — the refusal is a single `||`, and dropping either side
+// leaves the other still refusing, so a combined arm would pass at half strength.
+
+describe('incident feed parameters stay on the feed that owns them', () => {
+  it('CRITICAL the admin feed REFUSES `window`, which belongs to the public feed. Both feeds parse the same schema, so nothing but this check stops an operator from passing a window that is silently dropped — and reading an unfiltered page as if it were filtered.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/incidents?window=30d',
+      headers: { ...headers, ...auth(fx) },
+    });
+    expect(res.statusCode, 'refused rather than silently ignored').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/public incident feed/i);
+  });
+
+  it('CRITICAL the public feed ACCEPTS `window` — the arm above is about scope, not about the parameter being broken. Asserted so a build where `window` stopped working everywhere could not pass the refusal arm and look correct.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'GET', url: '/v1/status/incidents?window=30d' });
+    expect(res.statusCode, 'window is valid on the feed that owns it').toBe(200);
+  });
+
+  it('CRITICAL the public feed REFUSES `state`. Lifecycle state is an operator concept; letting it through would hand an anonymous caller a filter over incident triage states that the public page never exposes.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'GET', url: '/v1/status/incidents?state=open' });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/public status feed/i);
+  });
+
+  it('CRITICAL the public feed REFUSES `cursor`. The public feed is a windowed view, not a keyset walk; accepting a cursor would let an anonymous caller page backwards past the window the feed is supposed to bound.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'GET', url: '/v1/status/incidents?cursor=abc' });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/public status feed/i);
+  });
+
+  it('CRITICAL the admin feed ACCEPTS `state`, so the refusal above is a scope rule rather than a broken parameter.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/incidents?state=open',
+      headers: { ...headers, ...auth(fx) },
+    });
+    expect(res.statusCode, 'state is valid on the feed that owns it').toBe(200);
+  });
+
+  it('CRITICAL a malformed pagination cursor is a 400, not a 500. The cursor is customer-supplied base64 that is decoded, JSON-parsed and round-trip checked against its own ISO timestamp; every one of those can fail on a hand-edited value, and without the wrapper an operator pasting a truncated cursor gets a server error and an alert instead of a message telling them the cursor is bad.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/incidents?cursor=not-a-valid-cursor',
+      headers: { ...headers, ...auth(fx) },
+    });
+    expect(res.statusCode, 'a client error, not a server fault').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/invalid incident cursor/i);
+  });
+
+  it("CRITICAL idempotent create by id REFUSES a body with no `started_at`. The replayable PUT is keyed on the caller supplying the incident's own start time; without it a retry could mint a row whose start is the moment of the retry rather than of the incident, which is exactly the field an incident timeline is ordered and measured by.", async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/admin/incidents/inc_${randomUUID()}`,
+      headers: { ...headers, ...auth(fx) },
+      payload: { title: 'no-start', description: 'x', severity: 'minor' },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/started_at is required/i);
+  });
+});
