@@ -1117,3 +1117,100 @@ describe('POST /v1/account/me/proxies with PROFILE_MASTER_KEY unset', () => {
     expect(create.json<ProxyMeta>().has_password).toBe(false);
   });
 });
+
+// ─── the optimistic-concurrency verdicts on PUT ─────────────────────────────
+//
+// `PUT /v1/account/me/proxies/:id` reads the row, then passes its scheme as
+// `expectedScheme` into a conditional UPDATE. A null return means the row moved
+// under it, and the route re-reads to decide which kind of "moved": gone → 404,
+// still present → 409 with "retry the update". Both verdicts were cold at HEAD.
+//
+// ⚠️ Neither can be produced by ordering client calls, and that is a property of
+// the design rather than a limitation of the harness. Two sequential PUTs each
+// read the row they are about to write, so the second one's expectation always
+// matches. Two CONCURRENT PUTs would do it, but only if they genuinely interleave
+// between the read and the write — and an attempt at exactly that shape on the
+// OAuth consent route this same day was measured NOT interleaving: the winner
+// finished before the loser started reading. A test built on that hope passes for
+// the wrong reason. Losing the write is the precondition, so the write is what
+// the test controls.
+//
+// The two arms differ only in what the re-read finds, which is the whole point of
+// the branch: the route must not answer 404 for a row that still exists, or 409
+// for one that is gone. A caller retrying a 409 is doing the right thing; a
+// caller retrying a 404 is chasing a row that will never come back.
+//
+// LEDGER — control 42/42:
+//
+//   the lost write is ignored entirely      2 red
+//   always 409, never re-reads              1 red
+//   always 404, never re-reads              2 red
+//   the two verdicts SWAPPED                2 red
+//
+// The swap is the one that matters. It leaves the branch present, the re-read
+// intact and both error types in use — only the condition is inverted — so any
+// test that merely asserted "the update was refused" would stay green while
+// every caller got exactly the wrong instruction about whether to retry.
+//
+// "Always 404" reds the 404 arm too, which looks wrong until you notice why: the
+// arm counts the reads. Without the re-read there is one, and a verdict reached
+// without looking is a guess that happened to agree.
+describe('PUT /v1/account/me/proxies/:id — losing the conditional update', () => {
+  async function createProxy(): Promise<string> {
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'home', host: '1.2.3.4', port: 1080 },
+    });
+    expect(create.statusCode, create.body).toBe(201);
+    return create.json<ProxyMeta>().id;
+  }
+
+  it('409: the row is still there, so the caller is told to retry', async () => {
+    fx = await buildTestApp();
+    const id = await createProxy();
+    // The write loses; the row survives. That is a concurrent writer, not a
+    // deletion, and retrying is the correct client response.
+    vi.spyOn(fx.accountProxiesRepo, 'update').mockResolvedValue(null);
+
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'renamed' },
+    });
+    expect(res.statusCode, res.body).toBe(409);
+    expect(res.json<{ detail: string }>().detail).toMatch(/changed concurrently/i);
+  });
+
+  it('404: the row is gone, so the caller is NOT told to retry', async () => {
+    fx = await buildTestApp();
+    const id = await createProxy();
+
+    // A concurrent DELETE landing between this request's read and its write.
+    // The handler's FIRST read must still succeed, or the request is refused by
+    // the ordinary not-found path further up and never reaches the verdict under
+    // test — so only the RE-READ, after the lost write, sees the gap.
+    const realFindById = fx.accountProxiesRepo.findById.bind(fx.accountProxiesRepo);
+    let reads = 0;
+    vi.spyOn(fx.accountProxiesRepo, 'findById').mockImplementation(async (args) => {
+      reads += 1;
+      return reads === 1 ? realFindById(args) : null;
+    });
+    vi.spyOn(fx.accountProxiesRepo, 'update').mockResolvedValue(null);
+
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'renamed' },
+    });
+    expect(res.statusCode, res.body).toBe(404);
+    expect(res.json<{ detail: string }>().detail).toMatch(/not found/i);
+    // Both reads happened: the pre-read that found the row, and the re-read that
+    // did not. If the route had answered from the first read alone the verdict
+    // would be a guess.
+    expect(reads).toBe(2);
+  });
+});

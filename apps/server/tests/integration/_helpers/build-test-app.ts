@@ -628,6 +628,16 @@ export interface TestAppFixture {
   /** Stripe webhook signing secret used by the test fixture. */
   stripeWebhookSigningSecret: string;
   profilesRepo: InMemoryProfilesRepo;
+  /**
+   * Exposed so a test can drive the optimistic-concurrency verdicts on
+   * `PUT /v1/account/me/proxies/:id`. The route retries nothing: it passes
+   * `expectedScheme` into the conditional UPDATE and interprets a null return
+   * by re-reading the row — gone means 404, still there means someone else
+   * changed it. Both outcomes need a WRITE to lose, and the loser cannot be
+   * produced by ordering client calls: two sequential PUTs each read the row
+   * they are about to update, so the second one's expectation always matches.
+   */
+  accountProxiesRepo: InMemoryAccountProxiesRepo;
   billingRepo: InMemoryBillingRepo;
   billingProvider: InMemoryBillingProvider;
   /** V-202c — lifecycle dedup state (first_failure_email_sent_at, etc.). */
@@ -1818,6 +1828,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(agentTurnReceiptsRepoForTests !== undefined
       ? { agentTurnReceiptsRepo: agentTurnReceiptsRepoForTests }
       : {}),
+    accountProxiesRepo,
     incidentsRepo,
     statusSubscribersRepo,
     statusSubscribersService,
