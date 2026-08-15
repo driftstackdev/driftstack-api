@@ -129,13 +129,29 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
       current.expiresAt !== null && current.expiresAt < candidateGraceEnd
         ? current.expiresAt
         : candidateGraceEnd;
+    // V-775 twin — mirrors DrizzleApiKeysRepo.rotateApiKeyAtomic EXACTLY: rotation
+    // de-escalates (drop the staff scope, retire the legacy `admin` alias to `account_owner`)
+    // and carries the minter forward. A double that behaves differently from the real repo
+    // makes every route-level test that uses it meaningless — which is precisely how the
+    // billing defect in V-767 survived its own green suite.
+    const successorScopes = [
+      ...new Set(
+        current.scopes.flatMap((scope) =>
+          scope === 'driftstack_internal_admin'
+            ? []
+            : scope === 'admin'
+              ? (['account_owner'] as const)
+              : [scope],
+        ),
+      ),
+    ];
     const newRow: ApiKeyRow = {
       id: randomUUID(),
       accountId: current.accountId,
       name: input.name ?? current.name,
       keyPrefix: input.keyPrefix,
       keyHash: input.keyHash,
-      scopes: current.scopes,
+      scopes: successorScopes,
       lastUsedAt: null,
       revokedAt: null,
       expiresAt: current.expiresAt,
@@ -145,6 +161,12 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
     const updatedOld: ApiKeyRow = { ...current, expiresAt: gracePeriodEndsAt };
     this.byId.set(current.id, updatedOld);
     this.byId.set(newRow.id, newRow);
+    // V-775 twin — the real repo carries `created_by_account_id` onto the successor. ApiKeyRow
+    // does not expose that column, so this fake tracks it in `minterByKeyId`; propagating it
+    // here is what makes listApiKeysMintedBy (and therefore offboarding reclaim) see the
+    // successor, exactly as the SQL does.
+    const minter = this.minterByKeyId.get(current.id);
+    if (minter !== undefined) this.minterByKeyId.set(newRow.id, minter);
     if (this.authRepoMirror) {
       this.authRepoMirror.upsertApiKey(updatedOld);
       this.authRepoMirror.upsertApiKey(newRow);

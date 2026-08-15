@@ -391,7 +391,10 @@ export class ApiKeysService {
 
   /**
    * V-296 — customer self-service rotation. Mints a fresh plaintext +
-   * hash for a new api_keys row (same name + scopes + accountId), and
+   * hash for a new api_keys row (same name + accountId + minter, and the same
+   * scopes MINUS any elevated ones — V-775: `driftstack_internal_admin` is
+   * dropped and the legacy `admin` alias becomes `account_owner`, so rotation
+   * can never mint authority the way this second issuance path used to), and
    * sets `expires_at` on the OLD key to `now + gracePeriodMs`. The old
    * key continues to authenticate until that timestamp; after that the
    * existing expires_at gate in auth.ts rejects it cleanly.

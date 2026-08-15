@@ -48,10 +48,16 @@ describe('W901 V-296 + V-359 24h rotate-grace cross-source invariant', () => {
     expect(p).toMatch(/const gracePeriodMs = opts\.gracePeriodMs \?\? 24 \* 60 \* 60 \* 1000;/);
   });
 
-  it("CRITICAL V-296 rotate() framing — 'customer self-service rotation. Mints a fresh plaintext + hash for a new api_keys row (same name + scopes + accountId), and sets expires_at on the OLD key to now + gracePeriodMs'. The 4-step pattern pins the rotate-flow contract.", () => {
+  it("CRITICAL V-296 rotate() framing — 'customer self-service rotation. Mints a fresh plaintext + hash for a new api_keys row (same name + accountId + minter, and the same scopes MINUS any elevated ones), and sets expires_at on the OLD key to now + gracePeriodMs'. V-775 corrected 'same scopes': this pin froze the escalation, asserting verbatim scope copying as the intended contract while rotate's own comment said it 'always produces an ordinary customer API key'.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
     expect(p).toMatch(/V-296 — customer self-service rotation\. Mints a fresh plaintext \+/);
-    expect(p).toMatch(/hash for a new api_keys row \(same name \+ scopes \+ accountId\), and/);
+    expect(p).toMatch(
+      /hash for a new api_keys row \(same name \+ accountId \+ minter, and the same/,
+    );
+    expect(p).toMatch(/scopes MINUS any elevated ones/);
+    expect(p, 'the retired verbatim-copy contract must not come back').not.toMatch(
+      /same name \+ scopes \+ accountId/,
+    );
     expect(p).toMatch(/sets `expires_at` on the OLD key to `now \+ gracePeriodMs`/);
   });
 

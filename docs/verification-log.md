@@ -33477,3 +33477,64 @@ Worth noting for later: 8 GB buys headroom, not a permanent answer. This file gr
 per verification and will eventually exceed that too. The structural fix is to split it into
 per-period files (`verification-log-2026-H1.md`, …) with the index kept in the current file. Not
 done here because it touches 33k lines of shared history and deserves its own change.
+
+## V-775 — key rotation minted staff authority and laundered attribution (2026-08-15)
+
+`ApiKeysService.rotate` is the **second** key-issuance path. `create()` guards issuance with an
+`ELEVATED_SCOPES` loop that refuses to grant a scope the caller does not itself hold. `rotate()`
+had no equivalent: its only gates are `throwIfMissingScope(ctx, 'account_owner')`, a device-key
+check and a tier check, the route contributes none (`preHandler: [requireAuth, rateLimit]`), and
+`rotateApiKeyAtomic` copied `scopes: locked.scopes` verbatim. Two defects fell out of that line.
+
+**1. Privilege escalation.** A caller holding only `account_owner` could rotate a key carrying
+`driftstack_internal_admin` and receive a fresh plaintext with staff authority — satisfying every
+`requireScope('driftstack_internal_admin')` preHandler, and, being an API key, exempt from the MFA
+step-up a session would face. Reachable two ways: a team member with role `admin` via
+`X-Driftstack-Account` (`effectiveAccountIdForKeyWrite` admits role `admin`), or any
+`account_owner` key on the same account with no header at all.
+
+**2. Attribution laundering.** The successor insert omitted `createdByAccountId`, so it landed
+NULL, while **both** minter-attributed reclaims filter on that column —
+`listApiKeysMintedBy` (`api-keys-repo.ts:44`) and team offboarding
+(`team-members-repo.ts:293`). A member could mint a key on the owner's account, rotate it, and
+keep a working key with the same authority and no expiry straight through their own offboarding.
+
+**This was unimplemented intent, not a design question — the function said so itself.** rotate()
+carries the comment "Rotation always produces an ordinary customer API key. A legacy key on a
+downgraded Free account … may not be refreshed into new programmatic authority." The code simply
+never did it. That settles the shape of the fix and made a caller-vs-target comparison
+unnecessary: the rule is unconditional.
+
+Successor scopes are now derived from the locked row: `driftstack_internal_admin` is dropped, and
+the legacy `admin` alias becomes `account_owner`. **Replaced rather than dropped, deliberately** —
+`docs/operations/admin-scope-mitigation.md` records that the alias grants `account_owner` plus the
+customer `admin:*` checks, and `account_owner` satisfies both, so the customer keeps identical
+authority while shedding the alias. That same doc says the enum can only retire once stored legacy
+keys are "rotated or revoked", so retiring it here is the documented path, not new policy.
+`createdByAccountId` is carried forward.
+
+Both computed **inside** the existing `FOR UPDATE` transaction from the locked row, so they cannot
+race a concurrent scope change the way a pre-read in the service layer would.
+
+**A pin was actively freezing the escalation.**
+`rotate-grace-24h-cross-source-invariant.test.ts` asserted the source comment "same name + scopes
+
+- accountId" as the intended contract — pinning verbatim scope copying while the function's own
+  neighbouring comment said the opposite. Corrected in the same commit, with a negative assertion so
+  the old contract cannot return.
+
+**The in-memory twin was updated in the same change, and that was not optional.**
+`_helpers/in-memory-api-keys-repo.ts` implements `rotateApiKeyAtomic` and backs the route-level
+tests. Left alone it would have kept the old behaviour, so every route test using it would stay
+green against a fake that escalates — the exact shape that hid the V-767 billing defect. Because
+`ApiKeyRow` does not expose the minter, the fake tracks it in a `minterByKeyId` side map; the
+rotation now propagates that entry, which is what makes its `listApiKeysMintedBy` see the
+successor as the SQL does.
+
+Proved against real Postgres (`db-api-key-rotation-de-escalates-drizzle.test.ts`), including the
+end-to-end reclaim: after rotation, the minted-by enumeration returns both the original and its
+successor. Mutation-proved separately — restoring `scopes: locked.scopes` reds the two
+de-escalation tests, and removing the minter carry-forward reds the attribution test.
+
+Found by a parallel tenant-isolation / authorization / money sweep: 14 candidates, 3 surviving
+adversarial refutation. `EXPECTED_TEST_FILES` → 2723.

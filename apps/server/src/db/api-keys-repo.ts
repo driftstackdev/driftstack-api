@@ -112,6 +112,37 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
       }
 
       const oldKey = toApiKeyRow(locked);
+
+      // V-775 — rotation DE-ESCALATES. `rotate()`'s own comment has always said it "always
+      // produces an ordinary customer API key", but the successor used to copy
+      // `locked.scopes` verbatim, so a caller holding only `account_owner` could rotate a key
+      // carrying `driftstack_internal_admin` and be handed a fresh plaintext with staff
+      // authority — `create()` refuses exactly that (its ELEVATED_SCOPES guard), and rotate is
+      // the second issuance path.
+      //
+      //   driftstack_internal_admin — dropped. Staff mint a staff key from a staff session;
+      //     rotation must not launder one.
+      //   admin (legacy alias)      — replaced by `account_owner`, not merely dropped. Per
+      //     docs/operations/admin-scope-mitigation.md the alias grants `account_owner` plus the
+      //     customer `admin:*` checks, and `account_owner` satisfies both — so the successor
+      //     keeps identical CUSTOMER authority while shedding the alias. That doc also states
+      //     the enum can only be retired once stored legacy keys are "rotated or revoked", so
+      //     retiring it here is the documented path rather than a new policy.
+      //
+      // Computed from the FOR UPDATE-locked row inside this transaction, so it cannot race a
+      // concurrent scope change the way a pre-read in the service layer would.
+      const successorScopes = [
+        ...new Set(
+          locked.scopes.flatMap((scope) =>
+            scope === 'driftstack_internal_admin'
+              ? []
+              : scope === 'admin'
+                ? (['account_owner'] as const)
+                : [scope],
+          ),
+        ),
+      ];
+
       const candidateGraceEnd = new Date(input.now.getTime() + input.gracePeriodMs);
       const gracePeriodEndsAt =
         locked.expiresAt !== null && locked.expiresAt < candidateGraceEnd
@@ -122,11 +153,17 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
         .values({
           accountId: locked.accountId,
           name: input.name ?? locked.name,
-          scopes: locked.scopes,
+          scopes: successorScopes,
           keyPrefix: input.keyPrefix,
           keyHash: input.keyHash,
           expiresAt: locked.expiresAt,
           provenance: null,
+          // V-775 — carry the minter forward. Omitting this landed NULL, and BOTH
+          // minter-attributed reclaims filter on this column: team offboarding
+          // (team-members-repo.ts) and the staff termination sweep (:44 below). A rotated key
+          // therefore survived removal of the member who minted it, with the same authority
+          // and no expiry. Rotation must not launder attribution.
+          createdByAccountId: locked.createdByAccountId,
         })
         .returning();
       if (!inserted) throw new Error('rotateApiKeyAtomic insert returned no row');
