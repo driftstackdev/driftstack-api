@@ -702,3 +702,81 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(headers?.['x-driftstack-signature']).toMatch(/^t=\d+,v1=[0-9a-f]{64}$/);
   });
 });
+
+describe('WebhookDeliveryWorker per-delivery error boundary (V-781)', () => {
+  /**
+   * A repo whose endpoint lookup throws — the realistic shape is a stored secret that will not
+   * decrypt under this process's key, which `toEndpointRow` raises on. This is the FIRST await
+   * in the delivery path, before any record* write, so before the boundary the row stayed
+   * in_flight with `attempts` unchanged and could never age into the DLQ.
+   */
+  function repoThatThrowsOnEndpointLookup(repo: InMemoryWebhooksRepo): InMemoryWebhooksRepo {
+    const proxied = Object.create(repo) as InMemoryWebhooksRepo;
+    proxied.findEndpointById = () =>
+      Promise.reject(new Error('webhook secret could not be decrypted'));
+    return proxied;
+  }
+
+  it('CRITICAL a delivery that throws before any write still consumes an attempt — `attempts` is written only by recordRetry, so without this the row could never reach MAX_ATTEMPTS, never reach the DLQ, and the stale-reclaim would re-claim it forever', async () => {
+    const { repo } = await setupRepoWithEndpoint();
+    const worker = new WebhookDeliveryWorker({
+      repo: repoThatThrowsOnEndpointLookup(repo),
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 200 }),
+      now: constNow,
+      metrics: registryOf(),
+    });
+
+    const result = await worker.tickOnce();
+
+    expect(result.claimed).toBe(1);
+    expect(result.outcomes[0]?.kind, 'the budget applies, so it is an ordinary retry').toBe(
+      'retry',
+    );
+    const row = await repo.findDeliveryById(result.outcomes[0]!.delivery.id);
+    expect(row?.attempts, 'the attempt was consumed rather than frozen').toBe(1);
+    expect(row?.status, 'and it is no longer stuck in_flight').not.toBe('in_flight');
+  });
+
+  it("CRITICAL one throwing delivery does not discard the rest of the batch — Promise.all rejected the whole tick, so a single undeliverable row silently degraded OTHER tenants' webhooks and skipped the metrics that would have shown it", async () => {
+    const { repo, endpoint } = await setupRepoWithEndpoint();
+    // A second, healthy delivery on the same endpoint, claimed in the same batch.
+    await repo.enqueueDelivery({
+      webhookId: endpoint.id,
+      eventId: '99999999-8888-7777-6666-555555555555',
+      eventType: 'session.completed',
+      payload: { id: '99999999-8888-7777-6666-555555555555', type: 'session.completed', data: {} },
+      nextAttemptAt: NOW,
+    });
+
+    // Throw for the FIRST lookup only; the second delivery must still be processed.
+    let calls = 0;
+    const realLookup = repo.findEndpointById.bind(repo);
+    const proxied = Object.create(repo) as InMemoryWebhooksRepo;
+    proxied.findEndpointById = (id: string) => {
+      calls += 1;
+      if (calls === 1) return Promise.reject(new Error('secret could not be decrypted'));
+      return realLookup(id);
+    };
+
+    const metrics = registryOf();
+    const worker = new WebhookDeliveryWorker({
+      repo: proxied,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 200 }),
+      now: constNow,
+      metrics,
+    });
+
+    const result = await worker.tickOnce();
+
+    expect(result.claimed).toBe(2);
+    expect(result.outcomes, 'both deliveries reported an outcome').toHaveLength(2);
+    expect(
+      result.outcomes.some((o) => o.kind === 'delivered'),
+      'the healthy delivery still went out',
+    ).toBe(true);
+    // And the metrics were emitted rather than skipped by a rejected Promise.all.
+    expect(deliverySamples(metrics).length).toBeGreaterThan(0);
+  });
+});

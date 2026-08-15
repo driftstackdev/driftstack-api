@@ -33826,3 +33826,47 @@ than a typo. Both fixed; all nine readers of the two edited files now pass toget
 
 Nothing about the V-780 behaviour changed here — the scoping and the 4xx remap are as committed,
 and both remain mutation-proved.
+
+## V-781 — one undeliverable webhook froze its own attempt budget and truncated everyone else's batch (2026-08-15)
+
+`WebhookDeliveryWorker.deliver()` had no error boundary. Its first `await` is the endpoint
+lookup, before any `record*` write — and `attempts` is written **only** by `recordRetry`. So a
+throw there left the row `in_flight` with `attempts` unchanged, which meant it could never reach
+`nextAttemptIndex >= MAX_ATTEMPTS`, never reach `recordDlq`, and never appear in the DLQ list. The
+
+> 5-minute stale-reclaim arm then re-claimed the same row and the same throw repeated. Forever, and
+> invisibly: a row that cannot reach the DLQ cannot be seen in the DLQ.
+
+The realistic trigger is a stored endpoint secret that will not decrypt under this process's key —
+`toEndpointRow` raises on exactly that.
+
+**And it was not confined to that row.** The batch ran under `Promise.all`, so one rejection
+discarded every other delivery's outcome in the tick and skipped `countOutcome` entirely. A single
+undeliverable row degraded OTHER tenants' webhooks _and_ suppressed the metrics that would have
+shown it happening.
+
+The boundary applies the ordinary budget — same `attempts + 1`, same MAX_ATTEMPTS boundary, same
+backoff table as `handleOutcome` — so an unexpected failure ages into the DLQ exactly like an
+ordinary one. It writes through `recordRetry`/`recordDlq` rather than a raw UPDATE, because both
+are fenced on `status='in_flight'`, which is what keeps them safe against the stale-reclaim
+overlap. The batch now uses `allSettled` with per-delivery counting.
+
+**One deliberate omission:** `maybeAutoDisable` is not called on the recovery path. The endpoint
+may be precisely what could not be loaded, and disabling a customer's endpoint on the strength of
+an error we could not attribute to it would punish them for our own decrypt failure.
+
+**A second failure mode is handled explicitly rather than assumed away:** if the recovery write
+itself fails, there is nothing safe left to do for that row, so it logs at error level and says so
+— that is the one remaining path that can still leave a delivery `in_flight`, and it should be
+loud rather than silently swallowed by the boundary meant to prevent exactly that.
+
+Mutation-proved both ways: removing the boundary reds both cases, and reverting to `Promise.all`
+reds them too.
+
+**Process note — the pin check ran BEFORE the edit this time.** `grep -rln` over all fifteen test
+dirs returned 23 files reading `webhook-worker`; grepping the four exact expressions I was about
+to change returned one coincidental match in an unrelated file. Cost: one command. That is the
+habit V-780a said was not sticking.
+
+Third of seven findings from the concurrency/recovery sweep. No new test file, so
+`EXPECTED_TEST_FILES` is unchanged.

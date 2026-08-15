@@ -159,7 +159,25 @@ export class WebhookDeliveryWorker {
       batchSize: this.config.batchSize ?? DEFAULT_BATCH_SIZE,
       now: this.now(),
     });
-    const outcomes = await Promise.all(claimed.map((d) => this.deliver(d)));
+    // V-781 — allSettled, not all. `deliver` now has its own error boundary, so a rejection
+    // here should be impossible; using allSettled means that if one ever does escape it costs
+    // that single delivery rather than discarding every other outcome in the tick and skipping
+    // the metrics entirely, which is what `Promise.all` did.
+    const settled = await Promise.allSettled(claimed.map((d) => this.deliver(d)));
+    const outcomes: DeliveryOutcome[] = [];
+    for (const [i, r] of settled.entries()) {
+      if (r.status === 'fulfilled') {
+        outcomes.push(r.value);
+        continue;
+      }
+      this.config.logger.error(
+        {
+          deliveryId: claimed[i]?.id,
+          err: { message: r.reason instanceof Error ? r.reason.message : String(r.reason) },
+        },
+        'webhook delivery escaped its own error boundary — the batch continues',
+      );
+    }
     // Counted HERE rather than at each recordDelivered/recordRetry/recordDlq
     // call: every delivery funnels through this array exactly once, so one site
     // cannot drift out of step with another as the delivery paths change.
@@ -191,7 +209,109 @@ export class WebhookDeliveryWorker {
     }
   }
 
+  /**
+   * V-781 — the per-delivery error boundary.
+   *
+   * `deliverInner` awaits several things BEFORE any `record*` write — the endpoint lookup
+   * first. A throw there (an endpoint secret that will not decrypt under this process's key is
+   * the realistic one) left the row `in_flight` with `attempts` UNCHANGED. `attempts` is written
+   * only by `recordRetry`, so the row could never reach `nextAttemptIndex >= MAX_ATTEMPTS`,
+   * never reach the DLQ, and never appear in the DLQ list. The >5-minute stale-reclaim arm then
+   * re-claimed it and the same throw repeated — forever.
+   *
+   * Worse, it was not confined to that row: the batch used `Promise.all`, so one rejection
+   * discarded every other delivery's outcome in the tick and skipped `countOutcome` entirely.
+   * One undeliverable row silently degraded OTHER tenants' webhooks and the metrics that would
+   * have shown it.
+   *
+   * The recovery must go through `recordRetry` / `recordDlq` rather than a raw UPDATE: both are
+   * fenced on `status='in_flight'`, which is what keeps them safe against the stale-reclaim
+   * overlap.
+   */
   private async deliver(delivery: WebhookDeliveryRow): Promise<DeliveryOutcome> {
+    try {
+      return await this.deliverInner(delivery);
+    } catch (err) {
+      return await this.recoverFromUnexpectedThrow(delivery, err);
+    }
+  }
+
+  /**
+   * Apply the ordinary attempt budget to a delivery that threw before it could report an
+   * outcome. Deliberately mirrors `handleOutcome`'s retry/DLQ split — same `attempts + 1`,
+   * same MAX_ATTEMPTS boundary, same backoff table — so an unexpected failure ages out exactly
+   * like an ordinary one instead of living forever.
+   *
+   * `maybeAutoDisable` is NOT called here: the endpoint may be precisely what could not be
+   * loaded, and disabling an endpoint on the strength of an error we could not attribute to it
+   * would punish a customer for our own decrypt failure.
+   */
+  private async recoverFromUnexpectedThrow(
+    delivery: WebhookDeliveryRow,
+    err: unknown,
+  ): Promise<DeliveryOutcome> {
+    const at = this.now();
+    const lastError = `unexpected delivery error: ${err instanceof Error ? err.message : String(err)}`;
+    const nextAttemptIndex = delivery.attempts + 1;
+
+    try {
+      if (nextAttemptIndex >= MAX_ATTEMPTS) {
+        await this.config.repo.recordDlq(delivery.id, {
+          responseStatus: null,
+          lastError,
+          at,
+        });
+        this.config.logger.error(
+          {
+            deliveryId: delivery.id,
+            webhookId: delivery.webhookId,
+            attempts: nextAttemptIndex,
+            lastError,
+          },
+          'webhook delivery → DLQ after an unexpected error (max attempts)',
+        );
+        return { kind: 'dlq', delivery };
+      }
+
+      const backoffMs = BACKOFF_MS_BY_ATTEMPT[nextAttemptIndex] ?? 60_000;
+      const jitterMs = Math.floor(Math.random() * backoffMs * 0.15);
+      const nextAttemptAt = new Date(at.getTime() + backoffMs + jitterMs);
+      await this.config.repo.recordRetry(delivery.id, {
+        responseStatus: null,
+        responseExcerpt: null,
+        lastError,
+        attempts: nextAttemptIndex,
+        nextAttemptAt,
+      });
+      this.config.logger.error(
+        {
+          deliveryId: delivery.id,
+          webhookId: delivery.webhookId,
+          attempts: nextAttemptIndex,
+          nextAttemptAt: nextAttemptAt.toISOString(),
+          lastError,
+        },
+        'webhook delivery threw unexpectedly — scheduled for retry',
+      );
+      return { kind: 'retry', delivery, nextAttemptAt };
+    } catch (writeErr) {
+      // The recovery write itself failed. Nothing further is safe to do for this row — the
+      // stale-reclaim will pick it up — but it must be loud, because this is the one path that
+      // can still strand a delivery in_flight.
+      this.config.logger.error(
+        {
+          deliveryId: delivery.id,
+          webhookId: delivery.webhookId,
+          originalError: lastError,
+          err: { message: writeErr instanceof Error ? writeErr.message : String(writeErr) },
+        },
+        'webhook delivery error-boundary write FAILED — row stays in_flight for stale reclaim',
+      );
+      return { kind: 'retry', delivery, nextAttemptAt: at };
+    }
+  }
+
+  private async deliverInner(delivery: WebhookDeliveryRow): Promise<DeliveryOutcome> {
     // Default to the SSRF-guarded fetch: outbound deliveries connect only to
     // public IPs (connection-time DNS pin via undici lookup, rejecting a
     // hostname that resolves to a private/internal target). Tests inject
