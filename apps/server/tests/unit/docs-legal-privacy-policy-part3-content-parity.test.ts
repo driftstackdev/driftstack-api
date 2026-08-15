@@ -60,7 +60,16 @@ describe('W577.C /docs/legal/privacy-policy.md (part 3) content parity', () => {
     expect(body).toMatch(
       /\| Authentication data \(hashed API keys, key metadata\) \| Until revocation/,
     );
-    expect(body).toMatch(/revoked records retained 90 days for audit then deleted\./);
+    // This row promised DELETION until 2026-08-15, and nothing could honour it:
+    // `api_keys` is RESTRICT-referenced by admin_audit_log, incidents,
+    // incident_updates, rate_limit_overrides and sessions, so the row cannot be
+    // deleted at all. The retention sweeper ANONYMISES in place. The pin froze
+    // the promise rather than the behaviour — the negative below keeps the
+    // unhonourable wording from coming back.
+    expect(body).toMatch(
+      /90 days after revocation the record is anonymised — the key hash and key name are destroyed\./,
+    );
+    expect(body).not.toMatch(/revoked records retained 90 days for audit then deleted/);
     expect(body).toMatch(/\| Session metadata\s+\| 90 days operational/);
     expect(body).toMatch(
       /\| Desktop-local recordings\s+\| Not uploaded to or retained by Driftstack/,

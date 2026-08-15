@@ -713,11 +713,35 @@ rather than only here, so they cannot go quiet again.
 
 ### 3. Two retention-table lines cannot be honoured as written
 
-- **"Revoked API keys retained 90 days for audit then deleted."** Nothing deletes
-  `api_keys` rows and nothing can: `sessions.api_key_id` is **RESTRICT**, and
-  sessions are retained seven years under the Dutch tax-law line in the same
-  table. _Recommendation:_ reword to match reality (credential material zeroed,
-  metadata retained), or change the FK. It is a text-or-schema decision.
+- **CLOSED — "Revoked API keys retained 90 days for audit then deleted."** Nothing
+  deleted `api_keys` rows and nothing could: `apiKeys.id` carries **five RESTRICT
+  references** (admin_audit_log, incidents, incident_updates, rate_limit_overrides,
+  sessions), and sessions are retained seven years under the Dutch tax-law line in
+  the same table. Of the two options — reword or change the FK — **reworded**:
+  changing the FK would delete audit rows that exist precisely so an audit entry
+  can never point at a vanished actor, and would break the statutory seven-year
+  line to satisfy a contractual one.
+
+  The row now reads _"90 days after revocation the record is anonymised — the key
+  hash and key name are destroyed"_, which is what `retention-scrub-repo` actually
+  does and what §9's own closing paragraph authorises (_"deletes the Personal Data
+  or anonymises it"_). Corrected in **both published copies** — `docs/legal` and
+  the marketing site ship the policy twice.
+
+  ⚠️ **The content-parity pin had frozen the false promise**: it asserted the
+  sentence verbatim, so the unhonourable claim was protected by a passing test for
+  as long as it stood. Replaced with the corrected text plus a **negative** pin so
+  the old wording cannot return.
+
+  Guarded by `a-retention-promise-matches-what-the-sweeper-does`, which pins
+  neither side: it extracts the verb from the sweeper's SQL (UPDATE = anonymise,
+  DELETE = delete) and the verb from the policy row, and fails on disagreement —
+  **bidirectionally**, so implementing real deletion later fails until the policy
+  is updated to promise it. Proved by mutation: reverting the policy reds the verb
+  and mirror arms; turning the sweeper into a DELETE reds the verb arm; removing
+  every RESTRICT reds the premise arm; renaming the row reds anti-vacuity; drifting
+  the mirror reds the mirror arm.
+
 - **"Session metadata: 90 days operational."** Coherent, and item 2's archiver is
   the mechanism — it archives rather than deletes, so it does not conflict with
   the seven-year billing line. Resolves itself once the archiver runs. _(This

@@ -1,9 +1,15 @@
 // V-759 — privacy-policy §9 retention, implemented as ANONYMISATION rather than deletion.
 //
-// §9 discloses two windows that nothing enforced: revoked API-key records "retained 90 days
-// for audit then deleted", and session metadata "90 days operational". Both were
+// §9 USED TO DISCLOSE two windows that nothing enforced: revoked API-key records "retained
+// 90 days for audit then deleted", and session metadata "90 days operational". Both were
 // unimplemented. Implementing them as literal row deletions is IMPOSSIBLE, and the reasons
 // are structural rather than stylistic:
+//
+// (2026-08-15 — the authentication-data row has since been corrected to describe this
+// sweeper. It promised a deletion the RESTRICT references below make impossible, and a
+// content-parity pin held that sentence in place, so the claim was protected by a passing
+// test. `a-retention-promise-matches-what-the-sweeper-does` now reads the verb from BOTH
+// sides and fails on disagreement in either direction.)
 //
 //   • `usage_records.session_id` CASCADES from `sessions`. Deleting a 90-day-old session
 //     would delete its usage records — which §9's own table requires be kept for 7 YEARS
@@ -49,7 +55,13 @@ import type { Database } from './client.js';
  */
 export const RETENTION_SCRUB_SENTINEL = '[scrubbed: retention]';
 
-/** §9: "revoked records retained 90 days for audit then deleted" / "90 days operational". */
+/**
+ * §9: "90 days after revocation the record is anonymised" / "90 days operational".
+ *
+ * The authentication-data row used to read "retained 90 days for audit then
+ * deleted", which nothing here ever did — it was corrected to describe this
+ * sweeper rather than a deletion the RESTRICT references make impossible.
+ */
 export const RETENTION_WINDOW_DAYS = 90;
 
 export interface RetentionScrubOutcome {
