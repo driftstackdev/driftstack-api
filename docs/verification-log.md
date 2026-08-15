@@ -33587,3 +33587,41 @@ ticket rather than a vague note.
 Third of three findings from the tenant-isolation / authorization sweep (14 candidates, 3
 surviving refutation). No new test file — the cases went into the existing gui-control-key suite —
 so `EXPECTED_TEST_FILES` is unchanged.
+
+## V-777 — the scope-refusal roster could not see 13 of the routes it exists to cover (2026-08-15)
+
+V-776 recorded this gap with numbers and deferred it so a security fix and a coverage change
+would not obscure each other. Closing it now.
+
+`customer-scope-refusal-coverage.test.ts` derives the set of scope-gated customer routes from
+route source and generates a live refusal case per entry — inject with a key that does not satisfy
+the gate, assert 403. Its extractor scanned each route's window for a literal `requireScope('…')`
+and took **the first match only**. Two blind spots followed:
+
+- **13 routes were invisible.** Their gate is `controlKeyOrAccountAuth('<scope>')`, which falls
+  through to `requireAuth` + `requireScope(scope)` when no control-key header is present but
+  contains no literal `requireScope`. Among them: `/cookies`, `/page-state`, `/downloads`,
+  `/input-event`, `/cookies/set`, `/files`, `/mode`, `/takeover`, `/handback`, `/message` and
+  `GET /:id` — i.e. the live browser's cookie jar, its page state and its input surface.
+- **Multi-scope routes were under-reported.** Exactly one route carries two gates: the
+  gui-control-key mint, which V-776 gave `write` AND `read:sessions`. The roster listed it as
+  `[write]`, so removing the read gate again would have failed nothing.
+
+The extractor now matches both forms and collects every distinct scope per route. The roster grew
+98 → 112 entries, and **all 14 new refusal cases pass**: those routes do refuse correctly, they
+were simply unverified. No new defect — the finding is the absence of coverage, not a hole behind
+it.
+
+Mutation-proved on both blind spots, each reproducing a failure that was previously silent:
+removing the mint's `read:sessions` gate now reds its generated refusal case, and deleting one
+`controlKeyOrAccountAuth('read:sessions')` gate now reds the roster-exactness check. Before this
+change neither did anything.
+
+Worth naming the shape, because it recurs: a coverage roster derived by pattern-matching source is
+only as complete as its pattern, and its own greenness cannot tell you what the pattern missed.
+The count — 13 — was measurable in one command and should be measured whenever a derived roster is
+trusted as coverage. Same class as the `register*(Sweep|Purge|Reap|Prune)Job` name-shape matcher
+in V-759 and the doc-path guard in V-769: each was a real check that could not see the thing it
+was written to protect.
+
+No new test file, so `EXPECTED_TEST_FILES` is unchanged.

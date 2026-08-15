@@ -43,18 +43,37 @@ function scopedRoutes(): ScopedRoute[] {
     regs.forEach((m, i) => {
       const start = m.index + m[0].length;
       const end = i + 1 < regs.length ? regs[i + 1]!.index : Math.min(src.length, start + 2500);
-      const raw = /requireScope\(\s*'([^']+)'/.exec(src.slice(start, end))?.[1];
-      if (raw === undefined || raw === STAFF_SCOPE) return; // staff has its own suite
-      // Parsed, not cast: a scope string in route source that is not a real
-      // ApiKeyScope is itself a defect, and would otherwise be tested as if it
-      // were valid.
-      const scope = ApiKeyScopeSchema.parse(raw);
-      out.push({
-        method: m[1]!.toUpperCase() as ScopedRoute['method'],
-        path: m[2]!,
-        scope,
-        file,
-      });
+      const window = src.slice(start, end);
+      // V-776 — collect EVERY gate on the route, from both forms:
+      //
+      //   requireScope('x')              the literal preHandler
+      //   controlKeyOrAccountAuth('x')   the control-key wrapper, which falls through to
+      //                                  requireAuth + requireScope('x') when no control-key
+      //                                  header is present. It contains no literal
+      //                                  `requireScope`, so scanning for that alone made 13
+      //                                  routes invisible to this roster — among them
+      //                                  /cookies, /page-state, /downloads and /input-event.
+      //
+      // ALL matches, not the first: a route may carry more than one scope, and taking only
+      // the first under-reports it. Exactly one does today (the gui-control-key mint, which
+      // requires write AND read:sessions), and before this it was listed as [write] alone —
+      // so removing its read gate again would not have failed anything here.
+      const raws = [
+        ...window.matchAll(/(?:requireScope|controlKeyOrAccountAuth)\(\s*'([^']+)'/g),
+      ].map((g) => g[1]!);
+      for (const raw of new Set(raws)) {
+        if (raw === STAFF_SCOPE) continue; // staff has its own suite
+        // Parsed, not cast: a scope string in route source that is not a real
+        // ApiKeyScope is itself a defect, and would otherwise be tested as if it
+        // were valid.
+        const scope = ApiKeyScopeSchema.parse(raw);
+        out.push({
+          method: m[1]!.toUpperCase() as ScopedRoute['method'],
+          path: m[2]!,
+          scope,
+          file,
+        });
+      }
     });
   }
   return out.sort((a, b) => `${a.path}${a.method}`.localeCompare(`${b.path}${b.method}`));
@@ -126,104 +145,121 @@ const NOT_ACTIVATABLE: Record<string, string> = {
  * A diff means a gate was dropped, or a route was added and needs a line here.
  */
 const EXPECTED_SCOPED_ROUTES: readonly string[] = [
-  'GET /v1/account/cost [read:billing]',
-  'PATCH /v1/account/me [account_owner]',
-  'GET /v1/account/me [read]',
+  // V-776 — the agent-session entries gated via controlKeyOrAccountAuth were invisible
+  // to the extractor until it learned that form; 13 routes joined the roster at once,
+  // plus the mint's second scope (read:sessions), which taking only the first gate hid.
   'DELETE /v1/account/me/avatar [account_owner]',
-  'POST /v1/account/me/avatar [account_owner]',
+  'DELETE /v1/account/me/byok-anthropic-key [account_owner]',
+  'DELETE /v1/account/me/proxies/:id [account_owner]',
+  'DELETE /v1/account/mfa [account_owner]',
+  'DELETE /v1/account/web-sessions [account_owner]',
+  'DELETE /v1/account/web-sessions/:id [account_owner]',
+  'DELETE /v1/agent-sessions/:id [write]',
+  'DELETE /v1/profile-snapshots/:id [write:profiles]',
+  'DELETE /v1/profiles/:id [write:profiles]',
+  'DELETE /v1/profiles/:id/purge [write:profiles]',
+  'DELETE /v1/recipes/:id [write]',
+  'DELETE /v1/sessions/:id [write:sessions]',
+  'DELETE /v1/team/members/:id [account_owner]',
+  'GET /v1/account/cost [read:billing]',
+  'GET /v1/account/me [read]',
   'GET /v1/account/me/billing-portal [admin:billing]',
-  'PATCH /v1/account/me/bundled-llm-settings [account_owner]',
   'GET /v1/account/me/bundled-llm-settings [read]',
   'GET /v1/account/me/bundled-llm-status [read]',
-  'DELETE /v1/account/me/byok-anthropic-key [account_owner]',
-  'PUT /v1/account/me/byok-anthropic-key [account_owner]',
   'GET /v1/account/me/byok-anthropic-key [read]',
-  'POST /v1/account/me/byok-anthropic-key/test [account_owner]',
   'GET /v1/account/me/oauth-links [read]',
   'GET /v1/account/me/organization [read:profiles]',
-  'PUT /v1/account/me/organization [write:profiles]',
   'GET /v1/account/me/proxies [account_owner]',
-  'POST /v1/account/me/proxies [account_owner]',
-  'DELETE /v1/account/me/proxies/:id [account_owner]',
-  'PUT /v1/account/me/proxies/:id [account_owner]',
-  'POST /v1/account/me/proxies/:id/test [account_owner]',
-  'DELETE /v1/account/mfa [account_owner]',
   'GET /v1/account/mfa [read]',
+  'GET /v1/account/rate-limits [read]',
+  'GET /v1/account/web-sessions [read]',
+  'GET /v1/agent-sessions [read:sessions]',
+  'GET /v1/agent-sessions/:id [read:sessions]',
+  'GET /v1/agent-sessions/:id/cookies [read:sessions]',
+  'GET /v1/agent-sessions/:id/downloads [read:sessions]',
+  'GET /v1/agent-sessions/:id/downloads/content [read:sessions]',
+  'GET /v1/agent-sessions/:id/gui-control-key [read:sessions]',
+  'GET /v1/agent-sessions/:id/gui-control-key [write]',
+  'GET /v1/agent-sessions/:id/page-state [read:sessions]',
+  'GET /v1/agent-sessions/:id/recipe-suggestion [read]',
+  'GET /v1/billing [read:billing]',
+  'GET /v1/billing/crypto-orders [read:billing]',
+  'GET /v1/billing/crypto-orders/:order_id [read:billing]',
+  'GET /v1/billing/crypto-orders/:order_id/receipt [read:billing]',
+  'GET /v1/billing/crypto-orders/:order_id/receipt.pdf [read:billing]',
+  'GET /v1/billing/crypto-orders/:order_id/receipt.txt [read:billing]',
+  'GET /v1/profile-snapshots [read:profiles]',
+  'GET /v1/profile-snapshots/:id [read:profiles]',
+  'GET /v1/profiles [read:profiles]',
+  'GET /v1/profiles/:id [read:profiles]',
+  'GET /v1/profiles/:id/export [read:profiles]',
+  'GET /v1/profiles/:id/snapshots [read:profiles]',
+  'GET /v1/profiles/trash [read:profiles]',
+  'GET /v1/recipes [read]',
+  'GET /v1/recipes/:id [read]',
+  'GET /v1/sessions [read:sessions]',
+  'GET /v1/sessions/:id [read:sessions]',
+  'GET /v1/sessions/:id/proxy [read:sessions]',
+  'GET /v1/sessions/:id/state [read:sessions]',
+  'GET /v1/team/invites [read]',
+  'GET /v1/team/members [read]',
+  'GET /v1/team/owners [read]',
+  'GET /v1/usage [read]',
+  'GET /v1/usage/series [read]',
+  'PATCH /v1/account/me [account_owner]',
+  'PATCH /v1/account/me/bundled-llm-settings [account_owner]',
+  'PATCH /v1/billing/crypto-orders/:order_id [admin:billing]',
+  'PATCH /v1/profiles/:id [write:profiles]',
+  'POST /v1/account/me/avatar [account_owner]',
+  'POST /v1/account/me/byok-anthropic-key/test [account_owner]',
+  'POST /v1/account/me/proxies [account_owner]',
+  'POST /v1/account/me/proxies/:id/test [account_owner]',
   'POST /v1/account/mfa/disable [account_owner]',
   'POST /v1/account/mfa/enroll [account_owner]',
   'POST /v1/account/mfa/recovery-codes/regenerate [account_owner]',
   'POST /v1/account/mfa/verify [account_owner]',
-  'GET /v1/account/rate-limits [read]',
-  'DELETE /v1/account/web-sessions [account_owner]',
-  'GET /v1/account/web-sessions [read]',
-  'DELETE /v1/account/web-sessions/:id [account_owner]',
-  'GET /v1/agent-sessions [read:sessions]',
   'POST /v1/agent-sessions [write]',
-  'GET /v1/agent-sessions/:id/downloads/content [read:sessions]',
-  'GET /v1/agent-sessions/:id/gui-control-key [write]',
+  'POST /v1/agent-sessions/:id/cookies/set [write]',
+  'POST /v1/agent-sessions/:id/files [write]',
+  'POST /v1/agent-sessions/:id/handback [write]',
+  'POST /v1/agent-sessions/:id/history [write]',
+  'POST /v1/agent-sessions/:id/input-event [write]',
   'POST /v1/agent-sessions/:id/livekit-token [write]',
-  'GET /v1/agent-sessions/:id/recipe-suggestion [read]',
+  'POST /v1/agent-sessions/:id/message [write]',
+  'POST /v1/agent-sessions/:id/mode [write]',
   'POST /v1/agent-sessions/:id/resume [write]',
-  'GET /v1/billing [read:billing]',
+  'POST /v1/agent-sessions/:id/takeover [write]',
   'POST /v1/billing/checkout-session [admin:billing]',
   'POST /v1/billing/crypto-checkout [admin:billing]',
   'POST /v1/billing/crypto-checkout/quote [read:billing]',
-  'GET /v1/billing/crypto-orders [read:billing]',
-  'PATCH /v1/billing/crypto-orders/:order_id [admin:billing]',
-  'GET /v1/billing/crypto-orders/:order_id [read:billing]',
   'POST /v1/billing/crypto-orders/:order_id/cancel [admin:billing]',
-  'GET /v1/billing/crypto-orders/:order_id/receipt [read:billing]',
-  'GET /v1/billing/crypto-orders/:order_id/receipt.pdf [read:billing]',
-  'GET /v1/billing/crypto-orders/:order_id/receipt.txt [read:billing]',
   'POST /v1/billing/portal-session [admin:billing]',
   'POST /v1/legal/accept [account_owner]',
-  'GET /v1/profile-snapshots [read:profiles]',
-  'GET /v1/profile-snapshots/:id [read:profiles]',
-  'DELETE /v1/profile-snapshots/:id [write:profiles]',
   'POST /v1/profile-snapshots/:id/restore [write:profiles]',
-  'GET /v1/profiles [read:profiles]',
   'POST /v1/profiles [write:profiles]',
-  'GET /v1/profiles/:id [read:profiles]',
-  'DELETE /v1/profiles/:id [write:profiles]',
-  'PATCH /v1/profiles/:id [write:profiles]',
   'POST /v1/profiles/:id/clone [write:profiles]',
-  'GET /v1/profiles/:id/export [read:profiles]',
   'POST /v1/profiles/:id/launch [write:sessions]',
-  'DELETE /v1/profiles/:id/purge [write:profiles]',
   'POST /v1/profiles/:id/restore [write:profiles]',
-  'GET /v1/profiles/:id/snapshots [read:profiles]',
   'POST /v1/profiles/:id/snapshots [write:profiles]',
   'POST /v1/profiles/:id/transfer [write:profiles]',
   'POST /v1/profiles/:id/trim [write:profiles]',
   'POST /v1/profiles/import [write:profiles]',
-  'GET /v1/profiles/trash [read:profiles]',
-  'GET /v1/recipes [read]',
   'POST /v1/recipes [write]',
-  'GET /v1/recipes/:id [read]',
-  'DELETE /v1/recipes/:id [write]',
-  'GET /v1/sessions [read:sessions]',
   'POST /v1/sessions [write:sessions]',
-  'GET /v1/sessions/:id [read:sessions]',
-  'DELETE /v1/sessions/:id [write:sessions]',
   'POST /v1/sessions/:id/capture [write:sessions]',
   'POST /v1/sessions/:id/extract [write:sessions]',
   'POST /v1/sessions/:id/gui-input [gui_control]',
   'POST /v1/sessions/:id/interact [write:sessions]',
   'POST /v1/sessions/:id/login [write:sessions]',
   'POST /v1/sessions/:id/navigate [write:sessions]',
-  'GET /v1/sessions/:id/proxy [read:sessions]',
   'POST /v1/sessions/:id/proxy [write:sessions]',
   'POST /v1/sessions/:id/search [write:sessions]',
-  'GET /v1/sessions/:id/state [read:sessions]',
   'POST /v1/sessions/:id/wait [write:sessions]',
   'POST /v1/team/invites [account_owner]',
-  'GET /v1/team/invites [read]',
   'POST /v1/team/invites/accept [account_owner]',
-  'GET /v1/team/members [read]',
-  'DELETE /v1/team/members/:id [account_owner]',
-  'GET /v1/team/owners [read]',
-  'GET /v1/usage [read]',
-  'GET /v1/usage/series [read]',
+  'PUT /v1/account/me/byok-anthropic-key [account_owner]',
+  'PUT /v1/account/me/organization [write:profiles]',
+  'PUT /v1/account/me/proxies/:id [account_owner]',
 ];
 
 let fx: TestAppFixture | null = null;
