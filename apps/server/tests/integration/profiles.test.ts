@@ -1067,3 +1067,106 @@ describe('L4b anti-abuse — trashed profiles count toward the cap + manual purg
     expect(res.statusCode).toBe(403);
   });
 });
+
+// ─── the tier cap on the doors that are not `create` ───────────────────────
+//
+// `PROFILES_PER_TIER` is a paid-tier boundary — free permits exactly one
+// profile — and `services/profiles.ts` enforces it at THREE entry points, each
+// with its own pre-check and its own atomic `limitExceeded` result: create,
+// clone, and import. Six sites.
+//
+// ⚠️ Measured: only create's atomic check was covered. Both of clone's and both
+// of import's were cold, which means a capped account could exceed its profile
+// limit by taking a different door — the same bypass shape as flipping an agent
+// session's mode instead of creating it LLM-driven. The create edge is the one
+// everybody tests.
+//
+// A profile is the saved browser identity — cookies, fingerprint, logged-in
+// state — so the cap is what the tier actually sells. Cloning past it is not a
+// cosmetic overage.
+//
+// LEDGER — control 46/46:
+//
+//   clone pre-check alone neutralized       SURVIVES
+//   import pre-check alone neutralized      1 red
+//   create pre-check alone neutralized      SURVIVES
+//   clone cap reports the WRONG numbers     1 red
+//   clone  BOTH layers neutralized          1 red
+//   import BOTH layers neutralized          1 red
+//   create BOTH layers neutralized          2 red
+//
+// ⚠️ The two survivors are the interesting rows and they are NOT gaps. Each door
+// checks the cap twice: a pre-check, then the atomic `limitExceeded` result of
+// the insert itself. Neutralizing the pre-check alone leaves the atomic one to
+// refuse, so the request is still correctly rejected — which is what defence in
+// depth is supposed to look like, and why the single-line rows say nothing on
+// their own. Neutralizing BOTH is what shows each cap is load-bearing, and each
+// pair reds.
+//
+// ⭐ The wrong-numbers row is the one a status assertion cannot see: the refusal
+// still fires with the right type, only `limit` and `current` are corrupted. The
+// dashboard renders those as "1 of 1 used", so a build that reported 0 of 999
+// would tell a customer at their cap that they have room.
+describe('the profile cap holds on clone and import, not just create', () => {
+  let fx2: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx2) await fx2.cleanup();
+  });
+
+  /** Free tier permits exactly one profile; `cli_device` is the credential that
+   *  reaches these routes on a free account. */
+  async function freeAccountAtItsCap(): Promise<{ id: string; auth: { authorization: string } }> {
+    fx2 = await buildTestApp({ tier: 'free', keyProvenance: 'cli_device' });
+    const auth = { authorization: `Bearer ${fx2.plaintext}` };
+    const first = await fx2.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'the-only-one' },
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    return { id: first.json<ProfileResponse>().id, auth };
+  }
+
+  it('CRITICAL 429: cloning cannot take an account past its tier cap. Create is refused at the cap and always has been; clone reaches the same limit through its own copy of the check, and that copy had never executed.', async () => {
+    const { id, auth } = await freeAccountAtItsCap();
+    const res = await fx2.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${id}/clone`,
+      headers: { ...auth, 'content-type': 'application/json' },
+      payload: { name: 'the-second-one' },
+    });
+    expect(res.statusCode, res.body).toBe(429);
+    const body = res.json<{ type: string; limit: number; current: number; resource: string }>();
+    expect(body.type).toBe(PROBLEM_TYPES.TierLimit);
+    // The numbers are the contract the dashboard renders ("1 of 1 used"), and a
+    // refusal that reported the wrong ones would send a customer to upgrade a
+    // limit they had not reached.
+    expect(body.limit).toBe(1);
+    expect(body.current).toBe(1);
+    expect(body.resource).toBe('profile');
+  });
+
+  it('CRITICAL 429: importing cannot take an account past its tier cap either — the third door, with its own copy again', async () => {
+    const { id, auth } = await freeAccountAtItsCap();
+    // Export the one profile the account is allowed, then try to import it back
+    // as a second. The envelope is genuine, so nothing else can refuse this.
+    const exported = await fx2.app.inject({
+      method: 'GET',
+      url: `/v1/profiles/${id}/export`,
+      headers: auth,
+    });
+    expect(exported.statusCode, exported.body).toBe(200);
+
+    const res = await fx2.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/import',
+      headers: { ...auth, 'content-type': 'application/json' },
+      // The export body IS the envelope — there is no wrapper field.
+      payload: { envelope: exported.json<unknown>(), name: 'imported' },
+    });
+    expect(res.statusCode, res.body).toBe(429);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.TierLimit);
+  });
+});
