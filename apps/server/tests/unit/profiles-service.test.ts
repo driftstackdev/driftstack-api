@@ -720,6 +720,141 @@ describe('V-553.B-21 ProfilesService.transferProfile', () => {
     // must leave the source profile intact.
     expect(state.rows.find((r) => r.id === 'p1')).toBeDefined();
   });
+
+  // ─── recipient tier caps ──────────────────────────────────────────────
+  //
+  // Added 2026-08-15. `transferProfile` carries THREE TierLimitError refusals
+  // and none had executed. `create`, `clone` and `importProfile` each had a
+  // cap arm; transfer did not — so profile transfer, which is the one path that
+  // moves a profile INTO an account the caller does not own, was the only
+  // tier-cap boundary nothing watched.
+  //
+  // The pin that names this control cannot see it either: its anchor is
+  // `/throw new TierLimitError\(/`, which matches 10 places in profiles.ts, so
+  // deleting any single cap check leaves it green (assessment item 5h).
+  //
+  // All three refusals measure the RECIPIENT, never the caller — that is the
+  // whole point of the check and the easiest thing to get backwards.
+  //
+  // MUTATION-PROVED against profiles.ts — control 61/61 here, 19/19 on the pin:
+  //
+  //                                                     here   tier pin
+  //   the recipient profile-cap pre-check removed      1 red    green
+  //   the cap measured against the SENDER              1 red    green
+  //   the monthly import cap removed                   1 red    green
+  //   the race-safe limitExceeded branch removed       1 red    green
+  //
+  // The pin is green on all four while its own anchor is `/throw new
+  // TierLimitError\(/` — which matches 10 sites in profiles.ts, so no single
+  // cap check being deleted can move it. That is item 5h stated concretely.
+  //
+  // ⚠️ The pre-check needed a SECOND look. With the obvious fixture — a
+  // recipient at cap — removing it changed nothing, because the atomic insert's
+  // `limitExceeded` catches the same condition and still throws TierLimitError.
+  // That is not a hole in the arm: the pre-check is a fast path over an
+  // authoritative check, and in production the two read the same count, so
+  // removing it does not weaken enforcement. What it DOES decide is which limit
+  // the customer is named — profile cap or import cap — and only one of those
+  // tells them something they can act on. The arm that discriminates it asserts
+  // exactly that, rather than a contrived fixture where the double disagrees
+  // with itself.
+
+  it('CRITICAL refuses a transfer that would put the RECIPIENT over their profile cap. This is the only path that adds a profile to an account the caller does not own, so without it a customer on any tier can be pushed past the cap they are billed against — by someone else, and without their involvement.', async () => {
+    const { repo, state } = makeRepo(
+      [makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' })],
+      { countOverride: 10 }, // solo_manual permits exactly 10
+    );
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.transferProfile({
+        sourceProfileId: 'p1',
+        sourceAccountId: 'acc_src',
+        recipientAccountId: 'acc_dst',
+        recipientTier: SOLO,
+      }),
+    ).rejects.toThrow(TierLimitError);
+    // Refused BEFORE any mutation — the source profile is untouched.
+    expect(
+      state.rows.find((r) => r.id === 'p1'),
+      'source preserved on refusal',
+    ).toBeDefined();
+  });
+
+  it('CRITICAL an account at BOTH caps is told about the profile cap, not the import cap. Which limit is named decides what the customer does next — delete a profile, or wait for the cycle to roll — and only one of those resolves the block. This is also the arm that gives the pre-check its own behaviour: with it removed, an at-cap recipient still gets a TierLimitError from the atomic insert, so every other arm here stays green (measured) and only the RESOURCE in the error changes.', async () => {
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' })], {
+      countOverride: 10, // at the solo_manual profile cap
+    });
+    const audit = {
+      record: () => Promise.resolve(),
+      countActionsSince: () => Promise.resolve(20), // and at the import cap
+    };
+    const svc = new ProfilesService(repo, audit as never);
+    await expect(
+      svc.transferProfile({
+        sourceProfileId: 'p1',
+        sourceAccountId: 'acc_src',
+        recipientAccountId: 'acc_dst',
+        recipientTier: SOLO,
+      }),
+    ).rejects.toMatchObject({ extensions: { resource: 'profile' } });
+  });
+
+  it("CRITICAL the cap is measured against the RECIPIENT, not the sender. A sender at their own limit is exactly the account most likely to be transferring a profile away, and reading the wrong side would block the transfer that resolves their overage while permitting the one that creates someone else's.", async () => {
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' })]);
+    // The sender holds far more than the recipient tier allows; the recipient
+    // is empty. countByAccount answers per-account so the two differ.
+    repo.countByAccount = (accountId: string) =>
+      Promise.resolve(accountId === 'acc_src' ? 9_999 : 0);
+    const svc = new ProfilesService(repo);
+    const { newProfile } = await svc.transferProfile({
+      sourceProfileId: 'p1',
+      sourceAccountId: 'acc_src',
+      recipientAccountId: 'acc_dst',
+      recipientTier: SOLO,
+    });
+    expect(newProfile.accountId, 'transfer completed into the recipient').toBe('acc_dst');
+  });
+
+  it('CRITICAL refuses when the recipient has exhausted their monthly import allowance, which is a SEPARATE cap from the profile count. It is limit*2 per cycle and it exists so a transfer cannot be used as an unmetered drip into an account that stays under its profile cap by deleting as it receives — the profile count alone would never notice that.', async () => {
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' })]);
+    const audit = {
+      record: () => Promise.resolve(),
+      // solo_manual = 10 profiles, so the import cap is 20 per cycle.
+      countActionsSince: () => Promise.resolve(20),
+    };
+    const svc = new ProfilesService(repo, audit as never);
+    await expect(
+      svc.transferProfile({
+        sourceProfileId: 'p1',
+        sourceAccountId: 'acc_src',
+        recipientAccountId: 'acc_dst',
+        recipientTier: SOLO,
+      }),
+    ).rejects.toThrow(TierLimitError);
+  });
+
+  it('CRITICAL refuses when the ATOMIC INSERT reports the recipient at cap, even though the pre-check passed. That is the race: two transfers into the same recipient both read a count under the limit, and only the conditional insert can settle it. Without this branch the loser of that race is written anyway and the recipient ends up over the cap they are billed against — the pre-check alone cannot prevent it, which is why both exist.', async () => {
+    const { repo, state } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' }),
+    ]);
+    // Pre-check sees room; the conditional insert disagrees, which is exactly
+    // what a concurrent transfer looks like from inside this call.
+    repo.countByAccount = () => Promise.resolve(0);
+    repo.insertWithLimit = () => Promise.resolve({ limitExceeded: true as const, current: 10 });
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.transferProfile({
+        sourceProfileId: 'p1',
+        sourceAccountId: 'acc_src',
+        recipientAccountId: 'acc_dst',
+        recipientTier: SOLO,
+      }),
+    ).rejects.toThrow(TierLimitError);
+    expect(
+      state.rows.find((r) => r.id === 'p1'),
+      'source preserved on refusal',
+    ).toBeDefined();
+  });
 });
 
 // file 57 — clone/import/transfer must mint a FRESH wrapped DEK (not run

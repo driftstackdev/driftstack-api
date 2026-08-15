@@ -1540,6 +1540,63 @@ The largest, and they are real controls rather than plumbing:
 - `throw new NotFoundError(\`Account "${accountId}" not found.\`)` — 5
 - `if (row === null) throw new AuthFlowError('invalid_auth_token')` — 4
 
+✅ **First 5h entry closed, and it was a real gap.** `throw new TierLimitError(`
+— the 10-site anchor above — turned out to name a control with a genuinely
+unguarded site. Of the four operations enforcing the profile tier cap
+(`create`, `clone`, `importProfile`, `transferProfile`), the first three each had
+an execution arm and **`transferProfile` had none**, despite carrying three
+distinct refusals: the recipient's profile cap, their monthly import allowance
+(`limit * 2`), and the race-safe `limitExceeded` from the conditional insert.
+
+Transfer is the one path that adds a profile to an account the caller does not
+own, so an unguarded cap there means a customer can be pushed past the limit they
+are billed against, by someone else, without their involvement. Four arms added
+(`profiles-service.test.ts`), all four mutations red — **and the pin stayed green
+on all four**, which is 5h demonstrated rather than argued.
+
+⚠️ One of the four needed a second look and is worth recording, because the first
+reading would have been wrong. Removing the profile-cap **pre-check** changed
+nothing under the obvious fixture: the atomic insert's `limitExceeded` catches
+the same condition and still throws. That is not a hole in the arm — the
+pre-check is a fast path over an authoritative check, and in production both read
+the same count, so removing it does not weaken enforcement. What it decides is
+**which** limit the customer is told about, profile cap or import cap, and only
+one of those tells them something they can act on. The discriminating arm asserts
+that, rather than a contrived fixture where the double disagrees with itself.
+Same shape as the redundant-predicate case in 5f: a surviving mutation is a
+question about the source, not automatically a gap in the test.
+
+⚠️ **Do not read the remaining 75 as unguarded.** A quick scope-check of the next
+three candidates suggested `RateLimitedError` had **13 throw sites and zero
+execution tests** — a striking-looking result that was **wrong**. The pattern
+matched `rejects` and the error name on the same LINE, and prettier splits
+exactly that assertion across lines:
+
+```
+    await expect(gate(req, reply), 'the request past capacity').rejects.toBeInstanceOf(
+      RateLimitedError,
+    );
+```
+
+`a-rate-limit-store-outage-does-not-remove-the-gate` executes that refusal on
+four arms. This is the **second** time in one session that prettier's multi-line
+formatting has silently emptied a line-oriented scan — the first was the anchor
+detector above. Any grep-based coverage claim over this repository needs to be
+multi-line aware before it is quoted, and the failure mode is always the same
+direction: it under-reports, which reads as a clean result.
+
+_Corrected scoping for the next slices_ — re-run whole-file rather than
+per-line. **These are test-FILE counts, not site coverage**: a file may drive one
+of thirteen throw sites. Separating covered sites from uncovered ones needs the
+per-line coverage intersection, not grep, and is not done here.
+
+| error              | throw sites in `src` | test files executing it |
+| ------------------ | -------------------- | ----------------------- |
+| `ValidationError`  | 85                   | 2                       |
+| `AuthFlowError`    | 37                   | 2                       |
+| `RateLimitedError` | 13                   | 1                       |
+| `TierLimitError`   | 12                   | 2                       |
+
 _Fix shapes, in preference order:_ execute the sites separately (what 5f did for
 `auth.ts`); or assert the **count** — `expect(matches).toHaveLength(10)` — so a
 site disappearing reds even without execution; or anchor to the enclosing
