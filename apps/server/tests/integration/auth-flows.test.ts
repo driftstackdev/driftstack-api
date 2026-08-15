@@ -1065,6 +1065,106 @@ describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
   });
 });
 
+// MUTATION-PROVED against services/auth-flows.ts — control 72/72 here, 28/28 on
+// services-auth-flows-content-parity:
+//
+//                                                   here    parity pin
+//   the single-use claim stops refusing the loser   1 red     1 red
+//   a challenge with neither code nor recovery      1 red     green
+//   the mid-flight status pre-check removed        SURVIVES   green
+//   the pre-check narrowed to `=== 'deleted'`      SURVIVES   green
+//
+// ⚠️ The two survivors are NOT gaps in these arms, and the check that settled it
+// is worth recording. `issueWebSession` — called a few lines later — repeats
+// `if (account.status !== 'active') throw new AuthFlowError('account_suspended')`
+// at auth-flows.ts:1560. So the pre-check inside completeMfaChallenge is a
+// fail-fast over an authoritative check, and removing it produces the identical
+// error with the identical code. There is no observable difference for any
+// caller, so no behavioural test can distinguish it — the same shape as the
+// profile tier-cap pre-check in profiles-service.
+//
+// The security property these arms assert — a suspended or deleted account
+// cannot complete MFA and receive a session — is therefore ENFORCED, just one
+// layer down from where it is written. That is worth knowing before anyone
+// "cleans up" the later check believing the earlier one covers it.
+
+describe('AuthFlowsService.completeMfaChallenge — single-use and mid-flight account state', () => {
+  /** Log in far enough to hold a live MFA challenge token. */
+  async function challengeFor(email: string): Promise<{
+    repo: InMemoryAuthFlowsRepo;
+    service: AuthFlowsService;
+    challenges: InMemoryMfaChallengeStore;
+    token: string;
+    accountId: string;
+  }> {
+    const { repo, service, challenges } = makeMfaDirectService();
+    const signup = await service.signup({
+      email,
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    repo.seedAccount({ ...signup.account, emailVerifiedAt: new Date() });
+    const login = await service.login({
+      email: signup.account.email,
+      password: 'correct horse battery staple',
+      issuedFromIp: '203.0.113.9',
+      userAgent: 'browser',
+    });
+    if (login.kind !== 'mfa_required') throw new Error('expected MFA challenge');
+    return { repo, service, challenges, token: login.challengeToken, accountId: signup.account.id };
+  }
+
+  const consume = (service: AuthFlowsService, token: string): Promise<unknown> =>
+    service.completeMfaChallenge({
+      challengeToken: token,
+      code: '123456',
+      sourceIp: '203.0.113.9',
+      userAgent: 'browser',
+    });
+
+  it('CRITICAL two requests racing the SAME valid code mint exactly one session. The claim is an atomic GETDEL, and the loser must not mint a second session — sequential reuse is already caught by the peek, so this is the concurrent window, and losing it turns one MFA code into as many sessions as an attacker can fire in parallel.', async () => {
+    const { service, token } = await challengeFor('mfa-race@driftstack.local');
+    const [a, b] = await Promise.allSettled([consume(service, token), consume(service, token)]);
+    const won = [a, b].filter((r) => r.status === 'fulfilled');
+    const lost = [a, b].filter((r) => r.status === 'rejected');
+    expect(won.length, 'exactly one session minted').toBe(1);
+    expect(lost.length, 'and exactly one refusal').toBe(1);
+    expect(
+      (lost[0] as PromiseRejectedResult).reason,
+      'the loser is told the token was already used, not given a session',
+    ).toMatchObject({ code: 'invalid_auth_token' });
+  });
+
+  it('CRITICAL an account SUSPENDED between challenge issue and consume cannot complete MFA. The window is real: the token outlives the login that issued it, and suspension is how billing failure and policy enforcement stop an account. Passing the second factor is not the same as still being allowed in.', async () => {
+    const { repo, service, token, accountId } = await challengeFor('mfa-suspend@driftstack.local');
+    const live = await repo.findAccountById(accountId);
+    repo.seedAccount({ ...live!, status: 'suspended' });
+    await expect(consume(service, token)).rejects.toMatchObject({ code: 'account_suspended' });
+  });
+
+  it("CRITICAL an account DELETED between issue and consume cannot complete MFA either. Note the refusal is the SAME `account_suspended` code as suspension: this path checks `status !== 'active'` and does not distinguish them, unlike the API-key and web-session paths where deleted answers InvalidKeyError so it cannot be told apart from a bad credential. That asymmetry is defensible here — a caller completing MFA has already presented this account's password, so the account's existence is not news to them — and it is pinned so the collapse is a decision rather than an accident.", async () => {
+    const { repo, service, token, accountId } = await challengeFor('mfa-delete@driftstack.local');
+    const live = await repo.findAccountById(accountId);
+    repo.seedAccount({ ...live!, status: 'deleted' });
+    await expect(consume(service, token)).rejects.toMatchObject({ code: 'account_suspended' });
+  });
+
+  it('CRITICAL a challenge with NEITHER a code nor a recovery code is refused before the token is touched. Without it an empty body reaches the verifier with nothing to verify, and the challenge token is spent on a request that never presented a second factor.', async () => {
+    const { service, challenges, token } = await challengeFor('mfa-nocode@driftstack.local');
+    await expect(
+      service.completeMfaChallenge({
+        challengeToken: token,
+        sourceIp: '203.0.113.9',
+        userAgent: 'browser',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_auth_token' });
+    expect(
+      await challenges.peek(mfaChallengeKey(token)),
+      'and the token survives for a real attempt',
+    ).not.toBeNull();
+  });
+});
+
 describe('AuthFlowsService.completeMfaChallenge — fail-closed challenge integrity', () => {
   it('rejects an unavailable attempt IP when the challenge was issued from a known IP without consuming the legitimate retry', async () => {
     const { repo, service, challenges, verifyCode } = makeMfaDirectService();
