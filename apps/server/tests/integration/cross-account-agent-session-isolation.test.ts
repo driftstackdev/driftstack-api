@@ -255,3 +255,112 @@ describe('every id-taking agent-session route is in the isolation table', () => 
     expect(stale, `exempted routes that no longer exist: ${stale.join(', ')}`).toEqual([]);
   });
 });
+
+// ─── the admin-only half of the predicate, over HTTP ────────────────────────
+//
+// `callerCanAccessAgentSession` grants access to the owner, and to a team ADMIN
+// of the owner — never to a plain member. All six cases of that logic are
+// unit-tested in `agent-sessions-caller-access.test.ts`, and the arms above
+// prove the routes consult the predicate at all (disabling it reds every one).
+//
+// Neither answers the question in between, and it is the one that fails
+// silently: does a REQUEST carrying a plain-member credential actually get
+// refused? The predicate reads `ctx.teams`, which the auth path builds. A build
+// that populated that list wrongly — resolving every membership as `admin`,
+// or attaching the caller's memberships of OTHER owners — would return true for
+// a plain member while the predicate's own tests all still pass, because they
+// hand it a context by hand.
+//
+// That is the wiring failure a library test cannot see: the predicate keeps
+// classifying correctly, and the input it classifies is wrong. The arms above
+// cannot see it either, since account B holds no membership at all and is
+// refused by the first clause.
+//
+// Both directions are asserted. Without the admin arm, a build that refused
+// every team caller would satisfy the member arm and quietly break the feature
+// the predicate exists to allow.
+//
+// LEDGER — control 23/23:
+//
+//   the admin requirement dropped (any member counts)   1 red
+//   the lookup ignores WHICH owner it matched           1 red
+//   the admin requirement inverted                      2 red
+//   the predicate always returns true                  20 red
+//
+// The first row is the survivor this file's earlier ledger recorded and could
+// not catch: account B held no membership, so nothing here could see a change to
+// what a MEMBER may do.
+//
+// ⚠️ The second row is why there are three arms rather than two. With a single
+// membership on the caller, `ctx.teams[0]` and a find-by-owner are the same
+// value, so a lookup that ignored which owner it matched SURVIVED both of the
+// first two arms — measured, not guessed. Giving the caller an admin membership
+// of an unrelated owner is what separates them. One fixture that trips two
+// conditions at once discriminates neither.
+describe('a team MEMBER is refused where a team ADMIN is allowed', () => {
+  const MEMBERSHIP_ID = '00000000-0000-4000-8000-00000000d001';
+
+  async function sessionOwnedByAWithBAs(role: 'member' | 'admin'): Promise<{
+    id: string;
+    bToken: string;
+  }> {
+    fx = await buildTestApp({ tier: 'api_builder', enableAgentRuntime: true });
+    const id = await createAgentSessionForAccountA(fx);
+    const b = await seedAdditionalAccount(fx, {
+      email: `b-${role}@agent-isolation.test`,
+      tier: 'api_builder',
+      scopes: [...FULL_SCOPES],
+    });
+    // B is on A's team in the given role. The membership is B's, so it is B's
+    // `ctx.teams` that carries it.
+    fx.authRepo.setTeamMemberships(b.accountId, [
+      { membershipId: MEMBERSHIP_ID, ownerAccountId: fx.accountId, role },
+    ]);
+    return { id, bToken: b.plaintext };
+  }
+
+  it("CRITICAL a plain MEMBER of the owner's team cannot read the owner's agent session. The predicate is admin-only and unit-tested, but nothing had ever sent a member's CREDENTIAL at the route — so a build that resolved every membership as admin would pass every existing test.", async () => {
+    const { id, bToken } = await sessionOwnedByAWithBAs('member');
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${bToken}` },
+    });
+    expect(res.statusCode, `a plain member got ${res.statusCode}`).toBe(404);
+  });
+
+  it("CRITICAL an ADMIN of a DIFFERENT owner cannot read this owner's session. Measured: with only one membership on the caller, a lookup that ignored WHICH owner it matched — `ctx.teams[0]` instead of a find by ownerAccountId — survived every other arm here, because the one membership was always the right one.", async () => {
+    fx = await buildTestApp({ tier: 'api_builder', enableAgentRuntime: true });
+    const id = await createAgentSessionForAccountA(fx);
+    const b = await seedAdditionalAccount(fx, {
+      email: 'b-other-owner@agent-isolation.test',
+      tier: 'api_builder',
+      scopes: [...FULL_SCOPES],
+    });
+    // B is an admin — of somebody else entirely. Nothing connects them to A.
+    fx.authRepo.setTeamMemberships(b.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-00000000d002',
+        ownerAccountId: '00000000-0000-4000-8000-00000000d0ff',
+        role: 'admin',
+      },
+    ]);
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${b.plaintext}` },
+    });
+    expect(res.statusCode, `an admin of another owner got ${res.statusCode}`).toBe(404);
+  });
+
+  it("an ADMIN member of the owner's team CAN read it, so the refusal above is the role and not team callers in general", async () => {
+    const { id, bToken } = await sessionOwnedByAWithBAs('admin');
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${bToken}` },
+    });
+    expect(res.statusCode, `an admin member got ${res.statusCode}`).toBe(200);
+  });
+});
