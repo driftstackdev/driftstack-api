@@ -2292,6 +2292,43 @@ into busywork that slows every future suite run. Two sites measured this fire:
 silent skip. If the cap ever becomes injectable, or the outer `bodyLimit` is
 raised, the arithmetic changes and the arm becomes worth writing.
 
+### 5r. The money surfaces swept — and they are in good shape
+
+Widened the mutation sweep off agent-sessions onto the paths where a bug costs a
+customer money. Every site neutralized in turn against the billing / Stripe /
+crypto test set.
+
+| surface                    | sites probed | uncovered                                  |
+| -------------------------- | ------------ | ------------------------------------------ |
+| `webhooks-stripe.ts`       | 4            | 1 (`:73` empty body — **now covered**)     |
+| `billing-crypto-orders.ts` | 5            | 0                                          |
+| `routes/billing.ts`        | 4            | 1 (`:50` — **schema-shadowed**, see below) |
+| `services/billing.ts`      | 6            | 1 (`:251` — **deferred**, see below)       |
+
+⭐ **The headline is the negative result.** `Invalid Stripe signature` — the
+boundary that stops anyone forging a billing event into a tier upgrade — reds
+**4** existing arms. The crypto-order money paths are 5 for 5. This is the first
+surface swept all session that came back essentially clean, and that is worth
+recording as precisely as a gap: it bounds where the risk is not.
+
+**`routes/billing.ts:50` is schema-shadowed.** `validateReturnUrl` refuses twice —
+malformed URL, then disallowed origin. The origin half is covered; the parse half
+is unreachable, because `CreateCheckoutSessionRequestSchema` already carries
+`success_url: z.string().url()`. Two arms were written for it and **removed** when
+the request came back as a Zod validation error naming neither field. Same class
+as `AccountProxyInputSchema` and `oauth.ts:518`.
+
+⚠️ Worth noting what that does NOT mean: the open-redirect boundary is the ORIGIN
+allowlist, and that half is covered. The shadowed half is a message-quality guard,
+not the control.
+
+**`services/billing.ts:251` is deferred on a behavioural question, not on cost.**
+`getBillingState` throws `Account not found.` when the BILLING repo has no row for
+an account that `resolveEffectiveAccount` already accepted — i.e. an account that
+exists in auth but has never touched billing. Whether that should be a 404 or a
+`subscription: null` is a product decision, and an arm either way would freeze an
+answer nobody has given. Recorded rather than encoded.
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
