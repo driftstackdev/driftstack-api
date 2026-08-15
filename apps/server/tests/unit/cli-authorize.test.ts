@@ -140,6 +140,101 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
       }),
     ).rejects.toMatchObject({ code: 'already_bound' });
   });
+
+  // ─── losing the compare-and-set, and the error split that follows ────────
+  //
+  // Two devices can race to bind one authorization code. The loser's CAS fails,
+  // and `bind` then RE-READS to say precisely what happened rather than
+  // collapsing every loss into one error. The arm above covers only the last of
+  // those four outcomes (`already_bound`); the three before it were cold —
+  // measured, by neutralizing each against 112 cli-authorize tests.
+  //
+  // ⚠️ The split is the point, and `state_mismatch` is why. `already_bound`
+  // tells a legitimate second device "someone already claimed this code", which
+  // is a normal thing to see in a real flow. `state_mismatch` means the winner
+  // carried a DIFFERENT state — the code was claimed by a request that was never
+  // part of this flow. Collapsing the two would report an attacker's claim as
+  // ordinary contention, on the one endpoint that turns a browser session into a
+  // device credential.
+  //
+  // The store is what the test controls: a real interleaving cannot be forced,
+  // and the CAS losing is the precondition for every branch here.
+  //
+  // LEDGER — control 17/17:
+  //
+  //   :455 lost-CAS not_found neutralized          1 red
+  //   :460 lost-CAS invalid_code neutralized       1 red
+  //   :463 lost-CAS state_mismatch neutralized     1 red
+  //   state_mismatch COLLAPSED into already_bound  1 red
+  //
+  // The last row is the failure worth guarding: it does not remove a refusal, it
+  // deletes the branch so a foreign-state winner is reported as ordinary
+  // contention. Every request is still refused, the status is unchanged, and the
+  // only thing lost is the operator's ability to tell a race from a claim that
+  // was never part of this flow.
+  //
+  // ⚠️ Two of these arms were retargeted while being written, both because an
+  // EARLIER branch answered first: an unparseable payload is caught by
+  // invalid_code before state is ever compared, and `user_code_hash` must be 64
+  // HEX characters or the parse fails there too. The fixture had to be made
+  // valid in the ways the test is not about, so the one thing it IS about is
+  // what refuses it.
+  function storeLosingCas(latest: string | null): InMemoryCliAuthorizeStore {
+    const store = new InMemoryCliAuthorizeStore();
+    const realGet = store.get.bind(store);
+    let casAttempted = false;
+    // `initiate` writes with setEx, so the ONLY compare-and-set in this flow is
+    // the bind's — failing it unconditionally is exactly "another bind won".
+    store.compareAndSetEx = () => {
+      casAttempted = true;
+      return Promise.resolve(false);
+    };
+    // Before the CAS, reads must be real so bind gets past its own preconditions;
+    // after it, the re-read is what the branch under test interprets.
+    store.get = (key: string) => (casAttempted ? Promise.resolve(latest) : realGet(key));
+    return store;
+  }
+
+  async function bindLosingCasWith(latest: string | null): Promise<unknown> {
+    const store = storeLosingCas(latest);
+    const svc = new CliAuthorizeService({
+      store,
+      dashboardOrigin: 'https://app.driftstack.local',
+      secretEncryptionKeyBase64: TEST_ENCRYPTION_KEY,
+    });
+    const init = await svc.initiate({ state: 'st_' + 'a'.repeat(20) });
+    return svc.bind({
+      code: init.code,
+      state: 'st_' + 'a'.repeat(20),
+      user_code: init.user_code,
+      account_id: 'acc_1',
+      api_key_plaintext: 'sk_first',
+    });
+  }
+
+  it('CRITICAL the loser gets not_found when the code EXPIRED rather than being taken. Both mean "you cannot have it", and only one means "try again with a fresh code".', async () => {
+    await expect(bindLosingCasWith(null)).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('CRITICAL the loser gets invalid_code when the stored value no longer parses — a corrupted entry must not be reported as ordinary contention', async () => {
+    await expect(bindLosingCasWith('{not json')).rejects.toMatchObject({ code: 'invalid_code' });
+  });
+
+  it('CRITICAL the loser gets state_mismatch when the winner carried a DIFFERENT state. This is the one that must not collapse into already_bound: it says the code was claimed by a request that was never part of this flow, not that a second device beat you to it.', async () => {
+    // A payload that PARSES cleanly — otherwise the invalid_code branch above
+    // fires first and this one is never reached. Only `state` differs.
+    const foreign = JSON.stringify({
+      state: 'st_' + 'z'.repeat(20),
+      user_code_hash: 'a'.repeat(64), // must be 64 HEX chars or the parse fails first
+      client_label: null,
+      created_at: Date.now(),
+      status: 'pending',
+      secret_blob: null,
+      encrypted: false,
+      account_id: null,
+    });
+    await expect(bindLosingCasWith(foreign)).rejects.toMatchObject({ code: 'state_mismatch' });
+  });
 });
 
 describe('V-553.B-2 CliAuthorizeService — exchange', () => {
