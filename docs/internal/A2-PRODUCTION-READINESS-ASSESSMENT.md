@@ -1504,6 +1504,63 @@ verdict depends on something nobody chose. A single-run mutation ledger cannot
 see that class at all — which is an argument for re-running a ledger when the
 file it documents changes, not for trusting the number in the header forever.
 
+#### 5h. NEW — 76 text-pin anchors name a control they cannot guard
+
+Generalisation of the `services/auth.ts` finding in 5f, now measured repo-wide
+rather than asserted. A `toMatch(/…/)` anchor that matches its target source
+**more than once** asserts the block exists somewhere, not that it still guards
+the site it was written for: mutating any single occurrence leaves the others
+satisfying it. Proved on `auth.ts`, where the anti-enumeration block appears
+twice and the pin only reds when BOTH change.
+
+**Measured 2026-08-15** across every `*-content-parity` and
+`*-cross-source-invariant` test:
+
+|                                                   |            |
+| ------------------------------------------------- | ---------- |
+| pins scanned                                      | **439**    |
+| anchors extracted                                 | **16,060** |
+| anchors matching their source >1×                 | **1,241**  |
+| of those, naming control flow or a thrown outcome | **76**     |
+| regexes that did not answer within 0.5s           | **2**      |
+
+The 1,241 figure is **not** a defect count and should not be quoted as one. Most
+are type and field fragments — `accountId: string;`, `status,` — which
+legitimately recur and where "appears at all" is the honest property. The **76**
+are the interesting subset: anchors containing `throw new`, `if (`, `=== '` or a
+boolean operator, i.e. standing in for a per-site behavioural guarantee. Even
+those are a **candidate list** — each needs reading before it is called a defect.
+
+The largest, and they are real controls rather than plumbing:
+
+- `throw new TierLimitError(` — **10 sites** (profile tier caps)
+- `if (opts.effectiveAccountId === undefined) { throwIfMissing…` — 6
+- `throw new RateLimitedError(` — 5 and 4, in two different pins
+- `if (!parsed.success) throw new ValidationError(…)` — 5 (request validation)
+- `throw new NotFoundError(\`Account "${accountId}" not found.\`)` — 5
+- `if (row === null) throw new AuthFlowError('invalid_auth_token')` — 4
+
+_Fix shapes, in preference order:_ execute the sites separately (what 5f did for
+`auth.ts`); or assert the **count** — `expect(matches).toHaveLength(10)` — so a
+site disappearing reds even without execution; or anchor to the enclosing
+function so the pattern is unique. Deleting the pins is **not** proposed: 5f also
+showed the opposite case, a redundant predicate with text but no behaviour, which
+only a text pin can see.
+
+⚠️ _Termination, because the first two attempts failed differently._ A naive
+sweep never finished — several anchors chain unbounded wildcards (`[\s\S]*?`
+between many literals) and backtrack exponentially against a 2000-line source.
+Declining "dangerous-looking" patterns was not enough and was also unprincipled.
+The measurement above puts a hard **0.5s per-regex wall-clock timeout** on each
+match and reports the 2 that did not answer, so the number carries its own
+uncertainty rather than hiding it behind a silent skip.
+
+⚠️ _And the detector nearly under-reported._ Its first version required `)`
+immediately after the regex; prettier writes multi-line assertions as
+`toMatch(\n  /…/,\n)`. That silently skipped 52 of 169 anchors on the first file
+tried — **including the anchor the tool existed to find**. A tool that misses its
+own motivating case reports a clean bill of health.
+
 #### 5g. NEW — nine keyset guards seed tie groups; one was probabilistic, now all measured
 
 The `admin-accounts` finding above raises an obvious question about its
