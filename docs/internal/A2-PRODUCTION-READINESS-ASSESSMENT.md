@@ -1449,10 +1449,31 @@ ledger in its header: `admin-accounts-repo`, `legal-repo`,
 `health-probes-repo`, `validation-schedules-repo`,
 `byok-anthropic-rotation-reminder-repo`.
 
-**Open:** `webhook-rotation-reminder-repo` (next), `admin-billing-repo`,
-`cost-nightly-accounts-provider`, and `audit-archive-repo` — the last blocked on
-item 2, since `AuditArchiveService` is still "built, tested, never run" and a
-repo test would cover SQL that nothing calls.
+Also closed since: `webhook-rotation-reminder-repo`, `admin-billing-repo`,
+`cost-nightly-accounts-provider`.
+
+**Open: one.** `audit-archive-repo`, blocked on item 2. Re-verified here rather
+than inherited from that item — `grep -rn 'new DrizzleAuditArchiveRepo' src/`
+returns nothing, so the class is constructed nowhere in the server and a repo
+test would cover SQL that nothing calls. It should land with the wiring, not
+before.
+
+**So the item-5e backlog is closed except for the one blocked entry.** Ten
+`db-*` integration files covering the SQL behind the public status page, the
+validation harness, both rotation-reminder sweeps, the nightly cost recompute
+and the admin billing cockpit.
+
+⚠️ _One caveat on those ten, checked rather than assumed:_ **six record a
+mutation ledger in their header** (`health-probes`, `validation-schedules`,
+`byok-anthropic-rotation-reminder`, `webhook-rotation-reminder`,
+`cost-nightly-accounts-provider`, `admin-billing`). The earlier four —
+`admin-accounts`, `legal`, `email-preferences`,
+`incident-update-notifications` — were mutation-proved when written, but the
+result was reported to the bus rather than written into the file, so **nothing
+in the repository evidences it**. That is a documentation gap rather than a
+coverage one, and the distinction is worth keeping straight: an unrecorded proof
+is indistinguishable from an unperformed one to the next reader. Backfilling
+those four headers is a small, worthwhile follow-up.
 
 ⚠️ **`validation-schedules-repo` changed what this item means.** It was not an
 uncovered repo sitting unguarded — a source pin
@@ -1477,13 +1498,21 @@ opening each of the 2,713 test files rather than grepping names: a module counts
 as executed only if some test has a real `import … from '…/<module>.js'`, and as
 pinned only if a test names its `src/db/<module>.ts` path as a string.
 
-| classification                | count |
-| ----------------------------- | ----- |
-| imported by at least one test | 46    |
-| **pinned but never imported** | **5** |
-| neither imported nor pinned   | 2     |
+Re-run after the backlog landed, so the same instrument reports both states:
 
-The five pinned-but-never-imported are **not** five open items:
+| classification                | before | after  |
+| ----------------------------- | ------ | ------ |
+| imported by at least one test | 46     | **50** |
+| **pinned but never imported** | **5**  | **3**  |
+| neither imported nor pinned   | 2      | **0**  |
+
+The three remaining are `migrate`, `seed` and `audit-archive-repo` — the two CLI
+entrypoints whose pins are the right instrument, and the one blocked on item 2.
+**Every `src/db` module that a test can execute now is executed by one.**
+
+The reasoning behind the "before" column, kept because it is what made the
+remaining three defensible rather than merely small — the five
+pinned-but-never-imported were **not** five open items:
 
 - `migrate`, `seed` — CLI entrypoints run as processes, already listed above as
   legitimately unmeasurable under vitest. Their pins are the right instrument.
