@@ -2362,6 +2362,45 @@ non-null because we just found the row above" and the guard exists for strict
 type-narrowing. Driving it means forcing a state the code says cannot occur, and
 the arm would pin the narrowing rather than a behaviour.
 
+### 5t. The refusal-coverage frontier is closing — seven services swept
+
+Seven services have now been swept site-by-site with mutation, and the yield per
+sweep is falling in a way worth recording, because it changes what the next fire
+should do.
+
+| service                                | sites | uncovered | driven |
+| -------------------------------------- | ----- | --------- | ------ |
+| `auth.ts`                              | 42    | 6         | 5      |
+| `profiles.ts`                          | 33    | 8         | 4      |
+| `webhooks.ts`                          | 28    | 6         | 3      |
+| `recipe-payload-encryption.ts`         | 14    | 8         | 4      |
+| `cli-authorize.ts`                     | 13    | 3         | 3      |
+| `sessions.ts`                          | 19    | 5         | 1      |
+| money surfaces (stripe/crypto/billing) | 19    | 3         | 1      |
+
+⭐ **What is left uncovered is now mostly two kinds of thing, and neither is a
+gap.** In `sessions.ts`, three of the five are the same
+`destroySessionSerialized returned destroyed without destroyedAt` internal
+invariant, and `:474` (archetype not selectable) is shadowed by
+`SelectableArchetypeIdSchema` on the create request. Across all seven sweeps the
+residue is: **internal "cannot happen" invariants**, and **guards shadowed by a
+request schema**.
+
+⭐ The single recurring finding across every sweep was structural rather than
+per-file: **a rule implemented more than once, tested in only some of its
+copies.** Six instances — `/handback` vs `/takeover`, `validateReturnUrl` origin
+vs parse, the auth cache session-block vs key-block, the auth cache-write key vs
+session branch, the recipe intent-log vs transcript key check, and `destroy`'s
+three not-found copies. That is the pattern to search for first in anything not
+yet swept, ahead of "which lines are cold".
+
+⚠️ **Implication for the next fire.** Continuing to sweep by refusal count has
+diminishing returns; `agent-decomposer-claude.ts` (23) and
+`status-subscribers.ts` (13) are the last large ones, and if they follow the
+trend most of their residue will be invariants and schema shadows. The higher
+yield now is **property-shaped work** — asking what a subsystem must never do —
+rather than enumerating throws.
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
