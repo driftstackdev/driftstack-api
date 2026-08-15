@@ -4081,3 +4081,66 @@ Remaining lock-based candidates, by the rule above: `mfa-repo` enrollment (2 sit
 the `oauth-store` group (6), and `sessions-repo.claimSessionOperation` — the last of
 which already has a dedicated concurrency file worth auditing the same way before
 adding anything.
+
+## 6v — correcting the rule I published twice, and a fifth lock proved
+
+### ⛔ The rule was too categorical, and the correction is the main result
+
+6u stated it as a property of MECHANISM: conditional UPDATEs are race-detectable,
+locks are not. Auditing `claimSessionOperation` refutes the second half.
+
+`db-session-operation-claim-drizzle` **does** detect its lock's removal — deleting
+`.for('update')` reds "elects exactly one of nine independent claims". That file is
+built differently from the ones that failed: **nine separate clients**, each its own
+`postgres()` at `max: 1`, so nine genuinely independent backends fire at once.
+
+So it is not mechanism, it is PROBABILITY of hitting the window, and it scales:
+
+| shape                                    | detects a lock?                                        |
+| ---------------------------------------- | ------------------------------------------------------ |
+| N callers sharing one pooled connection  | **no** — the pool serialises them (the profile cap)    |
+| 2 callers, 2 connections, fast path      | **no** — window missed (cap probe, token debit)        |
+| **9 callers, 9 independent connections** | **yes** — some pair overlaps (session-operation claim) |
+| conditional UPDATE, any N                | **yes** — no timing needed at all                      |
+| forced ordering                          | **yes** — deterministic in both directions             |
+
+A race is a sampling experiment. Two samples on a sub-millisecond path is a bad
+one; nine independent samples is a decent one. I published the categorical version
+twice, in `9c2616d18` and `c3246e53b`, and it was wrong in the direction that
+matters — it would have justified rewriting a test that already works.
+
+### `mfa-repo` — and why its existing test is RIGHT to miss the lock
+
+`db-mfa-credential-issuance-concurrency` does not detect the FOR UPDATE at
+`mfa-repo:214` — 3 passed either way — and that is correct rather than deficient.
+`completeEnrollmentIfPending` takes TWO locks:
+
+1. `pg_advisory_xact_lock(hashtext('mfa-credentials:<accountId>'))` — serialises MFA
+   activation against another MFA activation;
+2. `SELECT accounts … FOR UPDATE` — the account AUTHORITY row, which web-session
+   minting also locks.
+
+The existing test races MFA against MFA, which the ADVISORY lock already
+serialises, so the row lock is invisible to it. **No MFA-vs-MFA test can exercise a
+lock whose purpose is MFA-vs-login.** Reading the method mattered here: on the
+"race did not detect it" signal alone the obvious move is to strengthen the
+existing file, and that would have been the wrong file.
+
+### The fifth lock
+
+What the authority lock actually protects, per the source: "a mint that wins first
+is retired by the epoch advance below; a mint that loses observes the new epoch and
+refuses its stale snapshot." Lose it and an in-flight login mint interleaves with
+activation and survives on a pre-MFA snapshot — **a session that should have been
+retired the moment MFA came on**.
+
+Forced ordering with a login-shaped holder on the same row. Blocks with the lock,
+proceeds without it: "completeEnrollmentIfPending must be waiting on the account
+authority row."
+
+### Locks proved by forced ordering
+
+crypto order · profile cap · token debit · account tier · **MFA authority row**.
+The `oauth-store` group (6 sites) is what remains, and each wants the same two
+questions first: what does this lock protect that a sibling lock does not, and does
+an existing N-way race already reach it.
