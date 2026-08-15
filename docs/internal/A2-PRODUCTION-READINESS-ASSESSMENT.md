@@ -2265,6 +2265,33 @@ on the census output — including `/transport-report`, which passed its arm and
 kept passing with ownership disabled because it could not see the fixture's
 session ids at all.
 
+### 5q. Two guards measured and deliberately NOT covered, with the arithmetic
+
+Coverage work needs a stopping rule as much as a target list, or the tail turns
+into busywork that slows every future suite run. Two sites measured this fire:
+
+- **`agent-sessions.ts` empty-upload guard** (`Uploaded file is empty…`) —
+  **already covered.** Ignoring it reds an existing arm. No work needed; recorded
+  so the next sweep does not re-derive it.
+
+- **`agent-sessions.ts:3102`, the 64 MiB per-file cap** — genuinely uncovered
+  (ignoring it leaves 226 agent-session tests green), and deliberately left that
+  way. Reaching it needs a payload **above 64 MiB decoded**, which is ~85 MiB of
+  base64 plus a JSON envelope, allocated in the test process on **every suite
+  run**. `UPLOAD_MAX_FILE_BYTES` is a `const` inside the route registration, so
+  there is no seam to shrink it without changing production code.
+
+  What that buys is coverage of a single `bytes.length > CAP` comparison that
+  already sits behind Fastify's own `bodyLimit` of 96 MiB — the source says so
+  directly: _"Beyond this Fastify 413s before the handler; the handler is the
+  authoritative 64-MiB-decoded enforcer."_ So the window the guard uniquely owns
+  is 64–96 MiB, and an escape costs one oversized file reaching a harness that
+  has its own cap.
+
+⭐ The honest form of this is a recorded decision with the numbers in it, not a
+silent skip. If the cap ever becomes injectable, or the outer `bodyLimit` is
+raised, the arithmetic changes and the arm becomes worth writing.
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
