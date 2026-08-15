@@ -236,6 +236,21 @@ export interface TestAppOptions {
    */
   readinessChecks?: ReadinessCheck[];
   tier?: AccountTier;
+  /**
+   * Tier given to accounts created by `POST /v1/auth/signup`, i.e. the
+   * web-session identities — NOT the seeded API-key account above, which is
+   * `tier`. Unset ⇒ `free`, matching production and every existing fixture.
+   *
+   * These are separate knobs because they are separate accounts, and the split
+   * hides a whole class of route from coverage: a signup account is free-tier,
+   * free-tier has `apiAccess: false`, so any route holding BOTH a web-session
+   * requirement and a `requireTierFeature(tier, 'apiAccess')` gate could only
+   * ever be reached at its tier refusal. `POST /v1/oauth/authorize/complete` is
+   * exactly that shape, and consent is the entry point to the whole OAuth
+   * provider surface — so everything downstream of a real authorization code
+   * was unreachable too.
+   */
+  signupTier?: AccountTier;
   /** Email admitted by the requireOwner gate. Unset → the gate stays
    *  fail-closed, which is the default posture for every other suite. */
   ownerEmail?: string;
@@ -1280,6 +1295,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       magicLinkUrl: 'http://localhost:5173/auth/magic-link',
       passwordResetUrl: 'http://localhost:5173/reset-password',
       exposeDebugToken: true,
+      // Undefined keeps the service's own `?? 'free'` default, so every
+      // existing fixture is byte-for-byte unaffected.
+      ...(opts.signupTier !== undefined ? { initialTier: opts.signupTier } : {}),
     },
     authCache, // V-168 — cache invalidation on logout
     accountAuditService, // V-224 — emit account.{email_verified,login,logout,password_changed}

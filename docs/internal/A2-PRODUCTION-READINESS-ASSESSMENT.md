@@ -2116,6 +2116,66 @@ rather than a residual:
   because on a deterministic deployment the turn succeeds through the generic
   decomposer and there is no refusal to assert.
 
+### 5n. The two classic authorization-code attacks, and a blocker of mine that was wrong
+
+`exchangeCode` in `services/oauth.ts` runs a chain of guards, and two of them had
+never executed at HEAD. Neither is caught upstream, so neither was redundant:
+the token route's schema checks **shape only** (`redirect_uri: z.string().url()`),
+and nothing at the route layer knows which client a code was issued to.
+
+- **`:612` redirect_uri rejected.** The allowlist refuses credentials embedded in
+  the URL, a fragment, and any non-https scheme except localhost — each a way to
+  land an authorization code somewhere the client never nominated. Three arms,
+  one per rejection class, because they fail through **different clauses**; the
+  ledger shows dropping the credentials/fragment line reds exactly the two arms
+  that depend on it rather than all three. Four mutations, all red.
+
+- **`:620` code issued to a different client.** A code minted for client A must
+  not be redeemable by client B even when B authenticates correctly as itself.
+  Four mutations, all red.
+
+Left alone deliberately: **`:518`**, the PKCE-downgrade guard. The authorize
+route's schema is `z.literal('S256')`, so the service's own copy is a second
+layer HTTP cannot reach, and the route-level refusal is already covered.
+
+⭐ **The part worth recording is that I got the second one wrong first.** I
+reported `:620` as blocked and committed that claim, on the reasoning that
+earning a code requires `POST /v1/oauth/authorize/complete`, which refuses an API
+key:
+
+    if (ctx.webSession === null) …
+    // Accepting an API key here lets a stolen limited credential launder its
+    // authority into an independent OAuth token that survives key revocation.
+
+That refusal is real and correct. My conclusion from it — "the harness cannot
+mint a web-session credential" — was not: signup + verify-email issues one, and
+**ten integration suites already authenticate that way**. One grep would have
+shown it.
+
+The actual obstacle was two lines further down, `requireTierFeature(ctx.account.tier,
+'apiAccess')`. A signup account is `free`, the one tier with `apiAccess: false`,
+and the harness seeds the tier of the **API-key** account while leaving the
+**signup** account at the production default. Two correct gates in sequence, fed
+by two different accounts. `signupTier` is that missing knob, and it is additive
+— unset keeps the service's own `?? 'free'`.
+
+⚠️ **The lesson is about the shape of the evidence, not the miss.** A 403 is
+equally consistent with "wrong credential kind" and "wrong tier". I read the
+first gate, found a sufficient explanation, and stopped — so the claim was
+untested where it was most load-bearing. **A recorded blocker is a claim like any
+other and earns the same verification as a finding**; being an admission of a gap
+makes it feel humble, which is exactly what stops it being checked. Consent is
+the entry point to the whole provider surface, so the wrong blocker would have
+written off every branch downstream of a real authorization code.
+
+⭐ Two mutations in this slice are worth keeping as patterns. **Comparing the
+authenticated client back to the body-supplied id** (`client.client_id !==
+args.client_id`) is a tautology after `authenticateClient` — the guard reads
+correctly, reviews cleanly, and enforces nothing. And **refusing every exchange**
+leaves the attack assertion passing; only the "rightful client still succeeds
+afterwards" leg tells a working binding check apart from a build that refuses
+everyone, which is why the arm spends a second exchange on it.
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the

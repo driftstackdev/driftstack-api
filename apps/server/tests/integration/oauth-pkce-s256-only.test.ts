@@ -28,6 +28,7 @@
 // method and the assertions passed either way. Asserting that S256 SUCCEEDS on
 // the same request is what makes the plain refusal mean something.
 
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
@@ -39,6 +40,12 @@ afterEach(async () => {
 
 /** 43 chars is the RFC 7636 minimum, so the value itself is never the reason. */
 const CHALLENGE = 'a'.repeat(43);
+
+// The verifier `token()` sends, and its true S256 challenge. Needed only by the
+// client-binding arm, which is the one that drives an exchange all the way to a
+// token — every other arm is refused before PKCE is reached.
+const VERIFIER = 'v'.repeat(43);
+const REAL_CHALLENGE = createHash('sha256').update(VERIFIER).digest('base64url');
 
 function authorizeUrl(clientId: string, method: string): string {
   const q = new URLSearchParams({
@@ -142,6 +149,29 @@ describe('OAuth authorize accepts S256 only', () => {
 // other still refusing. The counts above show it — dropping the
 // credentials/fragment line reds exactly the two arms that depend on it.
 //
+// Client binding, added in the same slice once the harness could earn a real
+// code — control 6/6:
+//
+//   the binding check deleted outright                    1 red
+//   it compares the AUTHENTICATED client to the body id   1 red
+//   every exchange refused                                1 red
+//   the `signupTier` harness seam removed                 1 red
+//
+// The second is the one worth keeping. `authenticateClient` has already proved
+// args.client_id owns its secret, so comparing the resolved client back to the
+// same id is a tautology — the guard reads correctly, reviews cleanly, and
+// enforces nothing. Deleting a guard is caught by almost anything; a comparison
+// against the wrong side of an identity is not.
+//
+// The third mutates nothing about the attack and reds the OTHER leg: with every
+// exchange refused, the stolen-code assertion still passes. Only the "rightful
+// client still succeeds afterwards" leg tells that apart from a build that
+// refuses everyone, which is why the arm spends a second exchange on it.
+//
+// The fourth is not a source guard at all — it pins that the coverage depends on
+// the seam. Drop `signupTier` and the signup account falls back to `free`, the
+// approve route 403s on `apiAccess`, and no code is ever minted.
+//
 // ⚠️ The guard block appears at FOUR sites in this file, so the first mutation
 // anchor matched more than once and was refused rather than applied to the wrong
 // path. The `authenticateClient` line above exchangeCode's copy disambiguates
@@ -180,31 +210,116 @@ describe('OAuth token exchange refuses a bad redirect_uri and a foreign code', (
       },
     });
 
-  // ⚠️ The client-binding refusal (services/oauth.ts:620, "code issued to a
-  // different client") is NOT covered here, and the blocker is worth recording
-  // rather than leaving as a silent gap.
-  //
-  // Driving it needs a real authorization code, which means completing
-  // POST /v1/oauth/authorize/complete — and that route deliberately refuses an
-  // API key:
+  // Earning a real authorization code takes a consent, and consent is a human
+  // action: POST /v1/oauth/authorize/complete refuses an API key outright.
   //
   //     if (ctx.webSession === null) …
-  //     // Consent is a human dashboard action, not a general API-key mutation.
   //     // Accepting an API key here lets a stolen limited credential launder
   //     // its authority into an independent OAuth token that survives key
   //     // revocation.
   //
-  // That refusal is correct and worth keeping. But `buildTestApp` cannot mint a
-  // web-session credential — nothing in the integration suite authenticates with
-  // one — and it constructs `InMemoryOAuthStore` inline without exposing it, so
-  // a code cannot be seeded directly either. Both routes to a real code are
-  // closed by construction.
+  // So the caller has to be a web session, which signup + verify-email issues.
+  // That alone is not enough: the very next line is
+  // `requireTierFeature(ctx.account.tier, 'apiAccess')`, and a signup account is
+  // `free`, the one tier with `apiAccess: false`. Two independent gates in
+  // sequence, each correct, each fed by a different account — the harness seeds
+  // the API-key account's tier and left the signup account at the production
+  // default. `signupTier` is that missing knob.
   //
-  // Fix shape, either would do: expose the store on the fixture so a code can be
-  // seeded, or add a web-session credential to the harness. The latter is worth
-  // more — it would also unlock the approve route's own refusals. Same call as
-  // the `agentDecomposerKind` and `opts.fetch` gaps: add the seam rather than
-  // bend a fixture into the branch.
+  // ⚠️ Worth stating plainly because the first version of this file asserted the
+  // opposite: the blocker recorded here was that the harness "cannot mint a
+  // web-session credential". It can, and ten integration suites already do. The
+  // real obstacle was one tier default two lines further down. A blocker is a
+  // claim like any other and deserves the same grep — mine survived only because
+  // a 403 is equally consistent with "wrong credential kind" and "wrong tier",
+  // and I read the first gate and stopped.
+  async function consentingSession(fixture: TestAppFixture, email: string): Promise<string> {
+    const signup = await fixture.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email, password: 'correct-horse-battery-staple-9' },
+    });
+    expect(signup.statusCode, `signup returned ${signup.statusCode}`).toBe(200);
+    const debugToken = signup.json<{ debug_token?: string }>().debug_token;
+    expect(debugToken, 'fixture should expose debug_token').toBeTruthy();
+    const verify = await fixture.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: debugToken },
+    });
+    expect(verify.statusCode, `verify-email returned ${verify.statusCode}`).toBe(200);
+    return verify.json<{ session: { token: string } }>().session.token;
+  }
+
+  /** Stage an authorization for `client`, then approve it as the human. */
+  async function earnCode(
+    fixture: TestAppFixture,
+    client: Client,
+    sessionToken: string,
+  ): Promise<string> {
+    const staged = await fixture.app.inject({
+      method: 'GET',
+      url: '/v1/oauth/authorize',
+      query: {
+        client_id: client.client_id,
+        redirect_uri: 'https://app.example/cb',
+        state: 'state-value-long-enough',
+        // A REAL S256 pair, unlike the dummy CHALLENGE the arms above use —
+        // those stop at the method check, this one runs the exchange to
+        // completion and would fail PKCE verification at services/oauth.ts:625.
+        code_challenge: REAL_CHALLENGE,
+        code_challenge_method: 'S256',
+      },
+    });
+    expect(staged.statusCode, `authorize returned ${staged.statusCode}`).toBe(200);
+    const approved = await fixture.app.inject({
+      method: 'POST',
+      url: '/v1/oauth/authorize/complete',
+      headers: { authorization: `Bearer ${sessionToken}`, 'content-type': 'application/json' },
+      payload: { authorization_id: staged.json<{ authorization_id: string }>().authorization_id },
+    });
+    expect(approved.statusCode, `approve returned ${approved.statusCode}: ${approved.body}`).toBe(
+      200,
+    );
+    return approved.json<{ code: string }>().code;
+  }
+
+  it('400: a code minted for one client cannot be redeemed by another', async () => {
+    const fx = await buildTestApp({ withOauthStore: true, signupTier: 'api_builder' });
+    try {
+      const alice = await registerFullClient(fx, 'alice');
+      const mallory = await registerFullClient(fx, 'mallory');
+      const session = await consentingSession(fx, 'consent-binding@example.test');
+      const code = await earnCode(fx, alice, session);
+
+      // Mallory authenticates correctly AS MALLORY — the client credentials are
+      // her own and valid. The only thing wrong is that the code is not hers,
+      // which is the whole point: without the binding check, any registered
+      // client that merely observes a code can spend it.
+      const stolen = await token(fx, {
+        code,
+        client_id: mallory.client_id,
+        client_secret: mallory.client_secret,
+      });
+      expect(stolen.statusCode).toBe(400);
+      const body = stolen.json<{ error: string; detail: string }>();
+      expect(body.error).toBe('invalid_grant');
+      expect(body.detail).toMatch(/different client/i);
+
+      // The same code still works for its rightful client afterwards, so the
+      // refusal above is the binding check and not the code being consumed,
+      // malformed, or expired. Without this the arm passes just as well against
+      // a build that rejects every exchange.
+      const rightful = await token(fx, {
+        code,
+        client_id: alice.client_id,
+        client_secret: alice.client_secret,
+      });
+      expect(rightful.statusCode, `rightful client got ${rightful.statusCode}`).toBe(200);
+    } finally {
+      await fx.cleanup();
+    }
+  });
 
   it.each([
     ['a plain-http target', 'http://evil.example/cb'],
