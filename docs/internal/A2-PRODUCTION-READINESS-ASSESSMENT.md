@@ -3197,3 +3197,90 @@ following every candidate the only actionable one was the metrics label roster �
 a drift guard, not a live defect. The class that was least reliably measured turns
 out to be in good shape; that is worth knowing precisely rather than assuming in
 either direction.
+
+## 6g — every mutation ledger this session ran with 80 test files switched off
+
+The largest instrument defect yet, and `verify-suite` had been printing it after
+every run:
+
+> NOTE — 80 test file(s) were collected but never executed. Most gate on
+> DATABASE_URL; set it to the local Postgres to run them.
+
+I read that as a note about SUITE completeness and never applied it to my own
+ledgers. Every "**_ UNNOTICED _**" verdict in this document was produced with
+those 80 files skipped, so any of them could have been covered by an integration
+test that never ran.
+
+### How it surfaced
+
+Chasing a different lead — lease ownership on `scheduled_jobs`. Three
+ownership-sensitive mutations (`markComplete`, `markRetry`, `markFailed`) each
+scope their UPDATE with `eq(scheduledJobs.lockedBy, workerId)`, and the existing
+cross-source invariant pins what each method SETS but not that predicate.
+Removing it from `markComplete` left the unit and invariant tests **fully green
+(22 passed)**; only the content-parity pin reddened, and only because the source
+TEXT changed.
+
+That looked exactly like a real gap — a duplicate-execution hazard on a chain that
+sends webhooks and runs retention purges — guarded by nothing but a text pin.
+
+It is not. `db-scheduled-jobs-repo-drizzle.test.ts` contains
+_"a settle from a worker that no longer holds the lock is rejected (fenced on
+locked_by)"_, and with `DATABASE_URL` set the same mutation reds it. The predicate
+is behaviourally covered; my measurement had the covering test switched off.
+
+⭐ A local Postgres was running the whole time, with `driftstack_e2e_a2` already
+present from earlier e2e work. The cost of the blind spot was zero setup — just
+`DATABASE_URL=postgres://localhost:5432/driftstack_e2e_a2`.
+
+### Re-verifying the committed conclusions rather than assuming they survive
+
+Both sets of arms committed earlier were re-measured against their integration
+importers with the database available:
+
+| pinned earlier                                          | integration test alone, under the same mutations        |
+| ------------------------------------------------------- | ------------------------------------------------------- |
+| `account-proxy-secret-encryption` — 5 encrypt-path arms | control 4 passed; all five mutations **still 4 passed** |
+| `webhook-secret-encryption` — the exact-UTF-8 arm       | control 13 passed; mutation **still 13 passed**         |
+
+Neither is covered by an integration test, so both sets were genuinely additive
+and those conclusions stand. Checked rather than assumed, because the whole point
+of this entry is that I had been assuming.
+
+### The rule
+
+A mutation ledger must run with `DATABASE_URL` set whenever the module under test
+has ANY importer under `tests/integration/`. Enumerate importers first — the
+skipped ones are exactly the ones a local run hides.
+
+### Also swept clean this fire
+
+Time-unit handling in expiry/TTL arithmetic — the classic seconds-vs-milliseconds
+bug where a token never expires. Every seconds-named constant meeting a
+millisecond clock is explicitly `* 1000`; no `_MS` constant is treated as seconds;
+no `exp`/`expires_at` field takes a raw `Date.now()`. The three lines my heuristic
+flagged were the correct conversions themselves.
+
+### What the DB-enabled run immediately caught
+
+The first `npm run verify` with `DATABASE_URL` set executed **2734 files with 2
+skipped instead of 80** — 375 tests that had never run in any local verification
+of mine — and came back NOT TRUSTWORTHY on one file:
+
+```
+marketing-site: built 2026-08-15T21:35:08Z but source changed 2026-08-15T21:40:28Z
+  — REBUILD, do not repin assertions onto stale
+```
+
+Not a DATABASE_URL-gated test and not my change: `about.astro` was committed eight
+minutes earlier by another agent (`df2ad92d3`) without rebuilding, so
+`dist-reading-suites-have-fresh-artifacts` fired exactly as designed. `dist/` is
+gitignored, so the fix is local and produces no commit, and the guard states the
+remedy itself. Rebuilt (68 pages, 2.9s) and the guard is green.
+
+⭐ Two things worth keeping from that: the repo has a guard for _stale build
+artifacts feeding assertions_, which is the failure mode where a test "passes"
+against a page that no longer exists — and it caught a real one within minutes of
+the source landing. And the reason I saw it at all is that a committed change from
+another agent had shifted the tree since my last verify; a green from ten minutes
+ago is not a green now.
