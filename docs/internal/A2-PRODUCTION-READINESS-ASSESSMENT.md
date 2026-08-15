@@ -3800,3 +3800,54 @@ re-run — which is the arm that would have caught it if the change had NOT been
 behaviour-neutral. Worth noting that the pre-commit hook and the tests-typecheck
 guard have now each caught something in the last three commits; between them they
 are doing more real work than a second pair of eyes would.
+
+## 6q — verifying my own scoping claim, and racing the crypto lock for real
+
+6p scoped the additive-write guard to Stripe with the line "the NowPayments/crypto
+IPN path has its own idempotency and its own race analysis". That was an assertion
+I had not checked. Checking it was this fire's first slice.
+
+**The claim holds.** The crypto path's idempotency is a different mechanism, and it
+has to be: an IPN carries no unique event identity, so there is nothing to key an
+ON CONFLICT on. Instead `applyIpnStatus` runs inside
+`withOrderLock(orderId, …)` — `select … .for('update')` in a transaction — and
+decides the transition against the LOCKED committed row. The source names the
+defect it fixed: _"Previously the read-modify-write was unlocked: two same-order
+IPNs both read pre-paid, both upserted, both fired the webhook + receipt email."_
+
+### The gap
+
+The only test that races two `applyIpnStatus` calls is a UNIT test against the
+in-memory repo. That cannot establish this property at all — JavaScript is
+single-threaded, so an in-memory "lock" is trivially exclusive and the test passes
+identically with `.for('update')` deleted. Two integration files name
+`withOrderLock`; neither runs anything concurrently.
+
+### The guard, and the trap it had to avoid
+
+⚠️ A `postgres()` client with `max: 1` serialises the two calls **in the connection
+pool**, so the assertions would hold with no row lock at all — a green proving the
+pool works. This test therefore uses two independent clients, and its first arm
+asserts they are distinct backends (`pg_backend_pid()` differ) BEFORE the race arm
+runs. Without that arm the whole file could quietly degrade into a pool test.
+
+Each side reports the status it observed under its own lock: the winner sees
+`pending` and commits `paid`; the loser must then observe `paid`.
+
+Ledger — and this is the clearest mutation result of the session, because it
+reproduces the historical bug verbatim rather than merely failing:
+
+```
+.for('update') removed →
+  expected [ 'pending', 'pending' ] to deeply equal [ 'paid', 'pending' ]
+```
+
+Both sides read the pre-paid row. That is the source comment's sentence, executed.
+
+### Money-path idempotency now stands on measured ground
+
+| path            | mechanism                                         | proven against               |
+| --------------- | ------------------------------------------------- | ---------------------------- |
+| Stripe          | `INSERT … ON CONFLICT DO NOTHING` on the event id | real SQL (`9f3745a2a`)       |
+| Stripe handlers | no additive write — the race's precondition       | enforced guard (`db3d747d8`) |
+| Crypto IPN      | `SELECT … FOR UPDATE` on the order row            | real concurrency, here       |
