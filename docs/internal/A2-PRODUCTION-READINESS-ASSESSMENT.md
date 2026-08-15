@@ -1418,7 +1418,8 @@ the aggregate:
   entrypoints run as processes, exactly like the already-excluded `index.ts`.
 - **Zero, and tied to a known-unwired subsystem (1):** `audit-archive-repo.ts` —
   `AuditArchiveService` is item 2's "built, tested, never run".
-- **Zero or near-zero Drizzle repos (8):** `admin-accounts-repo`,
+- **Zero or near-zero Drizzle repos (8)** — six now closed, see progress below:
+  `admin-accounts-repo`,
   `email-preferences-repo`, `health-probes-repo`,
   `incident-update-notifications-repo`, `legal-repo`, `validation-schedules-repo`,
   `cost-nightly-accounts-provider`, plus `admin-billing-repo`,
@@ -1438,6 +1439,62 @@ way the BYOK candidate query was — a `db-*` integration file per repo against
 real Postgres. Do **not** fold `src/db/**` into the gate until that work lands;
 folding it in first would force the thresholds down, and this file's own policy
 is never to ratchet downward.
+
+**Backlog progress (updated 2026-08-15).** Six of the eight closed, each with a
+`db-*` integration file against real Postgres and a mutation ledger in its
+header: `admin-accounts-repo`, `legal-repo`, `email-preferences-repo`,
+`incident-update-notifications-repo`, `health-probes-repo`,
+`validation-schedules-repo`. **Two remain:** `cost-nightly-accounts-provider`,
+and `audit-archive-repo` — the latter blocked on item 2, since
+`AuditArchiveService` is still "built, tested, never run" and a repo test would
+cover SQL that nothing calls.
+
+⚠️ **`validation-schedules-repo` changed what this item means.** It was not an
+uncovered repo sitting unguarded — a source pin
+(`db-validation-schedules-repo-v218-cross-source-invariant`) has been pinning it
+for a long time, which is why the hole was easy to miss. That pin reads the
+source and regex-matches it; it never executes a line, so coverage reads zero
+while the repo looks guarded. Running the ten mutations against BOTH files, the
+pin is blind to **four**, including the one its own header names — "SET excludes
+nextRunAt (preserved)", which no arm asserts. The others: `markRun` never
+advancing `next_run_at` (the schedule stays due forever, so the harness re-runs
+that archetype every tick), `findByArchetype` losing its predicate, and `list`
+losing its order. The `markRun` miss is instructive — the pin _does_ assert
+`/nextRunAt,/`, but that substring also appears in `upsert`'s insert values, so a
+different occurrence keeps it green.
+
+_Generalises past this item:_ a repo with a cross-source-invariant pin should not
+be read as covered. The pin freezes what the source **says**; these four
+mutations left the text saying the same thing while the behaviour inverted.
+
+**Swept 2026-08-15.** All 53 modules under `apps/server/src/db`, classified by
+opening each of the 2,713 test files rather than grepping names: a module counts
+as executed only if some test has a real `import … from '…/<module>.js'`, and as
+pinned only if a test names its `src/db/<module>.ts` path as a string.
+
+| classification                | count |
+| ----------------------------- | ----- |
+| imported by at least one test | 46    |
+| **pinned but never imported** | **5** |
+| neither imported nor pinned   | 2     |
+
+The five pinned-but-never-imported are **not** five open items:
+
+- `migrate`, `seed` — CLI entrypoints run as processes, already listed above as
+  legitimately unmeasurable under vitest. Their pins are the right instrument.
+- `audit-archive-repo` — blocked on item 2, as above.
+- `byok-anthropic-rotation-reminder-repo`, `webhook-rotation-reminder-repo` —
+  genuinely in the same shape `validation-schedules-repo` was in: a
+  content-parity pin and no execution. These are the two to close next.
+
+The two neither-imported-nor-pinned are `admin-billing-repo` and
+`cost-nightly-accounts-provider`, already named above.
+
+So the sweep corroborates the coverage figures from a second, independent
+direction — the 8–11% those three show is transitive import by a covered
+service, not a test of their own — and it closes the question this paragraph
+originally left open: **the pinned-but-unexecuted class is four repos wide, not
+a systemic hole.**
 
 _No guard shipped for this._ The obvious one — "every repo is imported by some
 test, or declared" — was checked against the coverage data and disagrees on 4 of
