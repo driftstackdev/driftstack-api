@@ -315,6 +315,14 @@ export interface TestAppOptions {
     dashboardOrigin: string;
     google?: { clientId: string; clientSecret: string };
     github?: { clientId: string; clientSecret: string };
+    /**
+     * Injectable HTTP client for the two IDP calls. `vi.stubGlobal('fetch')`
+     * cannot reach them — `lib/oauth-client-exchange.ts` captures
+     * `globalThis.fetch` at module load, so the capture never sees a later
+     * stub. Without this the callback's IDP legs were untestable and every
+     * arm reaching them made a REAL request to the provider.
+     */
+    fetch?: typeof fetch;
   };
   /**
    * Wave 1119 / Slice 1119.2 — when `true`, omits `billingService` from

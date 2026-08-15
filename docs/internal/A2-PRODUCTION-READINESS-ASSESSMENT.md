@@ -1643,7 +1643,7 @@ The last two are CLASSIFICATION failures and both layers catch them, which is th
 division of labour working as intended: the verifier owns _is this token valid_,
 the route owns _do we act on that answer_.
 
-#### 5m. NEW — `vi.stubGlobal('fetch')` cannot reach the OAuth IDP calls
+#### 5m. `vi.stubGlobal('fetch')` could not reach the OAuth IDP calls — seam added, closed
 
 ⛔ **An existing test helper does not do what its name says**, and it took trying
 to use the same technique to notice.
@@ -1670,12 +1670,32 @@ Two consequences:
   reachable from an integration test.** Driving it needs the token exchange to
   SUCCEED and only the userinfo call to fail, which requires controlling `fetch`.
 
-⚠️ A third observation, stated as an observation because it is not fully pinned
-down: the failure that comes back is `idp-error`, which the exchange returns only
-when an HTTP **response** arrived — `network-error` is the no-response case. That
-suggests those arms reach the real endpoint rather than being short-circuited.
-Worth confirming separately; a suite that makes outbound calls on an auth path is
-a different problem from an ineffective stub.
+⛔ **CONFIRMED 2026-08-15: the suite was making real outbound calls.** The
+observation above is now measured, not suspected — a `POST` to
+`https://github.com/login/oauth/access_token` from this machine answers **404 in
+~250ms**, a genuine response, which is exactly why the exchange reported
+`idp-error` rather than `network-error`. Every arm that got past the state and
+cookie checks was talking to GitHub on each suite run: slow, dependent on network
+and third-party availability, and sending fixture credentials off-box.
+
+✅ **CLOSED 2026-08-15.** `RegisterOAuthClientRoutesDeps` gained an optional
+`fetch`, threaded through `app.ts` and `buildTestApp` (additive at every layer;
+production leaves it unset and the helpers keep their global fallback). That one
+seam does three things: closes the `Userinfo fetch failed` branch, turns
+`rejectTokenExchange()` from decorative into real, and stops the outbound calls.
+
+3 new arms, 6 mutations, all red — including the token-exchange refusal asserted
+as **distinct** from the userinfo one, since they are adjacent branches of
+near-identical shape and collapsing them sends an operator reading logs to the
+wrong side of the IDP round-trip.
+
+⚠️ **One mutation survived at first and is the reason this entry is worth
+reading.** Dropping the seam from the userinfo call left every arm green: the
+helper falls back to the global fetch, really reaches `api.github.com`, really
+gets a 401, and produces the _same_ 400. The refusal assertion could not tell the
+two apart. It now records the injected client's calls and asserts the userinfo
+URL went through it — **asserting WHICH client made the call, not only what came
+back**, which is what actually pins "this suite makes no outbound request".
 
 _Fix shape:_ `exchangeCodeForTokens` and `fetchUserInfo` both already accept an
 `opts.fetch` override — the route simply does not thread one through. Adding that

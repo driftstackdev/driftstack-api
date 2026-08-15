@@ -775,6 +775,9 @@ export interface AppDeps {
     dashboardOrigin: string;
     google?: { clientId: string; clientSecret: string };
     github?: { clientId: string; clientSecret: string };
+    /** Test seam for the two IDP HTTP calls — see the note on
+     *  RegisterOAuthClientRoutesDeps.fetch. Unset in production. */
+    fetch?: typeof fetch;
   };
   /**
    * V-667.C-followup — drives the customer-facing
@@ -1349,6 +1352,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // gates on auth.ts use.
       rateLimitStore: deps.rateLimitStore,
       logger: deps.logger,
+      ...(deps.oauthClient.fetch !== undefined ? { fetch: deps.oauthClient.fetch } : {}),
     });
   }
   // V-667.C-followup — customer-facing list of linked IDPs. Gated

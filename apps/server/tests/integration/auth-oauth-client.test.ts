@@ -35,6 +35,28 @@ const OAUTH = {
 
 // Per-provider URL derivation — must equal what auth-oauth-client.ts
 // computes for the IDP redirect_uri parameter.
+/**
+ * A fetch that refuses the token exchange, INJECTED rather than stubbed.
+ *
+ * This was `vi.stubGlobal('fetch', …)` and it never took effect:
+ * `lib/oauth-client-exchange.ts` captures `globalThis.fetch` at module load,
+ * so a later stub is a different reference. The arms below passed because the
+ * exchange failed anyway — by making a REAL request to the provider (a POST
+ * to GitHub's token endpoint answers 404 in ~250ms, which is why the failure
+ * arrived as `idp-error` and not `network-error`).
+ *
+ * Passed through `buildTestApp({ oauthClient: { …, fetch } })`, these arms now
+ * control the IDP interaction they always claimed to, and the suite stops
+ * talking to github.com.
+ */
+const REJECTING_FETCH: typeof fetch = () =>
+  Promise.resolve(
+    new Response(JSON.stringify({ error: 'invalid_grant' }), {
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
+
 const callbackFor = (p: 'google' | 'github') => `${OAUTH.callbackUrlBase}/${p}/callback`;
 
 describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
@@ -319,18 +341,6 @@ describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
     };
   }
 
-  function rejectTokenExchange(): void {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn<typeof fetch>().mockResolvedValue(
-        new Response(JSON.stringify({ error: 'invalid_grant' }), {
-          status: 400,
-          headers: { 'content-type': 'application/json' },
-        }),
-      ),
-    );
-  }
-
   it("rejects a valid state when only a DIFFERENT flow's scoped cookie is present", async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
     const a = await startFlow(fx);
@@ -393,9 +403,8 @@ describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
   });
 
   it('a state+cookie from the SAME flow passes the binding check (fails later, not on the binding)', async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: REJECTING_FETCH } });
     const a = await startFlow(fx);
-    rejectTokenExchange();
     const res = await fx.app.inject({
       method: 'GET',
       url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(a.state)}`,
@@ -407,11 +416,10 @@ describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
   });
 
   it('keeps two browser-tab flows independent and clears only the callback flow', async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: REJECTING_FETCH } });
     const google = await startFlow(fx, 'google');
     const github = await startFlow(fx, 'github');
     expect(google.cookieName).not.toBe(github.cookieName);
-    rejectTokenExchange();
     const cookieJar = `${google.cookie}; ${github.cookie}`;
 
     for (const flow of [google, github]) {
@@ -565,36 +573,81 @@ describe('the OAuth callback verifies the state token itself', () => {
     expect(res.json<{ detail: string }>().detail).toMatch(/provider "google" is not configured/i);
   });
 
-  // MUTATION-PROVED for the provider check — control 26/26:
+  // MUTATION-PROVED — control 28/28:
   //   the unconfigured-provider check removed        1 red
   //   the check narrowed to `creds === null`         1 red
+  //   the userinfo verdict is ignored                1 red
+  //   the token-exchange verdict is ignored          2 red
+  //   the two IDP refusals collapse into one message 1 red
+  //   the fetch seam is dropped from userinfo        1 red
+  //
+  // The last one only started failing once the injected client recorded its
+  // calls. Without the seam the helper falls back to the global fetch, really
+  // reaches api.github.com, really gets a 401, and produces the SAME 400 — so
+  // the refusal assertion passed while the request went to the network. That is
+  // the shape this whole seam exists to remove, and it survived a mutation until
+  // the test asserted WHICH client made the call rather than only what came back.
   //
   // The second matters because `providers` is a Partial record: a missing key
   // is `undefined`, not `null`, so narrowing the test to `=== null` reads as
   // equivalent and disables the guard entirely.
-  //
-  // ⚠️ `Userinfo fetch failed:` (routes/auth-oauth-client.ts:253) is NOT covered
-  // here, and the reason is worth writing down rather than leaving as a silent
-  // gap. Driving it needs the token exchange to SUCCEED and only the userinfo
-  // call to fail, which means controlling `fetch` — and that is not possible
-  // from a test:
-  //
-  //     lib/oauth-client-exchange.ts:51
-  //     const DEFAULT_FETCH: typeof fetch = globalThis.fetch;
-  //
-  // captured once at module load. `vi.stubGlobal('fetch', …)` replaces
-  // `globalThis.fetch` afterwards, so `DEFAULT_FETCH` still points at the
-  // original. Verified rather than assumed: a module-scope capture compared
-  // against a later stub is not the same reference.
-  //
-  // The same applies to `rejectTokenExchange()` in the D2 block above — its stub
-  // cannot take effect either. Those arms pass because the exchange fails
-  // anyway, not because the helper made it fail.
-  //
-  // `exchangeCodeForTokens`/`fetchUserInfo` both accept an `opts.fetch`
-  // override; the route does not thread one through. Closing this means adding
-  // that seam to the route deps, the same shape as the `agentDecomposerKind`
-  // harness gap (assessment item 5f).
+
+  it('CRITICAL a userinfo fetch that fails AFTER a successful token exchange is refused, rather than the flow continuing with an unverified identity. By this point we hold a real access token, so the tempting failure mode is to carry on with whatever is at hand — and what follows is link-or-create, which would attach or mint an account from an identity the IDP never confirmed.', async () => {
+    // The injected fetch answers the token endpoint and fails ONLY userinfo, so
+    // the exchange genuinely succeeds and this is the branch under test. It is
+    // matched positively on the userinfo URLs: enumerating the token endpoints
+    // instead was fragile, and a miss there reports "Token exchange failed",
+    // which is a different refusal wearing a similar shape.
+    const seen: string[] = [];
+    const userinfoFails: typeof fetch = (input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      seen.push(url);
+      const isUserinfo = url.includes('api.github.com/user') || url.includes('openidconnect');
+      return Promise.resolve(
+        isUserinfo
+          ? new Response(JSON.stringify({ message: 'Bad credentials' }), {
+              status: 401,
+              headers: { 'content-type': 'application/json' },
+            })
+          : new Response(JSON.stringify({ access_token: 'at_live', scope: 'read:user' }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+      );
+    };
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: userinfoFails } });
+    const flow = await startFlowFor(fx, 'github');
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(flow.state)}`,
+      headers: { cookie: flow.cookie },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/userinfo fetch failed/i);
+    // The refusal alone does not prove the INJECTED client was used: with the
+    // seam removed the helper falls back to the global fetch, really calls
+    // api.github.com, really gets a 401, and produces this same 400. Measured —
+    // that mutation survived until this assertion existed. Asserting the
+    // injected client actually saw the userinfo URL is what pins both the seam
+    // and the promise that this suite makes no outbound request.
+    expect(
+      seen.some((u) => u.includes('api.github.com/user')),
+      'the userinfo call went through the injected client, not the network',
+    ).toBe(true);
+  });
+
+  it('CRITICAL the token exchange failing is reported as its OWN refusal, distinct from the userinfo one. They are adjacent branches with near-identical shape; collapsing them would send an operator reading logs to the wrong side of the IDP round-trip.', async () => {
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: REJECTING_FETCH } });
+    const flow = await startFlowFor(fx, 'github');
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(flow.state)}`,
+      headers: { cookie: flow.cookie },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/token exchange failed/i);
+    expect(res.json<{ detail: string }>().detail).not.toMatch(/userinfo/i);
+  });
 
   it('CRITICAL a state we genuinely minted gets PAST this check. Every arm above asserts a 400, and a callback that refused all states would satisfy all three while breaking social login entirely — so this asserts the failure moves ON, to the cookie binding rather than the state.', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });

@@ -69,6 +69,21 @@ export interface RegisterOAuthClientRoutesDeps {
   /** HMAC-SHA256 key for state JWT + cookie signing (≥32 chars). */
   signingSecret: string;
   logger: Logger;
+  /**
+   * Injectable HTTP client for the two IDP calls (token exchange +
+   * userinfo). Optional; production leaves it unset and the exchange
+   * helpers fall back to the global fetch.
+   *
+   * It exists because those helpers capture `globalThis.fetch` at MODULE
+   * LOAD (`lib/oauth-client-exchange.ts`), so a test's
+   * `vi.stubGlobal('fetch', …)` can never reach them — the capture still
+   * points at the original. Without this seam the IDP legs of the callback
+   * were untestable AND every arm that got past the state/cookie checks made
+   * a REAL outbound request to the provider (measured: a POST to GitHub's
+   * token endpoint answers 404 in ~250ms, which is why the failure surfaced
+   * as `idp-error` rather than `network-error`).
+   */
+  fetch?: typeof fetch;
   /** 2026-05-19 — auth-flows service used to mint a 30-day web
    *  session after a successful link-or-create. Without this, the
    *  callback would return `{outcome, account_id}` without a token
@@ -231,6 +246,7 @@ export function registerOAuthClientRoutes(
         callbackUrl: callbackUrlFor(provider, deps.callbackUrlBase),
         code,
         codeVerifier: verifier,
+        ...(deps.fetch !== undefined ? { fetch: deps.fetch } : {}),
       });
       if (tokens.kind !== 'ok') {
         deps.logger.warn(
@@ -244,6 +260,7 @@ export function registerOAuthClientRoutes(
       const userinfo = await fetchUserInfo({
         provider,
         accessToken: tokens.tokens.accessToken,
+        ...(deps.fetch !== undefined ? { fetch: deps.fetch } : {}),
       });
       if (userinfo.kind !== 'ok') {
         deps.logger.warn(
