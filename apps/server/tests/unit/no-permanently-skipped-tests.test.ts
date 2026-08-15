@@ -55,7 +55,12 @@ function testFiles(dir: string): string[] {
     if (entry === 'node_modules' || entry === 'dist' || entry === '.astro') continue;
     const full = resolve(dir, entry);
     if (statSync(full).isDirectory()) out.push(...testFiles(full));
-    else if (entry.endsWith('.test.ts') || entry.endsWith('.spec.ts')) out.push(full);
+    // `.test.tsx` included deliberately. It was absent until 2026-08-16, which
+    // hid two `describe.skip` blocks — six behavioural tests for the profile
+    // Clone and Import flows — in apps/gui-client, the one place the repo keeps
+    // .tsx tests. A guard against permanent skips that cannot see 162 files is
+    // a guard against permanent skips in the files that happen to end in .ts.
+    else if (/\.(test|spec)\.tsx?$/.test(entry)) out.push(full);
   }
   return out;
 }

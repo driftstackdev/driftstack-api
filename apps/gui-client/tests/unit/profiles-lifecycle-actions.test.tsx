@@ -3,8 +3,43 @@
 // gated), and Import (parse a single envelope OR a bulk array and import each).
 // All three back onto already-shipped SDK methods; these pin the GUI wiring.
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+
+// Clone and Import are flag-gated in the view (founder 2026-06-20: clone deemed
+// useless, import/export a profile-cheat abuse vector). The handlers were kept
+// for reversibility, and these suites with them.
+//
+// They used to be `describe.skip`, with a comment asking whoever flips the flag
+// to re-enable them. A comment is not a mechanism: flipping the flag would leave
+// six tests silently skipped, and the skip guard could not see them either
+// because it collected `.test.ts` and `.spec.ts` only, never `.test.tsx`.
+//
+// The condition is now READ FROM THE VIEW, so the flag and the coverage move
+// together — flip it and these run on the next suite pass, with no one having to
+// remember this file exists.
+const VIEW = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  'src',
+  'views',
+  'ProfilesView.tsx',
+);
+
+function viewFlag(name: string): boolean {
+  const match = new RegExp(`const ${name} = (true|false);`).exec(readFileSync(VIEW, 'utf8'));
+  if (match === null) {
+    throw new Error(`${name} not found in ProfilesView.tsx — the gate this suite reads has moved`);
+  }
+  return match[1] === 'true';
+}
+
+const CLONE_ENABLED = viewFlag('CLONE_ENABLED');
+const IMPORT_EXPORT_ENABLED = viewFlag('IMPORT_EXPORT_ENABLED');
 
 const profilesUpdate = vi.fn<(id: string, body: unknown) => Promise<unknown>>(() =>
   Promise.resolve({ id: 'prof_1' }),
@@ -235,9 +270,8 @@ describe('ProfilesView profile-lifecycle actions', () => {
     });
   });
 
-  // Clone affordance hidden 2026-06-20 (CLONE_ENABLED=false; founder: clone is
-  // currently useless) — handler kept; re-enable these when the flag flips.
-  describe.skip('Clone', () => {
+  // Runs automatically if CLONE_ENABLED flips in the view — see the note above.
+  describe.skipIf(!CLONE_ENABLED)('Clone', () => {
     it('calls profiles.clone + refreshes the cap counter, and shows a duplicated notice', async () => {
       await openCardMenu();
       fireEvent.click(await screen.findByRole('button', { name: 'Duplicate Demo' }));
@@ -280,9 +314,8 @@ describe('ProfilesView profile-lifecycle actions', () => {
     });
   });
 
-  // Import affordance hidden 2026-06-20 (IMPORT_EXPORT_ENABLED=false; founder:
-  // profile-cheat abuse vector) — handler kept; re-enable when the flag flips.
-  describe.skip('Import', () => {
+  // Runs automatically if IMPORT_EXPORT_ENABLED flips in the view.
+  describe.skipIf(!IMPORT_EXPORT_ENABLED)('Import', () => {
     const ENVELOPE = {
       version: 1,
       exported_at: '2026-06-08T00:00:00Z',

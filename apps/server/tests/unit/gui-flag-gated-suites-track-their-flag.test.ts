@@ -18,6 +18,20 @@
 // justification, so flipping a flag fails here with instructions rather than
 // silently shipping an untested affordance.
 //
+// SUPERSEDED MECHANISM, 2026-08-16. The original form was `describe.skip` plus
+// this guard reporting "remove the .skip" when a flag flipped — correct, but it
+// still needed a human to act on the instruction. The suite now reads the flags
+// out of the view and uses `describe.skipIf(!FLAG)`, so flipping a flag runs the
+// tests on the next pass with nobody in the loop. That is the repo's stated
+// preference: a conditional skip re-evaluates, an unconditional one never comes
+// back.
+//
+// This guard keeps its job and gets a stricter one. Rather than checking that
+// skip-state and flag-state agree — a correspondence that can only be checked
+// after someone edits both — it now requires the binding itself, so the two
+// cannot disagree at all. The bidirectional arms are gone because the state they
+// compared can no longer exist.
+//
 // Reading gui-client source from the server suite follows the existing
 // convention (see gui-client-index-html-and-test-setup-content-parity).
 
@@ -55,11 +69,16 @@ function flagLiteral(source: string, flag: string): boolean | null {
   return null;
 }
 
-/** Whether a describe block is skipped. */
-function blockIsSkipped(source: string, block: string): boolean | null {
-  if (new RegExp(`describe\\.skip\\(\\s*'${block}'`).test(source)) return true;
-  if (new RegExp(`describe\\(\\s*'${block}'`).test(source)) return false;
-  return null;
+/**
+ * The flag a describe block binds its skip to, or null when it is not bound.
+ *
+ * `describe.skipIf(!CLONE_ENABLED)('Clone', …)` returns 'CLONE_ENABLED'. A bare
+ * `describe.skip` or a live `describe` returns null, which the arms below treat
+ * as a failure — those are precisely the two states this file exists to prevent.
+ */
+function blockBoundFlag(source: string, block: string): string | null {
+  const m = new RegExp(`describe\\.skipIf\\(!([A-Z_]+)\\)\\(\\s*'${block}'`).exec(source);
+  return m?.[1] ?? null;
 }
 
 describe('a suite skipped for a hidden affordance tracks the flag that hides it', () => {
@@ -74,8 +93,8 @@ describe('a suite skipped for a hidden affordance tracks the flag that hides it'
         `${feature}: ${flag} declared as a literal`,
       ).not.toBeNull();
       expect(
-        blockIsSkipped(suiteSource, block),
-        `${feature}: describe('${block}') located`,
+        blockBoundFlag(suiteSource, block),
+        `${feature}: describe('${block}') located and bound to a flag`,
       ).not.toBeNull();
     }
 
@@ -86,31 +105,40 @@ describe('a suite skipped for a hidden affordance tracks the flag that hides it'
     expect(flagLiteral('const X_ENABLED = false;', 'X_ENABLED'), 'reads a disabled flag').toBe(
       false,
     );
-    expect(blockIsSkipped("describe.skip('Clone', () => {", 'Clone'), 'reads a skipped block').toBe(
-      true,
-    );
-    expect(blockIsSkipped("describe('Clone', () => {", 'Clone'), 'reads a live block').toBe(false);
+    expect(
+      blockBoundFlag("describe.skipIf(!X_ENABLED)('Clone', () => {", 'Clone'),
+      'reads the bound flag',
+    ).toBe('X_ENABLED');
+    expect(
+      blockBoundFlag("describe.skip('Clone', () => {", 'Clone'),
+      'an unconditional skip is NOT bound',
+    ).toBeNull();
+    expect(
+      blockBoundFlag("describe('Clone', () => {", 'Clone'),
+      'a live block is NOT bound',
+    ).toBeNull();
   });
 
-  it('CRITICAL no affordance is enabled while the suite covering it is still skipped. Flipping the flag ships the feature; the tests stay dormant and the summary line reads exactly the same as if they had run.', () => {
-    const shipped = GATED.filter(
-      ({ flag, block }) =>
-        flagLiteral(viewSource, flag) === true && blockIsSkipped(suiteSource, block) === true,
+  it('CRITICAL every gated suite binds its skip to the flag that hides it. The previous form was `describe.skip` plus a comment asking whoever flips the flag to re-enable the block, and this guard reporting it afterwards — both of which still needed a human to act. Binding the skip to the flag removes the step: flip it and the tests run on the next pass.', () => {
+    const unbound = GATED.filter(
+      ({ flag, block }) => blockBoundFlag(suiteSource, block) !== flag,
     ).map(
       ({ feature, flag, block }) =>
-        `${feature}: ${flag} is now true but describe.skip('${block}') is still skipped — remove the .skip`,
+        `${feature}: describe('${block}') must be describe.skipIf(!${flag})(…), found ` +
+        `${String(blockBoundFlag(suiteSource, block))}`,
     );
-    expect(shipped, 'enabled affordance(s) whose coverage is still skipped:').toEqual([]);
+    expect(unbound, 'gated suite(s) whose skip is not bound to its flag:').toEqual([]);
   });
 
-  it('CRITICAL no suite is running against an affordance that is still hidden. The reverse direction, so the pair cannot be satisfied by un-skipping alone — those tests would be driving UI the view never renders.', () => {
-    const orphaned = GATED.filter(
-      ({ flag, block }) =>
-        flagLiteral(viewSource, flag) === false && blockIsSkipped(suiteSource, block) === false,
-    ).map(
-      ({ feature, flag, block }) =>
-        `${feature}: describe('${block}') is live but ${flag} is still false — flip the flag or restore the .skip`,
+  it('CRITICAL the suite reads the flags from the view rather than restating them. A local copy of `false` would satisfy the binding above and never change when the view does — the failure mode the binding is meant to close.', () => {
+    expect(suiteSource, 'the suite reads ProfilesView.tsx').toMatch(
+      /ProfilesView\.tsx|'ProfilesView'/,
     );
-    expect(orphaned, 'un-skipped suite(s) for a hidden affordance:').toEqual([]);
+    expect(suiteSource, 'and derives each flag from it').toMatch(/viewFlag\(/);
+    for (const { flag } of GATED) {
+      expect(suiteSource, `${flag} is derived, not hard-coded`).not.toMatch(
+        new RegExp(`const ${flag} = (true|false);`),
+      );
+    }
   });
 });
