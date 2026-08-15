@@ -2329,6 +2329,39 @@ exists in auth but has never touched billing. Whether that should be a 404 or a
 `subscription: null` is a product decision, and an arm either way would freeze an
 answer nobody has given. Recorded rather than encoded.
 
+### 5s. `services/webhooks.ts` swept — 28 sites, 6 uncovered, 3 driven
+
+| uncovered site                                | disposition                                       |
+| --------------------------------------------- | ------------------------------------------------- |
+| `:707` deliveries list for a missing endpoint | **covered** — a fixed bug with no regression test |
+| `:532` endpoint deleted mid-UPDATE            | **covered**                                       |
+| `:598` endpoint deleted mid secret-ROTATION   | **covered**                                       |
+| `:751` delivery replay, endpoint vanished     | open — same shape as `:532`                       |
+| `:942` delivery "disappeared mid-requeue"     | open — the source calls it unreachable            |
+| `:988` malformed webhook URL                  | **schema-shadowed** — `url: z.string().url()`     |
+
+⭐ **`:707` is the find of this sweep, and it is a regression risk rather than a
+gap.** Its own comment records that listing deliveries for a nonexistent endpoint
+used to answer an **empty list** — "indistinguishable from a real endpoint that
+has never fired, so a customer debugging a mistyped id was shown 'no deliveries'
+instead of 'no such webhook'". Someone found that, fixed it, wrote the comment,
+and pinned nothing. The bug could return exactly as it left.
+
+The mutation for it deletes the existence check and returns the empty list again
+— **the code that actually shipped before the fix** — rather than only
+neutralizing the throw. A ledger row should reproduce the historical bug when one
+is known.
+
+⚠️ `:988` is the third instance today of a URL-parse guard shadowed by
+`z.string().url()` (after `routes/billing.ts:50`). The pattern is worth naming:
+**a `try { new URL(x) } catch` inside a service is almost always dead when the
+request schema already validates the field** — and it reads like the validation.
+
+⚠️ `:942` is left alone deliberately: the source says the value "is guaranteed
+non-null because we just found the row above" and the guard exists for strict
+type-narrowing. Driving it means forcing a state the code says cannot occur, and
+the arm would pin the narrowing rather than a behaviour.
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
