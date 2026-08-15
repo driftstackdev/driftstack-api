@@ -3404,3 +3404,57 @@ construction, so it wants a scoped caller and a test the day something calls it.
 
 `mfa-repo` (14 predicates) is the last of the three named in 6h, and 16 predicates
 in `profiles-repo` remain unexercised by real SQL.
+
+## 6j — the recovery-code candidate set is the MFA boundary, and it was unproven
+
+Third and last of the repos named in 6h. `mfa-repo` is in better shape than the
+other two — three integration tests construct the Drizzle repo, and most of its
+methods key on `accountId` alone rather than on a resource id, so they are not
+IDOR-shaped at all. Two findings, one of which needed no fix.
+
+### Checked and safe: the unscoped consume
+
+`markRecoveryCodeUsed(id, now)` updates by id with NO account predicate, which is
+the exact shape that has been a real defect elsewhere in this document. It is safe
+here, and the reason is worth writing down: its caller obtains the id from
+`listUnusedRecoveryCodes(args.accountId)`, so provenance is already scoped, and
+the predicate it does carry — `isNull(usedAt)` — is what makes the consume atomic
+so a code can never be spent twice. Verified by reading the caller, not assumed
+from the signature.
+
+### The gap
+
+That makes the CANDIDATE SET the entire authorisation boundary for recovery-code
+login. `MfaService.verify` scrypt-checks the submitted code against every row the
+query returns, and the unscoped consume then inherits its safety from that same
+query.
+
+Neutralising the account predicate in `listUnusedRecoveryCodes` left the MFA
+credential-issuance and enrollment-session-authority integration tests **green at
+12 passed**. The sibling predicate in `findByAccount` IS covered — one red — so
+this was a specific hole rather than an untested module.
+
+⛔ The consequence is a change of kind, not degree. Without that predicate the
+verify loop compares the submitted code against **every account's** unused codes,
+which turns "guess this account's recovery code" into "guess any live recovery
+code in the system" — and the unscoped consume then spends the stranger's row.
+
+### The guard
+
+One integration test on the shipped `DrizzleMfaRepo` against real Postgres: two
+accounts, the owner holding one unused and one already-spent code, the stranger
+holding one. It asserts the owner's own code IS a candidate first (a positive
+control, since every other assertion also passes on a query returning nothing),
+that the stranger's is not, that the spent one is not, that the set is EXACTLY the
+one row rather than a superset, and that the stranger sees exactly their own — so
+the arms are a boundary rather than a query that returns one row for everybody.
+
+Ledger: dropping the account predicate reds it; dropping the `isNull(usedAt)`
+filter in the same WHERE reds it. Before, neither reddened any behavioural test.
+
+### Sweep complete
+
+All three repos named in 6h are now closed at their customer-facing read/write
+paths: profiles (`db5bae456`), sessions (`56801c354`), MFA recovery codes here.
+Still open and named rather than dropped: 16 predicates in `profiles-repo`
+(trash/restore, rename, snapshot, quota) remain unexercised by real SQL.
