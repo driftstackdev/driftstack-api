@@ -14,6 +14,7 @@
 // prod-pre-env-wire posture.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { signOauthClientState } from '../../src/lib/oauth-client-state.js';
 
 let fx: TestAppFixture;
 
@@ -428,5 +429,110 @@ describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
       const other = flow === google ? github : google;
       expect(cleared).not.toContain(`${other.cookieName}=;`);
     }
+  });
+});
+
+// ─── the state token's OWN verification, at the route ───────────────────────
+//
+// Added 2026-08-15. The D2 block above is a careful set on the nonce-scoped PKCE
+// cookie binding — but every one of its arms supplies a token minted by /start,
+// i.e. a VALID state, and then varies the COOKIE. `verifyOauthClientState`
+// returning anything other than `ok` is what `routes/auth-oauth-client.ts:201`
+// refuses, and that refusal had never executed: the function is covered in
+// isolation by `lib-oauth-client-state`, and the route's use of it was not.
+//
+// This is the CSRF defence for social login. The state token is what ties the
+// callback the browser presents back to a flow this server started; without the
+// check, a callback carrying an attacker-chosen `state` — and therefore an
+// attacker-chosen `provider` and `redirectTo` — is processed as if we had issued
+// it. The verifier is a tagged union precisely so the route can distinguish the
+// failure modes, and all three non-ok kinds are driven here.
+//
+// The state check runs BEFORE the PKCE cookie is read, so these arms send no
+// cookie at all: reaching a cookie error would mean the state check let the
+// request through.
+//
+// MUTATION-PROVED against routes/auth-oauth-client.ts and
+// lib/oauth-client-state.ts — controls 25/25 here, 11/11 on the verifier's own
+// unit test:
+//
+//                                                    here    state-lib pin
+//   the route ignores the verifier's verdict        3 red        GREEN
+//   the route refuses only a MALFORMED state        2 red        GREEN
+//   the signature comparison always succeeds        1 red        2 red
+//   the TTL check is removed                        1 red        2 red
+//
+// The first two are route-WIRING failures and the verifier cannot see either:
+// it still classifies every token correctly, and all 11 of its arms pass, while
+// the route acts on a verdict it no longer reads. The second is the sharper of
+// the pair — refusing only `malformed` still rejects hand-written junk, so the
+// endpoint looks defended, while a FORGED token (correctly shaped, wrong
+// signature) sails through. That is the login-CSRF bypass, and it is the exact
+// shape a reviewer skims past.
+//
+// The last two are CLASSIFICATION failures and both layers catch them, which is
+// the division of labour working: the verifier owns "is this token valid", the
+// route owns "do we act on that answer".
+
+describe('the OAuth callback verifies the state token itself', () => {
+  const CALLBACK = '/v1/auth/oauth-client/callback';
+
+  it('CRITICAL a MALFORMED state is refused. The token is `payload.signature`; anything without that shape cannot have been minted by us, and the refusal is what stops a hand-written state from reaching the exchange.', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `${CALLBACK}?code=dummycode&state=not-a-token`,
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/state token invalid: malformed/i);
+  });
+
+  it('CRITICAL a FORGED state — correctly shaped, signed with a different secret — is refused. This is the login-CSRF case: the signature is the only thing distinguishing a flow this server started from one an attacker composed, and a forged state carries an attacker-chosen provider and redirect target into the rest of the handler.', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const forged = signOauthClientState({
+      provider: 'github',
+      redirectTo: 'https://app.driftstack.test/dashboard',
+      signingSecret: 'z'.repeat(32), // NOT the server's secret
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(forged)}`,
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/state token invalid: bad-signature/i);
+  });
+
+  it('CRITICAL an EXPIRED state is refused even though its signature is ours. The TTL is 5 minutes; without the expiry check a state captured from a browser history, a referrer header or a shared link stays replayable indefinitely, which is the difference between a bounded window and a permanent one.', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const stale = signOauthClientState({
+      provider: 'github',
+      redirectTo: 'https://app.driftstack.test/dashboard',
+      signingSecret: OAUTH.signingSecret, // genuinely ours
+      nowMs: Date.now() - 10 * 60 * 1000, // minted 10 minutes ago, TTL is 5
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(stale)}`,
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/state token invalid: expired/i);
+  });
+
+  it('CRITICAL a state we genuinely minted gets PAST this check. Every arm above asserts a 400, and a callback that refused all states would satisfy all three while breaking social login entirely — so this asserts the failure moves ON, to the cookie binding rather than the state.', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const fresh = signOauthClientState({
+      provider: 'github',
+      redirectTo: 'https://app.driftstack.test/dashboard',
+      signingSecret: OAUTH.signingSecret,
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(fresh)}`,
+    });
+    // No cookie sent, so it still fails — but on the NEXT check, not this one.
+    expect(
+      res.json<{ detail?: string }>().detail ?? '',
+      'the state itself was accepted',
+    ).not.toMatch(/state token invalid/i);
   });
 });

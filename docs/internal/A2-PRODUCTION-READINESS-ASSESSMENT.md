@@ -1599,7 +1599,7 @@ _Note the split arms._ The public refusal is a single `||` over `state` and
 arm would pass at half strength. They are asserted separately, and the mutation
 that drops only `state` proves it.
 
-#### 5l. NEXT — the OAuth state token's own verification is never driven at the route
+#### 5l. The OAuth state token's own verification was never driven at the route — closed
 
 `routes/auth-oauth-client.ts` has three cold refusals, and the first is the CSRF
 defence for social login:
@@ -1620,10 +1620,28 @@ COOKIE. `verifyOauthClientState` returning non-ok is what line 201 refuses, and
 `lib-oauth-client-state.test.ts` covers that function in isolation — so once
 again the helper is tested, the route's use of it is not.
 
-_Slice shape:_ post a callback with a forged/expired/tampered state token and
-assert the 400; mutate by making the route ignore `stateRes.kind` to show the
-ROUTE is what is guarded. Pair it with the existing valid-state arms so the
-refusal cannot be a build where no state ever verifies.
+✅ **CLOSED 2026-08-15.** 4 arms, 4 mutations, all red. All three non-ok kinds
+(`malformed`, `bad-signature`, `expired`) driven, plus a genuinely-minted state
+asserted to get PAST this check — without which a callback that refused every
+state would satisfy all three refusals while breaking social login outright.
+
+|                                          | new arms | verifier's own pin |
+| ---------------------------------------- | -------- | ------------------ |
+| the route ignores the verifier's verdict | 3 red    | **green**          |
+| the route refuses only a MALFORMED state | 2 red    | **green**          |
+| the signature comparison always succeeds | 1 red    | 2 red              |
+| the TTL check is removed                 | 1 red    | 2 red              |
+
+⛔ The first two are route-WIRING failures the verifier cannot see: it still
+classifies every token correctly and all 11 of its arms pass, while the route
+acts on a verdict it no longer reads. **The second is the one worth remembering**
+— refusing only `malformed` still rejects hand-written junk, so the endpoint
+looks defended, while a FORGED token (correct shape, wrong signature) sails
+through. That is the login-CSRF bypass, wearing a green suite.
+
+The last two are CLASSIFICATION failures and both layers catch them, which is the
+division of labour working as intended: the verifier owns _is this token valid_,
+the route owns _do we act on that answer_.
 
 #### 5j. NEW — the avatar upload's "invalid base64" branch is dead code
 
