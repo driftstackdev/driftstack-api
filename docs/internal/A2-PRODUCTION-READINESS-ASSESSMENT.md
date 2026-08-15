@@ -3851,3 +3851,50 @@ Both sides read the pre-paid row. That is the source comment's sentence, execute
 | Stripe          | `INSERT … ON CONFLICT DO NOTHING` on the event id | real SQL (`9f3745a2a`)       |
 | Stripe handlers | no additive write — the race's precondition       | enforced guard (`db3d747d8`) |
 | Crypto IPN      | `SELECT … FOR UPDATE` on the order row            | real concurrency, here       |
+
+## 6r — a concurrency test serialised by its own connection pool, and a claim I could not prove
+
+The crypto lock finding suggested a class: row locks whose exclusivity is only ever
+exercised single-threaded. Enumerating the db layer gives ~25 `.for('update')` /
+`SKIP LOCKED` sites across 12 repos.
+
+⭐ First result was a correction to my own expectation: this class is **far better
+covered than I assumed** — 19 integration files already run genuine two-client
+concurrency (agent sessions, api-key revocation, auth flows, incidents, MFA
+issuance, session destroy, session-operation claim, webhooks, team invites,
+status subscribers). The crypto-order lock closed last fire was a real hole in an
+otherwise well-guarded area, not the first of many.
+
+### The verified finding
+
+`db-profiles-repo-keyset-drizzle` fires **8 concurrent `insertWithLimit` calls
+against a cap of 1**, with distinct names so the unique index is not the limiter,
+and its comment states the property exactly: "Without the FOR UPDATE lock all N
+read count=0 and all insert (the TOCTOU)."
+
+Its client is `postgres(DB_URL, { max: 1 })`. With one pooled connection postgres-js
+**queues** those 8 calls — they execute sequentially, so the pool provides whatever
+serialisation is observed. Widened to `max: 8`, which makes the concurrency real
+rather than nominal.
+
+### ⛔ What I could NOT prove, stated as such
+
+Widening does not make the test detect the lock. Measured three ways — deleting
+`.for('update')` from `insertWithLimit` leaves the file green at `max: 1`, green at
+`max: 8`, and a two-backend probe outside vitest also still accepted exactly one.
+
+That is **not** evidence the lock is unnecessary. The TOCTOU window between the
+count and the insert is narrow, and a race that fails to hit it proves nothing
+about the race that does. The lock is load-bearing by construction: nothing else
+stops two transactions that both read `count < limit` from both inserting.
+
+⭐ The general point is worth more than this instance. **A passing concurrency test
+is only evidence if the interleaving it needs actually occurred**, and nothing in a
+green tells you whether it did. Every one of the 19 files above is worth the same
+question — the ones that assert a _loser_ exists (a rejected duplicate, a
+`not_found`, a second observer seeing committed state) are self-evidencing; the
+ones that only assert a final count are not.
+
+Demonstrating this particular lock needs forced interleaving — an advisory-lock
+choreography or a driver-level barrier between the count and the insert — not a
+faster race. Left named rather than claimed.

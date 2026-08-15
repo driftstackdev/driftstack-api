@@ -40,7 +40,23 @@ beforeAll(async () => {
     await probe.end({ timeout: 1 }).catch(() => {});
     return;
   }
-  client = postgres(DB_URL, { max: 1 });
+  // max > 1 deliberately. The cap test below fires N concurrent inserts; with a
+  // single pooled connection postgres-js QUEUES them, so they run sequentially and
+  // the pool — not the row lock — provides whatever serialisation is observed.
+  //
+  // Be precise about what widening this does and does not buy. It makes the
+  // concurrency REAL rather than nominal. It does NOT turn the test into a proof
+  // that the FOR UPDATE is what enforces the cap: measured both ways, deleting
+  // `.for('update')` from insertWithLimit leaves this file green at `max: 1` AND
+  // at `max: 8`, and a two-backend probe outside vitest also still accepted
+  // exactly one. The TOCTOU window between the count and the insert is narrow, so
+  // a race that does not hit it is not evidence the lock is unnecessary — the
+  // lock is load-bearing by construction, since nothing else stops two
+  // transactions that both read count < limit from both inserting.
+  //
+  // Left as an honest limitation rather than a claim: demonstrating the lock
+  // itself needs forced interleaving, not a faster race.
+  client = postgres(DB_URL, { max: 8 });
   try {
     await client`SELECT 1 FROM profiles LIMIT 0`;
   } catch {
