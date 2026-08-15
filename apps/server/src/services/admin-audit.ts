@@ -36,6 +36,15 @@ export type AdminAuditAction =
   | 'status_subscriber.force_unsubscribed'
   | 'status_subscriber.force_subscribed'
   | 'incident.reopened'
+  // V-783 — RESERVED, never emitted. Migration 0027 added this value for the
+  // automated 90d email purge, and nothing can write it: admin_audit_log
+  // requires a non-null admin_account_id AND admin_key_id (both FKs), and
+  // account_audit_log requires an accountId. The purge is fired by a timer and
+  // a status subscriber is an anonymous email with no account and no key, so
+  // there is no actor to attribute the row to. A Postgres enum value cannot be
+  // dropped without rebuilding the type, so it stays in the vocabulary; the
+  // reachability guard lists it as unemittable rather than pretending. The only
+  // evidence the purge ran is its structured log line in bootstrap.
   | 'status_subscriber.purged'
   // LK.2: per-Mac LiveKit credential registration (migration 0057).
   | 'mac_node.livekit_registered'

@@ -27,8 +27,11 @@
 //   • V-237 profilesRepo feeds /v1/account/me.
 //   • V-295c2 status-snapshot writer (R2_BUCKET_PUBLIC gated).
 //   • V-295c3-tombstone daily 24h status-subscriber purge (Privacy
-//     §3.10 90d post-unsubscribe zero-out; system-action audit with
-//     adminAccountId=null).
+//     §3.10 90d post-unsubscribe zero-out). This header used to repeat
+//     the source's claim that the purge writes an actor-less admin
+//     audit row; V-783 established that no such write exists or can —
+//     both actor columns are NOT NULL with FKs and the purge has no
+//     actor — so the claim is retracted here too.
 //   • V-353b MFA gated by MFA_ENCRYPTION_KEY (32 random bytes b64).
 //   • V-541.H real UsageAggregator over usage_records ledger.
 //   • V-232 poller cadence 60s; founder-approved on V-202d ack
@@ -331,11 +334,21 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
-  it('V-295c3-tombstone framing pinned: Privacy §3.10 90d post-unsubscribe email zero-out; daily 24h cadence; first tick fires 24h after boot (acceptable — rows just unsubscribed have 90d before eligible); audit-logs each purge as system action with adminAccountId=null', () => {
+  it('V-295c3-tombstone framing pinned: Privacy §3.10 90d post-unsubscribe email zero-out; daily 24h cadence; first tick fires 24h after boot (acceptable — rows just unsubscribed have 90d before eligible). V-783 REPLACED the audit claim this used to freeze: the comment asserted the purge writes admin_audit_log with adminAccountId=null and that the repo accepts null for system actions, and BOTH were false — the column is NOT NULL with an FK, so no such write has ever happened or could. This pin now requires the correction to stay put.', () => {
     expect(body).toMatch(
-      /\/\/ V-295c3-tombstone — daily status-subscriber email-purge poller\.\s*\n?\s*\/\/ Privacy §3\.10 promises 90d post-unsubscribe email zero-out\. Runs\s*\n?\s*\/\/ every 24 hours; first tick fires 24h after boot \(acceptable —\s*\n?\s*\/\/ rows that just unsubscribed have 90 days before they're eligible\s*\n?\s*\/\/ anyway\)\. Audit-logs each purge as a system action \(no admin actor\)\s*\n?\s*\/\/ — done via writes to admin_audit_log with the special\s*\n?\s*\/\/ 'status_subscriber\.purged' action and adminAccountId set to null\.\s*\n?\s*\/\/ The audit-log repo accepts null adminAccountId for system actions\./,
+      /\/\/ V-295c3-tombstone — daily status-subscriber email-purge poller\.\s*\n?\s*\/\/ Privacy §3\.10 promises 90d post-unsubscribe email zero-out\. Runs\s*\n?\s*\/\/ every 24 hours; first tick fires 24h after boot \(acceptable —\s*\n?\s*\/\/ rows that just unsubscribed have 90 days before they're eligible\s*\n?\s*\/\/ anyway\)\./,
     );
     expect(body).toMatch(/const STATUS_PURGE_INTERVAL_MS = 24 \* 60 \* 60 \* 1000;/);
+
+    // Per-occurrence negatives on the retracted claim. The regex above would
+    // still match if the false sentences were merely moved further down, so the
+    // correction is asserted as the ABSENCE of each half of it.
+    expect(body).not.toMatch(/Audit-logs each purge as a system action/);
+    expect(body).not.toMatch(/adminAccountId set to null/);
+    expect(body).not.toMatch(/audit-log repo accepts null adminAccountId/);
+    expect(body, 'the retraction itself must be present, not just the old text absent').toMatch(
+      /V-783 — this comment used to claim the purge records each row in the admin/,
+    );
   });
 
   it('V-232 poller framing pinned: 60s cadence (V-173 webhook-worker convention; minute-level latency tolerance); founder-approved on V-202d ack 2026-05-06; setInterval wraps try/catch as defense-in-depth — unexpected throw must NEVER kill the interval, or background work silently stops; .unref() so app close cleanly on SIGINT without waiting next tick', () => {

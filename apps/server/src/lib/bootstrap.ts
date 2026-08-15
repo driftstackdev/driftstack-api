@@ -2833,10 +2833,16 @@ export async function createProductionDeps(
   // Privacy §3.10 promises 90d post-unsubscribe email zero-out. Runs
   // every 24 hours; first tick fires 24h after boot (acceptable —
   // rows that just unsubscribed have 90 days before they're eligible
-  // anyway). Audit-logs each purge as a system action (no admin actor)
-  // — done via writes to admin_audit_log with the special
-  // 'status_subscriber.purged' action and adminAccountId set to null.
-  // The audit-log repo accepts null adminAccountId for system actions.
+  // anyway).
+  //
+  // V-783 — this comment used to claim the purge records each row in the admin
+  // audit log as an actor-less system action. That was false, and unachievable:
+  // admin_audit_log.admin_account_id and .admin_key_id are both NOT NULL with
+  // FKs, account_audit_log requires an accountId, and a status subscriber is an
+  // anonymous email fired at by a timer — there is no actor to attribute the
+  // row to. Migration 0027 reserved the 'status_subscriber.purged' enum value
+  // for a write that nothing has ever performed. The log line below is the only
+  // evidence the purge ran; see the admin-audit reachability guard.
   const STATUS_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
   const statusPurgeTimer = setInterval(() => {
     void (async () => {

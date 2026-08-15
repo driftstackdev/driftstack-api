@@ -33936,3 +33936,48 @@ Mutation-proved: restoring the bare rethrow reds the audit case.
 
 Fourth of seven findings from the concurrency/recovery sweep. No new test file, so
 `EXPECTED_TEST_FILES` is unchanged.
+
+## V-783 — an audit action reserved in the enum, exported to three SDKs, and impossible to write (2026-08-15)
+
+Migration 0027 added `status_subscriber.purged` to the `admin_audit_action` enum for the automated
+90-day email purge that privacy §3.10 promises. `bootstrap.ts` said the purge "Audit-logs each
+purge as a system action (no admin actor) — done via writes to admin_audit_log with the special
+'status_subscriber.purged' action and adminAccountId set to null. The audit-log repo accepts null
+adminAccountId for system actions."
+
+Nothing writes it. Across all 328 TypeScript files under `apps/server/src`, with comments stripped,
+the string appears **zero** times outside its own declaration — and the single occurrence in raw
+text was that comment, asserting the write happens. The comment was the only evidence for the
+comment.
+
+It is not merely unwired, it is unwireable. `admin_audit_log.admin_account_id` and `.admin_key_id`
+are both `notNull()` with FKs to `accounts` / `api_keys`, and `account_audit_log` requires an
+`accountId`. A status subscriber is an anonymous email address, and the purge is fired by a timer
+with no admin actor at all. There is no row that could be inserted. Same shape as V-759: a design
+recorded in prose that the schema forbids.
+
+Why it matters beyond tidiness. The value is exported through `packages/api-types` into all three
+customer SDKs and accepted as an `action` filter on the admin audit-list endpoint. Staff can filter
+for it, get an empty page, and read that as _this never happened_ when the truth is _this can never
+be recorded_ — and the sweep this action was supposed to evidence is one of the privacy
+commitments, so "did the 90-day purge run" was already the question worth asking.
+
+**The standing guard is the point.** Migration 0097's own comment records the same defect class
+found once before by hand: `admin-crypto-orders.ts` and `admin-validation-harness.ts` "had zero
+audit wiring despite this file's header invariant". That was fixed once; nothing stopped the next
+one. `every-declared-admin-audit-action-is-reachable.test.ts` now derives, for every one of the 33
+declared actions, whether any executable code path emits it — comments stripped, because the
+comment is exactly what fooled a text search here. One action is allowlisted as unemittable, with
+the structural reason; two further cases fail if that entry ever becomes emittable (a rotten
+allowlist is a blindfold) or names an action no longer declared.
+
+Mutation-proved twice: a new declared-but-unwired action reds it, and removing the comment-stripping
+reds it.
+
+Corrections: the enum declaration and the bootstrap comment now say the value is reserved and never
+emitted, and why. The parity pin over that comment froze the false claim verbatim — including in
+its own `it()` title — so it was rewritten in this commit with per-occurrence negatives on each half
+of the retracted sentence, plus a positive requiring the retraction to stay. My first retraction
+quoted the frozen phrase back and tripped its own negative, which is the correct behaviour.
+
+`EXPECTED_TEST_FILES` 2725 → 2726.
