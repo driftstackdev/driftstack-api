@@ -58,21 +58,16 @@ function procedureDocs(): string[] {
  * Repo paths cited in a procedure doc that are absent ON PURPOSE, or that are known-broken and
  * awaiting their own fix. Each needs a reason. This map may only SHRINK.
  *
- * The four known-broken entries are real defects found by widening this guard (V-769); each
- * cites a mechanism that no longer exists under that name and needs its own investigation to
- * rewrite, so they are tracked here rather than silently passing.
+ * V-773 emptied the known-broken half of this map. All four entries turned out to be
+ * resolvable, and three of them were WRONG PATHS rather than dead mechanisms — the drizzle
+ * config is at the repo root, and the SLA policy is published at docs/sla-policy.astro, not
+ * legal/sla.astro. Chasing the fourth (an SLA reference) surfaced a separate money defect: the
+ * DR runbook claimed credits "apply automatically" when the published policy requires the
+ * customer to email billing@ to request one.
  */
 const KNOWN_ABSENT: Record<string, string> = {
   'apps/server/.env':
     'Gitignored by design — the runbook correctly instructs the operator to CREATE it.',
-  'apps/gui-client/src/views/LiveSessionView.tsx':
-    'V-769 known-broken: docs/runbooks/livekit-go-live.md cites a view that no longer exists under any name. Needs the current LiveKit view path.',
-  'apps/marketing-site/src/pages/legal/sla.astro':
-    'V-769 known-broken: docs/deployment/dr-runbook.md cites an SLA page that does not exist; the legal directory has no SLA document at all. Needs a decision on whether an SLA exists before the reference can be corrected.',
-  'apps/server/drizzle.config.ts':
-    'V-769 known-broken: docs/deployment/migration-rehearsal.md cites a drizzle-kit config file that is not in the repo. Needs the real migration-run invocation.',
-  'apps/server/src/lib/synthetic-checks.ts':
-    'V-769 known-broken: docs/runbooks/observability.md cites a synthetic-checks module that does not exist. Needs the current synthetic-probe mechanism.',
 };
 
 describe('docs/runbooks file-reference existence', () => {

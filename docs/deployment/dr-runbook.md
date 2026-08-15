@@ -556,8 +556,13 @@ regional outage requires cross-region failover.
    compute connects to the existing data plane via env vars; no
    data migration required.
 6. **Customer comms**: hourly updates on the trust center until
-   resolved. SLA credits per `apps/marketing-site/src/pages/legal/sla.astro`
-   apply automatically against the next invoice.
+   resolved. SLA credits are governed by the published policy at
+   <https://driftstack.dev/docs/sla-policy>
+   (`apps/marketing-site/src/pages/docs/sla-policy.astro`). They are NOT
+   automatic — that policy's "How to request a credit" section requires the
+   customer to email `billing@driftstack.dev`. On an SLA-carrying tier
+   (API Scale, Enterprise), tell affected customers they need to claim, or
+   they will not receive one.
 
 **RTO**: 4–6 hours including TLS re-acquisition. **RPO**: zero —
 data plane is regionally independent.

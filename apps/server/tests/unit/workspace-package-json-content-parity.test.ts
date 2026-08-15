@@ -14,7 +14,7 @@
 //     before vitest).
 //   • db:* scripts wire to drizzle-kit + apps/server.
 //   • sdk:python:* 4-script ladder: dump-spec + generate + test + lint.
-//   • husky prepare + lint-staged (eslint --fix + prettier --write).
+//   • husky prepare + lint-staged (eslint --fix + prettier at 8 GB heap).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -129,7 +129,7 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     );
   });
 
-  it("Critical devDep + lint-staged + husky framing pinned: 7-tooling devDeps (eslint + prettier + vitest + drizzle-kit + drizzle-orm + tsx + typescript) + 'prepare: husky' + lint-staged 2-pattern (ts/tsx/js/jsx/mjs/cjs → eslint --fix + prettier --write; json/md/yml/yaml/css → prettier --write only) — pinned so the toolchain dep-set + husky-prepare-hook + lint-staged 2-pattern commitment survives (drift to dropping eslint --fix from lint-staged would let unfixable lint errors slip into commits)", () => {
+  it("Critical devDep + lint-staged + husky framing pinned: 7-tooling devDeps (eslint + prettier + vitest + drizzle-kit + drizzle-orm + tsx + typescript) + 'prepare: husky' + lint-staged 2-pattern (ts/tsx/js/jsx/mjs/cjs → eslint --fix + prettier; json/md/yml/yaml/css → prettier only), both invoking prettier through node with --max-old-space-size=8192 — pinned so the toolchain dep-set + husky-prepare-hook + lint-staged 2-pattern commitment survives (drift to dropping eslint --fix would let unfixable lint errors slip into commits; drift back to a bare `prettier --write` reinstates the V-774 OOM that blocked every commit touching docs/verification-log.md, since the repo's own format scripts alreadyneed the 8 GB heap)", () => {
     expect(pkg.devDependencies).toHaveProperty('eslint');
     expect(pkg.devDependencies).toHaveProperty('prettier');
     expect(pkg.devDependencies).toHaveProperty('vitest');
@@ -142,9 +142,11 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     expect(pkg.scripts.prepare).toBe('husky');
     expect(pkg['lint-staged']['*.{ts,tsx,js,jsx,mjs,cjs}']).toEqual([
       'eslint --fix',
-      'prettier --write',
+      'node --max-old-space-size=8192 ./node_modules/prettier/bin/prettier.cjs --write',
     ]);
-    expect(pkg['lint-staged']['*.{json,md,yml,yaml,css}']).toEqual(['prettier --write']);
+    expect(pkg['lint-staged']['*.{json,md,yml,yaml,css}']).toEqual([
+      'node --max-old-space-size=8192 ./node_modules/prettier/bin/prettier.cjs --write',
+    ]);
   });
 
   it('file exists at canonical path', () => {

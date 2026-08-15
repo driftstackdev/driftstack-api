@@ -172,7 +172,9 @@ than the rehearsal branch reflected.
 ## Related
 
 - Drizzle migrations: `apps/server/src/db/migrations/*.sql`
-- Drizzle config: `apps/server/drizzle.config.ts`
+- Drizzle config: `drizzle.config.ts` (repo root; `npm run db:generate` /
+  `db:studio` run from there, and `npm run db:migrate` in `apps/server`
+  applies them via `apps/server/src/db/migrate.ts`)
 - Operational runbook: `docs/deployment/runbook.md` (incident plays,
   not migration rehearsal)
 - Env-var schema: `docs/deployment/env-vars.md` (DATABASE_URL is

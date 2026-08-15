@@ -110,9 +110,11 @@ during an incident, customers can't see what's happening:
 
 ## Synthetic checks (V-289)
 
-Configuration lives in `apps/server/src/lib/synthetic-checks.ts`
-(if wired) or external uptime provider when V-289 wires it. Check
-intervals + timeouts:
+**Not wired yet (V-289 open).** No synthetic-check module exists in the
+repo — the in-process health probe (`apps/server/src/services/health-probe.ts`)
+covers the API targets below, and nothing polls the static sites. The table is
+the intended configuration for whichever external uptime provider V-289
+selects, not a description of something running today:
 
 | Target                                 | Interval | Timeout | Failure threshold    |
 | -------------------------------------- | -------- | ------- | -------------------- |

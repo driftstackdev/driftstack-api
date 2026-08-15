@@ -123,8 +123,10 @@ latency logged.
 
 ## Step 3 — verify customer-flow integration
 
-Open `LiveSessionView` in the GUI client against a real Mac-mini
-session. Expected:
+**Blocked until the GUI subscriber slice lands** — the `LiveSessionView`
+checklist item above is still unchecked and no such view exists in
+`apps/gui-client/src`. When it does, open it against a real Mac-mini session.
+Expected:
 
 - WS handshake to `wss://<project-id>.livekit.cloud` within ~1s.
 - First frame paints within ~500ms of handshake (vs ~1s on the HTTP
@@ -182,7 +184,8 @@ not at WS-handshake time).
 - `packages/webrtc-streaming/` — `MockWebRtcStreamingService` is the
   fallback used today; will become the dev-mode / fallback
   implementation once `LiveKitWebRtcStreamingService` lands.
-- `apps/gui-client/src/views/LiveSessionView.tsx` — viewport that
+- `LiveSessionView` (NOT YET BUILT — see the unchecked item above; no such
+  file exists under `apps/gui-client/src`) — viewport that
   will swap from HTTP polling to LiveKit subscribe.
 - `apps/gui-client/src/lib/session-stream.ts` — `createPollingFrameStream`
   is the existing stream-source abstraction; a

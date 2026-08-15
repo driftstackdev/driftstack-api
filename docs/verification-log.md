@@ -33396,3 +33396,84 @@ Swept all fifteen for every string this session changed — the two-email cap, t
 unit name, the `/opt/driftstack/.env` path, and the Critical/Major postmortem wording. The only
 remaining hits are inside the guards I added, where the phrases appear in negative assertions
 ("the retired cap must not come back") and in header comments explaining the defect. Clean.
+
+## V-773 — closing the four tracked dead references, and the money defect one of them was hiding (2026-08-15)
+
+V-769 widened the operator-doc file-reference guard and left four broken references in a
+shrink-only `KNOWN_ABSENT` map, each needing its own investigation. All four are now resolved and
+the map is back to its single intentional entry (`apps/server/.env`, gitignored by design).
+
+**Three were WRONG PATHS, not dead mechanisms** — which is why investigating rather than
+rewriting mattered:
+
+- `apps/server/drizzle.config.ts` → the config exists at the **repo root**. `db:generate` /
+  `db:studio` run from there; `db:migrate` in `apps/server` applies via `src/db/migrate.ts`.
+- `apps/marketing-site/src/pages/legal/sla.astro` → the SLA **is** published, at
+  `apps/marketing-site/src/pages/docs/sla-policy.astro`. I had begun to conclude no SLA existed
+  at all — Terms §9.2 says the commercial SLA is "published separately" and `legal/` has no SLA
+  document — and that would have been a confident wrong finding. It is published, just not there.
+- `apps/gui-client/src/views/LiveSessionView.tsx` → genuinely absent, and the runbook already
+  knew: line 34 lists it as an **unchecked** checklist item. The defect was that Step 3 and the
+  file inventory then instructed the operator to open it anyway. Both now say the slice has not
+  landed.
+
+**`apps/server/src/lib/synthetic-checks.ts` was the one real absence**, and the doc half-admitted
+it ("if wired"). The section now states plainly that no synthetic-check module exists, that the
+in-process health probe covers the API targets, that nothing polls the static sites, and that the
+table is the intended configuration for whichever provider V-289 selects — not a description of
+something running.
+
+**Chasing the SLA path surfaced a money defect that no sweep had found.** The DR runbook said
+"SLA credits … **apply automatically** against the next invoice." The published policy's own "How
+to request a credit" section requires the customer to email `billing@driftstack.dev`. So during a
+multi-day regional outage the operator, following the runbook, would believe credits were handled
+and never tell affected customers to claim — and API Scale / Enterprise customers entitled to 5%,
+10% or 25% of a monthly subscription fee would simply not receive it. The step now states the
+policy URL, that credits are NOT automatic, and that affected customers must be told to claim.
+
+Flagged, not fixed: `docs/proposals/td-002-drizzle-kit-reinstatement.md` proposes _adding_ a
+`drizzle.config.ts`, but one already exists at the repo root — TD-002 may be stale. Proposals are
+deliberately outside the guard's scanned directories, since a proposal may legitimately name a
+file that does not exist yet.
+
+## V-774 — the pre-commit hook OOMed on every commit touching the verification log (2026-08-15)
+
+A commit failed with `FATAL ERROR: CALL_AND_RETRY_LAST Allocation failed - JavaScript heap out of
+memory`, at a hard 4074 MB ceiling, with 66% of system memory free. Not contention — a process
+heap limit.
+
+Isolated by elimination rather than guessed: `eslint` on the staged TS file passed alone (exit 0),
+`prettier --check` on the other five staged files passed together instantly, and
+`prettier --check docs/verification-log.md` OOMed **on its own**. This log is now 2.1 MB across
+33,437 lines, and prettier's default ~4 GB heap cannot parse it.
+
+Because the project convention is that every verification appends an entry here, this blocked
+**every substantive commit, for anyone** — not just mine.
+
+**The repo had already solved this and the hook did not get the fix.** `npm run format` and
+`format:check` invoke `node --max-old-space-size=8192 ./node_modules/prettier/bin/prettier.cjs`.
+Someone hit this heap limit before and raised it for the repo-wide run. `lint-staged` still ran a
+bare `prettier --write`, which gets the default. So `format:check` succeeded while the pre-commit
+hook died on the same file. Both lint-staged patterns now use the same 8 GB invocation.
+
+**I nearly shipped the wrong fix.** My first move was to add the log to `.prettierignore`. That
+would have worked, and would have diverged from the repo's own established answer while quietly
+un-formatting a tracked file — and `.prettierignore` is itself pinned by
+`workspace-prettierignore-content-parity.test.ts`, so it would also have needed a pin change to
+achieve something the existing 8 GB flag already achieves. Reverted before committing.
+
+**A measurement I made was invalid and I caught it by disbelieving the result.** To size the
+blast radius of reformatting a 33k-line shared file I copied it to the scratchpad and ran
+prettier there: zero changed lines. That is because prettier resolves configuration from the
+file's own location, and a copy outside the repo gets defaults instead of `.prettierrc`. Re-run on
+a copy INSIDE `docs/`, the true answer is **two lines** — both in my own V-773 entry, where
+`*adding*` needed to be `_adding_`. Fixed, so the log is prettier-clean. The same lesson as the
+mutation-proof rule: a check run outside the repo answers a different question.
+
+`workspace-package-json-content-parity.test.ts` pinned the bare `prettier --write` in both
+lint-staged patterns and moved with the fix.
+
+Worth noting for later: 8 GB buys headroom, not a permanent answer. This file grows by an entry
+per verification and will eventually exceed that too. The structural fix is to split it into
+per-period files (`verification-log-2026-H1.md`, …) with the index kept in the current file. Not
+done here because it touches 33k lines of shared history and deserves its own change.
