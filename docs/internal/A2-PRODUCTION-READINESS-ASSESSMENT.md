@@ -1769,7 +1769,40 @@ test, or declared" — was checked against the coverage data and disagrees on 4 
 8–11% without any test importing it. A 92%-accurate ratchet would spend more on
 its exception list than it earns.
 
-### 5f. NEW — 31 of 108 security denial paths have never executed
+### 5f. 31 of 108 security denial paths had never executed — now 13 of 108
+
+✅ **RE-MEASURED 2026-08-15 with the proper instrument: 13 of 108.** The original
+31 came from an earlier coverage snapshot; this run regenerated
+`coverage-final.json` (whole workspace, `DATABASE_URL` set so the 65 `db-*` files
+execute) and intersected its `statementMap` with every deny site, same
+definition as before. The work in this and the preceding fires — the MFA gate,
+the login mapper, both auth slow paths, the OAuth bearer path — accounts for the
+difference.
+
+_The wider picture from the same data, which had never been taken:_ **1,175
+`throw new …Error(` sites under `apps/server/src`, of which 202 have never
+executed**, plus 105 outside the coverage scope entirely (`src/db/**` is
+excluded — item 5e). Security classes are the healthiest slice of that by some
+margin; the bulk is `Error` (78 cold of 430) and `BadRequestError` (31 of 121).
+
+**The 13 that remain are not one population.** Six are the owner-vanished
+residuals enumerated above and verified unreachable — `admin.ts` ×2,
+`profiles.ts` ×2, `profile-snapshots.ts:217`, `agent-sessions.ts:3920`. One more
+is `services/auth.ts:532`, the non-fall-through `InvalidKeyError` in
+`slowPathApiKey`, reachable only if that function is called WITHOUT
+`fallThroughOnPrefixMiss` — and `authenticate`, its only caller, always passes
+`true`. It is a residual for a second caller that does not exist yet.
+
+That leaves **six genuinely actionable**, and one is an authorization boundary
+rather than a residual:
+
+- ⭐ `routes/profile-snapshots.ts:44` — `'Snapshot writes on a team owner require
+admin role.'` A non-admin team member must not write snapshots on the owner's
+  account. That is team RBAC, it is the only thing enforcing it on this route,
+  and it has never run. **Next slice.**
+- `routes/agent-sessions.ts:3916` (`'Owner account tier is unavailable.'`), 4632
+- `routes/sessions.ts:345`
+- `services/auth.ts:398`, `:401` — the API-key cache-revalidation branch
 
 Measured 2026-08-15 by intersecting per-line coverage with every
 `throw new <Forbidden|Unauthorized|InvalidKey|RevokedKey|Expired*|MfaStepUpRequired
@@ -1859,8 +1892,34 @@ The largest clusters:
 
 - `middleware/auth.ts` — both refusals of the MFA step-up gate. **Closed by this
   commit** (`mfa-step-up-gate-actually-denies`).
-- Six routes share `throw new ForbiddenError('Owner account no longer exists.')`
-  — the team-owner-vanished branch, unreachable without a mid-request deletion.
+- `throw new ForbiddenError('Owner account no longer exists.')` — **enumerated
+  and closed as a VERIFIED NEGATIVE, 2026-08-15.** The count here was wrong: it
+  is **9 sites across 5 files**, not six routes — `middleware/rate-limit.ts:178`,
+  `routes/profiles.ts` ×3, `routes/admin.ts` ×3, `routes/agent-sessions.ts:3920`,
+  `routes/profile-snapshots.ts:217`. And the sites are not one population:
+  - **The 8 route sites test `!owner` only** — a null row. Accounts are
+    soft-deleted (`account_status` is active|suspended|deleted), so a deleted
+    owner still HAS a row and would slip past a null check. That looked like a
+    real hole until the layer above was read: `findTeamMemberships` filters owner
+    status **in SQL** —
+    `.where(and(eq(teamMembers.memberAccountId, …), eq(accounts.status, 'active')))`
+    — so a suspended or deleted owner produces no grant and
+    `effectiveAccountId` can never resolve to one. Both the Drizzle repo and the
+    in-memory double enforce it, and `team-auth-owner-status-authority` pins the
+    parity. The route check is therefore a genuine residual, reachable only by a
+    hard delete mid-request.
+  - **The 1 middleware site is a DIFFERENT check** and is executed. It tests
+    `account === null || account.status === 'deleted'` and answers 403 rather
+    than 429 deliberately, because the SDK retries 429 forever and a permanent
+    condition would become an infinite retry loop.
+    `team-effective-owner-rate-limit` drives it table-wise over **both**
+    `suspended` and `deleted`.
+
+  _Recorded rather than left open so the next reader does not re-derive it._
+  ⚠️ Note the shape of the near-miss: the route-level check IS insufficient on
+  its own, and reading only those 8 sites produces a confident false positive.
+  The control lives one layer up, in a `where` clause.
+
 - `routes/auth.ts:109` — `'Account is suspended.'` on the login path. **Closed
   2026-08-15** (`auth-login-deny-paths-actually-deny`), and with it the whole
   `mapAuthFlowError` switch: all five `AuthFlowError` codes are now driven
