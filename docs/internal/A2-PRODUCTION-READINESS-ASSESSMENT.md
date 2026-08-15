@@ -1898,3 +1898,18 @@ rather than a residual:
   covers the turn-time tier RE-CHECK and legitimately never reaches this throw,
   because on a deterministic deployment the turn succeeds through the generic
   decomposer and there is no refusal to assert.
+
+## Current state
+
+Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
+real-Postgres integration files run rather than skip (refreshed 2026-08-15; the
+figure had read 2,559 / 26,548). e2e **199 / 0**, from
+187/10 at the start of the run. Python SDK 337 tests + mypy strict over 43
+files; Go SDK vet and tests clean; all five Astro sites typecheck clean;
+`npm audit --omit=dev` 0 vulnerabilities.
+
+One caveat on reading any of these numbers, including mine: a suite run without
+`DATABASE_URL` silently SKIPS every `db-*` integration file, and the totals it
+prints look like a full pass. The figures above are from a run with the database
+present. See item 11 for the one intermittent failure that configuration can
+surface.
