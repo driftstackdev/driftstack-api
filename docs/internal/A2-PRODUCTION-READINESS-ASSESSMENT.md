@@ -1445,6 +1445,43 @@ test, or declared" — was checked against the coverage data and disagrees on 4 
 8–11% without any test importing it. A 92%-accurate ratchet would spend more on
 its exception list than it earns.
 
+### 5f. NEW — 31 of 108 security denial paths have never executed
+
+Measured 2026-08-16 by intersecting per-line coverage with every
+`throw new <Forbidden|Unauthorized|InvalidKey|RevokedKey|Expired*|MfaStepUpRequired
+|LegalAcceptanceRequired|EmailNotVerified|InvalidCredentials|InvalidAuthToken>Error`
+in `apps/server/src`. **108 deny sites across 26 files; 31 never run under any
+test.** A refusal path nobody has watched refuse is a control nobody has shown
+works — the same shape as item 26's "four fail-closed branches nothing could see".
+
+The largest clusters:
+
+- `services/auth.ts` — 8+ never-executed `InvalidKeyError` / `ExpiredKeyError`
+  throws on the API-key and web-session authentication paths.
+- `middleware/auth.ts` — both refusals of the MFA step-up gate. **Closed by this
+  commit** (`mfa-step-up-gate-actually-denies`).
+- Six routes share `throw new ForbiddenError('Owner account no longer exists.')`
+  — the team-owner-vanished branch, unreachable without a mid-request deletion.
+- `routes/auth.ts:109` — `'Account is suspended.'` on the login path.
+
+⚠️ **What made the MFA one worth doing first is how well covered it looked.**
+`MfaStepUpRequiredError` is referenced in **seventeen** test files. Every one
+reads source text or an SDK export list — content-parity, cross-source-invariant,
+error-taxonomy. **Extensively pinned, never executed.** Text pins over a security
+gate are the most reassuring possible way to not test it.
+
+_Recommendation:_ work the `services/auth.ts` cluster next — those are the
+rejections that decide whether an expired or revoked credential is accepted, and
+they are the highest-consequence entries on the list. The
+`'Owner account no longer exists.'` group is genuinely hard to reach and may be
+better served by a note than a fixture.
+
+_Method note, since it generalises:_ file-level coverage cannot find these. The
+check is an intersection of "lines matching the deny pattern" with "statements
+whose execution count is 0" from `coverage-final.json`, and it requires first
+confirming every file appears in the report — a file never imported has no entry
+at all and would be silently omitted from the denominator.
+
 ## Current state
 
 Node suite **2,559 files / 26,548 passing** with `DATABASE_URL` set, so the
