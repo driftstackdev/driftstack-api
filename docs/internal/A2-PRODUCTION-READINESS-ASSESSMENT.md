@@ -3284,3 +3284,62 @@ against a page that no longer exists — and it caught a real one within minutes
 the source landing. And the reason I saw it at all is that a committed change from
 another agent had shifted the tree since my last verify; a green from ten minutes
 ago is not a green now.
+
+## 6h — the profile tenant boundary was proven only against a fake
+
+First real use of the capability unlocked last fire. SQL-level tenant predicates
+live in integration tests that skip without `DATABASE_URL`, so until now this
+surface was not measurable locally at all.
+
+`profiles-repo.ts` carries **20** `eq(profiles.accountId, …)` predicates. The
+service does not re-check ownership — `ProfilesService.get` is
+`const row = await this.repo.findById(args); if (row === null) throw NotFound` —
+so those WHERE clauses ARE the isolation boundary, not a second line behind one.
+
+### What the ledger showed
+
+Neutralising each predicate in turn, with the database available:
+
+| detector                                                                 | result                                  |
+| ------------------------------------------------------------------------ | --------------------------------------- |
+| `cross-account-profile-isolation` (routes)                               | **all 20 unnoticed**                    |
+| `db-profiles-repo-keyset` + `restore-quota`                              | 4 covered (the LIST predicates), 16 not |
+| `in-use-concurrency`, `terminated-account-purge`, `snapshot-restore-dek` | fetch-by-id still unnoticed             |
+
+⛔ The route-level isolation test drives `buildTestApp`, which wires **InMemory**
+repos. It proves the RULE against a double that re-implements the same filtering
+by hand, and executes none of the shipped SQL. The uniform all-20 column was not a
+broken instrument — it was a detector pointed at code the test never loads, which
+is a fourth way a ledger can lie and the one hardest to tell from the others.
+
+So: the list path is covered on real Postgres, and the single-row paths —
+`findById`, `update`, `recordSave` — were covered by nothing that runs real SQL. A
+refactor rewriting one WHERE clause could hand account A account B's profile, the
+cookies and storage of somebody else's browser session, with a fully green suite.
+
+### The guard
+
+One integration test on the shipped `DrizzleProfilesRepo` against real Postgres,
+two seeded accounts:
+
+- **read** — a stranger's `findById` returns null, with an owner-side positive
+  control first so the arm cannot pass because the fixture was invisible;
+- **write** — a stranger's `update` rejects, AND the row is read back as the owner
+  to prove the UPDATE did not land before failing to return;
+- **silent path** — `recordSave` returns void, so a wrong-account call cannot be
+  caught by a return value; the columns are read back directly, then the owner's
+  call is asserted to succeed so the arm is a boundary and not a broken call.
+
+Ledger: `findById`, `update` and `recordSave` predicates each red it; before, none
+of the three reddened anything anywhere.
+
+It carries the same CI contract as its siblings — quiet skip locally, hard failure
+in CI if the database is unreachable. A vacuous pass on a tenant-isolation test is
+worse than no test: it reports the boundary as proven when nothing ran.
+
+### Still open, named rather than dropped
+
+16 predicates in this repo remain unexercised by real SQL — trash/restore,
+rename-on-restore, snapshot and quota paths among them. The three closed here are
+the ones the customer-facing read/write path depends on. The same question applies
+to `sessions-repo` (15 predicates) and `mfa-repo` (14), neither swept yet.
