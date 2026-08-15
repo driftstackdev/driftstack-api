@@ -3563,3 +3563,71 @@ remains in `profiles-repo` is the low-consequence tail: `countByAccount`,
 `listTrashed`, `findByAccountAndName`, `touch`, the list cursor anchor, and
 `migrateWrappedDekEnvelopes` — which is cross-account by design and already covered
 by its own isolated-database test.
+
+## 6m — the OAuth prune, and a probe that manufactured false POSITIVES
+
+Continued the class rather than the file: the retention purge in 6l was one of a
+roster. Narrowing "global operation" to its dangerous shape — a DELETE bounded
+only by time, with no id and no account scope — gives five methods across the db
+layer. Two already have real-SQL coverage (`deleteStaleAuthTokens`,
+`pruneOlderThan`), `purgeTrashedBefore` was closed in 6l, and `pruneFinished` is
+safe by construction (its `isNotNull` + `lt` pairs mean it can only ever match
+terminal rows). That leaves `oauth-store.pruneExpired`.
+
+It deletes from THREE tables in one transaction, each guarded by exactly one time
+predicate and nothing else — authorizations and codes on `createdAt < now − TTL`,
+access tokens on `expiresAt <= now`. Lose any one and that table is emptied. The
+token row is the one that hurts: every OAuth-authenticated customer's credential
+disappears and every integration built on it breaks until they re-authorise.
+
+Coverage before this: three unit tests, all against the in-memory store that
+re-implements the comparison by hand. Isolated via `ensureIsolatedDatabase`, per
+the same policy that governed 6l.
+
+### ⛔ The instrument produced FALSE POSITIVES — the reverse of every previous one
+
+The first ledger reported all three predicates COVERED. They were not. My probe
+substituted `` sql`true` `` and **`oauth-store.ts` never imports `sql`**, so every
+run failed with `ReferenceError: sql is not defined` — a red that had nothing to do
+with the guard. Three green-looking "COVERED" verdicts, all worthless.
+
+Every previous instrument defect this week made a covered thing look uncovered.
+This one made an uncovered thing look covered, which is strictly more dangerous:
+a false negative costs a wasted investigation, a false positive closes a gap that
+is still open.
+
+⭐ It surfaced only because I could not explain ONE of the three reds. The codes
+predicate reddened despite my fixtures containing no code rows, and a red I cannot
+account for deserves the same scrutiny as an unexplained green.
+
+Re-run with a tautology built from an import the module actually has
+(`eq(col, col)`): authorizations RED, access tokens RED, **codes GREEN** — genuinely
+uncovered, exactly as the unexplained result had hinted. Added a code fixture; the
+re-run is 3 of 3 with a valid probe.
+
+### The guard
+
+Fixtures straddle each boundary rather than sitting far from it — a token one
+second past expiry and one a day short, an authorization and a code an hour stale
+against ones created at `now`. A sweep that deletes everything and a sweep that
+deletes nothing both pass a test whose fixtures all sit on one side.
+
+It also asserts the backing `api_keys` row OUTLIVES its deleted token, since the
+source deliberately keeps it as an expired actor identity for session and audit FK
+integrity — leaving that untested would leave the transaction's blast radius
+unmeasured.
+
+⚠️ Four fixture rejections found by running it: a `^[0-9a-f]{64}$` check on both
+hash columns, the `api_key_scope` enum being `read:sessions` rather than
+`sessions:read`, a globally-unique `key_prefix` that collides on the second run
+because the isolated database persists, and the same for the hash primary keys.
+Every one is invisible to a test that never reaches Postgres.
+
+⚠️ And the tests-typecheck guard caught this file too, for a reason worth
+recording: `client` is a module-level `let`, so the `if (!client) return` narrowing
+does NOT propagate into arrow-function helpers that close over it — four
+`TS2349: This expression is not callable`. The sibling tenant-scope files avoided
+it only because they call the client inline in the test body rather than through
+helpers. Fixed by binding a non-null local after the guard. Second time this week
+that a vitest-green file failed `tsconfig.test.json`; the suite's own type-check
+test is the authority, not a hand-run `tsc -p tsconfig.json` on the source project.
