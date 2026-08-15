@@ -2332,3 +2332,233 @@ describe('V-224 — auth-flows emits customer-facing audit entries', () => {
     expect(logoutEntry).toBeDefined();
   });
 });
+
+// ─── MFA must fail CLOSED when the server is not wired for it ───────────────
+//
+// Two refusals, both cold at HEAD (v8 coverage), both guarding the same
+// inversion: on a deployment where the MFA service is absent, "MFA is not
+// configured" must never be treated as "MFA is satisfied".
+//
+//   auth-flows.ts:960   completeMfaChallenge, when mfa OR the challenge store is missing
+//   auth-flows.ts:1336  stepUpReauth, when mfa is missing
+//
+// Reachable without any new seam: `makeDirectService()` has always constructed
+// the service with both left null. Nothing had ever called these two methods on
+// it.
+//
+// ⚠️ Why this is not a theoretical configuration. A challenge is issued by one
+// process and consumed by another request, so the two can land on different
+// instances — a rolling deploy, or one replica that came up without the MFA env.
+// login() only issues a challenge when `this.mfa` is wired, so the token cannot
+// originate here; it can very easily ARRIVE here. And stepUpReauth is what
+// satisfies `requireMfaFresh`, so a version that returned success instead of
+// refusing would let a caller clear the step-up gate having proved nothing.
+//
+// ⭐ The compound guard is why there are three challenge arms rather than one.
+// `if (!this.mfa || !this.mfaChallenges)` has TWO conditions, and
+// `makeDirectService()` leaves BOTH null — so an arm built on it is refused by
+// either half and cannot tell which did the work. Each half needs a fixture that
+// isolates it, and the ledger shows both narrowings caught by exactly one arm.
+//
+// LEDGER — control 79/79:
+//
+//   challenge guard removed entirely        3 red
+//   NARROWED to the mfa half only           1 red
+//   NARROWED to the store half only         1 red
+//   challenge guard refuses ALWAYS          6 red
+//   step-up guard removed                   1 red
+//   step-up guard refuses ALWAYS            5 red
+//
+// The last two rows of each pair are the anti-vacuity check, and they are not
+// mine — 6 and 5 PRE-EXISTING MFA arms red when the guard refuses everything.
+// That is what stops these three arms from being satisfied by a build that
+// simply never completes a challenge. Without it, "it threw" proves nothing.
+//
+// ⚠️ Measured, not designed: the store-half narrowing SURVIVED until the third
+// arm existed. Both halves looked covered by the first arm because it happened
+// to trip both at once — the same "one fixture trips two halves of a guard, so
+// it discriminates neither" trap as the VPN host/config guards.
+describe('MFA fails closed when the server is not wired for it', () => {
+  it('completeMfaChallenge refuses outright when no MFA service is wired', async () => {
+    const { service } = makeDirectService();
+    await expect(
+      service.completeMfaChallenge({
+        challengeToken: 'a'.repeat(43),
+        code: '123456',
+        sourceIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_auth_token' });
+    await expect(
+      service.completeMfaChallenge({
+        challengeToken: 'a'.repeat(43),
+        code: '123456',
+        sourceIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toThrow(/MFA challenge not available on this server/i);
+  });
+
+  it('completeMfaChallenge refuses when MFA is wired but the challenge STORE is missing', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    const logger = createTestLogger();
+    const email = createEmailService({ config: null, logger });
+    // Wired for MFA, no challenge store — the half of the guard that a
+    // narrowing to `if (!this.mfa)` alone would silently admit.
+    const service = new AuthFlowsService(
+      repo,
+      email,
+      logger,
+      {
+        verifyEmailUrl: 'https://app.driftstack.local/verify-email',
+        magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+        passwordResetUrl: 'https://app.driftstack.local/reset-password',
+        exposeDebugToken: true,
+      },
+      null,
+      null,
+      { getStatus: vi.fn(), verifyCode: vi.fn() } as never,
+      null,
+    );
+
+    await expect(
+      service.completeMfaChallenge({
+        challengeToken: 'a'.repeat(43),
+        code: '123456',
+        sourceIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toThrow(/MFA challenge not available on this server/i);
+  });
+
+  it('completeMfaChallenge refuses when the challenge store is wired but MFA is NOT', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    const logger = createTestLogger();
+    const email = createEmailService({ config: null, logger });
+    // The mirror image of the arm above. Both halves of
+    // `!this.mfa || !this.mfaChallenges` need their own fixture, because
+    // `makeDirectService()` leaves BOTH null — so an arm built on it is refused
+    // by either half and cannot tell which one did the work. Measured: narrowing
+    // the guard to the store half alone survived until this arm existed.
+    const service = new AuthFlowsService(
+      repo,
+      email,
+      logger,
+      {
+        verifyEmailUrl: 'https://app.driftstack.local/verify-email',
+        magicLinkUrl: 'https://app.driftstack.local/auth/magic-link',
+        passwordResetUrl: 'https://app.driftstack.local/reset-password',
+        exposeDebugToken: true,
+      },
+      null,
+      null,
+      null,
+      new InMemoryMfaChallengeStore(),
+    );
+
+    await expect(
+      service.completeMfaChallenge({
+        challengeToken: 'a'.repeat(43),
+        code: '123456',
+        sourceIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toThrow(/MFA challenge not available on this server/i);
+  });
+
+  it('stepUpReauth refuses when no MFA service is wired, so the freshness gate cannot be cleared', async () => {
+    const { service } = makeDirectService();
+    await expect(
+      service.stepUpReauth({
+        accountId: '00000000-0000-4000-8000-000000000001',
+        sessionId: '00000000-0000-4000-8000-000000000002',
+        input: '123456',
+      }),
+    ).rejects.toThrow(/MFA step-up not available on this server/i);
+  });
+});
+
+// ─── the two signup races, and the catch that must stay precise ────────────
+//
+// `signup()` pre-checks the literal email AND the canonical (alias-folded) one,
+// then inserts. Two concurrent signups can both pass a pre-check before either
+// commits, so the unique indexes are the real arbiters and the loser arrives as
+// a Postgres 23505. Both translations were cold at HEAD:
+//
+//   accounts_email_unique            two signups for the SAME literal address
+//   accounts_canonical_email_unique  two signups for DIFFERENT alias variants
+//                                    of the same mailbox (user+1@ / user+2@)
+//
+// The second is the one that carries weight. Alias folding is what stops one
+// mailbox minting unlimited "distinct" free accounts, and the pre-check cannot
+// enforce it under concurrency — only the index can. A loser that surfaced as an
+// uncaught 500 would also be a loser the caller may retry into a different
+// outcome, so the translation is the difference between "this mailbox already
+// has an account" and a server fault.
+//
+// ⭐ The third arm is what keeps the catch honest. It must translate THESE two
+// constraints, not every 23505 that happens to pass through — a unique violation
+// from an unrelated index is a real fault and must stay one. A catch-all here
+// would convert genuine database bugs into a cheerful 409 for the rest of time.
+//
+// LEDGER — control 82/82, each mutation caught by exactly one arm:
+//
+//   literal-race translation removed              1 red
+//   canonical-race translation removed            1 red
+//   catch-all: ANY 23505 becomes the 409          1 red
+//   canonical arm keyed on the WRONG constraint   1 red
+//
+// The last two are the ones a deletion-only ledger would miss. The catch-all
+// leaves both races handled and every assertion about them green; only the
+// unrelated-index arm notices. And keying the canonical branch on the literal
+// constraint name leaves the code reading correctly — two branches, two
+// `isUniqueViolation` calls, the right error — while the canonical race falls
+// through to a 500. Alias folding would then hold in every sequential test and
+// fail exactly when two variants of one mailbox arrive together, which is the
+// only time it is load-bearing.
+describe('signup translates a lost insert race, precisely', () => {
+  function unique23505(constraint: string): Error {
+    return Object.assign(
+      new Error(`duplicate key value violates unique constraint "${constraint}"`),
+      {
+        code: '23505',
+        constraint_name: constraint,
+      },
+    );
+  }
+
+  async function signupWithInsertFailure(constraint: string): Promise<unknown> {
+    const { service, repo } = makeDirectService();
+    vi.spyOn(repo, 'createAccount').mockRejectedValue(unique23505(constraint));
+    return service.signup({
+      email: 'race@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+  }
+
+  it('the literal-email race loses as email_already_registered, not a 500', async () => {
+    await expect(signupWithInsertFailure('accounts_email_unique')).rejects.toMatchObject({
+      code: 'email_already_registered',
+    });
+  });
+
+  it('the canonical-email race loses the same way, so alias folding holds under concurrency', async () => {
+    await expect(signupWithInsertFailure('accounts_canonical_email_unique')).rejects.toMatchObject({
+      code: 'email_already_registered',
+    });
+  });
+
+  it('a 23505 from an UNRELATED index is re-thrown untouched, so the catch cannot mask a real fault', async () => {
+    // Same SQLSTATE, different constraint. If this became
+    // email_already_registered, every unique-violation bug in any future index
+    // touched by signup would be reported to the customer as "that email is
+    // taken" and never surface as the fault it is.
+    await expect(signupWithInsertFailure('accounts_slug_unique')).rejects.not.toMatchObject({
+      code: 'email_already_registered',
+    });
+    await expect(signupWithInsertFailure('accounts_slug_unique')).rejects.toThrow(
+      /duplicate key value/i,
+    );
+  });
+});
