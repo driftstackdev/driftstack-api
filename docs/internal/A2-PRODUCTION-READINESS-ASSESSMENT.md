@@ -780,15 +780,83 @@ these constants by `the-documented-replay-cadence-matches-the-poller`, including
 an arm that fails if webhook delivery is ever moved off the shared interval — so
 that change cannot silently invalidate the published cadence.
 
-### 5. An abandoned paid session bills indefinitely
+### 5. CORRECTED — an abandoned paid session bills indefinitely, and this was never blocked on A1/A3
 
-Billed minutes derive from the `sessions` table, and an `active` row with no
-`destroyed_at` accrues to `now()`. Only `free` is capped — the duration sweeper's
-own comment says "paid = null = never", and its suite pins that. A paid session
-ends only via customer DELETE, a failed operation, admin action, or suspension,
-and there is **no liveness signal on driver sessions**. _Doing nothing:_ a
-silently-dead driver keeps billing. _Recommendation:_ needs A1/A3 input on
-whether driver death reaches the control plane; A2 cannot verify that from here.
+The exposure is real and unchanged: billed minutes derive from the `sessions`
+table, an `active` row with no `destroyed_at` accrues to `now()`, and
+`MAX_SESSION_MINUTES_PER_TIER` caps `free` at 20 minutes while leaving **all seven
+paid tiers `null`** — `durationCutoffsFor` skips a null cap outright.
+
+**What was wrong is the premise.** This item claimed "there is **no liveness
+signal on driver sessions**" and routed the question to A1/A3. Checked from this
+repo 2026-08-15, that is false, and it was A2's to check:
+
+- **Fleet nodes report liveness.** `/v1/fleet/events` (V-820) carries `heartbeat`
+  frames with `bootId` and `activeSessionStates`, gated on
+  `config.fleetControlPlaneEnabled` — which bootstrap does wire.
+- **The control plane already consumes it.** A `bootId` change closes the sessions
+  a restarted node cannot still be running (`node-boot-reconcile`), worker-reported
+  orphans are reconciled (`cp-daemon-reconcile`), and there is an orphan sweeper
+  with its own reap job and terminal reasons (`node_shutting_down`,
+  `reaped_during_provisioning`).
+
+**All of that is wired to `agent_sessions`, not to `sessions`.** The table that
+bills has no equivalent — and no node column to hang one on, so the bootId reaper
+cannot simply be pointed at it. `sessions.last_state_at` IS maintained
+(monotonic `GREATEST`) and exposed on the API, but **nothing reads it as a
+staleness anchor**; it is the obvious hook for a sweep that needs no node
+attribution and no new column.
+
+So this is an **engineering task in A2's own scope**, not a cross-agent question —
+and a cheap one. `durationCutoffsFor` iterates the whole tier enum and its own
+comment notes that "a future capped paid tier is picked up automatically with no
+sweep change". **Capping a paid tier is one value in one table.**
+
+_Doing nothing:_ unchanged — a silently-dead driver keeps billing.
+_Recommendation:_ the only genuinely open question is the **number** — how long a
+paid session runs before it counts as abandoned, or how stale `last_state_at` may
+get. That is a product call with real customer consequences (a long-running
+session is a legitimate use of the product), so A2 has not invented one. Everything
+else is ready.
+
+Held by `an-unbounded-paid-session-is-a-visible-choice`, which asserts the cap
+table from SOURCE, that exactly one tier is capped, that the sweeper never targets
+an uncapped tier (behaviourally), and that `sessions` still has no node column —
+that last arm expiring the moment one is added, because the reaper becomes
+extensible at that point.
+
+⚠️ **Found while proving it:** three mutations of the cap table failed to red
+anything, because `@driftstack/api-types` resolves to `dist` and a local
+`npm test` does not rebuild it. **CI is safe** (`npm run build` precedes the test
+job) but the **local loop is not** — a developer can change a cap in `src`, run the
+suite, and see green against a build artifact from days earlier. The guard now
+reads source and asserts the built copy agrees.
+
+### 5b. NEW — 192 test files validate a build artifact, not source (local only)
+
+`@driftstack/api-types` declares `main: dist/index.js` and has no vitest alias, so
+every import resolves to the **built** copy. **192 test files import it** (plus 9
+importing `@driftstack/sdk`). A local `npm test` does **not** rebuild, so those
+files assert against whatever `dist/` happens to contain — here, a build dated
+**Jul 14** against source modified since.
+
+**CI is not affected**: `.github/workflows/ci.yml` runs `npm run build` before the
+test job, so CI always tests a fresh artifact. **The local loop is the hazard** — a
+developer changes a constant in `packages/api-types/src`, runs the suite, sees
+green, and the change was never exercised.
+
+_How it was found:_ three mutations of `MAX_SESSION_MINUTES_PER_TIER` failed to
+red anything while proving item 5's guard. A mutation that changes nothing looks
+exactly like a guard that is too weak.
+
+_Doing nothing:_ CI still catches it, one push later, with a failure that does not
+point at the cause. _Recommendation:_ pick one — a vitest alias mapping
+`@driftstack/*` to `src`, or a `pretest` build step. **A2 did not choose**: the
+alias changes what 192 files actually test (source rather than the artifact CI
+builds), and the build step slows every local run. Either is a workflow decision
+rather than a defect fix. A targeted mitigation is in place for the one table that
+mattered here — `an-unbounded-paid-session-is-a-visible-choice` reads the cap
+table from source and asserts the built copy agrees.
 
 ### 6. Unrecognised request fields are silently dropped
 
