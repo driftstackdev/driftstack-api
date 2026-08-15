@@ -3898,3 +3898,67 @@ ones that only assert a final count are not.
 Demonstrating this particular lock needs forced interleaving — an advisory-lock
 choreography or a driver-level barrier between the count and the insert — not a
 faster race. Left named rather than claimed.
+
+## 6s — proving the cap lock, after three attempts that could not
+
+6r left this named rather than claimed: demonstrating the profile cap's
+`FOR UPDATE` needs forced interleaving, not a faster race. Done here, and the
+route to it is more useful than the result.
+
+### Three attempts that proved nothing
+
+| attempt                                        | outcome with `.for('update')` deleted |
+| ---------------------------------------------- | ------------------------------------- |
+| existing 8-way race, `max: 1` pool             | green — the pool serialised it        |
+| same race, `max: 8` pool                       | green — window too narrow to hit      |
+| two-backend probe outside vitest               | green — same reason                   |
+| **forced ordering, holder takes `FOR UPDATE`** | **green — and this one was subtler**  |
+
+The fourth is the instructive one. Holding `FOR UPDATE` on the account row and
+asserting that `insertWithLimit` blocks LOOKS like a direct test of the lock. It is
+not: an INSERT into `profiles` takes a **`FOR KEY SHARE`** lock on the referenced
+`accounts` row for its foreign key, and KEY SHARE conflicts with FOR UPDATE. So the
+call blocked either way — the test was observing the FK's lock, not the repo's, and
+would have shipped as a guard that guards nothing.
+
+### What actually isolates it
+
+The lock MODE is the entire experiment. Hold **`FOR KEY SHARE`** instead:
+
+- it conflicts with the repo's `FOR UPDATE`, so the guarded path blocks;
+- it is compatible with the FK's own KEY SHARE, so an unguarded path sails through.
+
+Result: lock present → blocks, holder commits, insert completes, one row. Lock
+deleted → _"insertWithLimit must be waiting on the account row lock, not proceeding
+past it: expected true to be false"_.
+
+⭐ **The profile cap's `FOR UPDATE` is load-bearing, and that is now measured rather
+than argued.** Everything I wrote about it in 6r was reasoning from construction;
+this is the first evidence.
+
+### The transferable part
+
+A blocking assertion is only about the lock you think it is if no OTHER lock in the
+statement conflicts with the holder's mode. An FK insert quietly takes KEY SHARE on
+its parent, so any "does it block on the parent row" test in this repo has the same
+trap. The fix is not more waiting — it is choosing a holder mode that conflicts
+with the guard under test and with nothing else.
+
+That also sharpens 6r's rule. A green concurrency test needs the interleaving to
+have occurred AND the observed effect to be attributable to the mechanism under
+test. The first is about timing; the second is about lock modes, and it is the one
+that fooled me here.
+
+⚠️ Two hook rejections on the way in, both from the same root and worth separating.
+`pending` was assigned inside the `begin` callback, and TypeScript does not narrow
+across that boundary: first the tests typecheck rejected a cast from a
+null-inclusive type, then — after I "fixed" it with a null check — eslint rejected
+`await pending` as awaiting a non-Promise, because the check had narrowed the
+handle to `never`. Both are the same mistake wearing different clothes: a mutable
+handle assigned in a callback is not a value the type system can reason about.
+
+Restructured with an explicit one-shot latch, so the lock acquisition, the probe,
+and the release are three ordered steps with no cross-callback assignment at all.
+That reads better than what I started with, and the mutation was re-proved
+afterwards rather than assumed to survive the rewrite — the arm still reds with
+`.for('update')` deleted.
