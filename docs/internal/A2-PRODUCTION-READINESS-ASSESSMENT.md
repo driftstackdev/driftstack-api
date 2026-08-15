@@ -1796,12 +1796,33 @@ is `services/auth.ts:532`, the non-fall-through `InvalidKeyError` in
 That leaves **six genuinely actionable**, and one is an authorization boundary
 rather than a residual:
 
-- ⭐ `routes/profile-snapshots.ts:44` — `'Snapshot writes on a team owner require
-admin role.'` A non-admin team member must not write snapshots on the owner's
-  account. That is team RBAC, it is the only thing enforcing it on this route,
-  and it has never run. **Next slice.**
-- `routes/agent-sessions.ts:3916` (`'Owner account tier is unavailable.'`), 4632
-- `routes/sessions.ts:345`
+- ✅ `routes/profile-snapshots.ts:44` — the snapshot-write RBAC gate.
+  **Closed 2026-08-15** (`profile-snapshots-team-write-requires-admin`): 6 arms
+  across all three routes the gate guards, 5 mutations, all red.
+
+  ⛔ Two of those mutations — a route silently dropping the shared helper — are
+  **invisible to the source pin**, which keeps matching the `throw` and the
+  `!== 'admin'` while that write path stands open to any team member. The gate
+  being CORRECT and the gate being REACHED are different properties, and only one
+  is visible in source text. That is why the file drives capture, restore and
+  delete rather than proving the helper throws once.
+
+  ⚠️ **The gate enumeration here was wrong, twice over.** It first said five such
+  gates existed, from a grep for `require admin role` — which misses the
+  `requires` verb form. Verb-agnostic there are **11**, and checked per-site
+  against the coverage statementMap: **9 executed, 2 cold**. One was this
+  snapshot gate; the other is below. Third time this session a too-narrow pattern
+  under-reported, always in the same direction.
+
+- ⭐ `routes/sessions.ts:345` — `'Launching a profile on a team owner requires
+admin role on that team.'` The profile-launch RBAC gate (handler at
+  `sessions.ts:307`). Never executed. **Next slice**, same shape as the snapshot
+  one and the harness pattern is proven: `buildTestApp` +
+  `fx.authRepo.setTeamMemberships(fx.accountId, [{…, role: 'member'}])` +
+  `x-driftstack-account: acc_<owner>`.
+- `routes/agent-sessions.ts:3916` — `'Owner account tier is unavailable.'` is a
+  WIRING guard (`authRepo === undefined`), fail-closed for a route registered
+  without its dependency, not a customer-reachable path. Also `:4632`.
 - `services/auth.ts:398`, `:401` — the API-key cache-revalidation branch
 
 Measured 2026-08-15 by intersecting per-line coverage with every
