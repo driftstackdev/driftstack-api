@@ -92,3 +92,57 @@ The control plane + customer surfaces are **v1-complete and prod-stable**. The
 two things standing between "demo" and "real launch" are both outside pure A2:
 **a real driver (Mac + A1 fork)** and **the webhook delivery worker**. The
 founder-data gates (R2, Stripe) are minutes of work once values arrive.
+
+---
+
+## VERIFICATION 2026-08-15 — what has changed since this was written
+
+This document is dated **2026-06-11** and was accurate then. It is now **two
+months old**, and a readiness doc that is read as current is worse than one that
+is obviously stale, because its blockers get planned around. Re-checked against
+the code today; the original text above is left intact as the record.
+
+### 🔴 → ✅ Blocker 2 (webhook delivery worker) has SHIPPED
+
+The doc says "the API enqueues deliveries but no prod driver POSTs them (0
+endpoints fire)… Needed before webhooks are a real customer feature."
+
+**That is no longer true.** `lib/bootstrap.ts` constructs a `WebhookDeliveryWorker`
+and runs it on a poller. It is not a stub: the tick **drains** (keeps claiming
+while the previous batch came back full), bounded by a maximum batch count and a
+wall-clock budget inside the poll interval, with an overlap guard so a slow drain
+cannot multiply in-flight deliveries, per-attempt timeouts, and both delivery
+metrics wired. The source also records the bug that made those counters
+unincrementable in production, now fixed.
+
+**Do not plan around this blocker.** Whether it is ENABLED on the prod host is a
+deployment question I cannot answer from the repo — see the limits below — but
+the "no worker exists" statement is stale.
+
+### Minor drift
+
+- "errors.driftstack.dev (all **29** type-URIs)" — `PROBLEM_TYPES` now carries
+  **32**. The cross-SDK parity test separately pins 24 as the canonical subset
+  every SDK must map, which is a different number for a different reason and is
+  not drift.
+
+### What I did NOT verify, and why
+
+Three of this document's claims need the production host, and A2 does not take
+SSH without an explicit live-bus grant:
+
+- **`driver=mock` in prod** (blocker 1) — unverified. The A1-fork + A3-runtime
+  split it describes is cross-agent and outside A2 regardless.
+- **R2 / Stripe env keys** (the two founder-data gates) — unverified.
+- **GitHub Actions dead since 2026-06-08** — unverified from the repo.
+
+Stating these as unverified rather than assuming they still hold is the point:
+the two months that made blocker 2 stale applied to them equally.
+
+### How to keep this from recurring
+
+The failure mode is not that the doc was wrong — it was right on 2026-06-11. It
+is that nothing in it said **when to distrust it**. Anything that reads as a
+launch decision input needs a re-verification date, and the cheapest version is
+the one used here: re-check only the claims the repo can settle, and mark the
+rest unverified rather than silently carrying them forward.
