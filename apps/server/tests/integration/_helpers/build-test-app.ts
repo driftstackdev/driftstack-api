@@ -251,6 +251,19 @@ export interface TestAppOptions {
    * was unreachable too.
    */
   signupTier?: AccountTier;
+  /**
+   * Build as a deployment with `PROFILE_MASTER_KEY` absent. Unset ⇒ the fixed
+   * test key, which is what every other fixture wants.
+   *
+   * bootstrap.ts logs that with the key unset "encrypted account proxies are
+   * unreadable and credentialed writes fail closed". That promise is kept by two
+   * refusals in `account-me.ts` — one for a proxy password, one for a VPN secret
+   * — and neither had ever executed, because no fixture could produce the
+   * configuration they exist for. A deployment that lost the key must refuse the
+   * write; the alternative is a proxy password or a WireGuard private key
+   * written to the database in the clear.
+   */
+  profileMasterKeyUnset?: boolean;
   /** Email admitted by the requireOwner gate. Unset → the gate stays
    *  fail-closed, which is the default posture for every other suite. */
   ownerEmail?: string;
@@ -1420,7 +1433,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // ARC A — per-account customer proxies repo + a fixed test master key so the
   // /v1/account/me/proxies routes are live and password-wrapping is exercised.
   const accountProxiesRepo = new InMemoryAccountProxiesRepo();
-  const proxyMasterKey = Buffer.alloc(32, 7);
+  // `profileMasterKeyUnset` reproduces a deployment with PROFILE_MASTER_KEY
+  // absent. bootstrap.ts sets the same buffer to null there and logs that
+  // "encrypted account proxies are unreadable and credentialed writes fail
+  // closed" — null is what makes those writes fail closed, so it has to be the
+  // same null, not a separate flag the route consults.
+  const proxyMasterKey = opts.profileMasterKeyUnset === true ? null : Buffer.alloc(32, 7);
   const accountProxiesService = new AccountProxiesService(accountProxiesRepo, proxyMasterKey);
   // V-225 — accountAudit wired for profile.{created,deleted}.
   const profilesService = new ProfilesService(profilesRepo, accountAuditService);

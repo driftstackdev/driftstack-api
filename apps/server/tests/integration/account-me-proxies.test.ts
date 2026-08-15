@@ -996,3 +996,124 @@ describe('proxy audit emit — egress-config changes land in the account audit l
     expect(entries.some((e) => e.target_resource_id === `proxy_${id}`)).toBe(true);
   });
 });
+
+// ─── a deployment that lost PROFILE_MASTER_KEY must refuse credentialed writes ──
+//
+// bootstrap.ts logs, when the key is absent:
+//
+//     'PROFILE_MASTER_KEY not set — encrypted account proxies are unreadable
+//      and credentialed writes fail closed'
+//
+// That promise is kept by two refusals in `account-me.ts`, one for a proxy
+// password and one for a VPN secret, and NEITHER had ever executed — measured
+// with v8 coverage at HEAD. No fixture could produce the configuration they
+// exist for: the harness hard-coded a master key, so the null branch was
+// unreachable rather than untested. `profileMasterKeyUnset` is that seam.
+//
+// ⚠️ What the stake is, MEASURED rather than assumed. My first draft of this
+// comment said that without the guard a password or private key is written in
+// the clear. It is not: removing the guard makes `encryptAccountProxySecret`
+// fault on the null key and the request answers **500**. There are two layers,
+// and this one is not the last line against plaintext.
+//
+// What it actually owns is the CONTRACT bootstrap.ts advertises — fail closed,
+// visibly, with an operator-actionable reason. The difference between a 503
+// saying "encryption not configured" and an opaque 500 is the difference between
+// an operator who knows the key is missing and one who files a crash report.
+// That is worth pinning on its own, and it is what these arms pin.
+//
+// The arms assert the properties, not the message: NOTHING is persisted (both
+// wraps run before the insert, so a stored row would mean the guard moved below
+// the work it precedes), and the submitted credential appears nowhere in the
+// response.
+//
+// ⭐ The third arm is the one that makes the other two mean anything. With the
+// key unset, a proxy carrying NO credential must still be created: the feature
+// is not switched off, only the credentialed path fails closed. Without it, a
+// build that refused every proxy write would satisfy both refusal arms.
+//
+// LEDGER — control 40/40:
+//
+//   password wrap stops checking for the key           1 red
+//   VPN wrap stops checking for the key                1 red
+//   password wrap accepts anything non-undefined       1 red
+//   the `profileMasterKeyUnset` seam removed           2 red
+//
+// The third is the narrowing mutation rather than a deletion: `=== null` becomes
+// `=== undefined`, so the guard is still present, still reads correctly, and
+// still fires for a caller who never configured the field at all — while the
+// actual production shape, an explicit null from `decodeMasterKey` not being
+// called, sails through. Deleting a guard is caught by almost anything.
+//
+// The fourth reds only the two refusal arms and leaves the positive control
+// green, which is the right shape: removing the seam restores a configured key,
+// so a no-credential create still succeeds.
+describe('POST /v1/account/me/proxies with PROFILE_MASTER_KEY unset', () => {
+  it('503: a proxy password is refused rather than stored in the clear', async () => {
+    fx = await buildTestApp({ profileMasterKeyUnset: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'home', host: '1.2.3.4', port: 1080, username: 'u', password: 'hunter2' },
+    });
+    expect(create.statusCode).toBe(503);
+    expect(create.json<{ detail: string }>().detail).toMatch(/encryption not configured/i);
+    // The plaintext must not survive anywhere in the refusal either.
+    expect(create.body).not.toContain('hunter2');
+
+    // The property, not the message: nothing was persisted. The refusal happens
+    // before the insert, so a stored row would mean the guard moved below the
+    // work it exists to prevent.
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json<{ data: ProxyMeta[] }>().data).toHaveLength(0);
+  });
+
+  it('503: a WireGuard private key is refused rather than stored in the clear', async () => {
+    fx = await buildTestApp({ profileMasterKeyUnset: true, tier: 'enterprise' });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        label: 'wg',
+        scheme: 'wireguard',
+        host: '1.2.3.4',
+        port: 51820,
+        wireguard: {
+          private_key: 'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=',
+          peer_public_key: 'AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=',
+          endpoint: '1.2.3.4:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      },
+    });
+    expect(create.statusCode, create.body).toBe(503);
+    expect(create.json<{ detail: string }>().detail).toMatch(/VPN proxies are unavailable/i);
+    expect(create.body).not.toContain('AgICAgICAgICAgICAgICAgIC');
+
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    expect(list.json<{ data: ProxyMeta[] }>().data).toHaveLength(0);
+  });
+
+  it('201: a proxy with NO credential is still created, so the refusals above are about the SECRET and not the feature', async () => {
+    fx = await buildTestApp({ profileMasterKeyUnset: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'open', host: '1.2.3.4', port: 1080 },
+    });
+    expect(create.statusCode, `no-credential create returned ${create.statusCode}`).toBe(201);
+    expect(create.json<ProxyMeta>().has_password).toBe(false);
+  });
+});
