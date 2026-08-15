@@ -742,3 +742,52 @@ describe('GET/PUT /v1/account/me/organization (per-account org-sync phase 3)', (
     expect(res.statusCode).toBe(400);
   });
 });
+
+// ─── avatar upload: the emptiness check ─────────────────────────────────────
+//
+// Added 2026-08-15. `POST /v1/account/me/avatar` had no arms; its
+// `'Avatar image is empty.'` refusal had never executed.
+//
+// Reaching it takes a specific payload, and finding that out corrected a
+// finding I had half-written. The schema already carries
+// `.regex(/^[A-Za-z0-9+/=]+$/)`, so ordinary junk ('!!!!', 'not base64') is a
+// Zod 400 long before the route runs. What slips through is a string of pure
+// PADDING: '====' satisfies both `.min(4)` and the regex, and decodes to zero
+// bytes. That is the only way in.
+//
+// The sibling branch at account-me.ts:776, `'data_base64 is not valid base64.'`,
+// is DEAD CODE for two independent reasons and is deliberately not covered:
+// `Buffer.from(x, 'base64')` never throws — verified, it silently drops
+// non-alphabet characters — and the schema regex has already rejected anything
+// that would make it throw. It is left in place because it costs nothing and a
+// change to either the regex or the decode call would make it live again.
+
+describe('POST /v1/account/me/avatar — emptiness', () => {
+  it('CRITICAL a payload that decodes to zero bytes is refused. Pure base64 padding passes both the length floor and the character-class regex, so the schema cannot catch it; without this check a customer would get an "avatar" that is a zero-byte object in the public bucket, and every surface rendering it would show a broken image rather than the initials fallback.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { content_type: 'image/png', data_base64: '====' },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/empty/i);
+  });
+
+  it('CRITICAL a real payload still uploads, so the arm above is about emptiness rather than avatar upload being broken. Asserted because a route that refused every upload would satisfy the refusal arm and look correct.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      // A few real bytes — the route stores what it is given; format validation
+      // is the content_type enum's job, not this branch's.
+      payload: { content_type: 'image/png', data_base64: Buffer.from('hello').toString('base64') },
+    });
+    expect(res.statusCode, 'accepted').toBe(200);
+    expect(res.json<{ avatar_url: string | null }>().avatar_url, 'and a URL comes back').toEqual(
+      expect.any(String),
+    );
+  });
+});

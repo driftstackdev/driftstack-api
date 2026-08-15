@@ -2008,17 +2008,36 @@ test, or declared" — was checked against the coverage data and disagrees on 4 
 8–11% without any test importing it. A 92%-accurate ratchet would spend more on
 its exception list than it earns.
 
-### 5f. 31 of 108 security denial paths had never executed — now 8, all residuals
+### 5f. 31 of 108 security denial paths had never executed — now 8, all residuals (measured at HEAD)
 
-✅ **RE-MEASURED 2026-08-15 with the proper instrument: 13 of 108.** Five of those 13 have since been closed — `profile-snapshots.ts:44`, `services/auth.ts:398`, `:401`, `sessions.ts:345` and `agent-sessions.ts:4632` — so the current figure is **8 by arithmetic, not by re-measurement**: the coverage snapshot predates those tests and no new run has been taken. Stated that way deliberately, since the whole point of this item was replacing an estimate with a measurement.
+✅ **RE-MEASURED at HEAD, 2026-08-15 (second run): 8 of 108.** A fresh
+`coverage-final.json` was generated against current HEAD — the previous snapshot
+predated roughly ten slices, so every figure derived from it had become
+arithmetic rather than measurement, and this item exists precisely to avoid that.
 
-✅ **Every ACTIONABLE site in that population is now closed.** The 8 that remain are all residuals, each verified individually below: **6** owner-vanished null checks (unreachable because `findTeamMemberships` filters owner status in SQL one layer up), **1** wiring guard (`agent-sessions.ts:3916`, `authRepo === undefined`), and **1** unreachable branch (`services/auth.ts:532`, the non-fall-through `InvalidKeyError` in `slowPathApiKey`, whose only caller always passes `fallThroughOnPrefixMiss: true`). None is a customer-reachable refusal, and each is documented rather than left as an open number. The original
-31 came from an earlier coverage snapshot; this run regenerated
-`coverage-final.json` (whole workspace, `DATABASE_URL` set so the 65 `db-*` files
-execute) and intersected its `statementMap` with every deny site, same
-definition as before. The work in this and the preceding fires — the MFA gate,
-the login mapper, both auth slow paths, the OAuth bearer path — accounts for the
-difference.
+⭐ **The arithmetic held.** The interim figure was stated as "8 by arithmetic, not
+by re-measurement"; the measurement returns **8**, and the same 8 sites named
+individually. Labelling it rather than asserting it cost nothing and the label
+turned out to be conservative in the right direction.
+
+_Repo-wide over the same run:_ **1,175 throw sites, 188 never executed** — down
+from 202 at the previous snapshot, i.e. 14 closed by the intervening work.
+
+**All 8 remaining are residuals, each verified individually:**
+
+| site                       | why it is a residual                                      |
+| -------------------------- | --------------------------------------------------------- |
+| `admin.ts:183`, `:220`     | owner-vanished null check                                 |
+| `agent-sessions.ts:3920`   | owner-vanished null check                                 |
+| `profile-snapshots.ts:217` | owner-vanished null check                                 |
+| `profiles.ts:347`, `:411`  | owner-vanished null check                                 |
+| `agent-sessions.ts:3916`   | wiring guard (`authRepo === undefined`)                   |
+| `services/auth.ts:532`     | only caller always passes `fallThroughOnPrefixMiss: true` |
+
+The six owner-vanished checks are unreachable because `findTeamMemberships`
+filters owner status **in SQL** one layer up, so a non-active owner never
+produces a grant. **No customer-reachable security refusal in this population is
+now unexecuted.**
 
 _The wider picture from the same data, which had never been taken:_ **1,175
 `throw new …Error(` sites under `apps/server/src`, of which 202 have never

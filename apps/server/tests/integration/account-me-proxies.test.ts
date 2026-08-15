@@ -607,6 +607,56 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
     expect(res.json<{ detail: string }>().detail).toMatch(/metadata|private|loopback/i);
   });
 
+  // ─── update-body validation surfaces the SPECIFIC reason ──────────────
+  //
+  // Added 2026-08-15. The update route's schema refusal had no arms, and its
+  // validation is deliberately unlike the rest of the codebase: instead of `ValidationError(parsed.error.flatten())`
+  // it lifts the FIRST zod issue message into a `BadRequestError`. That choice
+  // is what turns "your update was rejected" into "port must be <= 65535", and
+  // nothing exercised it.
+
+  it('CRITICAL an invalid update body is refused with the SPECIFIC schema reason, not a generic message. The route lifts the first zod issue into the detail on purpose; losing that leaves a customer editing a proxy with no indication of which field they got wrong.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: { label: 'patchable', host: 'proxy.example.test', port: 1080 },
+    });
+    expect(created.statusCode, 'seeded').toBe(201);
+    const id = created.json<ProxyMeta>().id;
+
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { scheme: 'socks5', port: 65536 },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    const detail = res.json<{ detail: string }>().detail;
+    expect(detail, 'the schema reason reaches the caller').toMatch(/65535|less than or equal/i);
+    expect(detail, 'not the generic fallback').not.toBe('Invalid proxy.');
+  });
+
+  it('CRITICAL a valid update still succeeds, so the arm above is about the MESSAGE rather than the update route being broken. Without this a build that refused every update would satisfy the refusal arm and look correct.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: { label: 'patchable-ok', host: 'proxy.example.test', port: 1080 },
+    });
+    const id = created.json<ProxyMeta>().id;
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { scheme: 'socks5', port: 1081 },
+    });
+    expect(res.statusCode, 'a legal update is accepted').toBe(200);
+    expect(res.json<ProxyMeta & { port: number }>().port).toBe(1081);
+  });
+
   it('a paid tier is unaffected — wireguard still registers', async () => {
     fx = await buildTestApp({ tier: 'api_starter' });
     const res = await fx.app.inject({
