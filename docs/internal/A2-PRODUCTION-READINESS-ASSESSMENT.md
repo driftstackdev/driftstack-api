@@ -1504,7 +1504,7 @@ verdict depends on something nobody chose. A single-run mutation ledger cannot
 see that class at all — which is an argument for re-running a ledger when the
 file it documents changes, not for trusting the number in the header forever.
 
-#### 5g. NEW — nine keyset guards seed tie groups; one was probabilistic, eight unmeasured
+#### 5g. NEW — nine keyset guards seed tie groups; one was probabilistic, now all measured
 
 The `admin-accounts` finding above raises an obvious question about its
 neighbours, and it should not be answered by assertion. **Nine `db-*` files seed
@@ -1516,9 +1516,42 @@ a deliberate `created_at` tie group** to guard a compound-cursor tiebreaker:
 `db-profiles-repo-keyset-drizzle`, `db-rate-limit-overrides-repo-keyset-drizzle`,
 `db-sessions-repo-keyset-drizzle`.
 
-**Status: 1 measured (probabilistic, now fixed), 8 unmeasured.** No claim is made
-about the eight either way. Two things are known about them and neither settles
-it:
+✅ **RESOLVED 2026-08-15 — all nine measured, all nine now stable.** Each repo's
+compound `ORDER BY` had its `id` half stripped, and the guarding test was then
+run **5×**. A stable guard reds 5/5; anything less reports "fine" some fraction
+of runs on a live pagination bug.
+
+| guard                                         | detection                    |
+| --------------------------------------------- | ---------------------------- |
+| `db-account-audit-repo-keyset-drizzle`        | 5/5                          |
+| `db-admin-audit-repo-keyset-drizzle`          | 5/5                          |
+| `db-api-keys-repo-keyset-drizzle`             | 5/5                          |
+| `db-durable-webhook-list-keyset-drizzle`      | 5/5                          |
+| `db-legal-repo-drizzle`                       | 5/5                          |
+| `db-profiles-repo-keyset-drizzle`             | 5/5                          |
+| `db-rate-limit-overrides-repo-keyset-drizzle` | 5/5                          |
+| `db-sessions-repo-keyset-drizzle`             | 5/5                          |
+| `db-admin-accounts-repo-drizzle`              | 5/5 _(was 3/4; fixed above)_ |
+
+So `admin-accounts` was the **only** weak one, and the eight neighbours were
+sound. The tie-group-larger-than-the-page-size construction they share is what
+makes the difference: it forces the group to span a page boundary every run,
+where `admin-accounts` seeded 4 tied rows through pages of 2 and could land a
+boundary that happened not to expose the bug.
+
+⛔ **A near-miss worth recording, because it would have been a confident wrong
+finding.** The first sweep reported `db-durable-webhook-list-keyset-drizzle` as
+**0/5 — BLIND**, a keyset guard that could not see its own tiebreaker vanish.
+It was wrong. The driver mutated `src/db/webhooks-repo.ts`, and that test drives
+`DurableWebhookDeliveryService`, whose list keyset lives in
+`src/services/durable-webhook-delivery.ts:218`. Mutating a file the test never
+executes produces exactly the signature of a blind guard. Re-run against the
+right source: 5/5. **A derived measurement is only as good as the key it was
+computed against, and "no reds" is the one result that looks identical whether
+the guard is blind or the instrument is pointed at nothing.**
+
+_Superseded framing, kept because the reasoning was sound at the time:_ two
+things were known about the eight and neither settled it:
 
 - They are built more strongly than `admin-accounts` was — each seeds a tie group
   **larger than the page size** (typically 5 tied rows through pages of 2), which
@@ -1538,8 +1571,9 @@ the hand-verified version. Both errors are the same one — trusting a pattern's
 output as a measurement — and the second was more dangerous, because a smaller
 number reads like a more careful result.
 
-_Next:_ apply the tiebreaker mutation to each of the eight and run it 5× per
-file, hardening any whose detection is not 5/5. Estimated 40 runs.
+_Done:_ 45 runs across nine files (5 per file, plus the re-run against the
+corrected source). No further hardening needed — `admin-accounts` was the only
+guard that required a change.
 
 ⚠️ **`validation-schedules-repo` changed what this item means.** It was not an
 uncovered repo sitting unguarded — a source pin
