@@ -286,3 +286,129 @@ describe('Arc 2 v2-#8 sub-slice 8.4 GET /v1/agent-sessions/:id/gui-control-key',
     expect(mint.statusCode).toBe(200);
   });
 });
+
+// ─── a control key is scoped to ONE session ────────────────────────────────
+//
+// Found by asking a different question than "which lines are cold". A census of
+// guard CONDITIONS across src/ showed `guiControlKeyAuthorized !== true` at
+// FOURTEEN sites, and the flag itself set at three independent ones
+// (`agent-sessions.ts`, `agent-sessions-livekit-token.ts`,
+// `agent-sessions-transport-report.ts`). Every one of those fourteen uses the
+// flag to SKIP the account-ownership check, on the reasoning recorded in the
+// source: "the key was already decrypt-matched against THIS session in the
+// preHandler, so it is authorized for this one session".
+//
+// That reasoning is load-bearing and nothing tested it. This file covers
+// minting, TTL, and the cross-ACCOUNT guard on minting — but never USING a key
+// from one session against another. If the decrypt-match were keyed on anything
+// but the URL's session id, one leaked control key would authorize operations on
+// every session in the deployment, and fourteen routes would skip ownership for
+// it.
+//
+// ⭐ The arms are per SITE, not per rule: three files set the flag, so the rule
+// is implemented three times. That is the pattern that produced six findings in
+// a day — a rule written more than once and tested in only some of its copies.
+//
+// LEDGER — control 13/13:
+//
+//   key comparison accepts ANY presented value   1 red
+//   decrypt AAD drops the sessionId              1 red
+//   length check dropped (prefix accepted)       SURVIVES
+//
+// ⚠️ The first row only reds because session B is given its OWN key. The first
+// version of this fixture minted a key for A alone, and then A's key on B was
+// refused by the "this session has no key" branch — the comparison was never
+// reached, and a build accepting ANY presented value passed every arm. The
+// fixture had to be made realistic before the assertion meant anything.
+//
+// The survivor is honest and expected: the plaintext format is fixed-length
+// (`gck_` + 32 base32 chars), so two real keys always compare equal-length and
+// the length short-circuit never discriminates here. It guards a
+// differing-length presented value, which this fixture cannot produce without
+// forging a header — a different test than "one session's key on another".
+describe("a gui control key does not authorize another session's routes", () => {
+  let fx2: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx2) await fx2.cleanup();
+  });
+
+  async function twoSessionsAndAKeyForTheFirst(): Promise<{
+    a: string;
+    b: string;
+    keyForA: string;
+  }> {
+    fx2 = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+    const auth = { authorization: `Bearer ${fx2.plaintext}` };
+    const mk = async (mode: 'manual' | 'pair'): Promise<string> => {
+      const res = await fx2.app.inject({
+        method: 'POST',
+        url: '/v1/agent-sessions',
+        headers: auth,
+        payload: { token_budget: 50_000, mode },
+      });
+      expect(res.statusCode, res.body).toBe(201);
+      return res.json<{ id: string }>().id;
+    };
+    const a = await mk('pair');
+    const b = await mk('pair');
+    const mintFor = async (id: string): Promise<string> => {
+      const res = await fx2.app.inject({
+        method: 'GET',
+        url: `/v1/agent-sessions/${id}/gui-control-key`,
+        headers: auth,
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      return res.json<{ gui_control_key: string }>().gui_control_key;
+    };
+    const keyForA = await mintFor(a);
+    // ⚠️ B gets its OWN key too, and that is not incidental. Measured: without
+    // it, B has no stored ciphertext at all, so A's key is refused by the
+    // "this session has no key" branch and the comparison is never reached —
+    // the arms passed while a mutation that accepted ANY presented value
+    // survived. Giving B a real key of its own is what makes the COMPARISON the
+    // only thing that can refuse.
+    await mintFor(b);
+    return { a, b, keyForA };
+  }
+
+  it("CRITICAL session A's control key cannot drive session B through the shared preHandler. Fourteen routes skip the ownership check on this flag, so a key that authorized any session would bypass ownership on all of them.", async () => {
+    const { b, keyForA } = await twoSessionsAndAKeyForTheFirst();
+    const res = await fx2.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${b}/mode`,
+      headers: { 'x-driftstack-gui-control-key': keyForA, 'content-type': 'application/json' },
+      payload: { mode: 'manual' },
+    });
+    // No account bearer is sent, so the ONLY thing that could authorize this is
+    // the key — and it belongs to a different session.
+    expect(res.statusCode, `A's key on B returned ${res.statusCode}`).toBeGreaterThanOrEqual(400);
+    expect(res.statusCode).toBeLessThan(500);
+  });
+
+  it("CRITICAL the same key cannot reach session B's transport-report either — a SECOND file sets the flag, with its own copy of the validation", async () => {
+    const { b, keyForA } = await twoSessionsAndAKeyForTheFirst();
+    const res = await fx2.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${b}/transport-report`,
+      headers: { 'x-driftstack-gui-control-key': keyForA, 'content-type': 'application/json' },
+      payload: { transport: 'udp', relayed: false, rtt_ms: 12, packet_loss_recent_pct: 0 },
+    });
+    expect(
+      res.statusCode,
+      `A's key on B's transport-report returned ${res.statusCode}`,
+    ).toBeGreaterThanOrEqual(400);
+    expect(res.statusCode).toBeLessThan(500);
+  });
+
+  it('the key DOES work on its own session, so the refusals above are about scope and not a key that never worked', async () => {
+    const { a, keyForA } = await twoSessionsAndAKeyForTheFirst();
+    const res = await fx2.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${a}/mode`,
+      headers: { 'x-driftstack-gui-control-key': keyForA, 'content-type': 'application/json' },
+      payload: { mode: 'manual' },
+    });
+    expect(res.statusCode, `A's key on A returned ${res.statusCode}`).toBe(200);
+  });
+});
