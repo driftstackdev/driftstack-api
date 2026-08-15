@@ -667,6 +667,57 @@ describe('DELETE /v1/sessions/:id', () => {
     expect(body.type).toBe(PROBLEM_TYPES.SessionDestroyed);
   });
 
+  // Swept services/sessions.ts — all 19 refusal sites against 212 session tests.
+  // Five uncovered; this is the one that is a customer-visible behaviour rather
+  // than an internal invariant.
+  //
+  // ⚠️ `destroy` has THREE copies of the not-found refusal and the other two are
+  // covered. This one is the outcome of the serialized destroy itself: the
+  // compare-and-set reports the row was never there, as opposed to the earlier
+  // reads that look it up. Sixth time today that a rule implemented more than
+  // once was tested in only some of its copies.
+  //
+  // 204-on-repeat is the neighbouring case and is already covered: destroying an
+  // ALREADY-DESTROYED session is idempotent, not an error. So the two outcomes
+  // must stay distinguishable — a session that never existed is a 404, and one
+  // that existed and is gone is a success.
+  //
+  // LEDGER — control 56/56:
+  //
+  //   :1071 destroy not_found neutralized           1 red
+  //   not_found COLLAPSED into already_terminal     1 red
+  //
+  // The second row is the realistic regression: someone simplifying "both mean
+  // there is nothing to destroy" into one `return` makes every unknown id answer
+  // 204. That is not a refusal being removed — it is a 404 becoming a success,
+  // so a client deleting the wrong id is told the deletion worked.
+  it('CRITICAL 404 destroying a session id that was never created, while a repeat destroy of a REAL session stays idempotent — the two must not collapse', async () => {
+    fx = await buildTestApp();
+    const unknown = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/sessions/ses_00000000-0000-4000-8000-0000000000ff',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(unknown.statusCode, unknown.body).toBe(404);
+
+    // The contrast that makes the 404 mean something: a real session destroyed
+    // twice answers 204 both times. Without this half, a build that 404'd every
+    // destroy would satisfy the assertion above.
+    const session = await createSession(fx);
+    const first = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/sessions/${session.id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(first.statusCode).toBe(204);
+    const second = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/sessions/${session.id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(second.statusCode, 'a repeat destroy is idempotent, not a 404').toBe(204);
+  });
+
   it('serializes five concurrent deletes into one driver call, event, and customer audit', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const session = await createSession(fx);
