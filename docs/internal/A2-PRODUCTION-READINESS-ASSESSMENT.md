@@ -2472,6 +2472,75 @@ parameter), so the migration is not free — it trades one generic function for 
 regex per resource. That is the actual trade, stated so the next person can weigh
 it rather than reading this as "the admin routes are wrong".
 
+### 5w. The e2e suite is green — verified at HEAD, and here is how to re-verify it in 45s
+
+**199 passed, 43.4s**, run today against HEAD. Recorded with the command because
+the reason this suite rots is not that it is broken — it is that nobody runs it.
+
+    cd apps/server
+    DATABASE_URL="postgres://$USER@localhost:5432/driftstack_e2e_a2" \
+    REDIS_URL="redis://localhost:6379/9" \
+    npx playwright test --config=playwright.config.ts
+
+⚠️ **The Redis index is the whole trick, and it is why this had felt unsafe to
+run.** The e2e harness truncates twelve tables and calls `redis.flushdb()`. On the
+default index that would wipe whatever another agent has live on this machine —
+index 0 had 5 keys belonging to a concurrent writer while this ran. `flushdb`
+only clears the SELECTED index, so `/9` makes it inert: index 0 was still at 5
+keys afterwards, verified.
+
+⭐ Two things this settles that were previously assumption:
+
+- **The specs ARE type-checked.** `tsconfig.test.json` includes `tests/**/*`, so
+  `tests/e2e` is inside the gate's `the-server-source-type-checks` test. A renamed
+  export cannot rot them silently — structural drift reds the normal gate.
+- **They are NOT executed by it.** `vitest.config.ts` carries
+  `exclude: **/tests/e2e/**`, so none of ~30 full-gate runs today ran a single one.
+  Semantic drift — a spec asserting behaviour that has since changed — is the gap
+  the type-check cannot cover, and only running them closes it.
+
+The suite is self-contained (`startTestServer`, `workers: 1`), so it needs no
+docker-compose and no running server; the `test:e2e:setup` docker step in the root
+package.json is optional for this path, which is the other reason it looked more
+expensive than it is.
+
+### 5w-b. Two webhook delivery implementations, two different SSRF guards
+
+Chasing the e2e loopback spec nearly produced a false alarm, and the shape is
+worth recording because anyone reading that spec will hit it.
+
+There are **two** delivery implementations:
+
+- `packages/webhook-delivery` — `InMemoryWebhookDeliveryService.deliverOnce`,
+  guarded by `isLiteralUnsafeWebhookHost(url)`, a **string** check on the literal
+  host. This is the one the e2e spec's comment describes.
+- `apps/server/src/services/webhook-worker.ts` — `WebhookDeliveryWorker`, the one
+  **bootstrap actually runs**, guarded by `ssrfGuardedFetch`: a connection-time
+  DNS pin through undici that rejects a hostname resolving to a private or
+  internal target.
+
+⚠️ Searching the production worker for the string-check name returns **nothing**,
+which reads exactly like a missing guard. It is not: the production path uses the
+stronger of the two — a literal-host check cannot stop DNS rebinding, and a
+connection-time pin can.
+
+Both are covered, measured rather than assumed:
+
+- swapping the worker's default from `ssrfGuardedFetch` to the plain global fetch
+  **reds 3 tests**, so the default is protected;
+- the worker's drain bounds are covered (5t/`648745f91`);
+- the loopback refusal's WIRING is proved by the e2e spec — which is the half the
+  vitest gate cannot see, since tests inject `config.fetch` and bypass the
+  dispatcher by design.
+
+⭐ That last point is the reason 5w matters. The SSRF wiring proof lives **only**
+in the suite the gate never runs, so "e2e is green" is not a nice-to-have here —
+it is the only evidence that one specific guarantee holds end to end.
+
+⭐ The honest framing: a green suite that nothing runs is **evidence with an expiry
+date**. This entry is dated for that reason, exactly like 5t on the readiness doc —
+the number above is true for HEAD today and says nothing about HEAD next week.
+
 ## Current state
 
 Node suite **2,722 files / 27,557 passing** with `DATABASE_URL` set, so the
