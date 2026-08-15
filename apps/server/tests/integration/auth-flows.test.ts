@@ -2759,3 +2759,86 @@ describe('a vanished account cannot complete a flow it started', () => {
     expect(insertSession).not.toHaveBeenCalled();
   });
 });
+
+// ─── a suspended account is not SENT an actionable auth email ──────────────
+//
+// The guard-condition census found `account.status !== 'active'` at nine sites
+// in this service. Neutralizing each (making the refusal unreachable) showed
+// most are redundant with the `issueWebSession` chokepoint — a suspended account
+// cannot end up with a session even if a door-local check is removed.
+//
+// ⭐ These two are the exception, and that is why they matter. `requestMagicLink`
+// and `requestPasswordReset` do not mint anything: they SEND. Suppression here
+// is the only thing standing between a suspended account and a working sign-in
+// link in its inbox, and no session-minting chokepoint can cover it — the email
+// has already left.
+//
+// Both return `{ sent: false }` rather than an error, deliberately: telling an
+// unauthenticated caller "that account is suspended" would turn either endpoint
+// into an account-state oracle. So the assertion cannot be on the response
+// alone — it has to be that NO MAIL WAS PRODUCED.
+//
+// LEDGER — control 88/88:
+//
+//   :1079 magic-link suppression neutralized   1 red
+//   :1163 reset suppression neutralized        1 red
+//
+// ⚠️ Two methodological notes, both mistakes caught here rather than shipped.
+//
+// The census probe was run first with an INVERTING mutation (`!== 'NEVER'`, so
+// the guard always fires) and every one of the nine status guards reddened —
+// which reads like "all covered" and is not that question at all. Inverting
+// tests whether a guard is CONSULTED; neutralizing tests whether its refusal is
+// EXERCISED. Re-run neutralized, four of six were cold.
+//
+// And the first version of these arms read `repo.sentEmails`, which does not
+// exist — `?? 0` made both sides zero and the assertion vacuous while green. The
+// second version fabricated an account row for `seedAccount`, which is keyed by
+// id, so the real account stayed active and the arm failed loudly instead. Only
+// reading the row back and suspending THAT one drives the branch.
+describe('auth emails are suppressed for a suspended account', () => {
+  let fxs: TestAppFixture;
+
+  afterEach(async () => {
+    if (fxs) await fxs.cleanup();
+  });
+
+  async function suspendedThenAsk(
+    url: string,
+  ): Promise<{ status: number; mailsBefore: number; mailsAfter: number }> {
+    fxs = await buildTestApp();
+    const email = 'suppressed@driftstack.local';
+    const signup = await fxs.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email, password: 'correct horse battery staple' },
+    });
+    expect(signup.statusCode, signup.body).toBe(200);
+    await fxs.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: signup.json<{ debug_token: string }>().debug_token },
+    });
+    // Suspend through the repo the routes actually read. seedAccount is keyed
+    // by id, so the row has to be read back first — a fabricated row lands under
+    // a different key and leaves the real account active, which is exactly how
+    // the first version of this arm reported mail it should not have seen.
+    const row = await fxs.authFlowsRepo.findAccountByEmail(email);
+    expect(row, 'the signed-up account must be readable before suspending it').not.toBeNull();
+    fxs.authFlowsRepo.seedAccount({ ...row!, status: 'suspended' });
+
+    const before = fxs.emailSends.length;
+    const res = await fxs.app.inject({ method: 'POST', url, payload: { email } });
+    return { status: res.statusCode, mailsBefore: before, mailsAfter: fxs.emailSends.length };
+  }
+
+  it('CRITICAL no magic-link mail is produced for a suspended account. The response deliberately does not say why — telling an unauthenticated caller "suspended" would make this an account-state oracle — so the mailbox, not the status, is what the assertion has to read.', async () => {
+    const r = await suspendedThenAsk('/v1/auth/magic-link/request');
+    expect(r.mailsAfter, 'no magic-link mail was produced').toBe(r.mailsBefore);
+  });
+
+  it('CRITICAL no password-reset mail is produced for a suspended account either — the sibling copy of the same suppression, and the only guard standing between a suspended account and a working sign-in link', async () => {
+    const r = await suspendedThenAsk('/v1/auth/password-reset/request');
+    expect(r.mailsAfter, 'no reset mail was produced').toBe(r.mailsBefore);
+  });
+});
