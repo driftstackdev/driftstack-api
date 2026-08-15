@@ -98,14 +98,25 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     expect(body).not.toMatch(/Object\s*\n?\s*storage on Cloudflare R2 EU\./);
   });
 
-  it("'No behavioural data collection' posture: 'We don't log your destination URLs, response bodies, or session content. We don't train models on your traffic. We don't sell datasets. The control plane sees session metadata and license validity — that's the entire surface we touch.' — pinned so the 4-state no-collection commitment (no URL log + no body log + no training + no sale) + the 'metadata + license validity' scope all survive (drift to dropping would weaken the privacy posture marketing customers evaluate Driftstack on)", () => {
+  it("'No behavioural data collection' posture, corrected by V-789. This card used to say \"We don't log your destination URLs\" and close with \"That's everything we touch\" — a denial and a closed enumeration that BOTH contradicted Driftstack's own binding privacy policy (§3.3 lists target URL) and its own trust page (which answers 'Do you see our destination URLs?' with 'Yes'). Agent navigate intents carry a full url and are persisted verbatim into the transcript (agent-runtime.ts spreads decomposed.intents), and the driver path records origin. Three of four surfaces already matched the code; this page was the outlier. What is pinned now is the part that IS true, plus the pointer to the binding document instead of a marketing-side enumeration that can drift out of date.", () => {
     // S20c 2026-07-06 plain-language pass: the metadata+license scope
     // is now stated plainly ("its ID, when it started and stopped")
     // with the precise terms (control plane, session metadata) in
     // parens — same 4-state no-collection commitment, same scope.
     expect(body).toMatch(
-      /We don't log your destination URLs, response bodies, or\s+session content\. We don't train models on your traffic\. We\s+don't sell datasets\. Our coordination service \(the control\s+plane\) sees only the basics about each session — its ID,\s+when it started and stopped \(session metadata\) — and whether\s+your license is valid\. That's everything we touch\./,
+      /We don't log response bodies or session content, we don't\s+train models on your traffic, and we don't sell datasets\./,
     );
+    expect(body).toMatch(
+      /The control plane does record the navigations it coordinates\s+— the destination you ask it for, alongside session id,\s+timing, duration and outcome — because routing and billing\s+the work requires it\./,
+    );
+    // Per-occurrence negatives. A denial and a closure claim are the two shapes
+    // that made this false; both must stay gone, and the page must keep pointing
+    // at the binding document rather than re-enumerating categories itself.
+    expect(body, 'the URL denial must not return').not.toMatch(/don't log your destination URLs/);
+    expect(body, 'nor the closure claim').not.toMatch(/That's everything we touch/);
+    expect(body).toMatch(/href="\/legal\/privacy"/);
+    expect(body).toMatch(/href="\/trust"/);
+    expect(body).toMatch(/lists every\s+category in full/);
   });
 
   it("'Honest scope' posture pins shipped behavioural input and recipes without certification promises", () => {

@@ -75,10 +75,15 @@ describe('W367.A marketing-site /about page content parity', () => {
 
   it('no-behavioural-data 4 specifics pinned (URLs / bodies / training / sale)', () => {
     expect(body).toMatch(
-      /We don't log your destination URLs, response bodies, or\s+session content/,
+      // V-789 — the destination-URL denial was retracted; see
+      // marketing-site-pages-about-content-parity.test.ts for the full reasoning.
+      /We don't log response bodies or session content, we don't\s+train models on your traffic, and we don't sell datasets\./,
     );
-    expect(body).toMatch(/We don't train models on your traffic/);
-    expect(body).toMatch(/We\s+don't sell datasets/);
+    expect(body).toMatch(/we don't\s+train models on your traffic/i);
+    expect(body).toMatch(/we don't sell datasets/i);
+    expect(body, 'the retracted denial must not return').not.toMatch(
+      /don't log your destination URLs/i,
+    );
   });
 
   it('honest-scope does not advertise certification plans', () => {

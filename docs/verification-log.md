@@ -34280,3 +34280,52 @@ central claim I re-verified myself before acting — the report also asserted th
 pre-launch", which is not supported: `routes/sessions.ts:479` calls `service.guiInput` for real.
 
 `EXPECTED_TEST_FILES` 2732 → 2733.
+
+## V-789 — the about page denied logging destination URLs; the privacy policy, the trust page and the code all say otherwise (2026-08-15)
+
+`about.astro`, under the heading "No behavioural data collection", told customers:
+
+> We don't log your destination URLs, response bodies, or session content. … Our coordination
+> service (the control plane) sees only the basics about each session — its ID, when it started and
+> stopped (session metadata) — and whether your license is valid. **That's everything we touch.**
+
+Three of the four surfaces that describe this already agreed with the code, and this page was the
+outlier:
+
+- `legal/privacy.md` §3.3, the **binding** document, lists session metadata as "session id, account
+  id, **target URL**, archetype identifier, timestamps, duration, success/failure, aggregate
+  operation counts".
+- `trust/index.astro:233` asks "Do you see our destination URLs?" and answers **"Yes,** when you
+  send a navigate request or an agent plans one, Driftstack's control plane processes the
+  destination URL and records the navigation event for your account."
+- The code: `agent-decomposer.ts:149` types a navigate intent as `{ kind: 'navigate'; url: string }`
+  and `agent-runtime.ts:1148` spreads `intents: decomposed.intents` into the persisted transcript,
+  so a full URL is stored verbatim on the agent path. The driver path is genuinely minimised —
+  `session-event-metadata.ts:335-342` reduces any URL to `url.origin` — but an origin is still
+  destination data, and the page denied logging _any_.
+
+So a customer evaluating Driftstack on privacy read a denial on the about page that the company's own
+legal document contradicts. That is the worst direction for this class of error: the marketing
+surface under-claims relative to the binding one, on a fact a regulator or a plaintiff reads first.
+
+Two shapes made it wrong and both are now banned by name in the pins: a **denial** ("we don't log
+X") and a **closed enumeration** ("that's everything we touch"). The replacement keeps the three
+commitments that are true — no response bodies or session content, no model training, no dataset
+sales — states plainly that navigations are recorded and why, and then points at the privacy policy
+and trust page instead of re-enumerating categories on a marketing page where they go stale.
+
+**Five assertions across three pin files froze it, and the test run found the last two.** After
+correcting the main pin, `about-narrative-baseline` and `about-page-content-parity` still failed on
+`/We\s+don't sell datasets/` and `/We don't train models on your traffic/` — the two surviving
+commitments had moved into the same sentence and lost their capital W. Reading the report would
+never have found those; running the suite did, which is the same lesson as the multi-assertion pins
+in V-780.
+
+Mutation-proved: reinstating either the denial or the closure claim reds the negatives in all three
+files.
+
+Second action from the 74-agent parity sweep. Its core claims here were re-verified against source
+before any edit — including the direction of the contradiction, since "the policy over-discloses" and
+"the marketing page under-discloses" call for opposite fixes and only reading the code separates them.
+
+No new test file; `EXPECTED_TEST_FILES` unchanged.

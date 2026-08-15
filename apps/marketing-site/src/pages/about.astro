@@ -130,12 +130,18 @@ import CtaBand from '../components/CtaBand.astro';
         </IconTile>
         <h3 class="font-semibold text-tk-ink">No behavioural data collection</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          We don't log your destination URLs, response bodies, or
-          session content. We don't train models on your traffic. We
-          don't sell datasets. Our coordination service (the control
-          plane) sees only the basics about each session — its ID,
-          when it started and stopped (session metadata) — and whether
-          your license is valid. That's everything we touch.
+          We don't log response bodies or session content, we don't
+          train models on your traffic, and we don't sell datasets.
+          The control plane does record the navigations it coordinates
+          — the destination you ask it for, alongside session id,
+          timing, duration and outcome — because routing and billing
+          the work requires it. Our <a
+            class="underline decoration-tk-line underline-offset-4 hover:text-tk-ink"
+            href="/legal/privacy">privacy policy</a> lists every
+          category in full, and the <a
+            class="underline decoration-tk-line underline-offset-4 hover:text-tk-ink"
+            href="/trust">trust page</a> answers the specific
+          questions.
         </p>
       </div>
       <div>

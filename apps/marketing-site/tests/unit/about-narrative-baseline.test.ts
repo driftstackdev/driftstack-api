@@ -46,9 +46,19 @@ describe('W334.B /about narrative baseline', () => {
   });
 
   it('no-behavioural-data-collection commitment', () => {
-    expect(body).toMatch(/[Ww]e don't log your destination URLs/i);
-    expect(body).toMatch(/We\s+don't sell datasets/);
-    expect(body).toMatch(/We don't train models on your traffic/);
+    // V-789 — was /we don't log your destination URLs/. That denial contradicted
+    // both the binding privacy policy (§3.3 lists target URL) and this site's own
+    // trust page, and the code persists agent navigate intents verbatim. What
+    // survives is the part that is true.
+    expect(body).toMatch(/[Ww]e don't log response bodies or session content/i);
+    expect(body, 'the retracted denial must not return').not.toMatch(
+      /don't log your destination URLs/i,
+    );
+    // The two remaining commitments moved into the same sentence and lost their
+    // capital W when the denial was dropped; matched case-insensitively so the
+    // pin survives ordinary sentence-level rewording without losing the claim.
+    expect(body).toMatch(/we don't sell datasets/i);
+    expect(body).toMatch(/we don't\s+train models on your traffic/i);
   });
 
   it('honest scope avoids certification promises', () => {
