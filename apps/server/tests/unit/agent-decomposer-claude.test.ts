@@ -1131,3 +1131,108 @@ describe('AI-B1.b ClaudeAgentDecomposer — #140 answerFromObservation (read-and
     expect(res.answer).toBe('ok');
   });
 });
+
+// ─── the shapes that PARSE but are not objects ─────────────────────────────
+//
+// Swept this file's 23 refusal sites. Three were uncovered, and they are the
+// same rule in two places:
+//
+//   :483  plan path   — parsed, but not a JSON object
+//   :565  answer path — not valid JSON at all
+//   :568  answer path — parsed, but not a JSON object
+//
+// ⚠️ The plan path's "not valid JSON" arm exists above; its "not an OBJECT"
+// sibling did not, and the whole answer path had neither. Same asymmetry this
+// codebase keeps producing: one branch of a pair tested, the other not — and
+// here the untested branch is the subtler one.
+//
+// `JSON.parse` succeeds on `[1,2]`, on `"a string"`, and on `null`. All three
+// are valid JSON and none is an object, so the not-valid-JSON check cannot catch
+// them. Without the object check the code reaches property access on an array,
+// a primitive, or null — and `null` is the one that turns a bad model response
+// into a TypeError from somewhere unrelated rather than a named decomposer
+// failure the runtime can classify.
+//
+// ⚠️ Measured while writing these: an ARRAY is NOT caught here. `typeof [] ===
+// 'object'` and it is not null, so `[1,2,3]` passes this guard and is refused
+// further down by the result-kind check (plan) or the missing-answer-string
+// check (answer). That is still a refusal, so it is not a hole — but it means
+// the arms have to send a PRIMITIVE or `null` to exercise this line, and an
+// array-based fixture would have measured a different guard while passing.
+//
+// LEDGER — control 61/61:
+//
+//   :483 plan not-an-object neutralized      2 red
+//   :565 answer not-valid-JSON neutralized   1 red
+//   :568 answer not-an-object neutralized    1 red
+//   :483 null-check dropped (typeof only)    1 red
+//
+// The last row is why one arm sends `null` and another sends a string. Dropping
+// `|| parsed === null` leaves the guard reading correctly and still refusing
+// every primitive — while `null` sails through, which is the single input that
+// turns a bad model response into a TypeError from unrelated code instead of a
+// named failure the runtime can classify.
+describe('decomposer refusals for JSON that is not an object', () => {
+  // `jsonRaw` above is describe-scoped; this is the same one-liner.
+  function jsonRaw(raw: unknown): Response {
+    return new Response(JSON.stringify(raw), { status: 200 });
+  }
+
+  it('CRITICAL plan path: a bare JSON STRING is refused as "not a JSON object". It parses, so the not-valid-JSON guard above cannot see it.', async () => {
+    const { fetch } = sequenceFetch([
+      jsonRaw({
+        content: [{ type: 'text', text: '"just a sentence"' }],
+        usage: { input_tokens: 120, output_tokens: 80 },
+      }),
+    ]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    await expect(dec.decompose(defaultArgs())).rejects.toThrow(/was not a JSON object/i);
+  });
+
+  it('CRITICAL plan path: a bare `null` is refused too — the check is typeof-plus-null, and null is the shape that would otherwise fault on property access', async () => {
+    const { fetch } = sequenceFetch([
+      jsonRaw({
+        content: [{ type: 'text', text: 'null' }],
+        usage: { input_tokens: 120, output_tokens: 80 },
+      }),
+    ]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    await expect(dec.decompose(defaultArgs())).rejects.toThrow(/was not a JSON object/i);
+  });
+
+  it("CRITICAL answer path: non-JSON text is refused — its own copy of the guard, which the plan path's arm does not exercise", async () => {
+    const { fetch } = sequenceFetch([
+      jsonRaw({
+        content: [{ type: 'text', text: 'I will not output JSON.' }],
+        usage: { input_tokens: 120, output_tokens: 80 },
+      }),
+    ]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    await expect(
+      dec.answerFromObservation({
+        task: 'what is my IP address?',
+        observation: 'Your IP: 203.0.113.7',
+        budgetTokensRemaining: 100_000,
+        byokAnthropicApiKey: 'sk-ant-test-fake-key',
+      }),
+    ).rejects.toThrow(/answer response was not valid JSON/i);
+  });
+
+  it('CRITICAL answer path: a bare JSON string is refused as "not a JSON object", the sibling of the plan-path arm above', async () => {
+    const { fetch } = sequenceFetch([
+      jsonRaw({
+        content: [{ type: 'text', text: '"just an answer"' }],
+        usage: { input_tokens: 120, output_tokens: 80 },
+      }),
+    ]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    await expect(
+      dec.answerFromObservation({
+        task: 'what is my IP address?',
+        observation: 'Your IP: 203.0.113.7',
+        budgetTokensRemaining: 100_000,
+        byokAnthropicApiKey: 'sk-ant-test-fake-key',
+      }),
+    ).rejects.toThrow(/answer response was not a JSON object/i);
+  });
+});
