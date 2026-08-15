@@ -33733,3 +33733,27 @@ customer forever.
 
 First of seven findings from the concurrency/recovery sweep (15 candidates, 7 surviving
 refutation). `EXPECTED_TEST_FILES` → 2725.
+
+## V-779a — correction: the reconciler's test stub did not implement the real activator interface (2026-08-15)
+
+The V-779 gate failed on `the-server-source-type-checks.test.ts`. My test's activator stub declared
+`clawbackTierForRefundedOrder` — a name I took from the interface's DOC COMMENT ("refund/chargeback
+clawback") rather than from the member itself, which is `revokeTierForRefundedOrder` and returns
+`{ revoked: boolean }`. The `as CryptoOrderTierActivator` cast I added to satisfy eslint then hid
+the mismatch from the compiler until that guard ran.
+
+Fixed by implementing the real member and dropping the cast entirely — the stub now satisfies the
+interface structurally, so a future signature change breaks it loudly.
+
+**Two things worth recording.**
+
+`npx tsc --noEmit -p tsconfig.json` in `apps/server` passed the whole time, because that project
+covers `src` only. `the-server-source-type-checks.test.ts` is what type-checks the TESTS, and its
+own description says why it exists: vitest transpiles tests without checking them, so a test can
+reference a renamed export and stay green while `npm run typecheck` — a CI gate — fails, which is
+"exactly what had main red for four days". My pre-commit `tsc` was not the check I assumed it was.
+
+And the cast caused this. I added `as CryptoOrderTierActivator` to silence an eslint
+`no-unsafe-argument` complaint about an `as never` stub. Replacing one cast with a narrower cast
+kept the type system quiet about a member that did not exist. Implementing the interface — no cast
+at all — is what makes the stub honest, and it is what I should have reached for first.

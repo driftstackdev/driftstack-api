@@ -111,8 +111,8 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
                     ${intent.paid_at}, ${new Date(PAID_AT_MS + 31 * 86400000).toISOString()})
             ON CONFLICT (order_id) DO NOTHING`.then(() => undefined);
         },
-        clawbackTierForRefundedOrder: () => Promise.resolve(),
-      } as CryptoOrderTierActivator;
+        revokeTierForRefundedOrder: () => Promise.resolve({ revoked: false }),
+      };
       return new CryptoEntitlementReconcileSweeper({
         repo: new DrizzleCryptoOrdersRepo(database),
         activator,
