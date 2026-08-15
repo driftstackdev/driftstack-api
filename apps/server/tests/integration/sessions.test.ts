@@ -807,6 +807,101 @@ describe('POST /v1/profiles/:id/launch request boundary', () => {
     expect(await fx.sessionsRepo.listActiveByAccount(fx.accountId)).toHaveLength(0);
     expect(fx.sessionsRepo.getEvents()).toHaveLength(0);
   });
+
+  // ─── team-RBAC on launch ────────────────────────────────────────────────
+  //
+  // Added 2026-08-15. `sessions.ts:345` is the launch half of the admin-role
+  // write gate, and it was the LAST of eleven such gates in the codebase with no
+  // execution behind it — established per-site against the coverage
+  // statementMap, after an earlier enumeration found only five because it
+  // grepped `require admin role` and missed the `requires` verb form.
+  //
+  // Launch is the write with the largest blast radius on this route file: it
+  // creates a live session, binds a profile, and meters against the OWNER's tier
+  // and storage quota. A member with read access silently gaining it would spend
+  // the owner's concurrency and quota without appearing anywhere in the owner's
+  // own actions.
+  //
+  // MUTATION-PROVED against routes/sessions.ts — control 55/55 here, 20/20 on
+  // routes-sessions-content-parity:
+  //
+  //                                                     here    parity pin
+  //   the role comparison inverted                     2 red      GREEN
+  //   the gate removed entirely                        1 red      GREEN
+  //   the gate moved BELOW the owner resolution        1 red      GREEN
+  //
+  // The third is the one that would be easy to wave through in review, because
+  // the gate is still there and still correct — only its POSITION moved. The
+  // observed effect: the member no longer receives the role refusal at all. They
+  // get a 404 from the owner-scoped profile lookup instead of the 403 that names
+  // the reason, and by then `consumeEffectiveOwnerRateLimit` has already charged
+  // the owner's bucket for a request that was never allowed. A refusal that
+  // arrives after the metering is not the same refusal.
+  //
+  // The parity pin is green on all three. It matches the `throw` and the message
+  // wherever they sit in the file, which is exactly what an ordering change does
+  // not disturb.
+
+  const TEAM_OWNER = '00000000-0000-4000-8000-0000000ab001';
+
+  function joinOwnerTeam(fixture: TestAppFixture, role: 'member' | 'admin'): void {
+    fixture.authRepo.upsertAccount({
+      id: TEAM_OWNER,
+      email: 'launch-owner@example.test',
+      name: null,
+      tier: 'api_builder',
+      status: 'active',
+      timezone: null,
+      avatarR2Key: null,
+      slug: null,
+      region: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    fixture.authRepo.setTeamMemberships(fixture.accountId, [
+      { membershipId: '00000000-0000-4000-8000-0000000ab002', ownerAccountId: TEAM_OWNER, role },
+    ]);
+  }
+
+  it('CRITICAL a non-admin team member cannot LAUNCH a profile on the owner, and is refused before any side effect. Launch creates a live session, binds a profile and meters the owner’s concurrency and storage; a member gaining it silently would spend the owner’s quota without appearing in anything the owner did. The spies are the point — a refusal that happens after the driver call has already leaked a session.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = await createProfile(fx, 'rbac-launch');
+    joinOwnerTeam(fx, 'member');
+    const driverCreate = vi.spyOn(fx.driver, 'createSession');
+    const sessionInsert = vi.spyOn(fx.sessionsRepo, 'insertSessionIfUnderLimit');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/launch`,
+      headers: { ...auth(fx), 'x-driftstack-account': `acc_${TEAM_OWNER}` },
+      payload: { label: 'member-launch' },
+    });
+
+    expect(res.statusCode, 'refused with Forbidden').toBe(403);
+    expect(res.json<{ detail: string }>().detail, 'and named the reason').toBe(
+      'Launching a profile on a team owner requires admin role on that team.',
+    );
+    expect(driverCreate, 'no browser was started').not.toHaveBeenCalled();
+    expect(sessionInsert, 'and no session row was written').not.toHaveBeenCalled();
+  });
+
+  it('CRITICAL an ADMIN team member is NOT stopped by the role gate. Every refusal above is satisfied by a gate that refuses all team launches, which would leave a team with no one able to launch on the owner at all — asserted as "not this refusal" rather than a success code, because the request continues into profile binding this fixture has not set up.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = await createProfile(fx, 'rbac-launch-admin');
+    joinOwnerTeam(fx, 'admin');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/launch`,
+      headers: { ...auth(fx), 'x-driftstack-account': `acc_${TEAM_OWNER}` },
+      payload: { label: 'admin-launch' },
+    });
+
+    expect(
+      res.json<{ detail?: string }>().detail ?? '',
+      'the admin cleared the gate',
+    ).not.toContain('requires admin role');
+  });
 });
 
 // doc-150 item 6 — per-account storage quota is enforced HARD at

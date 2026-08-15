@@ -1814,15 +1814,42 @@ rather than a residual:
   snapshot gate; the other is below. Third time this session a too-narrow pattern
   under-reported, always in the same direction.
 
-- ⭐ `routes/sessions.ts:345` — `'Launching a profile on a team owner requires
-admin role on that team.'` The profile-launch RBAC gate (handler at
-  `sessions.ts:307`). Never executed. **Next slice**, same shape as the snapshot
-  one and the harness pattern is proven: `buildTestApp` +
-  `fx.authRepo.setTeamMemberships(fx.accountId, [{…, role: 'member'}])` +
-  `x-driftstack-account: acc_<owner>`.
+- ✅ `routes/sessions.ts:345` — the profile-launch RBAC gate. **Closed
+  2026-08-15**, 2 arms in `sessions.test.ts`, 3 mutations, all red, parity pin
+  green on all three. **With this, all 11 admin-role gates are executed** — 9 by the coverage statementMap, and these 2 by mutation evidence, which is the stronger of the two: an arm that reds when a line changes has necessarily run that line.
+
+  ⭐ The mutation worth keeping: move the gate BELOW the owner rate-limit/tier
+  resolution. The gate is still present and still correct — only its position
+  changes — and the member stops receiving the role refusal entirely, getting a
+  404 from the owner-scoped profile lookup instead of the 403 that names the
+  reason, after `consumeEffectiveOwnerRateLimit` has already charged the owner's
+  bucket for a request that was never allowed. A refusal that arrives after the
+  metering is not the same refusal, and no text pin can see the difference.
+
 - `routes/agent-sessions.ts:3916` — `'Owner account tier is unavailable.'` is a
   WIRING guard (`authRepo === undefined`), fail-closed for a route registered
-  without its dependency, not a customer-reachable path. Also `:4632`.
+  without its dependency, not a customer-reachable path.
+
+- `routes/agent-sessions.ts:4632` — the bundled-LLM **tier-ineligible** refusal,
+  which deliberately differs from the consent error so a customer whose consent
+  is already on is told the blocker is their plan rather than sent to a toggle
+  that is already ticked. The "consented, then downgraded or payment lapsed"
+  case.
+
+  ⚠️ **Unreachable from the current integration harness by construction, not
+  merely untested.** Three conditions must hold at once: no resolvable key,
+  `bundledLlmTierIneligible`, and `agentDecomposerKind === 'claude'`.
+  `buildTestApp` never passes `agentDecomposerKind`, and `buildApp` defaults it
+  to `'deterministic'`, so the third can never be true in any integration
+  fixture. `bundled-llm-tier-gate` already covers the _tier re-check_ at turn
+  time — it asserts the bundled path is not taken via a spy, and its own comment
+  notes the turn can still succeed through the generic decomposer fallback, so it
+  legitimately never reaches this throw.
+
+  _Closing it means extending the harness with an `agentDecomposerKind` option
+  first._ Recorded rather than attempted, since a fixture bent into reaching it
+  another way would prove less than the harness change does.
+
 - ✅ `services/auth.ts:398`, `:401` — the API-key cache-revalidation branch.
   **Closed 2026-08-15**, 4 arms appended to
   `auth-cache-hit-revalidates-against-postgres` (which previously drove only the
