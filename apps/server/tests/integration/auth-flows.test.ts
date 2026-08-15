@@ -2562,3 +2562,98 @@ describe('signup translates a lost insert race, precisely', () => {
     );
   });
 });
+
+// ─── losing the single-use token compare-and-swap ───────────────────────────
+//
+// `verifyEmail` and `confirmPasswordReset` both claim their whole token FAMILY
+// in one conditional UPDATE — `consumeAuthTokenFamily` — and both refuse when it
+// reports the claim was lost. Neither refusal had ever executed.
+//
+// ⚠️ Measured before writing these, by ignoring each verdict in turn: the whole
+// auth-flows file stayed green at 82/82 both times. The concurrent-verify arm
+// further up does NOT reach them, and cannot: the winner finishes before the
+// loser starts, so the loser's `findActiveAuthToken` already returns null and it
+// is refused by the pre-check. Both sites answer `invalid_auth_token`, so even a
+// genuinely interleaved race could not be attributed from outside. Same shape as
+// the OAuth authorize pre-check and its atomic sibling.
+//
+// So the repo reports the loss directly. What the guards protect is worth being
+// precise about: the pre-check is an early-exit for the ordinary case, and the
+// UPDATE is the only thing that serialises TWO DIFFERENT LIVE TOKENS of the same
+// family — a second verification email, or a reset requested twice. Without it
+// both callers proceed, and the source says what that costs: two sessions minted
+// from one link, or two password writes whose session issuance mutually revokes
+// the other into a lockout.
+//
+// LEDGER — control 84/84:
+//
+//   email_verify verdict ignored     1 red
+//   password_reset verdict ignored   1 red
+//   email_verify verdict INVERTED   27 red
+//
+// The inversion is the anti-vacuity row and it is not mine: 27 pre-existing arms
+// red when a WON claim is treated as lost. That is what stops these two from
+// being satisfied by a build that refuses every verification — "it threw" is not
+// the property, "it threw only when the claim was lost" is.
+describe('a lost single-use token claim is refused, and nothing is written', () => {
+  it('verifyEmail mints NO session when the family claim is lost', async () => {
+    const { service, repo } = makeDirectService();
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+    const signup = await service.signup({
+      email: 'verify-race@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    insertSession.mockClear();
+    // The token is still live — findActiveAuthToken succeeds — and the atomic
+    // claim is what fails. That ordering is the whole point: a test that made the
+    // token invalid instead would be refused one line earlier and prove nothing.
+    vi.spyOn(repo, 'consumeAuthTokenFamily').mockResolvedValue(false);
+
+    await expect(
+      service.verifyEmail({
+        token: signup.debugToken as string,
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_auth_token' });
+    expect(insertSession).not.toHaveBeenCalled();
+  });
+
+  it('confirmPasswordReset writes NO password and mints NO session when the family claim is lost', async () => {
+    const { service, repo } = makeDirectService();
+    const signup = await service.signup({
+      email: 'reset-race@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    await service.verifyEmail({
+      token: signup.debugToken as string,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    const reset = await service.requestPasswordReset({
+      email: 'reset-race@driftstack.local',
+      requestedFromIp: null,
+    });
+    const insertSession = vi.spyOn(repo, 'insertWebSession');
+    const setPassword = vi.spyOn(repo, 'setPassword');
+    vi.spyOn(repo, 'consumeAuthTokenFamily').mockResolvedValue(false);
+
+    await expect(
+      service.confirmPasswordReset({
+        token: reset.debugToken as string,
+        newPassword: 'a different sufficiently long password',
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_auth_token' });
+
+    // ⭐ Two assertions because the guard sits ABOVE both effects. A build that
+    // moved it below `setPassword` would still refuse — same error, same status —
+    // having already overwritten the credential of an account whose reset link
+    // lost its race. The thrown error cannot see that; the spy can.
+    expect(setPassword).not.toHaveBeenCalled();
+    expect(insertSession).not.toHaveBeenCalled();
+  });
+});
