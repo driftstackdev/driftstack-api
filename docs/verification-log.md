@@ -33799,3 +33799,30 @@ max-length cases, and removing the remap reds the 4xx case while leaving the 5xx
 
 Second of seven findings from the concurrency/recovery sweep. No new test file, so
 `EXPECTED_TEST_FILES` is unchanged.
+
+## V-780a — correction: a THIRD pin, missed in the commit where I noted the habit was not sticking (2026-08-15)
+
+V-780's gate failed on `stripe-billing-provider-v088-cross-source-invariant.test.ts:165`, which
+pinned the raw-forwarding line I had just replaced. I had updated two pins on that file and
+declared the fix done.
+
+This is the fourth time this session the same miss has produced the same failure — V-768, V-772,
+V-780, and now V-780a inside V-780 itself, one message after I wrote that the habit was not
+sticking. Writing the lesson down is evidently not the same as running the command.
+
+**The command, which takes one second and which I keep skipping:**
+
+```
+grep -rln "<path/of/file/I/am/about/to/edit>" apps/*/tests packages/*/tests
+```
+
+Run BEFORE the edit, not after the gate. For `stripe-billing-provider.ts` +
+`middleware/error-handler.ts` it returns **thirty-eight** files. I checked two.
+
+A second, smaller error in the same fix: the negative assertion I added used `body` as the source
+variable, but this file reads into `p`. Same slip as earlier in the session — a pin copied between
+files carries the other file's variable name, and the failure looks like a content mismatch rather
+than a typo. Both fixed; all nine readers of the two edited files now pass together.
+
+Nothing about the V-780 behaviour changed here — the scoping and the 4xx remap are as committed,
+and both remain mutation-proved.

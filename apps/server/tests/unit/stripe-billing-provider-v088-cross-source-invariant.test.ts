@@ -156,13 +156,14 @@ describe('W943 V-088 StripeBillingProvider cross-source invariant', () => {
 
   // ─── createSubscriptionCheckout args + retry identity ────────
 
-  it('CRITICAL createSubscriptionCheckout takes the 5 Stripe fields plus optional idempotencyKey and forwards the retry identity to Stripe', () => {
+  it('CRITICAL createSubscriptionCheckout takes the 5 Stripe fields plus optional idempotencyKey and forwards the retry identity to Stripe SCOPED PER ACCOUNT. V-780: this pinned the raw customer key being forwarded verbatim into Stripe platform-global namespace, where it binds to the request parameters and 400s on any reuse with different ones.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
     expect(p).toMatch(
       /async createSubscriptionCheckout\(args: \{\s*\n\s*customerId: string;\s*\n\s*priceId: string;\s*\n\s*successUrl: string;\s*\n\s*cancelUrl: string;\s*\n\s*accountId: string;\s*\n\s*idempotencyKey\?: string;\s*\n\s*\}\)/,
     );
-    expect(p).toMatch(
-      /\.\.\.\(args\.idempotencyKey !== undefined \? \{ idempotencyKey: args\.idempotencyKey \} : \{\}\),/,
+    expect(p).toMatch(/idempotencyKey: `checkout:\$\{args\.accountId\}:\$\{createHash\('sha256'\)/);
+    expect(p, 'the unscoped customer key must not go back to Stripe').not.toMatch(
+      /\{ idempotencyKey: args\.idempotencyKey \}/,
     );
   });
 
