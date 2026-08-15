@@ -1368,6 +1368,48 @@ export async function createProductionDeps(
   // audit emit. Routes call tracker.recordHeartbeat on takeover /
   // handback / message so customer activity counts as a heartbeat.
   const pairModeHeartbeatTracker = new InMemoryPairModeHeartbeatTracker();
+  // V-785 — seed the tracker from the database so a restart does not strand a
+  // parked pair-mode session forever.
+  //
+  // `pair_mode_state` is persisted; the tracker that clears it is the Map above,
+  // rebuilt empty on every boot. The 5s sweep only walks what the tracker knows,
+  // so after a restart a session parked in `takeover-pending` is invisible to it
+  // and the revert `docs/api/agent-sessions.md` promises — "returns to
+  // `ai-driving` after 30s without a client heartbeat" — never fires. The session
+  // cannot rescue itself either: the input-event route 409s on every parked state
+  // BEFORE it reaches `recordHeartbeat`, and per V-757 nothing emits
+  // `takeover-grant`, so the only remaining exit is the orphan reaper closing the
+  // session outright. Recovery becomes eventual death.
+  //
+  // Seeding at boot time gives every parked session the ordinary 30s grace: a
+  // client still there sends an input event and re-heartbeats normally, and one
+  // that is gone times out 30 seconds from now instead of never. Failure is
+  // logged and swallowed — a seed that cannot read the database must not stop the
+  // server from starting, and the next restart tries again.
+  try {
+    const parked = await agentSessionsRepo.listActivePairModeSessionIds();
+    const seededAt = new Date();
+    for (const sessionId of parked) {
+      pairModeHeartbeatTracker.recordHeartbeat({ sessionId, at: seededAt });
+    }
+    if (parked.length > 0) {
+      logger.info(
+        { component: 'pair-mode-heartbeat-seed', seeded: parked.length },
+        'seeded the pair-mode heartbeat tracker from parked sessions — each gets the ordinary grace window before auto-revert',
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      {
+        component: 'pair-mode-heartbeat-seed',
+        err:
+          err instanceof Error
+            ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+            : { value: err },
+      },
+      'could not seed the pair-mode heartbeat tracker — sessions parked before this boot will not auto-revert until a client sends input',
+    );
+  }
   // Arc 4 Wave 2.B sub-slice 8.18 — metrics registry is now constructed
   // earlier (before the audit service) so every downstream service can
   // accept it at construction time. See the construction block above.

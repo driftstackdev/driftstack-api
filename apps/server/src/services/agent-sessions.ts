@@ -322,6 +322,24 @@ export interface AgentSessionsRepo {
   reapOrphanedActiveBefore(cutoff: Date): Promise<number>;
 
   /**
+   * V-785 — ids of every `status='active'` session parked in a pair-mode state
+   * that is waiting on a client, i.e. `pair_mode_state` is present and its
+   * `kind` is not `ai-driving`.
+   *
+   * Used ONCE, at boot, to seed the in-memory heartbeat tracker. `pair_mode_state`
+   * is persisted; the liveness signal that clears it is a process-local Map, so a
+   * restart leaves the row parked with nothing able to see it. A session in
+   * `takeover-pending` cannot re-register itself either — the input-event route
+   * 409s on that state before reaching `recordHeartbeat` — so without this the
+   * documented "returns to ai-driving after 30s without a client heartbeat" never
+   * happens and the session stays parked until the orphan reaper closes it.
+   *
+   * Bounded by the active-session caps and read once per process, so no limit
+   * argument. Ordering is unspecified; the caller seeds all of them.
+   */
+  listActivePairModeSessionIds(): Promise<string[]>;
+
+  /**
    * Worker-disconnect fix (2026-06-19, migration 0086) — record which fleet
    * node a session was dispatched to. Called by dispatchSessionAssignOnCreate
    * immediately before sessionAssign is sent. Best-effort at the call site (a
@@ -876,6 +894,23 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     this.records.set(id, updated);
     this.authorityRevisions.set(id, expectedRevision + 1);
     return Promise.resolve(updated);
+  }
+
+  listActivePairModeSessionIds(): Promise<string[]> {
+    const out: string[] = [];
+    for (const [id, rec] of this.records) {
+      if (rec.status !== 'active') continue;
+      const state = rec.pairModeState;
+      if (state === null || state === undefined || typeof state !== 'object') continue;
+      const kind = (state as { kind?: unknown }).kind;
+      // `ai-driving` is the resting state and needs no heartbeat; anything else
+      // is parked waiting on a client. An unrecognised kind is INCLUDED on
+      // purpose — a state this build does not know about is exactly the one
+      // that should still be able to time out.
+      if (kind === 'ai-driving') continue;
+      out.push(id);
+    }
+    return Promise.resolve(out);
   }
 
   reapOrphanedActiveBefore(cutoff: Date): Promise<number> {

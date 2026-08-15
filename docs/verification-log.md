@@ -34058,3 +34058,49 @@ tooling: the enumeration is only as complete as its pattern, and a green run of 
 find says nothing about the ones it did not.
 
 Fifth of seven findings from the concurrency/recovery sweep. `EXPECTED_TEST_FILES` 2726 → 2728.
+
+## V-785 — the one recovery a parked pair-mode session had was process-local (2026-08-15)
+
+`docs/api/agent-sessions.md` tells customers "A parked `takeover-pending` session returns to
+`ai-driving` after 30s without a client heartbeat", and the three SDK quickstarts repeat it. That
+revert is fired by the 5s `PairModeHeartbeatSweep`, which walks
+`PairModeHeartbeatTracker.findStaleSessions()`.
+
+`pair_mode_state` is a persisted JSONB column. The tracker is an in-memory `Map`, rebuilt empty on
+every boot. **The parked state survived a restart; the only thing that could clear it did not.**
+
+The session could not rescue itself either. The input-event route 409s on `takeover-pending`,
+`takeover-queued`, `handback-pending` and `handback-queued`, and throws **before** reaching the
+`recordHeartbeat` below it — so no client action re-registers a parked session. Per V-757 nothing
+emits `takeover-grant`, so there is no forward exit. The only remaining outcome was the orphan
+reaper closing the session on its wall-clock lifetime cap: recovery by eventual death, on every
+deploy, for every session parked at that moment.
+
+The fix is a boot seed, no migration: `listActivePairModeSessionIds()` returns every `status='active'`
+session whose `pair_mode_state` kind is not `ai-driving`, and bootstrap records a synthetic heartbeat
+for each at boot time. A client still connected sends an input event and re-heartbeats normally; one
+that is gone times out 30 seconds after boot instead of never. Seeding at boot rather than at the
+original `requestedAt` is the load-bearing choice — the latter would revert every parked session on
+the first sweep tick after a deploy, including live ones — and a case pins it.
+
+Selection asymmetry, deliberate: an **unrecognised** state kind is INCLUDED. The two error
+directions are not equally bad. A spurious timeout costs one auto-revert; a missed one parks a
+session until it is reaped. The Drizzle predicate uses `IS DISTINCT FROM` rather than `<>` for the
+same reason — `<>` evaluates to NULL when `kind` is absent, silently excluding exactly the malformed
+row most in need of a timeout.
+
+**Nearly a rediscovery.** Grepping prior art first surfaced `pair-mode-unreachable-states-are-caveated.test.ts`
+— V-757 already established that six of thirteen transitions have no producer, that `human-driving`
+is unreachable, and fixed it with bidirectional doc caveats. I was three steps into re-deriving that
+when the filename stopped me. What is new here is narrower and real: the ONE recovery path those
+caveats promise is process-local, and V-757's guard does not cover it. Confirmed the guard still
+passes — it scans three producer files for transition literals, none of which this change touches.
+
+Proved through a real boot rather than a helper call, for the reason V-784 established: a
+content-parity pin can prove wiring text exists and never that the function runs. The integration
+case seeds three rows — parked, `ai-driving`, and closed-while-parked — and asserts the tracker
+knows the first and not the other two after `createProductionDeps`. Mutation-proved both ways:
+removing the seed reds it with the parked session unknown to the tracker; seeding `ai-driving` too
+reds the selection cases.
+
+Sixth of seven findings from the concurrency/recovery sweep. `EXPECTED_TEST_FILES` 2728 → 2730.

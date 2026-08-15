@@ -790,6 +790,30 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
   }
 
+  async listActivePairModeSessionIds(): Promise<string[]> {
+    // V-785 — boot seed for the pair-mode heartbeat tracker. `pair_mode_state` is
+    // persisted but the tracker that clears it is a process-local Map, so after a
+    // restart a parked session is invisible to the 5s sweep and the documented
+    // 30s revert to `ai-driving` never fires. A session in `takeover-pending`
+    // cannot re-register itself: the input-event route 409s on that state before
+    // reaching `recordHeartbeat`.
+    //
+    // `IS DISTINCT FROM` rather than `<>` so a row whose `kind` is absent or
+    // JSON null still matches — a malformed parked state is the one most in need
+    // of a timeout, and `<>` would silently drop it to NULL and exclude it.
+    const rows = await this.database.db
+      .select({ id: agentSessions.id })
+      .from(agentSessions)
+      .where(
+        and(
+          eq(agentSessions.status, 'active'),
+          sql`${agentSessions.pairModeState} IS NOT NULL`,
+          sql`(${agentSessions.pairModeState}->>'kind') IS DISTINCT FROM 'ai-driving'`,
+        ),
+      );
+    return rows.map((r) => r.id);
+  }
+
   async reapOrphanedActiveBefore(cutoff: Date): Promise<number> {
     // Orphaned-session backstop (2026-06-19) — agent sessions only flip to
     // 'closed' on an explicit DELETE or budget exhaustion. When a worker dies
