@@ -3754,3 +3754,49 @@ row?.field` form three lines earlier. The rule is now explicit rather than
 habitual: in a test that queries Postgres, never destructure an array index —
 index it and use optional chaining. vitest runs the unsafe form happily, so only
 `tsconfig.test.json` says otherwise.
+
+## 6p — enforcing the condition the Stripe race safety rests on
+
+6o established that the accepted race in `StripeWebhooksService.handle` is safe for
+a reason rather than by luck: `dispatch(event)` runs BEFORE the idempotency insert,
+so a concurrent delivery executes every handler twice, and that is harmless only
+while each handler is an upsert or a set. Measured then: eleven write statements
+across the two files, seven `.set(` calls, **zero additive writes**.
+
+The property is conditional and nothing enforced the condition. Add one
+`balance = balance + delta` to a handler and the documented, accepted race becomes
+a double-credit — **with the SQL idempotency test from 6o still green**, because
+that test asserts the `inserted` flag, not the arithmetic.
+
+### The guard
+
+Three arms, and the middle one is the point:
+
+1. **The detector detects.** A regex that matched nothing would pass forever. Both
+   directions asserted: it catches `sql`${col} + …``and`+=`, and ignores an
+ordinary `.set({ tier })` and plain string concatenation.
+2. **The scan reaches real files with real writes**, so "clean" means checked
+   rather than not looked — floors below the measured counts.
+3. **No additive write on the path.**
+
+Ledger: introducing `sql`${accounts.balanceMinutes} + ${args.termDays}`` into the
+repo reds arm 3. Neutering the regex reds arm 1 — ⭐ and leaves arm 3 GREEN, which
+is exactly why arm 1 exists. A property guard whose detector has rotted reports
+the property as holding.
+
+The pattern matches the SHAPE of accumulation rather than any particular column, so
+a new balance-like field is covered the day it appears rather than the day someone
+remembers to add it here.
+
+Scope is the Stripe dispatch path only — `services/stripe-webhooks.ts` and
+`db/stripe-webhooks-repo.ts`. The NowPayments/crypto IPN path has its own
+idempotency and its own race analysis; asserting over it here would make this guard
+claim a property it has not established.
+
+⚠️ The commit hook rejected the first attempt: `[+\-]` inside a character class is
+an unnecessary escape (`no-useless-escape`), and lint-staged reverted cleanly so
+nothing partial landed. Behaviour-identical fix to `[+-]`, then the detector arm
+re-run — which is the arm that would have caught it if the change had NOT been
+behaviour-neutral. Worth noting that the pre-commit hook and the tests-typecheck
+guard have now each caught something in the last three commits; between them they
+are doing more real work than a second pair of eyes would.
