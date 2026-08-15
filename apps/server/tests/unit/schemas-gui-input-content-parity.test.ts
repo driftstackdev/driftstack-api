@@ -9,8 +9,8 @@
 //   • L-001 framing pinned: server-internal only; never on
 //     @driftstack/api-types; human-cadence rationale.
 //   • Endpoint pinned: POST /v1/sessions/:id/gui-input + gui_control
-//     scope; customer keys never carry this by default; only
-//     enterprise self-hosted GUI keys.
+//     scope, which no broad scope satisfies (V-788 retracted the
+//     enterprise-only half of this framing).
 //   • GUIInputActionSchema: discriminated-union (tap_at + type_focused).
 //   • tap_at: x/y int min 0 (viewport pixels, origin top-left).
 //   • type_focused: text max 10_000 + optional delay_ms int 0..500
@@ -50,10 +50,14 @@ describe('W430.C apps/server/src/schemas/gui-input.ts content parity', () => {
     );
   });
 
-  it('Endpoint + scope posture pinned: POST /v1/sessions/:id/gui-input + gui_control scope; customer keys never carry by default; enterprise self-hosted GUI workflow only', () => {
+  it('Endpoint + scope posture pinned: POST /v1/sessions/:id/gui-input + the gui_control scope, which no broad scope satisfies. V-788 RETRACTED "only keys minted for the self-hosted GUI workflow (enterprise tier) get it" — false, since ELEVATED_SCOPES withholds only admin + driftstack_internal_admin and any account_owner on an apiAccess tier may request the scope.', () => {
     expect(body).toMatch(
-      /\/\/ Endpoint: POST \/v1\/sessions\/:id\/gui-input\.\s*\n?\s*\/\/ Auth: requires the `gui_control` scope\. Customer keys never carry\s*\n?\s*\/\/ this scope by default; only keys minted for the self-hosted GUI\s*\n?\s*\/\/ workflow \(enterprise tier\) get it\./,
+      /\/\/ Endpoint: POST \/v1\/sessions\/:id\/gui-input\.\s*\n?\s*\/\/ Auth: requires the `gui_control` scope\. No broad scope satisfies it, so\s*\n?\s*\/\/ a key only carries it when the mint request asks for it explicitly\./,
     );
+    expect(body, 'the retracted enterprise-only claim must not return').not.toMatch(
+      /workflow \(enterprise tier\) get it\./,
+    );
+    expect(body).toMatch(/V-788 — the second half of this sentence used to read "only keys minted/);
   });
 
   it('GUIInputActionSchema discriminated-union on kind: tap_at (x/y int min 0 viewport pixels origin top-left) + type_focused (text max 10_000 + optional delay_ms 0..500); GUIInputAction type inferred', () => {

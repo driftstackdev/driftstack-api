@@ -13,9 +13,9 @@
 //   automation simulation layer is correct, not a regression'.
 //
 //   Endpoint framing — 'Endpoint: POST /v1/sessions/:id/gui-input.
-//   Auth: requires the gui_control scope. Customer keys never carry
-//   this scope by default; only keys minted for the self-hosted GUI
-//   workflow (enterprise tier) get it'.
+//   Auth: requires the gui_control scope, which no broad scope satisfies.
+//   (V-788: this header used to add "only keys minted for the self-hosted GUI
+//   workflow (enterprise tier) get it" — false; any account_owner may ask.)
 //
 //   GUIInputActionSchema discriminated union on 'kind' with 2 variants:
 //     - 'tap_at' with x, y (int ≥ 0).
@@ -66,12 +66,17 @@ describe('W983 gui-input L-001 schemas cross-source invariant', () => {
 
   // ─── Endpoint + scope framing ────────────────────────────────
 
-  it("CRITICAL endpoint + scope framing — 'Endpoint: POST /v1/sessions/:id/gui-input. Auth: requires the gui_control scope. Customer keys never carry this scope by default; only keys minted for the self-hosted GUI workflow (enterprise tier) get it'. The POST + gui_control-scope + enterprise-only design is the GUI access-control contract.", () => {
+  it("CRITICAL endpoint + scope framing. V-788 REPLACED the second half of this: 'only keys minted for the self-hosted GUI workflow (enterprise tier) get it' was false — ELEVATED_SCOPES withholds only admin + driftstack_internal_admin, so any account_owner on an apiAccess tier can request the scope. The 'no broad scope satisfies it' half is the part that is actually enforced, and it is asserted here plus derived from the code in gui-control-is-a-scope-boundary-not-a-tier-one.test.ts.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/schemas/gui-input.ts'));
     expect(p).toMatch(/Endpoint: POST \/v1\/sessions\/:id\/gui-input\./);
-    expect(p).toMatch(/Auth: requires the `gui_control` scope\. Customer keys never carry/);
-    expect(p).toMatch(/this scope by default; only keys minted for the self-hosted GUI/);
-    expect(p).toMatch(/workflow \(enterprise tier\) get it\./);
+    expect(p).toMatch(
+      /Auth: requires the `gui_control` scope\. No broad scope satisfies it, so\s*\n?\s*\/\/ a key only carries it when the mint request asks for it explicitly\./,
+    );
+    expect(p).toMatch(/V-788 — the second half of this sentence used to read/);
+    // Per-occurrence negatives on the retracted half.
+    expect(p, 'the enterprise-only claim must not return').not.toMatch(
+      /only keys minted for the self-hosted GUI\s*\n?\s*\/\/ workflow \(enterprise tier\) get it\./,
+    );
   });
 
   // ─── GUIInputActionSchema discriminated union ────────────────

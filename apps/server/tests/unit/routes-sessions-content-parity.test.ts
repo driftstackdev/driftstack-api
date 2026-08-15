@@ -14,8 +14,8 @@
 //     localStorage) require admin role on team; persisted list/detail
 //     metadata remains readable by both member and admin.
 //   • V-326e2 — DELETE: admin-only on team scope.
-//   • L-001 gui_control gate: customer keys never carry; enterprise
-//     self-hosted GUI keys do; gui-input bypasses behavioral simulation.
+//   • L-001 gui_control gate: a scope boundary, not a tier or deployment
+//     one (V-788 retracted the 'customer keys never carry' framing).
 //   • Public-id prefix conversion at route boundary; service+DB use
 //     raw uuids.
 
@@ -243,12 +243,19 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('L-001 framing pinned on /v1/sessions/:id/gui-input: GUI-control plane coordinate-level primitives bypass behavioral-simulation layer; gated behind gui_control scope; customer keys never carry; only enterprise self-hosted GUI keys do; V-326e3 admin-only on team', () => {
+  it('L-001 framing pinned on /v1/sessions/:id/gui-input: coordinate-level primitives bypass the behavioral-simulation layer, gated behind the gui_control scope which no broad scope satisfies; V-326e3 admin-only on team. V-788 RETRACTED the rest — "customer keys never carry this; only enterprise self-hosted GUI keys do" was false on both halves, since ELEVATED_SCOPES withholds only admin + driftstack_internal_admin. The retraction is held down per-occurrence below and derived from code in gui-control-is-a-scope-boundary-not-a-tier-one.test.ts.', () => {
     expect(body).toMatch(
-      /\/\/ GUI-control plane \(L-001\)\. Coordinate-level primitives that bypass\s*\n?\s*\/\/ the behavioral simulation layer\. Gated behind `gui_control` scope —\s*\n?\s*\/\/ customer keys never carry this; only enterprise self-hosted GUI\s*\n?\s*\/\/ keys do\. See docs\/locked-decisions\.md\./,
+      /\/\/ GUI-control plane \(L-001\)\. Coordinate-level primitives that bypass\s*\n?\s*\/\/ the behavioral simulation layer\. Gated behind the `gui_control` scope:\s*\n?\s*\/\/ no broad scope satisfies it, so a key must request it explicitly\./,
     );
     expect(body).toMatch(
       /preHandler: \[app\.requireAuth, app\.requireScope\('gui_control'\), app\.rateLimit\('global'\)\],/,
+    );
+    expect(body, 'the retracted boundary claim must not return').not.toMatch(
+      /customer keys never carry this;/,
+    );
+    expect(body).not.toMatch(/only enterprise self-hosted GUI\s*\n?\s*\/\/ keys do\./);
+    expect(body, 'and the retraction itself stays').toMatch(
+      /V-788 — this used to say customer keys never carry it and only/,
     );
     expect(body).toMatch(/const body = GUIInputRequestSchema\.parse\(request\.body \?\? \{\}\);/);
   });

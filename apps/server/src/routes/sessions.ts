@@ -467,9 +467,20 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
 
   // ── POST /v1/sessions/:id/gui-input ────────────────────────────────────
   // GUI-control plane (L-001). Coordinate-level primitives that bypass
-  // the behavioral simulation layer. Gated behind `gui_control` scope —
-  // customer keys never carry this; only enterprise self-hosted GUI
-  // keys do. See docs/locked-decisions.md.
+  // the behavioral simulation layer. Gated behind the `gui_control` scope:
+  // no broad scope satisfies it, so a key must request it explicitly.
+  //
+  // V-788 — this used to say customer keys never carry it and only
+  // enterprise self-hosted GUI keys do. Both halves were false. The scope
+  // is a SCOPE boundary, not a tier or deployment one: `ELEVATED_SCOPES` in
+  // services/api-keys.ts withholds only `admin` and
+  // `driftstack_internal_admin`, and that file's own comment lists
+  // `gui_control` among the customer-level scopes that "stay grantable
+  // under account_owner". Any account_owner on an apiAccess tier can mint a
+  // key carrying it. Issuing it only for the self-hosted GUI is convention,
+  // and the OAuth path is the one place it is actually fenced
+  // (services/oauth.ts OAUTH_ALLOWED_SCOPES omits it → invalid_scope).
+  // See docs/locked-decisions.md.
   // V-326e3 — same admin-only gate as the other write actions.
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/gui-input',

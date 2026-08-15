@@ -419,11 +419,11 @@ describe('W786 docs reference/ triplet content parity', () => {
     );
   });
 
-  it("CRITICAL gui_control scope locked-decision-L-001 framing pinned. The 'Manual-control plane (tap_at, type_focused). Self-hosted GUI workflow only (locked-decision L-001)' wording matches W762 /api/api-keys gui_control reserved-for-GUI contract.", () => {
+  it('CRITICAL gui_control scope locked-decision-L-001 framing pinned. V-788 — the claim this used to freeze (customer keys never carry gui_control; only enterprise self-hosted GUI keys do) was FALSE: ELEVATED_SCOPES withholds only admin + driftstack_internal_admin, so any account_owner on an apiAccess tier can mint a key carrying it. The corrected text is pinned here and kept honest by gui-control-is-a-scope-boundary-not-a-tier-one.test.ts, which derives the restriction from the code.', () => {
     const p = read(SCP);
 
     expect(p).toMatch(
-      /\| `gui_control`\s+\| special\s+\| Manual-control plane \(`tap_at`, `type_focused`\)\. Self-hosted GUI workflow only \(locked-decision L-001\)\./,
+      /\| `gui_control`\s+\| special\s+\| Manual-control plane \(`tap_at`, `type_focused`\)\. Intended for the self-hosted GUI workflow \(locked-decision L-001\); it is never granted unless a mint request asks for it, but no tier or deployment check restricts who may ask\./,
     );
   });
 

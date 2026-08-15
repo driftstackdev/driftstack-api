@@ -96,7 +96,13 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
       /Satisfies `account_owner` and customer `admin:\*` scopes, but never the staff-only `driftstack_internal_admin` scope\./,
     );
     expect(body).toMatch(/\| `gui_control`\s+\| special\s+\| Manual-control plane/);
-    expect(body).toMatch(/Self-hosted GUI workflow only \(locked-decision L-001\)\./);
+    // V-788 — was /Self-hosted GUI workflow only/, a boundary the code does not enforce.
+    expect(body).toMatch(
+      /Intended for the self-hosted GUI workflow \(locked-decision L-001\); it is never granted unless a mint request asks for it, but no tier or deployment check restricts who may ask\./,
+    );
+    expect(body, 'the overstated claim must not come back').not.toMatch(
+      /Self-hosted GUI workflow only/,
+    );
     expect(existsSync(SC)).toBe(true);
   });
 

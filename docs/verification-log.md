@@ -34232,3 +34232,51 @@ No new test file (three cases appended); `EXPECTED_TEST_FILES` unchanged at 2731
 currently reports 2732 on disk — that delta is a peer's untracked
 `migration-journal-is-applyable.test.ts`, confirmed by moving it aside and watching the check pass;
 the pin belongs with their commit, not this one.
+
+## V-788 — three files and a customer doc claimed a security boundary that does not exist (2026-08-15)
+
+`routes/sessions.ts`, directly above the auth gate on the manual-control plane, said the
+`gui_control` scope is one "customer keys never carry … only enterprise self-hosted GUI keys do".
+`schemas/gui-input.ts` and the customer-facing `reference/scopes.md` said the same in weaker words.
+
+`ELEVATED_SCOPES` in `services/api-keys.ts:285` is `['admin', 'driftstack_internal_admin']`, and the
+comment beside it lists `gui_control` among the customer-level scopes that "stay grantable under
+account_owner". So **any `account_owner` on an apiAccess tier can mint a key carrying it.** It is a
+scope boundary — no broad scope satisfies it, a mint request must ask for it explicitly — but not a
+tier or deployment one. The one place it is genuinely fenced is OAuth: `OAUTH_ALLOWED_SCOPES` omits
+it, so a third-party client gets `invalid_scope`.
+
+Nobody is harmed today; the cost lands on whoever sizes blast radius from that comment, and one of
+the four surfaces is the customer scope reference a customer reads to size their own.
+
+**The obvious fix is wrong, and the guard says so in place.** Adding `gui_control` to
+`ELEVATED_SCOPES` would make it permanently _unmintable_: that list means "the caller must already
+hold this exact scope", which bootstraps for `driftstack_internal_admin` from staff keys that hold
+it — and nothing anywhere holds `gui_control`. No signup, OAuth grant or seed issues it. The list
+would deadlock the workflow it is meant to protect. A tier gate is the shape that could work, and it
+would have to apply on the USE path as well as at mint, or it lapses on downgrade exactly as
+`vpnEgress` did in V-786. I did not make that product change; I made the sentences true and pinned
+the real shape.
+
+`gui-control-is-a-scope-boundary-not-a-tier-one.test.ts` derives all of it from code: `gui_control`
+is absent from `ELEVATED_SCOPES`, absent from `OAUTH_ALLOWED_SCOPES`, enforced by exactly one route,
+and the second mechanics plane (`agent-sessions/:id/input-event`) does not consult it at all — which
+is the other half of why the old comment misled: a reader who took it as _the_ manual-control
+boundary would have missed that door entirely.
+
+Five pins froze the false claim and all five moved in this commit: the routes comment, the schemas
+header, both docs-table pins, and the L-001 cross-source pin — each with per-occurrence negatives on
+the retracted half, plus the three pin-file HEADER comments that restated it in prose.
+
+**Two mutation attempts that silently did nothing, caught by checking rather than trusting.** The
+first used `python3 -c "…"` with backticks in the replacement string; bash executed them as command
+substitution and the anchor never matched, so the guard "passed" against an unmutated file. The
+second used a quoted heredoc but the wrong anchor (the text had already moved). Only the third
+actually mutated, and it reds. Both failures looked exactly like a passing mutation.
+
+Found by a 74-agent adversarial sweep over the 292 content-parity pins that freeze a falsifiable
+claim: 65 candidates, 57 survived refutation. This is the first action from that report, and its
+central claim I re-verified myself before acting — the report also asserted the plane "503s
+pre-launch", which is not supported: `routes/sessions.ts:479` calls `service.guiInput` for real.
+
+`EXPECTED_TEST_FILES` 2732 → 2733.

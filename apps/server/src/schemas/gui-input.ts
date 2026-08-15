@@ -9,9 +9,15 @@
 // automation simulation layer is correct, not a regression.
 //
 // Endpoint: POST /v1/sessions/:id/gui-input.
-// Auth: requires the `gui_control` scope. Customer keys never carry
-// this scope by default; only keys minted for the self-hosted GUI
-// workflow (enterprise tier) get it.
+// Auth: requires the `gui_control` scope. No broad scope satisfies it, so
+// a key only carries it when the mint request asks for it explicitly.
+//
+// V-788 — the second half of this sentence used to read "only keys minted
+// for the self-hosted GUI workflow (enterprise tier) get it", and that was
+// false: services/api-keys.ts withholds only `admin` and
+// `driftstack_internal_admin` from an account_owner caller, so any
+// account_owner on an apiAccess tier can request this scope. Reserving it
+// for the self-hosted GUI is convention, not enforcement.
 
 import { z } from 'zod';
 
