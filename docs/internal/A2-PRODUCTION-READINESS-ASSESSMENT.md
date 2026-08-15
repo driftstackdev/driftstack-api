@@ -1440,14 +1440,19 @@ real Postgres. Do **not** fold `src/db/**` into the gate until that work lands;
 folding it in first would force the thresholds down, and this file's own policy
 is never to ratchet downward.
 
-**Backlog progress (updated 2026-08-15).** Six of the eight closed, each with a
-`db-*` integration file against real Postgres and a mutation ledger in its
-header: `admin-accounts-repo`, `legal-repo`, `email-preferences-repo`,
-`incident-update-notifications-repo`, `health-probes-repo`,
-`validation-schedules-repo`. **Two remain:** `cost-nightly-accounts-provider`,
-and `audit-archive-repo` — the latter blocked on item 2, since
-`AuditArchiveService` is still "built, tested, never run" and a repo test would
-cover SQL that nothing calls.
+**Backlog progress (updated 2026-08-15).** Enumerated rather than counted, since
+the bullet above lists ten names under a heading of eight.
+
+**Closed** — each a `db-*` integration file against real Postgres with a mutation
+ledger in its header: `admin-accounts-repo`, `legal-repo`,
+`email-preferences-repo`, `incident-update-notifications-repo`,
+`health-probes-repo`, `validation-schedules-repo`,
+`byok-anthropic-rotation-reminder-repo`.
+
+**Open:** `webhook-rotation-reminder-repo` (next), `admin-billing-repo`,
+`cost-nightly-accounts-provider`, and `audit-archive-repo` — the last blocked on
+item 2, since `AuditArchiveService` is still "built, tested, never run" and a
+repo test would cover SQL that nothing calls.
 
 ⚠️ **`validation-schedules-repo` changed what this item means.** It was not an
 uncovered repo sitting unguarded — a source pin
@@ -1483,9 +1488,28 @@ The five pinned-but-never-imported are **not** five open items:
 - `migrate`, `seed` — CLI entrypoints run as processes, already listed above as
   legitimately unmeasurable under vitest. Their pins are the right instrument.
 - `audit-archive-repo` — blocked on item 2, as above.
-- `byok-anthropic-rotation-reminder-repo`, `webhook-rotation-reminder-repo` —
-  genuinely in the same shape `validation-schedules-repo` was in: a
-  content-parity pin and no execution. These are the two to close next.
+- `byok-anthropic-rotation-reminder-repo` — **closed 2026-08-15**, 11 arms, 8
+  mutations. `webhook-rotation-reminder-repo` is the last of this shape.
+
+⭐ **The BYOK one came out the MIRROR of `validation-schedules-repo`, and that is
+the more useful result.** Its content-parity pin caught **all eight** mutations,
+including one this file's execution arms could not — dropping
+`not(isNull(byokAnthropicApiKeySetAt))` left all 11 arms green. That is not a
+gap: the predicate is **redundant**. The age gate `lt(setAt, thresholdCutoff)`
+sits in the same `and`, and under SQL three-valued logic `NULL < <timestamp>` is
+NULL rather than TRUE, so a keyless account is already excluded without it —
+confirmed against the database, not argued: `SELECT (NULL::timestamptz < now())
+IS TRUE` returns `f`. A clause with text but no behaviour is invisible to every
+behavioural test and visible only to a text pin.
+
+_So neither instrument dominates._ The pin sees edits that do not move behaviour;
+only execution distinguishes **which way** a change broke. Both halves of the
+BYOK dedupe `or` red the pin identically at one arm, while they red one and five
+arms here — the pin reports that the text moved, not that customers would now be
+spammed rather than silenced. The right reading of the
+`validation-schedules-repo` finding is therefore **"a pin is not coverage"**, not
+"pins are weak": four repos need execution added _alongside_ their pins, and
+none of those pins should be removed.
 
 The two neither-imported-nor-pinned are `admin-billing-repo` and
 `cost-nightly-accounts-provider`, already named above.
