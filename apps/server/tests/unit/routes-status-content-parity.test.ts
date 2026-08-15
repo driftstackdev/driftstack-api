@@ -24,8 +24,19 @@
 //     header set on every response.
 //   • recent_incidents: readonly PublicIncidentSummary[]; populated
 //     from optional incidentsService (last 5 public incidents from
-//     30d window). Empty array when service is undefined (fresh
-//     fixtures) or list() throws (fail-open posture).
+//     30d window). Empty array when the service is undefined (fresh
+//     fixtures) or publicFeed() throws.
+//   • V-791 — that last line used to end "(fail-open posture)", which is
+//     the exact inverse of the code. status.ts:138 says "Absence must fail
+//     closed in the public response rather than fabricating an all-clear",
+//     the catch at :149-153 sets incidentDataComplete=false under "never
+//     convert an incident storage failure into an operational/all-clear
+//     claim", :156-159 escalates operational → degraded, and :164 emits
+//     open_incidents: null. An operator seeing `degraded` with an empty
+//     incident list and reading "fail-open" concludes "empty means all
+//     clear, false alarm" — when it means incident storage is unavailable.
+//     Backwards, and precisely when it costs the most. The method name was
+//     stale too: list() became publicFeed().
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

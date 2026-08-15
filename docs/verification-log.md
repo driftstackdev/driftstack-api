@@ -34374,3 +34374,33 @@ emitter, and the dropped column.
 One self-inflicted error: my patch left an orphaned `);` and the file stopped parsing, which vitest
 reported as "no tests" rather than as a failure. A suite that collects zero tests is not a pass, and
 the summary line says so only if you read it.
+
+## V-791 — a pin header described the status endpoint's incident posture backwards (2026-08-15)
+
+`routes-status-content-parity.test.ts`'s own header comment said `recent_incidents` is an empty
+array when the service is undefined "or `list()` throws (**fail-open posture**)".
+
+The code is deliberately the opposite, and says so three times. `status.ts:138` — "Absence must
+**fail closed** in the public response rather than fabricating an all-clear". The catch at `:149-153`
+sets `incidentDataComplete = false` under "never convert an incident storage failure into an
+operational/all-clear claim". `:156-159` escalates `operational` → `degraded`, and `:164` emits
+`open_incidents: null`. `tests/integration/status.test.ts:47-62` proves both branches behaviourally.
+
+The cost lands on an operator mid-incident: they see `overall_status: degraded` with an empty
+incident list, read "fail-open", and conclude an empty list means all-clear and the degradation is a
+false alarm — when it actually means incident storage is unavailable. Exactly inverted, exactly when
+it matters. That the wrong sentence lived in a _test_ file rather than in the source is no defence;
+it is the file someone opens to learn what the endpoint guarantees.
+
+The same line named `list()`, which became `publicFeed()`.
+
+Corrected in place with the reasoning kept, since a bare correction would be re-inverted by the next
+person who reasons from "status endpoints usually fail open". Swept for other copies: the only other
+"fail open" near status is `bootstrap.ts:1007`, which is a different mechanism — the status SITE
+falling back to an R2 snapshot when the API is unreachable — and is accurate.
+
+No behavioural change and no new file. The existing case at `:113` already asserted the truth
+("fails closed on incident-read errors"), so the file has been contradicting itself: the header said
+fail-open while a case two hundred lines down asserted fail-closed, and both were green. That is the
+same shape as the parity sweep's systemic finding — nine pin files hold both sides of a contradiction
+green at once — and it is the cheapest possible instance of it.
