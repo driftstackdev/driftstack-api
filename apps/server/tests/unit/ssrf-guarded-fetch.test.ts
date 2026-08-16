@@ -132,6 +132,13 @@ describe('ssrfGuardedFetch — literal preflight before dispatcher selection', (
       'not a URL',
       'http://hooks.example.com/insecure',
       'https://user:super-secret@hooks.example.com/delivery',
+      // Unparseable AND credential-bearing. Neither of the two cases above
+      // reaches the branch this one does: 'not a URL' takes the unparseable
+      // path but carries no secret to detect, and the credential URL above
+      // parses fine, so its hostname is read normally and the catch never
+      // runs. Only this combination puts a secret in front of the catch that
+      // decides whether to reflect the raw target.
+      'https://user:super-secret@[not-a-host',
     ]) {
       try {
         assertSafeSsrfFetchTarget(target);
@@ -140,6 +147,28 @@ describe('ssrfGuardedFetch — literal preflight before dispatcher selection', (
         expect(error).toBeInstanceOf(SsrfBlockedError);
         expect((error as Error).message).not.toContain('super-secret');
       }
+    }
+  });
+
+  it('CRITICAL names an unparseable target by a fixed placeholder rather than by its own text', () => {
+    // The rejection message is built from a hostname the guard re-parses out of
+    // the target. When that re-parse fails it keeps a fixed placeholder, and
+    // that choice is the whole protection: the raw string is the one thing
+    // guaranteed to still hold the credential, and this message is logged.
+    //
+    // Pinning the placeholder positively — not just asserting the secret is
+    // absent — is what makes the arm survive a rewrite of the fallback. A
+    // fallback that reflected the target would satisfy "throws SsrfBlockedError"
+    // and, for every other fixture in this file, "contains no secret" too.
+    try {
+      assertSafeSsrfFetchTarget('https://user:super-secret@[not-a-host');
+      throw new Error('expected target rejection');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SsrfBlockedError);
+      const { message } = error as Error;
+      expect(message).toContain('<invalid target>');
+      expect(message).not.toContain('super-secret');
+      expect(message).not.toContain('not-a-host');
     }
   });
 });
