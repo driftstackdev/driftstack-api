@@ -6264,3 +6264,34 @@ Two of these read zero under a plausible keyword filter and were pinned at full 
 keep producing false gaps in this codebase because the covering test is often in a file whose name does
 not contain the module's keywords. Every zero now gets a full-scope re-measure before it is called
 anything — that rule has now corrected four would-be findings.
+
+## 8c — the bare-throw lens: large population, low yield here
+
+Last pass produced a rule worth testing at scale: an arm aimed at a decrypt-side length check failed
+with the WRONG error message, because upstream prechecks refused both candidate inputs first. A bare
+`.toThrow()` would have passed and shipped a test that proves an upstream check while naming this one.
+
+Census: **270 bare `.toThrow()` and 57 bare `rejects.toThrow()`** in the suite. Most are legitimate —
+a function with one failure mode needs no message. The risky subset is a bare throw under a title that
+names a specific reason: **55** of those in security-relevant files.
+
+Four were probed by disabling the guard each one names:
+
+| arm                                  | probe                        | result                                                                            |
+| ------------------------------------ | ---------------------------- | --------------------------------------------------------------------------------- |
+| recipes: "rejects record relocation" | drop `recipeId` from the AAD | 1 red — genuinely tests the id binding                                            |
+| MFA migration: wrong-key rejection   | —                            | sound; the real claim is carried by exact neighbours (`scanned: 0, converted: 0`) |
+| proxy secret: canonical-shape guard  | disable it                   | 1 red                                                                             |
+| proxy secret: canonical-base64 guard | disable it                   | 2 red                                                                             |
+
+**All four sound.** The pattern that makes a bare throw safe is visible in the MFA case: the throw is
+one assertion among several, and the substantive claim — that a failed migration wrote nothing — is
+carried by exact counts rather than by the throw.
+
+### Disposition
+
+Not worth a sweeping change. Converting 270 assertions would be churn with a low hit rate, and the
+looped bare throw over four malformations in the proxy-secret file — the shape most likely to hide
+layering — was individually attributable when measured. The rule is recorded for review time instead:
+if a title names a reason, pin the reason; if several malformations share one bare throw, disable each
+guard in turn and check that each reds something.
