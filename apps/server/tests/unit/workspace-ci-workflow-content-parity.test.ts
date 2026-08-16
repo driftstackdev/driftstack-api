@@ -15,7 +15,7 @@
 //     10 retries — parity with /docker-compose.yml).
 //   • Node 22 + actions/checkout@v6 + actions/setup-node@v6 +
 //     actions/upload-artifact@v7.
-//   • V-107 coverage threshold (npx vitest run --coverage).
+//   • V-107 coverage threshold, run THROUGH verify-suite (--all).
 //   • V-103 7-resource-accessor smoke-test (sessions + api_keys +
 //     usage + webhooks + profiles + billing + auth).
 //   • Python 3.10 ruff + mypy + pytest + build wheel + venv smoke.
@@ -83,7 +83,17 @@ describe('W541.A /.github/workflows/ci.yml content parity', () => {
     expect(body).toMatch(
       /# V-107: vitest\.config\.ts enforces coverage thresholds \(lines,\s*\n\s*# statements, functions, branches\)\. CI fails if coverage drops\s*\n\s*# below the regression gate set in V-107\./,
     );
-    expect(body).toMatch(/run: npx vitest run --coverage/);
+    // Was `npx vitest run --coverage`, which inherited none of verify-suite's
+    // judgement — and the incident that script exists for is a vitest run that
+    // EXITS 0 while workers die and files never execute. Coverage cannot see
+    // that either: a run that skipped files still reports high coverage over
+    // the ones it did run. `--all` keeps the scope (root config + --coverage)
+    // and adds the exit-code, unhandled-error and file-count checks.
+    expect(body).toMatch(/run: node scripts\/verify-suite\.mjs --all/);
+    expect(
+      body,
+      'CI must not call vitest directly again — that is how the judgement was lost',
+    ).not.toMatch(/run: npx vitest run --coverage/);
   });
 
   it("CRITICAL production-dependency audit gate pinned: 'npm audit --omit=dev --audit-level=high'. Nothing else checks this — deploy.yml runs `npm ci --no-audit` — so dropping this step means a vulnerable RUNTIME dependency reaches production silently. The --omit=dev scope is equally load-bearing: the tree carries 12 advisories (5 high), every one build or lint tooling, so an unscoped gate would either block every PR or be permanently muted, and a muted gate catches nothing.", () => {

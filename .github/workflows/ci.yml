@@ -120,7 +120,18 @@ jobs:
         # V-107: vitest.config.ts enforces coverage thresholds (lines,
         # statements, functions, branches). CI fails if coverage drops
         # below the regression gate set in V-107.
-        run: npx vitest run --coverage
+        #
+        # Run THROUGH verify-suite rather than calling vitest directly. This step
+        # used to be `npx vitest run --coverage`, which inherited none of that
+        # script's judgement — and the incident it was written for is precisely a
+        # vitest run that EXITS 0 while workers die and files silently never
+        # execute (`Tests 26677 passed`, nine files missing). Coverage thresholds
+        # cannot see that either: a suite that skipped files still reports high
+        # coverage over the files it did run.
+        #
+        # `--all` keeps the scope identical (root config + --coverage) and adds
+        # the exit-code, unhandled-error and file-count checks on top.
+        run: node scripts/verify-suite.mjs --all
 
   e2e:
     name: End-to-end (Playwright against real Postgres + Redis)

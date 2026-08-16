@@ -32,6 +32,17 @@ import { spawn, spawnSync } from 'node:child_process';
 export const EXPECTED_TEST_FILES = 2770;
 
 /**
+ * Files the ROOT config collects — every project, which is what CI runs.
+ *
+ * CI ran `npx vitest run --coverage` directly, so it inherited NONE of the
+ * judgement below: vitest exits 0 on a run whose workers died, which is the
+ * exact incident this file was written for. The count differs from the node
+ * project's because the root config also collects the gui-client and app
+ * projects. Raise when adding tests, same as the other pin.
+ */
+export const EXPECTED_TEST_FILES_ALL = 2932;
+
+/**
  * Judge a completed vitest run.
  *
  * Pure so it can be tested against REAL captured output from a known-bad run
@@ -109,7 +120,14 @@ if (process.argv[1]?.endsWith('verify-suite.mjs') === true) {
     );
     process.exit(1);
   }
-  const args = ['vitest', 'run', '--config', 'vitest.node.config.ts', ...process.argv.slice(2)];
+  // `--all` judges the FULL root-config run with coverage — the shape CI runs.
+  // Without it this defaults to the node project, which is the fast local loop.
+  const passthrough = process.argv.slice(2).filter((a) => a !== '--all');
+  const runAll = process.argv.includes('--all');
+  const expectedFiles = runAll ? EXPECTED_TEST_FILES_ALL : EXPECTED_TEST_FILES;
+  const args = runAll
+    ? ['vitest', 'run', '--coverage', ...passthrough]
+    : ['vitest', 'run', '--config', 'vitest.node.config.ts', ...passthrough];
   const child = spawn('npx', args, { encoding: 'utf8' });
   let output = '';
   child.stdout.setEncoding('utf8');
@@ -123,7 +141,7 @@ if (process.argv[1]?.endsWith('verify-suite.mjs') === true) {
     process.stderr.write(c);
   });
   child.on('close', (code) => {
-    const verdict = judge({ output, exitCode: code ?? 1 });
+    const verdict = judge({ output, exitCode: code ?? 1, expectedFiles });
     if (verdict.ok) {
       console.log('\nverify-suite: OK — exit 0, no unhandled errors, full file count');
       if (verdict.skippedFiles > 0) {

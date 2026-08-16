@@ -6827,3 +6827,40 @@ append the offending sentence, which is indistinguishable from fixing the copy.
 ⭐ One arm exists specifically to stop the fix becoming the hole: **"That
 integration is deferred" must still fail.** The allowlist exempts PHRASES, never
 the word.
+
+### 42. The suite's own trust gate was never run by CI or by any hook
+
+`scripts/verify-suite.mjs` exists because of a specific incident: a run that
+reported `Tests 26677 passed`, exited 0, listed no failures — and silently never
+executed nine test FILES, because their workers failed to start. It checks three
+things vitest alone cannot: the exit code, unhandled worker errors, and the
+collected file COUNT against a pin.
+
+**Nothing invoked it.** Swept every guard-shaped npm script for what actually
+runs it — CI, a git hook, or another script. `verify` was referenced by none of
+them. CI ran `npx vitest run --coverage` directly and the pre-push hook runs
+`npm test`; both are exactly the shape verify-suite was written to distrust.
+
+**Coverage thresholds cannot substitute.** A run that skipped files still reports
+high coverage over the files it did run — the metric is a ratio, and the missing
+files leave both sides of it.
+
+CI's test step now runs `node scripts/verify-suite.mjs --all`, which keeps the
+scope identical (root config plus `--coverage`) and adds the judgement on top.
+The full-run pin is a second constant, `EXPECTED_TEST_FILES_ALL`, because the
+root config collects every project rather than just the node one.
+
+⭐ **The pin was measured, not reasoned.** The arithmetic said 2932 (2928 seen
+earlier, plus four files added since) and the measurement agreed — but a
+coincidence between a guess and the truth is not evidence, and the run also
+surfaced that the full suite is otherwise clean: no unhandled errors, one
+failure, and that failure was this change tripping the `ci.yml` content-parity
+pin. Which is the pin doing its job.
+
+Proved two ways: a filtered `--all` run reports `expected 2932` (so the mode is
+judged against the right pin, not the node one), and reverting CI to a bare
+vitest call reds the parity arm that now forbids it.
+
+_Not a finding:_ `test:e2e:setup` is also invoked by nothing, correctly — CI's
+e2e job uses GitHub service containers rather than docker compose, so that script
+is a local convenience.
