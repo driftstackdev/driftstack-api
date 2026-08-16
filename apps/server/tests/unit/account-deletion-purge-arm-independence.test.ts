@@ -235,6 +235,44 @@ describe('no purge arm can be disabled by another arm being unavailable', () => 
     expect(result.turnReceiptsPurged).toBe(3);
   });
 
+  // After the profile rows are deleted, each sealed blob is removed from R2 in
+  // its own swallow. The comment there is the reason this arm exists: an
+  // undeleted blob is the customer's data outliving the erasure we committed
+  // to, so the log is the ONLY record that it happened.
+  //
+  // Making that catch rethrow reds nothing across 20 purge and retention files.
+  // The failure it would cause is subtle rather than loud: the throw lands in
+  // the enclosing profiles catch, so a purge whose database rows were deleted
+  // successfully gets reported as a FAILED profiles arm — and the next tick
+  // finds no profiles left to retry, so neither the count nor the orphan is
+  // ever corrected.
+  it('CRITICAL an R2 blob-delete failure leaves the profile purge successful and logs the orphan', async () => {
+    const errors: Array<Record<string, unknown>> = [];
+    const sweeper = new AccountDeletionPurgeSweeperService({
+      repo: byokRepoNeverCalled,
+      profiles: profileArm([]),
+      r2: {
+        deleteObject: () => Promise.reject(new Error('r2 unavailable')),
+      } as unknown as ConstructorParameters<typeof AccountDeletionPurgeSweeperService>[0]['r2'],
+      logger: {
+        error: (obj: Record<string, unknown>) => {
+          errors.push(obj);
+        },
+      } as unknown as ConstructorParameters<typeof AccountDeletionPurgeSweeperService>[0]['logger'],
+    });
+
+    const result = await sweeper.tickOnce(NOW);
+
+    expect(
+      result.profilesPurged,
+      'the rows WERE deleted, so the arm must not report itself failed because a blob lingered',
+    ).toBe(1);
+    expect(
+      errors.some((e) => e['profileId'] === 'prof_1'),
+      'the orphaned blob must be logged — that log is the only record it was left behind',
+    ).toBe(true);
+  });
+
   it('CRITICAL every arm reports its own count, so a silently-skipped arm is visible rather than absorbed into a single number.', async () => {
     const sweeper = new AccountDeletionPurgeSweeperService({ repo: byokRepoNeverCalled });
 
