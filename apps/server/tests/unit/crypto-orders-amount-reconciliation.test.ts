@@ -18,13 +18,41 @@
 //   integration/crypto-order-paid-tier-activation          1 red
 //   unit/services-crypto-orders-content-parity             1 red
 //
-// One behavioural unit arm, one end-to-end arm, one source-text pin. Delete this
-// file and the check survives on the integration arm alone, with a pin that
-// would go green again the moment someone rewrites the comparison rather than
-// removes it. That is thin for the gate deciding whether an under-payment buys a
-// tier, and it is thin because the interesting cases are arithmetic —
-// unit-mismatch, tolerance edges, zero and missing amounts — which an
-// end-to-end test is a poor place to enumerate. Add arithmetic cases HERE.
+// ⛔ CORRECTION, next day. The paragraph that stood here read that 3 as evidence
+// this file was THIN and asked for more arithmetic cases. That was wrong, and
+// wrong in a way worth leaving on the record: a red COUNT measures how much of
+// the suite one mutation breaks, not how well the file covers its subject. That
+// mutation disables exactly one branch, so exactly one arm here can notice it —
+// three reds is what a CORRECT narrow mutation looks like.
+//
+// Re-measured before rewriting this, each with tsc exit 0:
+//
+//   the short-payment branch made unreachable                      3 red
+//   the tolerance factor forced to 0 (any payment is enough)       3 red
+//   the pay_currency mismatch guard made unreachable               1 red
+//
+// The arithmetic is covered, and the half-pay arm is doing more work than its
+// name suggests: it pays 50% of what is owed, so it also fails any tolerance
+// widened past 50%. Between it and the tolerance arm below, the accepted band is
+// pinned from both sides.
+//
+// The thin spot is the LAST row. The pay_currency guard — the thing standing
+// between `actually_paid` in one coin and `pay_amount` in another — reds a single
+// arm in this file and nothing else at all. Both source-text pins are blind to
+// it. Treat that arm as load-bearing rather than as one case among nineteen.
+//
+// Following that row found a real hole, in the direction the mismatch arm cannot
+// reach. It pays ETH against a BTC order, which differs under ANY comparison — so
+// dropping the `.toLowerCase()` normalisation left the WHOLE SUITE GREEN at
+// 28,009 passed, tsc 0. A provider reporting `BTC` for an order bound to `btc`
+// would then read as a mismatch: routed to partial, alarmed, tier never
+// unlocked. A fully-paid customer who gets nothing is the expensive direction of
+// this guard, and it had no arm. The case-differing arm below is that arm.
+//
+// An earlier attempt to measure the tolerance row by writing `owed * 0` reported
+// tsc exit 2 — it leaves AMOUNT_RECONCILE_TOLERANCE_FRACTION unused — and printed
+// 5 reds, two of them the typecheck guards themselves. Contaminated, discarded.
+// Multiply the existing expression by 0 instead, so the const stays referenced.
 //
 // V-743: a settled payment that lands on an order the expiry sweep already
 // flipped to 'failed' (or that the customer cancelled) is deliberately NOT
@@ -185,6 +213,26 @@ describe('crypto IPN amount reconciliation (#1, crypto-denominated)', () => {
     expect(paidNotifier.notifyOrderPaid).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error.mock.calls[0]?.[1]).toMatch(/pay_currency does not match/);
+  });
+
+  it('CRITICAL treats a case-differing pay_currency as the SAME currency and still unlocks. The mismatch arm above cannot see this: BTC vs ETH differs under any comparison, so dropping the .toLowerCase() normalisation left the whole suite green — 28,009 passed — while a provider reporting `BTC` for an order bound to `btc` would be read as a currency mismatch, routed to partial, and alarmed. That is a fully-paid customer who never gets their tier, which is the expensive direction of this guard.', async () => {
+    const logger = { error: vi.fn() };
+    const paidNotifier: CryptoOrderPaidEmailNotifier = {
+      notifyOrderPaid: vi.fn(() => Promise.resolve()),
+    };
+    const { svc } = await seed({ logger, paidNotifier, bindQuote: true });
+    const updated = await svc.applyIpnStatus({
+      order_id: 'ord_t',
+      payment_id: 'np_p',
+      provider_status: 'finished',
+      actually_paid: ORDER_PAY_AMOUNT_BTC,
+      pay_amount: ORDER_PAY_AMOUNT_BTC,
+      // Same currency as the order's bound 'btc', reported in a different case.
+      // NOWPayments is the source of this string; nothing constrains its casing.
+      pay_currency: 'BTC',
+    });
+    expect(updated?.status, 'a full payment in the SAME currency must unlock').toBe('paid');
+    expect(logger.error, 'and must not be alarmed as a currency mismatch').not.toHaveBeenCalled();
   });
 
   it('persists the reconciliation amounts (crypto + fiat audit ref) on the transition event for support', async () => {
