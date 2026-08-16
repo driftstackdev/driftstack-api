@@ -150,6 +150,44 @@ describe('RedisAuthCache security-sensitive schema compatibility', () => {
     await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
   });
 
+  // V-247's key-generation gate, which is the REVOCATION backstop.
+  //
+  // `invalidateKey` normally deletes the entry outright via the reverse index, and
+  // that path is covered. This gate is what still catches a revoked key when the
+  // delete did NOT happen — and the cache's own contract makes that reachable:
+  // "any Redis error during get/set/invalidate is logged and treated as a no-op".
+  // A failed delete with a successful INCR leaves exactly this state.
+  //
+  // Coverage showed it had never fired: the account gate above it is checked first,
+  // and the one existing arm that reaches this area bumps BOTH generations, so the
+  // account gate returns null and execution never reaches the key gate. Evaluated
+  // 7 times, taken 0.
+  //
+  // So this arm moves ONLY the key generation and asserts the account generation is
+  // still absent — making the account gate incapable of producing the null, so the
+  // refusal can only be the key gate. Without it a revoked key keeps authenticating
+  // from cache until the 30s TTL expires.
+  it('CRITICAL a cached entry whose KEY generation has moved is a miss even though the account generation still matches, because that is the backstop when invalidateKey deleted nothing', async () => {
+    const redis = new FakeRedis();
+    const { cache } = makeCache(redis);
+    await cache.set(TOKEN_SHA, 'key-security', 'acc-security', context(), 30);
+    await expect(
+      cache.get(TOKEN_SHA),
+      'precondition: a hit before the revocation, or the miss below proves nothing',
+    ).resolves.not.toBeNull();
+
+    // A revocation INCRs the key generation. The entry itself is left in place,
+    // standing in for a delete that failed or never ran.
+    redis.values.set('auth:keyid:key-security:v', '1');
+    expect(
+      redis.values.get('auth:account:acc-security:v'),
+      'the account generation must stay absent, or the account gate could be the one refusing',
+    ).toBeUndefined();
+    expect(redis.values.get(entryKey()), 'the entry is still cached').toBeDefined();
+
+    await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
+  });
+
   it('treats an unversioned legacy envelope as a miss before Redis version reads', async () => {
     const redis = new FakeRedis();
     const { cache, warn } = makeCache(redis);

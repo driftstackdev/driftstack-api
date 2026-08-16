@@ -5833,3 +5833,55 @@ have inferred a gap from what a grep did NOT find, the gap was somewhere else.**
 V-174 alias (found via coverage counters, not names), the `resetForTest` scope (found
 by reading the enclosing class), and this tier gate (found by reading a test). A
 negative grep result is a hypothesis about location, and it is a weak one.
+
+## 7u — the revocation backstop that had never fired
+
+The hot-guard cut in 7r used a ≥50 threshold on the condition. The 5–49 band was
+never looked at; mining it for security/money consequents returns 10, and the first
+is the strongest find since the VPN dispatch re-guard.
+
+`auth-cache.ts` `RedisAuthCache.get()` checks two generations in order:
+
+    :364  if (currentAccountVersion !== entry.accountVersion) return null;   evaluated 7 → fired 1 ✓
+    :368  if (currentKeyVersion !== entry.keyVersion) return null;           evaluated 7 → fired 0 ✗
+
+The second is V-247's key-generation gate, and it is the **revocation backstop**.
+`invalidateKey` normally deletes the entry outright through the reverse index, and
+that path is covered. This gate is what still catches a revoked key when the delete
+did not happen — which the cache's own contract makes reachable: _"any Redis error
+during get/set/invalidate is logged and treated as a no-op."_ A failed delete
+alongside a successful INCR leaves exactly this state, and without the gate the
+revoked key keeps authenticating from cache until the 30s TTL expires.
+
+**Why it had never fired is the interesting part.** One existing arm does reach this
+area — "tags a late write with its captured account and key generations" — but it
+bumps BOTH generations, so the account gate one line above returns null first and
+execution never arrives at the key gate. Two gates, one test, and the test can only
+ever exercise the first.
+
+So the new arm moves **only** the key generation, and asserts the account generation
+is still absent:
+
+    expect(redis.values.get('auth:account:acc-security:v')).toBeUndefined();
+    expect(redis.values.get(entryKey())).toBeDefined();     // the entry is still cached
+
+That makes the account gate incapable of producing the null and the entry's absence
+incapable of it either, so the refusal can only be the key gate. A precondition
+assertion checks it was a HIT before the revocation — without that, the miss
+afterwards would prove nothing.
+
+    guard present → miss after the key INCR
+    guard removed → "expected { account: { … } } to be null" — the revoked key's
+                    cached context is served
+
+⚠️ The novelty run also redded `services-auth-cache-content-parity`, whose assertion
+is `expect(body).toMatch(/const currentKeyVersion = keyVersionR…/)` — a regex over
+source text. Same verdict as every previous instance: a deletion tripwire, not
+evidence the gate works. The line was text-protected; the behaviour was not.
+
+⭐ **Two gates in sequence need two tests, and the second one has to disable the
+first.** This is the third instance of the shape this session — the V-174 alias pair,
+the MFA sequential-vs-concurrent replay pair, and now the account-vs-key generation
+pair. In every case the covered sibling sits EARLIER in the function and short-
+circuits, so the later gate is unreachable by the obvious test. The tell is always the
+same: a condition and its consequent with different counts.
