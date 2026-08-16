@@ -5050,3 +5050,87 @@ uniqueness.** A `CREATE UNIQUE INDEX` enforces it without being a constraint, so
 constraint-only query reports "no uniqueness" on a table that has it. Query
 `pg_indexes` too before concluding a duplicate is possible — the wrong answer here
 would have promoted a 500-vs-400 nicety into a fabricated integrity finding.
+
+## 7i — a third category: cold because it cannot be reached
+
+`agent-runtime.ts:677` was next on the 31-list, and it is neither of the two
+categories 7d established. It is not a residual whose fall-through crashes, and not a
+missing test whose fall-through lies. It cannot execute at all.
+
+`runTurn` reads the session ONCE and screens it:
+
+    :602  if (session.status !== 'active')  → return { kind: 'session-closed', … }
+
+then, after admission bookkeeping that never re-reads the row, hands that same object
+to `runExclusiveTurn`, which screens it again:
+
+    :673  if (session.status !== 'active')  → return { kind: 'session-closed', … }
+
+The counters settle it:
+
+    :602  evaluated 146   :603  fired 2
+    :673  evaluated 140   :677  fired 0
+
+Every call that reaches `:673` has already passed `:602` on the same immutable value,
+and `runExclusiveTurn` is private with a single call site. The inner branch is
+therefore unreachable by construction, and the 146-vs-140 gap is simply the six calls
+that returned earlier for other reasons.
+
+**No test is written for it, and that is the finding rather than a gap.** Reaching
+that branch would mean calling a private method directly with a state the public path
+cannot produce — a test that pins nothing about production behaviour while looking
+like coverage. Nor is the branch removed: it is a cheap safety net that becomes load-
+bearing the moment someone adds a re-read after admission or a second call site, which
+is exactly when a stale-status turn would otherwise slip through.
+
+⭐ **The catalogue is now three, and the distinguishing question differs for each:**
+
+| cold guard  | fall-through                              | action                        |
+| ----------- | ----------------------------------------- | ----------------------------- |
+| residual    | crashes a line later                      | leave; a test pins a message  |
+| real gap    | returns a WRONG ANSWER silently           | pin it                        |
+| unreachable | cannot execute — a caller already decided | record; do not fake the state |
+
+The third is the one most likely to waste an afternoon, because it is invisible from
+the coverage row and from the guard's own body. What separates it is reading the
+CALLER: if the value under test was already decided upstream and nothing re-reads it,
+no test can honestly reach the branch.
+
+## 7j — the cold-site sweep has saturated, and here is the evidence
+
+Five guards were shipped from this sweep across the last fires (OAuth code single-use,
+OAuth client binding, api-key revocation, api-key expiry-on-rotation, TOTP concurrent
+replay, VPN dispatch SSRF). This fire worked the tail and shipped none, which is the
+result rather than a shortfall: **every remaining candidate examined is category 3 —
+cold because it cannot be reached, not because it is untested.**
+
+The evidence, one line each:
+
+| site                                   | why it cannot fire                                                                                                                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `agent-runtime.ts:677`                 | `runTurn` already screened the same object; no re-read, single private call site. Counters: outer 146 evaluated / 2 fired, inner 140 / **0**                                         |
+| `middleware/auth.ts:242`               | `if (request.account)` after `await requireAuth(...)` — `requireAuth` throws on failure, so the false side is unreachable. It exists because TS narrowing does not survive the await |
+| `lib/api-keys.ts:83`                   | `base32Encode`'s tail-padding branch. 8·N bits leave a remainder only when N ∤ 5; every caller passes a length that divides evenly, and the helper is private                        |
+| six `MAX_*_MIGRATION_BATCH` validators | one caller each, in `bootstrap.ts`, passing a hardcoded `500`                                                                                                                        |
+
+None of these is a defect and none should be deleted — each is a cheap net that
+becomes load-bearing the moment a caller changes. What none of them can be is
+_tested_, because reaching them means constructing a state the callers make
+impossible.
+
+⚠️ **A filter that produced 99 findings and 0 real ones**, worth recording as an
+instrument failure. Searching the never-executed returns for quota/limit refusals with
+`limit|cap|max|…` matched `.limit(1)` on ordinary repo reads — every SELECT in the
+codebase. The fix was to require the keyword inside an actual `if`/`&&` CONDITION and
+to exclude `.limit(`, which cut 99 to 33 and made the list readable. Same class as the
+earlier lesson about a keyword regex matching a category name rather than a leaf: **a
+word that appears in the language of the query is not a signal.**
+
+⭐ **The stopping rule, so the next fire does not re-grind this.** A cold site is worth
+work only when the CALLER can still produce the state. The check is mechanical and
+takes a minute: find the call sites, ask whether the value under test is fixed by the
+caller (a constant, an earlier screen on the same object, a type that cannot hold the
+value), and stop if it is. Applied to the tail of this list it returns "stop" every
+time — which is why the sweep is done, and why the next measured axis should be a
+different one (branch polarity, error-path coverage, or a fresh coverage pass after
+the next batch of features lands) rather than more of this list.
