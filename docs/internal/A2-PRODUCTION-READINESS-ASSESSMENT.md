@@ -775,7 +775,24 @@ rather than only here, so they cannot go quiet again.
   unknown-unknown is smaller, not gone.
 
 - **`WebhookSecretForceRotationService`**. Rotates webhook signing secrets past
-  91 days and emails the customer a 7-day grace deadline. Its sibling
+  91 days and emails the customer a 7-day grace deadline.
+
+  **Its SELECTION QUERY is now pinned (2026-08-16).** The policy decision below is
+  still open, but the query is the part a policy cannot fix: it decides whose
+  secret rotates, and if its predicates are wrong then the day someone wires the
+  tick every endpoint rotates at once no matter what the policy says. It had no
+  behavioural coverage at all — every test naming
+  `findEndpointsNeedingForceRotation` used an in-memory fake returning `[]`, plus
+  a content-parity pin over the source text. Measured: widening the age threshold
+  until every endpoint is due, and dropping the already-force-rotated exclusion so
+  endpoints re-rotate on every tick, each left all 22,428 tests green.
+
+  Now covered against real Postgres in both directions for all five predicates —
+  aged selected, fresh excluded, already-force-rotated excluded, disabled
+  excluded, ordering oldest-first, limit honoured. Proved by mutating each in
+  turn. This mirrors the discipline its sibling
+  `findEndpointsNeedingRotationReminder` already had; the asymmetry mattered
+  because the reminder only sends an email while this one changes the secret. Its sibling
   `WebhookGraceExpiringNoticeService` IS wired, so the half that warns about
   expiring grace windows runs while the half that opens them does not.
   _(Clarified 2026-08-16: that asymmetry does NOT make the notice service idle —
@@ -785,6 +802,7 @@ rather than only here, so they cannot go quiet again.
   _Doing nothing:_ signing secrets never rotate. _Recommendation:_ decide the
   policy first — turning it on breaks any integration that ignores the grace
   window.
+
 - **`DurableWebhookDeliveryService`**. The documented V-173 successor, awaiting
   soak time. _Doing nothing:_ fine, this one is genuinely staged. Its claim query
   is kept in step with the live one so a cutover cannot reintroduce the endpoint
