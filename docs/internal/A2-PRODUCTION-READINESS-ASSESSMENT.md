@@ -6966,3 +6966,33 @@ lookup in prose. Removing the exclusion leaves the arm **green** —
 filter stays as a cheap net against prose that happens to match, but the comment
 now says that instead of claiming a role it does not have. A false rationale in a
 guard is worse than none: the next reader trusts it.
+
+### 46. The production rate limiter was behaviourally tested only OUTSIDE the main gate
+
+`RedisRateLimitStore` implements the whole token bucket as a Lua script under
+EVAL — that is what makes it atomic across concurrent requests. Measured before
+writing anything: setting the allow branch to `if true then`, which turns the
+limiter completely OFF, reds exactly **three** tests in the vitest gate, and all
+three are CONTENT-PARITY pins over the script's source text. The same mutation
+fails **all four** `tests/e2e/rate-limit.spec.ts` cases.
+
+So the behavioural coverage was real and good, and lived entirely outside the
+gate that runs on every commit: e2e is a separate Playwright suite, excluded from
+every vitest config, and until item 41's work could not be run without Docker.
+**Anyone reading `verify-suite: OK` had not exercised the limiter.**
+
+Brought into the main gate as an integration test against a real Redis. CI's
+build-test job already provisions a redis service that **no integration test was
+using**. `now` is injected, so refill is exercised by arithmetic rather than
+sleeping — no timing assumptions, no flake — and keys are per-test UUIDs, so it
+never flushes and cannot disturb another agent's index.
+
+Eight arms, five mutations, all red: limiter off · `>=` → `>` (the last token
+unspendable) · refill uncapped · the partial-hash fail-safe losing its `last_ms`
+guard · refill 10× too fast.
+
+⚠️ **That last mutation initially passed**, and the arm it exposed is the one
+worth keeping. Both original refill assertions land where the capacity CAP
+absorbs the excess, so a 10× rate was invisible. **Rate is only observable BELOW
+the cap**: drain the bucket, then ask again after too little time has elapsed —
+0.2 tokens cannot pay for 1, and the refusal must say 400ms.
