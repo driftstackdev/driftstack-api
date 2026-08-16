@@ -35,6 +35,7 @@
     "check:rendered-product-status": "node scripts/check-rendered-product-status.mjs",
     "test:e2e": "npm run test:e2e --workspace apps/server",
     "test:e2e:setup": "docker compose up -d --wait",
+    "test:e2e:local": "node scripts/e2e-local.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint . && node scripts/check-subprocessor-mirror.mjs",
     "format": "node --max-old-space-size=8192 ./node_modules/prettier/bin/prettier.cjs --write .",

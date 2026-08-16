@@ -507,6 +507,22 @@ the wrapper shell, not the command. The `echo "exit=$?"` immediately after the
 command is what caught `exit=1` — the same discipline as capturing a capture
 driver's status on the very next line.
 
+**`npm run test:e2e:local` now exists (2026-08-16).** The suite kept being recorded
+as unrun because `test:e2e` is wired to `docker compose`; the suite itself needs
+only a Postgres and a Redis. The new entry point runs it without Docker and
+REFUSES a target it would destroy: `resetState()` TRUNCATEs the whole schema and
+`flushdb()`s the selected index before every test, and the harness defaults are
+the shared development database and Redis index 0 — correct for compose, where
+both are disposable containers, and exactly wrong on a developer machine.
+
+Item 30's existing rule cannot help here: it refuses a NON-LOOPBACK target, and
+every mistake this guards is on loopback. So the checks live on a separate entry
+point, where "not compose" is the stated contract, and `test:e2e` is untouched.
+Five rules, each mutation-proved: unset DATABASE_URL, the shared database by name,
+Redis index 0 or absent, a non-loopback host, and an unparseable URL (refused
+rather than assumed harmless — a guard that cannot identify its target must not
+clear it). All problems are reported at once rather than the first.
+
 **Coverage thresholds pass with room.** CI runs `vitest run --coverage` over the
 ROOT config, which is a bigger suite than the node-only gate this repo's
 `verify-suite` drives — **2928 files / 29,491 tests** against 2766 / 27,914 — and
