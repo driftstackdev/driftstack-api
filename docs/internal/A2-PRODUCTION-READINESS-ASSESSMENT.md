@@ -4723,3 +4723,72 @@ any edit to the text it pins, including a comment. When one appears in a novelty
 check, read its assertion before concluding the site was covered — otherwise the
 instrument that is supposed to prevent redundant work starts causing skipped work
 instead, which is the more expensive direction.
+
+### `api-keys-repo.ts:111` — rotation as a way to un-expire a key
+
+`rotateApiKeyAtomic` locks the old row and screens it three ways before minting a
+successor: `not_found`, `revoked`, then
+
+    if (locked.expiresAt !== null && locked.expiresAt <= input.now) return { kind: 'expired' };
+
+The first two have been exercised for a long time. The third had a statement count
+of zero. Delete it and nothing throws — execution proceeds to the successor INSERT
+and answers `rotated`, handing back fresh plaintext with a NEW expiry. A key whose
+lifetime already ended becomes live again, with nobody re-authorising it. Expiry is
+what makes a time-boxed key time-boxed, and rotation is the one path that could
+quietly undo it.
+
+Measured: with the screen gone the new arm reds (_"expected 'rotated' to be
+'expired'"_) while **38 of 39 api-key test files stay green, 449 tests**. Unlike the
+OAuth binding above, no content-parity pin covered this line either — so this one
+was unheld in every sense, text included.
+
+⚠️ **A test-harness trap worth recording, because it cost two runs.** Seeding
+`expires_at` by interpolating a `Date` into a raw `postgres.js` template threw
+_"The 'string' argument must be … Received an instance of Date"_ — but only once a
+`drizzle(client)` handle had been constructed over that same client before the seed
+ran. With the handle built lazily after seeding, the identical statement worked. The
+mechanism was not isolated, so this is recorded as observed behaviour rather than a
+proven cause; the fix that makes it moot is to pass
+`${value.toISOString()}::timestamptz` instead of the `Date`, which works either way.
+
+### Two more of the 31, examined and declined with reasons
+
+- **`rate-limit.ts:215`** (no actor receipt → fail closed) — removing it does NOT
+  fall through silently: the next line dereferences `actorReceipt.accountId` and
+  throws. By 7d's criterion that is the crash category; the guard converts a 500
+  into a 429. Recorded, not tested.
+- **`rate-limit.ts:234`** (owner not among the actor's live memberships → fail
+  closed) — this one does fall through silently, so it is the right category, but
+  its own comment records that exact member/admin role "remains route-specific and
+  must be checked before this decorator is called". It is defense in depth whose
+  exposure requires a route-layer bug first. Worth a test eventually; ranked below
+  the two shipped here, which need no precondition.
+
+### Two dead functions, found sideways
+
+Cross-referencing never-called functions against references anywhere in production
+source turned up two genuine leftovers — every other candidate was an istanbul
+disambiguation artefact (`constructor_2`, `list_2`) rather than a real name:
+
+- `db/fleet-nodes-repo.ts:465 listActiveByRegion()` — referenced nowhere but its own
+  definition. A genuine leftover on a production repo.
+
+⛔ **And one I wrote up wrongly before checking the enclosing class.**
+`services/oauth.ts:187 resetForTest()` went into this list as "a state-mutating
+method on a production service". It is not: it belongs to **`InMemoryOAuthStore`**,
+the test double, and all it does is clear four in-memory maps — which is precisely
+what such a helper is for. Being uncalled just means tests construct fresh instances
+instead of resetting shared ones.
+
+Worse for my version, the protection I imagined was missing already exists and I had
+read it a screen earlier: `oauth-production-wiring-content-parity` asserts the e2e
+helper contains neither `InMemoryOAuthStore` nor `oauthStore.resetForTest`. The
+guard against the exact footgun I was describing is committed and green.
+
+The lesson is narrow and repeatable: **a coverage row gives a file and a line, never
+a scope.** `services/oauth.ts` sounds like a production service and contains one;
+line 187 is inside a different class in the same file. One `awk` for the enclosing
+`class` was the whole check, and it should run before any claim about what a symbol
+is attached to. Only `listActiveByRegion` survives as a real finding, and it is
+recorded rather than deleted.
