@@ -2,7 +2,6 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
-import assert from 'node:assert/strict';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const APPS = [
@@ -33,8 +32,19 @@ const INTERNAL_MARKERS = [
   /\buntil\b[^.]{0,120}\blands\b/giu,
 ];
 
-// Current request-timing semantics, not an unshipped-product promise.
-const ALLOWED_PHRASES = ['Authentication is deferred to the first request'];
+// Phrases that contain a forbidden WORD in a sense that is not a product-status
+// claim. Each needs a reason; the count is pinned by the test so growing this
+// list is a deliberate edit rather than a quiet way to silence the guard.
+const ALLOWED_PHRASES = [
+  // Current request-timing semantics, not an unshipped-product promise.
+  'Authentication is deferred to the first request',
+  // AUP §billing: invoices for a suspended period are voided, not postponed.
+  // "deferred" here describes what does NOT happen to an invoice, and this is
+  // the phrase that had the guard failing — which is very likely why nothing
+  // was wired to run it.
+  'voided rather than deferred',
+];
+export { ALLOWED_PHRASES, FORBIDDEN, INTERNAL_MARKERS };
 
 async function htmlFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -60,7 +70,7 @@ function decodeEntities(value) {
     .replace(/&#x([\da-f]+);/giu, (_match, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
 }
 
-function renderedText(html) {
+export function renderedText(html) {
   let text = decodeEntities(
     html
       .replace(/<!--[\s\S]*?-->/gu, ' ')
@@ -73,7 +83,7 @@ function renderedText(html) {
   return text;
 }
 
-function customerVisibleText(html) {
+export function customerVisibleText(html) {
   return decodeEntities(
     html
       .replace(/<!--[\s\S]*?-->/gu, ' ')
@@ -84,88 +94,71 @@ function customerVisibleText(html) {
     .trim();
 }
 
-function hasForbidden(text) {
+export function hasForbidden(text) {
   return FORBIDDEN.some((pattern) => {
     pattern.lastIndex = 0;
     return pattern.test(text);
   });
 }
 
-function hasInternalMarker(text) {
+export function hasInternalMarker(text) {
   return INTERNAL_MARKERS.some((pattern) => {
     pattern.lastIndex = 0;
     return pattern.test(text);
   });
 }
 
-// Keep the verifier honest: customer-visible aspirational copy must fail, while
-// implementation text and the one current request-timing phrase must not.
-assert.equal(hasForbidden(renderedText('<main>Feature coming soon</main>')), true);
-assert.equal(hasForbidden(renderedText('<script>"coming soon"</script><main>Live</main>')), false);
-assert.equal(hasForbidden(renderedText('<pre>deferred</pre><main>Live</main>')), false);
-assert.equal(
-  hasForbidden(renderedText('<main>Authentication is deferred to the first request</main>')),
-  false,
-);
-
-assert.equal(hasForbidden(customerVisibleText('<main>Live</main><pre>V-666.BY</pre>')), false);
-assert.equal(hasInternalMarker(customerVisibleText('<pre>V-666.BY</pre>')), true);
-assert.equal(
-  hasInternalMarker(customerVisibleText('<!-- V-666 --><script>"W393"</script><main>Live</main>')),
-  false,
-);
-assert.equal(
-  hasInternalMarker(customerVisibleText("<main>until Agent 1's work lands</main>")),
-  true,
-);
-assert.equal(
-  hasInternalMarker(customerVisibleText('<!-- until Agent 2 work lands --><main>Live</main>')),
-  false,
-);
-
-const failures = [];
-let fileCount = 0;
-
-for (const app of APPS) {
-  const dist = resolve(ROOT, 'apps', app, 'dist');
-  try {
-    if (!(await stat(dist)).isDirectory()) throw new Error('not a directory');
-  } catch {
-    failures.push(`${app}: missing dist/ (build the app before running this guard)`);
-    continue;
-  }
-
-  const files = await htmlFiles(dist);
-  fileCount += files.length;
-  for (const file of files) {
-    const html = await readFile(file, 'utf8');
-    const text = renderedText(html);
-    for (const pattern of FORBIDDEN) {
-      pattern.lastIndex = 0;
-      const match = pattern.exec(text);
-      if (match === null) continue;
-      const start = Math.max(0, match.index - 80);
-      const end = Math.min(text.length, match.index + match[0].length + 80);
-      failures.push(`${relative(ROOT, file)}: …${text.slice(start, end)}…`);
-    }
-    const visible = customerVisibleText(html);
-    for (const pattern of INTERNAL_MARKERS) {
-      pattern.lastIndex = 0;
-      const match = pattern.exec(visible);
-      if (match === null) continue;
-      const start = Math.max(0, match.index - 80);
-      const end = Math.min(visible.length, match.index + match[0].length + 80);
-      failures.push(`${relative(ROOT, file)}: …${visible.slice(start, end)}…`);
-    }
-  }
+/* c8 ignore start — CLI wiring; the matchers above are what the tests drive. */
+if (process.argv[1]?.endsWith('check-rendered-product-status.mjs') === true) {
+  await runScan();
 }
 
-if (failures.length > 0) {
-  console.error('Rendered product-status guard failed:');
-  for (const failure of failures) console.error(`- ${failure}`);
-  process.exit(1);
-}
+async function runScan() {
+  const failures = [];
+  let fileCount = 0;
 
-console.log(
-  `Rendered product-status guard passed: ${fileCount} HTML files across ${APPS.length} apps.`,
-);
+  for (const app of APPS) {
+    const dist = resolve(ROOT, 'apps', app, 'dist');
+    try {
+      if (!(await stat(dist)).isDirectory()) throw new Error('not a directory');
+    } catch {
+      failures.push(`${app}: missing dist/ (build the app before running this guard)`);
+      continue;
+    }
+
+    const files = await htmlFiles(dist);
+    fileCount += files.length;
+    for (const file of files) {
+      const html = await readFile(file, 'utf8');
+      const text = renderedText(html);
+      for (const pattern of FORBIDDEN) {
+        pattern.lastIndex = 0;
+        const match = pattern.exec(text);
+        if (match === null) continue;
+        const start = Math.max(0, match.index - 80);
+        const end = Math.min(text.length, match.index + match[0].length + 80);
+        failures.push(`${relative(ROOT, file)}: …${text.slice(start, end)}…`);
+      }
+      const visible = customerVisibleText(html);
+      for (const pattern of INTERNAL_MARKERS) {
+        pattern.lastIndex = 0;
+        const match = pattern.exec(visible);
+        if (match === null) continue;
+        const start = Math.max(0, match.index - 80);
+        const end = Math.min(visible.length, match.index + match[0].length + 80);
+        failures.push(`${relative(ROOT, file)}: …${visible.slice(start, end)}…`);
+      }
+    }
+  }
+
+  if (failures.length > 0) {
+    console.error('Rendered product-status guard failed:');
+    for (const failure of failures) console.error(`- ${failure}`);
+    process.exit(1);
+  }
+
+  console.log(
+    `Rendered product-status guard passed: ${fileCount} HTML files across ${APPS.length} apps.`,
+  );
+}
+/* c8 ignore stop */

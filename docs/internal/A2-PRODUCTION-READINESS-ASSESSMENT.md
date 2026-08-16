@@ -6789,3 +6789,41 @@ clean, and the linter becomes decorative while still passing.
 _Checked, not a defect:_ the linter's own output reads "12 public entries, 13 DPA
 Annex 3 rows — all matched", and that asymmetry is correct: the documented Stripe
 split maps two annex rows onto one public entry.
+
+### 41. A customer-truthfulness guard was failing, so nobody ran it
+
+`check-rendered-product-status.mjs` scans the BUILT html of all six
+customer-facing apps for unshipped-feature copy ("coming soon", "not yet
+available", "on our roadmap") and for internal markers (`V-123`, `W456`,
+"until … lands", "Agent 1"). Shipping either is a customer-facing truthfulness
+problem.
+
+**It was invoked by nothing** — defined in `package.json`, referenced by no CI
+job, no git hook, and no other script. Running it explained why: **it failed**,
+on a single false positive in AUP billing copy — _"invoices for the suspended
+period are voided rather than deferred"_. That "deferred" describes what does NOT
+happen to an invoice; it is not a product-status claim.
+
+That is the whole shape of it. A guard that fails on legitimate copy gets
+unwired, and once unwired it protects nothing while still looking like a
+safeguard someone could run.
+
+Fixed the false positive through the mechanism the script already had —
+`ALLOWED_PHRASES`, which carried exactly one reviewed entry with a reason — and
+the guard now **passes: 212 HTML files across 6 apps**. Then wired it into CI
+immediately after the build, because it needs `dist/`.
+
+Its own inline `node:assert` self-checks were a good instinct in the wrong place:
+they ran only when the script ran, and nothing ran it. They now live in the suite,
+so they execute on every gate without needing a build, while CI runs the full
+scan against real output.
+
+Proved five ways: dropping a forbidden pattern, dropping the allowlist
+application, removing the new entry, no longer stripping `script`/`pre`/`code`,
+and quietly appending an allowlist entry — each reds. The last is the
+anti-vacuity pin: without it, the cheapest way to silence a real failure is to
+append the offending sentence, which is indistinguishable from fixing the copy.
+
+⭐ One arm exists specifically to stop the fix becoming the hole: **"That
+integration is deferred" must still fail.** The allowlist exempts PHRASES, never
+the word.

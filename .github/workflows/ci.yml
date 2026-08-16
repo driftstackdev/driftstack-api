@@ -74,6 +74,13 @@ jobs:
       - name: Build SDK (tsup ESM + CJS + .d.ts)
         run: npm run build --workspace packages/sdk-typescript
 
+      # Runs HERE because it scans the BUILT html of all six customer-facing
+      # apps. It was defined in package.json and invoked by nothing — no job, no
+      # hook, no other script — so a guard against shipping "coming soon" copy or
+      # an internal `V-123` marker to customers has never actually run.
+      - name: Rendered product-status guard (no unshipped-feature copy, no internal markers)
+        run: npm run check:rendered-product-status
+
       - name: Typecheck
         run: npm run typecheck
 
