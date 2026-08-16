@@ -63,6 +63,29 @@ describe('hashApiKey + verifyApiKey', { timeout: 15_000 }, () => {
     expect(ok).toBe(false);
   });
 
+  // The arm above tampers with a WELL-FORMED hash: the scrypt envelope still
+  // parses, so the comparison simply returns false and the catch inside
+  // verifyApiKey never runs. A hash that does not parse at all is a different
+  // path — scrypt-kdf throws `Invalid key` for every malformed shape — and the
+  // catch is what turns that into an ordinary "wrong key" answer.
+  //
+  // It was covered five times over by content-parity and cross-source pins on
+  // the text `} catch { return false; }`, and not once behaviourally: making
+  // the catch rethrow reds five of those text pins and zero arms in this file.
+  // A stored hash goes malformed for dull reasons — a truncated column, a bad
+  // backfill, an encoding change — and the difference is a 401 for one key
+  // versus a 500 on the authentication path, with a raw crypto error where the
+  // pin's own title promises "no info-leak".
+  it('CRITICAL treats an unparseable stored hash as a wrong key rather than an error', async () => {
+    const plaintext = generateApiKey('test');
+    for (const corrupt of ['', 'AAAA', 'not-base64-at-all!!', 'c2NyeXB0']) {
+      await expect(
+        verifyApiKey(plaintext, corrupt),
+        `a stored hash of ${JSON.stringify(corrupt)} must answer false, never reject`,
+      ).resolves.toBe(false);
+    }
+  });
+
   it('produces different hashes for the same plaintext (random salt)', async () => {
     const plaintext = generateApiKey('test');
     const h1 = await hashApiKey(plaintext);
