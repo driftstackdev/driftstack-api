@@ -188,6 +188,91 @@ describe('RedisAuthCache security-sensitive schema compatibility', () => {
     await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
   });
 
+  // The STRUCTURAL half of the same schema gate. `isCurrentCachedEntry` has eight
+  // rungs; coverage showed only three had ever refused — schemaVersion, provenance
+  // and the webSession own-property check. Those three are exactly the "legacy
+  // ambiguity" cases the file reasons about in prose, so the author tested what they
+  // were thinking about and the structural checks went untested.
+  //
+  // What they reject is a well-versioned envelope whose CONTEXT is malformed, which
+  // is reachable from a `set()` bug or a tampered cache rather than from an old
+  // deploy. Their fall-through is the dangerous kind: not a crash but an
+  // `AccountContext` assembled from whatever was in Redis, handed to auth with
+  // possibly-absent ids.
+  //
+  // Every case carries a CURRENT schemaVersion and valid generations, so the rungs
+  // above cannot be what refuses; and each asserts `mgetCalls === 0`, which proves
+  // the refusal happened in the schema gate BEFORE the account/key version reads —
+  // otherwise a version gate could be doing the work and these rungs would stay as
+  // unexercised as they were.
+  const MALFORMED: Array<{ name: string; context: unknown; versions?: unknown }> = [
+    {
+      name: 'a non-integer generation',
+      context: {
+        account: { id: 'acc-security' },
+        apiKey: { id: 'key-security', provenance: null },
+        webSession: null,
+      },
+      versions: { accountVersion: 'not-a-number', keyVersion: 0 },
+    },
+    {
+      name: 'an account that is not a record',
+      context: {
+        account: 'acc-security',
+        apiKey: { id: 'key-security', provenance: null },
+        webSession: null,
+      },
+    },
+    {
+      name: 'an account id that is not a string',
+      context: {
+        account: { id: 42 },
+        apiKey: { id: 'key-security', provenance: null },
+        webSession: null,
+      },
+    },
+    {
+      // `mfaSatisfiedAt: null` deliberately: with it absent, the NEXT rung
+      // (mfaSatisfiedAt must be null or a number) rejects `undefined` and this arm
+      // would pass with the id check disabled — proving nothing about the id check.
+      name: 'a webSession whose id is not a string',
+      context: {
+        account: { id: 'acc-security' },
+        apiKey: { id: 'key-security', provenance: null },
+        webSession: { id: 42, mfaSatisfiedAt: null },
+      },
+    },
+    {
+      name: 'a webSession whose mfaSatisfiedAt is the wrong type',
+      context: {
+        account: { id: 'acc-security' },
+        apiKey: { id: 'key-security', provenance: null },
+        webSession: { id: 'sess-1', mfaSatisfiedAt: 1234 },
+      },
+    },
+  ];
+
+  for (const { name, context: ctx, versions } of MALFORMED) {
+    it(`CRITICAL rejects a current-schema envelope carrying ${name}, before any version read`, async () => {
+      const redis = new FakeRedis();
+      const { cache } = makeCache(redis);
+      redis.values.set(
+        entryKey(),
+        JSON.stringify({
+          schemaVersion: 1,
+          ...(versions ?? { accountVersion: 0, keyVersion: 0 }),
+          context: ctx,
+        }),
+      );
+
+      await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
+      expect(
+        redis.mgetCalls,
+        'the schema gate must refuse before the version reads, or a version gate could be what refused',
+      ).toBe(0);
+    });
+  }
+
   it('treats an unversioned legacy envelope as a miss before Redis version reads', async () => {
     const redis = new FakeRedis();
     const { cache, warn } = makeCache(redis);
