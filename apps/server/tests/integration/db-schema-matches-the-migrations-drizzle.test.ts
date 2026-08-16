@@ -342,6 +342,15 @@ describe('the drizzle schema matches the migrated database', () => {
       d: 'set default',
     };
 
+    // Scoped to `public`, like every other enumeration in this file. Without
+    // the scope this reads foreign keys out of EVERY namespace in the
+    // database, including the temporary per-test schemas other integration
+    // files create and drop around themselves. That made this CRITICAL
+    // invariant fail non-deterministically: three green runs, then a red one
+    // reporting three foreign keys in a `profile_snapshot_restore_dek_<hex>`
+    // schema that no longer existed by the time anyone looked. A check that
+    // fails on someone else's concurrent work is worse than no check, because
+    // the next red gets attributed to noise.
     const rows = await client!<{ tbl: string; cols: string; ftbl: string; del: string }[]>`
       SELECT c.conrelid::regclass::text AS tbl,
              (SELECT string_agg(a.attname, ',' ORDER BY a.attname)
@@ -350,7 +359,9 @@ describe('the drizzle schema matches the migrated database', () => {
              c.confrelid::regclass::text AS ftbl,
              c.confdeltype AS del
       FROM pg_constraint c
-      WHERE c.contype = 'f'`;
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      WHERE c.contype = 'f' AND n.nspname = 'public'`;
     const actual = new Map<string, string>();
     for (const row of rows)
       actual.set(`${row.tbl}.${row.cols}->${row.ftbl}`, ACTION[row.del] ?? row.del);

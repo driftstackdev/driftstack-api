@@ -117,7 +117,8 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       if (!client) throw new Error('no client');
       const rows = await client<Array<{ indexdef: string }>>`
         SELECT indexdef FROM pg_indexes
-        WHERE tablename = 'accounts' AND indexname = 'accounts_deleted_purge_idx'`;
+        WHERE schemaname = current_schema()
+          AND tablename = 'accounts' AND indexname = 'accounts_deleted_purge_idx'`;
       expect(rows.length, 'the index exists in the live schema').toBe(1);
       expect(
         rows[0]!.indexdef,
