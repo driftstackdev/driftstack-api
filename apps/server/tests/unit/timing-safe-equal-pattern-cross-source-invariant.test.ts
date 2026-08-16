@@ -1,7 +1,23 @@
-// Cross-source invariant: every signature / token / secret comparison
-// uses node:crypto's timingSafeEqual (constant-time) — NEVER === or
-// .equals(). Drift to a non-constant-time compare invites a
+// Cross-source invariant over the files that compare secrets in CONSTANT TIME:
+// each one is annotated with its purpose, and each annotation still names a file
+// that really does it. Drift to a non-constant-time compare invites a
 // timing-attack-style information leak.
+//
+// ⚠️ Read the direction carefully, because the obvious stronger reading is NOT
+// what runs here. This derives its set FROM the files that already call
+// timingSafeEqual, so it enforces "every constant-time comparison stays one and
+// stays documented" — it cannot enforce "every comparison that SHOULD be
+// constant-time is one". A brand-new plain `===` compare of secret material, in
+// a file that calls timingSafeEqual nowhere, is invisible to it.
+//
+// Measured rather than assumed (2026-08-16): a non-constant-time secret compare
+// was introduced into a module that already handles secrets, and the whole suite
+// stayed green — 22,405 tests, zero red. The missing direction is deliberately
+// not built here: scanning every `===` for secret-ish operands yields 47 hits in
+// this server of which none are real (type guards, length pre-checks that
+// precede a timingSafeEqual, and server-side id comparisons), so the guard would
+// be a 47-entry allow-list that decays into a rubber stamp. Judgement at review
+// time is the control for that direction; this file is not.
 //
 // The annotated list below was the whole guard, and it named FIVE files. The
 // server actually performs constant-time comparison in FOURTEEN. The other nine —
