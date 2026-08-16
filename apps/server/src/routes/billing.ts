@@ -8,6 +8,7 @@
 // All auth-gated. The one-time trial_pack checkout was retired 2026-05-27
 // in favour of the perpetual free tier (new accounts default to 'free').
 
+import { reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { CreateCheckoutSessionRequestSchema } from '@driftstack/api-types';
 import type { BillingService, SubscriptionMirror } from '../services/billing.js';
@@ -85,7 +86,7 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
   app.post(
     '/v1/billing/checkout-session',
     { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const ctx = requireCtx(req);
       const idempotency = readIdempotencyKey(req);
       if (idempotency.kind === 'invalid') {
@@ -93,6 +94,15 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
       }
       const parsed = CreateCheckoutSessionRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Item 6 — a mistyped field on checkout used to be dropped in silence, so the session
+      // was created on terms the caller did not choose.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: Object.keys(CreateCheckoutSessionRequestSchema.shape),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/billing/checkout-session',
+      });
 
       // V-248 — gate customer-supplied return URLs against the allowlist.
       const successUrl =

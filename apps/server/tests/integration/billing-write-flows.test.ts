@@ -26,6 +26,33 @@ describe('V-540.B-14 multi-step checkout flows', () => {
     if (fx) await fx.cleanup();
   });
 
+  // Item 6 — the wiring, not the helper. Removing the report call leaves this
+  // suite green otherwise, since reporting and silent stripping produce
+  // identical bodies and status codes.
+  it('CRITICAL reports a mistyped field on checkout, and stays quiet without one', async () => {
+    fx = await buildTestApp();
+    const typo = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { tier: 'api_starter', billing_period: 'monthly', billing_periodd: 'annual' },
+    });
+    expect(typo.statusCode, 'reporting, not rejecting').toBe(200);
+    expect(typo.headers['x-driftstack-unknown-fields']).toBe('billing_periodd');
+
+    const clean = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { tier: 'api_starter', billing_period: 'monthly' },
+    });
+    expect(clean.statusCode).toBe(200);
+    expect(
+      clean.headers['x-driftstack-unknown-fields'],
+      'a well-formed checkout must not be tagged',
+    ).toBeUndefined();
+  });
+
   it('two checkouts for the same account reuse the same Stripe customer', async () => {
     fx = await buildTestApp();
     const first = await fx.app.inject({

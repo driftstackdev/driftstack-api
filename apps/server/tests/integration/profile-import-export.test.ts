@@ -87,6 +87,49 @@ describe('POST /v1/profiles/import', () => {
     if (fx) await fx.cleanup();
   });
 
+  // Item 6 — the wiring, not the helper. Removing the report call leaves this
+  // suite green otherwise: reporting and silent stripping produce identical
+  // bodies and status codes, so only the header separates them.
+  it('CRITICAL reports a mistyped TOP-LEVEL field on import, and stays quiet without one', async () => {
+    fx = await buildTestApp();
+    const envelope = {
+      version: 1 as const,
+      exported_at: new Date().toISOString(),
+      source_profile_id: 'prof_11111111-1111-4111-8111-111111111111',
+      source_account_id: 'acc_22222222-2222-4222-8222-222222222222',
+      profile: {
+        name: 'typo-import',
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+        description: null,
+      },
+    };
+
+    const typo = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/import',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { envelope, envelop: envelope },
+    });
+    expect(typo.statusCode, 'reporting, not rejecting').toBe(200);
+    expect(typo.headers['x-driftstack-unknown-fields']).toBe('envelop');
+
+    // A distinct name: importing the same name twice is a 409 by design, which
+    // would fail this arm for a reason unrelated to field reporting.
+    const clean = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/import',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        envelope: { ...envelope, profile: { ...envelope.profile, name: 'clean-import' } },
+      },
+    });
+    expect(clean.statusCode).toBe(200);
+    expect(
+      clean.headers['x-driftstack-unknown-fields'],
+      'a well-formed import must not be tagged',
+    ).toBeUndefined();
+  });
+
   it('200 mints a new profile from a v1 envelope', async () => {
     fx = await buildTestApp();
     const envelope = {

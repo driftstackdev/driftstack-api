@@ -418,10 +418,18 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   app.post(
     '/v1/profiles/import',
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const ctx = requireCtx(req);
       const parsed = ProfileImportRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Item 6 — an import that carried a mistyped field succeeded with that field ignored.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: Object.keys(ProfileImportRequestSchema.shape),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/profiles/import',
+      });
 
       const eff = effectiveAccountIdForWrite(req, ctx);
       let accountId = ctx.account.id;
