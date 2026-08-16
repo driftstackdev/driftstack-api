@@ -457,19 +457,20 @@ done is remove the guesswork from it: every job CI would run was executed locall
 on 2026-08-16, so "the eventual push is one high-risk event" becomes a measured
 risk rather than an unknown one.
 
-| CI job / step                             | ran locally | result                                          |
-| ----------------------------------------- | ----------- | ----------------------------------------------- |
-| `npm run typecheck` (workspaces)          | yes         | exit 0                                          |
-| `npm run lint` (+ subprocessor mirror)    | yes         | exit 0 — 12 public entries, 13 DPA rows matched |
-| `npm run format:check`                    | yes         | exit 0                                          |
-| `npm audit --omit=dev --audit-level=high` | yes         | exit 0 (1 moderate, below the gate)             |
-| **e2e (Playwright, real PG + Redis)**     | yes         | **199 passed in 52s**                           |
-| `go vet` / `go test` / build examples     | yes         | exit 0                                          |
-| `ruff check` (python SDK)                 | yes         | **FAILED — fixed, see below**                   |
-| `ruff format --check`                     | yes         | exit 0 — 73 files                               |
-| `mypy` (python SDK)                       | **no**      | mypy not installed locally                      |
-| `pytest` (python SDK)                     | **no**      | pytest not installed locally                    |
-| `vitest run --coverage` thresholds        | yes         | exit 0 — all four clear with margin             |
+| CI job / step                                      | ran locally | result                                          |
+| -------------------------------------------------- | ----------- | ----------------------------------------------- |
+| `npm run build` (packages + server + 6 Astro apps) | yes         | exit 0 with CI's env — see note                 |
+| `npm run typecheck` (workspaces)                   | yes         | exit 0                                          |
+| `npm run lint` (+ subprocessor mirror)             | yes         | exit 0 — 12 public entries, 13 DPA rows matched |
+| `npm run format:check`                             | yes         | exit 0                                          |
+| `npm audit --omit=dev --audit-level=high`          | yes         | exit 0 (1 moderate, below the gate)             |
+| **e2e (Playwright, real PG + Redis)**              | yes         | **199 passed in 52s**                           |
+| `go vet` / `go test` / build examples              | yes         | exit 0                                          |
+| `ruff check` (python SDK)                          | yes         | **FAILED — fixed, see below**                   |
+| `ruff format --check`                              | yes         | exit 0 — 73 files                               |
+| `mypy` (python SDK)                                | yes         | exit 0 — no issues in 43 source files           |
+| `pytest` (python SDK)                              | yes         | exit 0 — 357 passed, 4 skipped                  |
+| `vitest run --coverage` thresholds                 | yes         | exit 0 — all four clear with margin             |
 
 **One real CI-blocking defect found and fixed:** `ruff check .` exited 1 on PT001
 (`@pytest.fixture()` in `tests/test_live_contract.py`). The dev extra pins
@@ -477,8 +478,34 @@ risk rather than an unknown one.
 default is inverted, and `PT` is selected with only `B`/`PT011` ignored for tests.
 The python-sdk job would have failed outright on the first push.
 
-⚠️ **Two python steps remain unverified** — mypy and pytest are not installed on
-this machine. Stating that rather than implying the job is green.
+**The python-sdk job is now fully verified (2026-08-16).** mypy and pytest were
+initially unrunnable here; closed by building an isolated venv on **Python 3.10**,
+the version `actions/setup-python` pins, and installing exactly what CI installs
+(`pip install -e '.[dev]'`). `mypy src examples` → no issues in 43 files;
+`pytest -v` → 357 passed, 4 skipped. Nothing was installed globally, and every
+artifact an editable install creates (`.venv/`, `__pycache__/`, `*.egg-info/`) is
+already gitignored, so the tree stayed clean.
+
+⚠️ The first venv attempt failed: the default `python3` here is 3.14 and its
+`ensurepip` is broken. Matching CI's pinned interpreter was both the correct fix
+and the more faithful measurement — a green on 3.14 would not have been evidence
+about the job CI runs.
+
+⚠️ **`npm run build` fails on a bare local invocation, and that is correct.**
+`admin-panel` refuses to build without `PUBLIC_API_BASE_URL` ("must be set for
+production builds"). CI supplies it through the step's `env:`
+(`vars.PUBLIC_API_BASE_URL || 'https://api.driftstack.dev'`), so CI is unaffected;
+with the same variable set the full build is exit 0 across 34 workspace steps.
+Left alone deliberately — defaulting it would let a real production
+misconfiguration build silently, and failing loud is the point of the guard. The
+root `pretest` already defaults it to localhost for test builds, which is the
+right split.
+
+⭐ Worth recording how that was nearly mis-reported: the background-task
+notification said "exit code 0" while the build had failed. That status reflects
+the wrapper shell, not the command. The `echo "exit=$?"` immediately after the
+command is what caught `exit=1` — the same discipline as capturing a capture
+driver's status on the very next line.
 
 **Coverage thresholds pass with room.** CI runs `vitest run --coverage` over the
 ROOT config, which is a bigger suite than the node-only gate this repo's
