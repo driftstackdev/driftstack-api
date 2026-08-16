@@ -6503,3 +6503,37 @@ behaviour's place — the first attempt did exactly that and had to be redone.
 _How it was found:_ classifying every public repo method by where it is named in
 the test corpus. 285 methods → 19 whose only references are fakes and text pins,
 4 named by no test at all. Same lens that found item 2's force-rotation query.
+
+### 35. A stale crypto order could have downgraded a paying account, and nothing said otherwise
+
+`DrizzleStripeWebhooksRepo.setAccountTierIfUpgrade` is the write a paid crypto
+activation performs on an account's tier. Two properties carry it and **both were
+uncovered**:
+
+- **the upgrade-only rule** — a stale or replayed order must never move a tier
+  DOWN. Inverting `isCryptoTierUpgrade`'s arguments, so downgrades apply and
+  upgrades are refused, left all 22,435 tests green.
+- **the `FOR UPDATE` row lock** — the decision is taken against the LOCKED
+  committed tier so a concurrent Stripe event and a crypto activation serialise.
+  Deleting `.for('update')` also left the suite green.
+
+Its only test references were an in-memory twin and content-parity pins. A fake
+reimplements the method, so it can reproduce the rule while proving nothing about
+the SQL, and it has no notion of a row lock at all.
+
+⚠️ **The first concurrency arm I wrote did not pin the lock.** A `Promise.all` of
+two activations passed with `.for('update')` deleted, on every run of three — the
+two transactions are short enough that they rarely overlap. It looked like a
+concurrency test and measured nothing, which is the failure mode that keeps
+passing after the property is gone.
+
+Replaced with a deterministic distinguisher: hold the row lock from an
+independent connection, then drive the DOWNGRADE path, which writes nothing.
+Without the lock that path is a plain SELECT plus an early return and finishes in
+milliseconds; with it, the SELECT waits. The write path would block on the UPDATE
+either way, which is why the no-write path is the one that isolates the lock.
+Verified 4 green control runs and 3 red mutation runs.
+
+_(A first attempt at that arm deadlocked — the holder transaction awaited the
+activation that was waiting on the holder. The lock is held with an explicit
+BEGIN/COMMIT on a `max: 1` connection instead.)_
