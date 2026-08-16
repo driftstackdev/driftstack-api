@@ -778,6 +778,10 @@ rather than only here, so they cannot go quiet again.
   91 days and emails the customer a 7-day grace deadline. Its sibling
   `WebhookGraceExpiringNoticeService` IS wired, so the half that warns about
   expiring grace windows runs while the half that opens them does not.
+  _(Clarified 2026-08-16: that asymmetry does NOT make the notice service idle —
+  `POST /v1/webhooks/:id/rotate-secret` opens a grace window on customer action,
+  so it has real work regardless. What is missing is server-initiated rotation,
+  not the notices.)_
   _Doing nothing:_ signing secrets never rotate. _Recommendation:_ decide the
   policy first — turning it on breaks any integration that ignores the grace
   window.
