@@ -4208,3 +4208,61 @@ consequence that does not exist.
 
 That is the useful shape of this sweep: six sites, two genuine proofs, three
 recorded as the same class as something already proven, and one honestly demoted.
+
+## 6x — the second half of the revocation pair, and a scan that had to be read twice
+
+`db-oauth-client-authority-lock-drizzle` proves `:242`, the client-row lock inside
+`consumeCodeForToken`. Control green; deleting it reds with _"consumeCodeForToken
+must be waiting on the client row, not minting against a stale revokedAt"_.
+
+The property is the one 6w set out: revocation completeness. `revokeClient` marks
+the client revoked and then revokes the tokens it SELECTs; an exchange that does
+not take the same lock inserts its key after that SELECT, so the key is never in
+the cascade's list. The customer revokes a compromised integration, watches it
+disappear from the dashboard, and one live API key remains behind it.
+
+A specificity check was run because this is the SECOND lock in a method whose
+first lock already has a test: with `:226` removed and `:242` intact, this file
+still passes; with `:242` removed it reds. So the two files probe their own locks
+rather than overlapping — which matters, because a test that reds for either
+mutation would let one of the two locks be deleted silently as long as the other
+survived.
+
+**A scan that would have produced two false findings.** Looking for read-modify-
+write transactions with no row lock — genuine defects rather than unproven guards —
+turned up three:
+
+    incidents-repo.ts:272      addUpdate
+    mfa-repo.ts:144            startEnrollmentIfNotEnrolled
+    platform-secrets-repo.ts:126  upsert
+
+Two are already serialised, just not by the mechanism the scan looked for:
+`startEnrollmentIfNotEnrolled` takes `pg_advisory_xact_lock(hashtext('mfa-
+credentials:<accountId>'))` and `upsert` takes
+`pg_advisory_xact_lock(hashtextextended('platform-secret-upsert:<name>', 0))`.
+The scan grepped for `.for('update')` and reported their absence accurately; the
+word "unlocked" was mine, and it was wrong.
+
+This is the same failure the ledger produced in 6w, in the opposite direction: there
+a fake-store race made an untested lock look covered, here a row-lock grep made an
+advisory-locked path look unguarded. Both come from letting one mechanism stand for
+the property. The check that fixes it is cheap and is now part of the routine —
+before calling any site unguarded, grep the body for the OTHER serialisation
+mechanisms, and before calling any site covered, confirm the test that covers it
+actually reaches the layer the guard lives in.
+
+`incidents-repo.ts:272` is the one survivor, and reading it closes the scan at zero
+real defects. `addUpdate` does read `incidents.resolvedAt` without a lock, but only
+to preserve an already-set resolution time, and it writes `status` and
+`resolved_at` in a SINGLE UPDATE. The invariant its comment exists to protect —
+`status === 'resolved'` iff `resolved_at != null` — is therefore carried by one
+atomic statement and cannot be broken by interleaving. The worst a race does is
+decide which of two concurrent admins' `now` lands in `resolved_at`, on a
+status-page timeline, off by the milliseconds between two manual posts.
+
+So the honest result of the scan is that there is nothing to fix: every
+read-modify-write on a money or authority path is serialised, by a row lock or an
+advisory one, and the only unserialised read left is one whose consequence does not
+survive being stated precisely. That is worth recording as a finding in its own
+right — it is the difference between "no defects found" and "the surface is
+clean".
