@@ -67,6 +67,50 @@ interface DbEnum {
   values: string[];
 }
 
+/**
+ * True for the transient catalog error a concurrent DDL causes.
+ *
+ * `pg_get_constraintdef(oid)` resolves the constraint's relation at CALL time,
+ * while the surrounding scan of `pg_constraint` was planned earlier. If another
+ * connection drops or recreates that relation in between — which the rest of
+ * this suite does constantly, since files run in parallel and several apply
+ * migrations on boot — Postgres raises `could not open relation with OID …`.
+ *
+ * This is a property of reading a live catalog, not of the constraints being
+ * wrong, and it took down the whole FILE: the read is in `beforeAll`, so the
+ * suite failed and all four tests reported as skipped.
+ *
+ * Deliberately NARROW. Any other error propagates on the first attempt, so a
+ * genuine failure is never retried into silence.
+ */
+export function isTransientCatalogError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /could not open relation with OID/i.test(message);
+}
+
+/** Read the enumerated CHECK constraints, retrying only the catalog race. */
+async function readEnumeratedChecks(
+  sql: ReturnType<typeof postgres>,
+  attempts = 3,
+): Promise<{ tbl: string; name: string; def: string }[]> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await sql<{ tbl: string; name: string; def: string }[]>`
+        SELECT t.relname AS tbl, c.conname AS name, pg_get_constraintdef(c.oid) AS def
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE c.contype = 'c' AND n.nspname = 'public'
+          AND pg_get_constraintdef(c.oid) LIKE '%= ANY (ARRAY%'`;
+    } catch (err) {
+      if (!isTransientCatalogError(err)) throw err;
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
 let dbEnums: DbEnum[] = [];
@@ -82,13 +126,7 @@ beforeAll(async () => {
     return;
   }
   client = postgres(DB_URL, { max: 1 });
-  const rows = await client<{ tbl: string; name: string; def: string }[]>`
-    SELECT t.relname AS tbl, c.conname AS name, pg_get_constraintdef(c.oid) AS def
-    FROM pg_constraint c
-    JOIN pg_class t ON t.oid = c.conrelid
-    JOIN pg_namespace n ON n.oid = t.relnamespace
-    WHERE c.contype = 'c' AND n.nspname = 'public'
-      AND pg_get_constraintdef(c.oid) LIKE '%= ANY (ARRAY%'`;
+  const rows = await readEnumeratedChecks(client);
   dbEnums = rows.map((r) => ({
     table: r.tbl,
     name: r.name,
@@ -127,6 +165,30 @@ const overlap = (a: string[], b: string[]): number =>
   a.filter((x) => b.includes(x)).length / new Set([...a, ...b]).size;
 
 describe('the database CHECK enumerations agree with the code', () => {
+  it('CRITICAL the catalog-race retry is NARROW — it must not swallow a real failure', () => {
+    // The retry above exists for one transient condition and must not become a
+    // general "try again" that hides a genuine error. Asserted in both
+    // directions: the race message retries, and everything else — including a
+    // constraint violation or a connection failure — propagates on the first
+    // attempt.
+    expect(
+      isTransientCatalogError(new Error('could not open relation with OID 4878539')),
+      'the concurrent-DDL catalog race is retryable',
+    ).toBe(true);
+    for (const other of [
+      new Error('duplicate key value violates unique constraint'),
+      new Error('permission denied for table accounts'),
+      new Error('connection refused'),
+      new Error('relation "pg_constraint" does not exist'),
+      'a bare string',
+    ]) {
+      expect(
+        isTransientCatalogError(other),
+        `${String(other)} must NOT be retried — a retried real failure is a silent pass`,
+      ).toBe(false);
+    }
+  });
+
   it('CRITICAL both sides were read and are non-trivial. Every comparison below reports disagreement, and an empty list of constraints disagrees with nothing — a parse that recovered no values would report all ten enumerations verified having read none of them.', () => {
     if (guardUnreachable()) return;
 

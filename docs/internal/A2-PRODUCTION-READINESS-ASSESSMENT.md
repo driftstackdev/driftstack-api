@@ -7160,3 +7160,30 @@ _Also corrected:_ my first draft asserted result shapes I had assumed rather tha
 read (`bind().ok`, an `exchange` status of `ready`). The precondition assertion
 inside the helper is what caught it — `bind` returns `{account_id, expires_at}`
 and throws on refusal, and the ready status is `bound`.
+
+### 52. A catalog-read race took down a whole test FILE, and it looked like 4 skips
+
+`database-check-enums-agree-with-the-code` reads every enumerated CHECK
+constraint out of `pg_constraint`. `pg_get_constraintdef(oid)` resolves the
+constraint's relation at CALL time, while the surrounding scan was planned
+earlier — so when another connection drops or recreates that relation in
+between, Postgres raises `could not open relation with OID …`.
+
+The rest of the suite does exactly that constantly: files run in parallel and
+several apply migrations on boot. Observed once during a gate run.
+
+⚠️ **The failure mode is worse than it sounds.** The read is in `beforeAll`, so
+the FILE failed and its four tests reported as **skipped** — the run showed
+`6 skipped` where it normally shows 2. A reader scanning for red would see a
+skip count, and `verify-suite`'s file-count pin is what actually caught it.
+
+Fixed with a retry scoped to that one error. **Narrowness is the whole risk**, so
+it is pinned in both directions: widening the predicate to match every error reds
+the arm, and narrowing it to match nothing reds it too. Any other failure — a
+constraint violation, a permission error, a refused connection — propagates on
+the first attempt, because a retried real failure is a silent pass.
+
+⭐ And the retry did not neuter what the file is for: adding a fifth model to
+`AgentModelSchema` while the DB CHECK still pins four reds two arms. That is the
+proof that this is a fix rather than leniency — the transient condition is
+handled, the property is not.
