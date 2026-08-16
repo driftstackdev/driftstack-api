@@ -281,7 +281,11 @@ describe('C6 — billing emails claim before send (dedup across concurrent deliv
   function billingService(): {
     service: AccountLifecycleService;
     repo: TestRepo;
-    email: { sendBillingRenewalReminder: ReturnType<typeof vi.fn> };
+    email: {
+      sendBillingRenewalReminder: ReturnType<typeof vi.fn>;
+      sendBillingReceipt: ReturnType<typeof vi.fn>;
+      sendBillingFailure: ReturnType<typeof vi.fn>;
+    };
   } {
     const repo = new TestRepo();
     repo.seed({
@@ -290,7 +294,11 @@ describe('C6 — billing emails claim before send (dedup across concurrent deliv
       firstFailureEmailSentAt: null,
       firstSuccessEmailSentAt: null,
     });
-    const email = { sendBillingRenewalReminder: vi.fn().mockResolvedValue(undefined) };
+    const email = {
+      sendBillingRenewalReminder: vi.fn().mockResolvedValue(undefined),
+      sendBillingReceipt: vi.fn().mockResolvedValue(undefined),
+      sendBillingFailure: vi.fn().mockResolvedValue(undefined),
+    };
     const prefs = { shouldSend: vi.fn().mockResolvedValue(true) };
     const service = new AccountLifecycleService(
       repo,
@@ -324,6 +332,60 @@ describe('C6 — billing emails claim before send (dedup across concurrent deliv
     // Both deliveries reached the claim — the second was blocked BY the claim,
     // not merely by the outer stripe-event ledger (which this path bypasses).
     expect(repo.billingClaimCount).toBe(2);
+  });
+
+  // The renewal-reminder arm above proved the claim for ONE of the three billing
+  // kinds. Coverage showed the other two guards had never once refused: the
+  // `if (!won) return` under handlePaymentSucceeded and handlePaymentFailed each
+  // evaluated on every delivery and fired ZERO times, because no test had ever
+  // delivered the same billing event twice.
+  //
+  // Stripe re-delivers events as a matter of course, so the loser branch is not an
+  // exotic path — it is what stands between a retried webhook and a customer
+  // receiving two receipts, or two "payment failed" warnings for one charge.
+  //
+  // Both arms assert `billingClaimCount === 2` alongside the send count, for the
+  // same reason the renewal arm does: it proves the SECOND delivery actually reached
+  // the claim and was refused BY it, rather than being filtered earlier by something
+  // else and leaving the guard still unexercised.
+  it('two deliveries of the same payment_succeeded event send exactly one receipt', async () => {
+    const { service, repo, email } = billingService();
+    const paid = (stripeEventId: string) =>
+      ({
+        kind: 'billing.payment_succeeded',
+        amountCents: 4999,
+        currency: 'usd',
+        periodStart: new Date('2026-08-01T00:00:00Z'),
+        periodEnd: new Date('2026-09-01T00:00:00Z'),
+        hostedInvoiceUrl: null,
+        stripeEventId,
+        stripeInvoiceId: 'in_paid',
+      }) as const;
+
+    await service.emit('acc_c6', paid('evt_paid_dupe'));
+    await service.emit('acc_c6', paid('evt_paid_dupe'));
+
+    expect(email.sendBillingReceipt).toHaveBeenCalledTimes(1);
+    expect(repo.billingClaimCount, 'both deliveries must reach the claim').toBe(2);
+  });
+
+  it('two deliveries of the same payment_failed event send exactly one warning', async () => {
+    const { service, repo, email } = billingService();
+    const failed = (stripeEventId: string) =>
+      ({
+        kind: 'billing.payment_failed',
+        amountCents: 4999,
+        currency: 'usd',
+        retryAt: new Date('2026-08-05T00:00:00Z'),
+        stripeEventId,
+        stripeInvoiceId: 'in_failed',
+      }) as const;
+
+    await service.emit('acc_c6', failed('evt_failed_dupe'));
+    await service.emit('acc_c6', failed('evt_failed_dupe'));
+
+    expect(email.sendBillingFailure).toHaveBeenCalledTimes(1);
+    expect(repo.billingClaimCount, 'both deliveries must reach the claim').toBe(2);
   });
 
   it('different event ids for the same account each send (the claim is per event)', async () => {

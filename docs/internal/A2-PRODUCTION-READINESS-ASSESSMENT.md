@@ -5527,3 +5527,58 @@ mechanism: **the first write is a claim, and its result is checked before anythi
 depends on it.** Row lock, conditional predicate, unique index, `RETURNING` on a
 delete, `onConflictDoNothing` — the mechanism varies and the shape does not. The one
 defect is the one place the claim comes last.
+
+## 7p — the claim lens applied to claims themselves, and two duplicate-email guards closed
+
+Three axes closed on persistence. The obvious next surface is the code that already
+calls itself a claim: `claimBillingEmail`, `claimDue`, `claimSessionOperation`,
+`webhooks-repo.claim`. Two of those were already proven in earlier fires; the other
+two were read, and both are textbook — `claimBillingEmail` is
+`INSERT … ON CONFLICT DO NOTHING … RETURNING` ("the row is returned only when THIS
+insert won"), and the webhook claim is `SELECT … FOR UPDATE SKIP LOCKED → UPDATE
+status = in_flight` with stale reclaim by `updated_at` age.
+
+More importantly — the transfer lesson — **every caller reads the answer**: three
+`if (!won) return;` in `account-lifecycle`, and the worker only delivers
+`claimed.map(...)`. So the claim surface has no `transferProfile`-shaped hole.
+
+**But the coverage counters split those five guards in half.** Each
+`if (!won) return;` records the condition and its consequent separately:
+
+    :247  evaluated 22 → loser fired 1   ✓
+    :275  evaluated 14 → loser fired 0   ✗
+    :401  evaluated  7 → loser fired 1   ✓
+    :446  evaluated  2 → loser fired 0   ✗
+    :494  evaluated  4 → loser fired 0   ✗
+
+Three duplicate-suppression guards had never once refused — the same "runs but never
+refuses" shape as the VPN dispatch re-guard in 7h. What they suppress is
+customer-visible: a second onboarding email, a second receipt, a second
+"payment failed" warning. **Stripe re-delivers events as a matter of course**, so the
+loser branch is not an exotic path; it is what stands between a retried webhook and a
+duplicate email.
+
+Two of the three are closed here, and the model already existed: the C6 block proves
+the same property for `subscription.renewal_reminder` by emitting the same event twice
+and asserting one send. The new arms do that for `billing.payment_succeeded` and
+`billing.payment_failed`.
+
+⭐ Both arms also assert `repo.billingClaimCount === 2`, copying C6's discipline for a
+reason worth restating: it proves the SECOND delivery actually **reached** the claim
+and was refused BY it. Without that, a test could pass because something earlier
+filtered the duplicate, leaving the guard as unexercised as before while looking
+covered.
+
+Measured per guard, since they are independent:
+
+    payment_succeeded guard removed → its arm reds ("called 1 times, but got 2 times"), other 13 green
+    payment_failed guard removed    → its arm reds, other 13 green
+    novelty: 69 other lifecycle/billing files (772 tests) stay green under the mutation
+
+**The third, `:275` in `handleSessionSuccessFirst`, is deliberately left open and the
+reason is structural.** Its two calls cannot both reach the claim sequentially: the
+first sets `firstSuccessEmailSentAt`, so the second returns at the _pre-check_ above
+and never touches the claim at all. Reaching that loser needs forced interleaving —
+both callers held past the read before either marks — which is the MFA-concurrency
+technique from 7g rather than a second copy of the C6 pattern. Recorded as the next
+slice rather than bundled in, because it is a different test, not a third arm.
