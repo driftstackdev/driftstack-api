@@ -7020,3 +7020,39 @@ matters most**, and nothing outside a source-text pin said otherwise.
 one whose expiry frees the next slot. From the newest it would overstate the wait
 and, on a busy key, never converge. Pinned with exact arithmetic (500ms, where
 newest-derived would be 900ms) rather than a `toBeGreaterThan`.
+
+### 48. An MFA challenge could stop being single-use and only a text pin would say so
+
+Swept the Redis-backed modules after items 46/47. Seven of them talk to Redis and,
+before this week, **not one integration test used a real Redis**.
+
+`RedisMfaChallengeStore.consume()` uses GETDEL — atomic get-and-delete, which is
+what makes a step-up challenge single-use. Replacing it with a plain `get` (a
+TYPE-VALID change, so the compile guards cannot answer in the behaviour's place)
+makes the challenge **reusable**, and the only test that reds is
+`services-mfa-challenge-store-content-parity` — a regex over the source text.
+
+The other two operations are Lua, and their comments state properties no
+source-text pin can check: `incrAttempts` must attach the expiry in the SAME step
+(a separate INCR then EXPIRE strands an immortal counter if the connection dies
+between them, permanently locking step-up for that account), and `releaseAttempt`
+must neither go negative nor RESURRECT an expired key as `-1`.
+
+Seven arms against real Redis; five mutations, all red:
+
+| mutation                                              | reds |
+| ----------------------------------------------------- | ---- |
+| consume stops deleting (challenge reusable)           | 2    |
+| incrAttempts stops attaching a TTL                    | 1    |
+| incrAttempts extends an existing TTL every attempt    | 1    |
+| releaseAttempt resurrects an absent key as -1         | 1    |
+| releaseAttempt leaves a 0 counter instead of deleting | 1    |
+
+⭐ The concurrency arm is what GETDEL actually buys: two simultaneous consumes,
+exactly one winner. Under a GET-then-DEL split both callers read the value before
+either deletes, and a captured challenge could be verified twice.
+
+_Checked and NOT a finding:_ `RedisFleetNonceCache` looked like the same shape —
+its tests use a hand-written fake. But the fake asserts the exact call arguments,
+so swapping the `EX`/`NX` order reds 4 tests and changing the TTL reds 1. It is
+genuinely covered; adding an integration test there would be churn, so I did not.
