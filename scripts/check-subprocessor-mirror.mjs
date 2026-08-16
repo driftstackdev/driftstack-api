@@ -151,41 +151,62 @@ function findMatch(target, candidates) {
   return null;
 }
 
-const publicNames = readPublicNames();
-const dpaNames = readDpaNames();
-
-const missingFromPublic = [];
-const missingFromDpa = [];
-
-for (const dpaName of dpaNames) {
-  if (!findMatch(dpaName, publicNames)) {
-    missingFromPublic.push(dpaName);
+/**
+ * Compare the two surfaces and report drift in BOTH directions.
+ *
+ * Pure, and exported, so the comparison can be tested without reading the real
+ * files or exiting the process. This linter runs inside `npm run lint`, which CI
+ * runs — a compliance guard that silently stopped detecting drift would keep
+ * printing its success line while the two surfaces diverged, which is worse than
+ * having no linter at all because it reads as active protection.
+ */
+export function compareSubprocessorLists({ publicNames, dpaNames }) {
+  const missingFromPublic = [];
+  const missingFromDpa = [];
+  for (const dpaName of dpaNames) {
+    if (!findMatch(dpaName, publicNames)) {
+      missingFromPublic.push(dpaName);
+    }
   }
-}
-for (const publicName of publicNames) {
-  if (!findMatch(publicName, dpaNames)) {
-    missingFromDpa.push(publicName);
+  for (const publicName of publicNames) {
+    if (!findMatch(publicName, dpaNames)) {
+      missingFromDpa.push(publicName);
+    }
   }
-}
-
-if (missingFromPublic.length > 0 || missingFromDpa.length > 0) {
-  let msg = '';
-  if (missingFromPublic.length > 0) {
-    msg += `\n  Listed in DPA Annex 3 but missing from data/sub-processors.ts:\n`;
-    for (const n of missingFromPublic) msg += `    - ${n}\n`;
-  }
-  if (missingFromDpa.length > 0) {
-    msg += `\n  Listed in data/sub-processors.ts but missing from DPA Annex 3:\n`;
-    for (const n of missingFromDpa) msg += `    - ${n}\n`;
-  }
-  msg +=
-    `\nSub-processor changes are an Article 28(2) GDPR amendment + force a customer\n` +
-    `re-acceptance flow. Both surfaces MUST move in lockstep. Update the missing side\n` +
-    `to match, OR (if the change is intentional) update both. After fixing, re-run:\n\n` +
-    `    node scripts/check-subprocessor-mirror.mjs\n`;
-  fail(msg);
+  return { missingFromPublic, missingFromDpa };
 }
 
-pass(
-  `${publicNames.length.toString()} public entries, ${dpaNames.length.toString()} DPA Annex 3 rows — all matched.`,
-);
+/* c8 ignore start — CLI wiring; the comparison above is what the tests drive. */
+if (process.argv[1]?.endsWith('check-subprocessor-mirror.mjs') === true) {
+  runCli();
+}
+
+function runCli() {
+  const publicNames = readPublicNames();
+  const dpaNames = readDpaNames();
+
+  const { missingFromPublic, missingFromDpa } = compareSubprocessorLists({ publicNames, dpaNames });
+
+  if (missingFromPublic.length > 0 || missingFromDpa.length > 0) {
+    let msg = '';
+    if (missingFromPublic.length > 0) {
+      msg += `\n  Listed in DPA Annex 3 but missing from data/sub-processors.ts:\n`;
+      for (const n of missingFromPublic) msg += `    - ${n}\n`;
+    }
+    if (missingFromDpa.length > 0) {
+      msg += `\n  Listed in data/sub-processors.ts but missing from DPA Annex 3:\n`;
+      for (const n of missingFromDpa) msg += `    - ${n}\n`;
+    }
+    msg +=
+      `\nSub-processor changes are an Article 28(2) GDPR amendment + force a customer\n` +
+      `re-acceptance flow. Both surfaces MUST move in lockstep. Update the missing side\n` +
+      `to match, OR (if the change is intentional) update both. After fixing, re-run:\n\n` +
+      `    node scripts/check-subprocessor-mirror.mjs\n`;
+    fail(msg);
+  }
+
+  pass(
+    `${publicNames.length.toString()} public entries, ${dpaNames.length.toString()} DPA Annex 3 rows — all matched.`,
+  );
+}
+/* c8 ignore stop */

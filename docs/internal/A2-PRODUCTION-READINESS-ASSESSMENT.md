@@ -6756,3 +6756,36 @@ absent" ones are exactly those conditional registrations, and the "registered bu
 undocumented" ones are operational (`/healthz`, `/metrics`), doc-viewer, or
 deliberately internal (`gui-input` is server-internal per the verification log).
 No phantom endpoints.
+
+### 40. The GDPR sub-processor linter had no test of its own
+
+`check-subprocessor-mirror.mjs` runs inside `npm run lint`, which CI runs. It
+keeps the customer-facing sub-processor list in lockstep with DPA Annex 3,
+because adding or removing a sub-processor is an Article 28(2) amendment and
+forces a customer re-acceptance flow.
+
+**It had no test.** A compliance guard that quietly stopped detecting drift would
+go on printing `✓ subprocessor mirror check passed` while the two surfaces
+diverged — worse than no linter, because it reads as active protection. Same
+question this assessment keeps asking of everything else, turned on the tooling:
+who checks the checker.
+
+The comparison is now exported as a pure function (the idiom `verify-suite` and
+`e2e-local` already use, with the CLI behind an `argv` guard) and covered by six
+arms driving SYNTHETIC lists, so they keep meaning the same thing when a real
+sub-processor is added. Proved three ways:
+
+| mutation                                     | reds |
+| -------------------------------------------- | ---- |
+| the DPA→public direction stops being checked | 3    |
+| the public→DPA direction stops being checked | 2    |
+| entity suffixes stop being stripped          | 1    |
+
+That third one is the subtle one. The matcher compares distinctive tokens with
+entity suffixes removed; without the strip, "Twilio Ireland Limited" and "Acme
+Limited" satisfy each other on `limited`, drift in **both** directions reports
+clean, and the linter becomes decorative while still passing.
+
+_Checked, not a defect:_ the linter's own output reads "12 public entries, 13 DPA
+Annex 3 rows — all matched", and that asymmetry is correct: the documented Stripe
+split maps two annex rows onto one public entry.
