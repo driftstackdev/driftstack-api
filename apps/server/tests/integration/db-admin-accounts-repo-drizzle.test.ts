@@ -53,6 +53,25 @@
 // The general point, worth carrying: a mutation that survives sometimes is not
 // a weaker signal than one that survives always — it is a louder one, because
 // it means the guard's verdict depends on something nobody chose.
+//
+// ⚠️ 2026-08-16 — THE ARMS IN THIS FILE WERE NOT INDEPENDENT OF EACH OTHER.
+// Found by `--sequence.shuffle --sequence.seed=7`: the keyset arm failed with
+// 107 canonical rows against 7 traversed. The page-cap arm bulk-inserts 101 rows
+// under the same MARKER, and a traversal bounded by `limit * guard` cannot cover
+// them — so the keyset arm silently depended on running FIRST. The header above
+// promised these assertions "survive a SHARED database"; they did, and were
+// still order-dependent within this one file.
+//
+// The keyset arm now seeds under its own `keyset` submarker, disjoint from the
+// bulk rows. That scoping alone WEAKENED it: at 4 tied rows the dropped-
+// tiebreaker mutation red only 2 runs in 3, because a small tie group is likely
+// to come back in the same order from both paged queries. The tie group is now
+// 14 rows wide across several page boundaries, and the mutation is back to
+// 5 reds out of 5 — re-measured, not assumed.
+//
+// The lesson is the one above, applied to a fix rather than a bug: scoping a
+// flaky assertion until it stops failing is indistinguishable from scoping it
+// until it stops testing. Re-run the mutation ledger after touching a fixture.
 
 import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
@@ -73,14 +92,27 @@ let client: ReturnType<typeof postgres> | null = null;
 let repo: DrizzleAccountsAdminRepo | null = null;
 const seededAccountIds: string[] = [];
 
+/**
+ * `submarker` gives an arm its own disjoint email namespace under MARKER.
+ *
+ * Arms in this file are NOT independent without it: the page-cap arm bulk-inserts
+ * 101 rows under `MARKER-bulk-`, and the keyset arm compares a full traversal
+ * against every MARKER row. Whichever order vitest picks, the keyset arm can only
+ * page `limit * guard` rows, so once the bulk arm has run first it sees a fraction
+ * of its canonical set. Found by `--sequence.shuffle --sequence.seed=7`: 107
+ * canonical rows against 7 traversed. Everything still starts with MARKER, so the
+ * afterAll sweep continues to reach it.
+ */
 async function seedAccount(opts: {
   tier?: string;
   status?: string;
   createdAt?: Date;
+  submarker?: string;
 }): Promise<string> {
   if (!client) throw new Error('no client');
   const id = randomUUID();
-  const email = `${MARKER}-${seededAccountIds.length}@example.test`;
+  const prefix = opts.submarker ? `${MARKER}-${opts.submarker}` : MARKER;
+  const email = `${prefix}-${seededAccountIds.length}@example.test`;
   await client`
     INSERT INTO accounts (id, email, name, tier, status, created_at, updated_at)
     VALUES (${id}, ${email}, ${'Admin Repo Fixture'}, ${opts.tier ?? 'free'}::account_tier,
@@ -203,23 +235,44 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
     it('CRITICAL keyset pagination returns every row exactly once across pages. The cursor is compound (created_at, id); a timestamp-only cursor drops whole tie groups at a page boundary.', async () => {
       if (!dbReachable || !repo) return;
+      // Own namespace: the page-cap arm's 101 bulk rows share MARKER, and a
+      // traversal capped at limit*guard rows cannot cover them. Scoping here
+      // rather than raising the cap keeps this arm about cursor CORRECTNESS
+      // instead of turning it into a hundred-page endurance run.
+      const keysetMarker = `${MARKER}-keyset`;
+      // Sized deliberately. The dropped-tiebreaker mutation only shows up when
+      // the two paged queries disagree about the order WITHIN a tie group, so a
+      // small tie group lets the mutation survive by luck: at 4 tied rows it red
+      // 2 runs in 3. A wide tie group spanning several page boundaries is what
+      // makes the disagreement reliable.
       const tie = new Date();
-      for (let i = 0; i < 4; i += 1) await seedAccount({ createdAt: tie });
+      for (let i = 0; i < 14; i += 1) await seedAccount({ createdAt: tie, submarker: 'keyset' });
+      for (let i = 0; i < 6; i += 1) {
+        await seedAccount({
+          createdAt: new Date(tie.getTime() - (i + 1) * 1000),
+          submarker: 'keyset',
+        });
+      }
 
       const seen: string[] = [];
       let cursor: string | undefined;
-      for (let guard = 0; guard < 10; guard += 1) {
+      for (let guard = 0; guard < 20; guard += 1) {
         const page = await repo.list({
-          emailContains: MARKER,
-          limit: 2,
+          emailContains: keysetMarker,
+          limit: 3,
           ...(cursor ? { cursor } : {}),
         });
-        seen.push(...page.data.filter((r) => r.email.includes(MARKER)).map((r) => r.id));
+        seen.push(...page.data.filter((r) => r.email.includes(keysetMarker)).map((r) => r.id));
         if (!page.hasMore || page.nextCursor === null) break;
         cursor = page.nextCursor;
       }
       expect(new Set(seen).size, 'no row returned twice').toBe(seen.length);
-      expect(seen.length, 'every seeded row seen').toBeGreaterThanOrEqual(seededAccountIds.length);
+      // An exact count, which this file otherwise forbids on a shared table. It
+      // is safe ONLY because `keysetMarker` is exclusive to this arm within a
+      // run-unique MARKER, so no sibling arm and no concurrent file can write a
+      // row that matches it. Stated rather than left for the next reader to
+      // re-derive against the header's rule.
+      expect(seen.length, 'every row this arm seeded, and nothing else').toBe(20);
 
       // Strengthened 2026-08-15. The two assertions above detect a dropped
       // `id DESC` tiebreaker only PROBABILISTICALLY: without it Postgres may
@@ -236,7 +289,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       // second copy of the repo's own logic.
       const canonical = await client!<{ id: string }[]>`
         SELECT id FROM accounts
-        WHERE email LIKE ${`${MARKER}%`}
+        WHERE email LIKE ${`${keysetMarker}%`}
         ORDER BY created_at DESC, id DESC`;
       expect(seen, 'the paged traversal matches the canonical keyset order').toEqual(
         canonical.map((r) => r.id),
