@@ -427,14 +427,14 @@ imply.
 
 **Still pending a decision — nothing more to engineer:**
 
-| #    | item                                                             | cost of waiting                                              |
-| ---- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
-| 1    | 1,515 commits have never reached CI                              | grows every commit; the eventual push is one high-risk event |
-| 2    | Three subsystems built, tested, never run                        | unknown-unknowns surface in front of a customer              |
-| 6    | Unrecognised request fields are silently dropped                 | a customer's typo'd field succeeds and does nothing          |
-| 7, 8 | Free-tier OAuth consent + free-tier API-key minting              | abuse surface open on the unpaid tier                        |
-| 9    | GUI signing identity                                             | ships unsigned or signed by the wrong identity               |
-| 37   | Concurrent profile transfers duplicate a profile across accounts | one profile becomes two, owned by two tenants                |
+| #      | item                                                                 | cost of waiting                                                                                                                             |
+| ------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1      | 1,554 commits have never reached CI                                  | grows every commit; the eventual push is one high-risk event                                                                                |
+| 2      | Three subsystems built, tested, never run                            | unknown-unknowns surface in front of a customer                                                                                             |
+| 6      | Unrecognised request fields are silently dropped                     | a customer's typo'd field succeeds and does nothing                                                                                         |
+| 7, 8   | Free-tier OAuth consent + free-tier API-key minting                  | abuse surface open on the unpaid tier                                                                                                       |
+| 9      | GUI signing identity                                                 | ships unsigned or signed by the wrong identity                                                                                              |
+| ~~37~~ | ~~Concurrent profile transfers duplicate a profile across accounts~~ | **CLOSED 2026-08-16 (`87914bdd7`)** — decided under the auto-decide directive and fixed: one transaction, source retire is a checked claim. |
 
 Everything else numbered in this section is CLOSED, CORRECTED, or a record of
 completed work; the eight explicitly marked so are left in place for their
@@ -452,12 +452,12 @@ somebody choosing.
 
 ### 1. 1,515 commits have never reached CI
 
-`git rev-list --count @{u}..HEAD` = **1,515** (was 1,068, 1,031, and 1,022
-before that). The count is re-checked each time this item is touched, because the
+`git rev-list --count @{u}..HEAD` = **1,554** (was 1,515, 1,068, 1,031, and
+1,022 before that). The count is re-checked each time this item is touched, because the
 evidence below decays with every commit that lands after it — and it had decayed
 badly: the figure sat at 1,068 while the real number was **1,515**, a 42% under-
 statement, which makes the item read as less urgent than it is. Upstream's tip is
-`6b3a856cd`, dated **2026-07-12** — **34 days**, not nineteen. Every "gates green" any agent has reported, including all of
+`6b3a856cd`, dated **2026-07-12** — **35 days**, not nineteen. Every "gates green" any agent has reported, including all of
 mine, is a LOCAL result.
 
 _Doing nothing:_ the divergence grows and the eventual push is a single
@@ -1322,6 +1322,20 @@ and browser history — the request succeeding is not enough, it has to succeed 
 right way. The read path is fed a response containing an `api_key` the server
 would never send, and the value handed back is re-encoded and checked for it, so
 a struct that later grows a field able to hold the key fails there.
+
+### 37. Concurrent profile transfers duplicate a profile across accounts — CLOSED
+
+**CLOSED 2026-08-16 (`87914bdd7`).** Decided under the auto-decide directive rather
+than waiting further: the transfer now runs in ONE transaction that cap-checks the
+recipient, CLAIMS the source by retiring it and checking that claim, then inserts.
+The loser of a race matches zero rows and returns before writing anything, so there
+is no compensating delete and no window in which two rows exist; the service maps
+that outcome to a 409. Refusal checks still run before the first write, so a refused
+transfer leaves the source intact.
+
+Proved on real Postgres across two connections: with the claim's result discarded
+both transfers win and the profile exists in two accounts; with it checked, exactly
+one wins. The evidence below is left in place because it is the reproduction.
 
 ### 37. Concurrent profile transfers duplicate a profile across accounts
 

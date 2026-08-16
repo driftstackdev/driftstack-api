@@ -10,6 +10,7 @@
 // format: `prof_<uuid>` — same prefix-conversion convention as
 // sessions.ts.
 
+import { reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   CloneProfileRequestSchema,
@@ -139,10 +140,20 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   app.post(
     '/v1/profiles',
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const ctx = requireCtx(req);
       const parsed = CreateProfileRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Item 6 — a mistyped field used to be dropped in silence and answered
+      // 201. The request still succeeds exactly as before; the ignored keys are
+      // now reported in a header and a server log instead of vanishing.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: Object.keys(CreateProfileRequestSchema.shape),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/profiles',
+      });
 
       const eff = effectiveAccountIdForWrite(req, ctx);
       let accountId = ctx.account.id;
