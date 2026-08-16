@@ -1622,6 +1622,51 @@ describe('POST /v1/auth/password-reset', () => {
     expect(invalidateAccount).toHaveBeenCalledWith(signup.account.id);
   });
 
+  // The logout path revokes the session row in the database and THEN invalidates
+  // the cached account context (V-168). That second step is best-effort by
+  // design: the revocation has already happened, and the cache entry TTLs out
+  // within 30s regardless, so a cache outage must not turn a completed logout
+  // into an error the caller sees.
+  //
+  // Nothing exercised the failure. Removing the invalidation call reds an arm,
+  // so the call itself is covered — but making its catch rethrow reds nothing,
+  // because every existing arm supplies a cache that resolves. The assertion on
+  // the call count is what keeps this arm honest: without it, a logout that
+  // never reached the cache at all would pass just as happily.
+  it('CRITICAL logout still succeeds when the cache invalidation fails', async () => {
+    const invalidateAccount = vi.fn().mockRejectedValue(new Error('redis down'));
+    const authCache = { invalidateAccount } as unknown as AuthCache;
+    const { service } = makeDirectService(new InMemoryAuthFlowsRepo(), authCache);
+    const signup = await service.signup({
+      email: 'logout-cache-down@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    // Login refuses an unverified email, so the session comes from the reset
+    // flow — the same route the sibling arm above uses. That flow performs its
+    // OWN invalidation, so the assertion below counts the DELTA rather than the
+    // total; otherwise this arm would be measuring the reset, not the logout.
+    const reset = await service.requestPasswordReset({
+      email: signup.account.email,
+      requestedFromIp: null,
+    });
+    const confirmed = await service.confirmPasswordReset({
+      token: reset.debugToken as string,
+      newPassword: 'an entirely different cache-fenced passphrase!!',
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    if (confirmed.kind !== 'session') throw new Error('expected a session from the reset');
+    const beforeLogout = invalidateAccount.mock.calls.length;
+
+    await expect(service.logout(confirmed.session.plaintext)).resolves.toBeUndefined();
+
+    expect(
+      invalidateAccount.mock.calls.length - beforeLogout,
+      'logout must actually attempt the invalidation, or this proves nothing about the swallow',
+    ).toBe(1);
+  });
+
   it('a suspended account cannot use an outstanding reset link to change its password or mint a session', async () => {
     const { service, repo } = makeDirectService();
     const signup = await service.signup({
