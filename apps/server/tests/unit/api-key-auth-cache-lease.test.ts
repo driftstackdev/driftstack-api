@@ -11,6 +11,8 @@ import {
   type TeamMembership,
 } from '../../src/services/auth.js';
 import { InMemoryAuthCache, sha256Hex } from '../../src/services/auth-cache.js';
+import type { AuthCache, AuthCacheVersions } from '../../src/services/auth-cache.js';
+import type { AccountContext } from '../../src/services/auth.js';
 
 const PLAINTEXT = 'ds_live_cache_lease_aaaaaaaaaaaaaaaaaaaaaaaa';
 const SHA = sha256Hex(PLAINTEXT);
@@ -356,5 +358,52 @@ describe('API-key positive-cache generation lease', () => {
     ).resolves.toMatchObject({
       rateLimitOverrides: { global: { capacity: 7, refillPerSecond: 0.5 } },
     });
+  });
+  // The cache write at the end of the scrypt path is wrapped in a catch that
+  // drops the failure on the floor: "auth still completed via scrypt path...
+  // next request will retry the cache write". That swallow is the difference
+  // between a cache outage costing latency and a cache outage costing every
+  // authenticated request in the fleet — rethrowing turns a Redis blip into a
+  // total authentication failure.
+  //
+  // Nothing exercised it. No test in the suite makes a cache write throw; the
+  // only files naming cache-failure resilience are content-parity pins over
+  // the comment. This drives the real authenticate() with a cache whose write
+  // rejects, and asserts the write was attempted so it cannot pass by never
+  // reaching the swallow.
+  it('CRITICAL authentication still succeeds when the cache WRITE fails', async () => {
+    class CacheWhoseWriteFails implements AuthCache {
+      setCalls = 0;
+      private readonly inner = new InMemoryAuthCache();
+      get(plaintextSha256: string): Promise<AccountContext | null> {
+        return this.inner.get(plaintextSha256);
+      }
+      captureVersions(accountId: string, keyId: string): Promise<AuthCacheVersions | null> {
+        return this.inner.captureVersions(accountId, keyId);
+      }
+      set(): Promise<void> {
+        this.setCalls += 1;
+        return Promise.reject(new Error('auth cache backend unavailable'));
+      }
+      invalidateKey(keyId: string): Promise<void> {
+        return this.inner.invalidateKey(keyId);
+      }
+      invalidateAccount(accountId: string): Promise<void> {
+        return this.inner.invalidateAccount(accountId);
+      }
+    }
+
+    const cache = new CacheWhoseWriteFails();
+    const key = await activeKey();
+    const repo = repoWith({ findApiKeyByPrefix: () => Promise.resolve(key) });
+
+    const ctx = await authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:01.000Z'));
+
+    expect(
+      cache.setCalls,
+      'the cache write must actually be attempted, or this proves nothing about the swallow',
+    ).toBe(1);
+    expect(ctx.account.id).toBe(ACCOUNT.id);
+    expect(ctx.apiKey.id).toBe(key.id);
   });
 });
