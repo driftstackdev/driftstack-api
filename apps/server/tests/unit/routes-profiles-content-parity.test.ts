@@ -142,14 +142,15 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
   it('V-326e4 PATCH /v1/profiles/:id: admin-only on team scope; UpdateProfileRequestSchema; selective updates (name?/description?/folder?/tags?) preserved', () => {
     expect(body).toMatch(/\/\/ V-326e4 — admin-only on team scope\./);
     // Selective-update guards, one per PATCH-able field (undefined = untouched).
-    expect(body).toContain('if (parsed.data.name !== undefined) updates.name = parsed.data.name;');
+    // The PATCH handler names its validated payload `body` (not `parsed.data`)
+    // since it now goes through parseRequestBodyReportingUnknown — same values,
+    // and the rename is what lets the unknown-field report ride this route.
+    expect(body).toContain('if (body.name !== undefined) updates.name = body.name;');
     expect(body).toContain(
-      'if (parsed.data.description !== undefined) updates.description = parsed.data.description;',
+      'if (body.description !== undefined) updates.description = body.description;',
     );
-    expect(body).toContain(
-      'if (parsed.data.folder !== undefined) updates.folder = parsed.data.folder;',
-    );
-    expect(body).toContain('if (parsed.data.tags !== undefined) updates.tags = parsed.data.tags;');
+    expect(body).toContain('if (body.folder !== undefined) updates.folder = body.folder;');
+    expect(body).toContain('if (body.tags !== undefined) updates.tags = body.tags;');
   });
 
   it('DELETE /v1/profiles/:id: V-326e4 admin-only on team; 204 No Content', () => {

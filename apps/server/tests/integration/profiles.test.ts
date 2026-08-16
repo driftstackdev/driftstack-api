@@ -78,6 +78,57 @@ describe('POST /v1/profiles', () => {
     expect(body.tags).toEqual([]);
   });
 
+  // Item 6 — the route-level half. The helper has its own unit arms, but nothing
+  // noticed if a ROUTE stopped calling it: reverting either handler to a plain
+  // safeParse left all 906 profile tests green, because silent stripping and
+  // reporting produce identical bodies and status codes. These pin the wiring.
+  it('CRITICAL create reports a mistyped field instead of dropping it silently', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'typo-create', archetyp: 'iphone17_ios18_7_safari26_4' },
+    });
+
+    // Unchanged for the caller — this is the non-breaking half of the decision.
+    expect(res.statusCode).toBe(200);
+    expect(res.json<ProfileResponse>().archetype).toBe('iphone17_ios18_7_safari26_4');
+    // …but the ignored key is no longer invisible.
+    expect(res.headers['x-driftstack-unknown-fields']).toBe('archetyp');
+  });
+
+  it('CRITICAL update reports a mistyped field, and says nothing when all fields are known', async () => {
+    fx = await buildTestApp();
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'typo-update' },
+    });
+    const id = created.json<ProfileResponse>().id;
+
+    const typo = await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/profiles/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { nam: 'renamed' },
+    });
+    expect(typo.statusCode).toBe(200);
+    expect(typo.headers['x-driftstack-unknown-fields']).toBe('nam');
+
+    // The negative arm matters as much: without it a header set unconditionally
+    // would satisfy the assertions above and tag every well-formed request.
+    const clean = await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/profiles/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'renamed' },
+    });
+    expect(clean.statusCode).toBe(200);
+    expect(clean.headers['x-driftstack-unknown-fields']).toBeUndefined();
+  });
+
   it('403 when the key lacks write:profiles scope (read-only key)', async () => {
     fx = await buildTestApp({ scopes: ['read'] });
     const res = await fx.app.inject({

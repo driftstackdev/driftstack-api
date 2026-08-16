@@ -10,7 +10,10 @@
 // format: `prof_<uuid>` — same prefix-conversion convention as
 // sessions.ts.
 
-import { reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
+import {
+  parseRequestBodyReportingUnknown,
+  reportUnknownRequestFields,
+} from '../lib/unknown-request-fields.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   CloneProfileRequestSchema,
@@ -240,11 +243,17 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   app.patch<{ Params: { id: string } }>(
     '/v1/profiles/:id',
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const ctx = requireCtx(req);
       const id = uuidFromProfileId(req.params.id);
-      const parsed = UpdateProfileRequestSchema.safeParse(req.body);
-      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Item 6 — a mistyped field on update used to be dropped in silence, so
+      // the request answered 200 having changed nothing the caller asked for.
+      const body = parseRequestBodyReportingUnknown({
+        schema: UpdateProfileRequestSchema,
+        req,
+        reply,
+        route: 'PATCH /v1/profiles/:id',
+      });
 
       const updates: {
         name?: string;
@@ -254,12 +263,12 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         icon?: string | null;
         note?: string | null;
       } = {};
-      if (parsed.data.name !== undefined) updates.name = parsed.data.name;
-      if (parsed.data.description !== undefined) updates.description = parsed.data.description;
-      if (parsed.data.folder !== undefined) updates.folder = parsed.data.folder;
-      if (parsed.data.tags !== undefined) updates.tags = parsed.data.tags;
-      if (parsed.data.icon !== undefined) updates.icon = parsed.data.icon;
-      if (parsed.data.note !== undefined) updates.note = parsed.data.note;
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.description !== undefined) updates.description = body.description;
+      if (body.folder !== undefined) updates.folder = body.folder;
+      if (body.tags !== undefined) updates.tags = body.tags;
+      if (body.icon !== undefined) updates.icon = body.icon;
+      if (body.note !== undefined) updates.note = body.note;
 
       const eff = effectiveAccountIdForWrite(req, ctx);
       const accountId = eff ?? ctx.account.id;

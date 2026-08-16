@@ -17,7 +17,9 @@
 // with a much higher false-positive rate (polymorphic payloads, forward-compat
 // blocks), and the failure this item describes is a mistyped top-level field.
 
-import type { FastifyBaseLogger, FastifyReply } from 'fastify';
+import type { FastifyBaseLogger, FastifyReply, FastifyRequest } from 'fastify';
+import type { z, ZodObject, ZodRawShape } from 'zod';
+import { ValidationError } from './errors.js';
 
 export const UNKNOWN_FIELDS_HEADER = 'x-driftstack-unknown-fields';
 
@@ -54,4 +56,37 @@ export function reportUnknownRequestFields(args: {
     'request carried fields the schema does not declare; they were ignored',
   );
   return unknown;
+}
+
+/**
+ * Validate a request body and report — never reject — top-level keys the schema
+ * does not declare.
+ *
+ * One helper rather than the same three lines at 33 call sites: a new route that
+ * uses it inherits the reporting, and a structural test can pin that
+ * customer-facing writes go through here rather than calling `safeParse`
+ * directly.
+ *
+ * Deliberately NOT applied to unauthenticated auth endpoints. Echoing the keys a
+ * caller sent back to an anonymous caller is a (mild) disclosure of schema shape
+ * on exactly the surface that attracts probing, and the failure this exists to
+ * fix — a mistyped field silently changing a resource's configuration — is a
+ * property of authenticated resource writes, not of login.
+ */
+export function parseRequestBodyReportingUnknown<Shape extends ZodRawShape>(args: {
+  schema: ZodObject<Shape>;
+  req: FastifyRequest;
+  reply: FastifyReply;
+  route: string;
+}): z.infer<ZodObject<Shape>> {
+  const parsed = args.schema.safeParse(args.req.body);
+  if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+  reportUnknownRequestFields({
+    body: args.req.body,
+    knownKeys: Object.keys(args.schema.shape),
+    reply: args.reply,
+    logger: args.req.log,
+    route: args.route,
+  });
+  return parsed.data;
 }
