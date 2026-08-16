@@ -4144,3 +4144,67 @@ crypto order · profile cap · token debit · account tier · **MFA authority ro
 The `oauth-store` group (6 sites) is what remains, and each wants the same two
 questions first: what does this lock protect that a sibling lock does not, and does
 an existing N-way race already reach it.
+
+## 6w — the OAuth code-replay lock, and a coverage ledger that lies about it
+
+The `oauth-store` group was the last named concurrency item: six `FOR UPDATE` sites
+across four methods. Following 6u's rule, each got the two questions before any
+test was written — what does this lock protect that a sibling does not, and does an
+existing race already reach it. The answers split the six cleanly, and only two of
+them turned out to be worth a test.
+
+**`consumeCodeForToken` :226 — the authorization code's single-use guard.** The
+shape:
+
+```
+SELECT … FROM oauth_authorization_codes … FOR UPDATE     ← the lock
+if (code.consumedAt !== null) return 'code_unavailable'  ← the check, in JS
+… INSERT api_keys, INSERT oauth_access_tokens …
+UPDATE oauth_authorization_codes SET consumed_at = …     ← the mark
+```
+
+The marking UPDATE has no `AND consumed_at IS NULL` predicate, so there is no
+conditional-UPDATE atomicity underneath the lock the way there is in api-key
+revocation. A unique constraint does not stand in either: each exchange mints its
+own token value, so two replays of one code produce two different `key_hash`es and
+both inserts succeed. The lock is the entire guard. Without it, two concurrent
+exchanges of a stolen code both observe `consumedAt === null`, both pass, and both
+mint an `api_keys` authority row — one code yielding two live API keys, where
+revoking the one the customer can see leaves the other working.
+
+**The ledger lies about this one.** `unit/oauth.test.ts` races `consumeCodeForToken`
+through `Promise.all`, so any coverage pass that greps for the method name plus a
+concurrency primitive reports it as raced. It has zero `postgres(` calls. It runs
+against the in-memory store, where single-use is enforced by JavaScript being
+single-threaded — a property that holds regardless of what Postgres does. A race
+against a fake store is not evidence about a row lock, and it is worth naming
+because the ledger entry looks identical to a real one.
+
+`db-oauth-code-single-use-lock-drizzle` proves it by forced ordering. Control
+green; deleting `.for('update')` at :226 reds with _"consumeCodeForToken must be
+waiting on the authorization-code row, not reading a consumed_at past it"_.
+
+**`:70` and `:242` are a pair, and neither means much alone.** `revokeClient`
+locks the client row, marks it revoked, then SELECTs that client's tokens and
+revokes each. `consumeCodeForToken` locks the same row before inserting a new
+token. Together they make revocation _complete_. Drop `:242` and an exchange
+inserts its key after the cascade has already taken its list, so the new key is
+never in that list and never revoked — the customer revokes a compromised
+integration, watches it disappear from the dashboard, and one live API key remains
+behind it. The `revokedAt` check the exchange performs is not a substitute: without
+the lock it reads a snapshot that predates the revocation's commit.
+
+**`:150`/`:164` in `consumeAuthorizationForCode`** are the same two shapes one step
+earlier — an authorization row consumed by DELETE (unconditional, so the lock is
+what makes it single-use) and a client-authority read. Same classes, same
+arguments; recorded rather than re-proven.
+
+**`:299` in `revokeToken` is defense-in-depth, not load-bearing.** Both of its
+UPDATEs carry `AND revoked_at IS NULL` and run in one transaction, so two
+concurrent revokes converge on the same state whether or not the lock is there.
+No test is written for it, and that is a finding rather than a gap — manufacturing
+a forced-ordering test here would prove the lock is _acquired_ while implying a
+consequence that does not exist.
+
+That is the useful shape of this sweep: six sites, two genuine proofs, three
+recorded as the same class as something already proven, and one honestly demoted.
