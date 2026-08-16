@@ -4522,3 +4522,144 @@ codebase is asked.** One `ls` of the test directory for the guard's own name wou
 have closed it in seconds — which is exactly the check that turned out to matter.
 
 Item 20 and its recommendation are hereby marked closed. Nothing to ship.
+
+## 7d — picking targets by measurement instead of by intuition
+
+The last three fires chose targets by reading code that looked risky, or by
+grepping this document for open items. Both misfired: every intuition-picked area
+turned out already sound, and the doc-picked one (item 20) had been closed for days.
+So this fire regenerated the measurement first.
+
+A full coverage pass was taken **with `DATABASE_URL` set** — without it ~80
+integration files never execute and every "never executed" verdict they would have
+produced is false, which is the exact trap recorded earlier and passed on to A3.
+2751 files, 27,803 tests, all passing, `coverage-final.json` written.
+
+Counting statements whose line begins with `throw`: **960 seen, 225 never
+executed.** That is not comparable with item 5f's 188 — 5f counts throw _sites_ by a
+different rule — and the two numbers should not be differenced. What the list is
+good for is ranking, and it ranks by consequence once the messages are read rather
+than the counts.
+
+### The one worth a test
+
+`db/api-keys-repo.ts:91` — _"revokeApiKeyAtomic lost its update without a persisted
+revocation"_. The method revokes with a conditional UPDATE (`… AND revoked_at IS
+NULL RETURNING *`) and, when that matches nothing, re-reads under the same scope.
+Two answers are legitimate: the row is gone (`not_found`), or a concurrent revoke
+won and the loser returns the winner's timestamp (`already_revoked`). The third is
+a contradiction — the row is present with `revoked_at` still NULL after an update
+predicated on exactly that matched nothing — and nothing in the codebase ever clears
+`revoked_at`, so it should not arise.
+
+It earns a test anyway because **removing it does not crash; it lies.** Execution
+falls through to `return { kind: 'already_revoked', key }` carrying the row just
+read, whose `revokedAt` is null. The service reports the key as already revoked, the
+customer is told the key is dead, and the key keeps authenticating. Revocation is
+the control a customer reaches for when a key has leaked, so of the two directions
+this lie could take, it takes the worse one.
+
+Measured, not assumed:
+
+    guard removed → the new arm reds ("promise resolved { kind: 'already_revoked' } instead of rejecting")
+    same mutation → 37 of 38 api-key test files still pass, 447 tests green
+
+so the guard was genuinely unheld, and the other three arms (revoked /
+already_revoked / not_found) pass under the mutation too — which is what stops a
+stub that refuses everything from satisfying the suite.
+
+Reaching the branch needs a state Postgres will not produce, so the database is
+stubbed rather than driven. That is the honest cost of testing an
+impossible-state assertion, and it is worth paying only because the fall-through is
+a wrong answer rather than an exception.
+
+### A deferred product decision that dissolves on inspection
+
+5q defers `services/billing.ts:251` — `getBillingState` throwing `Account not
+found.` — as a product question: _"whether that should be a 404 or `subscription:
+null` for an account that exists in auth but has never touched billing"_.
+
+There is no such account. `billing-repo.getAccount` selects **`.from(accounts)`** —
+the same table auth resolves against — not a billing-specific row. An account that
+has never touched billing still has an `accounts` row, and already receives
+`subscription: null` from `findCurrentSubscription` below. The throw fires only if
+the `accounts` row itself is absent, i.e. the account was deleted between
+authentication and this read.
+
+So the question is moot and the guard is a correct residual for a narrow TOCTOU. No
+product decision is owed. Recorded because the deferral was reasonable given its
+premise — the premise was just wrong, and one line of the repo settles it.
+
+### Probed and sound (recorded so the next sweep does not re-derive)
+
+- **Global error handler** — unknown errors wrap to `InternalError('An unexpected
+error occurred.', err)`; the one echo (`StripeApiError` < 500) is deliberate and
+  reasoned under V-780. Already covered by
+  `error-handler-internal-error-no-leak`.
+- **Rate limiter under backend failure** — store error degrades to a bounded
+  in-process fallback with a metric; fallback error **fails CLOSED**. Its
+  `rejectEffectiveOwner` throws rather than replies, so the call at the invocation
+  guard that lacks a `return` is correct, and it strips policy headers first so the
+  actor cannot infer the owner's capacity.
+- **Worker identity** — `pid-<pid>@<hostname>-<uuid8>`; the container pid-1
+  collision hazard is closed, with the reason in the source.
+- **Outbound HTTP** — five `fetch` sites, all with a timeout, and every one that
+  reads a body keeps the abort timer armed THROUGH the read. `oauth-client-exchange`
+  keeps a local copy of the bounded-body reader; it enforces the cap during
+  streaming exactly as the shared helper does, and its streaming path is covered
+  behaviourally, not by a text pin.
+
+### One recorded decision, not a change
+
+Fastify is constructed with `loggerInstance`, `trustProxy` and `genReqId` only — so
+`bodyLimit` (1 MiB), `requestTimeout` (**0, disabled**), `connectionTimeout` and
+`keepAliveTimeout` all take defaults. The upload route sets its own limits and is
+thoroughly bounded (64 MiB per file, a 96 MiB route body limit, a 512 MB
+per-account concurrent in-flight byte cap, and a concurrent-count cap), so the
+global 1 MiB default is what everything else runs under, which is right.
+
+`requestTimeout: 0` means a slow client can hold a connection indefinitely at the
+Fastify layer. Deployed, Cloudflare and nginx both impose their own timeouts, so the
+exposure is bounded by the topology rather than by the app. **Not changed here**: a
+64 MiB upload over a slow link is a legitimately long request, and picking a number
+without knowing the longest legitimate one would trade a bounded hazard for an
+outage. Recorded with the numbers so it is a decision someone can make.
+
+### The criterion that sorts 225 sites into one
+
+Most of the never-executed throws are not worth testing, and the rule that
+separates them is what the code does when the guard is DELETED:
+
+- **Falls through to a crash** → residual. `agent-sessions-repo.ts:569`
+  (_"disappeared mid-transaction"_) is the type case: the row is held `FOR UPDATE`
+  inside the same transaction, so the UPDATE cannot fail to match; remove the guard
+  and `rowToRecord(undefined, key)` throws a `TypeError` one line later. The guard
+  improves a message. A test would pin the message, not a behaviour.
+- **Falls through to a WRONG ANSWER** → test it. `api-keys-repo.ts:91` returns
+  `already_revoked` for a live key. Nothing crashes, nothing logs, and the caller
+  is told the opposite of the truth.
+
+Both look identical in a coverage report — one uncovered `throw` each — and the
+difference is invisible until the fall-through is traced. That trace is one read of
+the following three lines, and it is the whole triage. Applied here it took a list
+of 225 down to a single test worth writing, with the eleven
+`agent-sessions-repo` sites and the seven `account-me` feature-flag branches
+declining for stated reasons rather than by omission.
+
+### An observation the sweep turned up sideways
+
+Tracing who could reach `agent-sessions-repo.ts:556` showed that **nothing in
+production source calls `appendTranscript` at all.** The two guarded variants do the
+work — `appendTranscriptIfActive` (scopes the update with
+`eq(status, 'active')` and returns null instead of throwing) and
+`appendTranscriptIfAuthorityRevision`. The unguarded original remains, implemented
+twice (Drizzle + in-memory), reachable only from tests: 14 call sites across 8 files.
+
+Not filed as dead code to delete. Those 14 sites exercise the transcript
+encrypt/decrypt round-trip through a real repo, which is genuine coverage, and
+rewriting them onto a variant with different return semantics (null vs throw) is a
+change to test meaning, not a cleanup. The thing worth recording is the footgun: a
+future caller reaching for "append to the transcript" finds an unguarded method
+first, and it will happily append to a session that is no longer active. If it is
+ever removed, the guarded variants are the replacements and the null-vs-throw
+difference is the migration cost.
