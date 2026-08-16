@@ -11,6 +11,7 @@ import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { createTestLogger } from '../../src/lib/logger.js';
 import { createEmailService } from '../../src/services/email.js';
 import type { AuthCache } from '../../src/services/auth-cache.js';
+import type { AccountAuditService } from '../../src/services/account-audit.js';
 import {
   AuthFlowError,
   AuthFlowsService,
@@ -65,6 +66,7 @@ class PasswordResetBeforeSessionInsertRepo extends InMemoryAuthFlowsRepo {
 function makeDirectService(
   repo = new InMemoryAuthFlowsRepo(),
   authCache: AuthCache | null = null,
+  accountAudit: AccountAuditService | null = null,
 ): {
   repo: InMemoryAuthFlowsRepo;
   service: AuthFlowsService;
@@ -82,6 +84,7 @@ function makeDirectService(
       exposeDebugToken: true,
     },
     authCache,
+    accountAudit,
   );
   return { repo, service };
 }
@@ -1710,6 +1713,46 @@ describe('POST /v1/auth/password-reset', () => {
       invalidateAccount.mock.calls.length - beforeRefresh,
       'the rotation must actually attempt the invalidation',
     ).toBe(1);
+  });
+
+  // Every auth flow emits a customer-facing audit entry through
+  // emitAuditBestEffort, which swallows and logs. The emissions themselves are
+  // covered through the full app fixture, which wires the real audit service.
+  // The FAILURE is not: making that catch rethrow reds only a content-parity
+  // pin over the source text, and no behavioural arm anywhere.
+  //
+  // It matters because the audit store is a different dependency from the auth
+  // store. If an emit failure propagated, an outage in the audit path would
+  // start failing password changes and logins outright — the auth write has
+  // already committed by then, so the caller would see an error for an
+  // operation that actually succeeded.
+  it('CRITICAL an auth flow still succeeds when the audit emit fails', async () => {
+    const record = vi.fn().mockRejectedValue(new Error('audit store down'));
+    const accountAudit = { record } as unknown as AccountAuditService;
+    const { service } = makeDirectService(new InMemoryAuthFlowsRepo(), null, accountAudit);
+    const signup = await service.signup({
+      email: 'audit-down@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const reset = await service.requestPasswordReset({
+      email: signup.account.email,
+      requestedFromIp: null,
+    });
+
+    await expect(
+      service.confirmPasswordReset({
+        token: reset.debugToken as string,
+        newPassword: 'an entirely different audit-fenced passphrase!!',
+        issuedFromIp: null,
+        userAgent: null,
+      }),
+    ).resolves.toMatchObject({ kind: 'session' });
+
+    expect(
+      record,
+      'the audit emit must actually be attempted, or this proves nothing about the swallow',
+    ).toHaveBeenCalled();
   });
 
   it('a suspended account cannot use an outstanding reset link to change its password or mint a session', async () => {
