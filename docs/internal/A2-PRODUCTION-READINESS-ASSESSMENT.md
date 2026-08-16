@@ -4266,3 +4266,66 @@ advisory one, and the only unserialised read left is one whose consequence does 
 survive being stated precisely. That is worth recording as a finding in its own
 right — it is the difference between "no defects found" and "the surface is
 clean".
+
+## 6y — the site where forced ordering does not work, and what replaced it
+
+6w recorded `consumeAuthorizationForCode`'s `:150` as "same class as :226,
+recorded rather than re-proven". That was too quick. Its consequence is the same
+severity — the DELETE that retires the authorization never checks its row count,
+so two callers that both read before either commits both insert a code, and one
+user consent becomes several codes, each separately exchangeable for an API key.
+Something that severe earns a test rather than a note.
+
+**The technique that worked five times does not transfer here.** Forced ordering
+depends on a holder lock mode that conflicts with the repo's `FOR UPDATE` but with
+nothing an unguarded path takes — `FOR KEY SHARE` has been that mode throughout.
+It cannot be that here, because an unguarded path still DELETEs the row, and a
+DELETE takes a lock of `FOR UPDATE` strength. A KEY SHARE holder blocks both
+variants, so the test would pass identically with the lock deleted.
+
+That was verified rather than recalled, with two psql sessions:
+
+    ERROR:  canceling statement due to lock timeout
+    CONTEXT:  while deleting tuple (0,1) in relation "oauth_authorizations"
+
+The DELETE blocks on a KEY SHARE holder. So the design decision rests on a measured
+fact, and the trap it avoids is the same one that fooled the first profile-cap
+test — a holder that blocks the unguarded path too, producing a green that means
+nothing.
+
+**What replaced it is the corrected rule from 6v.** Detectability by racing is
+about sample count and connection independence, not mechanism: two connections on a
+sub-millisecond path miss the window, nine independent clients hit it. So this file
+opens nine separate `postgres()` clients and has each consume the SAME authorization
+with a DIFFERENT code — distinct, so the defect shows as two codes rather than
+being masked as a primary-key error.
+
+Measured, and the result is not marginal:
+
+    with the lock:     verdicts = inserted + 8 × unavailable, 1 code row
+    without the lock:  verdicts = inserted × 9,              9 code rows
+
+All nine win. The window is wide because the transaction does a client lookup, a
+delete and an insert between the read and the commit, which is exactly why the
+race that fails on a narrow count-then-insert succeeds here. Control run three
+times for stability: 3/3 green.
+
+**The rule, consolidated, since it has now been wrong twice and refined twice.**
+Whether a race can demonstrate a lock depends on three things, and the first
+version of this rule got it wrong by naming none of them:
+
+1. connection independence — callers sharing a pooled connection are serialised
+   inside the process and never reach Postgres concurrently at all;
+2. sample count — two callers miss a narrow window; nine hit it;
+3. WINDOW WIDTH — how much work sits between the read and the commit.
+
+The profile cap fails on (3) despite satisfying (1) and (2): its count-then-insert
+window is sub-millisecond, and it stayed green at eight connections and under a
+two-backend probe outside vitest. This authorization consume satisfies all three —
+a client lookup, a delete and an insert sit inside its window — and all nine
+callers win. Neither result is evidence about locks in general; each is evidence
+about the shape of one call site.
+
+So the sweep now stands at seven locks proven, by whichever of the two techniques
+the site actually admits — and the choice between them is a property of the
+unguarded path's own locking and its window, not a preference.
