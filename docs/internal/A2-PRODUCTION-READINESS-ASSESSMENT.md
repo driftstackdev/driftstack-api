@@ -4371,3 +4371,44 @@ The useful outcome is not the guard. It is that the property was already covered
 and that the check which established it — run the existing suite against the
 mutation before claiming novelty — costs one command and is now the routine step
 between "I have a mutation that reds" and "this guard is worth committing".
+
+## 7a — a gap closed, and the row that described it wrongly
+
+5s listed `services/webhooks.ts:751` as _"delivery replay, endpoint vanished — open
+— same shape as `:532`"_. The site is open, and the mutation confirms it: removing
+the check leaves **115 webhook test files and 1257 tests fully green**. But the
+description of WHEN it fires was wrong, and being wrong made it look like a
+defensive nicety.
+
+The line is `if (!updated)` after `resetDeliveryToPending`. That repo method fences
+on `status != 'in_flight'` — pinned by `webhooks-repo-reset-to-pending-in-flight-
+guard`, whose own header says it exists so a replay cannot "stomp a delivery a
+worker currently has claimed". So a falsy return is not primarily a row that
+vanished. It is **the ordinary outcome of a customer pressing replay on a delivery
+the worker picked up a moment earlier** — a routine race on any busy account.
+
+Two failures follow from removing it, and the second is the one that matters:
+
+1. the method returns null where its signature promises a row, so the caller
+   serialises a malformed body instead of answering 404;
+2. execution falls through to the audit block and writes
+   `webhook_delivery.replayed` **for a replay that was refused** — the customer's
+   own audit log then asserts something the delivery's real state contradicts.
+
+`webhooks-customer-replay-fenced-delivery` closes it with two arms, and the second
+is not decoration. Measured separately:
+
+    check deleted entirely   → arm 1 reds ("promise resolved null instead of rejecting")
+    check MOVED below audit  → arm 1 PASSES, arm 2 reds ("called 1 times")
+
+The second mutation is the interesting one: the endpoint still answers 404, the
+status code is correct, and the log is a lie. A test asserting only the throw would
+sign that off. Ordering, not just presence, is the property — which is why the
+audit assertion had to be measured against a mutation that preserves the throw.
+
+⭐ The general point, since 5s produced the row and 5s also produced four correct
+ones: **a triage note records what a site LOOKED like from the outside.** This one
+read as a TOCTOU check because the two throws above it are TOCTOU checks with the
+same message. Reading what the repo method actually does — one grep for its name —
+moved it from "rare defensive branch" to "routine race with an audit-integrity
+consequence". Re-read the mechanism before scheduling the work, not just the note.
