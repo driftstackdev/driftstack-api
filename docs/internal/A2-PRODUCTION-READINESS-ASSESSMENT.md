@@ -431,7 +431,6 @@ imply.
 | ---- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
 | 1    | 1,515 commits have never reached CI                              | grows every commit; the eventual push is one high-risk event |
 | 2    | Three subsystems built, tested, never run                        | unknown-unknowns surface in front of a customer              |
-| 3    | Two retention-table lines cannot be honoured as written          | the published policy is not what the code does               |
 | 6    | Unrecognised request fields are silently dropped                 | a customer's typo'd field succeeds and does nothing          |
 | 7, 8 | Free-tier OAuth consent + free-tier API-key minting              | abuse surface open on the unpaid tier                        |
 | 9    | GUI signing identity                                             | ships unsigned or signed by the wrong identity               |
@@ -440,6 +439,12 @@ imply.
 Everything else numbered in this section is CLOSED, CORRECTED, or a record of
 completed work; the eight explicitly marked so are left in place for their
 evidence.
+
+⚠️ **Item 3 was in this index and should not have been** — corrected the same fire
+it was written. Its first bullet is CLOSED (the retention line was reworded and is
+now pinned positively AND negatively), and its second resolves itself once item 2's
+archiver runs. It is subsumed by item 2, not a decision of its own. An index is only
+worth having if its rows are checked, so each one was.
 
 Each item below states the evidence, what happens if nothing is decided, and a
 recommendation. None is blocked on more test coverage; every one is blocked on
@@ -5751,3 +5756,40 @@ to run it when touching the section, which is now recorded in the item itself.
 Finally, the transferProfile defect is added as **item 37**, with its reproduction,
 its cost of waiting, and the sized recommendation from 7n. It had been sitting in the
 chronological log at 7l where a decision-maker would never find it.
+
+## 7s — auditing the index I had just written
+
+7r built an index of pending decisions and refreshed item 1's decayed count. An index
+is only worth having if its rows are true, so each was checked against the tree rather
+than against the prose that produced it. Five held; one did not, and it was mine.
+
+- **Item 2 — current.** `AuditArchiveService` and `WebhookSecretForceRotationService`
+  have **zero** mentions in `bootstrap.ts`; the sibling `WebhookGraceExpiringNoticeService`
+  has two. That is exactly the asymmetry the item describes — the half that warns
+  about expiring grace windows runs while the half that opens them does not — and
+  `tick-services-are-wired-invariant.test.ts` still pins it.
+- **Item 6 — current.** `CreateProfileRequestSchema` is a plain `z.object` (not
+  `.strict()`), so unknown keys are stripped, and `archetype` is `.optional()` with a
+  documented default. A mistyped field therefore yields 201 with the default
+  substituted, as claimed.
+- **Item 3 — NOT a pending decision, and I had listed it as one.** Its first bullet is
+  CLOSED: the retention line was reworded, and the correction reaches **both** published
+  copies (`docs/legal/privacy-policy.md` and `apps/marketing-site/.../privacy.md`).
+  Better, the parity test now pins the corrected sentence positively AND carries
+  `expect(body).not.toMatch(/revoked records retained 90 days for audit then deleted/)`
+  — so the false promise cannot return the way it originally froze. Its second bullet
+  resolves once item 2's archiver runs. Row removed.
+
+⛔ **The removal failed the first time, and my check confirmed the failure as success.**
+Prettier had realigned the table on commit (`| 3 | …` → `| 3    | …`), so the
+exact-string replacement matched nothing — and the `grep -c` I used to verify reused
+the _same_ unpadded pattern, returned 0, and read as "row is gone". It was still
+there.
+
+⭐ **A verification that reuses the pattern that just failed proves nothing.** Check
+with a different shape than the one that did the work: here a regex on the row's
+CONTENT (`^\|\s*3\s*\|\s*Two retention-table`), plus an assertion that exactly one line
+disappeared, plus printing the surviving row numbers. Three independent signals, none
+of which shares the assumption that broke.
+
+Pending decisions now read 1, 2, 6, 7/8, 9, 37 — six, each verified.
