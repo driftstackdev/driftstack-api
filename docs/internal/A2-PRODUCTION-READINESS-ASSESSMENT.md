@@ -6566,3 +6566,29 @@ one that drops it.
 
 All four now covered against real Postgres in both directions, each proved by
 mutating its predicate in turn.
+
+### 37b. The tier recompute counted things nobody was still paying for
+
+`setAccountTierToBestActive` is the tier recompute a Stripe subscription event
+runs. It ranks in unexpired crypto entitlements so a lower Stripe sub cannot wipe
+a higher crypto-paid tier. Three rules carry it and **all three were uncovered**:
+
+| rule                                  | mutation                  | result       |
+| ------------------------------------- | ------------------------- | ------------ |
+| `gt(entitlements.expiresAt, args.at)` | compare against the epoch | 22,447 green |
+| `inArray(status, active/trialing)`    | let `canceled` in         | 22,447 green |
+| `.for('update')`                      | remove the lock           | 22,447 green |
+
+Every failure mode points the same way: **an account keeps a tier it is no longer
+paying for.** An expired crypto entitlement keeps granting; a cancelled or
+past_due subscription keeps granting.
+
+All three now covered against real Postgres, each proved by mutating it in turn,
+with the lock proved by the same write-free-path technique used in item 35 — here
+the `appliedTier === null` branch, which returns without writing.
+
+⚠️ The first mutation of the entitlement expiry was **invalid as a measurement**:
+it used a raw `sql` template and the only test that redded was the repo's
+structural guard on raw-`sql` interpolation shape — a red about the mutation's own
+form, not the behaviour. Re-run comparing against `new Date(0)` instead, it was a
+clean zero. A red has to be attributed before it counts, in either direction.
