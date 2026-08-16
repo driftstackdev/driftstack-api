@@ -5793,3 +5793,43 @@ disappeared, plus printing the surviving row numbers. Three independent signals,
 of which shares the assumption that broke.
 
 Pending decisions now read 1, 2, 6, 7/8, 9, 37 — six, each verified.
+
+## 7t — finishing the freshness audit, and a grep that pointed the wrong way
+
+7s verified items 2, 3 and 6. Items 7/8 complete the checkable set — item 9 is about
+the founder's machine and the release path, not a measurement this repo can refresh.
+
+**Items 7 and 8 — current, and the verification nearly went wrong.** The item claims
+both policies are "pinned by their own tests so they stay visible". The API-key half
+is obvious (`tier-features`, `agent-sessions-tier-gate`). For the OAuth half I grepped
+`routes/auth-oauth-client.ts` and `services/oauth.ts` for any mention of tier, found
+**none**, and was one step from recording that the consent path has no tier gate — that
+a free-tier account may consent and nothing pins it.
+
+Reading the test instead of trusting the grep:
+
+    const freeAttempt = await app.inject({ … '/v1/oauth/authorize/complete' … });
+    expect(freeAttempt.statusCode).toBe(403);
+    expect(freeAttempt.json<{ detail: string }>().detail).toContain('apiAccess');
+
+The gate exists and is pinned. It simply is not in the OAuth files, because it is
+enforced centrally: `middleware/auth.ts:144` calls
+`requireTierFeature(ctx.account.tier, 'apiAccess')` inside `requireAuth`, so every
+authenticated route inherits it and none of them mentions a tier.
+
+⭐ **Grepping a feature's own files for its gate finds nothing when the gate is
+central.** The absence of a keyword in the handler is evidence about where the check
+lives, not about whether it exists — and the two readings point in opposite
+directions. The cheap disambiguation is to look for the OBSERVED behaviour (a test
+asserting 403) before concluding from the absence of a keyword.
+
+**Freshness audit complete.** Of the six pending decisions, five carry checkable
+evidence and all five now read true against the tree — item 1 after being refreshed
+from a 42% decay, items 2, 6 and 7/8 as written, and item 3 removed because it was
+not pending at all. Item 9 stands on its own terms.
+
+⚠️ Recorded because the pattern is now three-for-three this session: **every time I
+have inferred a gap from what a grep did NOT find, the gap was somewhere else.** The
+V-174 alias (found via coverage counters, not names), the `resetForTest` scope (found
+by reading the enclosing class), and this tier gate (found by reading a test). A
+negative grep result is a hypothesis about location, and it is a weak one.
