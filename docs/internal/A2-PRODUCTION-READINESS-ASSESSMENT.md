@@ -7087,3 +7087,39 @@ each gate outright left unused variables, so `tsc exit=2` and the two typecheck
 guards redded alongside the pin. **A mutation that breaks the build measures the
 build, not the behaviour.** Re-run with `x === y && false`, which keeps both
 operands referenced.
+
+### 50. A release script's Lua was pinned by a duplicated literal, never executed
+
+`RedisPairModeTakeoverLock.release()` is a CAS-DEL in Lua: delete the lock only
+if the caller still holds it. A plain DELETE there would let any client free the
+holder's pair-mode session, and a third party could take it over.
+
+Its unit test drives a hand-written fake whose `eval` is, by its own comment, "a
+tiny interpreter just for the release CAS-DEL script". It recognises the script by
+comparing it against a LITERAL COPY re-declared inside the test — the source
+constant is module-private — and then substitutes its own JavaScript model.
+
+That is a duplicated-literal tripwire, and a real one: changing the source Lua
+reds three tests because the fake stops recognising it. **It is not semantic
+validation.** The tell is that replacing the script with an unconditional DELETE
+and with syntactically invalid Lua red the SAME THREE TESTS — the reds are about
+the text changing, not about what the script does. Update both copies, as any
+refactor would, and the fake's model passes regardless.
+
+So the script had never been executed by Redis. Six arms now run it, and the
+signatures separate:
+
+| mutation                | unit suite | real Redis |
+| ----------------------- | ---------- | ---------- |
+| unconditional DELETE    | 3 (same)   | **1**      |
+| invalid Lua             | 3 (same)   | **3**      |
+| CAS comparison inverted | —          | **2**      |
+
+⚠️ A fourth mutation (acquire ignoring the caller's TTL) left `ttl` unused, so
+`tsc exit=2` and it is recorded as CONTAMINATED rather than as a result.
+
+_Also checked this fire, all sound:_ the four `suspended`/`deleted` sibling guards
+on both live-authority paths in `services/auth.ts` — each behaviourally covered,
+and someone had already written the "holds on the WEB-SESSION path too" mirror
+that item 49's auth-cache pair lacked. `requireOwner`'s two guards throw the same
+message, so the first is fully layered behind the second; not a gap.
