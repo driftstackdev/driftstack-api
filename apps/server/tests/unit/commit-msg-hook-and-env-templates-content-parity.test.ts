@@ -161,24 +161,27 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
     expect(read(ENV_STG)).toMatch(/V-278\.K isolation[\s\S]*?deploy-bridge\.sh fails closed/);
   });
 
-  it('CRITICAL R2_ACCOUNT_ID pinned to 7260371ac521e2a08a27ba8c7bdd5f43 cross-env; prod buckets driftstack-prod-{avatars,uploads} + staging driftstack-staging-{avatars,uploads}. The bucket-name namespacing matches the V-NNN convention; drift would collide prod/staging blob storage.', () => {
+  it('CRITICAL R2_ACCOUNT_ID pinned to 7260371ac521e2a08a27ba8c7bdd5f43 cross-env; recordings bucket namespaced driftstack-recordings / driftstack-staging-recordings + endpoint URL derived from the account id. Drift would collide prod/staging blob storage.', () => {
     for (const f of [ENV_PROD, ENV_STG]) {
       expect(read(f)).toMatch(/^R2_ACCOUNT_ID=7260371ac521e2a08a27ba8c7bdd5f43$/m);
+      expect(read(f)).toMatch(
+        /^R2_ENDPOINT_URL=https:\/\/7260371ac521e2a08a27ba8c7bdd5f43\.r2\.cloudflarestorage\.com$/m,
+      );
     }
-    expect(read(ENV_PROD)).toMatch(/^R2_BUCKET_AVATARS=driftstack-prod-avatars$/m);
-    expect(read(ENV_PROD)).toMatch(/^R2_BUCKET_UPLOADS=driftstack-prod-uploads$/m);
-    expect(read(ENV_PROD)).toMatch(/^R2_PUBLIC_BASE_URL=https:\/\/avatars\.driftstack\.dev$/m);
-    expect(read(ENV_STG)).toMatch(/^R2_BUCKET_AVATARS=driftstack-staging-avatars$/m);
-    expect(read(ENV_STG)).toMatch(/^R2_BUCKET_UPLOADS=driftstack-staging-uploads$/m);
-    expect(read(ENV_STG)).toMatch(
-      /^R2_PUBLIC_BASE_URL=https:\/\/avatars\.staging\.driftstack\.dev$/m,
-    );
+    // These pinned R2_BUCKET_{AVATARS,UPLOADS} and R2_PUBLIC_BASE_URL, none of
+    // which config.ts reads — so R2 was off for any deploy built from these
+    // templates while the pin reported the bucket names as correct.
+    expect(read(ENV_PROD)).toMatch(/^R2_BUCKET_RECORDINGS=driftstack-recordings$/m);
+    expect(read(ENV_STG)).toMatch(/^R2_BUCKET_RECORDINGS=driftstack-staging-recordings$/m);
   });
 
-  it('CRITICAL Postmark FROM addresses pinned cross-env — POSTMARK_FROM_TRANSACTIONAL=noreply@driftstack.dev + POSTMARK_FROM_DEFAULT=info@driftstack.dev. Drift would either break SPF/DKIM (changed sender domain) or get filtered as not-from-our-domain.', () => {
+  it('CRITICAL Postmark FROM addresses pinned cross-env under the names config.ts reads — POSTMARK_FROM + POSTMARK_REPLY_TO. Drift would either break SPF/DKIM (changed sender domain) or get filtered as not-from-our-domain.', () => {
     for (const f of [ENV_PROD, ENV_STG]) {
-      expect(read(f)).toMatch(/^POSTMARK_FROM_TRANSACTIONAL=noreply@driftstack\.dev$/m);
-      expect(read(f)).toMatch(/^POSTMARK_FROM_DEFAULT=info@driftstack\.dev$/m);
+      // Previously pinned as POSTMARK_FROM_TRANSACTIONAL / _FROM_DEFAULT. The
+      // server reads neither, so transactional email was off for a deploy
+      // built from these templates and the pin still passed.
+      expect(read(f)).toMatch(/^POSTMARK_FROM=noreply@driftstack\.dev$/m);
+      expect(read(f)).toMatch(/^POSTMARK_REPLY_TO=info@driftstack\.dev$/m);
     }
   });
 

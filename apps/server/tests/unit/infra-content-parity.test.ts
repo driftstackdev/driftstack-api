@@ -430,12 +430,18 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/^UPSTASH_REDIS_REST_TOKEN=REDACTED$/m);
     expect(body).toMatch(/R2 \(Cloudflare\)/);
     expect(body).toMatch(/^R2_ACCOUNT_ID=7260371ac521e2a08a27ba8c7bdd5f43$/m);
-    expect(body).toMatch(/^R2_BUCKET_AVATARS=driftstack-prod-avatars$/m);
-    expect(body).toMatch(/^R2_BUCKET_UPLOADS=driftstack-prod-uploads$/m);
-    expect(body).toMatch(/^R2_PUBLIC_BASE_URL=https:\/\/avatars\.driftstack\.dev$/m);
-    expect(body).toMatch(/^POSTMARK_SERVER_TOKEN=REDACTED$/m);
-    expect(body).toMatch(/^POSTMARK_FROM_TRANSACTIONAL=noreply@driftstack\.dev$/m);
-    expect(body).toMatch(/^POSTMARK_FROM_DEFAULT=info@driftstack\.dev$/m);
+    // R2 and Postmark are both all-or-nothing blocks in config.ts. The names
+    // pinned here before (R2_BUCKET_{AVATARS,UPLOADS}, R2_PUBLIC_BASE_URL,
+    // POSTMARK_SERVER_TOKEN, POSTMARK_FROM_{TRANSACTIONAL,DEFAULT}) are read
+    // by nothing, so object storage and transactional email were both OFF for
+    // any deploy built from this template — and this pin passed throughout.
+    expect(body).toMatch(/^R2_BUCKET_RECORDINGS=driftstack-recordings$/m);
+    expect(body).toMatch(
+      /^R2_ENDPOINT_URL=https:\/\/7260371ac521e2a08a27ba8c7bdd5f43\.r2\.cloudflarestorage\.com$/m,
+    );
+    expect(body).toMatch(/^POSTMARK_API_TOKEN=REDACTED$/m);
+    expect(body).toMatch(/^POSTMARK_FROM=noreply@driftstack\.dev$/m);
+    expect(body).toMatch(/^POSTMARK_REPLY_TO=info@driftstack\.dev$/m);
     expect(body).toMatch(
       /^SENTRY_DSN=https:\/\/a30962fd20ed09c4e7f23b3c3fc32724@o4511325811834880\.ingest\.de\.sentry\.io\/4511325820223568$/m,
     );
@@ -496,9 +502,14 @@ describe('W614 infra/ content parity', () => {
       /^REDIS_URL=rediss:\/\/default:REDACTED@welcome-antelope-114301\.upstash\.io:6379$/m,
     );
     expect(body).toMatch(/^REDIS_KEY_PREFIX=stg:$/m);
-    expect(body).toMatch(/^R2_BUCKET_AVATARS=driftstack-staging-avatars$/m);
-    expect(body).toMatch(/^R2_BUCKET_UPLOADS=driftstack-staging-uploads$/m);
-    expect(body).toMatch(/^R2_PUBLIC_BASE_URL=https:\/\/avatars\.staging\.driftstack\.dev$/m);
+    // Same rename as production: these were pinned under names nothing reads.
+    expect(body).toMatch(/^R2_BUCKET_RECORDINGS=driftstack-staging-recordings$/m);
+    expect(body).toMatch(
+      /^R2_ENDPOINT_URL=https:\/\/7260371ac521e2a08a27ba8c7bdd5f43\.r2\.cloudflarestorage\.com$/m,
+    );
+    expect(body).toMatch(/^POSTMARK_API_TOKEN=REDACTED$/m);
+    expect(body).toMatch(/^POSTMARK_FROM=noreply@driftstack\.dev$/m);
+    expect(body).toMatch(/^POSTMARK_REPLY_TO=info@driftstack\.dev$/m);
     expect(body).toMatch(/^SENTRY_ENVIRONMENT=staging$/m);
     expect(body).toMatch(/^SENTRY_TRACES_SAMPLE_RATE=1\.0$/m);
     expect(body).toMatch(/Stripe \(TEST keys; same as prod pre-launch\)/);
