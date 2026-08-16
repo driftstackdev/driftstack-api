@@ -129,10 +129,14 @@ describe('services/agent-executor content parity', () => {
     expect(body).toMatch(
       /const redacted = redactText\(\s*sliceWithoutSplittingSurrogate\(s, EXECUTOR_DIAGNOSTIC_INPUT_MAX_LENGTH\),\s*\);/,
     );
+    // The helper itself now lives in lib/bounded-text.ts — it is needed by a lib
+    // module too (unknown-request-fields), and lib may not import from services.
+    // What this file must keep is the IMPORT and the re-export, because the
+    // transcript sanitiser's bound is only correct through it.
     expect(body).toMatch(
-      /export function sliceWithoutSplittingSurrogate\(value: string, max: number\): string \{/,
+      /import \{ sliceWithoutSplittingSurrogate \} from '\.\.\/lib\/bounded-text\.js';/,
     );
-    expect(body).toMatch(/last >= 0xd800 && last <= 0xdbff \? cut\.slice\(0, -1\) : cut;/);
+    expect(body).toMatch(/export \{ sliceWithoutSplittingSurrogate \};/);
     expect(body).toMatch(
       /redacted\.replace\(\/\[\\u0000-\\u001f\\u007f-\\u009f\]\/g, ' '\)\.trim\(\)/,
     );

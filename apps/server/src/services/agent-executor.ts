@@ -29,31 +29,14 @@ import {
   type ConsequentialActionCategory,
 } from './agent-consequential-action.js';
 import { redactText } from '../lib/redact-url.js';
+import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
+
+// Re-exported: the transcript sanitiser below is this module's contract, and
+// its bound is only correct because of this helper.
+export { sliceWithoutSplittingSurrogate };
 
 const EXECUTOR_DIAGNOSTIC_INPUT_MAX_LENGTH = 4096;
 const EXECUTOR_DIAGNOSTIC_MAX_LENGTH = 512;
-
-/**
- * `slice` to a UTF-16 length WITHOUT leaving a lone surrogate behind.
- *
- * A plain `s.slice(0, n)` counts UTF-16 code units, so a cut landing between the
- * two halves of an astral character — any emoji, and much of the CJK extension
- * and historic-script range — keeps the high surrogate and drops its pair. The
- * result is not a valid string: encoded to UTF-8 for the wire or for storage it
- * becomes U+FFFD, so the customer's own text comes back with a replacement
- * character in it.
- *
- * Measured before this existed: `sanitizeTranscriptText` on 511 ASCII + an emoji
- * returned a trailing lone `\ud83d`, and `Buffer.from(out, 'utf8')` did not
- * round-trip. Dropping the orphan is the whole fix — one character shorter is
- * correct where half a character is not.
- */
-export function sliceWithoutSplittingSurrogate(value: string, max: number): string {
-  if (value.length <= max) return value;
-  const cut = value.slice(0, max);
-  const last = cut.charCodeAt(cut.length - 1);
-  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
-}
 
 function safeExecutorDiagnostic(value: string, fallback: string): string {
   const bounded = sliceWithoutSplittingSurrogate(value, EXECUTOR_DIAGNOSTIC_INPUT_MAX_LENGTH);

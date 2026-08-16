@@ -18,6 +18,7 @@
 // blocks), and the failure this item describes is a mistyped top-level field.
 
 import type { FastifyBaseLogger, FastifyReply, FastifyRequest } from 'fastify';
+import { sliceWithoutSplittingSurrogate } from './bounded-text.js';
 import type { z, ZodObject, ZodRawShape } from 'zod';
 import { ValidationError } from './errors.js';
 
@@ -48,7 +49,7 @@ export function reportUnknownRequestFields(args: {
   const unknown = Object.keys(body)
     .filter((k) => !known.has(k))
     .slice(0, MAX_REPORTED)
-    .map((k) => k.slice(0, MAX_KEY_CHARS));
+    .map((k) => sliceWithoutSplittingSurrogate(k, MAX_KEY_CHARS));
   if (unknown.length === 0) return [];
   reply.header(UNKNOWN_FIELDS_HEADER, unknown.join(','));
   logger?.warn(

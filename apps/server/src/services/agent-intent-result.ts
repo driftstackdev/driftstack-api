@@ -25,7 +25,7 @@ import type {
 import type { ParsedIntentResult } from './harness-control-codec.js';
 import type { HarnessErrorCode } from '../schemas/harness-control-protocol.js';
 import { redactText } from '../lib/redact-url.js';
-import { sliceWithoutSplittingSurrogate } from './agent-executor.js';
+import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 
 // Result summaries and failure reasons cross two customer-data boundaries: the
 // message response and the encrypted agent transcript. Harness output is

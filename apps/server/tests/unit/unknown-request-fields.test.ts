@@ -92,3 +92,28 @@ describe('unknown request fields are reported, never rejected', () => {
     }
   });
 });
+
+describe('a reported field name is never cut through a character', () => {
+  it('CRITICAL an unknown field name carrying an emoji across the 64-char bound does not produce a header value Node refuses. The reported names go into the X-Driftstack-Unknown-Fields RESPONSE HEADER, and a plain slice counts UTF-16 units: a bound landing between the halves of an astral character leaves a lone surrogate. Measured against node:http before the fix — res.setHeader threw "Invalid character in header content" and the request answered 500, on a field name the CUSTOMER chooses.', () => {
+    const { reply, headers } = makeReply();
+    const key = `${'x'.repeat(63)}😀tail`;
+
+    const reported = reportUnknownRequestFields({
+      body: { [key]: 1 },
+      knownKeys: [],
+      reply,
+      route: 'POST /v1/probe',
+    });
+
+    const value = headers['X-Driftstack-Unknown-Fields'] ?? reported.join(',');
+    const loneSurrogate = [...value].some((ch) => {
+      const c = ch.charCodeAt(0);
+      return ch.length === 1 && c >= 0xd800 && c <= 0xdfff;
+    });
+    expect(loneSurrogate, 'a header value may not carry half a character').toBe(false);
+    expect(
+      Buffer.from(value, 'utf8').toString('utf8'),
+      'the header value must survive a UTF-8 round-trip — Node rejects it otherwise',
+    ).toBe(value);
+  });
+});
