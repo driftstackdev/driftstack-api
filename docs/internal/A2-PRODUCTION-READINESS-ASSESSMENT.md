@@ -5309,3 +5309,80 @@ Two other candidates from the same 26 were examined and are sound:
 of writing a value derived from the stale read; `auth-flows.ts::consumeMagicLink`'s
 flagged write is `markEmailVerified`, an idempotent timestamp behind a null check.
 Twenty-three remain for the next pass.
+
+## 7m — scoping the transfer defect, and a guard that measurement killed
+
+7l reported one real defect. Two questions follow: does the class recur elsewhere,
+and can it be caught mechanically. Both were answered by measurement.
+
+**Does the class recur? No — it is a singleton.** The defect needs a method that
+INSERTS one row and RETIRES another (a move), because that is what makes the
+recipient's lock irrelevant to the source. Scanning every method in
+`routes/`, `services/` and `db/` for that pairing:
+
+    move-shaped (insert + retire in one unit): 1
+    apps/server/src/services/profiles.ts::transferProfile
+
+Every other write path creates or updates within one owner, so there is no second
+row whose retirement can be lost. The eventual fix is therefore complete at one
+site — worth knowing before anyone designs it.
+
+**Can it be caught mechanically? No, and the measurement is why.** The tempting rule
+is "a repo method returning `Promise<boolean>` must not be called as a bare `await`" —
+it describes `transferProfile` exactly, since `delete` returns "did I retire this row"
+and the service discards it. Measured against the codebase: 18 such methods, and
+**10 discarded call sites**, of which 9 are correct. Most are idempotent deletes where
+the caller genuinely does not care — `DELETE /v1/profiles/{id}` is documented as a 204
+whether or not a row existed, and its 404-free status is already pinned.
+
+So the rule would have flagged 10 sites to fix 1, and the 9 false positives are not
+sloppiness but the intended contract. What actually distinguishes the defect is
+semantic and not visible to a scanner: the discarded boolean means _another actor
+already did this_, AND the call has already performed an irreversible side effect (the
+recipient insert) that the loser cannot take back. No syntactic rule sees that.
+
+⭐ Recorded as a negative result so it is not rebuilt: **a rule that flags 10 to catch
+1 is not a guard, it is a backlog.**
+
+**The diagnostic that does work is a reading rule.** Every other read-modify-write
+examined follows the same shape — and they were checked, not assumed:
+
+| site                                  | shape                                                                                         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `confirmPasswordReset`                | claims the unconsumed token FAMILY in one conditional UPDATE, `if (!consumed) throw`          |
+| `handleSessionFailedFirst`            | atomic mark BEFORE the send; loser skips, with the accepted worst case written down           |
+| `handleSubscriptionUpsert`            | writes via `setAccountTierToBestActive`, recomputing from DB state rather than the stale read |
+| `consumeMagicLink`                    | idempotent timestamp behind a null check                                                      |
+| `profile-snapshots.ts::restore`       | V-714 lock, and no second row to retire                                                       |
+| `webhook-rotation-reminder::tickOnce` | send-then-mark, but the whole tick runs under a scheduled-jobs worker lease                   |
+| **`transferProfile`**                 | **claims LAST, and discards the claim's result**                                              |
+
+Every sound one claims first and checks the claim. The defect claims last and does not
+look. That is the sentence to carry into the next audit of this kind — it is faster
+than any scanner and it is what found this one.
+
+Two more were checked after that table was written, and both follow the rule:
+`profiles.ts::update` lets the `profiles_account_name_unique` index be the authority
+and translates its 23505 into the same 409 the pre-check throws — the DATABASE claims,
+not the read; `status-subscribers.ts::confirm` assigns `markConfirmed`'s result and
+throws "invalid or has been used" when it comes back null.
+
+_Nine of the 26 service-layer candidates are now dispositioned — one defect, eight
+sound, and every sound one claims first and checks the claim. Seventeen remain._
+
+⭐ **A tenth check makes the omission sharper rather than softer.**
+`auth-flows.ts::signup` handles the identical scenario and names it:
+
+    // Concurrent same-email signup race (e.g. a double-clicked submit):
+    // … both insert; the accounts_email_unique index lets one win and raises
+    // 23505 on the loser. Translate to the same email_already_registered (409)
+    // the pre-check throws — not an uncaught 500.
+
+A double-clicked submit is precisely what produces two concurrent `transferProfile`
+calls. The hazard was anticipated on the signup path, solved there by letting a unique
+index be the authority and translating the loser's violation, and the same reasoning
+simply was not carried to the one path that moves a row between owners. That is not a
+gap in anyone's understanding of concurrency — the codebase demonstrates it repeatedly
+and in writing. It is a single path where the claim ended up last.
+
+_Ten of the 26 dispositioned: one defect, nine sound. Sixteen remain._
