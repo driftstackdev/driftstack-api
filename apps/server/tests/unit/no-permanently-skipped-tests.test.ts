@@ -32,8 +32,17 @@ import { relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { REPO_ROOT } from './_helpers/public-apps.js';
 
-/** Directories that hold test files, across every workspace package. */
-const TEST_ROOTS = ['apps', 'packages'];
+/**
+ * Directories that hold test files.
+ *
+ * `scripts` was absent until 2026-08-16. `vitest.node.config.ts` collects
+ * `scripts/tests/**` alongside the two workspace roots, so a permanently
+ * skipped test there RAN in the suite while being invisible to this guard —
+ * the same shape as the `.test.tsx` omission noted below, and the same shape as
+ * the route-authority invariant that discovers a DIRECTORY rather than the app.
+ * The gap stopped being theoretical when scripts/tests gained files.
+ */
+const TEST_ROOTS = ['apps', 'packages', 'scripts'];
 
 /**
  * Unconditional skips that are permitted, each with the reason it cannot run.
@@ -94,7 +103,13 @@ describe('no test is skipped unconditionally', () => {
   it('CRITICAL the scan reaches real test files across every workspace. This case asserts an absence, so a scan that reached nothing would report the repo clean — and an earlier version of this very sweep was scoped to apps/server/tests and missed all eight offenders, which lived in two other apps.', () => {
     const files = allTestFiles();
     expect(files.length, 'test files found').toBeGreaterThan(1500);
-    for (const app of ['apps/server', 'apps/customer-dashboard', 'apps/marketing-site']) {
+    for (const app of [
+      'apps/server',
+      'apps/customer-dashboard',
+      'apps/marketing-site',
+      // Collected by vitest.node.config.ts and formerly outside TEST_ROOTS.
+      'scripts/tests',
+    ]) {
       expect(
         files.some((f) => relative(REPO_ROOT, f).startsWith(app)),
         `${app} must be in scope — the offenders were outside apps/server`,

@@ -6864,3 +6864,42 @@ vitest call reds the parity arm that now forbids it.
 _Not a finding:_ `test:e2e:setup` is also invoked by nothing, correctly — CI's
 e2e job uses GitHub service containers rather than docker compose, so that script
 is a local convenience.
+
+### 43. The no-permanent-skip guard could not see `scripts/tests`
+
+`no-permanently-skipped-tests` is a good guard with the right instincts — it
+scans workspace roots rather than one directory, and carries an anti-vacuity arm
+asserting the scan reaches `apps/server`, `customer-dashboard` and
+`marketing-site`, because "the offenders were outside apps/server". Its file
+walker was even extended to `.test.tsx` in August after that omission hid six
+skipped gui-client tests.
+
+Its roots were `['apps', 'packages']`. **`vitest.node.config.ts` also collects
+`scripts/tests/**`\*\*, so a permanently skipped test there RAN in the suite while
+being invisible to the guard.
+
+That stopped being theoretical this week: `scripts/tests` gained three files
+(the e2e-local target validation, the sub-processor mirror linter, and the
+rendered product-status matchers). A skip in any of them would have gone
+unreported.
+
+Proved as a before/after, which is the cleanest form this can take:
+
+|                                              | injected `it.skip(` in `scripts/tests` |
+| -------------------------------------------- | -------------------------------------- |
+| `TEST_ROOTS = ['apps','packages','scripts']` | **caught** — 1 failed                  |
+| `TEST_ROOTS = ['apps','packages']` (old)     | **green** — 4 passed                   |
+
+The anti-vacuity arm now names `scripts/tests` too, so removing the root again
+fails with a reason rather than silently narrowing the scan.
+
+⭐ Third instance this week of the same shape — a guard whose discovery is a
+DIRECTORY LIST rather than the thing it claims to cover (route authority, the
+rendered-status guard's wiring, and now this). Worth checking that question of
+any guard that enumerates.
+
+_Decided, not done:_ the pre-push hook still runs bare `npm test` and has the
+same blind spot CI had. Left alone deliberately — a stale `EXPECTED_TEST_FILES_ALL`
+would block a push for a reason unrelated to the change being pushed, and CI now
+carries the judgement. A failing CI run is recoverable; a blocked push is
+friction at the worst moment.
