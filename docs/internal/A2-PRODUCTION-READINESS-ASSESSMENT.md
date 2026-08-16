@@ -6537,3 +6537,32 @@ Verified 4 green control runs and 3 red mutation runs.
 _(A first attempt at that arm deadlocked — the holder transaction awaited the
 activation that was waiting on the holder. The lock is held with an explicit
 BEGIN/COMMIT on a `max: 1` connection instead.)_
+
+### 36. Four more auth boundaries whose only guard was a text pin
+
+Continuing the FAKE-ONLY repo-method sweep from item 35. Four more, all in the
+authentication path, all measured by mutation at full unit scope first:
+
+- **`findWebSessionByIdForAccount` lost its account scoping → 22,440 tests green.**
+  The method takes an id AND an accountId, and the second parameter is the entire
+  cross-account boundary on that read. It had no coverage of any kind, so one
+  account could have read another's web-session row by id.
+- **`findActiveByTokenHash` lost `isNull(consumedAt)` → only the parity pin redded.**
+  A consumed OAuth link token would resolve again.
+- **`findActiveByTokenHash` lost `gt(expiresAt, now)` → same.** An expired link
+  token would resolve.
+- **`markConsumedAt` lost its CAS predicate → same.** Consumption stops being
+  single-use, so two concurrent confirmations both win.
+
+`oauth_pending_links` did not appear in a single integration test. The three rules
+above were held entirely by `db-oauth-links-repo-content-parity.test.ts`, which
+asserts the source TEXT.
+
+**That is the weakest possible guard for these rules**, and the reason is
+structural rather than incidental: a text pin fires when the source changes, which
+is exactly what a refactor does — so it is updated as part of the very change it
+should have caught. It cannot distinguish a rewrite that preserves the rule from
+one that drops it.
+
+All four now covered against real Postgres in both directions, each proved by
+mutating its predicate in turn.

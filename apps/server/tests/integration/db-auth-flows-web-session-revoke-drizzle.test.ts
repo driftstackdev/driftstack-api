@@ -73,6 +73,43 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(results.sort()).toEqual([false, true]);
     });
 
+    it('CRITICAL a web session is only readable by the account that owns it', async () => {
+      // `findWebSessionByIdForAccount` takes an id AND an accountId, and the
+      // second parameter is the entire cross-account boundary on this read. It
+      // had NO coverage of any kind: replacing `eq(accountId)` with a predicate
+      // that always matches left all 22,440 tests green, so one account could
+      // have read another's web-session row by id.
+      if (!dbReachable || !client) return;
+      const c = client;
+      const db = drizzle(c) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAuthFlowsRepo({ client: c, db, close: async () => {} });
+
+      const owner = randomUUID();
+      const stranger = randomUUID();
+      seeded.push(owner, stranger);
+      for (const id of [owner, stranger]) {
+        await c`INSERT INTO accounts (id, email) VALUES (${id}, ${`scoped-${id}@test.local`})`;
+      }
+      const session = await repo.insertWebSession({
+        accountId: owner,
+        tokenHash: `hash-${randomUUID()}`,
+        authEpoch: 0,
+        expiresAt: new Date(Date.now() + 60_000),
+        issuedFromIp: null,
+        userAgent: null,
+      });
+      if (!session) throw new Error('expected live session insert');
+
+      expect(
+        (await repo.findWebSessionByIdForAccount(session.id, owner))?.id,
+        'the owner reads their own session',
+      ).toBe(session.id);
+      expect(
+        await repo.findWebSessionByIdForAccount(session.id, stranger),
+        'another account gets nothing, even holding the exact session id',
+      ).toBeNull();
+    });
+
     it('CRITICAL bulk revoke stops at the account boundary, spares the current session, and is idempotent', async () => {
       // `revokeAllWebSessionsExcept` is what "log out my other devices" runs. Its
       // three predicates are the whole security of that action:
