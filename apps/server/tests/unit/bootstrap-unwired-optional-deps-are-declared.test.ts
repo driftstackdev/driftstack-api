@@ -47,6 +47,14 @@ const DECLARED: Record<string, string> = {
     'Emits a debug-level line per coalesced auth hit. Wiring it would log on ' +
     'the hottest path in the service for no operational benefit; the ' +
     'coalescer already exposes starts/hits counters for that.',
+  'DrizzleRecipesRepo.clock':
+    'Clock injection seam inside a bag bootstrap DOES pass. The default ' +
+    '() => new Date() IS the production behaviour — verified at the call site, ' +
+    'not assumed from the name.',
+  'DrizzleAgentSessionsRepo.clock':
+    'Same seam and same verified default as DrizzleRecipesRepo.clock. Both ' +
+    'became visible only when the detector learned to look inside a supplied ' +
+    'inline option bag.',
   'DrizzleAgentTurnReceiptsRepo.options':
     'Clock injection seam. The default () => new Date() IS the production ' +
     'behaviour; the encryption key, which is not optional, is passed.',
@@ -140,14 +148,11 @@ function suppliedKeys(literal: string): Set<string> {
   return new Set([...keys, ...shorthand]);
 }
 
-/** Optional top-level members of an interface. */
-function optionalMembers(iface: string): string[] {
-  const decl = allSource.indexOf(`export interface ${iface} {`);
-  if (decl === -1) return [];
-  const body = stripComments(balanced(allSource, allSource.indexOf('{', decl)));
+/** Optional top-level members of an object-type BODY (the text inside its braces). */
+function optionalMembersOfBody(body: string): string[] {
   const names: string[] = [];
   let depth = 0;
-  for (const line of body.split('\n')) {
+  for (const line of stripComments(body).split('\n')) {
     if (depth === 0) {
       const m = line.trim().match(/^(\w+)\?\s*:/);
       if (m?.[1] !== undefined) names.push(m[1]);
@@ -155,6 +160,58 @@ function optionalMembers(iface: string): string[] {
     depth += (line.match(/[{[]/g) ?? []).length - (line.match(/[}\]]/g) ?? []).length;
   }
   return names;
+}
+
+/** Optional top-level members of an interface. */
+function optionalMembers(iface: string): string[] {
+  const decl = allSource.indexOf(`export interface ${iface} {`);
+  if (decl === -1) return [];
+  return optionalMembersOfBody(balanced(allSource, allSource.indexOf('{', decl)));
+}
+
+/**
+ * Constructor parameters whose type is an INLINE object literal, per class.
+ *
+ * `depsTypeOf` below only sees a single-parameter constructor typed by a NAMED
+ * interface. A repo written as
+ *
+ *   constructor(private readonly database: Database, options: { a?: X } = {})
+ *
+ * falls through to the positional path, which sees both arguments supplied and
+ * never looks INSIDE the bag — so every optional key in it was invisible.
+ * Measured: dropping both `onUndecryptableSecret` wirings from bootstrap left
+ * this file green at 4/4.
+ */
+function inlineBagParams(): Map<string, Map<number, string[]>> {
+  const out = new Map<string, Map<number, string[]>>();
+  for (const file of sourceFiles) {
+    const src = readFileSync(file, 'utf8');
+    for (const m of src.matchAll(/export class (\w+)[^{]*\{/g)) {
+      const ctor = src.indexOf('constructor(', m.index);
+      if (ctor === -1) continue;
+      const params = splitTopLevel(stripComments(balanced(src, ctor + 'constructor'.length)));
+      const bags = new Map<number, string[]>();
+      params.forEach((param, i) => {
+        const colon = param.indexOf(':');
+        if (colon === -1) return;
+        // Only a conventional option BAG. A dep that merely happens to be typed
+        // as an object — `logger?: { error?: … }` — is a single optional dep the
+        // positional path already reports, and reading its members as bag keys
+        // reported `AccountsAdminService.error`, which is not a dependency at all.
+        const name = param
+          .slice(0, colon)
+          .trim()
+          .replace(/^(private|public|protected|readonly)\s+/g, '');
+        if (!/^(options|opts|config|deps)\??$/.test(name)) return;
+        const typeText = param.slice(colon + 1).trim();
+        if (!typeText.startsWith('{')) return;
+        const keys = optionalMembersOfBody(balanced(typeText, 0));
+        if (keys.length > 0) bags.set(i, keys);
+      });
+      if (bags.size > 0) out.set(m[1] ?? '', bags);
+    }
+  }
+  return out;
 }
 
 /** Positional constructors, and whether each param is optional. */
@@ -185,6 +242,7 @@ function positionalConstructors(): Map<string, Array<{ name: string; optional: b
 function unwiredOptionalDeps(bootstrap: string): string[] {
   const found: string[] = [];
   const ctors = positionalConstructors();
+  const inlineBags = inlineBagParams();
 
   // deps-object shape: new X({ … }) against an interface with optional members
   const depsTypeOf = new Map<string, string>();
@@ -209,9 +267,26 @@ function unwiredOptionalDeps(bootstrap: string): string[] {
       }
       continue;
     }
+    const args = splitTopLevel(stripComments(argText));
+
+    // Optional keys inside an inline option-bag argument.
+    const bags = inlineBags.get(cls);
+    if (bags !== undefined) {
+      for (const [index, keys] of bags) {
+        const arg = args[index];
+        // Only a bag that IS supplied. An omitted bag is already reported by the
+        // positional path as `${cls}.${paramName}` and carries its own roster
+        // entry; reporting each key again would be the same gap counted twice.
+        if (arg === undefined || !arg.trimStart().startsWith('{')) continue;
+        const supplied = suppliedKeys(balanced(arg, arg.indexOf('{')));
+        for (const key of keys) {
+          if (!supplied.has(key)) found.push(`${cls}.${key}`);
+        }
+      }
+    }
+
     const params = ctors.get(cls);
     if (params === undefined) continue;
-    const args = splitTopLevel(stripComments(argText));
     for (const p of params.slice(args.length)) {
       if (p.optional) found.push(`${cls}.${p.name}`);
     }
@@ -229,6 +304,22 @@ describe('every optional dependency bootstrap does not pass is declared', () => 
     `;
     // AccountsAdminService really does take an optional logger, so this is the
     // repository's own shape rather than a fixture written to suit the test.
+    // The inline-bag path needs its own case: it is a SEPARATE branch, and a
+    // detector that stopped looking inside supplied bags would satisfy the
+    // roster assertion below having inspected nothing. DrizzleRecipesRepo really
+    // does take `options: { clock?: … }`, so this is the repository's own shape.
+    const bagOmitted = unwiredOptionalDeps(
+      'const r = new DrizzleRecipesRepo(dbHandle, { encryptionKeyBase64: key });',
+    );
+    expect(
+      bagOmitted,
+      'a key missing from a SUPPLIED inline option bag must be reported',
+    ).toContain('DrizzleRecipesRepo.clock');
+    expect(
+      unwiredOptionalDeps('const r = new DrizzleRecipesRepo(dbHandle, { clock: c });'),
+      'and a key the bag DOES supply must not be',
+    ).not.toContain('DrizzleRecipesRepo.clock');
+
     const missed = unwiredOptionalDeps(KNOWN_BAD);
     expect(missed, 'the detector must report a dep the call site omits').toContain(
       'AccountsAdminService.logger',
