@@ -69,8 +69,10 @@ describe('routes/recipes content parity', () => {
     expect(body).toMatch(
       /\/\/ Load the source agent session to snapshot its intent_log \+\s*\n?\s*\/\/ transcript\. The caller must be able to ACCESS the session — its owner,\s*\n?\s*\/\/ or an admin member of the owner's team \(V-736; cross-account 404 instead\s*\n?\s*\/\/ of 403 — don't leak existence\)\./,
     );
+    // The create handler names its validated payload `body` (not `parsed.data`)
+    // since it now goes through parseRequestBodyReportingUnknown — same values.
     expect(body).toMatch(
-      /if \(source === null \|\| !callerCanAccessAgentSession\(ctx, source\.accountId\)\) \{\s*\n?\s*throw new NotFoundError\(`AgentSession \$\{parsed\.data\.agent_session_id\} not found\.`\);/,
+      /if \(source === null \|\| !callerCanAccessAgentSession\(ctx, source\.accountId\)\) \{\s*\n?\s*throw new NotFoundError\(`AgentSession \$\{body\.agent_session_id\} not found\.`\);/,
     );
     // Both sites, not just the create one — the suggestion route had it too.
     expect(body.match(/!callerCanAccessAgentSession\(ctx, source\.accountId\)/g)).toHaveLength(2);

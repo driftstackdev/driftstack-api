@@ -10,6 +10,7 @@
 // surfaces 503 FeatureUnavailable so SDK + dashboard get a machine-
 // readable "not yet enabled" signal vs 404.
 
+import { parseRequestBodyReportingUnknown } from '../lib/unknown-request-fields.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@driftstack/api-types';
@@ -122,16 +123,22 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
     { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
-      const parsed = CreateRecipeRequestSchema.safeParse(req.body);
-      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Item 6 — a mistyped field on recipe creation used to be dropped in
+      // silence, so the recipe saved without the option the caller set.
+      const body = parseRequestBodyReportingUnknown({
+        schema: CreateRecipeRequestSchema,
+        req,
+        reply,
+        route: 'POST /v1/recipes',
+      });
 
       // Load the source agent session to snapshot its intent_log +
       // transcript. The caller must be able to ACCESS the session — its owner,
       // or an admin member of the owner's team (V-736; cross-account 404 instead
       // of 403 — don't leak existence).
-      const source = await agentSessions.get(parsed.data.agent_session_id);
+      const source = await agentSessions.get(body.agent_session_id);
       if (source === null || !callerCanAccessAgentSession(ctx, source.accountId)) {
-        throw new NotFoundError(`AgentSession ${parsed.data.agent_session_id} not found.`);
+        throw new NotFoundError(`AgentSession ${body.agent_session_id} not found.`);
       }
 
       // Q.5.c — assemble intent_log from the transcript's
@@ -146,8 +153,8 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       const created = await recipes.create({
         accountId: ctx.account.id,
         agentSessionId: source.id,
-        label: parsed.data.label,
-        ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
+        label: body.label,
+        ...(body.description !== undefined ? { description: body.description } : {}),
         intentLog,
         transcriptSnapshot: source.transcript,
       });

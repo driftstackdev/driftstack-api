@@ -61,6 +61,34 @@ describe('AI-B4 POST /v1/recipes — wired', () => {
     expect(body.intent_count).toBe(0);
   });
 
+  // Item 6 — the wiring, not the helper. The helper has its own unit arms, but
+  // nothing notices if a ROUTE stops calling it: silent stripping and reporting
+  // produce identical bodies and status codes, so only a header assertion can
+  // tell them apart.
+  it('CRITICAL reports a mistyped field on create, and says nothing when all are known', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const agentSessionId = await createAgentSession();
+
+    const typo = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { agent_session_id: agentSessionId, label: 'r1', descrption: 'mistyped' },
+    });
+    // Unchanged for the caller — reporting, not rejecting.
+    expect(typo.statusCode).toBe(201);
+    expect(typo.headers['x-driftstack-unknown-fields']).toBe('descrption');
+
+    const clean = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { agent_session_id: agentSessionId, label: 'r2', description: 'spelled right' },
+    });
+    expect(clean.statusCode).toBe(201);
+    expect(clean.headers['x-driftstack-unknown-fields']).toBeUndefined();
+  });
+
   it('403 when the key lacks write scope (read-only key)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['read'] });
     const res = await fx.app.inject({
