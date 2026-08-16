@@ -95,6 +95,40 @@ afterAll(async () => {
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'agent-session token debit takes its row lock (real Postgres, forced ordering)',
   () => {
+    it('CRITICAL an OVERDRAW floors remaining at 0 instead of violating the CHECK. Nothing exercised this: removing the Math.max(0, …) from both debit paths left the whole suite green — 28,016 passed — because no test ever debits more than the session has. The column is `integer NOT NULL CHECK (token_budget_remaining >= 0)`, so an unfloored overdraw does not corrupt anything: it throws a constraint violation mid-transaction, turning a customer agent turn into a 500 at exactly the moment their budget runs out.', async () => {
+      if (!holder || !worker) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG debit-overdraw test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const h = holder;
+      const w = worker;
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await h`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`debit-floor-${accountId}@test.local`})`;
+
+      const repo = new DrizzleAgentSessionsRepo(
+        {
+          client: w,
+          db: drizzle(w) as unknown as ReturnType<typeof drizzle<typeof schema>>,
+          close: async () => {},
+        },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      // Debit MORE than the budget holds, on both debit paths.
+      const session = await repo.create({ accountId, tokenBudgetTotal: 10 });
+      const afterDebit = await repo.debitTokens(session.id, 999);
+      expect(afterDebit?.tokenBudgetRemaining, 'debitTokens floors at 0').toBe(0);
+
+      const other = await repo.create({ accountId, tokenBudgetTotal: 10 });
+      const afterActive = await repo.debitTokensIfActive(other.id, 999);
+      expect(afterActive?.tokenBudgetRemaining, 'debitTokensIfActive floors at 0').toBe(0);
+    });
+
     it('CRITICAL debitTokens BLOCKS while another session holds the row, and completes once it commits. It computes remaining-minus-tokens in application code, so without the lock two concurrent debits read the same balance and one is LOST — budget over-served and under-billed — and the race-based test cannot show it because a localhost transaction finishes faster than the window needs.', async () => {
       if (!holder || !worker) {
         if (process.env.CI) {
