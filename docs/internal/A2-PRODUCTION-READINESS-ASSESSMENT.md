@@ -812,6 +812,16 @@ rather than only here, so they cannot go quiet again.
   as long as it stood. Replaced with the corrected text plus a **negative** pin so
   the old wording cannot return.
 
+  ⚠️ **The 90-day window itself was untested until 2026-08-16.** The integration
+  arm asserted only the PAST-the-window direction for `api_keys` — an aged key is
+  scrubbed — while the sessions sweep next to it had both directions. Widening the
+  key window until it meant nothing (every revoked key anonymised at once, the
+  instant it is revoked) left the entire suite green. The reworded promise above
+  rests on that window, and destroying a key's name and hash early is
+  irreversible. `recentKey` was already being seeded and simply never asserted;
+  it now is. Not pinned: `<` vs `<=` at the exact cutoff instant, which needs a
+  key revoked at that microsecond and is immaterial on a 90-day window.
+
   Guarded by `a-retention-promise-matches-what-the-sweeper-does`, which pins
   neither side: it extracts the verb from the sweeper's SQL (UPDATE = anonymise,
   DELETE = delete) and the verb from the policy row, and fails on disagreement —

@@ -110,7 +110,12 @@ afterAll(async () => {
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'privacy §9 retention scrub (V-759, real Postgres)',
   () => {
-    async function seed(): Promise<{ oldSession: string; recentSession: string; oldKey: string }> {
+    async function seed(): Promise<{
+      oldSession: string;
+      recentSession: string;
+      oldKey: string;
+      recentKey: string;
+    }> {
       if (!client) throw new Error('real PostgreSQL setup failed');
       const accountId = randomUUID();
       await client`
@@ -160,7 +165,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           VALUES (${randomUUID()}, ${accountId}, ${sid}, 'login', 'queued',
                   ${randomUUID()}, ${NOW.toISOString()}, ${hex64()})`;
       }
-      return { oldSession, recentSession, oldKey };
+      return { oldSession, recentSession, oldKey, recentKey };
     }
 
     function sweeper(): RetentionScrubSweeperService {
@@ -170,7 +175,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
     it('CRITICAL scrubs only what is PAST the window, and leaves everything inside it untouched', async () => {
       if (!dbReachable || !client) throw new Error('real PostgreSQL setup failed');
-      const { oldSession, recentSession, oldKey } = await seed();
+      const { oldSession, recentSession, oldKey, recentKey } = await seed();
 
       const result = await sweeper().tickOnce(NOW);
       expect(result.sessionsScrubbed).toBeGreaterThanOrEqual(1);
@@ -210,6 +215,28 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(key?.key_hash).toBe(`scrubbed:${oldKey}`);
       // key_prefix is uniquely indexed and is not credential material — left intact.
       expect(key?.key_prefix).not.toBe(RETENTION_SCRUB_SENTINEL);
+
+      // The api_keys sweep had only this PAST-the-window direction, while sessions
+      // had both. `recentKey` was already seeded and simply never asserted, so
+      // widening the key window — scrubbing every revoked key immediately instead
+      // of after 90 days — left the whole suite green. That window is what the
+      // privacy policy's "90 days after revocation the record is anonymised" line
+      // rests on, and destroying the name and hash early is irreversible.
+      const [recentKeyRow] = await client<
+        Array<{ name: string; key_hash: string }>
+      >`SELECT name, key_hash FROM api_keys WHERE id = ${recentKey}`;
+      expect(recentKeyRow?.name, 'a key revoked inside the window keeps its name').toBe(
+        'customer named this key',
+      );
+      expect(recentKeyRow?.key_hash, 'and its hash — anonymising early cannot be undone').toBe(
+        `hash-${recentKey}`,
+      );
+
+      // Deliberately NOT asserted: that a NEVER-revoked key survives. The sweep's
+      // `revoked_at IS NOT NULL` predicate is redundant with `revoked_at < cutoff`
+      // under SQL three-valued logic — NULL < cutoff is NULL, so such a row is
+      // never selected — and an arm for it would pin a state the query cannot
+      // reach. Verified against the database rather than assumed.
     });
 
     it('CRITICAL a scrubbed session KEEPS its row, so usage_records (7-year billing data) survive', async () => {
