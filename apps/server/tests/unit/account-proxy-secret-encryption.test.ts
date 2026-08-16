@@ -192,6 +192,40 @@ describe('account proxy secret v2 encryption', () => {
       ),
     ).toThrow(/UUID/);
   });
+
+  it('CRITICAL refuses an oversized plaintext BEFORE parsing it, not after', () => {
+    // `validatePlaintext` bounds bytes FIRST, then parses. Deleting the upper
+    // half of that bound left all 22,426 tests green, because every oversized
+    // input is ALSO refused later — by the JSON schema, or by the per-slot
+    // rules. The outcome is unchanged; what changes is that the server would
+    // JSON.parse a multi-megabyte blob before deciding to refuse it. Refusing
+    // pre-parse is the whole point of a byte bound, so the property to pin is
+    // WHICH guard answers, not merely that something did.
+    //
+    // The existing bounds arm above cannot see this: it passes 1025 ASCII
+    // characters to the password slot, which is 1025 bytes against a 4096-byte
+    // bound, so the character rule refuses and the byte bound never speaks.
+    const ovpn = { accountId: ACCOUNT_A, proxyId: PROXY_A, slot: 'openvpn-config' as const };
+    const wg = { accountId: ACCOUNT_A, proxyId: PROXY_A, slot: 'wireguard-private-key' as const };
+
+    const huge = JSON.stringify({ config_blob: 'x'.repeat(3 * 1024 * 1024) });
+    expect(() => encryptAccountProxySecret(MASTER, ovpn, huge)).toThrow(/outside its byte bound/);
+
+    // The WireGuard slot makes the boundary exact. One byte over is answered by
+    // the byte bound; exactly at it the value passes the bound and is answered
+    // by the slot schema instead. An off-by-one in either direction swaps which
+    // error comes back, so both arms are required to pin it.
+    expect(() => encryptAccountProxySecret(MASTER, wg, 'k'.repeat(45))).toThrow(
+      /outside its byte bound/,
+    );
+    expect(() => encryptAccountProxySecret(MASTER, wg, 'k'.repeat(44))).toThrow(
+      /WireGuard private key is invalid/,
+    );
+
+    // …and a legitimate 44-byte key still seals, so the bound is not simply
+    // refusing everything at the limit.
+    expect(encryptAccountProxySecret(MASTER, wg, WG_KEY)).toContain(ACCOUNT_PROXY_SECRET_V2_PREFIX);
+  });
 });
 
 // Found by neutralising every `throw new ` in the module one at a time and
