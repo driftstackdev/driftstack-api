@@ -450,6 +450,61 @@ Each item below states the evidence, what happens if nothing is decided, and a
 recommendation. None is blocked on more test coverage; every one is blocked on
 somebody choosing.
 
+### 1b. Running CI's jobs LOCALLY — the one part of item 1 that is not rail-blocked
+
+Item 1 cannot be closed without a push, which is outside my rails. What CAN be
+done is remove the guesswork from it: every job CI would run was executed locally
+on 2026-08-16, so "the eventual push is one high-risk event" becomes a measured
+risk rather than an unknown one.
+
+| CI job / step                             | ran locally | result                                          |
+| ----------------------------------------- | ----------- | ----------------------------------------------- |
+| `npm run typecheck` (workspaces)          | yes         | exit 0                                          |
+| `npm run lint` (+ subprocessor mirror)    | yes         | exit 0 — 12 public entries, 13 DPA rows matched |
+| `npm run format:check`                    | yes         | exit 0                                          |
+| `npm audit --omit=dev --audit-level=high` | yes         | exit 0 (1 moderate, below the gate)             |
+| **e2e (Playwright, real PG + Redis)**     | yes         | **199 passed in 52s**                           |
+| `go vet` / `go test` / build examples     | yes         | exit 0                                          |
+| `ruff check` (python SDK)                 | yes         | **FAILED — fixed, see below**                   |
+| `ruff format --check`                     | yes         | exit 0 — 73 files                               |
+| `mypy` (python SDK)                       | **no**      | mypy not installed locally                      |
+| `pytest` (python SDK)                     | **no**      | pytest not installed locally                    |
+| `vitest run --coverage` thresholds        | yes         | exit 0 — all four clear with margin             |
+
+**One real CI-blocking defect found and fixed:** `ruff check .` exited 1 on PT001
+(`@pytest.fixture()` in `tests/test_live_contract.py`). The dev extra pins
+`ruff>=0.5` with no upper bound, so CI installs a modern ruff where that rule's
+default is inverted, and `PT` is selected with only `B`/`PT011` ignored for tests.
+The python-sdk job would have failed outright on the first push.
+
+⚠️ **Two python steps remain unverified** — mypy and pytest are not installed on
+this machine. Stating that rather than implying the job is green.
+
+**Coverage thresholds pass with room.** CI runs `vitest run --coverage` over the
+ROOT config, which is a bigger suite than the node-only gate this repo's
+`verify-suite` drives — **2928 files / 29,491 tests** against 2766 / 27,914 — and
+the four thresholds clear comfortably:
+
+| metric     | threshold | actual    |
+| ---------- | --------- | --------- |
+| statements | 83        | **91.10** |
+| branches   | 75        | **82.43** |
+| functions  | 84        | **90.21** |
+| lines      | 85        | **92.66** |
+
+Worth recording because the numbers in the config's own comment (89.87 / 88.16 /
+88.98 / 79.30) are now stale on the low side — coverage has risen since they were
+written, so the thresholds sit even further below actual than intended. That is a
+ratchet opportunity, not a defect, and moving them is a policy call I have left
+alone.
+
+⭐ **The e2e suite is runnable without Docker and nobody was running it.** The
+package script wires it to `docker compose`, which is why it has been repeatedly
+recorded as unrun; pointing `DATABASE_URL` at a throwaway database and `REDIS_URL`
+at an unused index runs the whole thing in 52 seconds. 199 tests, zero failures —
+no rot, which is itself worth knowing given a previous session found three dead
+specs in `rate-limit.spec.ts`.
+
 ### 1. 1,515 commits have never reached CI
 
 `git rev-list --count @{u}..HEAD` = **1,554** (was 1,515, 1,068, 1,031, and
