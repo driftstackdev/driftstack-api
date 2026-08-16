@@ -7218,3 +7218,40 @@ arm fires rather than going quietly green).
 files whose only sin was that **prettier had wrapped the call across lines**. I
 checked each before believing it, rather than "fixing" three correct files. The
 matcher now tolerates whitespace, and the comment says why.
+
+### 54. The egress-claim guard retired correctly, and left the opposite direction open
+
+Enumerating the suite's two skips (rather than reporting the count) led here.
+Both are `marketing-egress-claim-sweep` (W247.A), which forbade the marketing
+site from naming SOCKS5 / OpenVPN / WireGuard as shipped while egress was
+unbuilt, and which is designed to RETIRE once the implementation lands. It has.
+
+That file is exemplary and had already learned this assessment's lesson: its own
+comment records that `if (hasEgressImpl) return;` made both arms "a silent no-op
+… indistinguishable in the summary from a real check", and it converted them to
+visible skips with an arm stating the gate has retired.
+
+**Retiring was right; it left the opposite direction unguarded.** The site now
+says the feature "is live" and names three backends — in 11, 5 and 4 pages. If
+one were dropped from `ProxyTypeSchema`, the site would keep advertising a
+backend every request is rejected for, and nothing would object.
+
+The successor guard is derived rather than hand-kept: the accepted set comes from
+the schema's `.options` at runtime, the claimed set is parsed from the pages.
+Proved by removing `wireguard` from the schema (two arms red, naming it) and by
+emptying the page corpus (the anti-vacuity arm fires).
+
+⚠️ **I nearly filed a false-advertising finding here.** One grep for
+`implements SessionEgressService` returns only `SocksProxyBackend`, which reads
+as "OpenVPN and WireGuard are not implemented" against copy that says they are
+live. They ARE supported: the schemas accept them, the repos store them, the
+routes handle them, and `resolveVpnForDispatch` sends them to the fleet node —
+SOCKS5 is proxied by the control plane while the VPNs are applied on the box,
+which is why only one backend class exists here. **The grep measured the wrong
+thing**, and an implausible finding was again the tell.
+
+_Also checked this fire, all sound:_ `buildTestApp`'s in-memory repos are by
+design, not a fallback; and a scan for tests that assert nothing returned 21 hits
+that were entirely instrument error — anchored to real test declarations and
+allowing delegated `assert*` helpers, **all 21,643 test declarations carry an
+assertion**.
