@@ -6175,3 +6175,49 @@ A mutation loop that is killed mid-measurement leaves the tree dirty — a timeo
 left `auth.ts` mutated, caught by the tree check rather than by the loop. Restores now run from an
 `EXIT`/`INT`/`TERM` trap so the restore survives the kill, and the tree is checked against HEAD after
 every sweep regardless.
+
+## 8a — the call-site sweep continued: twelve sites, no gaps, and two false alarms of my own
+
+Continuing 7z's third lens. A harness now drives it (snapshot, delete the call line, run a scoped
+suite, restore from an `EXIT`/`INT`/`TERM` trap, verify the tree against HEAD).
+
+### Results
+
+| call site                                                   | arms red                      |
+| ----------------------------------------------------------- | ----------------------------- |
+| `requireTierFeature` vpnEgress, account-me route ×2         | 1 each                        |
+| `requireTierFeature` apiAccess, oauth route                 | 3                             |
+| `requireTierFeature` aiAgent, agent-sessions route          | 4                             |
+| `requireTierFeature` vpnEgress, account-proxies **service** | 3 (see below)                 |
+| `requireBundledLlmTier`, bundled-llm route                  | 1                             |
+| `verifyBootEncryptionKey`, agent-sessions repo              | 1                             |
+| `requireCtx`, session-proxy route                           | 0 — no observable consequence |
+| `assertAgentMessageAdmissionCurrent` at the first of three  | 0 — layered                   |
+
+Added to 7z's six, that is **fourteen call sites measured, zero unenforced**.
+
+### Two zeros of mine that were not gaps, and what each teaches
+
+**The scope was wrong, not the coverage.** `account-proxies.ts:102` is the dispatch-time VPN
+entitlement backstop — its own comment says an unentitled account cannot egress "even if the
+create-time check is ever bypassed or removed". Removing the call redded **0 of 96** under a
+`proxies` filter and **3 of 742** under a wider one. A non-vacuous run can still be the wrong
+population: the denominator proves tests ran, never that the right ones did. Every zero is now
+re-measured at full-suite scope before it is called anything.
+
+**No observable consequence.** `requireCtx(req)` in the session-proxy route discards its result inside
+a handler typed `never` — the deployment does not expose that backend, so the handler throws
+regardless. Confirmed at 22,403 tests. Nothing can make its presence observable, and an arm claiming
+to cover it would be theatre.
+
+**Layered, deliberately.** `assertAgentMessageAdmissionCurrent` is called three times in sequence;
+removing the first leaves the second to refuse the same input before any credential, spend or provider
+dependency is touched. The behaviour is covered, the individual line is not attributable, and the
+sequence is what the source comment describes.
+
+### Instrument note
+
+The sweep's first run reported three VACUOUS results because zsh does not word-split an unquoted
+expansion, so a multi-word vitest filter arrived as one literal string matching no files. The
+denominator check turned what would have been three false gaps into three obvious instrument failures.
+`${=filter}` fixes it.
