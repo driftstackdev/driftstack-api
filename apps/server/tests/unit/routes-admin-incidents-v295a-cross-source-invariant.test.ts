@@ -78,12 +78,27 @@ describe('W1042 routes/admin-incidents V-295a + V-281 cross-source invariant', (
 
   it('CRITICAL driftstack_internal_admin scope required on every admin endpoint. The hardcoded scope name is the canonical admin-key check; drift to a different scope would silently let normal customer keys hit admin routes.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'));
-    // Every admin route preHandler should include this scope check.
-    const adminScopeRefs = p.match(/app\.requireScope\('driftstack_internal_admin'\)/g) ?? [];
+    // Was `>= 5` against a file carrying 7 admin gates — two spare, and a bound
+    // with spare cannot see an admin route added without the scope.
+    //
+    // This file registers BOTH surfaces: /v1/admin/incidents/* (staff-gated) and
+    // /v1/status/incidents/* (the public status page, deliberately ungated). So
+    // the roster is the admin paths only, and the gate count must match it.
+    const code = p
+      .split('\n')
+      .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+      .join('\n');
+    const adminRoutes =
+      code.match(/^\s*app\.(?:get|post|patch|put|delete)[^\n]*\n?[^\n]*'\/v1\/admin\//gm) ?? [];
+    expect(
+      adminRoutes.length,
+      'the derived admin-route roster must not collapse',
+    ).toBeGreaterThanOrEqual(7);
+    const adminScopeRefs = code.match(/app\.requireScope\('driftstack_internal_admin'\)/g) ?? [];
     expect(
       adminScopeRefs.length,
-      'driftstack_internal_admin scope references',
-    ).toBeGreaterThanOrEqual(5);
+      'one driftstack_internal_admin gate per /v1/admin route (public /v1/status routes are excluded)',
+    ).toBe(adminRoutes.length);
   });
 
   // ─── PUBLIC_ID_RE prefix pattern ─────────────────────────────

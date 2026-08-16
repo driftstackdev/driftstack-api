@@ -54,10 +54,19 @@ describe('Q.1.c BYOK plaintext-clear-on-close (both route close paths) drift gua
     expect(body).toMatch(/if \(closeOutcome\.kind === 'already_closed'\) \{/);
     expect(body).toMatch(/const closed = closeOutcome\.session;/);
     expect(body).toMatch(/clear the cached plaintext on customer close/);
-    // BOTH route-layer clear sites must be present (message-route close +
-    // customer DELETE) — a count pin so neither can be dropped silently.
+    // Was `>= 2` with a comment naming "BOTH" sites. There are FOUR, so the
+    // bound carried two spare and could not see one being dropped. The sites are
+    // not derivable from a route roster — they sit inside close-handling
+    // branches — so this is an exhaustiveness pin instead: an exact count, which
+    // reds on a removal AND forces a new one to be acknowledged here.
+    //
+    // The four: the two message-route session-closed paths, the explicit close
+    // path, and the customer DELETE.
     const clearSites = body.match(/byokKeyCache\?\.delete\(req\.params\.id\);/g) ?? [];
-    expect(clearSites.length).toBeGreaterThanOrEqual(2);
+    expect(
+      clearSites.length,
+      'every route-layer BYOK cache-clear site; add the new one here deliberately',
+    ).toBe(4);
   });
 });
 
