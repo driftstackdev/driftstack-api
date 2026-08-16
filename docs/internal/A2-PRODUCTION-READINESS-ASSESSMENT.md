@@ -5480,3 +5480,50 @@ _Still not implemented here: it changes a repo API on an ownership path, and the
 decision is the founder's or A3's. But it is now a sized change rather than an open
 question, and the reproduction in 7l is ready to become its regression test the moment
 the behaviour is meant to differ._
+
+## 7o — a third axis: a transaction is atomicity, not isolation
+
+The two closed axes both asked about code with NO transaction. There is a subtler
+class inside the ones that HAVE one, and it is worth asking separately because a
+transaction looks like the answer: Postgres defaults to READ COMMITTED, so a
+`SELECT` → compute → `UPDATE` inside a transaction is atomic but **not** serialised.
+Two such transactions can both read the same row and both write. The transaction
+guarantees all-or-nothing; it does not guarantee alone-or-nothing.
+
+Scanning every repo transaction for a SELECT plus a write with no `FOR UPDATE` and no
+advisory lock:
+
+    repo transactions with SELECT + WRITE and NO row lock: 3
+      incidents-repo.ts::createWithInitialUpdate
+      incidents-repo.ts::addUpdate
+      team-members-repo.ts::removeMemberWithInvites
+
+All three are sound, and the reasons are worth recording because each uses a
+different mechanism:
+
+- **`removeMemberWithInvites`** claims with the DELETE itself —
+  `.delete(teamMembers) … .returning({ memberAccountId })` — and checks it
+  (`if (memberAccountId === null) return null`) before doing anything else. It then
+  revokes every key the member minted **in the same transaction**, with the hazard
+  written down: "a key authenticates as its `account_id` (the owner) and never
+  re-checks the minter's membership". That is precisely the
+  membership-outlived-by-credentials problem, already closed.
+- **`createWithInitialUpdate`** claims with `onConflictDoNothing({ target: incidents.id })`
+  and writes the dependent `incidentUpdates` row only `if (insertedRow)`.
+- **`addUpdate`** was dispositioned in the earlier sweep: it writes `status` and
+  `resolved_at` in ONE statement, so the invariant its comment protects cannot be
+  broken by interleaving.
+
+**Three axes are now closed, and the persistence layer holds a single pattern:**
+
+| axis                  | question                                 | candidates | defects  |
+| --------------------- | ---------------------------------------- | ---------- | -------- |
+| service RMW           | what do two callers do?                  | 26         | 1        |
+| multi-write           | what does one dying caller leave?        | 2          | 1 (same) |
+| txn without isolation | does the transaction actually serialise? | 3          | 0        |
+
+⭐ The pattern every sound site shares, across all three axes and regardless of
+mechanism: **the first write is a claim, and its result is checked before anything
+depends on it.** Row lock, conditional predicate, unique index, `RETURNING` on a
+delete, `onConflictDoNothing` — the mechanism varies and the shape does not. The one
+defect is the one place the claim comes last.
