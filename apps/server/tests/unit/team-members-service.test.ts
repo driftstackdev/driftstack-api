@@ -412,6 +412,35 @@ describe('V-553.B-13 TeamMembersService.accept — happy path', () => {
     expect(calls.map((c) => c.action)).toEqual(['team.invite_accepted']);
   });
 
+  it('CRITICAL accepts when the accepting account email differs only by CASE or surrounding whitespace. The invite stores a normalised address and the accept path normalises the account side to match; dropping that trim().toLowerCase() reds ONE test in the whole suite and it is a content-parity pin. The failure it hides is a legitimate invitee who cannot join their own team — the invite verifies, the emails "differ", and acceptance is refused.', async () => {
+    const { repo, state } = makeRepo();
+    const { service: email } = makeEmail();
+    const { audit } = makeAudit();
+    const { cache } = makeCache();
+    state.invites.push({
+      id: 'inv_case',
+      ownerAccountId: 'acc_owner',
+      inviteeEmail: 'b@e.test',
+      role: 'admin',
+      inviteTokenHash: tokenHash('plain-tok'),
+      inviteExpiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      invitedByAccountId: 'acc_owner',
+      acceptedAt: null,
+      createdAt: new Date(),
+    });
+    // The SAME address as the invite, as an identity provider might hand it
+    // back: capitalised and padded. Nothing constrains the casing of an email
+    // stored on an account row.
+    state.emailByAccount.set('acc_b', '  B@E.TEST  ');
+    const svc = new TeamMembersService(repo, email, CONFIG, audit, cache);
+    const result = await svc.accept({
+      plaintextToken: 'plain-tok',
+      acceptingAccountId: 'acc_b',
+    });
+    expect(result.membership.role, 'the invitee must be able to join their own team').toBe('admin');
+    expect(state.members).toHaveLength(1);
+  });
+
   it('a used invite token is SINGLE-USE: replaying it after acceptance is rejected (Fable auth re-audit 2026-07-02)', async () => {
     const { repo, state } = makeRepo();
     const { service: email } = makeEmail();

@@ -164,7 +164,7 @@ describe('requireOwner — project-owner gate', () => {
     await app.close();
   });
 
-  it('owner match is case-insensitive (config + account email normalized)', async () => {
+  it('owner match is case-insensitive on the CONFIG side (ownerEmail normalized at decoration)', async () => {
     const app = await buildApp(OWNER_EMAIL.toUpperCase());
     const res = await app.inject({
       method: 'GET',
@@ -172,6 +172,47 @@ describe('requireOwner — project-owner gate', () => {
       headers: { authorization: `Bearer ${OWNER_TOKEN}` },
     });
     expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('CRITICAL owner match is case-insensitive on the ACCOUNT side too. The case above says "config + account email normalized" in its title but only varies the CONFIG — the account email it authenticates with is always lowercase, so it exercises the trim().toLowerCase() at decoration and never the .toLowerCase() at the comparison. Dropping that second one reds ONE test in the whole suite and it is a source-text pin: an owner whose stored email has any capital letter would be refused every owner-gated route — secrets reveal, pricing edits — by a lockout no behavioural test could see.', async () => {
+    const MIXED_CASE_OWNER = ctxFor('acc-owner', 'Owner@Driftstack.TEST', 'ws-owner');
+    const ownerSha = sha256Hex(OWNER_TOKEN);
+    // The REPO, not the cache. A first attempt seeded the mixed-case account
+    // through the cache alone and the arm passed under the mutation: the cached
+    // path re-reads live authority and getAccount handed back the lowercase
+    // row, so the account-side normalisation was never reached. The cache is an
+    // accelerator here, never the source of the email being compared.
+    const repo = {
+      ...(makeRepo() as unknown as Record<string, unknown>),
+      getAccount: (id: string) =>
+        Promise.resolve(id === 'acc-owner' ? MIXED_CASE_OWNER.account : null),
+    } as unknown as AccountAuthRepo;
+    const cache = {
+      get: (sha: string) => Promise.resolve(sha === ownerSha ? MIXED_CASE_OWNER : null),
+      set: () => Promise.resolve(),
+      invalidateKey: () => Promise.resolve(),
+      invalidateAccount: () => Promise.resolve(),
+    } as unknown as AuthCache;
+
+    const app = Fastify();
+    await app.register(authPlugin, {
+      authRepo: repo,
+      authCache: cache,
+      authCoalescer: null,
+      // Config side already lowercase — the ONLY normalisation under test here
+      // is the one applied to the account's own email.
+      ownerEmail: OWNER_EMAIL,
+    });
+    app.get('/owner-only', { preHandler: [app.requireOwner] }, () => ({ ok: true }));
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/owner-only',
+      headers: { authorization: `Bearer ${OWNER_TOKEN}` },
+    });
+    expect(res.statusCode, 'a mixed-case owner email must still be the owner').toBe(200);
     await app.close();
   });
 
