@@ -48,7 +48,7 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
       /import \{\s*\n?\s*CaptureSnapshotRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*RestoreSnapshotRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, ForbiddenError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, ForbiddenError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
       /import type \{ ProfilesService, ProfileRecord \} from '\.\.\/services\/profiles\.js';/,
@@ -94,10 +94,10 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
 
   it('POST /v1/profiles/:id/snapshots capture: prof_ uuid + CaptureSnapshotRequest safeParse → Validation; effectiveAccountIdForWrite admin gate; calls service.capture with optional description', () => {
     expect(body).toMatch(
-      /const profileId = uuidFromPrefixedId\(req\.params\.id, 'prof'\);\s*\n?\s*const parsed = CaptureSnapshotRequestSchema\.safeParse\(req\.body\);\s*\n?\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);\s*\n?\s*const eff = effectiveAccountIdForWrite\(req, ctx\);\s*\n?\s*const accountId = eff \?\? ctx\.account\.id;/,
+      /const profileId = uuidFromPrefixedId\(req\.params\.id, 'prof'\);\s*\n?\s*const body = parseRequestBodyReportingUnknown\(\{[\s\S]*?\}\);\s*\n?\s*const eff = effectiveAccountIdForWrite\(req, ctx\);\s*\n?\s*const accountId = eff \?\? ctx\.account\.id;/,
     );
     expect(body).toMatch(
-      /const snapshot = await service\.capture\(\{\s*\n?\s*accountId,\s*\n?\s*profileId,\s*\n?\s*label: parsed\.data\.label,\s*\n?\s*\.\.\.\(parsed\.data\.description !== undefined \? \{ description: parsed\.data\.description \} : \{\}\),\s*\n?\s*\}\);/,
+      /const snapshot = await service\.capture\(\{\s*\n?\s*accountId,\s*\n?\s*profileId,\s*\n?\s*label: body\.label,\s*\n?\s*\.\.\.\(body\.description !== undefined \? \{ description: body\.description \} : \{\}\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -124,10 +124,10 @@ describe('W438.C apps/server/src/routes/profile-snapshots.ts content parity', ()
 
   it('POST /v1/profile-snapshots/:id/restore: admin-only on team; owner tier resolved from authRepo when team-scoped ("Owner account no longer exists." on missing); RestoreSnapshotRequest safeParse → Validation; service.restore({accountId, snapshotId, tier, name}) → publicProfile (NEW profile row)', () => {
     expect(body).toMatch(
-      /const parsed = RestoreSnapshotRequestSchema\.safeParse\(req\.body\);\s*\n?\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);\s*\n?\s*const eff = effectiveAccountIdForWrite\(req, ctx\);\s*\n?\s*let accountId = ctx\.account\.id;\s*\n?\s*let tier = ctx\.account\.tier;\s*\n?\s*if \(eff !== undefined\) \{\s*\n?\s*const owner = await authRepo\.getAccount\(eff\);\s*\n?\s*if \(!owner\) throw new ForbiddenError\('Owner account no longer exists\.'\);\s*\n?\s*accountId = owner\.id;\s*\n?\s*tier = owner\.tier;\s*\n?\s*\}/,
+      /const body = parseRequestBodyReportingUnknown\(\{[\s\S]*?\}\);\s*\n?\s*const eff = effectiveAccountIdForWrite\(req, ctx\);\s*\n?\s*let accountId = ctx\.account\.id;\s*\n?\s*let tier = ctx\.account\.tier;\s*\n?\s*if \(eff !== undefined\) \{\s*\n?\s*const owner = await authRepo\.getAccount\(eff\);\s*\n?\s*if \(!owner\) throw new ForbiddenError\('Owner account no longer exists\.'\);\s*\n?\s*accountId = owner\.id;\s*\n?\s*tier = owner\.tier;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /const restored = await service\.restore\(\{\s*\n?\s*accountId,\s*\n?\s*snapshotId: id,\s*\n?\s*tier,\s*\n?\s*name: parsed\.data\.name,\s*\n?\s*\}\);\s*\n?\s*return publicProfile\(restored\);/,
+      /const restored = await service\.restore\(\{\s*\n?\s*accountId,\s*\n?\s*snapshotId: id,\s*\n?\s*tier,\s*\n?\s*name: body\.name,\s*\n?\s*\}\);\s*\n?\s*return publicProfile\(restored\);/,
     );
   });
 

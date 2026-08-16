@@ -68,6 +68,48 @@ describe('POST /v1/profiles/:id/snapshots (V-312)', () => {
     expect(new Date(body.captured_at).getTime()).toBeGreaterThan(0);
   });
 
+  // Item 6 — the wiring, not the helper. Reverting either snapshot route to a
+  // plain safeParse leaves these suites green otherwise: silent stripping and
+  // reporting produce identical bodies and status codes, so only the header
+  // separates them.
+  it('CRITICAL capture and restore report a mistyped field, and stay quiet when all are known', async () => {
+    fx = await buildTestApp();
+    const profile = await mintProfile(fx, 'typo-prof');
+
+    const typo = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profile.id}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'snap-1', descrption: 'mistyped' },
+    });
+    expect(typo.statusCode, 'reporting, not rejecting').toBe(201);
+    expect(typo.headers['x-driftstack-unknown-fields']).toBe('descrption');
+
+    const clean = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profile.id}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'snap-2', description: 'spelled right' },
+    });
+    expect(clean.statusCode).toBe(201);
+    expect(
+      clean.headers['x-driftstack-unknown-fields'],
+      'a well-formed request must not be tagged',
+    ).toBeUndefined();
+
+    // …and the restore route, which is wired separately and would otherwise go
+    // unpinned exactly like capture.
+    const snapshotId = clean.json<SnapshotResponse>().id;
+    const restored = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profile-snapshots/${snapshotId}/restore`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'restored-prof', nmae: 'mistyped' },
+    });
+    expect(restored.statusCode, 'restore answers 200, like its sibling arm').toBe(200);
+    expect(restored.headers['x-driftstack-unknown-fields']).toBe('nmae');
+  });
+
   it('400 on missing label', async () => {
     fx = await buildTestApp();
     const profile = await mintProfile(fx, 'badreq');

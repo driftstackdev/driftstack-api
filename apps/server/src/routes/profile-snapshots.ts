@@ -18,13 +18,14 @@
 // routes. Snapshots are profile mutations — restore in particular
 // creates a profile — so a read-scope key must not reach them.
 
+import { parseRequestBodyReportingUnknown } from '../lib/unknown-request-fields.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   CaptureSnapshotRequestSchema,
   PaginationQuerySchema,
   RestoreSnapshotRequestSchema,
 } from '@driftstack/api-types';
-import { BadRequestError, ForbiddenError, ValidationError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError } from '../lib/errors.js';
 import type { ProfilesService, ProfileRecord } from '../services/profiles.js';
 import type {
   ProfileSnapshotRecord,
@@ -109,9 +110,15 @@ export function registerProfileSnapshotsRoutes(
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
+      // Item 6 — a mistyped field on capture used to be dropped in silence, so the
+      // snapshot was taken without the option the caller set.
       const profileId = uuidFromPrefixedId(req.params.id, 'prof');
-      const parsed = CaptureSnapshotRequestSchema.safeParse(req.body);
-      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const body = parseRequestBodyReportingUnknown({
+        schema: CaptureSnapshotRequestSchema,
+        req,
+        reply,
+        route: 'POST /v1/profiles/:id/snapshots',
+      });
 
       const eff = effectiveAccountIdForWrite(req, ctx);
       const accountId = eff ?? ctx.account.id;
@@ -119,8 +126,8 @@ export function registerProfileSnapshotsRoutes(
       const snapshot = await service.capture({
         accountId,
         profileId,
-        label: parsed.data.label,
-        ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
+        label: body.label,
+        ...(body.description !== undefined ? { description: body.description } : {}),
       });
       // S46 2026-07-07 (founder-approved) — 201 Created, matching every sibling
       // create-POST (profiles, sessions, agent-sessions, webhooks) and the
@@ -203,11 +210,17 @@ export function registerProfileSnapshotsRoutes(
   app.post<{ Params: { id: string } }>(
     '/v1/profile-snapshots/:id/restore',
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
-    async (req) => {
+    async (req, reply) => {
       const ctx = requireCtx(req);
+      // Item 6 — same on restore: the profile came back configured differently from
+      // what the caller asked for, with a 200.
       const id = uuidFromPrefixedId(req.params.id, 'psnap');
-      const parsed = RestoreSnapshotRequestSchema.safeParse(req.body);
-      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const body = parseRequestBodyReportingUnknown({
+        schema: RestoreSnapshotRequestSchema,
+        req,
+        reply,
+        route: 'POST /v1/profile-snapshots/:id/restore',
+      });
 
       const eff = effectiveAccountIdForWrite(req, ctx);
       let accountId = ctx.account.id;
@@ -223,7 +236,7 @@ export function registerProfileSnapshotsRoutes(
         accountId,
         snapshotId: id,
         tier,
-        name: parsed.data.name,
+        name: body.name,
       });
       return publicProfile(restored);
     },

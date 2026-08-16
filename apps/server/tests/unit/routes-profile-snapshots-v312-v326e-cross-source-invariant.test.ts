@@ -181,9 +181,9 @@ describe('W1048 routes/profile-snapshots V-312 + V-326e cross-source invariant',
 
   it('CRITICAL capture body — label (required) + description (optional spread). The conditional spread keeps description out of the service call when undefined.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profile-snapshots.ts'));
-    expect(p).toMatch(/label: parsed\.data\.label,/);
+    expect(p).toMatch(/label: body\.label,/);
     expect(p).toMatch(
-      /\.\.\.\(parsed\.data\.description !== undefined \? \{ description: parsed\.data\.description \} : \{\}\),/,
+      /\.\.\.\(body\.description !== undefined \? \{ description: body\.description \} : \{\}\),/,
     );
   });
 });
