@@ -5386,3 +5386,97 @@ gap in anyone's understanding of concurrency — the codebase demonstrates it re
 and in writing. It is a single path where the claim ended up last.
 
 _Ten of the 26 dispositioned: one defect, nine sound. Sixteen remain._
+
+## 7n — both concurrency axes closed, and they converge on one method
+
+### Axis 1 complete: 26 of 26 service-layer read-then-writes dispositioned
+
+The remaining sixteen were triaged with the reading rule from 7m applied
+mechanically — is the write's result assigned and checked — which sorted them
+without reading sixteen methods:
+
+    CLAIMED (result assigned + checked): 10
+    BARE    (result discarded):           4
+
+The four bare ones were then read, and all four are sound for reasons the rule does
+not capture on its own:
+
+| site                                          | why a bare write is correct here                                                                                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auth-flows.ts::completeMfaChallenge`         | the CHALLENGE is claimed and checked above (`if (consumed === null) throw`); the bare write marks the session this same call just created, so no other actor can race it |
+| `crypto-entitlement-expiry-sweeper::tickOnce` | marks only rows whose account recomputed cleanly, and the recompute is idempotent — "crash-idempotency: the whole batch replays next tick, not silently skipped"         |
+| `byok-anthropic-rotation-reminder::tickOnce`  | send-then-mark, but the tick runs under a scheduled-jobs worker lease                                                                                                    |
+| `validation-harness::runTick`                 | same, plus its own `ticking` re-entrancy flag against overlapping setInterval fires                                                                                      |
+
+**Final tally: 26 candidates, 1 defect, 25 sound.** The set was enumerated rather
+than sampled — a scripted diff of "found by the scan" against "examined" returns
+zero remaining.
+
+### Axis 2: crash atomicity, and it finds the same method
+
+The RMW axis asks what two concurrent callers do. A different question is what one
+caller leaves behind if it dies midway: methods performing 2+ writes with no
+transaction, where a failure between them is half-applied state. Across every
+service:
+
+    multi-write methods with NO transaction: 2
+      profiles.ts::transferProfile     writes at 1075, 1112
+      scheduled-jobs.ts::runOne        writes at 221, 234, 253, 278
+
+`runOne` is sound and is not really a sequence: its four writes are mutually
+exclusive OUTCOME branches — no-handler-failed, complete, attempts-exhausted-failed,
+retry — exactly one of which runs per call. Each is additionally wrapped in
+`if (!(await …))` with `reportLostLock` when the claim comes back false, which is the
+`locked_by = workerId` fencing.
+
+That leaves `transferProfile` as the only multi-write method in the service layer
+without a transaction — and its two writes are a genuine sequence, not branches.
+
+⭐ **Two independent enumerations, asked from different directions, return the same
+single method.** Concurrency asks "what do two callers do"; atomicity asks "what does
+one dying caller leave". A method that fails both is not an edge case in an otherwise
+uneven codebase — it is the one place where a pattern applied everywhere else was not.
+That convergence is the strongest argument for fixing it with a transaction, which is
+precisely what the second axis says is missing.
+
+### 7n (cont.) — sizing the fix, so the decision is concrete
+
+7l left the transfer defect open because each candidate fix trades one failure for
+another, and named "one transaction around the insert and the delete" as the correct
+one. 7n's second axis independently says the same thing — a transaction is exactly
+what is missing. So the remaining question is what that costs, and it is worth
+answering before anyone weighs it.
+
+**The service cannot wrap it.** `ProfilesService` holds a `ProfilesRepo`, not a
+database handle, and `insertWithLimit` opens its OWN transaction
+(`return this.database.db.transaction(async (tx) => …)`). There is no seam for the
+service to join those two calls into one unit of work — by design, since the service
+is deliberately opaque to Drizzle.
+
+**So the change belongs in the repo**, as one method that does both writes inside a
+single `db.transaction`: take the recipient's account row `FOR UPDATE` (as
+`insertWithLimit` already does), re-check the cap, insert the recipient row, then
+conditionally soft-delete the source with the same `notDeleted` predicate, and return
+a discriminated result — transferred / limitExceeded / nameConflict / sourceAlreadyGone.
+
+That shape fixes both axes at once. The loser's conditional delete matches zero rows
+inside its own transaction, so it rolls back its insert too: no duplicate, and no lost
+profile. It also preserves the property the current ordering was written for, because
+a cap refusal or name race aborts the transaction before anything commits.
+
+**Change surface, counted rather than estimated:**
+
+- `db/profiles-repo.ts` — one new method (the two existing bodies, composed).
+- `services/profiles.ts` — `transferProfile` calls it instead of orchestrating; the
+  `ProfilesRepo` interface declared there gains one entry.
+- `tests/integration/_helpers/in-memory-profiles-repo.ts` — the test double must
+  implement it too, and there is exactly one such double.
+
+Three files, one new method, no behavioural change to any other path — because
+`transferProfile` is the only caller that moves a row, which 7m established by
+scanning every method in `routes/`, `services/` and `db/`.
+
+_Still not implemented here: it changes a repo API on an ownership path, and the
+decision is the founder's or A3's. But it is now a sized change rather than an open
+question, and the reproduction in 7l is ready to become its regression test the moment
+the behaviour is meant to differ._
