@@ -742,17 +742,36 @@ rather than only here, so they cannot go quiet again.
   records the sweep with a checksum over the uploaded bytes. Proved by mutation —
   inverting the window predicate and skipping the delete each red the arm.
 
-  The two high-volume tables are the only ones with a PROJECTION, and that
-  projection is a redaction: an archived `navigated` event keeps the origin and
-  drops the path and query, which is where customer data and tokens live. That
-  redaction is now exercised on the archive path against a real row — a seeded
-  event carrying `/reset-password?token=…` archives as the bare origin. Proved
-  both ways: skipping the projection in the archive, and making the projection
-  keep the whole URL, each red the arm. Without it, the live API would redact a
-  URL that the archive quietly shipped to R2.
+  **Exactly two of the five tables carry a PROJECTION** — `session_events` and
+  `webhook_deliveries` — and both projections are redactions rather than shape
+  changes. (An earlier revision of this paragraph called them "the two
+  high-volume tables"; that is wrong. `AUDIT_TABLES` classifies only
+  `session_events` as high-volume, `webhook_deliveries` is audit-shaped, and the
+  overlap is a coincidence.) Both are now exercised on the archive path against
+  real rows:
+  - `session_events`: an archived `navigated` event keeps the origin and drops
+    the path and query, which is where customer data and tokens live. A seeded
+    event carrying `/reset-password?token=…` archives as the bare origin. Proved
+    both ways — skipping the projection in the archive, and making the projection
+    keep the whole URL, each red the arm.
+  - `webhook_deliveries`: a legacy `session.failed` delivery is rewritten through
+    `projectSessionFailedData`, an ALLOWLIST (`session_id`, `duration_ms`,
+    `operation`, `error_name`, `error_message`), with the response excerpt and
+    delivery error nulled. `error_message` survives but is REPLACED by one of
+    four canned strings, so the test asserts no key outside the allowlist
+    survives and the message is canned — not that the field is absent. Its only
+    prior coverage was a content-parity pin, which records what the source SAID
+    and never whether it was true. Proved three ways — skipping the projection,
+    keeping the excerpt and error, and passing the legacy payload through
+    uncanonicalised, each red the arm.
+
+  Without these, the live API would redact detail that the archive quietly
+  shipped to R2 — the archive was the one path that could undo the redaction.
 
   What this does NOT establish: it has still never run against production data
-  volumes, and wiring the tick remains a deploy decision outside my rails. The
+  volumes, and wiring the tick remains a deploy decision outside my rails. Two of
+  the five tables (`admin_audit_log`, `legal_acceptances`) are still unexercised
+  end-to-end, though both are pass-through — no projection to get wrong. The
   unknown-unknown is smaller, not gone.
 
 - **`WebhookSecretForceRotationService`**. Rotates webhook signing secrets past
