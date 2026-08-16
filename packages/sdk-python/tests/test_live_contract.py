@@ -39,7 +39,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def client():
     with Driftstack(api_key=API_KEY or "", base_url=BASE_URL or "") as sdk:
         yield sdk
