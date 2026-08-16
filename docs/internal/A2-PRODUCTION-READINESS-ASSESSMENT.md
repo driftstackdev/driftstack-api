@@ -4894,3 +4894,73 @@ only:
 the next person back to bisecting; collecting the disagreements and asserting the
 LIST is empty means the failure message already contains the granted set, the
 required scope, and which of the three dissented.
+
+## 7g — TOTP replay: the covered half and the uncovered half
+
+`services/mfa.ts:317` came off the same list of 31. It looked, at first read, like the
+TOTP replay defence — and that reading would have produced a badly wrong write-up,
+because `verifyCode` has TWO replay defences and only one of them was uncovered:
+
+    const matchedCounter = verifyTotpCodeWithCounter(secretBytes, trimmed, args.nowSeconds);
+    if (matchedCounter === null) return null;
+    const lastUsed = row.lastUsedTotpCounter;
+    if (lastUsed !== null && matchedCounter <= lastUsed) return null;   // ① sequential
+    const accepted = await this.repo.consumeTotpCounter({ … });
+    if (!accepted) return null;                                        // ② concurrent
+
+① is well covered. `mfa-service.test.ts` has _"the SAME code cannot be used twice
+within its window"_, which verifies a code, then replays it, and asserts `null`. That
+test passes with ② deleted, because a sequential replay never reaches ② — it is
+rejected one line earlier, before the repo is touched at all.
+
+② is reachable ONLY under concurrency: two verifies that both read
+`lastUsedTotpCounter` before either writes will both clear ①, and the atomic
+strict-monotonic write in `consumeTotpCounter` then lets exactly one win. ② is what
+makes the loser fail. Delete it and the loser falls through to `touchLastUsed` and
+`return 'totp'`, so **both parallel verifications of one intercepted code succeed** —
+against either the login challenge or the step-up gate, both of which flow through
+`verifyCode`. The source comment states the intent exactly ("so two concurrent
+verifies of the same code can't both win"); ② is the half that delivers it.
+
+Measured before writing anything: deleting ② left **all 38 MFA test files green (490
+tests)**, and a wider sweep — 156 files, 1,870 tests — green as well. No
+content-parity pin covered it either.
+
+The new arm forces the interleaving rather than racing for it: both callers are held
+at `consumeTotpCounter` until the second arrives, so both have provably passed ①, and
+the underlying fake is the existing faithful one that models the atomic write. With ②
+present, one wins and one is rejected; with ② deleted, `expected 2 to be 1`.
+
+⭐ **The lesson is about naming, and it nearly cost a false report.** A guard and the
+line above it can implement the same policy against different threat models. Coverage
+showed ② cold and the obvious conclusion — "TOTP replay is unheld" — was false and
+alarming. What distinguished them was reading the three lines ABOVE the cold one:
+the covered branch handles the sequential case, the cold one handles the concurrent
+case, and only the second was missing. **Before describing what an uncovered guard
+protects, check whether its neighbour already protects the case you have in mind.**
+
+### 7g (cont.) — the money-path candidate that was not one
+
+`stripe-webhooks.ts:370` — the `checkout.session.completed` dispatch case — was next
+on the list, and the coverage looked alarming: not just the routing but
+`handleCheckoutCompleted` itself shows **called 0 times**. Stripe Checkout is the
+primary revenue-activation path, so "the handler that provisions a paid subscription
+has never run in a test" is exactly the sentence one wants to write.
+
+It would have been wrong. The handler provisions nothing:
+
+    // ... all checkouts are now subscriptions. Subscription mode is informational
+    // here — customer.subscription.created does the actual mirror write — and any
+    // other mode is a no-op ack.
+
+It logs and returns `'handled'`. Deleting the case changes a log line and an outcome
+label, not a customer's entitlement, which is written by a different event whose
+handler IS covered. Declined, with the reason recorded rather than left as a silent
+skip.
+
+⭐ Second time in this section, and the same shape both times: the coverage row was
+right about WHERE and I supplied the WHAT. For ② it under-stated the guard (a
+neighbour already covered the case I imagined); here it over-stated one (the name
+implied work the body does not do). **A zero next to a money-path symbol is a
+question, not a finding** — the body and its neighbours answer it, and reading them
+costs a minute against a false report that would have cost more.

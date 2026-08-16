@@ -389,6 +389,75 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     expect(replay).toBeNull();
   });
 
+  // The test above covers SEQUENTIAL replay, which `matchedCounter <= lastUsed`
+  // rejects before the repo is ever touched. There is a second defence after it,
+  // and it guards a different attack:
+  //
+  //   const accepted = await this.repo.consumeTotpCounter({ … });
+  //   if (!accepted) return null;   // ← this one
+  //
+  // It is reachable ONLY under concurrency. Two verifies of the same code that
+  // both read `lastUsedTotpCounter` before either writes will both clear the
+  // pre-check; the atomic strict-monotonic write then lets exactly one win, and
+  // this branch is what makes the loser fail. Delete it and the loser falls
+  // through to `touchLastUsed` and `return 'totp'`, so BOTH parallel
+  // verifications of one intercepted code succeed — which is the whole point of
+  // consuming the counter, and the source comment says so: "so two concurrent
+  // verifies of the same code can't both win".
+  //
+  // Measured before writing this: removing that branch left all 38 MFA test files
+  // green (490 tests), and a wider sweep of 156 files / 1,870 tests too. The
+  // sequential replay test above passes either way, because it never reaches the
+  // branch.
+  //
+  // The interleaving is forced rather than raced: both callers are held at
+  // `consumeTotpCounter` until the second arrives, so both have provably passed
+  // the pre-check. The underlying fake is the faithful one from makeRepo, which
+  // models the atomic strict-monotonic write.
+  it('CRITICAL two CONCURRENT verifies of one TOTP code cannot both succeed. Both clear the sequential pre-check by reading the same lastUsedTotpCounter, so only the atomic consume distinguishes them; without the !accepted branch the loser also returns totp and one intercepted code authenticates twice in parallel.', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new MfaService(repo, SVC_CONFIG);
+    const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const code = computeTotpCode(base32Decode(start.secretBase32), nowSeconds);
+    await svc.completeEnrollment({
+      accountId: 'acc_1',
+      currentWebSessionId: CURRENT_WEB_SESSION_ID,
+      code,
+    });
+
+    let arrived = 0;
+    let releaseBoth: () => void = () => undefined;
+    const bothArrived = new Promise<void>((resolve) => {
+      releaseBoth = (): void => {
+        resolve();
+      };
+    });
+    const racingRepo: MfaRepo = {
+      ...repo,
+      consumeTotpCounter: async (args) => {
+        arrived += 1;
+        if (arrived === 2) releaseBoth();
+        await bothArrived;
+        return repo.consumeTotpCounter(args);
+      },
+    };
+    const racingSvc = new MfaService(racingRepo, SVC_CONFIG);
+
+    const results = await Promise.all([
+      racingSvc.verifyCode({ accountId: 'acc_1', input: code, nowSeconds }),
+      racingSvc.verifyCode({ accountId: 'acc_1', input: code, nowSeconds }),
+    ]);
+
+    expect(arrived, 'both callers must reach the atomic consume').toBe(2);
+    expect(
+      results.filter((r) => r === 'totp').length,
+      'exactly one concurrent verify may succeed',
+    ).toBe(1);
+    expect(results.filter((r) => r === null).length, 'the loser must be rejected').toBe(1);
+    expect(state.row?.lastUsedTotpCounter).toBe(Math.floor(nowSeconds / TOTP_PERIOD_SECONDS));
+  });
+
   it('TOTP replay defence: a code from an EARLIER timestep than the last consumed one is rejected (drift-window replay)', async () => {
     const { repo, state } = makeRepo();
     const svc = new MfaService(repo, SVC_CONFIG);
