@@ -7123,3 +7123,40 @@ on both live-authority paths in `services/auth.ts` — each behaviourally covere
 and someone had already written the "holds on the WEB-SESSION path too" mirror
 that item 49's auth-cache pair lacked. `requireOwner`'s two guards throw the same
 message, so the first is fully layered behind the second; not a gap.
+
+### 51. The CLI device-authorization Lua was text-pinned, and my first CAS arm was answered by a different guard
+
+Enumerated every Redis EVAL site in `src`. After items 46–50 the only uncovered
+one left was `services/cli-authorize.ts`, which runs two scripts: a
+compare-and-set guarding the bind transition, and a get-and-delete making the
+authorization code one-shot. Every existing test drives
+`InMemoryCliAuthorizeStore`.
+
+Applied the signature test from item 50:
+
+| mutation                         | reds                  |
+| -------------------------------- | --------------------- |
+| CAS always succeeds              | 1                     |
+| CAS script syntactically INVALID | 1 — **the same test** |
+
+Identical signatures ⇒ the red is about the source TEXT, and it was
+`services-cli-authorize-content-parity`. Neither script had been executed by
+Redis. The code is a bearer credential that mints an API key, so an unconsumed
+code is a replayable credential.
+
+⚠️⚠️ **My first CAS arm was answered by a different guard.** A sequential
+double-bind arm stayed GREEN with the CAS mutated to always succeed — because an
+earlier status check sees the record is no longer pending and throws
+`already_bound` before the script runs. The arm looked like it tested the CAS and
+tested the guard above it.
+
+⭐ Concurrency is what reaches it: two simultaneous binds both read the record
+while it is still `pending`, both clear the status check, and **only the
+compare-and-set can separate them**. With that arm the three mutations now
+separate — **1 / 4 / 2** reds — which is the evidence that semantics are being
+judged rather than text. Verified stable across three control runs.
+
+_Also corrected:_ my first draft asserted result shapes I had assumed rather than
+read (`bind().ok`, an `exchange` status of `ready`). The precondition assertion
+inside the helper is what caught it — `bind` returns `{account_id, expires_at}`
+and throws on refusal, and the ready status is `bound`.

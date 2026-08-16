@@ -29,7 +29,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 2773;
+export const EXPECTED_TEST_FILES = 2774;
 
 /**
  * Files the ROOT config collects — every project, which is what CI runs.
@@ -40,7 +40,7 @@ export const EXPECTED_TEST_FILES = 2773;
  * project's because the root config also collects the gui-client and app
  * projects. Raise when adding tests, same as the other pin.
  */
-export const EXPECTED_TEST_FILES_ALL = 2935;
+export const EXPECTED_TEST_FILES_ALL = 2936;
 
 /**
  * Judge a completed vitest run.
