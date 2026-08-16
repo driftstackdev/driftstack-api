@@ -135,6 +135,49 @@ describe('validateGuiControlKey — every branch, driving the real function', ()
     ).toThrow(UnauthorizedError);
   });
 
+  // The arm above nulls the ciphertext AND the expiry, so those two clauses of
+  // the same `||` chain shadow each other: breaking either one alone leaves the
+  // other to reject the identical input, and the suite stays green. Measured,
+  // not assumed — each clause was replaced with `false` in turn (0 red both
+  // times) and then together (1 red), which is the signature of a layered pair
+  // rather than of an uncovered branch.
+  //
+  // A half-written session row is the real shape here: minting writes the
+  // ciphertext and the expiry, and anything that clears one without the other
+  // (a partial write, a migration, a manual fix) lands in exactly these states.
+  //
+  // Splitting the pair recovers attribution for ONE of the two. The missing-
+  // expiry arm below is the only thing holding its clause up, and breaking that
+  // clause reds it. The missing-ciphertext arm does NOT isolate its clause, and
+  // no runtime test can: with that clause disabled the input falls through to
+  // decrypt(), which throws on a null ciphertext and is caught into the very
+  // same 401. What actually holds that clause up is the COMPILER — deleting it
+  // is `TS2345: 'Buffer | null' is not assignable to 'Buffer'`, checked by
+  // running tsc against the mutated source rather than assumed. That is a
+  // stronger guarantee than a test, so the arm is kept for the behaviour it
+  // asserts and is deliberately not claimed as evidence for the clause.
+  it('a session with an expiry but NO ciphertext is a 401 (behaviour only — the clause itself is held by the type system, not by this arm).', () => {
+    expect(() =>
+      validateGuiControlKey({
+        headerRaw: PLAINTEXT,
+        session: session({ guiControlKeyCiphertext: null }),
+        encryptionKey: KEY,
+        nowMs: now,
+      }),
+    ).toThrow(UnauthorizedError);
+  });
+
+  it('CRITICAL a session with a ciphertext but NO expiry is a 401, not a 500. This is the only arm holding that clause up: without it the next clause reads .getTime() off null, and an unauthenticated caller turns a credential rejection into a crash.', () => {
+    expect(() =>
+      validateGuiControlKey({
+        headerRaw: PLAINTEXT,
+        session: session({ guiControlKeyExpiresAt: null }),
+        encryptionKey: KEY,
+        nowMs: now,
+      }),
+    ).toThrow(UnauthorizedError);
+  });
+
   it('CRITICAL expiry is enforced on the boundary: a key whose expiry equals now is already expired. An inclusive comparison here would extend every key by one tick, which is the kind of off-by-one that only a boundary case catches.', () => {
     expect(() =>
       validateGuiControlKey({
