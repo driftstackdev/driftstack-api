@@ -132,6 +132,25 @@ export interface ProfilesRepo {
     input: NewProfileInput,
     limit: number | null,
   ): Promise<{ record: ProfileRecord } | { limitExceeded: true; current: number }>;
+  /**
+   * Transfer between accounts in ONE transaction: cap-check the recipient,
+   * CLAIM the source by retiring it (the claim's result is checked), then
+   * insert the recipient row.
+   *
+   * The two-statement version it replaces could not serialise two transfers of
+   * the same source to different recipients — they take different account-row
+   * locks — so both inserted and one profile became two. `sourceAlreadyRetired`
+   * is the loser of that race, and it has written nothing.
+   */
+  transferAtomic(args: {
+    source: { id: string; accountId: string };
+    insert: NewProfileInput;
+    limit: number | null;
+  }): Promise<
+    | { record: ProfileRecord }
+    | { limitExceeded: true; current: number }
+    | { sourceAlreadyRetired: true }
+  >;
   countByAccount(accountId: string): Promise<number>;
   /**
    * doc-150 item 6 — sum of `size_bytes` (COALESCE NULL→0) over the account's
@@ -1070,10 +1089,24 @@ export class ProfilesService {
     // recipient's account-row lock). Both the cap refusal and the name-race
     // 409 throw BEFORE the source delete below, so a refused transfer leaves
     // the source profile intact (the transfer simply didn't happen).
-    let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
+    // V-714 + the concurrent-transfer fix: retiring the source and creating the
+    // recipient row now happen in ONE transaction, and the retire is a CLAIM
+    // whose result is checked.
+    //
+    // Before, this was `insertWithLimit(recipient)` followed by `delete(source)`
+    // with the delete's boolean discarded. Two transfers of the SAME source to
+    // DIFFERENT recipients take DIFFERENT account-row locks, so nothing
+    // serialised them: both inserted, both "deleted" (the second matching zero
+    // rows), and one profile became two owned by two accounts — with both
+    // callers told they had succeeded. Reproduced by forcing the interleave.
+    //
+    // Cap and name-race refusals still happen before anything is written, so a
+    // refused transfer still leaves the source profile intact.
+    let result: Awaited<ReturnType<typeof this.repo.transferAtomic>>;
     try {
-      result = await this.repo.insertWithLimit(
-        {
+      result = await this.repo.transferAtomic({
+        source: { id: args.sourceProfileId, accountId: args.sourceAccountId },
+        insert: {
           id: transferIdentity.id,
           accountId: args.recipientAccountId,
           name: targetName,
@@ -1082,12 +1115,8 @@ export class ProfilesService {
           wrappedDek: transferIdentity.wrappedDek,
         },
         limit,
-      );
+      });
     } catch (err) {
-      // Concurrent race: the recipient acquired `targetName` between the
-      // pre-check rename above and this insert. Fail with a clean 409 — we
-      // throw before the source delete, so the source profile is preserved
-      // (the transfer simply didn't happen) rather than surfacing a 500.
       if (isProfileNameRaceViolation(err)) {
         throw new ConflictError(`Recipient account already has a profile named "${targetName}".`, {
           resource: 'profile',
@@ -1107,9 +1136,15 @@ export class ProfilesService {
         },
       );
     }
+    if ('sourceAlreadyRetired' in result) {
+      // Another transfer (or a delete) claimed this profile first. It leaves the
+      // source account exactly once, and this caller created nothing.
+      throw new ConflictError('Profile was transferred or deleted by a concurrent request.', {
+        resource: 'profile',
+        field: 'id',
+      });
+    }
     const newProfile = result.record;
-
-    await this.repo.delete({ id: args.sourceProfileId, accountId: args.sourceAccountId });
 
     await this.emitAuditBestEffort(
       args.sourceAccountId,

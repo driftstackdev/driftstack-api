@@ -117,6 +117,19 @@ function makeRepos(
     },
   };
   const profilesRepo: ProfilesRepo = {
+    // Mirrors the prod transaction: cap-check, CLAIM the source (only a live row
+    // can be claimed), then insert. This fake exists for snapshot tests, but the
+    // claim is modelled anyway — a double that skips it would let the
+    // concurrent-transfer bug pass wherever it is used.
+    transferAtomic: (args) => {
+      const src = profiles.find(
+        (r: ProfileRecord) =>
+          r.id === args.source.id && r.accountId === args.source.accountId && !r.deletedAt,
+      );
+      if (!src) return Promise.resolve({ sourceAlreadyRetired: true as const });
+      src.deletedAt = new Date();
+      return profilesRepo.insertWithLimit(args.insert, null);
+    },
     insert: (input) => {
       profileCounter += 1;
       const row: ProfileRecord = {

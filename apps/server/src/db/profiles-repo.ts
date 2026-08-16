@@ -261,6 +261,92 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     });
   }
 
+  /**
+   * Transfer a profile between accounts in ONE transaction: retire the source
+   * row, then create the recipient row under the recipient's cap.
+   *
+   * Why this exists as a single repo method rather than the two it replaces.
+   * The old service did `insertWithLimit(recipient)` then `delete(source)` as
+   * separate statements and discarded the delete's boolean. Two transfers of
+   * the SAME source to DIFFERENT recipients take DIFFERENT account-row locks,
+   * so nothing serialised them: both inserted, both "deleted" (the second
+   * matching zero rows, silently), and one profile became two owned by two
+   * accounts with both callers told they had succeeded.
+   *
+   * The source retire happens FIRST and its result is checked, so the loser of
+   * a race aborts before inserting anything — no compensating delete, no window
+   * where two rows exist. Doing it first is only safe because it is inside the
+   * transaction: a cap refusal or name race below rolls the retire back, which
+   * preserves the documented property that a refused transfer leaves the source
+   * profile intact.
+   */
+  async transferAtomic(args: {
+    source: { id: string; accountId: string };
+    insert: NewProfileInput;
+    limit: number | null;
+  }): Promise<
+    | { record: ProfileRecord }
+    | { limitExceeded: true; current: number }
+    | { sourceAlreadyRetired: true }
+  > {
+    return this.database.db.transaction(async (tx) => {
+      // Cap check FIRST — it is a read, so returning from it commits nothing.
+      // (Ordering note: drizzle's tx.rollback() THROWS rather than returning, so
+      // a refusal discovered after a write cannot hand a value back to the
+      // caller. Doing every refusal check before the first write keeps the
+      // outcomes as return values instead of exceptions.)
+      if (args.limit !== null) {
+        await tx
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.id, args.insert.accountId))
+          .for('update')
+          .limit(1);
+        const [c] = await tx
+          .select({ n: count() })
+          .from(profiles)
+          .where(eq(profiles.accountId, args.insert.accountId));
+        const current = c?.n ?? 0;
+        if (current >= args.limit) return { limitExceeded: true as const, current };
+      }
+
+      // Claim the source. `notDeleted` in the predicate IS the claim: exactly
+      // one concurrent transfer can match the row, and the loser gets zero rows
+      // back before it has written anything.
+      const now = new Date();
+      const retired = await tx
+        .update(profiles)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(profiles.id, args.source.id),
+            eq(profiles.accountId, args.source.accountId),
+            notDeleted,
+          ),
+        )
+        .returning({ id: profiles.id });
+      if (retired.length === 0) return { sourceAlreadyRetired: true as const };
+
+      const [row] = await tx
+        .insert(profiles)
+        .values({
+          ...preallocatedProfileId(args.insert),
+          accountId: args.insert.accountId,
+          name: args.insert.name,
+          archetype: args.insert.archetype,
+          description: args.insert.description,
+          folder: args.insert.folder ?? null,
+          tags: args.insert.tags ?? [],
+          icon: args.insert.icon ?? null,
+          note: args.insert.note ?? null,
+          wrappedDek: args.insert.wrappedDek ?? null,
+        })
+        .returning();
+      if (!row) throw new Error('transferAtomic profile: no row returned');
+      return { record: toRecord(row) };
+    });
+  }
+
   async findById(args: { id: string; accountId: string }): Promise<ProfileRecord | null> {
     const [row] = await this.database.db
       .select()

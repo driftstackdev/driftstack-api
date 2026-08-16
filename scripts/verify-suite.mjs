@@ -29,7 +29,7 @@
 import { spawn } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 2759;
+export const EXPECTED_TEST_FILES = 2760;
 
 /**
  * Judge a completed vitest run.

@@ -72,6 +72,27 @@ function makeRepo(
   const rows = [...initial];
   let counter = rows.length;
   const repo: ProfilesRepo = {
+    // Mirrors the prod transaction: cap-check, CLAIM the source (only a live
+    // row can be claimed), then insert. A double that skipped the claim would
+    // let the concurrent-transfer bug pass here.
+    transferAtomic: (args: {
+      source: { id: string; accountId: string };
+      insert: NewProfileInput;
+      limit: number | null;
+    }) => {
+      if (args.limit !== null) {
+        const current = rows.filter((r) => r.accountId === args.insert.accountId).length;
+        if (current >= args.limit) {
+          return Promise.resolve({ limitExceeded: true as const, current });
+        }
+      }
+      const src = rows.find(
+        (r) => r.id === args.source.id && r.accountId === args.source.accountId && !r.deletedAt,
+      );
+      if (!src) return Promise.resolve({ sourceAlreadyRetired: true as const });
+      src.deletedAt = new Date();
+      return repo.insertWithLimit(args.insert, null);
+    },
     insert: (input: NewProfileInput) => {
       counter += 1;
       const row: ProfileRecord = {
@@ -1115,7 +1136,13 @@ describe('ProfilesService.transferProfile — live-session guard (FIX #3)', () =
       recipientTier: TEAM,
     });
     expect(newProfile.accountId).toBe('acc_dst');
-    expect(state.rows.find((r) => r.id === 'p1')).toBeUndefined();
+    // The source is RETIRED, not erased: prod soft-deletes (sets deleted_at) and
+    // transferAtomic models that. This previously expected the row to vanish,
+    // which only held because this fake's `delete` splices the array — an
+    // inaccuracy in the double rather than a property of the system.
+    const retired = state.rows.find((r) => r.id === 'p1');
+    expect(retired, 'the source row still exists').toBeDefined();
+    expect(retired?.deletedAt, 'and is retired, exactly once').toBeInstanceOf(Date);
   });
 });
 

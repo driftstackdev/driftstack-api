@@ -65,6 +65,36 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
   // via a `FOR UPDATE` lock on the accounts row; here the count + insert run
   // synchronously (JS single-thread → no interleave), which models the same
   // "loser sees the post-insert count and is refused" outcome.
+  /** Mirrors the prod transaction: cap-check the recipient, CLAIM the source by
+   *  retiring it (only a live row can be claimed), then insert. Ordering and the
+   *  claim's checked result are the whole point — a double that inserted first,
+   *  or ignored the claim, would let the concurrency bug this method exists to
+   *  fix pass in every test that uses this repo. */
+  transferAtomic(args: {
+    source: { id: string; accountId: string };
+    insert: NewProfileInput;
+    limit: number | null;
+  }): Promise<
+    | { record: ProfileRecord }
+    | { limitExceeded: true; current: number }
+    | { sourceAlreadyRetired: true }
+  > {
+    if (args.limit !== null) {
+      let current = 0;
+      for (const r of this.rows.values()) if (r.accountId === args.insert.accountId) current += 1;
+      if (current >= args.limit) {
+        return Promise.resolve({ limitExceeded: true as const, current });
+      }
+    }
+    const src = this.rows.get(args.source.id);
+    if (!src || src.accountId !== args.source.accountId || src.deletedAt !== null) {
+      return Promise.resolve({ sourceAlreadyRetired: true as const });
+    }
+    const now = new Date();
+    this.rows.set(args.source.id, { ...src, deletedAt: now, updatedAt: now });
+    return this.insertWithLimit(args.insert, null);
+  }
+
   insertWithLimit(
     input: NewProfileInput,
     limit: number | null,
