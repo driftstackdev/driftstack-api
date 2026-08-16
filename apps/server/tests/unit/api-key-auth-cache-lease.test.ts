@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { hashApiKey, keyPrefixFromPlaintext } from '../../src/lib/api-keys.js';
-import { ForbiddenError, InvalidKeyError, RevokedKeyError } from '../../src/lib/errors.js';
+import {
+  ExpiredKeyError,
+  ForbiddenError,
+  InvalidKeyError,
+  RevokedKeyError,
+} from '../../src/lib/errors.js';
 import {
   authenticate,
   resolveEffectiveAccount,
@@ -179,6 +184,68 @@ describe('API-key positive-cache generation lease', () => {
       authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:02.000Z')),
     ).rejects.toBeInstanceOf(RevokedKeyError);
     await expect(cache.get(SHA)).resolves.not.toBeNull();
+  });
+
+  // Expiry is compared with `<=`, so a credential whose expiresAt IS the current
+  // instant is already expired. That one-tick difference is a real one here: the
+  // FAST path pins it (flipping the cached comparison to `<` reds an arm), while
+  // these two authoritative re-checks did not — flipping either left all 1745
+  // auth tests green. The asymmetry is the risk: a "simplification" to `<` on the
+  // live side alone would make the same credential pass on a cache miss and fail
+  // on a cache hit, at exactly the moment it expires.
+  //
+  // The re-checks are defensive by design — the production query already filters
+  // expired rows — so reaching them needs a repo that does not, which is exactly
+  // the custom implementation the source comment says they exist to keep honest.
+  it('CRITICAL a live key whose expiry IS the current instant is already expired', async () => {
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    const at = new Date('2026-07-14T00:00:02.000Z');
+    let liveKey = key;
+    const repo = repoWith({ findApiKeyByPrefix: () => Promise.resolve(liveKey) });
+
+    await expect(
+      authenticate(repo, PLAINTEXT, cache, new Date('2026-07-14T00:00:00.000Z')),
+    ).resolves.toMatchObject({ apiKey: { id: key.id } });
+
+    liveKey = { ...key, expiresAt: at };
+    await expect(authenticate(repo, PLAINTEXT, cache, at)).rejects.toBeInstanceOf(ExpiredKeyError);
+
+    // …and one millisecond earlier it is still valid, so this is a boundary and
+    // not a blanket rejection of anything carrying an expiry.
+    liveKey = { ...key, expiresAt: new Date(at.getTime() + 1) };
+    await expect(authenticate(repo, PLAINTEXT, cache, at)).resolves.toMatchObject({
+      apiKey: { id: key.id },
+    });
+  });
+
+  it('CRITICAL a live web session whose expiry IS the current instant is already expired', async () => {
+    const cache = new InMemoryAuthCache();
+    const token = 'websession-token-that-is-long-enough-aaaa';
+    const at = new Date('2026-07-14T00:00:02.000Z');
+    const sessionRow = (expiresAt: Date) => ({
+      id: 'sess_expiry_boundary',
+      accountId: ACCOUNT.id,
+      expiresAt,
+      revokedAt: null,
+      lastUsedAt: null,
+      mfaSatisfiedAt: null,
+      createdAt: new Date('2026-07-01T00:00:00.000Z'),
+    });
+    let live = sessionRow(new Date('2026-07-20T00:00:00.000Z'));
+    const repo = repoWith({ findActiveWebSession: () => Promise.resolve(live) });
+
+    await expect(
+      authenticate(repo, token, cache, new Date('2026-07-14T00:00:00.000Z')),
+    ).resolves.toMatchObject({ account: { id: ACCOUNT.id } });
+
+    live = sessionRow(at);
+    await expect(authenticate(repo, token, cache, at)).rejects.toBeInstanceOf(ExpiredKeyError);
+
+    live = sessionRow(new Date(at.getTime() + 1));
+    await expect(authenticate(repo, token, cache, at)).resolves.toMatchObject({
+      account: { id: ACCOUNT.id },
+    });
   });
 
   it('rejects a cached key whose live secret hash rotated without invalidation', async () => {
