@@ -4964,3 +4964,89 @@ neighbour already covered the case I imagined); here it over-stated one (the nam
 implied work the body does not do). **A zero next to a money-path symbol is a
 question, not a finding** — the body and its neighbours answer it, and reading them
 costs a minute against a false report that would have cost more.
+
+## 7h — the guard that ran but had never refused
+
+`account-proxies.ts` came off the 31-list, and the coverage shape was one I had not
+hit before. Both VPN SSRF re-guards in `resolveVpnForDispatch` show the `if` at **1
+execution** and the `return null` beneath it at **0**:
+
+    :186  count=1   if (classifyUnsafeVpnTargets({ configBlob: parsed.config_blob }) !== null)
+    :186  count=0     return null
+    :197  count=1   if (classifyUnsafeVpnTargets({ endpoint: str('endpoint'), dns: str('dns') }) …
+    :198  count=0     return null
+
+The guards RUN on every dispatch and had never once REFUSED, because no test has ever
+presented a stored row with an unsafe embedded target. A file-level or
+function-level coverage view calls this covered; only the statement beneath the
+condition disagrees.
+
+**Why the route-level work does not cover it.** `account-me-proxies` already pins
+the create-route guard, thoroughly and with its own mutation table — that was assessment
+item 5i. But a route guard governs rows created THROUGH that route, AFTER it shipped.
+These guard the rows themselves, and `resolveForDispatch` states the reasoning
+verbatim: _"so a row inserted by any other path can't smuggle a private/loopback/
+metadata host into egress"_, and of the route-only alternative, _"a check on one call
+site, which is the shape of the bug being fixed"_. Rows predating the gate are the
+concrete case.
+
+Delete either guard and nothing throws: `candidate` is built, the flat wire validates,
+and the config is handed back for dispatch. With `169.254.169.254` that is the cloud
+metadata endpoint reached from inside the fleet.
+
+Measured, per scheme, since the two are independent:
+
+    WireGuard guard deleted → both WG arms red ("expected { type: 'wireguard', … } to be null")
+    OpenVPN guard deleted   → the OpenVPN arm red; WG arms and both positives stay green
+    novelty: 35 other proxy/egress files (317 tests) stay green under the WG mutation
+
+⛔ **The trap this file walked into, and it would have shipped a test that proved
+nothing.** The first version's WireGuard rows omitted `peer_public_key`,
+`allowed_ips` and `address`. The negative arms passed — but for the wrong reason: the
+flat `InlineVpnProxyWireSchema.safeParse` at the end of the method rejected the
+candidate on missing fields, returning null before the SSRF guard's absence could
+matter. **A null-returning refusal test must make every OTHER path to null
+impossible**, or a mutation of the guard under test cannot change the result. The tell
+was a positive arm failing ("a safe row must still dispatch"): if a SAFE row is also
+refused, the refusals are not measuring the guard. Fixing the positive arm is what
+made the negatives real.
+
+⭐ Same discipline as the route-level arms, and worth repeating: every row keeps a
+SAFE display host, so a refusal cannot be the display-host check doing the work. Only
+the embedded target is unsafe.
+
+⚠️ `tsc -p tsconfig.test.json` caught a duplicate object key (TS1117) that vitest ran
+straight past — the helper spread `...over` after an explicit `id` and then repeated
+`id`. Re-ran the mutation after the fix to confirm the refactor had not weakened the
+arms; 2 red, as before.
+
+### 7h (cont.) — `oauth-client-service.ts:153`, declined on evidence
+
+Same shape as 7g's MFA finding: a fast-fail pre-check above, then
+
+    // …this CAS is the authoritative serialization point… Two concurrent
+    // confirm-merges carrying the same token → exactly one claims → exactly one
+    // link created; the loser gets a clean null (→ 400 "already used") instead of
+    // a duplicate-key 500.
+    if (!(await this.deps.pending.markConsumedAt(pending.id, nowDate))) return null;
+
+reachable only when two confirm-merges race. The obvious worry is that removing it
+lets BOTH insert, leaving one OAuth identity linked twice — a real integrity defect
+if nothing else stops it.
+
+Something else stops it. `pg_constraint` on `account_oauth_links` shows only a PK on
+`id`, which is what suggested the worry, but the enforcement is a unique INDEX rather
+than a constraint and does not appear there:
+
+    account_oauth_links_provider_sub_idx  UNIQUE btree (provider, provider_sub)
+
+So the comment is accurate as written: the loser hits a duplicate-key violation. The
+fall-through is an exception, not a silent wrong answer, and by 7d's criterion that
+is the residual category — the guard turns a 500 into a clean 400. Worth having,
+recorded, not tested ahead of items whose fall-through is silent.
+
+⭐ Two checks, one conclusion: **`pg_constraint` is not the whole answer for
+uniqueness.** A `CREATE UNIQUE INDEX` enforces it without being a constraint, so a
+constraint-only query reports "no uniqueness" on a table that has it. Query
+`pg_indexes` too before concluding a duplicate is possible — the wrong answer here
+would have promoted a 500-vs-400 nicety into a fabricated integrity finding.
