@@ -6473,3 +6473,33 @@ the control was refused by a DIFFERENT guard and proved nothing about the `CASE`
 was the control failing while the arm under test passed. `rotateSecret` returns the
 **unchanged row** rather than null on that miss, so a `not.toBeNull()` assertion passes
 through a refused rotation — the value has to be read back and compared.
+
+### 34. "Log out my other devices" had its account boundary held by text pins only
+
+`DrizzleAuthFlowsRepo.revokeAllWebSessionsExcept` is what the bulk web-session
+revoke runs. Three predicates carry the whole security of that action:
+`eq(accountId)` is the cross-account boundary, `ne(id, exceptId)` keeps the
+caller's own session alive, and `isNull(revokedAt)` limits the sweep to live rows
+so the returned count is honest.
+
+**Every reference to it in the test corpus was a regex over source text** — the
+repo content-parity pin, the v079 cross-source invariant, the route pin and the
+service pin — plus an in-memory fake. Dropping each predicate in turn redded only
+those pins and the two typecheck guards (the dropped parameter goes unused).
+Nothing anywhere drove the method against a database holding two accounts.
+
+The consequence of the first predicate regressing is not subtle: one customer
+pressing "log out my other devices" would revoke **every web session on the
+platform**. And because the guards that noticed were text pins, a rewrite that
+updated the text while dropping `eq(accountId)` — exactly what a refactor does —
+would have shipped behind a green suite.
+
+Now covered against real Postgres with a bystander account: the victim's other
+two sessions are revoked, the caller's own survives, the bystander's two are
+untouched, and a second call returns 0. Proved by mutating each predicate, with
+the identifiers kept REFERENCED so the typecheck guards could not answer in the
+behaviour's place — the first attempt did exactly that and had to be redone.
+
+_How it was found:_ classifying every public repo method by where it is named in
+the test corpus. 285 methods → 19 whose only references are fakes and text pins,
+4 named by no test at all. Same lens that found item 2's force-rotation query.

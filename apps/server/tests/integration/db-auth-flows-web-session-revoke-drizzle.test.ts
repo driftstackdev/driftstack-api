@@ -73,6 +73,74 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(results.sort()).toEqual([false, true]);
     });
 
+    it('CRITICAL bulk revoke stops at the account boundary, spares the current session, and is idempotent', async () => {
+      // `revokeAllWebSessionsExcept` is what "log out my other devices" runs. Its
+      // three predicates are the whole security of that action:
+      //   eq(accountId)      — the cross-account boundary
+      //   ne(id, exceptId)   — the caller keeps their own session
+      //   isNull(revokedAt)  — only live rows, so the count is honest
+      //
+      // Every reference to it in the test corpus is a REGEX OVER SOURCE TEXT: the
+      // repo parity pin, the v079 invariant, the route pin and the service pin.
+      // Measured by mutation at full unit scope — dropping the account scoping,
+      // dropping the carve-out, and dropping the live-only filter each redded ONLY
+      // those pins plus the typecheck guards (the dropped parameter goes unused).
+      // Not one behavioural test anywhere drove this against two accounts, so a
+      // rewrite that updated the text while dropping `eq(accountId)` would have
+      // logged out every account on the platform behind a green suite.
+      if (!dbReachable || !client) return;
+      const c = client;
+      const db = drizzle(c) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAuthFlowsRepo({ client: c, db, close: async () => {} });
+
+      const mkAccount = async (): Promise<string> => {
+        const id = randomUUID();
+        seeded.push(id);
+        await c`INSERT INTO accounts (id, email) VALUES (${id}, ${`bulk-${id}@test.local`})`;
+        return id;
+      };
+      const mkSession = async (accountId: string): Promise<string> => {
+        const row = await repo.insertWebSession({
+          accountId,
+          tokenHash: `hash-${randomUUID()}`,
+          authEpoch: 0,
+          expiresAt: new Date(Date.now() + 60_000),
+          issuedFromIp: null,
+          userAgent: null,
+        });
+        if (!row) throw new Error('expected live session insert');
+        return row.id;
+      };
+      const liveIds = async (accountId: string): Promise<string[]> => {
+        const rows = await c<Array<{ id: string }>>`
+          SELECT id FROM web_sessions
+           WHERE account_id = ${accountId} AND revoked_at IS NULL ORDER BY id`;
+        return rows.map((r) => r.id);
+      };
+
+      const victim = await mkAccount();
+      const bystander = await mkAccount();
+      const keep = await mkSession(victim);
+      const dropA = await mkSession(victim);
+      const dropB = await mkSession(victim);
+      const otherA = await mkSession(bystander);
+      const otherB = await mkSession(bystander);
+
+      const revoked = await repo.revokeAllWebSessionsExcept(victim, keep, new Date());
+      expect(revoked, 'exactly the two other sessions on THIS account').toBe(2);
+
+      expect(await liveIds(victim), 'the caller keeps the session they are using').toEqual([keep]);
+      expect(
+        (await liveIds(bystander)).sort(),
+        'another account loses nothing — this is the predicate a text pin cannot hold',
+      ).toEqual([otherA, otherB].sort());
+
+      // Idempotent: the live-only filter means a second sweep claims nothing, so a
+      // retried request cannot report work it did not do.
+      expect(await repo.revokeAllWebSessionsExcept(victim, keep, new Date())).toBe(0);
+      expect([dropA, dropB].every((id) => id !== keep)).toBe(true);
+    });
+
     it('waits for a password epoch bump and refuses the stale successor', async () => {
       if (!dbReachable || !client) return;
       const pg = client;
