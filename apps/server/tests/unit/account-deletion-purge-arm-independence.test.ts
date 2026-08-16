@@ -63,6 +63,41 @@ function profileArm(calls: string[]) {
   };
 }
 
+/** The receipt + session arms, recording their calls so a later arm can be
+ *  proved to have run after an earlier one failed. */
+function turnReceiptArm(calls: string[], opts: { throws?: boolean } = {}) {
+  return {
+    purgeForTerminatedAccountsBefore: (): Promise<number> => {
+      calls.push('turn_receipts');
+      return opts.throws === true ? Promise.reject(new Error('db down')) : Promise.resolve(3);
+    },
+  };
+}
+
+function agentSessionArm(calls: string[], opts: { throws?: boolean } = {}) {
+  return {
+    purgeForTerminatedAccountsBefore: (): Promise<number> => {
+      calls.push('agent_sessions');
+      return opts.throws === true ? Promise.reject(new Error('db down')) : Promise.resolve(4);
+    },
+  };
+}
+
+/** Snapshots succeed, the profile delete then fails — the partial case, which
+ *  is the one the source comment calls out as leaving stranded snapshots. */
+function profileArmFailing(calls: string[]) {
+  return {
+    purgeSnapshotsForTerminatedAccountsBefore: (): Promise<number> => {
+      calls.push('snapshots');
+      return Promise.resolve(2);
+    },
+    purgeProfilesForTerminatedAccountsBefore: (): Promise<string[]> => {
+      calls.push('profiles');
+      return Promise.reject(new Error('db down'));
+    },
+  };
+}
+
 /** A repo whose BYOK query would throw if it were ever reached. */
 const byokRepoNeverCalled = {
   findDeletedAccountIdsWithByokKeyBefore: (): Promise<string[]> => {
@@ -128,6 +163,76 @@ describe('no purge arm can be disabled by another arm being unavailable', () => 
     expect(result.proxySecretsPurged, 'the failing arm purged nothing').toBe(0);
     expect(profiles, 'the profile arm still ran').toEqual(['snapshots', 'profiles']);
     expect(result.profilesPurged).toBe(1);
+  });
+
+  // Per-arm failure isolation was proved for the proxy arm only. Measured on
+  // the rest: making the profiles, turn-receipt or agent-session catch rethrow
+  // reds NOTHING across 20 purge/retention files and 115 tests, while the byok
+  // and proxy arms red 1 and 2. `profiles` even appears in this file already —
+  // but as the arm that must KEEP RUNNING when another fails, never as the one
+  // that fails. Being named in an independence test is not the same as having
+  // your own failure path covered.
+  //
+  // It matters more here than the isolation alone suggests: the arms run in
+  // sequence in one method, so an escaping throw from an EARLY arm skips every
+  // LATER one. A profiles failure would silently stop the receipt and session
+  // purges too, and this sweeper is the erasure we committed to — data that is
+  // not purged is data retained.
+  it('CRITICAL a THROWING profile arm does not stop the receipt or session arms', async () => {
+    const calls: string[] = [];
+    const sweeper = new AccountDeletionPurgeSweeperService({
+      repo: byokRepoNeverCalled,
+      profiles: profileArmFailing(calls),
+      turnReceipts: turnReceiptArm(calls),
+      agentSessions: agentSessionArm(calls),
+    });
+
+    const result = await sweeper.tickOnce(NOW);
+
+    expect(result.profilesPurged, 'the failing arm purged nothing').toBe(0);
+    expect(calls, 'both later arms still ran').toEqual([
+      'snapshots',
+      'profiles',
+      'turn_receipts',
+      'agent_sessions',
+    ]);
+    expect(result.turnReceiptsPurged).toBe(3);
+    expect(result.agentSessionsPurged).toBe(4);
+  });
+
+  it('CRITICAL a THROWING receipt arm does not stop the session arm', async () => {
+    const calls: string[] = [];
+    const sweeper = new AccountDeletionPurgeSweeperService({
+      repo: byokRepoNeverCalled,
+      profiles: profileArm(calls),
+      turnReceipts: turnReceiptArm(calls, { throws: true }),
+      agentSessions: agentSessionArm(calls),
+    });
+
+    const result = await sweeper.tickOnce(NOW);
+
+    expect(result.turnReceiptsPurged, 'the failing arm purged nothing').toBe(0);
+    expect(calls.at(-1), 'the session arm still ran after it').toBe('agent_sessions');
+    expect(result.agentSessionsPurged).toBe(4);
+  });
+
+  it('CRITICAL a THROWING session arm still leaves the tick successful and the earlier arms applied', async () => {
+    // The last arm in the sequence: nothing runs after it, so what this proves
+    // is that its failure does not turn the whole sweep into a rejection —
+    // which would take the scheduled job down with it every tick.
+    const calls: string[] = [];
+    const sweeper = new AccountDeletionPurgeSweeperService({
+      repo: byokRepoNeverCalled,
+      profiles: profileArm(calls),
+      turnReceipts: turnReceiptArm(calls),
+      agentSessions: agentSessionArm(calls, { throws: true }),
+    });
+
+    const result = await sweeper.tickOnce(NOW);
+
+    expect(result.agentSessionsPurged).toBe(0);
+    expect(result.profilesPurged, 'the earlier arms still applied').toBe(1);
+    expect(result.turnReceiptsPurged).toBe(3);
   });
 
   it('CRITICAL every arm reports its own count, so a silently-skipped arm is visible rather than absorbed into a single number.', async () => {
