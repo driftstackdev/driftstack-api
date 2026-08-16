@@ -16,6 +16,7 @@ interface TestDeps {
   repo: TestRepo;
   email: {
     sendSessionFailedFirst: ReturnType<typeof vi.fn>;
+    sendSessionSuccessFirst: ReturnType<typeof vi.fn>;
     sendTierChanged: ReturnType<typeof vi.fn>;
   };
   prefs: { shouldSend: ReturnType<typeof vi.fn> };
@@ -85,6 +86,7 @@ function build(opts: { firstFailureSent?: Date | null; shouldSend?: boolean } = 
 
   const email = {
     sendSessionFailedFirst: vi.fn().mockResolvedValue(undefined),
+    sendSessionSuccessFirst: vi.fn().mockResolvedValue(undefined),
     sendTierChanged: vi.fn().mockResolvedValue(undefined),
   };
   const prefs = {
@@ -274,6 +276,57 @@ describe('AccountLifecycleService — subscription.tier_changed (V-202b)', () =>
       stripeEventId: 'evt_audit_fail',
     });
     expect(email.sendTierChanged).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AccountLifecycleService — session.success.first under concurrency', () => {
+  // The failed-first sibling above is covered from both sides: it sends on the first
+  // call, and it skips when the flag is ALREADY set. Those two exercise the
+  // fast-fail PRE-CHECK. They do not reach the guard beneath it:
+  //
+  //   const won = await this.repo.markFirstSuccessEmailSent(accountId, new Date());
+  //   if (!won) return;
+  //
+  // Coverage showed that branch evaluated 14 times and taken ZERO. A sequential
+  // retry cannot reach it — the first call sets `firstSuccessEmailSentAt`, so the
+  // second returns at the pre-check without ever attempting the claim. Only two
+  // callers that BOTH read the flag as null before either marks get there, which is
+  // an ordinary double-delivery of the same lifecycle event.
+  //
+  // Deleting the branch does not throw: the loser falls through and sends a SECOND
+  // onboarding email for one session. The claim is what makes "first success" mean
+  // once.
+  //
+  // The interleaving is forced rather than raced: both callers are held at the mark
+  // until the second arrives, so both have provably cleared the pre-check, and the
+  // underlying fake is the faithful one (it refuses a second claim exactly as the
+  // conditional UPDATE does).
+  it('CRITICAL two concurrent first-success deliveries send exactly one email. Both clear the pre-check by reading the flag as null, so only the atomic mark separates them; without the !won guard the loser also sends and one session produces two onboarding emails.', async () => {
+    const { service, repo, email } = build();
+
+    let arrived = 0;
+    let releaseBoth: () => void = () => undefined;
+    const bothArrived = new Promise<void>((resolve) => {
+      releaseBoth = (): void => {
+        resolve();
+      };
+    });
+    const realMark = repo.markFirstSuccessEmailSent.bind(repo);
+    repo.markFirstSuccessEmailSent = async (accountId: string, at: Date): Promise<boolean> => {
+      arrived += 1;
+      if (arrived === 2) releaseBoth();
+      await bothArrived;
+      return realMark(accountId, at);
+    };
+
+    await Promise.all([
+      service.emit('acc_test', { kind: 'session.success.first', sessionId: 'sess_a' }),
+      service.emit('acc_test', { kind: 'session.success.first', sessionId: 'sess_b' }),
+    ]);
+
+    expect(arrived, 'both deliveries must reach the atomic mark').toBe(2);
+    expect(email.sendSessionSuccessFirst).toHaveBeenCalledTimes(1);
+    expect(repo.read('acc_test')?.firstSuccessEmailSentAt).toBeInstanceOf(Date);
   });
 });
 

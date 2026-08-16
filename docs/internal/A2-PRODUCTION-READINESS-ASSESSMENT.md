@@ -5582,3 +5582,43 @@ and never touches the claim at all. Reaching that loser needs forced interleavin
 both callers held past the read before either marks — which is the MFA-concurrency
 technique from 7g rather than a second copy of the C6 pattern. Recorded as the next
 slice rather than bundled in, because it is a different test, not a third arm.
+
+## 7q — the third duplicate-email guard, reached by forcing the interleave
+
+7p closed two of the three never-refused duplicate-suppressors and deliberately left
+`:275` (`handleSessionSuccessFirst`) open, with the reason stated: a sequential retry
+cannot reach it. The first call sets `firstSuccessEmailSentAt`, so the second returns
+at the fast-fail PRE-CHECK and never attempts the claim at all. That is why its two
+existing tests — "sends on first call" and "skips when the flag is already set" —
+leave the branch beneath them at zero.
+
+Only two callers that BOTH read the flag as null before either marks get there, which
+is an ordinary double delivery of one lifecycle event. So the arm forces it: both are
+held at `markFirstSuccessEmailSent` until the second arrives, which proves both
+cleared the pre-check AND the preference check, over the existing faithful fake (it
+refuses a second claim exactly as the conditional UPDATE does).
+
+    guard present → one email, one claim winner
+    guard removed → "called 1 times, but got 2 times" — the loser sends a SECOND
+                    onboarding email for one session
+
+⚠️ **The novelty run also redded a content-parity file**, and the distinction is the
+one drawn in 7e: its assertion is
+`expect(body).toMatch(/const won = await this\.repo\.markFir…/)` — a regex over the
+source text. That is a deletion tripwire, and a good one; it is not evidence the
+branch works, since it passes whether the guard is reachable or the loser is actually
+refused. The line was text-protected; the behaviour was not.
+
+⚠️ **`tsc` caught what vitest ran past, again.** Adding `sendSessionSuccessFirst` to
+the email fake satisfied the runtime but not the `TestDeps` interface that declares
+the fake's shape, so `npx tsc -p tsconfig.test.json` failed with TS2339 on a green
+suite. Fixed, and then the mutation was RE-RUN afterwards to confirm the type change
+had not weakened the arm — the same discipline as 7h, because an edit between "proved"
+and "committed" can quietly do that.
+
+**All three duplicate-email guards now refuse under test.** The set that started as
+five, of which three had never fired, is closed:
+
+    :247 first-failure  ✓ (pre-existing)      :275 first-success   ✓ (this fire, forced interleave)
+    :401 renewal        ✓ (pre-existing)      :446 payment_succeeded ✓ (7p)
+                                              :494 payment_failed    ✓ (7p)
