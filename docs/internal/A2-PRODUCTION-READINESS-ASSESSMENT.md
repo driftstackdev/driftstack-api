@@ -6690,3 +6690,42 @@ it used a raw `sql` template and the only test that redded was the repo's
 structural guard on raw-`sql` interpolation shape — a red about the mutation's own
 form, not the behaviour. Re-run comparing against `new Date(0)` instead, it was a
 clean zero. A red has to be attributed before it counts, in either direction.
+
+### 38. Every registered route is now driven over HTTP, and the instrument that proves it
+
+Every finding this week lived at a layer — a repo method, a service, a handler.
+None of them answers whether any test actually ISSUES a given request against a
+booted app. A route can sit behind a fully-tested service and never be reached
+over HTTP, and nothing in the suite would notice.
+
+**Measured: 232 registered routes, 0 undriven.** Both `/v1` and the operational
+endpoints. That is a clean result, and the work was in earning the right to state
+it.
+
+⚠️ **The first instrument was wrong in the direction that flatters.** A regex over
+`app.get(...)` in `src/routes/*.ts` found **154** routes; the app registers
+**232**. It missed a third of the surface — plenty of routes come from helpers and
+nested plugins rather than one literal call — so "0 uncovered" would have been
+measured over two thirds of the app while reading as complete. Ground truth now
+comes from Fastify's own `printRoutes`.
+
+⚠️ **The tree parser was wrong too, and silently.** Inferring depth from a
+leading-character run produced 86 routes with every nested path missing —
+`/v1/sessions/:id/interact` simply absent. Depth is the COLUMN of the branch
+marker, four characters per level. The guard therefore asserts on **known routes**
+(including a nested one and one outside `/v1`) before sweeping, so a Fastify
+format change fails loudly instead of passing over an empty set.
+
+Proved two ways: injecting a route no test drives names it in the failure, and a
+parser that returns nothing reds the count assertion rather than passing.
+
+**Scope, stated because it bounds the claim:** routes registered CONDITIONALLY on
+an injected dependency (OAuth needs `deps.oauthStore`, LiveKit its credentials)
+are absent from the default test app and out of scope.
+
+_Not a finding:_ comparing the route table to the published OpenAPI spec shows 17
+operations each way, and **both directions are explained** — the "documented but
+absent" ones are exactly those conditional registrations, and the "registered but
+undocumented" ones are operational (`/healthz`, `/metrics`), doc-viewer, or
+deliberately internal (`gui-input` is server-internal per the verification log).
+No phantom endpoints.
