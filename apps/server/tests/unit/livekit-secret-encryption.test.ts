@@ -126,6 +126,47 @@ describe('LiveKit API secret record-bound v2 envelope', () => {
     ).toThrow(/must decode to 32 bytes/);
   });
 
+  it('CRITICAL bounds context fields from ABOVE, not just below', () => {
+    // `assertBoundedUtf8` is one compound condition — `< 1 || > maxBytes` — and
+    // only its lower half was pinned (the `apiKey: ''` arm above). Deleting
+    // `|| encoded.length > maxBytes` left all 22,425 tests green, so the upper
+    // bounds on the two context fields that reach the GCM AAD unchecked were
+    // enforced by nothing.
+    //
+    // nodeId is deliberately NOT pinned here: it is bounded at 64 bytes but must
+    // also be a UUID, so an over-long nodeId is refused either way and such an
+    // arm would pass whether or not the bound exists.
+    const key = makeKey();
+    const atApiKeyLimit = 'k'.repeat(1024);
+    const atWsUrlLimit = `wss://${'u'.repeat(16384 - 6)}`;
+
+    // At the limit the value is legal, and round-tripping proves acceptance is
+    // real rather than an error thrown somewhere later.
+    for (const context of [
+      { ...CONTEXT, apiKey: atApiKeyLimit },
+      { ...CONTEXT, wsUrl: atWsUrlLimit },
+    ]) {
+      expect(decryptLivekitSecret(encryptLivekitSecret('lk_s', key, context), key, context)).toBe(
+        'lk_s',
+      );
+    }
+
+    // One byte past it is refused, and the message names the bound that refused.
+    expect(() =>
+      encryptLivekitSecret('lk_s', key, { ...CONTEXT, apiKey: `${atApiKeyLimit}x` }),
+    ).toThrow(/apiKey must encode to 1\.\.1024 bytes/);
+    expect(() =>
+      encryptLivekitSecret('lk_s', key, { ...CONTEXT, wsUrl: `${atWsUrlLimit}x` }),
+    ).toThrow(/wsUrl must encode to 1\.\.16384 bytes/);
+
+    // The bound counts BYTES, not characters — a multi-byte string at the
+    // character limit is over the byte limit, and only an encoded-length check
+    // can tell those apart.
+    expect(() =>
+      encryptLivekitSecret('lk_s', key, { ...CONTEXT, apiKey: 'é'.repeat(513) }),
+    ).toThrow(/apiKey must encode to 1\.\.1024 bytes/);
+  });
+
   it('rejects noncanonical base64 and truncated payloads before decryption', () => {
     const key = makeKey();
     const envelope = encryptLivekitSecret('lk_test_xy', key, CONTEXT);
