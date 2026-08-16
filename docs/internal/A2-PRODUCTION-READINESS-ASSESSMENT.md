@@ -4329,3 +4329,45 @@ about the shape of one call site.
 So the sweep now stands at seven locks proven, by whichever of the two techniques
 the site actually admits — and the choice between them is a property of the
 unguarded path's own locking and its window, not a preference.
+
+## 6z — a guard written, measured, and deleted
+
+An audit of advisory-lock usage found all 12 sites transaction-scoped, so none can
+leak a lock past its transaction the way a session-scoped `pg_advisory_lock` would.
+Reading the keys turned up what looked like a gap: `profile-session` is built by a
+shared helper used from two files, while `mfa-credentials:` is a hand-written
+literal repeated at four sites in `mfa-repo.ts`. Advisory locks have no namespace
+beyond the number handed to them, so two sites serialise if and only if their key
+text matches — a one-character drift at one site silently stops it serialising
+against the other three while still taking a perfectly valid lock of its own.
+
+A drift guard was written for that, and it worked: mutating site 2 of 4 to
+`mfa-credential:` reds it. Then the claim in its own header — "nothing else catches
+it" — was checked instead of asserted, by running all 38 MFA test files with the
+mutation still applied. One redded:
+
+    tests/unit/db-mfa-repo-v353b-cross-source-invariant.test.ts:77
+      expect(p.match(/pg_advisory_xact_lock/g)).toHaveLength(4);
+      expect(p.match(/mfa-credentials:/g)).toHaveLength(4);
+
+That is the same property, pinned from both directions — the site count and the key
+count — and it catches every drift the new guard caught. The new file was deleted.
+
+**Two separate errors, worth separating.** The first is prior art: the standing rule
+is to grep for it before building, and it was followed for `src/` and not for
+`tests/`. Nothing named "advisory" would have surfaced that file either;
+`v353b-cross-source-invariant` describes its provenance rather than its subject.
+The general form is that the way to find whether a textual property is already
+pinned is to grep for the LITERAL being pinned — `mfa-credentials:` — across the
+whole repo, not for the concept's name in one directory.
+
+The second is internal: the guard's header stated it "deliberately does not pin
+WHICH string they agree on", while its assertion was
+`toEqual(['mfa-credentials'])`, which pins exactly that. The prose described a
+better test than the code implemented. That one had nothing to do with prior art
+and would have shipped a guard whose stated contract and real contract differed.
+
+The useful outcome is not the guard. It is that the property was already covered,
+and that the check which established it — run the existing suite against the
+mutation before claiming novelty — costs one command and is now the routine step
+between "I have a mutation that reds" and "this guard is worth committing".
