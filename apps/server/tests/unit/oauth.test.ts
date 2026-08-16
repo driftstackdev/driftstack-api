@@ -644,6 +644,37 @@ describe('V-667 OAuthService — exchangeCode rejection paths', () => {
     ).rejects.toMatchObject({ code: 'invalid_grant' });
   });
 
+  // The TOP rung of exchangeCode's invalid_grant ladder, and the only one that had
+  // never executed. Coverage, per rung:
+  //
+  //   code === null            evaluated 36 → fired 0   ← this arm
+  //   already exchanged        evaluated 36 → fired 1
+  //   different client         evaluated 35 → fired 1
+  //   redirect_uri mismatch    evaluated 34 → fired 1
+  //   PKCE failed              evaluated 33 → fired 1
+  //
+  // The ladder was tested systematically and the first step was missed. All four
+  // causes ARE pinned in `oauth-v667-service-cross-source-invariant`, but that pin
+  // asserts the four `throw` statements exist in the SOURCE TEXT — it cannot tell
+  // whether any of them is reachable.
+  //
+  // Delete the check and `code` is null at the next line, so `code.consumed_at`
+  // throws a TypeError: the token endpoint answers 500 where RFC 6749 requires
+  // `invalid_grant`, and an unknown code becomes distinguishable from every other
+  // rejection by its status alone.
+  it('rejects a code that was never issued (the top rung of the invalid_grant ladder)', async () => {
+    const { svc, reg, verifier } = await setup();
+    await expect(
+      svc.exchangeCode({
+        code: 'ds_oauth_code_that_was_never_issued',
+        code_verifier: verifier,
+        client_id: reg.client_id,
+        client_secret: reg.client_secret,
+        redirect_uri: 'https://app.example/cb',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_grant' });
+  });
+
   it('rejects already-exchanged code (one-shot)', async () => {
     const { svc, reg, code, verifier } = await setup();
     await svc.exchangeCode({

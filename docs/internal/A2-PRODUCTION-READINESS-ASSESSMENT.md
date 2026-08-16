@@ -5921,3 +5921,59 @@ deletions and cannot see disablement. The guard's own text survived, and only a
 behavioural arm noticed the behaviour was gone. Where a security property matters, the
 text pin is the tripwire and the behavioural arm is the proof — and this fire produced
 a case where the tripwire was silent by construction.
+
+## 7w — correcting 7v, and the top rung of the invalid_grant ladder
+
+### The correction first, because I published the over-claim
+
+7v concluded, from one mutation, that "a regex over source text sees deletions and
+cannot see disablement". That is **too strong, and the same technique disproved it one
+fire later.**
+
+Mutating `exchangeCode`'s top rung the same way —
+`if (false && code === null) throw new OAuthError(…)` — **did** red a content-parity
+file (`services-oauth-content-parity`), because inserting `false && ` changes the text
+the pin matches. A pin over the exact line catches that fine.
+
+The reason 7v saw silence is narrower and duller: **no parity file pins that line.**
+Checked directly — `grep -rn "not_before"` across every content-parity and
+cross-source-invariant test returns nothing. The freshness gate in `oauth-store.ts` is
+simply unpinned.
+
+So the accurate statement is:
+
+- a text pin catches **any change to the text it pins**, including a `false &&`
+  insertion;
+- it cannot catch a semantic change that leaves the pinned text **intact** — the
+  guard becoming unreachable because an earlier branch short-circuits, a caller
+  ceasing to call it, or a flag elsewhere flipping;
+- and it says nothing at all about a line no pin covers.
+
+7v's demonstration showed the third case and I wrote it up as the second. The
+practical advice survives — prefer a text-preserving mutation when measuring
+behavioural coverage — but the reason is that it isolates _which_ signal fired, not
+that pins are structurally blind.
+
+### The find: the only uncovered rung in a fully-covered ladder
+
+`OAuthService.exchangeCode` rejects with `invalid_grant` for five distinct causes.
+Per-rung coverage:
+
+    code === null            evaluated 36 → fired 0   ✗
+    already exchanged        evaluated 36 → fired 1   ✓
+    different client         evaluated 35 → fired 1   ✓
+    redirect_uri mismatch    evaluated 34 → fired 1   ✓
+    PKCE failed              evaluated 33 → fired 1   ✓
+
+The ladder was tested systematically and the first step was missed. All five causes
+ARE pinned by `oauth-v667-service-cross-source-invariant` — but that pin asserts the
+`throw` statements exist in the source, which cannot tell whether any is reachable.
+
+Delete the check and `code` is null at the next line, so `code.consumed_at` throws a
+TypeError: the token endpoint answers **500 where RFC 6749 requires `invalid_grant`**,
+and an unknown code becomes distinguishable from every other rejection by status
+alone. Measured exactly that:
+
+    guard present → invalid_grant
+    guard removed → "expected TypeError: Cannot read properties of null… to match
+                     object { code: 'invalid_grant' }"
