@@ -4475,3 +4475,50 @@ that raises the same thing — and it is the cause that most resembles coverage.
 methods, the same guard, the same test name, and one of them proves nothing. The
 distinguishing move is the one used here: reach the SECOND check by satisfying the
 first, which meant a fake whose row exists at read time and is gone by write time.
+
+## 7c — item 20 is closed, and this document was the stale source
+
+Item 20 lists six parameterised routes that "may return an undocumented 404 —
+unverified", and its recommendation says a roster guard is "deliberately NOT added
+yet: with six routes undecided it would either fail the suite or encode 'unknown'
+as 'fine'". Both statements are out of date. The work was done:
+
+`apps/server/tests/unit/parameterised-routes-document-404.test.ts` exists, carries
+an exemption entry with a written reason for **five of the six**, and has a second
+arm asserting the exemption list is not stale. The sixth documents its 404 in the
+spec. The suite has been green on it all along.
+
+I verified the six independently before finding that file, which makes the result
+worth keeping as corroboration — the reasons I derived match the committed
+exemptions one for one:
+
+| route                                             | independent finding                         | committed exemption |
+| ------------------------------------------------- | ------------------------------------------- | ------------------- |
+| `POST …/validation-schedules/{archetype}/trigger` | accepts any archetype, never looks one up   | same                |
+| `POST …/oauth/clients/{id}/rotate-secret`         | `invalid_client` → `UnauthorizedError` 401  | same                |
+| `PUT …/owner/secrets/{name}`                      | upsert, zero `NotFoundError` in the handler | same                |
+| `PATCH …/owner/pricing/{tier}`                    | enum-validated param → 400                  | same                |
+| `DELETE …/oauth/clients/{id}`                     | **I first got this wrong** — see below      | idempotent delete   |
+
+⛔ **The one I got wrong is the instructive part.** I read a 55-line window from the
+first registration and attributed a `NotFoundError` to the DELETE. It belongs to the
+**GET** at the same path — two registrations, one window. I had avoided that exact
+trap for `/v1/sessions/{id}/proxy` minutes earlier, where the 404 likewise belongs
+to the sibling GET. What caught it was the spec's own comment saying "deliberately
+no 404 … the 404 documented here until now was unreachable" — a contradiction I
+checked instead of overriding. Had I trusted my reading, I would have added a 404 to
+the spec and told every generated SDK to model a branch the server cannot produce,
+which is the precise harm that comment was written to prevent.
+
+⭐ **Bound a route-handler window at the next `app.<method>(`, never by line count.**
+A path that appears twice is normal — GET and DELETE, live and feature-disabled stub
+— and a fixed-size window silently merges them.
+
+⭐⭐ **The larger lesson is about this document.** I picked this task by grepping THIS
+file for open items, and its "open" was a snapshot of when the line was written, not
+a fact about HEAD. The same rule already applied to readiness docs and ADRs applies
+to the assessment itself: **an item is a hypothesis about the codebase until the
+codebase is asked.** One `ls` of the test directory for the guard's own name would
+have closed it in seconds — which is exactly the check that turned out to matter.
+
+Item 20 and its recommendation are hereby marked closed. Nothing to ship.
