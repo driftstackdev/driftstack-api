@@ -145,6 +145,80 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       );
     });
 
+    // The freshness gate on the same method. `consumeAuthorizationForCode` compares
+    // the stored `created_at` against the caller's `not_before` and, when the grant
+    // is older, DELETES it and answers 'expired' — so a stale consent cannot be
+    // retried either.
+    //
+    // Coverage put that `return 'expired'` at ZERO against a condition evaluated
+    // once: no test had presented an authorization older than the window. Delete the
+    // check and a stale grant mints a live authorization code, which is the whole
+    // point of having a freshness window on consent.
+    //
+    // The row is seeded with an explicit past `created_at` and `not_before` is set
+    // after it, so the ONLY reason to refuse is age: the client is bound to the same
+    // account that consumes it, so the binding check cannot be what answers.
+    it("CRITICAL an authorization older than the caller's freshness window is refused AND consumed, so a stale consent grant can neither mint a code nor be retried", async () => {
+      if (!admin) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG oauth-authorization-expiry test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const a = admin;
+      const owner = randomUUID();
+      const other = randomUUID();
+      const clientId = `oauth-stale-${randomUUID()}`;
+      const authorizationId = `authz-${randomUUID()}`;
+      seeded.push({ owner, other, clientId });
+
+      await a`
+        INSERT INTO accounts (id, email, status) VALUES
+          (${owner}, ${`oauth-stale-${owner}@test.local`}, 'active'),
+          (${other}, ${`oauth-stale2-${other}@test.local`}, 'active')`;
+      await a`
+        INSERT INTO oauth_clients (client_id, client_secret_hash, redirect_uris, label, account_id, created_at)
+        VALUES (${clientId}, ${sha256Hex(`secret-${clientId}`)}, ${a.array(['https://app.test.local/cb'])},
+                'stale consent probe', ${owner}, now())`;
+      // Granted an hour ago.
+      const grantedAt = new Date(Date.now() - 3_600_000);
+      await a`
+        INSERT INTO oauth_authorizations
+          (authorization_hash, client_id, redirect_uri, state, scopes, code_challenge, created_at)
+        VALUES (${sha256Hex(authorizationId)}, ${clientId}, 'https://app.test.local/cb', 'st',
+                ARRAY['read']::api_key_scope[], 'challenge', ${grantedAt.toISOString()}::timestamptz)`;
+
+      const store = new DrizzleOAuthStore({
+        client: a,
+        db: drizzle(a) as unknown as ReturnType<typeof drizzle<typeof schema>>,
+        close: async () => {},
+      });
+
+      const now = Date.now();
+      const verdict = await store.consumeAuthorizationForCode({
+        authorization_id: authorizationId,
+        code: `code-${randomUUID()}`,
+        // The OWNER — so the account-binding check cannot be the one refusing.
+        account_id: owner,
+        scope: ['read'],
+        created_at: now,
+        // Freshness window opens AFTER the grant was created.
+        not_before: now - 60_000,
+      });
+
+      expect(verdict, 'a grant older than the window must be refused').toBe('expired');
+
+      const codes = await a<Array<{ n: number }>>`
+        SELECT count(*)::int AS n FROM oauth_authorization_codes WHERE client_id = ${clientId}`;
+      expect(codes[0]?.n, 'a stale grant must not mint a code').toBe(0);
+
+      const left = await a<Array<{ n: number }>>`
+        SELECT count(*)::int AS n FROM oauth_authorizations WHERE client_id = ${clientId}`;
+      expect(left[0]?.n, 'and it is consumed, so it cannot be retried').toBe(0);
+    });
+
     it('the same client still works for the account it is bound to', async () => {
       if (!admin) {
         if (process.env.CI) {

@@ -5885,3 +5885,39 @@ the MFA sequential-vs-concurrent replay pair, and now the account-vs-key generat
 pair. In every case the covered sibling sits EARLIER in the function and short-
 circuits, so the later gate is unreachable by the obvious test. The tell is always the
 same: a condition and its consequent with different counts.
+
+## 7v — consent freshness, and a demonstration that a text pin cannot see a disabled guard
+
+Second find from the 5–49 band. `oauth-store.ts` `consumeAuthorizationForCode`
+compares the stored `created_at` against the caller's `not_before` and, when the grant
+is older, DELETES it and answers `'expired'` — so a stale consent can neither mint a
+code nor be retried. Coverage:
+
+    :152  if (authorization.createdAt.getTime() < args.not_before) {   evaluated 1
+    :156      return 'expired';                                        fired    0
+
+No test had ever presented an authorization older than the window, on the production
+store. Delete the check and a stale grant mints a live authorization code, which is
+what a freshness window on consent exists to prevent.
+
+The new arm seeds the grant an hour in the past and sets `not_before` after it, with
+the client bound to the SAME account that consumes it — so age is the only reason to
+refuse, and the binding check from 7e cannot be what answers. It asserts the verdict,
+that no code was minted, AND that the authorization is gone (the source deletes on the
+expired path, so a stale grant cannot be retried).
+
+    gate present → 'expired', 0 codes, 0 authorizations left
+    gate removed → "expected 'inserted' to be 'expired'" — the stale grant minted a code
+
+⭐ **The novelty run demonstrated the parity-pin blind spot outright, rather than by
+argument.** Every previous mutation this session tripped a content-parity file, and I
+have each time recorded that such a red is a deletion tripwire rather than evidence.
+This mutation was `if (false && authorization.createdAt.getTime() < args.not_before)`
+— semantically dead, textually intact. **No parity file redded.** 50 oauth test files
+and 522 tests stayed green while the freshness gate was disabled.
+
+That is the clearest possible statement of the limit: a regex over source text sees
+deletions and cannot see disablement. The guard's own text survived, and only a
+behavioural arm noticed the behaviour was gone. Where a security property matters, the
+text pin is the tripwire and the behavioural arm is the proof — and this fire produced
+a case where the tripwire was silent by construction.
