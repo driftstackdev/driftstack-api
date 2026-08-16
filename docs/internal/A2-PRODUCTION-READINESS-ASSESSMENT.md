@@ -4412,3 +4412,66 @@ read as a TOCTOU check because the two throws above it are TOCTOU checks with th
 same message. Reading what the repo method actually does — one grep for its name —
 moved it from "rare defensive branch" to "routine race with an audit-integrity
 consequence". Re-read the mechanism before scheduling the work, not just the note.
+
+## 7b — the sibling that had the test, and a comment that argued for its own deletion
+
+`resetDeliveryToPending` has three callers, not the two the earlier sweep implied:
+`replayDeliveryAsCustomer` (7a), `replayDelivery` (admin), and `requeueFromDlq`.
+All three guard a falsy return, and — correcting what this section first said —
+**all three are followed by an audit write**, not just the customer one. The
+customer's is inline in the service; the two admin ones come from the route's
+`withAudit`, which does `const updated = await perform()` and only then
+`audit.record(...)`. A guard that returned null instead of throwing would resolve
+`perform()` normally, so `withAudit` would write `webhook_delivery.replayed` for an
+operation that did not happen — the same false-log outcome as 7a, reached through
+the route rather than the service.
+
+That makes these three checks audit-integrity guards on every path, which is a
+larger claim than the one this section opened with. Worth stating plainly: the
+first version was written after reading the two admin service methods, seeing no
+`record` call in either, and concluding there was no audit. The audit was one
+layer up.
+
+`requeueFromDlq` was uncovered on the same shape, and the asymmetry is the tell:
+its sibling `discardFromDlq` HAS the arm — _"surfaces NotFound (not a silent
+delete) when the row leaves DLQ between check and delete"_ — written with a
+stale-snapshot fake that flips the live row while returning the copy the service
+already read. Requeue has the same read-then-act window and had no equivalent.
+The new arm reuses that idiom with a concurrent `discardFromDlq` hard-deleting the
+row; mutating the guard reds it with _"promise resolved null instead of rejecting"_
+while the file's other 13 tests stay green.
+
+⛔ **The comment above that guard was arguing for its own removal.** It read:
+
+    // updated is guaranteed non-null because we just found the row above —
+    // but the type narrows here, so guard explicitly for the noUncheckedIndexedAccess
+    // family of strict checks.
+
+Both halves are wrong in the same direction. Finding the row does not make the
+reset succeed: the reset is status-fenced on `!= 'in_flight'`, and `discardFromDlq`
+can hard-delete a DLQ row in exactly that window. So the check is not a formality
+demanded by strict-mode narrowing — it is a live race guard, and the comment
+invited a future reader to delete it as dead code with a clean conscience. It has
+been corrected to state the two ways `updated` really can be null, and to name the
+arm that now proves it.
+
+⭐ This is the same class as 6z's finding from the other side. There, prose in a
+test claimed a weaker contract than the code enforced; here, prose in the source
+claimed a stronger invariant than the code has. Both are cheap to catch and neither
+shows up in any run: **a comment asserting an invariant is a claim, and the test
+that would fail if it were false is the only thing that makes it one.** Where the
+invariant is real, say why; where it is a guard, say what it guards.
+
+⭐ **Why requeue was the uncovered one, precisely.** The admin `replayDelivery`
+guard IS covered, by the plainest possible arm — _"throws NotFound on unknown id"_.
+It calls `resetDeliveryToPending` directly, so an unknown id returns null and the
+guard fires. `requeueFromDlq` has TWO checks: `findDeliveryById` first, then the
+post-reset one. Its own _"throws NotFound on unknown id"_ arm is absorbed by the
+FIRST check, which throws the same `NotFoundError`, so the second never runs and
+the arm passes either way.
+
+That is cause 3 of the four reasons a site shows no red — layered behind a sibling
+that raises the same thing — and it is the cause that most resembles coverage. Two
+methods, the same guard, the same test name, and one of them proves nothing. The
+distinguishing move is the one used here: reach the SECOND check by satisfying the
+first, which meant a fake whose row exists at read time and is gone by write time.

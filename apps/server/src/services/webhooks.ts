@@ -935,9 +935,12 @@ export class WebhooksAdminService {
       );
     }
     const updated = await this.repo.resetDeliveryToPending(deliveryId, new Date());
-    // updated is guaranteed non-null because we just found the row above —
-    // but the type narrows here, so guard explicitly for the noUncheckedIndexedAccess
-    // family of strict checks.
+    // NOT guaranteed non-null, despite the row having been found above. The reset
+    // is status-fenced (`status != 'in_flight'`), and a DLQ row can be hard-deleted
+    // by `discardFromDlq` in the same window — either leaves `updated` null. So this
+    // is a live race guard rather than a type-narrowing formality, and deleting it
+    // would return null where the signature promises a row. Covered by the
+    // "discarded between the DLQ check and the reset" arm in webhooks-admin-service.
     if (!updated)
       throw new NotFoundError(`Webhook delivery "${deliveryId}" disappeared mid-requeue.`);
     return updated;

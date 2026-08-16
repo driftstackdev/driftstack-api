@@ -166,6 +166,31 @@ describe('WebhooksAdminService.requeueFromDlq', () => {
     const svc = new WebhooksAdminService(makeRepo().repo);
     await expect(svc.requeueFromDlq(ADMIN, 'nope')).rejects.toBeInstanceOf(NotFoundError);
   });
+
+  // The SYMMETRIC race for requeue. `discardFromDlq` has this arm (above);
+  // `requeueFromDlq` did not, though it has the same read-then-act shape and the
+  // same window. Here a concurrent `discardFromDlq` hard-deletes the row after the
+  // service has read status='dlq' but before the reset runs, so
+  // `resetDeliveryToPending` matches 0 rows and returns null.
+  //
+  // The source guards that with `throw new NotFoundError('… disappeared mid-requeue')`
+  // under a comment claiming `updated` is "guaranteed non-null because we just found
+  // the row above". It is not guaranteed — finding the row does not make the reset
+  // succeed — and this arm is the counterexample. Without the guard the method
+  // returns null where its signature promises a row.
+  it('surfaces NotFound when the row is discarded between the DLQ check and the reset', async () => {
+    const store = makeRepo([deliveryRow({ status: 'dlq' })]);
+    const svc = new WebhooksAdminService(store.repo);
+    const realFind = store.repo.findDeliveryById.bind(store.repo);
+    store.repo.findDeliveryById = (id: string) => {
+      const snapshot = realFind(id); // a COPY, so it survives the delete below
+      const at = store.rows.findIndex((r) => r.id === id);
+      if (at >= 0) store.rows.splice(at, 1); // concurrent discard wins the race
+      return snapshot; // service still sees the stale dlq snapshot
+    };
+    await expect(svc.requeueFromDlq(ADMIN, 'd-1')).rejects.toBeInstanceOf(NotFoundError);
+    expect(store.rows, 'the row stays gone — requeue must not resurrect it').toHaveLength(0);
+  });
 });
 
 describe('WebhooksAdminService.discardFromDlq', () => {
