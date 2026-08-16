@@ -112,6 +112,10 @@ scenario_7() {
   echo "── scenario 7: bad deploy (local rehearsal) ──"
   echo "  Verifies the test gate catches a deliberate-break."
   echo "  Pre-push hook runs the full 1300+ test suite; broken code is rejected at push time."
+  # Build the workspace packages first, exactly as the pre-push hook's `npm test`
+  # does via the root pretest. Without this the rehearsal would run against a
+  # stale artifact and could report a green for a break it never compiled.
+  npm run build:packages >/dev/null 2>&1 || { echo "✗ packages failed to build"; return 1; }
   npx vitest run --reporter=basic 2>&1 | tail -3
   echo "✓ scenario 7 local steps complete (revert + force-redeploy verified out-of-band)"
 }
