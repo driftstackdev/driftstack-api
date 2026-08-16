@@ -6,6 +6,7 @@
 // drift the two implementations apart.
 
 import { describe, expect, it } from 'vitest';
+import { ApiKeyScopeSchema } from '@driftstack/api-types';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import { requireScope as requireScopeFromHelpers, hasScope } from '../../src/lib/errors-helpers.js';
 import { requireScope as requireScopeFromAuth } from '../../src/services/auth.js';
@@ -217,4 +218,70 @@ describe('requireScope — both call sites evaluate the same predicate', () => {
       }
     });
   }
+});
+
+// ── Exhaustive agreement, so the matrix above never has to be complete ──
+//
+// The hand-written matrix is a correctness pin: it says what the predicate SHOULD
+// answer for the cases someone thought of. This block is a DRIFT pin: it says
+// nothing about what the answer should be, only that all three entry points give
+// the same one, for every pair the enum permits.
+//
+// It exists because the matrix missed a rule. V-174's granting half
+// (`admin` satisfies `account_owner`) had no row, so deleting that branch from
+// services/auth.ts left this file green at 53/53 while coverage showed the clone's
+// alias line at ZERO executions against the canonical's 18. A missing row is
+// invisible; a missing PAIR cannot be, because the pairs are generated.
+//
+// Scopes come from `ApiKeyScopeSchema.options` rather than a local list, so adding
+// a scope to the enum extends this automatically instead of silently leaving the
+// new one uncompared — the failure mode a hardcoded list would reintroduce.
+//
+// Granted sets are every subset of size 0, 1 and 2. Size 2 matters: several rules
+// read one scope while a second is present, and a singleton-only sweep cannot see
+// an implementation that consults the wrong element.
+describe('requireScope — the two implementations agree on every pair', () => {
+  const ALL = ApiKeyScopeSchema.options;
+
+  const grantedSets: ApiKeyScope[][] = [[]];
+  for (const a of ALL) {
+    grantedSets.push([a]);
+    for (const b of ALL) if (a < b) grantedSets.push([a, b]);
+  }
+
+  const throws = (fn: () => void): boolean => {
+    try {
+      fn();
+      return false;
+    } catch {
+      return true;
+    }
+  };
+
+  it(`CRITICAL all three entry points answer identically across ${String(grantedSets.length)} granted sets x ${String(ALL.length)} required scopes. requireScope is implemented twice — inline in services/auth.ts and via scopesSatisfy in lib/errors-helpers.ts — and the two are kept in step by hand; this compares them on every pair the enum permits, so a rule added to one and not the other cannot pass unnoticed the way the V-174 alias grant did.`, () => {
+    const disagreements: string[] = [];
+
+    for (const granted of grantedSets) {
+      const ctx = ctxWithScopes(granted);
+      for (const required of ALL) {
+        const authDenies = throws(() => {
+          requireScopeFromAuth(ctx, required);
+        });
+        const helpersDenies = throws(() => {
+          requireScopeFromHelpers(ctx, required);
+        });
+        const predicateDenies = !hasScope(ctx, required);
+        if (authDenies !== helpersDenies || authDenies !== predicateDenies) {
+          disagreements.push(
+            `granted=[${granted.join(',')}] required=${required} → ` +
+              `auth=${authDenies ? 'deny' : 'allow'} ` +
+              `helpers=${helpersDenies ? 'deny' : 'allow'} ` +
+              `hasScope=${predicateDenies ? 'deny' : 'allow'}`,
+          );
+        }
+      }
+    }
+
+    expect(disagreements, 'scope predicates disagree').toEqual([]);
+  });
 });

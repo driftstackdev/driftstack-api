@@ -4857,3 +4857,40 @@ This file names both implementations in its header, imports both, loops over bot
 and still missed a rule, because the omission was a missing row rather than a missing
 mechanism. Reading the header would have satisfied any reviewer. The coverage counter
 on the line was what disagreed.
+
+### 7f (cont.) — replacing the missing row with a generated product
+
+Adding the missing row fixes the instance. It does not fix the mechanism: the next
+rule someone adds to one implementation and not the other is another absent row, and
+absent rows are invisible by construction — nobody reviews a test for the cases it
+does not contain.
+
+So the matrix now sits alongside a generated one. The two do different jobs and both
+are worth having:
+
+- the hand-written matrix is a **correctness** pin — it says what the predicate
+  SHOULD answer for cases someone reasoned about;
+- the generated block is a **drift** pin — it asserts nothing about the right answer,
+  only that `requireScope` (auth.ts), `requireScope` (errors-helpers) and `hasScope`
+  return the same one, for every pair the enum permits.
+
+Scopes come from `ApiKeyScopeSchema.options`, not a local list, so a new scope
+extends the comparison automatically rather than silently going uncompared — which
+is the exact failure a hardcoded list would reintroduce. Granted sets are every
+subset of size 0, 1 and 2 (191 sets × 19 required = 3,629 comparisons, all pure
+calls). Size 2 earns its place: several rules read one scope while another is
+present, and a singleton-only sweep cannot catch an implementation consulting the
+wrong element.
+
+Proven against a divergence the matrix structurally cannot see — an extra allowance
+for `gui_control → read:audit`, a pair no row covers, injected into the canonical
+only:
+
+    16 disagreements, each naming its pair, e.g.
+      granted=[gui_control] required=read:audit → auth=deny helpers=allow hasScope=allow
+    every matrix row still green
+
+⭐ The failure output is the design point. A boolean "predicates disagree" would send
+the next person back to bisecting; collecting the disagreements and asserting the
+LIST is empty means the failure message already contains the granted set, the
+required scope, and which of the three dissented.
