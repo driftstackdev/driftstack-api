@@ -183,6 +183,89 @@ describe.skipIf(!process.env.CI && !process.env.REDIS_URL)(
       expect(results.filter((r) => !r.allowed)).toHaveLength(40);
     });
 
+    // ── sliding window ────────────────────────────────────────────────────
+    // The same file's OTHER Lua script, used by middleware/ip-rate-limit.ts —
+    // the anti-abuse layer in front of unauthenticated endpoints. Turning it off
+    // (`if count >= limit` → `if false`) redded only the two content-parity pins,
+    // exactly as the token bucket did before these arms existed.
+
+    it('CRITICAL counts within the window and refuses at the limit', async () => {
+      if (!reachable) return;
+      const k = key();
+      const s = store();
+      const first = await s.consumeSlidingWindow({ key: k, limit: 3, windowMs: 1_000, now: 5_000 });
+      expect(first.allowed).toBe(true);
+      expect(first.remaining, 'limit - count - 1').toBe(2);
+
+      await s.consumeSlidingWindow({ key: k, limit: 3, windowMs: 1_000, now: 5_000 });
+      await s.consumeSlidingWindow({ key: k, limit: 3, windowMs: 1_000, now: 5_000 });
+
+      const refused = await s.consumeSlidingWindow({
+        key: k,
+        limit: 3,
+        windowMs: 1_000,
+        now: 5_000,
+      });
+      expect(refused.allowed, 'the 4th call in the window is refused').toBe(false);
+      expect(refused.retryAfterMs, 'and says when a slot frees').toBeGreaterThan(0);
+      expect(refused.resetAtMs, 'and when the window is fully clear').toBeGreaterThan(5_000);
+    });
+
+    it('CRITICAL two calls in the SAME millisecond both count', async () => {
+      if (!reachable) return;
+      // The ZSET member is a fresh uuid per call, not the timestamp. If it were
+      // the timestamp, ZADD would OVERWRITE on a same-millisecond retry, the
+      // count would stay at one, and a burst arriving inside a single
+      // millisecond — exactly the shape of an abusive client — would be counted
+      // once. The limiter would leak precisely when it matters most.
+      const k = key();
+      const s = store();
+      const a = await s.consumeSlidingWindow({ key: k, limit: 2, windowMs: 1_000, now: 7_000 });
+      const b = await s.consumeSlidingWindow({ key: k, limit: 2, windowMs: 1_000, now: 7_000 });
+      expect([a.allowed, b.allowed]).toEqual([true, true]);
+      expect([a.remaining, b.remaining], 'both consumed a distinct slot').toEqual([1, 0]);
+
+      const third = await s.consumeSlidingWindow({ key: k, limit: 2, windowMs: 1_000, now: 7_000 });
+      expect(third.allowed, 'the same-ms burst is fully counted').toBe(false);
+    });
+
+    it('CRITICAL prunes entries older than the window, so the limit is per-window not forever', async () => {
+      if (!reachable) return;
+      const k = key();
+      const s = store();
+      for (let i = 0; i < 2; i += 1) {
+        await s.consumeSlidingWindow({ key: k, limit: 2, windowMs: 1_000, now: 20_000 });
+      }
+      expect(
+        (await s.consumeSlidingWindow({ key: k, limit: 2, windowMs: 1_000, now: 20_500 }))?.allowed,
+        'still inside the window',
+      ).toBe(false);
+      expect(
+        (await s.consumeSlidingWindow({ key: k, limit: 2, windowMs: 1_000, now: 21_001 }))?.allowed,
+        'the window has moved past both entries',
+      ).toBe(true);
+    });
+
+    it('CRITICAL retry-after is measured from the OLDEST retained entry', async () => {
+      if (!reachable) return;
+      // The oldest entry is the one whose expiry frees the next slot. Deriving
+      // it from the newest would tell a caller to wait longer than necessary,
+      // and on a busy key it would never converge.
+      const k = key();
+      const s = store();
+      await s.consumeSlidingWindow({ key: k, limit: 2, windowMs: 1_000, now: 30_000 });
+      await s.consumeSlidingWindow({ key: k, limit: 2, windowMs: 1_000, now: 30_400 });
+      const refused = await s.consumeSlidingWindow({
+        key: k,
+        limit: 2,
+        windowMs: 1_000,
+        now: 30_500,
+      });
+      expect(refused.allowed).toBe(false);
+      // oldest 30_000 + 1_000 - 30_500 = 500. From the newest it would be 900.
+      expect(refused.retryAfterMs, 'oldest-derived, not newest-derived').toBe(500);
+    });
+
     it('CRITICAL fails SAFE on a partial hash rather than erroring every request', async () => {
       if (!reachable || !redis) return;
       // The script guards `last_ms` as well as `tokens`. A hash holding only one

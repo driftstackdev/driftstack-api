@@ -6996,3 +6996,27 @@ worth keeping. Both original refill assertions land where the capacity CAP
 absorbs the excess, so a 10× rate was invisible. **Rate is only observable BELOW
 the cap**: drain the bucket, then ask again after too little time has elapsed —
 0.2 tokens cannot pay for 1, and the refusal must say 400ms.
+
+### 47. The sliding-window limiter had the same gap as the token bucket
+
+Item 46 brought the token bucket into the gate. The same file holds a SECOND Lua
+script — `SLIDING_WINDOW_LUA`, used by `middleware/ip-rate-limit.ts`, the
+anti-abuse layer in front of unauthenticated endpoints — and it was left with the
+identical gap. Measured the same way: turning it off (`if count >= limit` →
+`if false`) redded **two** tests in the gate, both content-parity pins.
+
+Four arms added, five mutations, all red: limiter off (4) · `>=`→`>` allowing
+limit+1 (4) · pruning removed (1) · ZSET member switched from a uuid to the
+timestamp (3) · retry-after derived from the newest entry instead of the oldest (1).
+
+⭐ **The same-millisecond arm is the one worth keeping.** The ZSET member is a
+fresh uuid per call rather than the timestamp. If it were the timestamp, `ZADD`
+would OVERWRITE on a same-millisecond retry, the count would stay at one, and a
+burst arriving inside a single millisecond — exactly the shape of an abusive
+client — would be counted once. **The limiter would leak precisely when it
+matters most**, and nothing outside a source-text pin said otherwise.
+
+⭐ **Retry-after is measured from the OLDEST retained entry**, because that is the
+one whose expiry frees the next slot. From the newest it would overstate the wait
+and, on a busy key, never converge. Pinned with exact arithmetic (500ms, where
+newest-derived would be 900ms) rather than a `toBeGreaterThan`.
