@@ -5977,3 +5977,85 @@ alone. Measured exactly that:
     guard present → invalid_grant
     guard removed → "expected TypeError: Cannot read properties of null… to match
                      object { code: 'invalid_grant' }"
+
+## 7x — the mutation operator was a no-op, and a rate limit that had never refused
+
+### The instrument first, because it nearly cost a retraction
+
+Guards are disabled here with the text-preserving edit `if (COND)` → `if (false && COND)`, chosen so
+the surrounding source text (and therefore every content-parity pin over it) stays intact.
+
+**That edit is wrong whenever `COND` contains `||`.** `&&` binds tighter than `||`, so
+
+```
+if (false && !isRecord(webSession) || typeof webSession.id !== 'string')
+```
+
+parses as `(false && A) || B`. Clause `B` is still live, the guard still refuses, the arm still passes,
+and the run reports a confident **"0 arms red"** — which is indistinguishable from a real finding.
+
+It produced two false zeros in one fire. The conclusion already drafted from them — that two
+validation rungs were structurally redundant defence in depth — was wrong. Wrapping the condition
+(`if (false && (COND))`) made one of the two red its arm immediately. The arm had been correct all
+along; the instrument was broken.
+
+This is a **fourth cause of a zero-red**, and it belongs ahead of the other three (uncovered /
+structurally unreachable / layered behind a sibling): it is the only one that is a defect in the
+measurement rather than a fact about the code. Rule it out first. The general defence is a positive
+control — confirm the mutated build changes _some_ observable behaviour before believing it changed
+nothing.
+
+### `isCurrentCachedEntry` — five rungs that had never refused
+
+Eight structural rungs validate a cached auth envelope before any version read; only three had ever
+rejected anything. Five arms were added, each asserting the read resolves null **and** that no version
+`mget` was issued, so each proves the schema gate refused rather than a later check reaching the same
+result.
+
+Four of the five isolate their rung under mutation. The fifth does not, and the reason is a property
+of the ladder rather than of the test: every input that fails _"account is not a record"_ also fails
+the next rung, _"account id is not a string"_, because a non-record yields an `undefined` id. No
+JSON-representable envelope can fail the first without failing the second. That line is
+unreachable-by-refusal defence in depth; its arm is retained for the behaviour it does assert, and is
+recorded as **not** evidence for that line.
+
+The webSession arm carries an explicit `mfaSatisfiedAt: null` for the same reason — without it the
+following rung rejects the `undefined`, and the arm would pass with its own rung disabled.
+
+### The internal atlas-priority per-token rate limit had never refused
+
+`/v1/internal/atlas-priority/*` applies a per-token rate limit as defence in depth: even behind a
+valid bearer gate, a leaked token could otherwise drive unbounded calls. **No test referenced it at
+all** — not the bucket key, not the capacity constant, not the 429. The refusal branch ran on every
+internal request and had never once fired, so a regression that stopped enforcing (wrong capacity,
+cost 0, result discarded) would have been invisible.
+
+Capacity is 1000, so exhausting the bucket by volume is impractical; the arms inject the store, which
+also makes two further properties observable. Six arms, each mutation-proved against the property it
+names:
+
+| mutation                       | arms red |
+| ------------------------------ | -------- |
+| refusal branch disabled        | 3        |
+| bucket key = plaintext token   | 1        |
+| Retry-After rounds down        | 1        |
+| Retry-After floor of 1 removed | 1        |
+| auth moved after the limit     | 1        |
+
+The refusal arms assert the repo is never touched, which separates "the limit refused" from "something
+later refused anyway"; a positive control asserts an allowed request does reach the handler, without
+which every refusal arm would still pass if the route refused unconditionally. One arm pins a claim
+the source comment makes but nothing enforced: the bucket key is a SHA-256 prefix and never the
+plaintext token — a bucket key is logged and Prometheus-labelled freely, so a plaintext leak there
+spreads the credential everywhere the key travels.
+
+### Examined and deliberately not covered
+
+- **The empty-token early `return` in the same preHandler is unreachable.** Any header satisfying
+  `validate()` carries a token whose length equals the configured token's, and the constructor maps an
+  empty configured token to `null`, which disables auth outright. Worth recording that this `return`
+  _skips the rate limit_ rather than rejecting — were it reachable it would be a bypass. It is not.
+- **`admin-owner.ts:201`** (`if (!ctx) throw`) is crash-category: delete the guard and the next `ctx.`
+  access throws anyway. It improves a message; it does not change an outcome.
+- **The IP rate limiter's degradation path** (primary → bounded in-process fallback → fail closed) is
+  already covered by three dedicated files. Grepped before investigating; no re-derivation.
