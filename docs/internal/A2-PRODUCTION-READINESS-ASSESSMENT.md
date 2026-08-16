@@ -6938,3 +6938,31 @@ shrunken list. The scan has to be compared against the filesystem.
 Proved four ways: an injected prefix-anchored assertion in `tests/unit` is caught
 with the new roots and green under the old ones; narrowing the list fails naming
 the dropped directory; and a declared root holding nothing fails.
+
+### 45. The keyset-cursor guard's scope was CORRECT — and is now held that way
+
+Applied the directory-scope question to the last two narrow guards. The
+keyset-cursor invariant scans `['db', 'services']`, and `keyset`/`cursor` code
+also appears in `lib` and `routes` — which looks like the same gap as items 43
+and 44. **It is not.**
+
+The guard's property is about a Drizzle query — `eq(<table>.id, <var>.cursor)`
+against a uuid column. Measured across all of `src`: every such query lives in
+`db/` or `services/`. The two hits outside are **comments** in
+`routes/account-audit.ts` and `routes/admin-audit-log.ts` that describe the
+lookup in prose, and `lib/keyset-cursor.ts` is the guard helper itself. Scope
+correct; no finding.
+
+Worth holding that way, because the guard's own header records how the roots
+became two: a SERVICE — `durable-webhook-delivery` — sat outside `src/db` doing
+exactly this, unguarded, and was found by hand. Added an arm that makes the next
+one fail instead: no raw-id cursor lookup may exist outside the scanned roots.
+Proved by adding one in `routes/`, which now names `routes/status.ts`.
+
+⚠️ **A rationale I wrote, tested, and had to correct.** I excluded comment lines
+and wrote that this was load-bearing, because those two route files describe the
+lookup in prose. Removing the exclusion leaves the arm **green** —
+`CURSOR_ID_LOOKUP` requires `<var>.cursor` and the prose says bare `cursor`. The
+filter stays as a cheap net against prose that happens to match, but the comment
+now says that instead of claiming a role it does not have. A false rationale in a
+guard is worse than none: the next reader trusts it.

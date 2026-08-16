@@ -55,6 +55,45 @@ describe('keyset-cursor UUID-guard coverage invariant', () => {
     expect(withCursorLookup.length).toBeGreaterThanOrEqual(8);
   });
 
+  it('CRITICAL no raw-id cursor lookup exists OUTSIDE the scanned roots', () => {
+    // SCAN_DIRS is two directories, and the header records why it is two: a
+    // service — durable-webhook-delivery — sat outside `src/db` doing exactly
+    // this, unguarded. That was found by hand. This makes the next one fail
+    // instead: the property is "a uuid column must not receive an unvalidated
+    // cursor", which has nothing to do with which directory the query is in.
+    //
+    // Comment lines are excluded DEFENSIVELY, not because anything needs it
+    // today — measured, because I first wrote the opposite. Two route files
+    // describe the lookup in prose (`keyset-looked-up via eq(adminAuditLog.id,
+    // cursor)`), and I assumed those would trip a comment-blind scan. They do
+    // not: CURSOR_ID_LOOKUP requires `<var>.cursor` and the prose says bare
+    // `cursor`. Removing this filter leaves the arm green. It stays because
+    // prose that happens to match is a false failure waiting to happen, but it
+    // is a cheap net rather than a load-bearing rule.
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walk(resolve(dir, e.name))
+          : e.name.endsWith('.ts')
+            ? [resolve(dir, e.name)]
+            : [],
+      );
+    const outside = walk(SRC)
+      .filter((f) => !SCAN_DIRS.some((d) => f.startsWith(`${d}/`)))
+      .filter((f) =>
+        readFileSync(f, 'utf8')
+          .split('\n')
+          .some((line) => !line.trim().startsWith('//') && CURSOR_ID_LOOKUP.test(line)),
+      )
+      .map((f) => f.slice(SRC.length + 1));
+
+    expect(
+      outside.sort(),
+      'raw-id cursor lookup outside src/db and src/services — either guard it and ' +
+        'move it under a scanned root, or add that root to SCAN_DIRS',
+    ).toEqual([]);
+  });
+
   it('every TEXT_PK_EXEMPT entry still exists + still does a raw-id cursor lookup (no rot)', () => {
     for (const f of TEXT_PK_EXEMPT) {
       expect(
