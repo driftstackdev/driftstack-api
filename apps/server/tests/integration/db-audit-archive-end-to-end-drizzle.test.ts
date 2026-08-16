@@ -199,10 +199,17 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(uploaded, 'the secret path and query must NEVER reach the archive').not.toContain(
         'super-secret-value',
       );
-      expect(uploaded).not.toContain('/reset-password');
-      expect(uploaded, 'the origin is what survives redaction').toContain(
-        'https://bank.example.test',
-      );
+      // Asserting the ABSENCE of the path alone would anchor on a PREFIX of the
+      // secret, which the secrecy-assertion invariant rightly refuses: a prefix is
+      // routinely public, so its absence is a weaker claim than it looks. The
+      // stronger statement is positive — the projected field equals the bare
+      // origin, so no part of the path survived, token or not.
+      const archived = uploaded
+        .split('\n')
+        .filter((line) => line.length > 0)
+        .map((line) => JSON.parse(line) as { payload?: { requested_origin?: string } });
+      expect(archived).toHaveLength(1);
+      expect(archived[0]?.payload?.requested_origin).toBe('https://bank.example.test');
     });
   },
 );
