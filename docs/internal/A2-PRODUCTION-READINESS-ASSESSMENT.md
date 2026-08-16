@@ -6691,6 +6691,33 @@ structural guard on raw-`sql` interpolation shape — a red about the mutation's
 form, not the behaviour. Re-run comparing against `new Date(0)` instead, it was a
 clean zero. A red has to be attributed before it counts, in either direction.
 
+### 39. The route-authority invariant's surface is a DIRECTORY, not the app
+
+`route-auth-coverage-invariant` is thorough — it walks `src/routes/*.ts` with the
+TypeScript AST, pins 286 routes, and classifies each as structurally authorized
+or explicitly exempt. Its header says "discover the full surface first".
+
+Measured against Fastify's own route table: **9 registered routes have no literal
+path anywhere in `src/routes/`**, so they are not in that invariant's universe at
+all. Eight are the health/readiness probes and the Scalar doc viewer, public by
+design. The ninth is **`/v1/whoami`**, registered in `lib/app.ts`.
+
+**Nothing is wrong today.** `/v1/whoami` carries
+`preHandler: [app.requireAuth, app.rateLimit('global')]`, and removing that
+`requireAuth` reds 27 tests — it is heavily covered behaviourally. The gap is
+structural: the guard that exists to stop a route shipping without caller
+authority cannot see routes registered outside one directory, so the next one
+added there inherits no such coverage by accident.
+
+Pinned at its current size. A route registered outside `src/routes/` now fails
+with an instruction to move it or exempt it with a reason, and the exemption list
+carries a **size pin** — the idiom the auth invariant already uses — so widening
+it is a deliberate edit rather than a quiet way to switch the assertion off.
+
+Proved: a route added to `lib/app.ts` is named in the failure, and adding an
+exemption reds the size pin. The control that made the size pin necessary is
+recorded too — before it, a filter that exempted everything left the suite green.
+
 ### 38. Every registered route is now driven over HTTP, and the instrument that proves it
 
 Every finding this week lived at a layer — a repo method, a service, a handler.

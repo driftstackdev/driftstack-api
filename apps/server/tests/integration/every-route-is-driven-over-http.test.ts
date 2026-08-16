@@ -23,7 +23,7 @@
 // here. This asserts the default surface is fully driven, not that every
 // optional route is.
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { buildTestApp } from './_helpers/build-test-app.js';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -92,19 +92,46 @@ function readCorpus(): string {
   return chunks.join('\n');
 }
 
-describe('every registered route is driven over HTTP by some test', () => {
-  it('CRITICAL no route ships without an end-to-end caller', async () => {
+/**
+ * Routes registered OUTSIDE `src/routes/` — health/readiness probes, the Scalar
+ * doc viewer, and `/v1/whoami`. Each is reviewed: the eight operational and
+ * doc-viewer paths are public by design, and `/v1/whoami` carries
+ * `preHandler: [app.requireAuth, …]` in `lib/app.ts`.
+ *
+ * The list exists because `route-auth-coverage-invariant` discovers routes by
+ * reading `src/routes/*.ts`. Its surface is a DIRECTORY, not the app — so a
+ * route registered anywhere else is outside the guard that exists to stop a
+ * route shipping without caller authority. Nothing is wrong today; this pins the
+ * blind spot at its current size so it cannot grow silently.
+ */
+const AUTHORITY_DISCOVERY_EXEMPTIONS = new Set([
+  '/docs/',
+  '/docs/js/scalar.js',
+  '/docs/openapi.json',
+  '/docs/openapi.yaml',
+  '/health',
+  '/healthz',
+  '/ready',
+  '/version',
+  '/v1/whoami',
+]);
+
+describe('the registered route surface', () => {
+  let routes: Array<{ method: string; path: string }> = [];
+
+  beforeAll(async () => {
     const fixture = (await buildTestApp()) as unknown as {
       app: { printRoutes: (o?: unknown) => string };
       close?: () => Promise<void>;
     };
-    let routes: Array<{ method: string; path: string }>;
     try {
       routes = parseRouteTree(fixture.app.printRoutes({ commonPrefix: false }));
     } finally {
       await fixture.close?.();
     }
+  });
 
+  it('CRITICAL no route ships without an end-to-end caller', () => {
     // The parser is the fragile part, so it fails LOUDLY rather than reporting a
     // comfortable zero. If Fastify changes its tree art these assertions break
     // first and say so, instead of the sweep below passing over an empty set.
@@ -129,6 +156,45 @@ describe('every registered route is driven over HTTP by some test', () => {
     expect(
       undriven,
       'these routes are registered but no e2e or integration test ever issues the request',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL every route is visible to the authority-coverage invariant, or explicitly exempt', () => {
+    // `route-auth-coverage-invariant` reads `src/routes/*.ts` with the TypeScript
+    // AST and pins 286 routes. That is a thorough discovery of a DIRECTORY — and
+    // a route registered elsewhere (as `/v1/whoami` is, in `lib/app.ts`) is
+    // simply not in its universe, so removing that route's `requireAuth` would
+    // not red it. Nothing is wrong today; without this, the blind spot grows
+    // silently the next time someone registers a route outside routes/.
+    // Anti-vacuity, the idiom route-auth-coverage-invariant already uses for its
+    // own exemptions: pin the SIZE, so widening the list is a deliberate edit
+    // rather than a quiet way to switch this assertion off. Without it, adding
+    // entries is indistinguishable from fixing the problem.
+    expect(
+      AUTHORITY_DISCOVERY_EXEMPTIONS.size,
+      'every new exemption needs a reason in the comment above it',
+    ).toBe(9);
+
+    const routesDir = resolve(TESTS_DIR, '..', 'src', 'routes');
+    const sources = readdirSync(routesDir)
+      .filter((f) => f.endsWith('.ts'))
+      .map((f) => readFileSync(join(routesDir, f), 'utf-8'))
+      .join('\n');
+
+    const invisible = routes
+      .map((r) => r.path)
+      .filter((path) => !AUTHORITY_DISCOVERY_EXEMPTIONS.has(path))
+      .filter(
+        (path) =>
+          !sources.includes(`'${path}'`) &&
+          !sources.includes(`"${path}"`) &&
+          !sources.includes(`\`${path}\``),
+      );
+
+    expect(
+      [...new Set(invisible)].sort(),
+      'registered outside src/routes/, so the route-authority invariant cannot see them — ' +
+        'move the route into routes/ or add it to AUTHORITY_DISCOVERY_EXEMPTIONS with a reason',
     ).toEqual([]);
   });
 });
