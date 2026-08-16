@@ -93,6 +93,41 @@ describe('active POST /v1/agent-sessions/:id/takeover (agent runtime wired)', ()
   // otherwise — /takeover covering them is exactly the assumption this file
   // warns about elsewhere ("it carries its OWN acquire/refuse pair, so covering
   // /takeover leaves this one cold").
+  // The message route parses the same body again inside three helpers, so the
+  // report sits ONCE at the route entry. This pins that entry — the helpers are
+  // deliberately not wired, and nothing else would notice if the entry lost it.
+  it('CRITICAL the agent-message route reports a mistyped field exactly once', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession(fx, 'pair');
+    // Take control first so the turn is refused for a pair-mode reason rather
+    // than succeeding — the status is incidental here, the header is the point.
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/takeover`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { client_id: 'cli_tab_a' },
+    });
+
+    const typo = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'drive for me', user_mesage: 'typo' },
+    });
+    expect(
+      typo.headers['x-driftstack-unknown-fields'],
+      'reported once, listing the mistyped key',
+    ).toBe('user_mesage');
+
+    const clean = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'drive for me' },
+    });
+    expect(clean.headers['x-driftstack-unknown-fields']).toBeUndefined();
+  });
+
   it('CRITICAL mode and input-event report a mistyped field too', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const id = await createSession(fx, 'ai');

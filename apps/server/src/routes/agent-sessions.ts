@@ -5042,6 +5042,17 @@ export function registerAgentSessionsRoutes(
       ],
     },
     async (req, reply) => {
+      // Item 6 — reported ONCE here, at the route entry. The body is parsed again
+      // inside prepareAgentMessage / executeAgentMessage / handleAgentMessage for
+      // one logical request; reporting at each of those would tag the same request
+      // up to three times and needs a reply threaded through internals for nothing.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: Object.keys(RunTurnRequestSchema.shape),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/agent-sessions/:id/message',
+      });
       const accept = req.headers.accept ?? '';
       const wantsEventStream = accept
         .toLowerCase()

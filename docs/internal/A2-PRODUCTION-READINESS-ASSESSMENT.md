@@ -427,14 +427,14 @@ imply.
 
 **Still pending a decision — nothing more to engineer:**
 
-| #      | item                                                                 | cost of waiting                                                                                                                             |
-| ------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1      | 1,554 commits have never reached CI                                  | grows every commit; the eventual push is one high-risk event                                                                                |
-| 2      | Three subsystems built, tested, never run                            | unknown-unknowns surface in front of a customer                                                                                             |
-| 6      | Unrecognised request fields are silently dropped                     | a customer's typo'd field succeeds and does nothing                                                                                         |
-| 7, 8   | Free-tier OAuth consent + free-tier API-key minting                  | abuse surface open on the unpaid tier                                                                                                       |
-| 9      | GUI signing identity                                                 | ships unsigned or signed by the wrong identity                                                                                              |
-| ~~37~~ | ~~Concurrent profile transfers duplicate a profile across accounts~~ | **CLOSED 2026-08-16 (`87914bdd7`)** — decided under the auto-decide directive and fixed: one transaction, source retire is a checked claim. |
+| #      | item                                                                 | cost of waiting                                                                                                                                                                                    |
+| ------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1      | 1,554 commits have never reached CI                                  | grows every commit; the eventual push is one high-risk event                                                                                                                                       |
+| 2      | Three subsystems built, tested, never run                            | unknown-unknowns surface in front of a customer                                                                                                                                                    |
+| ~~6~~  | ~~Unrecognised request fields are silently dropped~~                 | **CLOSED 2026-08-16** — decided under the auto-decide directive: REPORT, don't reject. Eleven routes surface ignored keys in a header + server log; no response body changed, so no client breaks. |
+| 7, 8   | Free-tier OAuth consent + free-tier API-key minting                  | abuse surface open on the unpaid tier                                                                                                                                                              |
+| 9      | GUI signing identity                                                 | ships unsigned or signed by the wrong identity                                                                                                                                                     |
+| ~~37~~ | ~~Concurrent profile transfers duplicate a profile across accounts~~ | **CLOSED 2026-08-16 (`87914bdd7`)** — decided under the auto-decide directive and fixed: one transaction, source retire is a checked claim.                                                        |
 
 Everything else numbered in this section is CLOSED, CORRECTED, or a record of
 completed work; the eight explicitly marked so are left in place for their
@@ -902,6 +902,33 @@ builds), and the build step slows every local run. Either is a workflow decision
 rather than a defect fix. A targeted mitigation is in place for the one table that
 mattered here — `an-unbounded-paid-session-is-a-visible-choice` reads the cap
 table from source and asserts the built copy agrees.
+
+### 6. Unrecognised request fields are silently dropped — CLOSED
+
+**CLOSED 2026-08-16.** The recommendation said "product call — making the schemas
+strict is a breaking change for any client already sending extra fields", and that
+framing is what kept it open: it treated the choice as binary. It is not.
+
+**Decision: report, don't reject.** The request still succeeds exactly as before and
+the ignored keys are surfaced in an `x-driftstack-unknown-fields` response header and
+a server-side warning. No response body changes, so no existing integration can break
+on it — and the header is precisely what a later API version needs before it can
+tighten to a refusal, because it shows who is actually sending extras.
+
+Eleven routes report: profile create/update/import, recipe create, snapshot
+capture/restore, billing checkout, agent-session takeover/mode/input-event, and the
+agent-message route entry. Each has its own route-level arm, because reporting and
+silent stripping produce identical bodies and status codes — nothing else notices if a
+route loses the call.
+
+Deliberately excluded: **unauthenticated auth endpoints**. Echoing a caller's own keys
+back to an anonymous caller discloses schema shape on the surface that attracts the
+most probing, and the failure this item describes — a mistyped field silently changing
+a resource — is a property of authenticated resource writes rather than of login.
+
+Also excluded: the three helper-level re-parses of the agent-message body. They
+re-parse the SAME body for one logical request, so the report sits once at the route
+entry rather than up to three times beneath it.
 
 ### 6. Unrecognised request fields are silently dropped
 
