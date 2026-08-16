@@ -742,6 +742,15 @@ rather than only here, so they cannot go quiet again.
   records the sweep with a checksum over the uploaded bytes. Proved by mutation —
   inverting the window predicate and skipping the delete each red the arm.
 
+  The two high-volume tables are the only ones with a PROJECTION, and that
+  projection is a redaction: an archived `navigated` event keeps the origin and
+  drops the path and query, which is where customer data and tokens live. That
+  redaction is now exercised on the archive path against a real row — a seeded
+  event carrying `/reset-password?token=…` archives as the bare origin. Proved
+  both ways: skipping the projection in the archive, and making the projection
+  keep the whole URL, each red the arm. Without it, the live API would redact a
+  URL that the archive quietly shipped to R2.
+
   What this does NOT establish: it has still never run against production data
   volumes, and wiring the tick remains a deploy decision outside my rails. The
   unknown-unknown is smaller, not gone.

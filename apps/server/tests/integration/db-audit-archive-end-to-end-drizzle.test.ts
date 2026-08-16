@@ -14,7 +14,7 @@
 // scope, has no foreign keys to satisfy, and its rows are pure bookkeeping, so a
 // mistake here cannot strand customer data in a shared local database.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -33,6 +33,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 let client: ReturnType<typeof postgres> | null = null;
 const seededIds: string[] = [];
+const seededAccounts: string[] = [];
 
 function recordingR2(): { r2: R2; puts: { key: string; body: Buffer }[] } {
   const puts: { key: string; body: Buffer }[] = [];
@@ -68,6 +69,12 @@ afterAll(async () => {
   if (!client) return;
   for (const id of seededIds) {
     await client`DELETE FROM processed_stripe_events WHERE event_id = ${id}`.catch(() => {});
+  }
+  for (const id of seededAccounts) {
+    // session_events cascade from sessions, sessions from accounts.
+    await client`DELETE FROM sessions WHERE account_id = ${id}`.catch(() => {});
+    await client`DELETE FROM api_keys WHERE account_id = ${id}`.catch(() => {});
+    await client`DELETE FROM accounts WHERE id = ${id}`.catch(() => {});
   }
   await client`DELETE FROM audit_archive_runs WHERE table_name = 'processed_stripe_events'
                AND r2_object_key LIKE 'test-archive/%'`.catch(() => {});
@@ -143,6 +150,59 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         runs[0]?.['sha256_checksum'],
         'the checksum is over the uploaded bytes, so a corrupted upload is detectable',
       ).toBe(createHash('sha256').update(puts[0]!.body).digest('hex'));
+    });
+
+    it('CRITICAL a navigated event is archived REDACTED — origin only, never the full URL', async () => {
+      // The two high-volume tables are the only ones with a projection, and the
+      // projection is a REDACTION: `navigated` keeps the origin and drops the
+      // path and query, which is where customer data and tokens live.
+      //
+      // That redaction had never run on the archive path against a real row. If
+      // the archive skipped it, the full URL would leave the database and land
+      // in an R2 object — the live API redacts it and the archive would not.
+      if (!client) {
+        if (process.env.CI) throw new Error('real-PG audit-archive redaction test: DB unreachable');
+        return;
+      }
+      const c = client;
+      const accountId = randomUUID();
+      const keyId = randomUUID();
+      const sessionId = randomUUID();
+      seededAccounts.push(accountId);
+      await c`INSERT INTO accounts (id, email, tier, status)
+              VALUES (${accountId}, ${`arch-${accountId}@t.test`}, 'api_scale', 'active')`;
+      await c`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+              VALUES (${keyId}, ${accountId}, 'k', ${`dsk_${keyId.slice(0, 8)}`}, ${`h-${keyId}`})`;
+      await c`INSERT INTO sessions (id, account_id, api_key_id, status, archetype, driver_session_id)
+              VALUES (${sessionId}, ${accountId}, ${keyId}, 'destroyed',
+                      'iphone17_ios18_7_safari26_4', ${`drv-${sessionId}`})`;
+
+      const SECRET_PATH = '/reset-password?token=super-secret-value';
+      await c`INSERT INTO session_events (session_id, type, payload, created_at)
+              VALUES (${sessionId}, 'navigated',
+                      ${JSON.stringify({ url: `https://bank.example.test${SECRET_PATH}` })}::text::jsonb,
+                      ${new Date(Date.now() - 200 * DAY_MS).toISOString()}::timestamptz)`;
+
+      const db = drizzle(c) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const { r2, puts } = recordingR2();
+      const service = new AuditArchiveService({
+        r2,
+        ledger: new DrizzleArchiveLedgerRepo({ client: c, db, close: async () => {} }),
+        rows: new DrizzleArchiveTableRepo({ client: c, db, close: async () => {} }),
+        r2Prefix: 'test-archive',
+      });
+
+      await service.archiveTable('session_events');
+
+      expect(puts).toHaveLength(1);
+      const uploaded = gunzipSync(puts[0]!.body).toString('utf-8');
+      expect(uploaded, 'the secret path and query must NEVER reach the archive').not.toContain(
+        'super-secret-value',
+      );
+      expect(uploaded).not.toContain('/reset-password');
+      expect(uploaded, 'the origin is what survives redaction').toContain(
+        'https://bank.example.test',
+      );
     });
   },
 );
