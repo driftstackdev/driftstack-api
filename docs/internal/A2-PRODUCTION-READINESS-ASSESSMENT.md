@@ -5216,3 +5216,96 @@ exceptions across 149 sites is more often an enforced rule than a maintained hab
 _(A stdin probe was tried first and could not answer: the type-checked ESLint config
 rejects a pseudo-filename that is not in the tsconfig project. Mutating a real file
 and restoring it was the only way to ask the question.)_
+
+## 7l — a real defect: concurrent transfers duplicate a profile across accounts
+
+7k concluded the coverage instruments had converged and that the next signal would
+come from concurrency applied to paths with no second caller yet. Scanning the
+SERVICE layer for read-then-write outside a transaction gave 26 candidates;
+`profiles.ts::transferProfile` is the first of them to be a genuine defect rather
+than a covered guard.
+
+**What it does.** `transferProfile` reads the source with a plain `findById` (no
+lock, no claim), asserts no active session, pre-checks the recipient's cap, inserts a
+fresh profile into the RECIPIENT under `insertWithLimit` — which takes the
+**recipient's** account-row lock — and finally soft-deletes the source.
+
+**Why the lock does not help.** Two transfers of the same source to DIFFERENT
+recipients take DIFFERENT account-row locks, so they never exclude each other. And
+nothing at any layer serialises on the SOURCE: the route adds no advisory lock or
+idempotency key, and the opening read takes none.
+
+**Reproduced, not argued.** A first probe ran the two transfers concurrently and came
+back `fulfilled, rejected` with the loser getting `NotFoundError` — the benign
+ordering, and one sample of a race proves nothing. Forcing the interleaving (both
+callers held at `insertWithLimit` until each had provably passed its own `findById`)
+gives the real answer:
+
+    outcomes = fulfilled, fulfilled
+    copies_in_recipients = 2
+    source_remaining = 1   (soft-deleted)
+
+**One profile becomes two, owned by two different accounts, and both callers are told
+they succeeded.** DEK handling is sound — each recipient gets a freshly minted key, so
+no key material crosses tenants — but the profile identity and its archetype/config
+are duplicated across accounts that were never meant to share it.
+
+⭐ **The signal was already there and is discarded.** `profiles-repo.delete` is a soft
+delete whose WHERE carries `notDeleted`, and it returns `result.length > 0` —
+precisely "did I actually retire this row". `transferProfile` calls it as a bare
+`await` and throws the boolean away. The loser therefore learns nothing from the one
+statement that knows the truth.
+
+**Not fixed here, deliberately, because the obvious fixes each trade one failure for
+another:**
+
+- _Check the boolean and throw._ Converts a silent duplication into a 409 — but the
+  loser's copy has ALREADY been inserted, so it needs compensation to remove it.
+- _Soft-delete the source first, insert second._ Gives exactly-once semantics, but
+  breaks a property the current ordering was written for and states in a comment:
+  "Both the cap refusal and the name-race 409 throw BEFORE the source delete below, so
+  a refused transfer leaves the source profile intact." Delete-first means a cap
+  refusal loses the profile entirely.
+- _One transaction around the recipient insert and the source delete._ The correct
+  answer — the loser's conditional delete matches zero rows and the whole transfer
+  rolls back, no copy and no loss — but it composes two repo methods into a shared
+  transaction, which is a change to how this service talks to the repo.
+
+That is a design decision on an ownership path with a documented trade-off, so it is
+reported with its reproduction rather than resolved by a drive-by edit. The
+reproduction is a scratchpad probe, deliberately not committed: a test that asserts
+today's behaviour would pin the bug.
+
+### 7l (cont.) — why transfer and not the other four
+
+V-714 already hardened the profile-creation paths against a count-then-insert TOCTOU:
+`restore`'s comment names them — "was a count-then-insert TOCTOU — the 5th
+profile-creation path, missed by the original create/clone/import/transfer fix". So
+create, clone, import, transfer and restore all now insert under
+`insertWithLimit`'s account-row lock, and the count above each is explicitly a
+fast-fail.
+
+That fix is about the **cap**, and it is complete. The transfer defect is orthogonal
+and survives it, because transfer is the only one of the five that **moves** rather
+than creates:
+
+    create / clone / import / restore : insert into ONE account, under that account's lock
+    transfer                          : insert into the RECIPIENT + retire the SOURCE
+
+The lock it takes belongs to the recipient, so it says nothing about the source, and
+two transfers of one profile to two different recipients never contend. Checked
+rather than assumed: `profile-snapshots.ts::restore` and the other creation paths are
+sound for exactly this reason — they have no second row to retire.
+
+⭐ The general shape worth carrying: **a fix that hardened a family can leave one
+member exposed if that member does something the others do not.** V-714 is correct,
+thorough, and documented, and it makes transfer look covered — the audit that finds
+the gap has to ask what is DIFFERENT about each member, not whether the family was
+fixed.
+
+Two other candidates from the same 26 were examined and are sound:
+`stripe-webhooks.ts::handleSubscriptionUpsert` writes through
+`setAccountTierToBestActive`, which recomputes the tier from current DB state instead
+of writing a value derived from the stale read; `auth-flows.ts::consumeMagicLink`'s
+flagged write is `markEmailVerified`, an idempotent timestamp behind a null check.
+Twenty-three remain for the next pass.
