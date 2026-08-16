@@ -20,7 +20,7 @@
 // flushes and cannot disturb another agent's index.
 
 import { randomUUID } from 'node:crypto';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RedisRateLimitStore } from '../../src/lib/redis-rate-limit-store.js';
 
