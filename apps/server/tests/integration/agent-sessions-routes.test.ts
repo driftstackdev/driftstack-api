@@ -1417,6 +1417,37 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     });
   });
 
+  it('CRITICAL message SSE negotiation accepts a REALISTIC Accept header — media-type parameters and a multi-value list. Every existing SSE case sends the bare exact string `text/event-stream`, so the trim/split normalisation had no arm at all: replacing the whole callback with a bare === left all 28,012 tests green. A browser EventSource-style client sending `text/event-stream; charset=utf-8`, or any client listing a fallback, would silently be handed the JSON lane instead of a stream.', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    // Same device as the negative case below: an unknown session id, whose
+    // error the SSE lane reports as a terminal `event: response` envelope while
+    // the JSON lane answers problem+json. That difference IS the lane, so it
+    // reads lane selection without standing up a full runtime turn.
+    for (const accept of [
+      'text/event-stream; charset=utf-8',
+      'application/json, text/event-stream',
+      // Media types are case-insensitive (RFC 9110), which is why the route
+      // lowercases before comparing. Dropping that .toLowerCase() ALSO left the
+      // suite green — including the two cases above, which are lowercase — so
+      // the casing needs its own value here rather than being implied by them.
+      'Text/Event-Stream',
+    ]) {
+      const response = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/agent-sessions/agt_inmem_99999999/message',
+        headers: { authorization: `Bearer ${fx.plaintext}`, accept },
+        payload: { user_message: 'anything' },
+      });
+      expect(
+        response.headers['content-type'],
+        `Accept: ${accept} must select the SSE lane`,
+      ).toContain('text/event-stream');
+      expect(response.body, `Accept: ${accept} must stream a terminal envelope`).toContain(
+        'event: response',
+      );
+    }
+  });
+
   it('message SSE negotiation rejects prefix-like media types and preserves JSON errors', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const response = await fx.app.inject({
