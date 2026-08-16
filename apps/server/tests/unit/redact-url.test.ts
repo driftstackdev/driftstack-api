@@ -9,6 +9,41 @@
 // customer email (email.ts send/failure, auth-flows.ts magic-link/password-
 // reset unknown-email no-ops, incident-notifications.ts fan-out failure) so
 // a future call site that forgets to mask is caught here, not in prod logs.
+//
+// MUTATION-PROVED 2026-08-16 against lib/redact-url.ts. Each rule was neutered
+// in turn — its pattern replaced with one that cannot match, the const left
+// REFERENCED — and the unit project run whole. Reds are across that project, not
+// just this file, because a redaction rule earns its keep wherever a credential
+// could surface:
+//
+//   whole redactText disabled                        38 red
+//   FREE_TEXT_TOKEN_RE                               28 red
+//   URL_USERINFO_RE                                  24 red
+//   FREE_TEXT_BEARER_RE                              18 red
+//   FREE_TEXT_PREFIXED_SECRET_RE                      4 red
+//   FREE_TEXT_BASIC_RE                                3 red
+//
+// No dead rule: every one of the five has behavioural coverage. The thin two are
+// the ones to know about before editing them. `FREE_TEXT_BASIC_RE` is held by
+// this file, `durable-webhook-signature-sdk-verify` and the worker's
+// persisted-transport-error case. `FREE_TEXT_PREFIXED_SECRET_RE` is held by
+// `redact-text-scrubs-every-minted-credential-shape` plus
+// `every-minted-secret-prefix-is-in-the-redactor`, which reads the allowlist
+// SOURCE and so also fails when a prefix leaves it. All are real behavioural
+// arms rather than content-parity pins — checked, because a thin count held up
+// only by a source-text pin would mean the rule is not covered at all.
+//
+// The prefixed-secret row read 3 when first measured and 4 a few hours later,
+// because that second guard landed in between. Re-measured here rather than
+// transcribed: a ledger carried forward without re-running is the same stale
+// artefact this file's own drift guards exist to prevent.
+//
+// ⛔ HOW NOT TO MEASURE THIS. The obvious mutation — deleting a rule's
+// `.replace(RULE, …)` link from the chain — leaves the regex const unused and
+// reports `tsc exit 2`. That run is CONTAMINATED, not a verdict: the typecheck
+// guard reds and the counts look plausible (30 and 20 on the first two attempts,
+// against 28 and 18 for the clean version). Neuter the PATTERN and keep the
+// const referenced.
 
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger } from '../../src/lib/logger.js';
