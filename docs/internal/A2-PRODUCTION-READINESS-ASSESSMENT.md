@@ -731,6 +731,21 @@ rather than only here, so they cannot go quiet again.
   the privacy policy's "Session metadata: 90 days operational" line has no
   mechanism behind it. _Recommendation:_ wire it, but on a staging dataset first
   — it deletes production rows after an R2 upload.
+
+  **First end-to-end run done, 2026-08-16** — the "staging dataset first" the
+  recommendation asks for, taken as far as I can within my rails: the real Drizzle
+  repos against real Postgres with a recording R2 double
+  (`db-audit-archive-end-to-end-drizzle.test.ts`). The unit tests cover the service
+  against fakes; what had never run is the **SQL** — the window predicate choosing
+  which rows are old enough, and the delete-by-id that removes them. Both work:
+  aged rows upload and are deleted, a recent row is untouched, and the ledger
+  records the sweep with a checksum over the uploaded bytes. Proved by mutation —
+  inverting the window predicate and skipping the delete each red the arm.
+
+  What this does NOT establish: it has still never run against production data
+  volumes, and wiring the tick remains a deploy decision outside my rails. The
+  unknown-unknown is smaller, not gone.
+
 - **`WebhookSecretForceRotationService`**. Rotates webhook signing secrets past
   91 days and emails the customer a 7-day grace deadline. Its sibling
   `WebhookGraceExpiringNoticeService` IS wired, so the half that warns about
