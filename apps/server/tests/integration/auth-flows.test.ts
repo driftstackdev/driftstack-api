@@ -1667,6 +1667,51 @@ describe('POST /v1/auth/password-reset', () => {
     ).toBe(1);
   });
 
+  // refreshSession rotates: it revokes the old row and mints a new one, then
+  // invalidates the cached account context. That invalidation closes a real
+  // window — the cache fast path re-checks only expiresAt, not revokedAt, so
+  // without it the OLD token keeps authenticating for up to the 30s TTL. The
+  // failure is still swallowed, for the same reason logout swallows it: the
+  // rotation already happened in the database, and failing the call would leave
+  // the caller holding a revoked token with no new one.
+  //
+  // Same measurement as logout: removing the call reds an arm, rethrowing reds
+  // nothing.
+  it('CRITICAL a session rotation still succeeds when the cache invalidation fails', async () => {
+    const invalidateAccount = vi.fn().mockRejectedValue(new Error('redis down'));
+    const authCache = { invalidateAccount } as unknown as AuthCache;
+    const { service } = makeDirectService(new InMemoryAuthFlowsRepo(), authCache);
+    const signup = await service.signup({
+      email: 'rotate-cache-down@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const reset = await service.requestPasswordReset({
+      email: signup.account.email,
+      requestedFromIp: null,
+    });
+    const confirmed = await service.confirmPasswordReset({
+      token: reset.debugToken as string,
+      newPassword: 'an entirely different cache-fenced passphrase!!',
+      issuedFromIp: null,
+      userAgent: null,
+    });
+    if (confirmed.kind !== 'session') throw new Error('expected a session from the reset');
+    const beforeRefresh = invalidateAccount.mock.calls.length;
+
+    const rotated = await service.refreshSession({
+      token: confirmed.session.plaintext,
+      issuedFromIp: null,
+      userAgent: null,
+    });
+
+    expect(rotated.session.plaintext).not.toBe(confirmed.session.plaintext);
+    expect(
+      invalidateAccount.mock.calls.length - beforeRefresh,
+      'the rotation must actually attempt the invalidation',
+    ).toBe(1);
+  });
+
   it('a suspended account cannot use an outstanding reset link to change its password or mint a session', async () => {
     const { service, repo } = makeDirectService();
     const signup = await service.signup({
