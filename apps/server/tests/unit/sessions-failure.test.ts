@@ -706,6 +706,11 @@ function buildService(
   opts: {
     loggerThrows?: boolean;
     accountAuditRecord?: (input: AccountAuditInput) => Promise<unknown>;
+    /** Make the webhook + lifecycle sinks REJECT after recording the call, so
+     *  an arm can prove the swallow around them rather than only the happy
+     *  path. Recording still happens, which is what lets the arm assert the
+     *  side effect was attempted at all. */
+    secondariesReject?: boolean;
   } = {},
 ): {
   service: SessionsService;
@@ -730,13 +735,17 @@ function buildService(
     webhooks: {
       enqueueEvent: (accountId, eventType, data) => {
         webhookEvents.push({ accountId, eventType, data });
-        return Promise.resolve(1);
+        return opts.secondariesReject === true
+          ? Promise.reject(new Error('webhook sink down'))
+          : Promise.resolve(1);
       },
     },
     accountLifecycle: {
       emit: (accountId, event) => {
         lifecycleEvents.push({ accountId, event });
-        return Promise.resolve();
+        return opts.secondariesReject === true
+          ? Promise.reject(new Error('lifecycle sink down'))
+          : Promise.resolve();
       },
     },
     notifications: {
@@ -1797,6 +1806,45 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     expect(terminal?.driverSessionId).toMatch(/^reserving:/);
     expect(driver.destroyedIds).toEqual(['mock-1']);
     expect(repo.events.filter((event) => event.type === 'created')).toHaveLength(0);
+  });
+
+  // A successful destroy fans out three best-effort side effects — a
+  // session.completed webhook, a first-success lifecycle emit, and a customer
+  // audit entry — each wrapped in its own swallow because the session is
+  // ALREADY destroyed by then. The comments say as much: "never break the
+  // user-facing op".
+  //
+  // Nothing proved those swallows. Making the webhook one rethrow reds 0 arms
+  // across 134 session files and 1605 tests; the lifecycle one likewise. Every
+  // existing fixture supplies sinks that resolve, so the happy path and the
+  // swallowed-failure path are indistinguishable to the suite — and a rethrow
+  // would fail DELETE /v1/sessions/:id for a session that is already gone,
+  // which is the one outcome a caller cannot correct by retrying.
+  it('CRITICAL destroy survives every secondary sink failing at once', async () => {
+    const { service, repo, webhookEvents, lifecycleEvents, accountAuditInputs } = buildService({
+      secondariesReject: true,
+      accountAuditRecord: () => Promise.reject(new Error('audit store down')),
+    });
+    const ctx = buildCtx();
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+
+    await expect(service.destroy(ctx, session.id)).resolves.not.toThrow();
+
+    // The authoritative outcome still happened.
+    expect(repo.read(session.id)).toMatchObject({ status: 'destroyed' });
+
+    // …and each sink was actually REACHED. Without these the arm would pass
+    // just as happily against a build that stopped emitting altogether, which
+    // is the failure the swallow itself cannot distinguish from success.
+    expect(
+      webhookEvents.some((e) => e.eventType === 'session.completed'),
+      'the completion webhook must be attempted',
+    ).toBe(true);
+    expect(lifecycleEvents.length, 'the lifecycle emit must be attempted').toBeGreaterThan(0);
+    expect(
+      accountAuditInputs.some((i) => i.action === 'session.destroyed'),
+      'the audit record must be attempted',
+    ).toBe(true);
   });
 
   it('destroy: a driver.destroy() throw STILL releases the slot (row marked destroyed) + re-throws (#4)', async () => {
