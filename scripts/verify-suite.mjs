@@ -26,7 +26,7 @@
 // adding tests means raising the pin in the same commit, which is a one-line
 // deliberate edit rather than a silent drift.
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
 export const EXPECTED_TEST_FILES = 2762;
@@ -86,6 +86,29 @@ export function judge({ output, exitCode, expectedFiles = EXPECTED_TEST_FILES })
 
 /* c8 ignore start — CLI wiring; the judgement above is what the tests drive. */
 if (process.argv[1]?.endsWith('verify-suite.mjs') === true) {
+  // The workspace packages are consumed through their BUILT entry points
+  // (`@driftstack/api-types` declares `main: dist/index.js`, and there is no
+  // vitest alias), so an edit under `packages/*/src` is invisible to every test
+  // that imports the package until it is rebuilt. `npm test` handles this with a
+  // root `pretest`, and CI builds before testing — but this gate spawns vitest
+  // directly, so it inherited neither. Every commit was therefore validated
+  // against whatever `dist/` happened to hold.
+  //
+  // `tsc --build` is incremental: measured at 2.0s across all packages when the
+  // artifact is already current, against a multi-minute suite. That cost is why
+  // this is the right place to fix it rather than aliasing the package to src —
+  // aliasing would change what 253 server test files actually assert, and would
+  // leave the artifact CI publishes behaviourally untested everywhere.
+  const build = spawnSync('npm', ['run', 'build:packages'], { encoding: 'utf8' });
+  if (build.status !== 0) {
+    process.stdout.write(build.stdout ?? '');
+    process.stderr.write(build.stderr ?? '');
+    console.error(
+      '\nverify-suite: NOT TRUSTWORTHY — the workspace packages failed to build, so the ' +
+        'suite would have run against a stale artifact.',
+    );
+    process.exit(1);
+  }
   const args = ['vitest', 'run', '--config', 'vitest.node.config.ts', ...process.argv.slice(2)];
   const child = spawn('npx', args, { encoding: 'utf8' });
   let output = '';

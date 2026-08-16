@@ -907,7 +907,7 @@ job) but the **local loop is not** — a developer can change a cap in `src`, ru
 suite, and see green against a build artifact from days earlier. The guard now
 reads source and asserts the built copy agrees.
 
-### 5b. NEW — 192 test files validate a build artifact, not source (local only)
+### 5b. CLOSED — the verification GATE tested a build artifact it never rebuilt
 
 `@driftstack/api-types` declares `main: dist/index.js` and has no vitest alias, so
 every import resolves to the **built** copy. **192 test files import it** (plus 9
@@ -937,14 +937,47 @@ _How it was found:_ three mutations of `MAX_SESSION_MINUTES_PER_TIER` failed to
 red anything while proving item 5's guard. A mutation that changes nothing looks
 exactly like a guard that is too weak.
 
-_Doing nothing:_ CI still catches it, one push later, with a failure that does not
-point at the cause. _Recommendation:_ pick one — a vitest alias mapping
-`@driftstack/*` to `src`, or a `pretest` build step. **A2 did not choose**: the
-alias changes what 192 files actually test (source rather than the artifact CI
-builds), and the build step slows every local run. Either is a workflow decision
-rather than a defect fix. A targeted mitigation is in place for the one table that
-mattered here — `an-unbounded-paid-session-is-a-visible-choice` reads the cap
-table from source and asserts the built copy agrees.
+**CLOSED 2026-08-16 — decided and fixed, and the framing above was too narrow.**
+
+Re-read from source: the root `package.json` already has a `pretest` that runs
+`npm run build --workspaces --if-present`, so plain `npm test` DOES rebuild, and
+CI builds too. The hazard was never really "the local loop" in general — it was
+one specific consumer. **`scripts/verify-suite.mjs` spawns `npx vitest run`
+directly**, so it inherited neither the `pretest` nor CI's build step. That gate
+is what every commit in this repo is validated against, including all of mine, so
+the instrument whose green is most load-bearing was the one testing whatever
+`dist/` happened to hold.
+
+Neither of the two options above was the right fix, and the reason each was
+rejected turned out to be measurable rather than a matter of taste:
+
+- The **alias** would change what 253 server test files actually assert (source
+  instead of the artifact CI publishes), and would leave that artifact
+  behaviourally untested everywhere.
+- A blanket **pretest on every vitest invocation** would tax ad-hoc runs, which
+  is the loop used most.
+
+So the build was wired into the GATE instead. `npm run build:packages` is
+incremental — **measured at 2.02s with the artifact already current**, against a
+multi-minute suite — which is what makes this affordable and is why the "slows
+every local run" objection did not survive measurement.
+
+Proved end to end, both directions:
+
+- Edit a cap in `packages/api-types/src` without rebuilding, run the gate on one
+  file, and `dist` now carries the edit (`1 * 2 ** 30` → `64 * 2 ** 30`). Before
+  the change it stayed stale and the suite asserted against the old value.
+- Inject a type error into the package: the gate exits 1 with
+  _"the workspace packages failed to build, so the suite would have run against a
+  stale artifact"_, and **vitest never runs** — it fails closed rather than
+  falling back to the last good artifact, which would have been the worst
+  outcome available.
+
+The targeted mitigation remains and is still worth having:
+`an-unbounded-paid-session-is-a-visible-choice` reads the cap table from source
+and asserts the built copy agrees, so a divergence is caught by identity as well
+as by rebuild. Its existence is also what makes the general hazard hard to
+demonstrate with that particular table — it reds on divergence by design.
 
 ### 6. Unrecognised request fields are silently dropped — CLOSED
 
