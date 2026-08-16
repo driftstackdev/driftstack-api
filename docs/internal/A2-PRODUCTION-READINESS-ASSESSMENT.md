@@ -6221,3 +6221,46 @@ The sweep's first run reported three VACUOUS results because zsh does not word-s
 expansion, so a multi-word vitest filter arrived as one literal string matching no files. The
 denominator check turned what would have been three false gaps into three obvious instrument failures.
 `${=filter}` fixes it.
+
+## 8b — the size/bound guards, and one that cannot fire
+
+Sixteen call sites of the size and bound guards (`assertTotpSecretLength`, `assertBoundedUtf8`,
+`assertSecretBytes`, `assertStringWithinLimit`) had never been measured. These are DoS and allocation
+bounds, several of them over model-supplied content, so they are the guards whose absence matters
+most. Removing an assert only stops it rejecting — nothing allocates — so mutation is safe here, unlike
+removing a cap that then allocates.
+
+### Results
+
+| call site                                           | outcome                           |
+| --------------------------------------------------- | --------------------------------- |
+| `assertTotpSecretLength` (mfa-totp)                 | 1 red — pinned                    |
+| `assertStringWithinLimit` (decomposer refuseReason) | 1 red — pinned                    |
+| `assertBoundedUtf8` (livekit nodeId)                | 2 red at full scope — pinned      |
+| `assertSecretBytes` on ENCRYPT                      | 1 red — pinned                    |
+| `assertSecretBytes` on DECRYPT                      | 0 red at 22,405 tests — see below |
+
+### The decrypt-side check cannot fire, and the reason is arithmetic
+
+The obvious reading of that zero is the asymmetry pattern: one rule, two copies, only one pinned. It
+is not. GCM ciphertext length equals plaintext length exactly, so a stored blob is always
+`IV(12) + TAG(16) + plaintextLen` bytes, and `decryptPayload` already bounds the blob on both sides:
+
+    blob.length < 12 + 16 + 1                     rejects plaintextLen < 1
+    blob.length > 12 + 16 + MAX_API_SECRET_BYTES  rejects plaintextLen > MAX
+
+Those two prechecks ARE the plaintext bounds. `assertSecretBytes(plaintext)` on the decrypt path can
+never fire, and an arm aimed at it passes for another reason — both candidate inputs were caught by the
+blob prechecks, with the wrong error message, which is how this was discovered rather than argued.
+
+The call is not useless: the equivalence holds only while the framing keeps ciphertext length equal to
+plaintext length. Padding, a different mode, or a compressed payload would break it and leave that
+check as the only bound. It is defence against a future change, and it is recorded here rather than
+covered, because no input can distinguish its presence today.
+
+### Scope lesson, again
+
+Two of these read zero under a plausible keyword filter and were pinned at full scope. Narrow filters
+keep producing false gaps in this codebase because the covering test is often in a file whose name does
+not contain the module's keywords. Every zero now gets a full-scope re-measure before it is called
+anything — that rule has now corrected four would-be findings.
