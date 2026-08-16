@@ -7,6 +7,7 @@ import {
   readLargeDownloadResultHeader,
 } from '../../src/services/fleet-inbound-frame-gate.js';
 import { FleetControlRegistry } from '../../src/services/fleet-control-registry.js';
+import { HARNESS_FRAME_ID_MAX_LENGTH } from '../../src/schemas/harness-control-protocol.js';
 
 describe('fleet inbound frame gate', () => {
   it('extracts only top-level correlation strings without depending on field order', () => {
@@ -53,6 +54,50 @@ describe('fleet inbound frame gate', () => {
       const raw = Buffer.from(typeof frame === 'string' ? frame : JSON.stringify(frame));
       expect(readLargeDownloadResultHeader(raw)).toBeNull();
     }
+  });
+
+  it('CRITICAL bounds the DECODED id length, not just the frame bytes', () => {
+    // The gate bounds correlation ids twice: a cheap byte precheck that rejects
+    // anything longer than six bytes per allowed character, and a decoded-length
+    // check after parsing. Only the second one enforces the declared limit —
+    // a plain-ASCII id of 300 characters is 302 bytes, comfortably under the
+    // 1538-byte precheck, so the precheck waves it through.
+    //
+    // Nothing pinned the decoded check: deleting it left all 22,424 tests in the
+    // only workspace that can reach this module green. Over-length ids would
+    // then flow to the download correlator, six times past the bound the schema
+    // declares for the same fields.
+    const frame = (over: Partial<{ requestId: string; sessionId: string }>) =>
+      Buffer.from(
+        JSON.stringify({
+          type: 'downloadData',
+          requestId: 'rq',
+          sessionId: 'agt',
+          dataB64: 'AAAA',
+          ...over,
+        }),
+      );
+
+    const atLimit = 'r'.repeat(HARNESS_FRAME_ID_MAX_LENGTH);
+    const overLimit = 'r'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1);
+
+    // The boundary is the whole point: a test using a value far from it cannot
+    // tell `<=` from `<`, and this bound is exactly where that distinction lives.
+    expect(readLargeDownloadResultHeader(frame({ requestId: atLimit }))).toEqual({
+      requestId: atLimit,
+      sessionId: 'agt',
+    });
+    expect(readLargeDownloadResultHeader(frame({ sessionId: atLimit }))).toEqual({
+      requestId: 'rq',
+      sessionId: atLimit,
+    });
+
+    // One character past it, and still far below the byte precheck, is refused.
+    expect(frame({ requestId: overLimit }).length).toBeLessThan(
+      HARNESS_FRAME_ID_MAX_LENGTH * 6 + 2,
+    );
+    expect(readLargeDownloadResultHeader(frame({ requestId: overLimit }))).toBeNull();
+    expect(readLargeDownloadResultHeader(frame({ sessionId: overLimit }))).toBeNull();
   });
 
   it('bounds ordinary bytes and frame count independently, then refills over time', () => {
