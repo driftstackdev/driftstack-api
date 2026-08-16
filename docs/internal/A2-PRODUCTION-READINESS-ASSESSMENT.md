@@ -4792,3 +4792,68 @@ line 187 is inside a different class in the same file. One `awk` for the enclosi
 `class` was the whole check, and it should run before any claim about what a symbol
 is attached to. Only `listActiveByRegion` survives as a real finding, and it is
 recorded rather than deleted.
+
+## 7f — a drift guard that named the thing it did not check
+
+Finishing the enumeration of 7e's 31 candidates (the set, not a sample) put
+`services/auth.ts:787` at the top of the remainder: the V-174 legacy alias grant,
+`admin` satisfies `account_owner`.
+
+`requireScope` exists twice — inline in `services/auth.ts`, and in
+`lib/errors-helpers.ts` as a wrapper over the canonical `scopesSatisfy`. The
+duplication is deliberate and documented ("route-side imports want zero
+indirection"), and comparing the two rule sets line by line shows they agree for
+every value `ApiKeyScope` permits. The canonical one is stricter in shape — it uses
+`parseGranularScope` and a `const _exhaustive: never` switch, so adding a verb to the
+enum fails to compile there while the inline copy silently falls through to a denial.
+Fail-closed, so no live bug.
+
+`scope-check.test.ts` already exists for precisely this risk. Its header:
+
+    requireScope() is mirrored at two call sites (lib/errors-helpers and
+    services/auth). Both should evaluate the same predicate. Unit tests pin the
+    matrix so future migrations don't accidentally drift the two implementations apart.
+
+and its loop is honest — every matrix row generates a `helpers:` case AND an
+`auth.ts:` case. What the matrix did not contain was a row for the rule in question.
+Twelve rows covered `admin → admin:webhooks`, `admin → driftstack_internal_admin`
+(deny), `account_owner → read/write/admin`, granular-vs-broad both ways — and not
+`admin → account_owner`. **It pinned V-174's denying half and not its granting half.**
+
+The coverage data says the same thing from the other side, and this is the part
+worth keeping:
+
+    lib/errors-helpers.ts:62  (alias → return true)   count = 18
+    services/auth.ts:787      (alias → return)        count =  0
+
+One rule, two implementations, an 18-to-0 split. The canonical one is reached
+constantly through real request paths; the inline clone is reached ONLY by this
+matrix, so a matrix row that does not exist means a rule that never runs.
+
+Measured before the fix: deleting the alias grant from `services/auth.ts` left
+`scope-check.test.ts` **green at 53/53** — the file whose stated purpose is to catch
+that exact drift.
+
+⚠️ **It was not unprotected, and I checked rather than assuming.** Two text pins do
+cover it, and their regexes span the code, not merely the comment above it:
+
+    /\/\/ V-174 legacy customer alias\. Never satisfies the staff-only scope\.\s*\n?\s*
+     if \(required === 'account_owner' && scopes\.includes\('admin'\)\) \{\s*\n?\s*return;/
+
+So deletion was already a tripwire. What no text pin can say is that the rule still
+FIRES: it passes just as happily if a refactor leaves the branch unreachable, and it
+fails on a reformat that changes nothing. Behavioural coverage is the missing half,
+not the whole guard.
+
+The fix is one matrix row, in the file that already existed, covering both
+implementations at once. Proven in both directions:
+
+    alias grant deleted from services/auth.ts   → "auth.ts: key=[admin] required=account_owner" reds
+    alias grant deleted from errors-helpers.ts  → "helpers: …" reds
+
+⭐ The general shape, which is what makes this worth writing down: **a guard's stated
+scope and its actual matrix are different things, and only the second one runs.**
+This file names both implementations in its header, imports both, loops over both —
+and still missed a rule, because the omission was a missing row rather than a missing
+mechanism. Reading the header would have satisfied any reviewer. The coverage counter
+on the line was what disagreed.

@@ -181,6 +181,16 @@ describe('requireScope — both call sites evaluate the same predicate', () => {
     { keyScopes: ['read:sessions'], required: 'read:profiles', pass: false },
     { keyScopes: ['read:sessions'], required: 'read:sessions', pass: true },
     { keyScopes: ['admin'], required: 'driftstack_internal_admin', pass: false },
+    // V-174's GRANTING half. The denying half above it — admin must never reach
+    // driftstack_internal_admin — was pinned from the start; the grant it exists to
+    // make was not, and coverage showed it: the canonical predicate in
+    // errors-helpers reached this rule 18 times through production paths, while the
+    // services/auth clone reached it ZERO times, because only this matrix drives it.
+    // Measured before adding: deleting the alias grant from services/auth left this
+    // file green at 53/53. Two content-parity regexes do pin the source text, but a
+    // text pin cannot say the rule still FIRES — it passes just as happily if a
+    // refactor leaves the branch unreachable.
+    { keyScopes: ['admin'], required: 'account_owner', pass: true },
     // account_owner superscope → bare read/write pass; staff gates fail.
     { keyScopes: ['account_owner'], required: 'write', pass: true },
     { keyScopes: ['account_owner'], required: 'read', pass: true },
