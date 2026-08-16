@@ -86,6 +86,71 @@ describe('active POST /v1/agent-sessions/:id/takeover (agent runtime wired)', ()
     expect((await repo.get(id))?.pairModeState).toEqual(winner);
   });
 
+  // Item 6 — the wiring, not the helper. Removing the report call leaves this
+  // suite green otherwise: reporting and silent stripping produce identical
+  // bodies and status codes, so only the header separates them.
+  // The sibling write routes are wired separately and would each go unpinned
+  // otherwise — /takeover covering them is exactly the assumption this file
+  // warns about elsewhere ("it carries its OWN acquire/refuse pair, so covering
+  // /takeover leaves this one cold").
+  it('CRITICAL mode and input-event report a mistyped field too', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createSession(fx, 'ai');
+
+    const mode = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/mode`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair', moed: 'manual' },
+    });
+    expect(mode.statusCode, mode.body).toBeLessThan(300);
+    expect(mode.headers['x-driftstack-unknown-fields']).toBe('moed');
+
+    const input = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        event: { type: 'mouseMove', x: 10, y: 10 },
+        client_id: 'cli_a',
+        clientId: 'cli_b',
+      },
+    });
+    // The status here is incidental — pair-mode may accept or refuse depending
+    // on lock state. What is pinned is that the ignored key was reported either
+    // way, which is the property the route wiring provides.
+    expect(input.headers['x-driftstack-unknown-fields']).toBe('clientId');
+  });
+
+  it('CRITICAL takeover reports a mistyped field, and stays quiet without one', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    // A session each: a second takeover on the same session is a 409 by design,
+    // which would fail this arm for a reason unrelated to field reporting.
+    const id = await createSession(fx, 'pair');
+    const id2 = await createSession(fx, 'pair');
+
+    const typo = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/takeover`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { client_id: 'cli_tab_a', clientid: 'cli_tab_b' },
+    });
+    expect(typo.statusCode, 'reporting, not rejecting').toBe(200);
+    expect(typo.headers['x-driftstack-unknown-fields']).toBe('clientid');
+
+    const clean = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id2}/takeover`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { client_id: 'cli_tab_a' },
+    });
+    expect(clean.statusCode).toBe(200);
+    expect(
+      clean.headers['x-driftstack-unknown-fields'],
+      'a well-formed takeover must not be tagged',
+    ).toBeUndefined();
+  });
+
   it("mode='ai' → 409 Conflict (takeover requires mode='pair')", async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const id = await createSession(fx, 'ai');

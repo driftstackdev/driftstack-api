@@ -17,6 +17,7 @@
 // v0 launch — tier-derived caps land in B3 (separate slice). Founder
 // reviews this constant before flipping the gate on.
 
+import { reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -3711,6 +3712,15 @@ export function registerAgentSessionsRoutes(
     async (req, reply) => {
       const parsed = SendInputEventRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Item 6 — a mistyped field here used to be dropped in silence, so the
+      // call succeeded having applied something other than what was asked.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: Object.keys(SendInputEventRequestSchema.shape),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/agent-sessions/:id/input',
+      });
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -3943,6 +3953,15 @@ export function registerAgentSessionsRoutes(
     async (req, reply) => {
       const parsed = SetModeRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Item 6 — a mistyped field here used to be dropped in silence, so the
+      // call succeeded having applied something other than what was asked.
+      reportUnknownRequestFields({
+        body: req.body,
+        knownKeys: Object.keys(SetModeRequestSchema.shape),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/agent-sessions/:id/mode',
+      });
       const rec = await sessions.get(req.params.id);
       if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
@@ -4054,6 +4073,15 @@ export function registerAgentSessionsRoutes(
       async (req, reply) => {
         const parsed = TakeoverBodySchema.safeParse(req.body);
         if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+        // Item 6 — a mistyped field here used to be dropped in silence, so the
+        // call succeeded having applied something other than what was asked.
+        reportUnknownRequestFields({
+          body: req.body,
+          knownKeys: Object.keys(TakeoverBodySchema.shape),
+          reply,
+          logger: req.log,
+          route: 'POST /v1/agent-sessions/:id/takeover',
+        });
         const rec = await sessions.get(req.params.id);
         if (rec === null) {
           throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
