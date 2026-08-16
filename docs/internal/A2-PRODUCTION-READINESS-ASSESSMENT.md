@@ -4663,3 +4663,63 @@ future caller reaching for "append to the transcript" finds an unguarded method
 first, and it will happily append to a session that is no longer active. If it is
 ever removed, the guarded variants are the replacements and the null-vs-throw
 difference is the migration cost.
+
+## 7e — the same instrument pointed at RETURNS, where the silent failures live
+
+7d's criterion was: delete the guard and ask whether the fall-through crashes
+(residual) or produces a wrong answer (worth pinning). Applied to `throw` sites that
+took 225 candidates down to one, because most throws fall through to a crash a line
+or two later.
+
+An early-`return` guard is the same shape with the opposite property: **its
+fall-through never crashes.** `if (<bad state>) return refusal;` removed means
+execution simply continues into the work the guard existed to prevent. By 7d's own
+criterion that is exactly where wrong answers concentrate, so the instrument was
+re-pointed at the same coverage data.
+
+    never-executed `return` statements in apps/server/src   373
+    …whose surrounding condition names a state or authority   31
+      (revoked|expired|disabled|suspended|consumed|deleted|owner|locked|…)
+
+373 is not a work list; 31 is.
+
+### `oauth-store.ts:167` — the account binding on a private OAuth client
+
+`oauth_clients.account_id` is nullable, and the nullability is the whole policy:
+NULL is a public client any account may authorize, non-NULL is a client PRIVATE to
+that account. At consume time one line enforces it:
+
+    if (client.accountId !== null && client.accountId !== args.account_id) {
+      return 'account_mismatch';
+    }
+
+Remove it and nothing throws. Execution falls through to the DELETE of the
+authorization and the INSERT of the code, and the method answers `inserted`. A
+client private to account A is then usable by account B — and because A controls
+that client's `redirect_uri` and secret, the code minted for B's account is
+delivered to A. Measured: with the check gone the new test reds with
+_"expected 'inserted' to be 'account_mismatch'"_, and a code row exists for the
+wrong account.
+
+⚠️ **This one was not entirely unheld, and the distinction matters.** The novelty
+run turned up a second red: `oauth-production-wiring-content-parity`, whose
+assertion is a regex over the SOURCE TEXT —
+
+    AssertionError: expected '// PostgreSQL-backed third-party OAut…' to match
+                    /client\.accountId !== null && clie…/
+
+That is a deletion tripwire, and a useful one: nobody can silently drop the line.
+It is not evidence the guard WORKS. A text pin passes whether the branch is
+reachable, whether the comparison is the right way round, and whether the writes it
+guards actually follow it — and coverage says this branch had never once executed.
+So the honest claim is not "nothing held it" but "the line was protected, the
+behaviour was not". The new test is the behavioural half, and the arms assert the
+absence of the two writes rather than just the verdict, because the dangerous
+fall-through is the writes.
+
+⭐ Worth generalising, since a parity pin will keep showing up in these novelty
+runs: **a red from a content-parity file is not a coverage signal.** It fires for
+any edit to the text it pins, including a comment. When one appears in a novelty
+check, read its assertion before concluding the site was covered — otherwise the
+instrument that is supposed to prevent redundant work starts causing skipped work
+instead, which is the more expensive direction.
