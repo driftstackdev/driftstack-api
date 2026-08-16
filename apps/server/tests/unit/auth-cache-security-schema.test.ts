@@ -48,9 +48,21 @@ function context(
 class FakeRedis {
   readonly values = new Map<string, string>();
   mgetCalls = 0;
+  /** Methods that should reject, standing in for a Redis that is reachable for
+   *  some commands and failing for others — which is what a partial outage
+   *  actually looks like. */
+  readonly fail = new Set<'get' | 'mget' | 'incr'>();
 
   get(key: string): Promise<string | null> {
+    if (this.fail.has('get')) return Promise.reject(new Error('redis down'));
     return Promise.resolve(this.values.get(key) ?? null);
+  }
+
+  incr(key: string): Promise<number> {
+    if (this.fail.has('incr')) return Promise.reject(new Error('redis down'));
+    const next = Number(this.values.get(key) ?? '0') + 1;
+    this.values.set(key, String(next));
+    return Promise.resolve(next);
   }
 
   set(key: string, value: string): Promise<'OK'> {
@@ -60,6 +72,7 @@ class FakeRedis {
 
   mget(...keys: string[]): Promise<Array<string | null>> {
     this.mgetCalls += 1;
+    if (this.fail.has('mget')) return Promise.reject(new Error('redis down'));
     return Promise.resolve(keys.map((key) => this.values.get(key) ?? null));
   }
 }
@@ -314,5 +327,46 @@ describe('RedisAuthCache security-sensitive schema compatibility', () => {
 
     await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
     expect(redis.mgetCalls).toBe(0);
+  });
+  // Redis is an ACCELERATOR for authentication, never its authority: every
+  // command this cache issues is wrapped so a Redis outage degrades to the
+  // scrypt path instead of failing the request. Making any of the three
+  // catches rethrow reds nothing across the 9 auth-cache files and 117 tests,
+  // because no fixture anywhere makes a Redis command fail.
+  it('CRITICAL a failing Redis READ degrades to a miss rather than throwing', async () => {
+    const redis = new FakeRedis();
+    const { cache, warn } = makeCache(redis);
+    redis.fail.add('get');
+
+    await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
+    expect(warn, 'the degrade is logged — it is the only signal Redis is down').toHaveBeenCalled();
+  });
+
+  it('CRITICAL a failing version READ skips the cache write instead of throwing', async () => {
+    // captureVersions returning null is load-bearing beyond not throwing: the
+    // slow path only writes when it captured both generations, so a null here
+    // silently disables positive caching for that request. That is the correct
+    // fail-safe — a write with unknown generations could outlive a revocation
+    // — and it is also the exact mechanism that made a "broken cache" fixture
+    // elsewhere in this suite never reach its own write.
+    const redis = new FakeRedis();
+    const { cache, warn } = makeCache(redis);
+    redis.fail.add('mget');
+
+    await expect(cache.captureVersions('acc-security', 'key-security')).resolves.toBeNull();
+    expect(redis.mgetCalls, 'the read must be attempted').toBe(1);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('CRITICAL a failing INVALIDATION does not throw at the caller', async () => {
+    // Revocation is authoritative in the database; this bump is what stops the
+    // fast path serving a stale context before the TTL. It must not turn a
+    // successful revoke into a failed one.
+    const redis = new FakeRedis();
+    const { cache, warn } = makeCache(redis);
+    redis.fail.add('incr');
+
+    await expect(cache.invalidateAccount('acc-security')).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalled();
   });
 });
