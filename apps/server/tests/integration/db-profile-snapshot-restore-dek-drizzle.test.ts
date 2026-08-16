@@ -88,6 +88,35 @@ afterAll(async () => {
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'ProfileSnapshotsService.restore profile-bound DEK (real PostgreSQL)',
   () => {
+    it('CRITICAL list clamps an oversized limit to the 100 cap. The clamp had NO behavioural arm: removing it left the whole suite green except two source-text pins, and a pin goes green again the moment someone rewrites the expression rather than deleting it. The routes in front carry a Zod .max(100), so this is defence-in-depth — which is exactly why it was easy to leave untested, and why it matters the day a caller reaches this repo without a schema in front of it.', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG snapshot page-cap test: database unreachable in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const snapshotsRepo = new DrizzleProfileSnapshotsRepo({
+        client,
+        db,
+        close: async () => {},
+      });
+      const accountId = randomUUID();
+      await client`INSERT INTO accounts (id) VALUES (${accountId})`;
+      // 101 rows in ONE statement — past the cap, without 101 round-trips. The
+      // whole TEST_SCHEMA is dropped in afterAll, so nothing needs sweeping.
+      await client`
+        INSERT INTO profile_snapshots (account_id, label, parent_archetype, parent_name)
+        SELECT ${accountId}, 'cap-snap-' || g, 'arch', 'parent'
+        FROM generate_series(1, 101) g`;
+
+      const page = await snapshotsRepo.list({ accountId, limit: 5000 });
+      expect(page.data.length, 'the oversized limit was clamped to the cap').toBe(100);
+    });
+
     it('atomically stores a fresh v2 wrapper bound to the returned account+profile identity', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {

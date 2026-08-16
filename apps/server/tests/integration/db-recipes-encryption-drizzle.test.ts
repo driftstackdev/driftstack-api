@@ -147,6 +147,33 @@ describe.skipIf(!RUN_DB_TESTS)(
       ).not.toBeNull();
     });
 
+    it("CRITICAL list clamps an oversized limit to MAX_RECIPE_PAGE. This clamp had NO coverage of ANY kind: removing it left the entire suite green — 28,015 passed, not even a source-text pin noticed. Its two siblings (profiles, profile-snapshots) at least had pins. The routes in front carry a Zod .max(100), so the clamp is defence-in-depth, and a caller reaching this repo without one would pull the account's whole recipe table.", async () => {
+      if (!client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleRecipesRepo(
+        { client, db, close: async () => {} },
+        { payloadEncryptionKeyBase64: KEY },
+      );
+      const accountId = randomUUID();
+      // Seeded through the repo, not by raw INSERT. A first version bulk-loaded
+      // 101 rows of plain jsonb in one statement and list() refused them with
+      // "Recipe intent-log storage is not a v2 envelope": the payload envelope
+      // is bound to { accountId, recipeId }, so one ciphertext cannot be reused
+      // across rows and there is no valid bulk shortcut.
+      for (let i = 0; i < 101; i += 1) {
+        await repo.create({
+          accountId,
+          agentSessionId: null,
+          label: `cap-rec-${String(i)}`,
+          intentLog: [],
+          transcriptSnapshot: [],
+        });
+      }
+
+      const page = await repo.list({ accountId, limit: 5000 });
+      expect(page.data.length, 'the oversized limit was clamped to MAX_RECIPE_PAGE').toBe(100);
+    });
+
     it('preserves bytes/timestamps on wrong key, migrates, and rejects record relocation', async () => {
       if (!client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
