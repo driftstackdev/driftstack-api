@@ -7056,3 +7056,34 @@ _Checked and NOT a finding:_ `RedisFleetNonceCache` looked like the same shape �
 its tests use a hand-written fake. But the fake asserts the exact call arguments,
 so swapping the `EX`/`NX` order reds 4 tests and changing the TTL reds 1. It is
 genuinely covered; adding an integration test there would be churn, so I did not.
+
+### 49. The auth cache's ACCOUNT-generation gate had no behavioural arm — only its KEY sibling did
+
+`RedisAuthCache.get()` carries two independent invalidation gates. V-247's
+key-generation gate is the revocation backstop, and it has a careful behavioural
+arm that even asserts the account generation stays absent _"or the account gate
+could be the one refusing"_. **Nobody wrote the mirror.**
+
+Measured with type-valid mutations, so the compile guards could not answer in the
+behaviour's place (`tsc exit=0` on both):
+
+| gate neutered      | reds                                         |
+| ------------------ | -------------------------------------------- |
+| key generation     | 2 — a parity pin **and** the behavioural arm |
+| account generation | **1 — the parity pin alone**                 |
+
+What the account gate carries is every account-level invalidation: suspension,
+deletion, a tier change, a password-epoch bump. Without it a **suspended account
+keeps authenticating from cache until the TTL expires**, and the only thing that
+would have objected is a regex over the module's source text.
+
+Added the mirror arm, symmetric with the existing one: bump only the ACCOUNT
+generation, assert the KEY generation stays absent so the key gate cannot be the
+refuser, assert the entry is still cached, and require a miss. Each gate now reds
+exactly one arm when neutered — isolation in both directions.
+
+⚠️ The first pass at this measurement was worthless and looked convincing: deleting
+each gate outright left unused variables, so `tsc exit=2` and the two typecheck
+guards redded alongside the pin. **A mutation that breaks the build measures the
+build, not the behaviour.** Re-run with `x === y && false`, which keeps both
+operands referenced.

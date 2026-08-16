@@ -201,6 +201,39 @@ describe('RedisAuthCache security-sensitive schema compatibility', () => {
     await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
   });
 
+  it('CRITICAL a cached entry whose ACCOUNT generation has moved is a miss even though the key generation still matches — the mirror of the arm above', async () => {
+    // The arm above isolates the KEY gate and is careful to keep the account
+    // generation absent so the account gate cannot be the one refusing. Nobody
+    // wrote the other direction, and it showed: neutering the ACCOUNT gate
+    // (type-valid, so the compile guards could not answer) redded exactly ONE
+    // test — the module's content-parity pin — while the same treatment of the
+    // key gate redded the behavioural arm above.
+    //
+    // What the account gate carries is every account-level invalidation:
+    // suspension, deletion, a tier change, a password-epoch bump. Without it a
+    // suspended account keeps authenticating from cache until the TTL expires,
+    // and the only thing that would have objected is a regex over this file's
+    // source text.
+    const redis = new FakeRedis();
+    const { cache } = makeCache(redis);
+    await cache.set(TOKEN_SHA, 'key-security', 'acc-security', context(), 30);
+    await expect(
+      cache.get(TOKEN_SHA),
+      'precondition: a hit before the invalidation, or the miss below proves nothing',
+    ).resolves.not.toBeNull();
+
+    // An account-level invalidation INCRs the account generation, leaving the
+    // entry in place — the same "the delete failed or never ran" shape.
+    redis.values.set('auth:account:acc-security:v', '1');
+    expect(
+      redis.values.get('auth:keyid:key-security:v'),
+      'the key generation must stay absent, or the KEY gate could be the one refusing',
+    ).toBeUndefined();
+    expect(redis.values.get(entryKey()), 'the entry is still cached').toBeDefined();
+
+    await expect(cache.get(TOKEN_SHA)).resolves.toBeNull();
+  });
+
   // The STRUCTURAL half of the same schema gate. `isCurrentCachedEntry` has eight
   // rungs; coverage showed only three had ever refused — schemaVersion, provenance
   // and the webSession own-property check. Those three are exactly the "legacy
