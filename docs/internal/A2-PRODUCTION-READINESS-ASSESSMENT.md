@@ -6412,3 +6412,32 @@ looped bare throw over four malformations in the proxy-secret file — the shape
 layering — was individually attributable when measured. The rule is recorded for review time instead:
 if a title names a reason, pin the reason; if several malformations share one bare throw, disable each
 guard in turn and check that each reds something.
+
+### 33. A customer-breaking rotation rule was pinned only by a text pin
+
+`DrizzleWebhooksRepo.rotateSecret` carries the V-359.G.2 exception: a customer rotation
+that lands INSIDE a live force-rotation window must keep the customer's own live secret in
+the dual-sign grace slot. `secret` at that moment holds the SERVER's force-rotated value,
+which the customer only ever received as a 12-character prefix and never deployed, while
+`secret_prev` holds what they actually have running. Move the current value across in the
+normal way and the worker dual-signs `{new, force}` — and **both fail the customer's
+verifier**, which is still on the original. Every delivery to that endpoint fails signature
+verification until someone notices.
+
+The rule is a `CASE` inside raw SQL, so no fake-repo test can reach it. Removing it redded
+exactly **one** test — and that test was the module's **content-parity pin**, which fires on
+the source text changing rather than on the behaviour. A red from a text pin is not
+coverage: the rule was behaviourally unpinned, and any rewrite that changed the text while
+changing the meaning would have been signed off by a green suite.
+
+Now pinned against real Postgres, both branches: inside a force window the grace slot keeps
+the customer's deployed secret and never the force value; outside one, the ordinary rule
+still advances `secret` into `secret_prev`. Proved two ways — removing the exception, and
+making it unconditional — each reds a different arm.
+
+⚠️ Writing it surfaced a second thing worth recording. The control arm initially left a live
+CUSTOMER grace window open, and V-359.G refuses a second customer rotation in that state, so
+the control was refused by a DIFFERENT guard and proved nothing about the `CASE`. The tell
+was the control failing while the arm under test passed. `rotateSecret` returns the
+**unchanged row** rather than null on that miss, so a `not.toBeNull()` assertion passes
+through a refused rotation — the value has to be read back and compared.

@@ -27,6 +27,10 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleWebhooksRepo } from '../../src/db/webhooks-repo.js';
+import {
+  encryptWebhookSecret,
+  readWebhookSecret,
+} from '../../src/lib/webhook-secret-encryption.js';
 import * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -175,6 +179,102 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       await repo.recordDelivered(second, { responseStatus: 200, at: new Date() });
 
       expect(await failuresOf(endpointId)).toBe(0);
+    });
+
+    it('CRITICAL a customer rotation inside a FORCE-rotation grace keeps the CUSTOMER live secret in the grace slot', async () => {
+      // V-359.G.2. `rotateSecret` normally moves the outgoing current secret into
+      // the grace slot. The exception is when a force rotation is still inside its
+      // window: there, `secret` holds the SERVER's force-rotated value, which the
+      // customer only ever saw as a 12-character prefix and never deployed, while
+      // `secret_prev` holds what the customer actually has live. Moving the
+      // current value across would make the worker dual-sign {new, force} — and
+      // BOTH would fail the customer's verifier, which is still on the original.
+      // Every delivery to that endpoint fails signature verification.
+      //
+      // The rule lives in a raw SQL CASE, so no fake-repo test can reach it.
+      // Removing it redded exactly one test, and that test was the module's
+      // CONTENT-PARITY pin — it fires on the source text changing, not on the
+      // behaviour, so the rule was behaviourally unpinned.
+      if (!dbReachable || !client) return;
+      const c = client;
+      const KEY = Buffer.alloc(32, 23).toString('base64');
+      const keyedRepo = new DrizzleWebhooksRepo(
+        { client: c, db: drizzle(c, { schema }), close: async () => {} },
+        { secretEncryptionKeyBase64: KEY },
+      );
+
+      // whsec_ + 32 lowercase base32 characters; three values distinguishable
+      // at a glance so a wrong one is obvious in a failure message.
+      const CUSTOMER_LIVE = `whsec_${'c'.repeat(32)}`;
+      const FORCE = `whsec_${'f'.repeat(32)}`;
+      const NEW = `whsec_${'n'.repeat(32)}`;
+
+      async function rotateFrom(args: { forceRotated: boolean }): Promise<{
+        secret: string;
+        secretPrev: string;
+      }> {
+        const accountId = randomUUID();
+        seededAccountIds.push(accountId);
+        await c`INSERT INTO accounts (id, email)
+                VALUES (${accountId}, ${`wh-rot-${accountId}@test.local`})`;
+        const endpointId = randomUUID();
+        const ctx = { accountId, endpointId };
+        const future = new Date(Date.now() + 12 * 60 * 60 * 1000);
+        // V-359.G blocks a second CUSTOMER rotation while a prior customer grace
+        // window is still live, and a force window is exempt. So the control arm
+        // must use an already-elapsed window — otherwise it is refused by that
+        // guard and proves nothing about the CASE under test. (Learned by
+        // writing it the other way first and watching the control fail.)
+        const past = new Date(Date.now() - 12 * 60 * 60 * 1000);
+        const graceEnds = args.forceRotated ? future : past;
+        await c`INSERT INTO webhook_endpoints
+                  (id, account_id, url, secret, secret_prefix, secret_prev,
+                   secret_prev_expires_at, force_rotated_at, events)
+                VALUES (${endpointId}, ${accountId}, ${'https://hooks.example.test/rot'},
+                        ${encryptWebhookSecret(FORCE, KEY, ctx)}, ${FORCE.slice(0, 12)},
+                        ${encryptWebhookSecret(CUSTOMER_LIVE, KEY, ctx)},
+                        ${graceEnds.toISOString()}::timestamptz,
+                        ${args.forceRotated ? future.toISOString() : null},
+                        ARRAY['session.completed']::webhook_event_type[])`;
+
+        const rotated = await keyedRepo.rotateSecret({
+          id: endpointId,
+          accountId,
+          newSecret: NEW,
+          newPrefix: NEW.slice(0, 12),
+          graceExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          now: new Date(),
+        });
+        expect(rotated, 'the rotation itself must succeed').not.toBeNull();
+
+        const rows = await c<{ secret: string; secret_prev: string }[]>`
+          SELECT secret, secret_prev FROM webhook_endpoints WHERE id = ${endpointId}`;
+        expect(rows).toHaveLength(1);
+        return {
+          secret: readWebhookSecret(rows[0]!.secret, KEY, ctx),
+          secretPrev: readWebhookSecret(rows[0]!.secret_prev, KEY, ctx),
+        };
+      }
+
+      // Inside a live force-rotation window: the customer's deployed secret is
+      // what must survive into the grace slot, NOT the force value.
+      const underForce = await rotateFrom({ forceRotated: true });
+      expect(underForce.secret).toBe(NEW);
+      expect(
+        underForce.secretPrev,
+        'the grace slot must carry the secret the customer actually deployed',
+      ).toBe(CUSTOMER_LIVE);
+      expect(
+        underForce.secretPrev,
+        'the un-deployed force value must never become the dual-signed grace secret',
+      ).not.toBe(FORCE);
+
+      // The ordinary path — no force rotation — still moves the outgoing current
+      // secret across. Without this arm the exception could be made unconditional
+      // and nothing would notice.
+      const ordinary = await rotateFrom({ forceRotated: false });
+      expect(ordinary.secret).toBe(NEW);
+      expect(ordinary.secretPrev, 'the normal rule is unchanged').toBe(FORCE);
     });
   },
 );
