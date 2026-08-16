@@ -268,6 +268,16 @@ describe('auth cache — live Free-tier entitlement', () => {
 describe('auth cache — graceful degradation', () => {
   it('Redis errors fall through to scrypt path; auth still works', async () => {
     // Build an app with a deliberately-broken cache that throws on every op.
+    //
+    // Note what this does NOT cover: `captureVersions` is optional on AuthCache
+    // and is omitted here, and the slow path only writes when it captured both
+    // generations (`if (cache && capturedVersions !== null)`). So `set` below is
+    // never called and its rejection is never raised. Rethrowing the swallow
+    // around that write leaves this file green — the api-key and web-session
+    // cache-write arms in tests/unit/api-key-auth-cache-lease.test.ts are what
+    // hold it up, and they assert the write was attempted for exactly this
+    // reason. What this arm does cover is the READ failing and auth falling
+    // through to the scrypt path.
     const brokenCache: AuthCache = {
       get: () => Promise.reject(new Error('redis down')),
       set: () => Promise.reject(new Error('redis down')),
