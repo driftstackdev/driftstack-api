@@ -158,6 +158,24 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // position is well-defined whether or not the boundary row is still live);
     // the RESULT set stays live-only. Pre-fix, a trashed boundary made the anchor
     // unresolvable → page 1 returned again with a non-null next_cursor (loop).
+    it("CRITICAL list clamps an oversized limit to MAX_PAGE. The clamp had NO behavioural arm: removing it left the whole suite green except two source-text pins, which would go green again the moment someone rewrote the expression rather than deleted it. Every route in front of this repo carries a Zod .max(100), so the clamp is defence-in-depth — and that is exactly why it was easy to leave untested. The day a second caller reaches this repo without a schema, one call pulls the account's entire profile table into memory.", async () => {
+      if (!dbReachable || client === null) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`cap-prof-${accountId}@test.local`})`;
+      // 101 rows in ONE statement — enough to exceed the 100 cap, cheap enough
+      // not to pay 101 round-trips. Swept by the account_id cleanup in afterAll.
+      await client`
+        INSERT INTO profiles (account_id, name)
+        SELECT ${accountId}, 'cap-prof-' || g FROM generate_series(1, 101) g`;
+
+      const page = await repo.list({ accountId, limit: 5000 });
+      expect(page.data.length, 'the oversized limit was clamped to MAX_PAGE').toBe(100);
+    });
+
     it('advances past a boundary profile trashed between page fetches (no reset to page 1)', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {
