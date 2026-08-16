@@ -682,21 +682,32 @@ describe('createEmailService — security-critical retry + per-account tracking 
   };
 
   /** In-memory fake AccountEmailDeliveryTracker keyed by lowercased email. */
-  function makeFakeTracker(seed: Record<string, string>) {
+  /** `reject` makes the named tracker calls fail AFTER recording the attempt,
+   *  so an arm can assert both that the call happened and that its failure was
+   *  swallowed. Recording first is the difference between proving a swallow and
+   *  passing because the call never ran. */
+  function makeFakeTracker(
+    seed: Record<string, string>,
+    opts: { reject?: Array<'find' | 'mark' | 'clear'> } = {},
+  ) {
+    const rejects = new Set(opts.reject ?? []);
     const emailToAccountId = new Map(
       Object.entries(seed).map(([email, accountId]) => [email.toLowerCase(), accountId]),
     );
     const failedAt = new Map<string, Date | null>();
     return {
       findAccountIdByEmail: vi.fn((email: string) => {
+        if (rejects.has('find')) return Promise.reject(new Error('tracker down'));
         return Promise.resolve(emailToAccountId.get(email.toLowerCase()) ?? null);
       }),
       markDeliveryFailed: vi.fn((accountId: string, at: Date) => {
         failedAt.set(accountId, at);
+        if (rejects.has('mark')) return Promise.reject(new Error('tracker down'));
         return Promise.resolve();
       }),
       clearDeliveryFailed: vi.fn((accountId: string) => {
         failedAt.set(accountId, null);
+        if (rejects.has('clear')) return Promise.reject(new Error('tracker down'));
         return Promise.resolve();
       }),
       // test-only inspection helper, not part of the real interface
@@ -746,6 +757,112 @@ describe('createEmailService — security-critical retry + per-account tracking 
     );
     expect(logger.warn).not.toHaveBeenCalled();
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  // The delivery tracker is bookkeeping BESIDE the send, not part of it: the
+  // source says a tracker outage must never turn email delivery into a hard
+  // failure. Three independent swallows implement that — the account lookup,
+  // the clear-on-success, and the mark-on-inactive-recipient.
+  //
+  // None was covered. Making any of the three rethrow reds nothing across 41
+  // email files and 374 tests, because every fixture supplies a tracker whose
+  // calls resolve. A rethrow would take out password-reset, verification and
+  // MFA mail whenever the tracker's database blinked — the security-critical
+  // templates are exactly the ones wired to it.
+  it('CRITICAL a failing tracker LOOKUP does not fail the send', async () => {
+    const logger = makeLogger();
+    const sentry = makeFakeSentry();
+    const tracker = makeFakeTracker({ 'user@example.com': 'acc_1' }, { reject: ['find'] });
+    const sendEmail = vi.fn().mockResolvedValue(undefined);
+    const svc = createEmailService({
+      config,
+      logger,
+      client: { sendEmail },
+      retryDelayFn: async () => {},
+      accountEmailDeliveryTracker: tracker,
+      sentry,
+    });
+
+    await expect(
+      svc.sendSignupVerification({
+        to: 'user@example.com',
+        link: 'https://x',
+        expiresAt: new Date(),
+      }),
+    ).resolves.not.toThrow();
+
+    expect(sendEmail, 'the email itself still went out').toHaveBeenCalledTimes(1);
+    expect(
+      tracker.findAccountIdByEmail,
+      'the lookup must be attempted, or this proves nothing about its swallow',
+    ).toHaveBeenCalled();
+  });
+
+  it('CRITICAL a failing tracker CLEAR does not fail the send', async () => {
+    // The lookup resolves here so the clear is actually reached — with a
+    // failing lookup the clear is skipped entirely and this arm would pass
+    // without ever touching the swallow it names.
+    const logger = makeLogger();
+    const sentry = makeFakeSentry();
+    const tracker = makeFakeTracker({ 'user@example.com': 'acc_1' }, { reject: ['clear'] });
+    const sendEmail = vi.fn().mockResolvedValue(undefined);
+    const svc = createEmailService({
+      config,
+      logger,
+      client: { sendEmail },
+      retryDelayFn: async () => {},
+      accountEmailDeliveryTracker: tracker,
+      sentry,
+    });
+
+    await expect(
+      svc.sendPasswordReset({ to: 'user@example.com', link: 'https://x', expiresAt: new Date() }),
+    ).resolves.not.toThrow();
+
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(tracker.clearDeliveryFailed, 'the clear must be attempted').toHaveBeenCalledWith(
+      'acc_1',
+    );
+    // The clear runs INSIDE the send's own try, so a rethrow there lands in the
+    // send-failure handler: the mail goes out and is then reported as failed.
+    // The tracker error classifies as non-retryable, so the attempt count alone
+    // cannot see it — this is the assertion that can.
+    expect(
+      logger.warn,
+      'a delivered email must not be reported as a send failure because bookkeeping failed',
+    ).not.toHaveBeenCalledWith(
+      expect.objectContaining({ component: 'email' }),
+      expect.stringContaining('email send failed'),
+    );
+  });
+
+  it('CRITICAL a failing tracker MARK does not fail the inactive-recipient path', async () => {
+    // 405 is Postmark's permanent suppression state — the one case that marks
+    // the account. If persisting that marker threw, the send-failure handler
+    // would raise on top of a send that had already permanently failed.
+    const logger = makeLogger();
+    const sentry = makeFakeSentry();
+    const tracker = makeFakeTracker({ 'bounced@example.com': 'acc_2' }, { reject: ['mark'] });
+    const suppressedErr = Object.assign(new Error('inactive recipient'), { code: 405 });
+    const sendEmail = vi.fn().mockRejectedValue(suppressedErr);
+    const svc = createEmailService({
+      config,
+      logger,
+      client: { sendEmail },
+      retryDelayFn: async () => {},
+      accountEmailDeliveryTracker: tracker,
+      sentry,
+    });
+
+    await expect(
+      svc.sendPasswordReset({
+        to: 'bounced@example.com',
+        link: 'https://x',
+        expiresAt: new Date(),
+      }),
+    ).resolves.not.toThrow();
+
+    expect(tracker.markDeliveryFailed, 'the marker persist must be attempted').toHaveBeenCalled();
   });
 
   it('a transient failure that exhausts all retries logs error + captures Sentry, but does NOT set email_delivery_failed_at (reserved for the permanent inactive-recipient case)', async () => {
