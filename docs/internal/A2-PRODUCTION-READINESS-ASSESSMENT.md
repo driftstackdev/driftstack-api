@@ -6903,3 +6903,38 @@ same blind spot CI had. Left alone deliberately — a stale `EXPECTED_TEST_FILES
 would block a push for a reason unrelated to the change being pushed, and CI now
 carries the judgement. A failing CI run is recoverable; a blocked push is
 friction at the worst moment.
+
+### 44. The secrecy-assertion guard scanned less than half the corpus it judges
+
+Fourth instance of the directory-scope shape, and this one is in the guard that
+caught a real defect of mine (W1153: an assertion anchored on a PREFIX of a
+secret, which is routinely public).
+
+`secrecy-assertion-anchors-on-the-secret-invariant` scanned
+`['apps/server/tests/integration', 'apps/server/tests/e2e']`. **The corpus
+outside that scan was larger than the corpus inside it**: 162 unit files use
+`.not.toContain(`, several on constants named `SECRET` or `TOKEN`. The header's
+"56 secrecy absence-assertions, measured against the existing suite" was a count
+over two of the four places such an assertion can live.
+
+Widening to `tests/unit` and `scripts/tests` flagged **nothing** — no
+prefix-anchored assertion exists there today. The value is prospective: one
+written tomorrow is now covered.
+
+Two anti-vacuity arms, because the existing floor (`> 20` total) could not see
+either failure:
+
+- **Narrowing** — every directory under `apps/server/tests` that holds test files
+  must appear in `TEST_ROOTS`. Reverting to the old pair now fails with
+  _"apps/server/tests/unit holds tests but is not in TEST_ROOTS"_.
+- **A declared root that went empty** — each root must contribute files AND
+  absence-assertions, which catches a moved directory rather than a removed one.
+
+The distinction matters and I only found it by testing: the per-root arm alone
+did NOT catch narrowing, because the roots that remain still contribute. A total
+floor cannot see a whole root disappear, and neither can a per-root check over a
+shrunken list. The scan has to be compared against the filesystem.
+
+Proved four ways: an injected prefix-anchored assertion in `tests/unit` is caught
+with the new roots and green under the old ones; narrowing the list fails naming
+the dropped directory; and a declared root holding nothing fails.

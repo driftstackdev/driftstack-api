@@ -29,7 +29,24 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
-const TEST_ROOTS = ['apps/server/tests/integration', 'apps/server/tests/e2e'];
+/**
+ * Every root that holds tests which can make a secrecy assertion.
+ *
+ * `tests/unit` and `scripts/tests` were absent until 2026-08-16, and the corpus
+ * outside the scan was LARGER than the corpus inside it — 162 unit files use
+ * `.not.toContain(`, several of them on constants named SECRET or TOKEN. The
+ * header's "56 secrecy absence-assertions" was therefore a count over two of the
+ * four places such an assertion can live.
+ *
+ * Widening flagged nothing, so no prefix-anchored assertion exists in the new
+ * roots today. The point is that one written tomorrow is now covered.
+ */
+const TEST_ROOTS = [
+  'apps/server/tests/integration',
+  'apps/server/tests/e2e',
+  'apps/server/tests/unit',
+  'scripts/tests',
+];
 
 /** String constants long enough to plausibly be a credential. */
 const SECRET_CONST = /const\s+([A-Za-z_][\w]*)\s*=\s*(?:`|')([^`'\n]{8,})(?:`|')/g;
@@ -92,6 +109,53 @@ describe('secrecy assertions anchor on the secret, not a prefix of it', () => {
       absences,
       'no `.not.toContain(...)` assertions found — the scan is broken',
     ).toBeGreaterThan(20);
+  });
+
+  it('CRITICAL every directory that holds tests is DECLARED, so the scan cannot be narrowed silently', () => {
+    // The arm below catches a declared root that went empty (a moved directory).
+    // It cannot catch a root being REMOVED from the list — which is exactly the
+    // regression that left `tests/unit` outside this guard, and which I verified
+    // by re-running the old roots against an injected violation: green.
+    //
+    // So assert the other direction too: every directory under apps/server/tests
+    // that actually holds test files must appear in TEST_ROOTS. Narrowing the
+    // list now fails and names the directory it dropped.
+    const testsDir = resolve(REPO_ROOT, 'apps/server/tests');
+    const holdsTests = readdirSync(testsDir)
+      .filter((entry) => statSync(resolve(testsDir, entry)).isDirectory())
+      .map((entry) => `apps/server/tests/${entry}`)
+      .filter((rel) =>
+        tsFilesUnder(resolve(REPO_ROOT, rel)).some((f) => /\.(test|spec)\.ts$/.test(f)),
+      );
+    for (const rel of holdsTests) {
+      expect(
+        TEST_ROOTS,
+        `${rel} holds tests but is not in TEST_ROOTS — a secrecy assertion there would be unscanned`,
+      ).toContain(rel);
+    }
+    expect(holdsTests.length, 'the directory scan itself found nothing').toBeGreaterThan(1);
+  });
+
+  it('CRITICAL every declared root actually contributes, so dropping one cannot go unnoticed', () => {
+    // The floor above is a total, and a total cannot tell that a whole root
+    // stopped being scanned — which is exactly how `tests/unit` sat outside this
+    // guard while contributing more absence-assertions than the roots inside it.
+    // Asserting PER ROOT makes a narrowed scan fail with the root's name.
+    for (const root of TEST_ROOTS) {
+      const files = tsFilesUnder(resolve(REPO_ROOT, root));
+      const absences = files.reduce(
+        (n, file) => n + [...readFileSync(file, 'utf8').matchAll(ABSENCE)].length,
+        0,
+      );
+      expect(
+        files.length,
+        `${root} contributed no test files — is it still a test root?`,
+      ).toBeGreaterThan(0);
+      expect(
+        absences,
+        `${root} contributed no absence-assertions — it is in TEST_ROOTS but adds nothing`,
+      ).toBeGreaterThan(0);
+    }
   });
 
   it('CRITICAL no test asserts a secret is absent using only a PREFIX of that secret. The prefix of a credential is routinely public — `sk-ant-api03-` is in the vendor docs — so such an assertion passes while the entropy leaks.', () => {
