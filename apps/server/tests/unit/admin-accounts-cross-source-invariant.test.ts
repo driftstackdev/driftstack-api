@@ -92,9 +92,22 @@ describe('W940 admin-accounts cross-source invariant', () => {
 
   it("CRITICAL all 8 service methods require 'driftstack_internal_admin' scope — getAccount + list + countByStatus + countByTier + signupCounts + changeTier + suspend + unsuspend. The internal-admin (not plain 'admin') scope keeps cross-account mutations internal-only.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-accounts.ts'));
-    // 8 throwIfMissingScope calls (getAccount + list + countByStatus + countByTier + signupCounts + changeTier + suspend + unsuspend).
+    // Was `>= 8`, which is satisfied with slack and therefore cannot see a NEW
+    // unguarded method: adding a tenth ctx-taking method with no scope call left
+    // the count at 9 and the whole admin suite green (1711 tests, measured).
+    // The roster is derived from the source instead and compared for PARITY —
+    // one scope check per method that takes a caller context.
+    const methods = [...p.matchAll(/^ {2}async (\w+)\(\s*\n?\s*ctx: AccountContext/gm)].map(
+      (m) => m[1],
+    );
     const matches = p.match(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/g) ?? [];
-    expect(matches.length).toBeGreaterThanOrEqual(8);
+    // A floor as well as the parity, because parity alone is satisfied by 0 === 0
+    // if every method is ever renamed out of the pattern.
+    expect(methods.length, 'the derived roster must not collapse').toBeGreaterThanOrEqual(9);
+    expect(
+      matches.length,
+      `every ctx-taking admin method needs the internal-admin gate; roster: ${methods.join(', ')}`,
+    ).toBe(methods.length);
   });
 
   // ─── 3-value account status enum ─────────────────────────────
