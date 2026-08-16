@@ -6059,3 +6059,54 @@ spreads the credential everywhere the key travels.
   access throws anyway. It improves a message; it does not change an outcome.
 - **The IP rate limiter's degradation path** (primary → bounded in-process fallback → fail closed) is
   already covered by three dedicated files. Grepped before investigating; no re-derivation.
+
+## 7y — the best-effort lens, mapped and mostly exhausted
+
+### The shape
+
+A best-effort side effect is an awaited call inside a `try` whose `catch` swallows rather than
+rethrows. The durable write has already committed; the follow-up — a cache invalidation, a webhook
+enqueue, an audit record, a lifecycle emit — is deliberately swallowed so an outage in a _secondary_
+dependency cannot fail an operation that already succeeded.
+
+Nothing about that is wrong. What kept being missing is a test proving the swallow, because on the
+happy path both behaviours are identical and every existing fixture supplies a dependency that
+resolves. Five such gaps closed across four fires: the api-key and web-session cache writes, logout
+and rotation cache invalidation, the audit emit, and session destroy.
+
+### The map
+
+Enumerated repo-wide: **181 sites**. Ranking them by whether any test anywhere makes that dependency
+method fail leaves a **19-site work-list**; the other 162 sit around methods some test does fail
+somewhere, which is not proof for a given site but is enough to deprioritise it.
+
+The ranking is a **proxy, not a verdict**, in both directions:
+
+- False negatives are the reason it exists — a method failed in one test may never be failed at the
+  site in question. All three session-destroy swallows sat behind methods that other tests do fail,
+  and all three redded nothing.
+- False positives are common — the entitlement sweeper's `downgradeAccountTierToBestRemaining` looked
+  unfailed, but its isolation arm induces the failure through a repo override rather than a
+  rejection near the call site.
+
+Only mutation settles a site. The ranking exists to choose which sites to spend a mutation on.
+
+### What this pass found
+
+`sessions.ts` destroy fans out three best-effort side effects. Rethrowing the webhook catch redded 0
+arms across 134 session files and 1605 tests; the lifecycle catch likewise. A rethrow there would fail
+`DELETE /v1/sessions/:id` for a session that is already gone — the one outcome a caller cannot correct
+by retrying. Closed with a single arm that fails all three sinks at once and asserts each was reached.
+
+### Sampled and already covered — recorded so they are not re-investigated
+
+| site                                         | what covers it                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------- |
+| `destroyAllForAccount` per-session isolation | "is best-effort per session — one driver failure does not block the rest"         |
+| `autoDestroyExpired` reaper emissions        | the deliberate `session.completed` omission is pinned in two named files          |
+| agent-session BYOK hydration degrade         | a dedicated file: "still returns 201 (degrades, no 500) when getPlaintext throws" |
+| crypto entitlement expiry sweeper            | "one account failing is isolated — the failed rows stay unprocessed"              |
+
+Four consecutive candidates already covered is the signal that this lens is near exhaustion in the
+well-tended services. The remaining 19-site work-list is the place to spend the next mutations, not
+another sweep of the same shape.
