@@ -25,6 +25,7 @@ import type {
 import type { ParsedIntentResult } from './harness-control-codec.js';
 import type { HarnessErrorCode } from '../schemas/harness-control-protocol.js';
 import { redactText } from '../lib/redact-url.js';
+import { sliceWithoutSplittingSurrogate } from './agent-executor.js';
 
 // Result summaries and failure reasons cross two customer-data boundaries: the
 // message response and the encrypted agent transcript. Harness output is
@@ -37,8 +38,10 @@ const RESULT_TEXT_INPUT_MAX_LENGTH = 4096;
 const RESULT_SUMMARY_MAX_LENGTH = 512;
 
 function safeResultText(value: string, maxLength: number): string {
-  const bounded = value.slice(0, RESULT_TEXT_INPUT_MAX_LENGTH);
-  return redactText(bounded).slice(0, maxLength);
+  // Surrogate-safe cuts: see sliceWithoutSplittingSurrogate. A plain slice here
+  // returns half an emoji, which reaches the customer as U+FFFD.
+  const bounded = sliceWithoutSplittingSurrogate(value, RESULT_TEXT_INPUT_MAX_LENGTH);
+  return sliceWithoutSplittingSurrogate(redactText(bounded), maxLength);
 }
 
 /**
@@ -270,7 +273,9 @@ function failureReason(
   if (msg !== undefined && msg.length > 0) {
     const redacted = safeResultText(msg, MAX_MESSAGE_LEN);
     const capped =
-      msg.length > MAX_MESSAGE_LEN ? `${redacted.slice(0, MAX_MESSAGE_LEN - 1)}…` : redacted;
+      msg.length > MAX_MESSAGE_LEN
+        ? `${sliceWithoutSplittingSurrogate(redacted, MAX_MESSAGE_LEN - 1)}…`
+        : redacted;
     return `${base}: ${capped}`;
   }
   return base;

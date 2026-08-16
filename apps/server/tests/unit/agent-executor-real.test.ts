@@ -13,7 +13,13 @@
 // - a throwing SessionsService surfaces as a failure result (never throws)
 
 import { describe, expect, it, vi } from 'vitest';
-import { RealAgentExecutor, type ExecutorSessionsPort } from '../../src/services/agent-executor.js';
+import {
+  RealAgentExecutor,
+  sanitizeTranscriptText,
+  sliceWithoutSplittingSurrogate,
+  MAX_TRANSCRIPT_FIELD_LEN,
+  type ExecutorSessionsPort,
+} from '../../src/services/agent-executor.js';
 import type { AgentIntent } from '../../src/services/agent-decomposer.js';
 import type { AccountContext } from '../../src/services/auth.js';
 
@@ -317,5 +323,31 @@ describe('AI-B2.b RealAgentExecutor — vocab gaps + guards', () => {
     expect(result.reason).toContain('https://[redacted]@internal.test');
     expect(result.reason).toContain('code=[redacted]');
     expect(result.reason).toContain('Bearer [redacted]');
+  });
+});
+
+describe('transcript text is cut on whole characters, not UTF-16 halves', () => {
+  it('CRITICAL an emoji straddling the cut does not become U+FFFD in the customer transcript. A plain slice counts UTF-16 code units, so a boundary landing between the halves of an astral character keeps the high surrogate and drops its pair. Measured before the fix: 511 ASCII + an emoji returned a trailing lone \\ud83d, and Buffer.from(out, "utf8") did NOT round-trip — the customer got a replacement character back inside their own durable transcript history.', () => {
+    const out = sanitizeTranscriptText(`${'a'.repeat(MAX_TRANSCRIPT_FIELD_LEN - 1)}😀tail`);
+
+    const loneSurrogate = [...out].some((ch) => {
+      const c = ch.charCodeAt(0);
+      return ch.length === 1 && c >= 0xd800 && c <= 0xdfff;
+    });
+    expect(loneSurrogate, 'no half-character may survive the cut').toBe(false);
+    expect(
+      Buffer.from(out, 'utf8').toString('utf8'),
+      'the cut text must survive a UTF-8 round-trip unchanged',
+    ).toBe(out);
+  });
+
+  it('CRITICAL the helper drops the orphan rather than the whole pair, and leaves ordinary text alone', () => {
+    // Cut lands mid-emoji: one unit shorter, no orphan.
+    expect(sliceWithoutSplittingSurrogate('ab😀', 3)).toBe('ab');
+    // Cut lands after a WHOLE emoji: the pair is kept intact.
+    expect(sliceWithoutSplittingSurrogate('ab😀cd', 4)).toBe('ab😀');
+    // Ordinary text is untouched, and a string shorter than the bound is returned as-is.
+    expect(sliceWithoutSplittingSurrogate('abcd', 3)).toBe('abc');
+    expect(sliceWithoutSplittingSurrogate('ab', 5)).toBe('ab');
   });
 });

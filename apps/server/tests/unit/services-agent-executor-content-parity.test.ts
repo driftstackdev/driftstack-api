@@ -122,9 +122,17 @@ describe('services/agent-executor content parity', () => {
     // this prompt-injection + secret-retention boundary cannot regress to raw
     // interpolation.
     expect(body).toMatch(/export function sanitizeTranscriptText\(s: string\): string \{/);
+    // The input bound goes through sliceWithoutSplittingSurrogate, not a raw
+    // slice: a plain UTF-16 cut landing between the halves of an astral
+    // character left a lone surrogate, which reached the customer's durable
+    // transcript as U+FFFD. Pinned so the cut cannot regress to `s.slice(...)`.
     expect(body).toMatch(
-      /const redacted = redactText\(s\.slice\(0, EXECUTOR_DIAGNOSTIC_INPUT_MAX_LENGTH\)\);/,
+      /const redacted = redactText\(\s*sliceWithoutSplittingSurrogate\(s, EXECUTOR_DIAGNOSTIC_INPUT_MAX_LENGTH\),\s*\);/,
     );
+    expect(body).toMatch(
+      /export function sliceWithoutSplittingSurrogate\(value: string, max: number\): string \{/,
+    );
+    expect(body).toMatch(/last >= 0xd800 && last <= 0xdbff \? cut\.slice\(0, -1\) : cut;/);
     expect(body).toMatch(
       /redacted\.replace\(\/\[\\u0000-\\u001f\\u007f-\\u009f\]\/g, ' '\)\.trim\(\)/,
     );
