@@ -61,6 +61,30 @@ async function activeKey(): Promise<ApiKeyRow> {
   };
 }
 
+/** Delegates everything except the WRITE, which rejects — a cache backend
+ *  that is up for reads and failing on writes, the shape a real outage takes.
+ *  `setCalls` exists so an arm can prove the write was actually attempted. */
+class CacheWhoseWriteFails implements AuthCache {
+  setCalls = 0;
+  private readonly inner = new InMemoryAuthCache();
+  get(plaintextSha256: string): Promise<AccountContext | null> {
+    return this.inner.get(plaintextSha256);
+  }
+  captureVersions(accountId: string, keyId: string): Promise<AuthCacheVersions | null> {
+    return this.inner.captureVersions(accountId, keyId);
+  }
+  set(): Promise<void> {
+    this.setCalls += 1;
+    return Promise.reject(new Error('auth cache backend unavailable'));
+  }
+  invalidateKey(keyId: string): Promise<void> {
+    return this.inner.invalidateKey(keyId);
+  }
+  invalidateAccount(accountId: string): Promise<void> {
+    return this.inner.invalidateAccount(accountId);
+  }
+}
+
 describe('API-key positive-cache generation lease', () => {
   it('rechecks the key after capturing generations that already reflect revocation', async () => {
     const cache = new InMemoryAuthCache();
@@ -372,27 +396,6 @@ describe('API-key positive-cache generation lease', () => {
   // rejects, and asserts the write was attempted so it cannot pass by never
   // reaching the swallow.
   it('CRITICAL authentication still succeeds when the cache WRITE fails', async () => {
-    class CacheWhoseWriteFails implements AuthCache {
-      setCalls = 0;
-      private readonly inner = new InMemoryAuthCache();
-      get(plaintextSha256: string): Promise<AccountContext | null> {
-        return this.inner.get(plaintextSha256);
-      }
-      captureVersions(accountId: string, keyId: string): Promise<AuthCacheVersions | null> {
-        return this.inner.captureVersions(accountId, keyId);
-      }
-      set(): Promise<void> {
-        this.setCalls += 1;
-        return Promise.reject(new Error('auth cache backend unavailable'));
-      }
-      invalidateKey(keyId: string): Promise<void> {
-        return this.inner.invalidateKey(keyId);
-      }
-      invalidateAccount(accountId: string): Promise<void> {
-        return this.inner.invalidateAccount(accountId);
-      }
-    }
-
     const cache = new CacheWhoseWriteFails();
     const key = await activeKey();
     const repo = repoWith({ findApiKeyByPrefix: () => Promise.resolve(key) });
@@ -405,5 +408,33 @@ describe('API-key positive-cache generation lease', () => {
     ).toBe(1);
     expect(ctx.account.id).toBe(ACCOUNT.id);
     expect(ctx.apiKey.id).toBe(key.id);
+  });
+  // The web-session path ends in the SAME swallow, commented "Same
+  // graceful-degradation as the API key path." It needs its own arm: breaking
+  // it reds nothing across 275 auth/session files and 3312 tests, because the
+  // arm above drives the api-key branch and never reaches this one.
+  it('CRITICAL a web session still authenticates when the cache WRITE fails', async () => {
+    const cache = new CacheWhoseWriteFails();
+    // Not ds_-shaped, so authenticate() routes straight to the web-session path.
+    const token = 'websession-token-that-is-long-enough-aaaa';
+    const now = new Date('2026-07-14T00:00:01.000Z');
+    const repo = repoWith({
+      findActiveWebSession: () =>
+        Promise.resolve({
+          id: 'sess_cache_write_fails',
+          accountId: ACCOUNT.id,
+          expiresAt: new Date('2026-07-20T00:00:00.000Z'),
+          revokedAt: null,
+          lastUsedAt: null,
+          mfaSatisfiedAt: null,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        }),
+    });
+
+    const ctx = await authenticate(repo, token, cache, now);
+
+    expect(cache.setCalls, 'the cache write must actually be attempted').toBe(1);
+    expect(ctx.account.id).toBe(ACCOUNT.id);
+    expect(ctx.webSession?.id).toBe('sess_cache_write_fails');
   });
 });
