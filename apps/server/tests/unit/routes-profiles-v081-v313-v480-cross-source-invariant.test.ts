@@ -174,10 +174,27 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
     // mutations now carry app.requireScope('write:profiles') between
     // them (V-481 scope enforcement), so the old adjacent-pair regex no
     // longer matches those routes. 11 routes now (8 + L4b trash/restore/purge).
-    const authRefs = p.match(/app\.requireAuth/g) ?? [];
-    expect(authRefs.length, 'requireAuth on every route').toBeGreaterThanOrEqual(11);
-    const rateRefs = p.match(/app\.rateLimit\('global'\)/g) ?? [];
-    expect(rateRefs.length, 'global rate-limit on every route').toBeGreaterThanOrEqual(11);
+    // Was `>= 11` for both, against a file that has 13 routes — two spare, and
+    // the title says "every route". Measured: dropping one requireAuth left 13
+    // and all 12 arms here passed. A bound with slack cannot see a route added
+    // without the gate, nor one that loses it.
+    //
+    // The roster is derived and compared for PARITY instead: one requireAuth and
+    // one global rate-limit per registered route. The preHandler anchor keeps the
+    // file's own header comment (which names both) out of the count.
+    // Comments are stripped first: this file's own header names both gates in
+    // prose, and counting that sentence as a gate is what let the old bound look
+    // satisfied.
+    const code = p
+      .split('\n')
+      .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+      .join('\n');
+    const routes = code.match(/^\s*app\.(?:get|post|patch|put|delete)[<(]/gm) ?? [];
+    expect(routes.length, 'the derived route roster must not collapse').toBeGreaterThanOrEqual(13);
+    const authRefs = code.match(/app\.requireAuth/g) ?? [];
+    expect(authRefs.length, 'requireAuth on every route').toBe(routes.length);
+    const rateRefs = code.match(/app\.rateLimit\('global'\)/g) ?? [];
+    expect(rateRefs.length, 'global rate-limit on every route').toBe(routes.length);
     // write:profiles on the 9 mutations: create, update, delete, clone,
     // import, transfer, restore (L4b), purge (L4b), trim (doc-150 §8 storage
     // eviction). Trash-list is read-only.
