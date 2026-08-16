@@ -415,7 +415,15 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(
       /^DATABASE_URL=postgresql:\/\/neondb_owner:REDACTED@ep-aged-pond-al77cutb\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require$/m,
     );
-    expect(body).toMatch(/Redis \(Upstash REST, eu-central\)/);
+    expect(body).toMatch(/Redis \(Upstash, eu-central\)/);
+    // REDIS_URL is the var the server actually connects with (ioredis, via
+    // bootstrap.ts). It was absent from this template while the header said
+    // "Upstash REST" and claimed an @upstash/redis wrapper that is not a
+    // dependency of this repo — so a template-built deploy ran production
+    // Redis on the silent localhost fallback. Pinned here so it stays.
+    expect(body).toMatch(
+      /^REDIS_URL=rediss:\/\/default:REDACTED@welcome-antelope-114301\.upstash\.io:6379$/m,
+    );
     expect(body).toMatch(
       /^UPSTASH_REDIS_REST_URL=https:\/\/welcome-antelope-114301\.upstash\.io$/m,
     );
@@ -481,6 +489,12 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/V-278\.K isolation: staging migrations and test writes must never land/);
     expect(body).toMatch(/deploy-bridge\.sh fails closed/);
     expect(body).toMatch(/Redis \(shared with prod, key prefix\)/);
+    // As on production: the connect-with var, absent while the REST pair
+    // stood in for it. Shared instance, so REDIS_KEY_PREFIX is what keeps
+    // staging keys off production's.
+    expect(body).toMatch(
+      /^REDIS_URL=rediss:\/\/default:REDACTED@welcome-antelope-114301\.upstash\.io:6379$/m,
+    );
     expect(body).toMatch(/^REDIS_KEY_PREFIX=stg:$/m);
     expect(body).toMatch(/^R2_BUCKET_AVATARS=driftstack-staging-avatars$/m);
     expect(body).toMatch(/^R2_BUCKET_UPLOADS=driftstack-staging-uploads$/m);
