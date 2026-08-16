@@ -414,18 +414,45 @@ second is how a stale allowlist starts lying.
 
 ## Open — needs a decision, not more engineering
 
-Ten items. Each states the evidence, what happens if nothing is decided, and a
+**This header described the section as it was, not as it is.** It claimed "ten
+items … ordered by what it costs to keep waiting". There are now **36 numbered
+entries**, in arbitrary order, with closed ones left inline — and most of the
+entries above 20 are work RECORDS appended here rather than decisions anybody is
+waiting on. A reader looking for "what needs deciding" was being handed a
+chronological log.
+
+Corrected rather than reordered, because renumbering 36 entries would break every
+cross-reference in this document. What follows is the index the header used to
+imply.
+
+**Still pending a decision — nothing more to engineer:**
+
+| #    | item                                                             | cost of waiting                                              |
+| ---- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
+| 1    | 1,515 commits have never reached CI                              | grows every commit; the eventual push is one high-risk event |
+| 2    | Three subsystems built, tested, never run                        | unknown-unknowns surface in front of a customer              |
+| 3    | Two retention-table lines cannot be honoured as written          | the published policy is not what the code does               |
+| 6    | Unrecognised request fields are silently dropped                 | a customer's typo'd field succeeds and does nothing          |
+| 7, 8 | Free-tier OAuth consent + free-tier API-key minting              | abuse surface open on the unpaid tier                        |
+| 9    | GUI signing identity                                             | ships unsigned or signed by the wrong identity               |
+| 37   | Concurrent profile transfers duplicate a profile across accounts | one profile becomes two, owned by two tenants                |
+
+Everything else numbered in this section is CLOSED, CORRECTED, or a record of
+completed work; the eight explicitly marked so are left in place for their
+evidence.
+
+Each item below states the evidence, what happens if nothing is decided, and a
 recommendation. None is blocked on more test coverage; every one is blocked on
 somebody choosing.
 
-**The list is ordered by what it costs to keep waiting**, not by effort.
+### 1. 1,515 commits have never reached CI
 
-### 1. 1,068 commits have never reached CI
-
-`git rev-list --count @{u}..HEAD` = **1,068** (was 1,031, and 1,022 before
-that). The count is re-checked each time this item is touched, because the
-evidence below decays with every commit that lands after it. Upstream's tip is `6b3a856cd`, dated **2026-07-12** —
-nineteen days. Every "gates green" any agent has reported, including all of
+`git rev-list --count @{u}..HEAD` = **1,515** (was 1,068, 1,031, and 1,022
+before that). The count is re-checked each time this item is touched, because the
+evidence below decays with every commit that lands after it — and it had decayed
+badly: the figure sat at 1,068 while the real number was **1,515**, a 42% under-
+statement, which makes the item read as less urgent than it is. Upstream's tip is
+`6b3a856cd`, dated **2026-07-12** — **34 days**, not nineteen. Every "gates green" any agent has reported, including all of
 mine, is a LOCAL result.
 
 _Doing nothing:_ the divergence grows and the eventual push is a single
@@ -1290,6 +1317,61 @@ and browser history — the request succeeding is not enough, it has to succeed 
 right way. The read path is fed a response containing an `api_key` the server
 would never send, and the value handed back is re-encoded and checked for it, so
 a struct that later grows a field able to hold the key fails there.
+
+### 37. Concurrent profile transfers duplicate a profile across accounts
+
+The only defect found across three independent concurrency enumerations (7l, 7n,
+7o), and the only one of 31 audited persistence sites where the first write is not
+a checked claim.
+
+`transferProfile` reads the source with a plain `findById` — no lock, no claim —
+inserts a fresh profile into the RECIPIENT under `insertWithLimit`, which takes the
+**recipient's** account-row lock, then soft-deletes the source. Two transfers of one
+profile to DIFFERENT recipients take DIFFERENT locks and never exclude each other,
+and nothing at any layer serialises on the source: no advisory lock, no idempotency
+key, no claim.
+
+_Evidence:_ reproduced, not argued. A first probe returned `fulfilled, rejected` —
+the benign ordering, and one sample of a race proves nothing. Forcing the
+interleaving, so both callers had provably passed their own read before either
+wrote:
+
+    outcomes = fulfilled, fulfilled
+    copies_in_recipients = 2
+    source_remaining = 1 (soft-deleted)
+
+One profile becomes two, owned by two different accounts, and both callers are told
+they succeeded. DEK handling is sound — each recipient gets a freshly minted key, so
+no key material crosses tenants — but the profile identity and its archetype/config
+are duplicated across accounts never meant to share it. The repo already reports the
+truth: `delete` is a soft delete carrying `notDeleted` and returning
+`result.length > 0`; the service calls it as a bare `await` and discards it.
+
+_Doing nothing:_ a double-clicked transfer, or a client retry, silently forks a
+customer's profile into two tenants. `auth-flows.ts::signup` names that exact
+scenario in its own comment ("a double-clicked submit") and handles it; this path
+does not.
+
+_Why it is a decision and not a fix:_ each obvious remedy trades one failure for
+another. Checking the boolean turns silence into a 409, but the loser's copy is
+already inserted and needs compensation. Delete-first gives exactly-once semantics
+but breaks a property the current ordering was written for — "a refused transfer
+leaves the source profile intact" — so a cap refusal would lose the profile
+entirely.
+
+_Recommendation:_ one transaction around the recipient insert and the source delete.
+The loser's conditional delete then matches zero rows inside its own transaction and
+rolls its insert back — no duplicate, no loss — and a cap refusal still aborts before
+anything commits. Sized in 7n: the service cannot wrap it (it holds a repo, not a
+database handle, and `insertWithLimit` opens its own transaction), so it is one new
+repo method composing the two existing bodies, touching three files — the Drizzle
+repo, the interface plus call site in `services/profiles.ts`, and the single
+in-memory test double. No other path changes: `transferProfile` is the only
+move-shaped method in the entire server, confirmed by scanning `routes/`,
+`services/` and `db/`.
+
+The 7l reproduction becomes its regression test the moment the behaviour is meant to
+differ.
 
 ## What A2 deliberately did not do
 
@@ -5622,3 +5704,50 @@ five, of which three had never fired, is closed:
     :247 first-failure  ✓ (pre-existing)      :275 first-success   ✓ (this fire, forced interleave)
     :401 renewal        ✓ (pre-existing)      :446 payment_succeeded ✓ (7p)
                                               :494 payment_failed    ✓ (7p)
+
+## 7r — the decision list had stopped being one
+
+The coverage instruments are saturated: a fresh cut this fire ranked every hot guard
+whose refusal has never fired (condition ≥50 executions, consequent 0) and returned
+49, of which the three security-relevant ones each decline on specific evidence —
+
+- `oauth.ts:741` `if (a.length !== b.length) return false` — both callers pass
+  sha256 HEX, so the lengths are equal by construction. Category 3.
+- `stripe-signing.ts:98` `if (!Number.isFinite(n)) return null` — a malformed `t`
+  would survive as `NaN` and skip the tolerance window, which looks alarming until
+  the HMAC input is read: it signs `${parsed.t}.${rawBody}`, so `t` is BOUND. The
+  request is still rejected, as `invalid_signature` rather than `malformed_header`.
+  Same security outcome, different label.
+- `profile-key-hierarchy.ts:71` UUID check — callers pass DB-sourced UUIDs, and a
+  non-UUID would derive a different key and fail decryption anyway.
+
+So the fire went somewhere else, and found something worth more than another guard.
+
+**The "Open — needs a decision" section had stopped functioning as one.** Its header
+claimed "Ten items … ordered by what it costs to keep waiting". It holds **36
+numbered entries**, in arbitrary order, closed ones inline, and most entries above 20
+are work RECORDS appended here rather than decisions anybody is waiting on. This
+section is the interface between the engineering and the person who has to choose;
+handing them a chronological log is a real defect in it.
+
+Fixed by correcting the header to describe what the section actually is and adding
+the index it used to imply — seven genuinely pending decisions, with the cost of
+waiting for each. **Not** reordered: renumbering 36 entries would break every
+cross-reference in this document, and the index gets a reader to the same place.
+
+⛔ **Item 1's evidence had decayed 42%, in the direction that makes it look less
+urgent.** The item says of itself: "the count is re-checked each time this item is
+touched, because the evidence below decays with every commit that lands after it."
+It had not been re-checked:
+
+    doc claimed:  1,068 commits ahead, upstream tip "nineteen days" old
+    measured now: 1,515 commits ahead, upstream tip 34 days old
+
+Both refreshed. ⭐ **A self-describing decay warning is not a mechanism.** The item
+knew its own number would rot and said so, and it still rotted, because nothing
+re-ran the command. The number is one `git rev-list --count @{u}..HEAD` — the fix is
+to run it when touching the section, which is now recorded in the item itself.
+
+Finally, the transferProfile defect is added as **item 37**, with its reproduction,
+its cost of waiting, and the sized recommendation from 7n. It had been sitting in the
+chronological log at 7l where a decision-maker would never find it.
