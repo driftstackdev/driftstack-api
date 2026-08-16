@@ -6110,3 +6110,68 @@ by retrying. Closed with a single arm that fails all three sinks at once and ass
 Four consecutive candidates already covered is the signal that this lens is near exhaustion in the
 well-tended services. The remaining 19-site work-list is the place to spend the next mutations, not
 another sweep of the same shape.
+
+## 7z — three lenses swept, three clean negatives, and the instrument that earned the zeros
+
+A sweep returning nothing is only worth as much as the instrument behind it. All three of these were
+validated against a known positive before their zeros were believed, and every run printed its
+denominator.
+
+### Lens 1 — security predicates that DIVERGE between copies
+
+Motivated by the expiry finding: one rule in four copies, two of which nothing held consistent.
+Generalised to "wherever a security predicate is written more than once, do the copies agree?"
+
+The instrument took three iterations, and the first two failures are the useful part:
+
+- **v1** bucketed by identifier names, so the four `X.expiresAt.getTime() <= now` copies — different
+  subjects — landed in four buckets and were never compared.
+- **v2** normalised identifiers but kept operators inside the grouping key, so two copies differing
+  ONLY in operator got different keys. That is precisely the case the lens exists to find.
+- **v3** normalises identifiers AND operators into the key, preserves the FIELD name so unrelated
+  subjects do not collide, then reports groups whose original operators are not uniform.
+
+Self-test: inject a copy of a real expiry predicate with a flipped operator; the scan must flag it.
+It does. **Result: 225 predicates, 114 distinct shapes, 35 written more than once, 3 groups with
+operator differences — all three benign** (an inverse branch, a shared helper applied to different
+subjects, and a mint-time versus authenticate-time device-key rule that are complementary rather than
+divergent).
+
+The architectural reason for the zero is worth recording: security rules here are factored into named
+helpers (`callerCanAccessAgentSession`, `isCryptoTierUpgrade`, `requireTierFeature`) rather than
+duplicated inline, so there is little surface for drift. The expiry comparison was the exception.
+
+### Lens 2 — defaults that fail OPEN
+
+Patterns where an absent or unknown value resolves to allow: `?? true`, `|| true`, `!== false`,
+`? true :`, `default: return true`. **One hit in the whole server**, and it is written defensively:
+
+    origin: deps.permissiveCors === true ? true : corsOriginMatchers(deps)
+
+An explicit `=== true`, so anything other than exactly `true` falls to the allow-list. Bootstrap then
+calls `assertCorsPosture`, which THROWS when permissive CORS is combined with production. Mutation:
+disabling the throw reds 1, inverting the environment test reds 4, and removing the call from
+bootstrap entirely reds 1. Covered in its logic and in its wiring.
+
+### Lens 3 — guards whose CALL SITE is unpinned
+
+A distinct failure mode from either of the above: the guard is correct and tested in isolation, but
+nothing notices if its call disappears. 77 statement-position guard calls across 29 functions; the six
+highest-consequence call sites were tested by deleting the call:
+
+| call site                                                             | arms red |
+| --------------------------------------------------------------------- | -------- |
+| `assertNotDeviceKey` at API-key mint                                  | 1        |
+| `assertNotDeviceKey` at API-key rotate                                | 1        |
+| `requireScope('driftstack_internal_admin')` ×2 in admin force-actions | 2 each   |
+| `requireProgrammaticApiAccess` in the auth middleware                 | 2        |
+| `assertCorsPosture` in bootstrap                                      | 1        |
+
+All pinned. The remaining 71 call sites are unmeasured and are the obvious continuation.
+
+### Process note
+
+A mutation loop that is killed mid-measurement leaves the tree dirty — a timeout during this sweep
+left `auth.ts` mutated, caught by the tree check rather than by the loop. Restores now run from an
+`EXIT`/`INT`/`TERM` trap so the restore survives the kill, and the tree is checked against HEAD after
+every sweep regardless.
