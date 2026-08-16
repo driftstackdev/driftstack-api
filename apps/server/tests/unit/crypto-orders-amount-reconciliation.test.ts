@@ -9,6 +9,23 @@
 // (incomparable units — that left every full crypto payment stuck 'partial').
 // price_amount is persisted on the audit event for support reference only.
 //
+// MUTATION-PROVED 2026-08-16 against services/crypto-orders.ts, whole node
+// project, tsc exit 0. Making the short-payment branch unreachable — so an
+// under-payment is never short and flips the order to 'paid' — reds only 3, and
+// the spread is the point:
+//
+//   unit/crypto-orders-amount-reconciliation (this file)   1 red
+//   integration/crypto-order-paid-tier-activation          1 red
+//   unit/services-crypto-orders-content-parity             1 red
+//
+// One behavioural unit arm, one end-to-end arm, one source-text pin. Delete this
+// file and the check survives on the integration arm alone, with a pin that
+// would go green again the moment someone rewrites the comparison rather than
+// removes it. That is thin for the gate deciding whether an under-payment buys a
+// tier, and it is thin because the interesting cases are arithmetic —
+// unit-mismatch, tolerance edges, zero and missing amounts — which an
+// end-to-end test is a poor place to enumerate. Add arithmetic cases HERE.
+//
 // V-743: a settled payment that lands on an order the expiry sweep already
 // flipped to 'failed' (or that the customer cancelled) is deliberately NOT
 // applied — but it now raises an integrity alarm, because the money is real and

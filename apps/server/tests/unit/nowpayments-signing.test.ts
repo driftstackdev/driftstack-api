@@ -4,6 +4,24 @@
 // level), keyed on the IPN secret. Tests pin: happy path, wrong
 // secret, wrong body, key-order independence, bad-hex graceful return,
 // length mismatch, raw-body fallback for non-JSON.
+//
+// MUTATION-PROVED 2026-08-16 against lib/nowpayments-signing.ts, whole node
+// project, tsc exit 0. Making the final `timingSafeEqual` always accept — so any
+// forged IPN verifies — reds 8:
+//
+//   unit/nowpayments-signing (this file)                  2 red
+//   unit/webhooks-nowpayments                             2 red
+//   integration/webhooks-nowpayments (invalid sig -> 401) 1 red
+//   unit/nowpayments-webhook-metrics                      1 red
+//   the two source-text pins                              2 red
+//
+// This header is worth its space because of WHAT the signature is here: the
+// route's own comment says "Public, no auth — `x-nowpayments-sig` header IS the
+// auth". There is no second gate behind it. A forged IPN that verifies walks
+// straight into the crypto order state machine, and the only thing then standing
+// between it and a tier activation is the under-payment check in
+// services/crypto-orders.ts — which is separately proved at 3 red, and is about
+// the AMOUNT rather than about whether the message is genuine.
 
 import { describe, expect, it } from 'vitest';
 import { createHmac } from 'node:crypto';

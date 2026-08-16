@@ -16,6 +16,26 @@
 // To regenerate a fixture:
 //   echo -n "<timestamp>.<body>" | \
 //     openssl dgst -sha256 -hmac "<secret>" -hex
+//
+// MUTATION-PROVED 2026-08-16 against lib/stripe-signing.ts, whole node project,
+// tsc exit 0 on both (a mutation that fails to typecheck is contaminated, not a
+// verdict):
+//
+//   the v1 comparison never refuses — any forged body verifies    11 red
+//   the t= tolerance window removed — a replayed event verifies     3 red
+//
+// The first is the one this file was written for, and the split is worth
+// knowing: of those 11, SEVEN are these reference vectors, one is
+// `stripe-webhooks` integration asserting 401 on a wrong-secret signature, and
+// the rest are the source-text pins. Drop this file and a forged-signature
+// bypass still fails the build — but only through the integration arm and the
+// pins, which is thin cover for the check that decides whether an unauthenticated
+// caller can move a customer between price points.
+//
+// The replay row is thinner still at 3, and that asymmetry is real rather than
+// an oversight: forging a signature needs the secret, while replaying a captured
+// one needs only the wire. The tolerance window is the only thing standing
+// against the second, so treat a change to `toleranceSec` as load-bearing.
 
 import { describe, expect, it } from 'vitest';
 import { verifyStripeSignature } from '../../src/lib/stripe-signing.js';
