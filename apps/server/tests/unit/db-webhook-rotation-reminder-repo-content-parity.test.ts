@@ -63,12 +63,18 @@ describe('db/webhook-rotation-reminder-repo content parity', () => {
     expect(body).toMatch(
       /private requireEncryptionKey\(\): string \{[\s\S]*?Webhook secret encryption key is unavailable/,
     );
+    // The key is resolved ONCE per row and OUTSIDE the try, not re-fetched at
+    // each call site. That placement is the load-bearing part: a missing key is
+    // a deployment fault for every row and must propagate, while a single row
+    // that will not decrypt is skipped so the cross-account sweep survives it.
+    expect(body).toMatch(/const encryptionKey = this\.requireEncryptionKey\(\);\s*\n\s*try \{/);
     expect(body).toMatch(
-      /secret: readWebhookSecret\(r\.secret, this\.requireEncryptionKey\(\), \{\s*\n?\s*accountId: r\.accountId,\s*\n?\s*endpointId: r\.id,\s*\n?\s*\}\)/,
+      /secret: readWebhookSecret\(r\.secret, encryptionKey, \{\s*\n?\s*accountId: r\.accountId,\s*\n?\s*endpointId: r\.id,\s*\n?\s*\}\)/,
     );
     expect(body).toMatch(
-      /readWebhookSecret\(r\.secretPrev, this\.requireEncryptionKey\(\), \{\s*\n?\s*accountId: r\.accountId,\s*\n?\s*endpointId: r\.id,\s*\n?\s*\}\)/,
+      /readWebhookSecret\(r\.secretPrev, encryptionKey, \{\s*\n?\s*accountId: r\.accountId,\s*\n?\s*endpointId: r\.id,\s*\n?\s*\}\)/,
     );
+    expect(body).toMatch(/this\.onUndecryptableSecret\?\.\(\{/);
   });
 
   it("markReminderSent updates ONLY lastReminderSentAt framing pinned: .set({ lastReminderSentAt: args.now }) + void sql to suppress unused-import warn. Drift to bumping updatedAt would create artificial 'customer mutated' signals on every reminder cycle (vs the actual customer-driven mutation events)", () => {

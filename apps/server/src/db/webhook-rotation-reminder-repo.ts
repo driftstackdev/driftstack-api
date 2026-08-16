@@ -17,11 +17,30 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export class DrizzleWebhookRotationReminderRepo implements WebhookRotationReminderRepo {
   private readonly secretEncryptionKeyBase64: string | undefined;
 
+  /**
+   * Reports a row whose stored secret could not be decrypted during a
+   * cross-account sweep. The sweep skips that row and continues; without this
+   * the skip would be silent, which is the other way to lose a reminder.
+   */
+  private readonly onUndecryptableSecret?: (info: {
+    endpointId: string;
+    accountId: string;
+    error: unknown;
+  }) => void;
+
   constructor(
     private readonly database: Database,
-    options: { secretEncryptionKeyBase64?: string } = {},
+    options: {
+      secretEncryptionKeyBase64?: string;
+      onUndecryptableSecret?: (info: {
+        endpointId: string;
+        accountId: string;
+        error: unknown;
+      }) => void;
+    } = {},
   ) {
     this.secretEncryptionKeyBase64 = options.secretEncryptionKeyBase64;
+    this.onUndecryptableSecret = options.onUndecryptableSecret;
   }
 
   private requireEncryptionKey(): string {
@@ -83,38 +102,58 @@ export class DrizzleWebhookRotationReminderRepo implements WebhookRotationRemind
       .orderBy(webhookEndpoints.secretCreatedAt)
       .limit(args.limit);
 
-    return rows.map((r) => ({
-      id: r.id,
-      accountId: r.accountId,
-      url: r.url,
-      secret: readWebhookSecret(r.secret, this.requireEncryptionKey(), {
-        accountId: r.accountId,
-        endpointId: r.id,
-      }),
-      secretPrefix: r.secretPrefix,
-      secretPrev:
-        r.secretPrev !== null
-          ? readWebhookSecret(r.secretPrev, this.requireEncryptionKey(), {
+    return rows.flatMap((r) => {
+      // Resolved OUTSIDE the try on purpose. A MISSING KEY is a deployment fault
+      // affecting every row and must stay loud — swallowing it here turned a hard
+      // failure into a silently empty sweep, the exact failure the "REFUSES rather
+      // than returning ciphertext" arm forbids. Only a per-ROW failure is recoverable.
+      const encryptionKey = this.requireEncryptionKey();
+      try {
+        return [
+          {
+            id: r.id,
+            accountId: r.accountId,
+            url: r.url,
+            secret: readWebhookSecret(r.secret, encryptionKey, {
               accountId: r.accountId,
               endpointId: r.id,
-            })
-          : null,
-      secretPrevExpiresAt: r.secretPrevExpiresAt,
-      secretCreatedAt: r.secretCreatedAt,
-      lastReminderSentAt: r.lastReminderSentAt,
-      graceWindowEndsAt: r.graceWindowEndsAt,
-      forceRotatedAt: r.forceRotatedAt,
-      events: sanitizePersistedWebhookEvents(r.events),
-      description: r.description,
-      active: r.active,
-      consecutiveFailures: r.consecutiveFailures,
-      lastSuccessAt: r.lastSuccessAt,
-      lastFailureAt: r.lastFailureAt,
-      disabledAt: r.disabledAt,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-      accountEmail: r.accountEmail,
-    }));
+            }),
+            secretPrefix: r.secretPrefix,
+            secretPrev:
+              r.secretPrev !== null
+                ? readWebhookSecret(r.secretPrev, encryptionKey, {
+                    accountId: r.accountId,
+                    endpointId: r.id,
+                  })
+                : null,
+            secretPrevExpiresAt: r.secretPrevExpiresAt,
+            secretCreatedAt: r.secretCreatedAt,
+            lastReminderSentAt: r.lastReminderSentAt,
+            graceWindowEndsAt: r.graceWindowEndsAt,
+            forceRotatedAt: r.forceRotatedAt,
+            events: sanitizePersistedWebhookEvents(r.events),
+            description: r.description,
+            active: r.active,
+            consecutiveFailures: r.consecutiveFailures,
+            lastSuccessAt: r.lastSuccessAt,
+            lastFailureAt: r.lastFailureAt,
+            disabledAt: r.disabledAt,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+            accountEmail: r.accountEmail,
+          },
+        ];
+      } catch (error) {
+        // One row whose secret will not decrypt must not stop the sweep for
+        // every other account. Skipping is reported, never silent.
+        this.onUndecryptableSecret?.({
+          endpointId: r.id,
+          accountId: r.accountId,
+          error,
+        });
+        return [];
+      }
+    });
   }
 
   async markReminderSent(args: { endpointId: string; now: Date }): Promise<void> {

@@ -459,6 +459,14 @@ export async function createProductionDeps(
     ...(config.mfaEncryptionKey !== undefined
       ? { secretEncryptionKeyBase64: config.mfaEncryptionKey }
       : {}),
+    onUndecryptableSecret: ({ endpointId, accountId, error }) => {
+      // A cross-account sweep skips this row rather than failing for every
+      // other account. Logged at error so the wedged endpoint is findable.
+      logger.error(
+        { endpointId, accountId, err: error },
+        'webhook endpoint secret could not be decrypted; skipped in sweep',
+      );
+    },
   });
   if (config.mfaEncryptionKey !== undefined) {
     const MAX_WEBHOOK_SECRET_BOOT_MIGRATION_ROWS = 10_000;
@@ -2173,6 +2181,12 @@ export async function createProductionDeps(
       ...(config.mfaEncryptionKey !== undefined
         ? { secretEncryptionKeyBase64: config.mfaEncryptionKey }
         : {}),
+      onUndecryptableSecret: ({ endpointId, accountId, error }) => {
+        logger.error(
+          { endpointId, accountId, err: error },
+          'webhook endpoint secret could not be decrypted; skipped in rotation-reminder sweep',
+        );
+      },
     }),
     email,
     logger,
