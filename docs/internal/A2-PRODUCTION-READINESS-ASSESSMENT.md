@@ -5134,3 +5134,85 @@ value), and stop if it is. Applied to the tail of this list it returns "stop" ev
 time — which is why the sweep is done, and why the next measured axis should be a
 different one (branch polarity, error-path coverage, or a fresh coverage pass after
 the next batch of features lands) rather than more of this list.
+
+## 7k — a new axis opened, measured, and closed: swallowed errors
+
+7j said the next measured axis should be a different one. This is it: `catch` blocks
+that discard the error. They are silent-failure sites by construction — no throw, no
+log, no return value change — so coverage cannot rank them and only the contents of
+the `try` say whether the silence matters.
+
+⛔ **The first scan was wrong, and reading one hit is what caught it.** It reported 220
+swallows. The classifier walked forward from the `catch` line counting braces, and for
+the extremely common shape
+
+    } catch {
+
+the delta is **net zero** — the try block's closing brace cancels the catch's opening
+one — so the walk terminated after a single line and judged every such body empty.
+`agent-session-control-key.ts:97` appeared on the list and does the opposite of
+swallowing: it throws `UnauthorizedError`. Counting braces only from the catch's own
+`{` gives the real figure: **149**, and the file that exposed the bug is correctly
+excluded.
+
+That is a 32% over-count in the direction that manufactures work. Worth stating
+plainly: **a brace-counting scanner must anchor on the token it cares about, not on
+the line containing it** — the line is shared with the construct that just closed.
+
+Filtering the corrected 149 to those whose `try` is not metrics/logging/audit/cleanup
+leaves **68**. The security-relevant ones were read, and each is sound:
+
+| site                              | why the silence is safe                                                                                                                                                                                                |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `webhook-target-guard.ts:133`     | entered only when `isIP(host) === 6`, which `new URL('http://[host]/')` parses; and if it did fire, the `::ffff:`, `::`-embedded-IPv4 and BlockList checks still run                                                   |
+| `account-me.ts:291/805/840`       | `invalidateAccount` already degrades internally ("any Redis error … logged and treated as a no-op") and the worst case is the documented 30s TTL — the version counter makes a stale entry a miss, not stale authority |
+| `agent-sessions.ts:3635`          | a failed control-key decrypt leaves `plaintext` null, which routes into the authenticated recovery path that mints and commits a fresh key                                                                             |
+| `agent-session-control-key.ts:97` | not a swallow at all — the scanner bug above                                                                                                                                                                           |
+
+⭐ The axis is closed with nothing to ship, and the reason is worth keeping: **the
+swallows in this codebase are deliberate and bounded, and each one says so in a
+comment that names the recovery.** That is the difference between a swallow and a bug
+— not whether the error is discarded, but whether the code that follows has a defined
+behaviour for the failure. Every one examined here does.
+
+_Next axis, for whoever picks this up: none of statement, branch, return, throw or
+swallow coverage now yields a ranked list with real defects in it. The instruments
+have converged. The next genuinely new signal will come from a fresh coverage pass
+AFTER the next batch of features lands, or from a different question entirely —
+concurrency (which produced five of the six shipped guards) applied to paths that have
+no second caller yet._
+
+### 7k (cont.) — the guard I almost wrote was a lint rule
+
+The claim above — "each swallow names its recovery in a comment" — was a
+generalisation from four files, so it was measured across all of them:
+
+    swallows WITH an explanatory comment: 149
+    swallows with NO comment at all:        0
+
+149 of 149. An invariant that already holds perfectly is exactly the kind worth
+pinning, and the guard was half-written: scan `apps/server/src` for a `catch` whose
+body has neither code nor a comment, assert the list is empty, mutation-prove by
+introducing one.
+
+**It would have duplicated a lint rule.** `eslint.config.js` extends
+`js.configs.recommended`, which includes `no-empty`, and that rule ignores blocks
+containing a comment while flagging genuinely empty ones. That is precisely the
+observed distribution — not discipline that happened to hold, but a rule that cannot
+be violated.
+
+Verified rather than inferred, because the reasoning would have been just as
+comfortable if it were wrong. Stripping the comment from one existing swallow and
+linting the file:
+
+    291:17  error  Empty block statement  no-empty
+
+⭐ The lint rule is also STRONGER than the test would have been: it runs in
+`lint-staged` at commit time, so a bare `catch {}` cannot reach a branch at all,
+whereas a test only fails after it is written. **Before pinning an invariant that
+holds perfectly, ask what is already making it hold** — a distribution with zero
+exceptions across 149 sites is more often an enforced rule than a maintained habit.
+
+_(A stdin probe was tried first and could not answer: the type-checked ESLint config
+rejects a pseudo-filename that is not in the tsconfig project. Mutating a real file
+and restoring it was the only way to ask the question.)_
