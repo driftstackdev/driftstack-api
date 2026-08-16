@@ -7187,3 +7187,34 @@ the first attempt, because a retried real failure is a silent pass.
 `AgentModelSchema` while the DB CHECK still pins four reds two arms. That is the
 proof that this is a fix rather than leniency — the transient condition is
 handled, the property is not.
+
+### 53. Fourteen integration files reported PASSED when their database was absent
+
+Item 52's flake surfaced the shape: a whole file's tests can vanish into a status
+that is not red. This is the sibling case, and it is worse, because it reports as
+**passed** rather than skipped.
+
+The idiom across `tests/integration` is a module-level `client` that stays null
+when Postgres is unreachable, and arms opening `if (!client) return;`. That is
+right when the suite runs without a database — `describe.skipIf` skips the block.
+The hole is when the describe DOES run and the service is down: every arm returns
+early and the file reports as PASSED.
+
+**Measured, not argued.** Pointed `db-pricing-repo-drizzle` at a dead Postgres:
+before the fix it reported **2 passed**. A green meaning "no database" was
+indistinguishable from one meaning "the database agreed".
+
+14 files were in that state. Each now carries one arm asserting the handle is
+non-null, so the same dead-database run reports **1 failed | 2 passed** — the two
+vacuous passes are still visible in that line, and the new arm is the only thing
+objecting.
+
+A structural guard keeps it that way: any integration file that bails on a
+missing service must also assert the service was there. Proved by removing an arm
+(the guard names the file) and by neutering the bail detector (the anti-vacuity
+arm fires rather than going quietly green).
+
+⚠️ The guard's first draft matched a literal `toBe(true)` and flagged three
+files whose only sin was that **prettier had wrapped the call across lines**. I
+checked each before believing it, rather than "fixing" three correct files. The
+matcher now tolerates whitespace, and the comment says why.

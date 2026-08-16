@@ -98,6 +98,20 @@ afterAll(async () => {
 describe.skipIf(!RUN_DB_TESTS)(
   'BYOK Anthropic account-bound migration (Drizzle path, real Postgres)',
   () => {
+    it('CRITICAL the database is reachable, so nothing below can pass vacuously', () => {
+      // Every arm in this file returns early when `client` is null. That is right
+      // when the suite runs without a database: the describe is skipped and
+      // nothing claims to have tested anything. But when the describe DOES run and
+      // Postgres is down or unmigrated, every arm returns early and the file
+      // reports as PASSED. A green meaning "the database was missing" is
+      // indistinguishable from one meaning "the database agreed", and that is the
+      // worse of the two failure modes.
+      expect(
+        client,
+        'postgres unreachable or unmigrated — the arms below never ran',
+      ).not.toBeNull();
+    });
+
     it('preserves bytes/timestamps on wrong key, migrates, then rejects cross-account relocation', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
