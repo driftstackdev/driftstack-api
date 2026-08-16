@@ -248,6 +248,60 @@ describe('API-key positive-cache generation lease', () => {
     });
   });
 
+  // The two arms above cover the CACHE-HIT revalidation. The same comparison
+  // appears twice more on the slow path, and flipping either left all 1747 auth
+  // tests green: the first-time web-session authentication, and the API-key
+  // re-read that runs after the cache generations are captured.
+  //
+  // Completing the set matters for the same reason as the first pair: four
+  // copies of one boundary, and a change applied to some of them makes the same
+  // credential accepted or rejected depending only on which path served it.
+  it('CRITICAL a slow-path web session whose expiry IS the current instant is already expired', async () => {
+    const token = 'websession-token-that-is-long-enough-bbbb';
+    const at = new Date('2026-07-14T00:00:02.000Z');
+    const sessionRow = (expiresAt: Date) => ({
+      id: 'sess_slow_path_boundary',
+      accountId: ACCOUNT.id,
+      expiresAt,
+      revokedAt: null,
+      lastUsedAt: null,
+      mfaSatisfiedAt: null,
+      createdAt: new Date('2026-07-01T00:00:00.000Z'),
+    });
+    // No cache at all, so this takes the slow path rather than the cache-hit
+    // revalidation the arms above exercise.
+    const expiring = repoWith({ findActiveWebSession: () => Promise.resolve(sessionRow(at)) });
+    await expect(authenticate(expiring, token, null, at)).rejects.toBeInstanceOf(ExpiredKeyError);
+
+    const valid = repoWith({
+      findActiveWebSession: () => Promise.resolve(sessionRow(new Date(at.getTime() + 1))),
+    });
+    await expect(authenticate(valid, token, null, at)).resolves.toMatchObject({
+      account: { id: ACCOUNT.id },
+    });
+  });
+
+  it('CRITICAL a key that expires between the first read and the revalidation is rejected', async () => {
+    // After capturing the cache generations the slow path re-reads the key, so
+    // a key can be valid on the first read and expired on the second. That
+    // second comparison is the one under test: the first read returns an
+    // unexpired key, the re-read returns one whose expiry IS the current
+    // instant.
+    const cache = new InMemoryAuthCache();
+    const key = await activeKey();
+    const at = new Date('2026-07-14T00:00:02.000Z');
+    let reads = 0;
+    const repo = repoWith({
+      findApiKeyByPrefix: () => {
+        reads += 1;
+        return Promise.resolve(reads === 1 ? key : { ...key, expiresAt: at });
+      },
+    });
+
+    await expect(authenticate(repo, PLAINTEXT, cache, at)).rejects.toBeInstanceOf(ExpiredKeyError);
+    expect(reads, 'the revalidation re-read must actually have happened').toBe(2);
+  });
+
   it('rejects a cached key whose live secret hash rotated without invalidation', async () => {
     const cache = new InMemoryAuthCache();
     const key = await activeKey();
