@@ -18,6 +18,7 @@
 // reviews this constant before flipping the gate on.
 
 import { binarySizeLabel } from '../lib/binary-size-label.js';
+import { MAX_SSE_BUFFER_BYTES, MAX_SSE_HEARTBEAT_BUFFER_BYTES } from '../lib/sse-backpressure.js';
 import {
   SESSION_UPLOAD_MAX_LIFETIME_BYTES_DEFAULT,
   UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES_DEFAULT,
@@ -3460,7 +3461,6 @@ export function registerAgentSessionsRoutes(
             : -1;
         const resumeFrom = Number.isFinite(lastEventId) ? lastEventId : -1;
 
-        const MAX_SSE_BUFFER_BYTES = 4_000_000;
         let closed = false;
         let acquired = false;
         let unsubscribe = (): void => {};
@@ -5130,7 +5130,7 @@ export function registerAgentSessionsRoutes(
         // A stalled viewer is not allowed to turn tiny heartbeats into an
         // unbounded socket buffer. End only its representation; the turn keeps
         // running and remains observable through the durable transcript.
-        if (reply.raw.writableLength > 64 * 1024) {
+        if (reply.raw.writableLength > MAX_SSE_HEARTBEAT_BUFFER_BYTES) {
           viewerClosed = true;
           reply.raw.end();
           return;

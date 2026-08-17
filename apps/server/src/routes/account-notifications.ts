@@ -21,6 +21,7 @@
 // concretely asks for it.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { MAX_SSE_BUFFER_BYTES } from '../lib/sse-backpressure.js';
 import type { NotificationEventBus } from '../services/notification-event-bus.js';
 import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 import { RateLimitedError } from '../lib/errors.js';
@@ -55,7 +56,6 @@ export const DEFAULT_MAX_SSE_PER_ACCOUNT = 10;
 // L1 — backpressure high-water mark, mirroring the transcript SSE (agent-sessions
 // W383). A stalled client (TCP window full) would otherwise let published events
 // buffer unboundedly in the socket (reply.raw.writableLength grows → server OOM).
-const MAX_SSE_BUFFER_BYTES = 4_000_000;
 
 export function registerAccountNotificationsRoutes(
   app: FastifyInstance,

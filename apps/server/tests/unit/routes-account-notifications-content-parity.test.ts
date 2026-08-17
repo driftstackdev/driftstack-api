@@ -250,7 +250,12 @@ describe('routes/account-notifications.ts content parity', () => {
   });
 
   it('L1 — shared backpressure cap closes both notification-event and heartbeat backlog', () => {
-    expect(body).toMatch(/const MAX_SSE_BUFFER_BYTES = 4_000_000;/);
+    // The ceiling is shared, not redeclared: it used to be a local
+    // `const MAX_SSE_BUFFER_BYTES = 4_000_000;` in each of the three SSE
+    // routes, each pinned by its own parity test, with nothing requiring the
+    // three to agree. Pin the import so a copy cannot come back.
+    expect(body).toContain("from '../lib/sse-backpressure.js'");
+    expect(body).not.toMatch(/const MAX_SSE_BUFFER_BYTES = /);
     expect(body).toMatch(/if \(reply\.raw\.writableLength > MAX_SSE_BUFFER_BYTES\) cleanup\(\);/);
     expect(body.match(/closeIfBackpressured\(\);/g)).toHaveLength(2);
   });

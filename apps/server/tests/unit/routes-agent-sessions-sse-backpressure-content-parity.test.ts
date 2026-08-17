@@ -201,7 +201,12 @@ describe('W383 agent-session transcript SSE backpressure guard content parity', 
   });
 
   it('generous high-water mark constant pinned (4MB)', () => {
-    expect(body).toMatch(/const MAX_SSE_BUFFER_BYTES = 4_000_000;/);
+    // The ceiling is shared, not redeclared: it used to be a local
+    // `const MAX_SSE_BUFFER_BYTES = 4_000_000;` in each of the three SSE
+    // routes, each pinned by its own parity test, with nothing requiring the
+    // three to agree. Pin the import so a copy cannot come back.
+    expect(body).toContain("from '../lib/sse-backpressure.js'");
+    expect(body).not.toMatch(/const MAX_SSE_BUFFER_BYTES = /);
   });
 
   it('live-event write path closes the stream when the socket buffer exceeds the mark (backpressure)', () => {

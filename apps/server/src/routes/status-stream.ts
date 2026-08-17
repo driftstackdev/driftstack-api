@@ -14,6 +14,7 @@
 // process at 500 total connections and 10 per IP.
 
 import type { FastifyInstance } from 'fastify';
+import { MAX_SSE_BUFFER_BYTES } from '../lib/sse-backpressure.js';
 import { FeatureUnavailableError } from '../lib/errors.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { IncidentEvent, IncidentEventBus } from '../services/incident-event-bus.js';
@@ -25,7 +26,6 @@ import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 // Same per-stream high-water mark as the authenticated notification/transcript
 // SSE routes. Connection caps bound socket count; this independently bounds the
 // bytes a single stalled public client can retain between writes.
-const MAX_SSE_BUFFER_BYTES = 4_000_000;
 
 export interface StatusStreamRoutesOptions {
   bus: IncidentEventBus;

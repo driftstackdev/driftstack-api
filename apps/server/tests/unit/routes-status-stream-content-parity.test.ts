@@ -118,7 +118,12 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
   });
 
   it('Event and heartbeat writes close a stream past the established 4MB buffer ceiling', () => {
-    expect(body).toContain('const MAX_SSE_BUFFER_BYTES = 4_000_000;');
+    // The ceiling is shared, not redeclared: it used to be a local
+    // `const MAX_SSE_BUFFER_BYTES = 4_000_000;` in each of the three SSE
+    // routes, each pinned by its own parity test, with nothing requiring the
+    // three to agree. Pin the import so a copy cannot come back.
+    expect(body).toContain("from '../lib/sse-backpressure.js'");
+    expect(body).not.toMatch(/const MAX_SSE_BUFFER_BYTES = /);
     expect(body).toMatch(
       /const closeIfBackpressured = \(\): void => \{\s*\n?\s*if \(reply\.raw\.writableLength > MAX_SSE_BUFFER_BYTES\) cleanup\(\);\s*\n?\s*\};/,
     );
