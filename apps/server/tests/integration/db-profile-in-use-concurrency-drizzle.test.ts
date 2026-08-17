@@ -150,6 +150,11 @@ function requireProfileInUseError(result: PromiseSettledResult<unknown>): Profil
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'single-active-session-per-profile guard is atomic (per-profile advisory lock, real Postgres)',
   () => {
+    it('CRITICAL the dependency was reachable, so a green here is not "no service". V-793 — this file was MISSED by the original sweep: it bails on a missing handle in every arm and never asserted the handle was there, so a run against a dead Postgres reported PASSED. The position-aware guard found it.', () => {
+      expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
+      expect(client, 'the integration dependency was unreachable').not.toBeNull();
+    });
+
     it('cross-surface: concurrent legacy + agent creates on the SAME profile → EXACTLY 1 global bind with the competing public id', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;

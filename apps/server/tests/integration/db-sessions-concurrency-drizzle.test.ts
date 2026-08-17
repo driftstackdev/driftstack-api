@@ -38,12 +38,6 @@ let client: ReturnType<typeof postgres> | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
-  it('CRITICAL the service was reachable, so a green here is not "no service"', () => {
-    // Without this, every arm below early-returns against a dead service and the
-    // file reports PASSED — a green meaning "nothing was tested".
-    expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
-  });
-
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;
@@ -103,6 +97,13 @@ function mkInput(accountId: string, apiKeyId: string, i: number): NewSessionInpu
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'sessions concurrent-cap enforcement is atomic (insertSessionIfUnderLimit advisory lock, real Postgres)',
   () => {
+    it('CRITICAL the dependency was reachable, so a green here is not "no service". V-793 — this arm previously sat inside beforeAll, where vitest registers nothing: the assertion existed as text, never ran, and the hole it was written to close stayed open.', () => {
+      // Every arm below early-returns when the handle is absent. Without this
+      // one, a run against a dead service reports PASSED — a green meaning
+      // "nothing was tested", indistinguishable from "the service agreed".
+      expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
+    });
+
     it('5 concurrent inserts on a limit-1 account yield EXACTLY 1 row (the advisory lock serialises → 4 losers get null)', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;

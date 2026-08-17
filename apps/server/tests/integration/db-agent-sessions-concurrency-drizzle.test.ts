@@ -48,12 +48,6 @@ let client: ReturnType<typeof postgres> | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
-  it('CRITICAL the service was reachable, so a green here is not "no service"', () => {
-    // Without this, every arm below early-returns against a dead service and the
-    // file reports PASSED — a green meaning "nothing was tested".
-    expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
-  });
-
   const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
   if (isolated === null) return;
   DB_URL = isolated;
@@ -129,6 +123,13 @@ afterAll(async () => {
 describe.skipIf(!RUN_DB_TESTS)(
   'agent_sessions debitTokens/appendTranscript atomicity under concurrency (Drizzle path, real Postgres)',
   () => {
+    it('CRITICAL the dependency was reachable, so a green here is not "no service". V-793 — this arm previously sat inside beforeAll, where vitest registers nothing: the assertion existed as text, never ran, and the hole it was written to close stayed open.', () => {
+      // Every arm below early-returns when the handle is absent. Without this
+      // one, a run against a dead service reports PASSED — a green meaning
+      // "nothing was tested", indistinguishable from "the service agreed".
+      expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
+    });
+
     it('concurrent debitTokens never lose an update (FOR UPDATE row lock serialises → 100-30-40=30)', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;

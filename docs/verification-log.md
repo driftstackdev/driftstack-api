@@ -34440,3 +34440,53 @@ dirty — their diff replaces `eq(profiles.accountId, args.accountId)` with `sql
 the cursor branch, which is a tenant-isolation **mutation probe in progress**, not a code change.
 `cross-account-crypto-order-isolation` passes 7/7 in isolation, so that one was contention. I left
 both alone; a full gate will keep reporting the profiles pin until they restore.
+
+## V-793 — a text-matching guard certified 18 fixes that never ran, and missed 2 files entirely (2026-08-17)
+
+`80a422ee1` found a real and well-described defect: an integration file whose every arm opens
+`if (!client) return;` reports **PASSED** when the service is down — a green meaning "nothing was
+tested", indistinguishable from one meaning "the database agreed". Measured there on
+`db-pricing-repo-drizzle`: pointed at a dead Postgres it reported 2 passed. Nineteen files were
+patched with an arm asserting the handle, and a new guard was added to keep it that way.
+
+**In 18 of those 19 files the arm was placed inside `beforeAll`, where `it()` registers nothing.**
+vitest drops it silently. The only visible symptom is that a file's registered-test count is one
+lower than its `it(` occurrences — `production-bootstrap-arms-every-chain` reported `1 passed` with
+two `it(` in the file; `db-incidents-truth-drizzle` and `db-scheduled-jobs-repo-drizzle` reported 5
+against 6. So the assertion existed as text, never executed, and the hole stayed exactly as wide as
+before.
+
+**The guard could not see that, because it searched the file rather than the cases.** It tested
+`ASSERTS_THE_DEPENDENCY_WAS_THERE` against the whole source, so text anywhere satisfied it —
+including inside a hook. A check that matches text cannot distinguish a registered test from dead
+code, which is the same defect it was written to catch, one level up. Its own header even reasons
+carefully about two earlier false-negative shapes (a compound bail, a prettier-wrapped matcher)
+without reaching the one that mattered.
+
+Hardened to be **position-aware**: `registeredCaseBodies()` brace-matches every `it(`/`test(` body
+and the assertion only counts inside one. Two things came out of that immediately:
+
+1. **18 offenders** — every file the previous version had reported clean. That red _is_ the scope
+   measurement; I did not have to trust an enumeration.
+2. **2 files the original sweep never touched** — `db-crypto-entitlements-drizzle` and
+   `db-profile-in-use-concurrency-drizzle` bail on a missing handle in every arm and never asserted
+   it was present. The text-matching version could not have found them either, since they had no
+   assertion text to match in the wrong place; it found them by asking the right question.
+
+All 20 now carry the arm inside the `describe`. Proved behaviourally rather than by the guard alone:
+pointed at `postgres://nobody@127.0.0.1:1/nope`, every one of them **fails** —
+`db-sessions-concurrency` 1 failed | 2 passed, `db-crypto-entitlements` 1 failed | 4 passed,
+`parked-pair-mode-survives-a-restart` and `production-bootstrap-arms-every-chain` 1 failed | 1 passed,
+and `db-incidents-truth` fails at the hook with `ECONNREFUSED` and skips all 6. Against the real
+database, 21 files / 94 tests green.
+
+The guard also gained a fixture case, because the corpus is expected to be clean and a matcher that
+silently accepted everything would agree with it — which is precisely how the previous version
+agreed with 18 broken files. Four literal fixtures (assertion in a case, assertion in a hook, both
+shapes) pin the position-awareness directly.
+
+Two of my own files were among the 18. The criticism landed on work I committed in V-784 and V-785,
+and it was correct: I wrote `expect(dbReachable, '…').toBe(false); return;` in the unreachable
+branch, which passes having verified nothing.
+
+`EXPECTED_TEST_FILES` unchanged — no file was added, 20 assertions were moved and one guard hardened.

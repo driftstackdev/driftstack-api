@@ -29,12 +29,6 @@ let client: ReturnType<typeof postgres> | null = null;
 const TEST_SCHEMA = `webhook_claim_reclaim_${randomUUID().replaceAll('-', '')}`;
 
 beforeAll(async () => {
-  it('CRITICAL the service was reachable, so a green here is not "no service"', () => {
-    // Without this, every arm below early-returns against a dead service and the
-    // file reports PASSED — a green meaning "nothing was tested".
-    expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
-  });
-
   admin = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await admin`SELECT 1`;
@@ -79,6 +73,13 @@ afterAll(async () => {
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'DrizzleWebhooksRepo.claim — stale in_flight reclaim (Drizzle path against real Postgres)',
   () => {
+    it('CRITICAL the dependency was reachable, so a green here is not "no service". V-793 — this arm previously sat inside beforeAll, where vitest registers nothing: the assertion existed as text, never ran, and the hole it was written to close stayed open.', () => {
+      // Every arm below early-returns when the handle is absent. Without this
+      // one, a run against a dead service reports PASSED — a green meaning
+      // "nothing was tested", indistinguishable from "the service agreed".
+      expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
+    });
+
     it('reclaims a stale in_flight row + a due pending row, but leaves a fresh in_flight row alone', async () => {
       if (!dbReachable || !client) {
         return;

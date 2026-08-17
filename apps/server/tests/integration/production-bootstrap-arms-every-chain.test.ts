@@ -43,12 +43,6 @@ let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
 
 beforeAll(async () => {
-  it('CRITICAL the service was reachable, so a green here is not "no service"', () => {
-    // Without this, every arm below early-returns against a dead service and the
-    // file reports PASSED — a green meaning "nothing was tested".
-    expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
-  });
-
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;
@@ -72,6 +66,13 @@ afterAll(async () => {
 });
 
 describe('the production dependency graph arms every recurring chain', () => {
+  it('CRITICAL the dependency was reachable, so a green here is not "no service". V-793 — this arm previously sat inside beforeAll, where vitest registers nothing: the assertion existed as text, never ran, and the hole it was written to close stayed open.', () => {
+    // Every arm below early-returns when the handle is null. Without this one,
+    // a run against a dead service reports PASSED — a green meaning "nothing
+    // was tested", indistinguishable from one meaning "the service agreed".
+    expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
+  });
+
   it('CRITICAL every job type on the liveness roster has a pending row after a real boot. A registration nobody enqueues has no pending row and reports 0 forever — indistinguishable from the dead chain the gauge exists to detect — and an enqueue whose type nobody registered is marked FAILED on first claim, which kills the chain outright. Only executing the real factory can tell either apart from the wiring text a parity pin freezes.', async () => {
     if (!dbReachable || client === null) {
       // Same posture as every other drizzle integration file here: a missing

@@ -98,6 +98,11 @@ afterAll(async () => {
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'crypto_entitlements (Drizzle path against real Postgres)',
   () => {
+    it('CRITICAL the dependency was reachable, so a green here is not "no service". V-793 — this file was MISSED by the original sweep: it bails on a missing handle in every arm and never asserted the handle was there, so a run against a dead Postgres reported PASSED. The position-aware guard found it.', () => {
+      expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
+      expect(client, 'the integration dependency was unreachable').not.toBeNull();
+    });
+
     it('activateCryptoEntitlement is idempotent on order_id — a replay inserts nothing and returns the original window', async () => {
       if (!dbReachable || !client) return;
       const repo = makeRepo();

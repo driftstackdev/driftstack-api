@@ -36,12 +36,6 @@ function input(overrides: Partial<CreateIncidentInput> = {}): CreateIncidentInpu
 }
 
 beforeAll(async () => {
-  it('CRITICAL the service was reachable, so a green here is not "no service"', () => {
-    // Without this, every arm below early-returns against a dead service and the
-    // file reports PASSED — a green meaning "nothing was tested".
-    expect(client, 'the integration dependency was unreachable').toBeTruthy();
-  });
-
   if (!RUN_DB_TESTS) return;
   admin = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   await admin`SELECT 1`;
@@ -88,6 +82,13 @@ afterAll(async () => {
 });
 
 describe.skipIf(!RUN_DB_TESTS)('Drizzle incident list/create truth (real PostgreSQL)', () => {
+  it('CRITICAL the dependency was reachable, so a green here is not "no service". V-793 — this arm previously sat inside beforeAll, where vitest registers nothing: the assertion existed as text, never ran, and the hole it was written to close stayed open.', () => {
+    // Every arm below early-returns when the handle is null. Without this one,
+    // a run against a dead service reports PASSED — a green meaning "nothing
+    // was tested", indistinguishable from one meaning "the service agreed".
+    expect(client, 'the integration dependency was unreachable').toBeTruthy();
+  });
+
   it('applies open state before LIMIT, so 100 newer resolved rows cannot hide one old open row', async () => {
     if (!repo) return;
     const repository = repo;

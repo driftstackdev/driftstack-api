@@ -16,6 +16,17 @@
 // 14 files were in that state. Each now carries one arm asserting the handle is
 // non-null, so a missing service is a FAILURE rather than a silent pass. This
 // keeps it that way: the fix was mechanical, and so is the regression.
+//
+// V-793 — and the first version of this guard certified 18 files whose assertion
+// NEVER RAN. It searched the file for the assertion text and found it, but the
+// text sat inside `beforeAll`, where `it()` registers nothing: vitest silently
+// drops it, the file's registered-test count is one lower than its `it(`
+// occurrences, and the hole the arm was added to close stayed wide open. A guard
+// that matches text cannot tell a registered test from dead code in a hook —
+// which is the same defect it exists to catch, one level up. The scan is now
+// POSITION-AWARE: the assertion only counts when it sits inside an `it(`/`test(`
+// body. Measured when that landed: 18 offenders, every one of them a file this
+// guard had previously reported clean.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -50,6 +61,61 @@ const BAILS_ON_MISSING_DEPENDENCY =
 const ASSERTS_THE_DEPENDENCY_WAS_THERE =
   /(expect\(\s*\b(client|redis|reachable|dbReachable)\b[^;]*?(not\.toBeNull|toBe\(\s*true\s*,?\s*\)|toBeTruthy)|throw new Error\([^)]*(unreachable|database unreachable|setup failed|not present))/is;
 
+/**
+ * The bodies of every registered `it(` / `test(` in a file, brace-matched.
+ *
+ * V-793 — this is the whole point. An assertion inside `beforeAll` is text in the
+ * file and nothing else; only an assertion inside a registered case can fail.
+ * Brace-matched rather than windowed because these bodies run long and a fixed
+ * window would spill into the next case, which is how a scan like this reports
+ * the wrong answer confidently.
+ */
+function registeredCaseBodies(source: string): string[] {
+  const out: string[] = [];
+  for (const m of source.matchAll(/\b(?:it|test)(?:\.\w+)*\s*\(/g)) {
+    const open = source.indexOf('{', m.index);
+    if (open === -1) continue;
+    let depth = 0;
+    for (let i = open; i < source.length; i += 1) {
+      if (source[i] === '{') depth += 1;
+      else if (source[i] === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          out.push(source.slice(open, i + 1));
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Bodies of `before*` / `after*` hooks — where an assertion is inert. */
+function hookBodies(source: string): string[] {
+  const out: string[] = [];
+  for (const m of source.matchAll(/\b(?:beforeAll|beforeEach|afterAll|afterEach)\s*\(/g)) {
+    const open = source.indexOf('{', m.index);
+    if (open === -1) continue;
+    let depth = 0;
+    for (let i = open; i < source.length; i += 1) {
+      if (source[i] === '{') depth += 1;
+      else if (source[i] === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          out.push(source.slice(open, i + 1));
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** True when the dependency assertion sits inside a case that actually runs. */
+function assertsInsideARegisteredCase(source: string): boolean {
+  return registeredCaseBodies(source).some((b) => ASSERTS_THE_DEPENDENCY_WAS_THERE.test(b));
+}
+
 function integrationFiles(): string[] {
   return readdirSync(INTEGRATION_DIR)
     .filter((f) => f.endsWith('.test.ts'))
@@ -70,9 +136,7 @@ describe('an integration test cannot pass without the service it integrates with
     const offenders = integrationFiles()
       .filter((f) => {
         const body = readFileSync(f, 'utf-8');
-        return (
-          BAILS_ON_MISSING_DEPENDENCY.test(body) && !ASSERTS_THE_DEPENDENCY_WAS_THERE.test(body)
-        );
+        return BAILS_ON_MISSING_DEPENDENCY.test(body) && !assertsInsideARegisteredCase(body);
       })
       .map((f) => f.slice(f.lastIndexOf('/') + 1))
       .sort();
@@ -82,5 +146,38 @@ describe('an integration test cannot pass without the service it integrates with
       'these bail out when the service is missing and never assert it was present, so with the ' +
         'describe running and the service down they report PASSED — add an arm asserting the handle',
     ).toEqual([]);
+  });
+
+  it("CRITICAL no file puts the dependency assertion inside a before/after HOOK, where it never runs. This is reported separately from the case above because the two need different fixes and look identical from a text search: a missing assertion needs one written, an inert one needs it MOVED. vitest drops an it() registered from inside a hook without a word, so the only visible symptom is a registered-test count one lower than the file's it( occurrences — nothing a reader would notice.", () => {
+    const inert = integrationFiles()
+      .filter((f) => {
+        const body = readFileSync(f, 'utf-8');
+        const inAHook = hookBodies(body).some((h) => /\b(?:it|test)\s*\(/.test(h));
+        return inAHook;
+      })
+      .map((f) => f.slice(f.lastIndexOf('/') + 1))
+      .sort();
+
+    expect(
+      inert,
+      'these register a case from inside a hook, so it never runs — move the it() out of the hook into the describe:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the position-awareness itself works, asserted on fixtures rather than on the corpus. The corpus is expected to be clean, so a matcher that silently accepted everything would agree with it — the same way the previous version of this guard agreed with 18 broken files.', () => {
+    const inACase = [
+      "it('x', () => { expect(client).not.toBeNull(); });",
+      "it('x', async () => {\n  expect(dbReachable, 'msg').toBe(true);\n});",
+    ];
+    const inAHook = [
+      'beforeAll(async () => { expect(client).not.toBeNull(); });',
+      "beforeEach(() => {\n  expect(dbReachable, 'msg').toBe(true);\n});",
+    ];
+    for (const src of inACase) {
+      expect(assertsInsideARegisteredCase(src), `should count: ${src.slice(0, 40)}`).toBe(true);
+    }
+    for (const src of inAHook) {
+      expect(assertsInsideARegisteredCase(src), `must NOT count: ${src.slice(0, 40)}`).toBe(false);
+    }
   });
 });

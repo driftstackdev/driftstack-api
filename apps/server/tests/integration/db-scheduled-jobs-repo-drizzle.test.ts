@@ -48,12 +48,6 @@ let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
 
 beforeAll(async () => {
-  it('CRITICAL the service was reachable, so a green here is not "no service"', () => {
-    // Without this, every arm below early-returns against a dead service and the
-    // file reports PASSED — a green meaning "nothing was tested".
-    expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
-  });
-
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;
@@ -93,6 +87,13 @@ afterAll(async () => {
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'DrizzleScheduledJobsRepo (Drizzle path against real Postgres)',
   () => {
+    it('CRITICAL the dependency was reachable, so a green here is not "no service". V-793 — this arm previously sat inside beforeAll, where vitest registers nothing: the assertion existed as text, never ran, and the hole it was written to close stayed open.', () => {
+      // Every arm below early-returns when the handle is absent. Without this
+      // one, a run against a dead service reports PASSED — a green meaning
+      // "nothing was tested", indistinguishable from "the service agreed".
+      expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
+    });
+
     it('claimDue with Date params does NOT throw TypeError — regression guard for the 2026-05-09 → 2026-05-19 silent prod bug (drizzle-orm 0.38.4 transparentParser swap → Buffer.byteLength(date) in postgres-js Bind)', async () => {
       if (!dbReachable || !client) {
         return;
