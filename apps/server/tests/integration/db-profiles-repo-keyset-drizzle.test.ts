@@ -482,5 +482,101 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       await client`INSERT INTO accounts (id, email) VALUES (${emptyAccountId}, ${`sum-empty-${emptyAccountId}@test.local`})`;
       expect(await repo.sumSizeBytesByAccount(emptyAccountId)).toBe(0);
     });
+
+    // ── update(): a partial patch, on the customer's own filing ─────────
+    // `update` has NO test references anywhere in the tree — not a mock, not a
+    // double. It patches six fields, two of which (folder, tags) ARE the
+    // customer's organisation of their profiles: losing them un-files
+    // everything, and nothing errors while it happens.
+    //
+    // Precise about what holds that, because the same shape misled me on the
+    // webhook-endpoint patch: deleting the `!== undefined` guards does NOT
+    // reproduce a wipe, since drizzle's `.set()` skips undefined values anyway.
+    // The shape that DOES is a defaulting coalesce (`args.updates.tags ?? []`),
+    // which is how this bug actually arrives. These arms pin the OUTCOME.
+
+    it('CRITICAL updating one field leaves the customer’s filing intact', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`upd-${accountId}@test.local`})`;
+
+      const created = await repo.insert({
+        accountId,
+        name: 'original',
+        archetype: 'iphone17_ios18_7_safari26_4',
+        description: null,
+      });
+      await repo.update({
+        id: created.id,
+        accountId,
+        updates: { folder: 'work', tags: ['banking', 'eu'], note: 'keep me' },
+      });
+
+      const renamed = await repo.update({
+        id: created.id,
+        accountId,
+        updates: { name: 'renamed' },
+      });
+      expect(renamed.name).toBe('renamed');
+      expect(
+        renamed.folder,
+        'renaming a profile un-filed it. Nothing errors when this happens — the customer sees a ' +
+          'successful save and their organisation quietly gone',
+      ).toBe('work');
+      expect(renamed.tags, 'renaming a profile dropped its tags').toEqual(['banking', 'eu']);
+      expect(renamed.note).toBe('keep me');
+    });
+
+    it('CRITICAL another account cannot edit this profile', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+      const mine = randomUUID();
+      const theirs = randomUUID();
+      seeded.push(mine, theirs);
+      await client`INSERT INTO accounts (id, email) VALUES (${mine}, ${`upd-a-${mine}@test.local`})`;
+      await client`INSERT INTO accounts (id, email) VALUES (${theirs}, ${`upd-b-${theirs}@test.local`})`;
+      const created = await repo.insert({
+        accountId: mine,
+        name: 'mine',
+        archetype: 'iphone17_ios18_7_safari26_4',
+        description: null,
+      });
+
+      // Refused by throwing rather than returning null — pinned as-is so the
+      // caller's error mapping is not silently changed underneath it.
+      await expect(
+        repo.update({ id: created.id, accountId: theirs, updates: { name: 'stolen' } }),
+        'one customer renamed another customer’s profile',
+      ).rejects.toThrow();
+      const [row] = await client`SELECT name FROM profiles WHERE id = ${created.id}`;
+      expect(row?.name).toBe('mine');
+    });
+
+    it('CRITICAL a trashed profile cannot be edited', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`upd-t-${accountId}@test.local`})`;
+      const created = await repo.insert({
+        accountId,
+        name: 'to-trash',
+        archetype: 'iphone17_ios18_7_safari26_4',
+        description: null,
+      });
+      expect(await repo.delete({ id: created.id, accountId })).toBe(true);
+
+      // notDeleted is in the predicate: a row in the recycle bin is a tombstone,
+      // so an edit must not quietly resurrect or mutate it behind the deletion.
+      await expect(
+        repo.update({ id: created.id, accountId, updates: { name: 'edited-after-trash' } }),
+        'a trashed profile was edited — the recycle bin is supposed to be terminal until restore',
+      ).rejects.toThrow();
+    });
   },
 );
