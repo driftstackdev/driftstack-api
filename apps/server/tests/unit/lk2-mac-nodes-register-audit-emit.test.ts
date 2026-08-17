@@ -171,6 +171,52 @@ describe('LK.2 POST /v1/mac-nodes/register — admin-audit emission', () => {
     expect(serialised).not.toContain('APIsecret_must_not_leak');
   });
 
+  // The response twin of the arm above. The audit row was guarded; the HTTP
+  // body was not — no test asserted this route's 200 body at all (the
+  // activation-gate file only exercises 404s, and the metrics/audit files read
+  // counters and audit rows). The route's own comment states the contract:
+  //
+  //   Response is intentionally minimal — never echoes the api_key
+  //   (treated as secret-equivalent per the orchestrator brief)
+  //   and obviously never echoes the api_secret.
+  //
+  // The credentials arrive in the REQUEST, so echoing them back is the easy
+  // regression: any move to reply with the accepted body, or with the stored
+  // node record, hands a live LiveKit key straight back over the wire and into
+  // whatever logs that response. Pinning the exact key set is what catches a
+  // field arriving that nobody deliberately added.
+  it('the 200 response is minimal and echoes neither the api_key nor the api_secret', async () => {
+    const { repo, nodeId } = fakeRepo();
+    const app = await buildHarness({ repo });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/mac-nodes/register',
+      headers: { authorization: 'Bearer ds_live_test', 'content-type': 'application/json' },
+      payload: {
+        mac_node_id: nodeId,
+        livekit: {
+          api_key: 'APIkey_must_not_leak',
+          api_secret: 'APIsecret_must_not_leak',
+          ws_url: 'wss://mac-003.driftstack.dev:8443',
+        },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      res.body,
+      'the register response echoed the LiveKit api_key back to the caller — it is treated as ' +
+        'secret-equivalent, and a response is exactly what ends up in proxy and client logs',
+    ).not.toContain('APIkey_must_not_leak');
+    expect(res.body, 'the register response echoed the LiveKit api_secret').not.toContain(
+      'APIsecret_must_not_leak',
+    );
+    expect(
+      Object.keys(res.json<Record<string, unknown>>()).sort(),
+      'the response grew a field the route was not written to return',
+    ).toEqual(['livekit_registered_at', 'mac_node_id', 'ws_url']);
+    await app.close();
+  });
+
   it('NO audit emission when adminAudit dep is absent (back-compat)', async () => {
     const { repo, nodeId } = fakeRepo();
     const app = await buildHarness({ repo }); // no adminAudit
