@@ -128,6 +128,19 @@ function isSensitiveKey(key: string): boolean {
 const MAX_SENTRY_SCRUB_DEPTH = 8;
 const REDACTED_SENTRY_STRUCTURE = '[redacted: structure limit]';
 function scrubValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
+  // Free-text scrub on EVERY string, not only those under a denylisted key.
+  //
+  // The key denylist below fires only when a secret sits under a name we
+  // predicted. A credential quoted inside an ordinary field reached sentry.io
+  // in clear: measured, extra.upstream_detail, extra.note and
+  // contexts.run.last_error all survived, while event.message and the
+  // exception value were scrubbed because those two get redactText applied
+  // separately below.
+  //
+  // lib/logger.ts already resolved this for our own logs, running redactText
+  // over every string in a serialized error for the same reason. Sentry is a
+  // THIRD PARTY, so the value-level pass matters more here, not less.
+  if (typeof value === 'string') return redactText(value);
   if (value === null || typeof value !== 'object') return value;
   if (depth >= MAX_SENTRY_SCRUB_DEPTH || seen.has(value)) return REDACTED_SENTRY_STRUCTURE;
   seen.add(value);

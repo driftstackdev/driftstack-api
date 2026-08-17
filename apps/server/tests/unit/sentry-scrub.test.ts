@@ -299,3 +299,56 @@ describe('Sentry scrub: credential tokens in exception message / event.message (
     expect(String(event.message)).toContain('code=[redacted]');
   });
 });
+
+// A credential quoted inside an ORDINARY field, not under a denylisted key.
+//
+// The key denylist above only fires when the secret sits under a name we
+// predicted. `scrubSentryEvent` compensated for two places — event.message and
+// the exception value both get redactText — but every other string in the event
+// was passed through on key name alone. Measured before the fix: with a BYOK key
+// quoted in extra.upstream_detail, extra.note and contexts.run.last_error, all
+// three reached the scrubber's output in clear while message and exception value
+// were scrubbed.
+//
+// lib/logger.ts already runs redactText over every string in a serialized error
+// for exactly this reason. Sentry is a THIRD PARTY, so the value-level pass
+// matters more here, not less.
+describe('V-494 — Sentry scrub: secrets quoted in non-denylisted fields', () => {
+  const BYOK = 'sk-ant-api03-AbCdEf0123456789XyZq-AA';
+  const APIKEY = 'ds_live_AbCdEf0123456789XyZq';
+
+  it('CRITICAL a credential quoted in an ordinary extra field is scrubbed', () => {
+    const event = {
+      extra: {
+        upstream_detail: `anthropic rejected ${BYOK}`,
+        note: `charged with ${APIKEY} on retry`,
+      },
+    } as unknown as SentryErrorEvent;
+    scrubSentryEvent(event);
+    const extra = event.extra as Record<string, string>;
+    expect(extra.upstream_detail, 'a BYOK key reached sentry.io in clear').not.toContain(BYOK);
+    expect(extra.note, 'an API key reached sentry.io in clear').not.toContain(APIKEY);
+    // The prefix survives, so an operator can still tell what was scrubbed.
+    expect(extra.upstream_detail).toContain('sk-ant-[redacted]');
+  });
+
+  it('CRITICAL the same holds arbitrarily deep, and inside arrays', () => {
+    const event = {
+      contexts: { run: { attempts: [{ last_error: `failed with ${BYOK}` }] } },
+    } as unknown as SentryErrorEvent;
+    scrubSentryEvent(event);
+    expect(JSON.stringify(event.contexts)).not.toContain(BYOK);
+  });
+
+  it('CRITICAL ordinary strings are left intact, so events stay diagnosable', () => {
+    // Without this, redacting every string would satisfy the arms above while
+    // making the event useless.
+    const event = {
+      extra: { detail: 'connection reset by peer after 3 attempts', count: 3 },
+    } as unknown as SentryErrorEvent;
+    scrubSentryEvent(event);
+    const extra = event.extra as Record<string, unknown>;
+    expect(extra.detail).toBe('connection reset by peer after 3 attempts');
+    expect(extra.count, 'non-string values must pass through untouched').toBe(3);
+  });
+});
