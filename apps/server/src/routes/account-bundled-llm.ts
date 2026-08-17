@@ -21,6 +21,7 @@
 // resource-granular or zero-scope key cannot inspect billing consent/spend.
 
 import type { FastifyInstance } from 'fastify';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { z } from 'zod';
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import type { AccountAuditService } from '../services/account-audit.js';
@@ -117,11 +118,18 @@ export function registerAccountBundledLlmRoutes(
   app.patch(
     '/v1/account/me/bundled-llm-settings',
     { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
-    async (request) => {
+    async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = PatchBodySchema.safeParse(request.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      reportUnknownRequestFields({
+        body: request.body ?? {},
+        knownKeys: knownRequestKeys(PatchBodySchema),
+        reply,
+        logger: request.log,
+        route: 'PATCH /v1/account/me/bundled-llm-settings',
+      });
       // S42 2026-07-07 (founder-approved) — gate the bundled-billing OPT-IN to
       // the tiers whose TIER_FEATURES.llmBilling is byok_or_bundled(_custom):
       // api_builder / api_scale / enterprise. Only consent=true is gated —

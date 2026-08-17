@@ -13,6 +13,7 @@
 // owner's resources until V-298d wires it.
 
 import type { FastifyInstance } from 'fastify';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { z } from 'zod';
 import { NotFoundError, ValidationError } from '../lib/errors.js';
 import type { TeamInviteRow, TeamMemberRow, TeamMembersService } from '../services/team-members.js';
@@ -80,6 +81,13 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = InviteBodySchema.safeParse(request.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      reportUnknownRequestFields({
+        body: request.body,
+        knownKeys: knownRequestKeys(InviteBodySchema),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/team/invites',
+      });
       await service.invite({
         ownerAccountId: ctx.account.id,
         invitedByAccountId: ctx.account.id,
@@ -111,6 +119,13 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = AcceptBodySchema.safeParse(request.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      reportUnknownRequestFields({
+        body: request.body,
+        knownKeys: knownRequestKeys(AcceptBodySchema),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/team/invites/accept',
+      });
       const result = await service.accept({
         plaintextToken: parsed.data.token,
         acceptingAccountId: ctx.account.id,

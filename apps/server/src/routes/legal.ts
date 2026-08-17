@@ -11,6 +11,7 @@
 // the published static URLs once the marketing site is live.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { z } from 'zod';
 import {
   LegalDocumentMismatchError,
@@ -95,6 +96,13 @@ export function registerLegalRoutes(app: FastifyInstance, service: LegalService)
     async (request, reply) => {
       const ctx = requireCtx(request);
       const body = AcceptBodySchema.parse(request.body ?? {});
+      reportUnknownRequestFields({
+        body: request.body ?? {},
+        knownKeys: knownRequestKeys(AcceptBodySchema),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/legal/accept',
+      });
       try {
         const record = await service.recordAcceptance({
           accountId: ctx.account.id,

@@ -9,6 +9,7 @@
 // own-account header) keeps pre-V-330d behavior.
 
 import type { FastifyInstance } from 'fastify';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { SetEmailPreferenceRequestSchema } from '@driftstack/api-types';
 import type { EmailPreferencesService } from '../services/email-preferences.js';
 import { BadRequestError, ForbiddenError } from '../lib/errors.js';
@@ -63,6 +64,13 @@ export function registerEmailPreferencesRoutes(
       if (!parsed.success) {
         throw new BadRequestError('Invalid request body.');
       }
+      reportUnknownRequestFields({
+        body: request.body ?? {},
+        knownKeys: knownRequestKeys(SetEmailPreferenceRequestSchema),
+        reply,
+        logger: request.log,
+        route: 'PUT /v1/account/email-preferences',
+      });
       // V-330d Q2 — when the request targets an owner via
       // X-Driftstack-Account, the caller MUST be 'admin' on that
       // owner's team. 'member' role gets 403. Self-account writes

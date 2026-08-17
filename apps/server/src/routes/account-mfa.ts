@@ -5,6 +5,7 @@
 // Disable and recovery-code regeneration additionally require fresh MFA.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { CompleteMfaEnrollmentRequestSchema } from '@driftstack/api-types';
 import type { MfaService } from '../services/mfa.js';
 import { BadRequestError, ForbiddenError } from '../lib/errors.js';
@@ -94,13 +95,20 @@ export function registerAccountMfaRoutes(
         app.rateLimit('global'),
       ],
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = CompleteMfaEnrollmentRequestSchema.safeParse(request.body ?? {});
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid body.');
       }
+      reportUnknownRequestFields({
+        body: request.body ?? {},
+        knownKeys: knownRequestKeys(CompleteMfaEnrollmentRequestSchema),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/account/mfa/verify',
+      });
       const result = await service.completeEnrollment({
         accountId: ctx.account.id,
         currentWebSessionId: interactiveWebSessionId(request),

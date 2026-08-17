@@ -10,6 +10,7 @@
 // header view.
 
 import { randomUUID } from 'node:crypto';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   AccountOrganizationSchema,
@@ -263,13 +264,20 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   app.patch(
     '/v1/account/me',
     { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
-    async (request) => {
+    async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = UpdateAccountMeRequestSchema.safeParse(request.body ?? {});
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid body.');
       }
+      reportUnknownRequestFields({
+        body: request.body ?? {},
+        knownKeys: knownRequestKeys(UpdateAccountMeRequestSchema),
+        reply,
+        logger: request.log,
+        route: 'PATCH /v1/account/me',
+      });
       let updated;
       try {
         updated = await authRepo.updateAccountBasics(ctx.account.id, parsed.data);
@@ -359,7 +367,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   app.put(
     '/v1/account/me/organization',
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
-    async (request) => {
+    async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       // Resolve and authorize the selected owner before parsing the body. A
@@ -375,6 +383,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid organization.');
       }
+      reportUnknownRequestFields({
+        body: request.body ?? {},
+        knownKeys: knownRequestKeys(AccountOrganizationSchema),
+        reply,
+        logger: request.log,
+        route: 'PUT /v1/account/me/organization',
+      });
       await authRepo.setOrganization(effective.accountId, parsed.data);
       return parsed.data;
     },
@@ -768,6 +783,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid body.');
       }
+      reportUnknownRequestFields({
+        body: request.body ?? {},
+        knownKeys: knownRequestKeys(UploadAvatarRequestSchema),
+        reply,
+        logger: request.log,
+        route: 'PUT /v1/account/me/avatar',
+      });
 
       let bytes: Buffer;
       try {
