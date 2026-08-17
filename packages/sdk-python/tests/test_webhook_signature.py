@@ -230,3 +230,51 @@ def test_v359_header_prev_none_keeps_single_header_behavior() -> None:
         now_seconds=t,
     )
     assert ok is True
+
+
+def test_uppercase_hex_signature_is_accepted() -> None:
+    """Hex is case-insensitive, so the verifier must be too.
+
+    The comparison decodes both sides before checking, which is what makes
+    casing irrelevant. It used to compare the hex TEXT with compare_digest,
+    which made this SDK the only one of the three to reject an upper-case
+    signature for the same body, secret and timestamp — a webhook a customer
+    verified with sdk-go was one their Python service refused.
+
+    Nothing is weakened by accepting it: the HMAC still has to match byte for
+    byte, still in constant time. This API signs with lowercase hex, so the
+    case only arrives from a proxy or a hand-built request.
+    """
+    body = b'{"event":"x"}'
+    secret = "whsec_case"
+    ts = int(time.time())
+    header = f"t={ts},v1={_sig_hex(body, secret, ts).upper()}"
+    assert verify_webhook_signature(body=body, header=header, secret=secret)
+
+
+def test_mixed_case_hex_signature_is_accepted() -> None:
+    """Not a second lookup table — any casing of the same bytes verifies."""
+    body = b'{"event":"x"}'
+    secret = "whsec_case"
+    ts = int(time.time())
+    hexsig = _sig_hex(body, secret, ts)
+    mixed = "".join(c.upper() if i % 2 == 0 else c for i, c in enumerate(hexsig))
+    header = f"t={ts},v1={mixed}"
+    assert verify_webhook_signature(body=body, header=header, secret=secret)
+
+
+def test_case_insensitivity_does_not_weaken_verification() -> None:
+    """Without this, accepting everything would satisfy the two arms above."""
+    body = b'{"event":"x"}'
+    secret = "whsec_case"
+    ts = int(time.time())
+    # Wrong secret, upper-cased: still refused.
+    wrong = f"t={ts},v1={_sig_hex(body, 'whsec_other', ts).upper()}"
+    assert not verify_webhook_signature(body=body, header=wrong, secret=secret)
+    # Not hex at all: refused, not crashed.
+    assert not verify_webhook_signature(
+        body=body, header=f"t={ts},v1={'z' * 64}", secret=secret
+    )
+    # Odd-length hex: refused, not crashed.
+    odd = _sig_hex(body, secret, ts)[:-1]
+    assert not verify_webhook_signature(body=body, header=f"t={ts},v1={odd}", secret=secret)

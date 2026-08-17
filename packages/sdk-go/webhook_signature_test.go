@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -220,5 +221,64 @@ func TestVerifyWebhookSignature_V359_HeaderPrevEmptyKeepsSingleHeaderBehavior(t 
 
 	if !VerifyWebhookSignature(body, header, secret, VerifyWebhookOptions{Now: now}) {
 		t.Fatal("expected single-header verify to still work")
+	}
+}
+
+// Hex is case-insensitive, so the verifier must be too. The comparison decodes
+// both sides before checking, which is what makes casing irrelevant.
+//
+// Guarded here because it was not: replacing the decode with a hex-TEXT compare
+// leaves every other arm in this file green. sdk-python carried exactly that
+// shape and was the only one of the three to refuse an upper-case signature for
+// the same body, secret and timestamp — a webhook one customer verified was one
+// their neighbour could not.
+//
+// Nothing is weakened: the HMAC still has to match byte for byte via hmac.Equal.
+// This API signs lowercase, so other casings arrive from a proxy or a
+// hand-built request.
+func TestVerifyWebhookSignature_UpperCaseHexAccepted(t *testing.T) {
+	body := []byte(`{"event":"x"}`)
+	secret := "whsec_case"
+	ts := time.Now().Unix()
+	header := "t=" + strconv.FormatInt(ts, 10) + ",v1=" + strings.ToUpper(sigHex(body, secret, ts))
+	if !VerifyWebhookSignature(body, header, secret) {
+		t.Fatal("an upper-case signature was refused; hex encodes the same bytes either way")
+	}
+}
+
+func TestVerifyWebhookSignature_MixedCaseHexAccepted(t *testing.T) {
+	body := []byte(`{"event":"x"}`)
+	secret := "whsec_case"
+	ts := time.Now().Unix()
+	h := sigHex(body, secret, ts)
+	mixed := []rune(h)
+	for i := range mixed {
+		if i%2 == 0 {
+			mixed[i] = []rune(strings.ToUpper(string(mixed[i])))[0]
+		}
+	}
+	header := "t=" + strconv.FormatInt(ts, 10) + ",v1=" + string(mixed)
+	if !VerifyWebhookSignature(body, header, secret) {
+		t.Fatal("a mixed-case signature was refused; this is not a second lookup table")
+	}
+}
+
+// Without this, accepting everything would satisfy the two arms above.
+func TestVerifyWebhookSignature_CaseInsensitivityDoesNotWeaken(t *testing.T) {
+	body := []byte(`{"event":"x"}`)
+	secret := "whsec_case"
+	ts := time.Now().Unix()
+	tsStr := strconv.FormatInt(ts, 10)
+
+	wrong := "t=" + tsStr + ",v1=" + strings.ToUpper(sigHex(body, "whsec_other", ts))
+	if VerifyWebhookSignature(body, wrong, secret) {
+		t.Fatal("an upper-cased signature from the WRONG secret verified")
+	}
+	if VerifyWebhookSignature(body, "t="+tsStr+",v1="+strings.Repeat("z", 64), secret) {
+		t.Fatal("a non-hex signature verified")
+	}
+	odd := sigHex(body, secret, ts)
+	if VerifyWebhookSignature(body, "t="+tsStr+",v1="+odd[:len(odd)-1], secret) {
+		t.Fatal("an odd-length hex signature verified")
 	}
 }
