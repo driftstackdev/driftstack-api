@@ -246,4 +246,41 @@ describe('DLQ keyset pagination', () => {
       'the DLQ depth an operator reads did not move by exactly the one dead-lettered row added',
     ).toBe(before + 1);
   });
+
+  // A cursor is customer-supplied, and `new Date(...)` accepts values Postgres
+  // will not store. Before the decoder bounded the year, either shape below
+  // decoded cleanly, reached the keyset comparison and FAILED THE QUERY -- a 500
+  // on GET /v1/webhooks/:id/deliveries, reachable from the query string by
+  // anyone holding a key. Verified against this database at the time: year zero
+  // raises "date/time field value out of range", the extended +/-YYYYYY form
+  // raises "time zone displacement out of range".
+  //
+  // The contract is that an unusable cursor falls through to the first page, so
+  // that is what this asserts -- and it asserts the page has real contents, not
+  // merely that nothing threw.
+  it('CRITICAL a cursor date Postgres cannot store yields a first page, not a 500', async () => {
+    if (!dbReachable || !repo || !sql) return;
+    const endpointId = await seedEndpoint();
+    const [row] = await sql`SELECT account_id FROM webhook_endpoints WHERE id = ${endpointId}`;
+    const accountId = (row as { account_id: string }).account_id;
+    const delivered = await seedDelivery({
+      endpointId,
+      status: 'dlq',
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    const uuid = '00000000-0000-4000-8000-000000000000';
+    for (const iso of ['0000-01-01T00:00:00.000Z', '-271821-04-20T00:00:00.000Z']) {
+      for (const cursor of [`${iso}_${uuid}`, iso]) {
+        const page = await repo.listDeliveriesForEndpoint(endpointId, accountId, {
+          limit: 5,
+          cursor,
+        });
+        expect(
+          page.items.map((i) => i.id),
+          `the cursor ${cursor} did not fall through to a first page`,
+        ).toEqual([delivered]);
+      }
+    }
+  });
 });

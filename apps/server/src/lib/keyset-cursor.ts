@@ -46,6 +46,32 @@ export function encodeDeliveryCursor(createdAt: Date, id: string): string {
 }
 
 /**
+ * The exact shape `Date.prototype.toISOString()` emits for a four-digit year,
+ * which is the only shape `encodeDeliveryCursor` can produce.
+ *
+ * `new Date(...)` alone is not a sufficient check, and the gap is reachable: it
+ * accepts values Postgres will not store, so the tampered cursor this module
+ * exists to neutralise still reached the query and failed it. Two concrete
+ * shapes, both verified against the running database —
+ *
+ *   `0000-01-01T00:00:00.000Z`     parses in JS; there is no year zero, so
+ *                                  Postgres raises "date/time field value out
+ *                                  of range".
+ *   `-271821-04-20T00:00:00.000Z`  parses in JS (the extended ±YYYYYY form);
+ *                                  Postgres raises "time zone displacement out
+ *                                  of range".
+ *
+ * Either one turned `GET /v1/webhooks/:id/deliveries` into a 500 — the exact
+ * outcome the header above says this file converts into a graceful first page.
+ *
+ * The lower bound is 1970 rather than year 1 because a cursor can only ever have
+ * come from a row this system created, so anything before the epoch is
+ * hand-crafted by definition. Postgres would accept years 1..1969 happily; they
+ * are refused here because they cannot be legitimate, not because they break.
+ */
+const ISO_UTC_MS_RE = /^(\d{4})-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/**
  * Decode a delivery cursor. A malformed/tampered created_at → null (first page,
  * matching the prior "invalid cursor → first page" contract). A missing or
  * malformed id tiebreaker → id:null (legacy created_at-only behaviour), never a
@@ -56,6 +82,8 @@ export function decodeDeliveryCursor(cursor: string | undefined): DeliveryCursor
   const sep = cursor.indexOf('_');
   const isoPart = sep === -1 ? cursor : cursor.slice(0, sep);
   const idPart = sep === -1 ? null : cursor.slice(sep + 1);
+  const match = ISO_UTC_MS_RE.exec(isoPart);
+  if (!match || Number(match[1]) < 1970) return null;
   const createdAt = new Date(isoPart);
   if (Number.isNaN(createdAt.getTime())) return null;
   const id = idPart !== null && UUID_RE.test(idPart) ? idPart : null;

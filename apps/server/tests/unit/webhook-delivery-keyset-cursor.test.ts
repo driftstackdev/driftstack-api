@@ -120,4 +120,46 @@ describe('webhook-delivery composite keyset cursor (#125)', () => {
     expect(decodeDeliveryCursor('not-a-date')).toBeNull();
     expect(decodeDeliveryCursor(undefined)).toBeNull();
   });
+
+  // A date JS accepts is not a date Postgres will store, and the gap was
+  // reachable from the query string. `new Date(...)` was the whole check, so a
+  // hand-crafted cursor decoded cleanly, reached the keyset comparison, and
+  // failed the query -- a 500 on GET /v1/webhooks/:id/deliveries, which is the
+  // exact outcome this module's header says it converts into a first page.
+  //
+  // Both shapes below were run against the real database before this arm was
+  // written: year zero raises "date/time field value out of range", and the
+  // extended +/-YYYYYY form raises "time zone displacement out of range". The
+  // integration sibling pins that the route no longer reaches either.
+  it('CRITICAL a date JS accepts but Postgres cannot store decodes to a first page', () => {
+    const uuid = '11111111-2222-3333-4444-555555555555';
+    const outOfRange = [
+      '0000-01-01T00:00:00.000Z', // no year zero exists
+      '-271821-04-20T00:00:00.000Z', // JS extended form, below the PG floor
+      '+275760-09-13T00:00:00.000Z', // JS extended form, above any real row
+      '0001-01-01T00:00:00.000Z', // valid in PG, but predates every row we write
+    ];
+    for (const iso of outOfRange) {
+      expect(
+        decodeDeliveryCursor(`${iso}_${uuid}`),
+        `${iso} decoded to a usable cursor. It cannot have come from a next_cursor we emitted, ` +
+          'and carrying it into the keyset comparison fails the query rather than paging',
+      ).toBeNull();
+      // The legacy created_at-only form takes the same path.
+      expect(
+        decodeDeliveryCursor(iso),
+        `${iso} (legacy form) decoded to a usable cursor`,
+      ).toBeNull();
+    }
+  });
+
+  it('CRITICAL an ordinary cursor still decodes, so the guard is not refusing everything', () => {
+    // Without this, returning null unconditionally would satisfy the arm above
+    // and break every paginating client instead.
+    const t = new Date('2026-07-03T00:00:00.123Z');
+    const id = '11111111-2222-3333-4444-555555555555';
+    expect(decodeDeliveryCursor(encodeDeliveryCursor(t, id))?.id).toBe(id);
+    // The epoch boundary itself is legitimate and must survive.
+    expect(decodeDeliveryCursor(`1970-01-01T00:00:00.000Z_${id}`)?.id).toBe(id);
+  });
 });
