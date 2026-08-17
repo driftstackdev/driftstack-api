@@ -113,8 +113,10 @@ describe('W678 cross-SDK webhook-signature format parity', () => {
     // sdk-python: compare_digest specifically. `hmac.new` is the HMAC
     // construction and says nothing about how the result is compared, so it is
     // no longer accepted as evidence.
+    // Operands are the DECODED digests now, not the hex text — see the hex
+    // arm below for why. Still hmac.compare_digest, so still constant-time.
     expect(py, 'python must compare with hmac.compare_digest').toMatch(
-      /hmac\.compare_digest\(expected, sig\)/,
+      /hmac\.compare_digest\(expected_bytes, candidate\)/,
     );
     expect(py, 'and must not fall back to a plain equality compare').not.toMatch(
       /return any\(expected == sig/,
@@ -163,14 +165,50 @@ describe('W678 cross-SDK webhook-signature format parity', () => {
     expect(py).toMatch(/Stripe-style/);
   });
 
-  it('Hex encoding invariant — all 3 SDKs compare LOWERCASE hex (Stripe convention). sdk-typescript uses HEX_LOOKUP = "0123456789abcdef"; sdk-go uses hex.DecodeString (case-insensitive but emits lowercase); sdk-python uses hexdigest (lowercase). Drift to uppercase hex in any SDK would silently fail cross-SDK verification because constant-time compare is byte-exact.', () => {
+  // The claim this arm used to carry — "drift to uppercase hex in any SDK
+  // would silently fail cross-SDK verification because constant-time compare is
+  // byte-exact" — was false for two of the three, and the arm half-knew it
+  // (it already noted Go is "case-insensitive"). Measured across a 14-case
+  // matrix run through all three verifiers: for the same body, secret and
+  // timestamp, an UPPER-CASE v1 signature was accepted by sdk-typescript and
+  // sdk-go and REJECTED by sdk-python.
+  //
+  // TS and Go decode the hex before comparing (hexToBytes + XOR;
+  // hex.DecodeString + hmac.Equal). Python compared the hex TEXT with
+  // compare_digest, which is case-sensitive. Decoding is the right side of that
+  // split: hex is case-insensitive by definition and the HMAC still has to
+  // match byte for byte, so nothing is weakened.
+  //
+  // Not reachable from this API — the server emits `.digest('hex')`, which is
+  // lowercase — but the whole point of this suite, in its own header, is that a
+  // webhook one SDK verifies must verify under the others.
+  it('Hex encoding invariant — all 3 SDKs EMIT lowercase hex (Stripe convention) and all 3 DECODE before comparing, so none of them is case-sensitive about a signature it receives.', () => {
     const ts = read(TS_WSIG);
     const go = read(GO_WSIG);
     const py = read(PY_WSIG);
 
+    // What each SDK EMITS for its own expected digest: lowercase.
     expect(ts).toMatch(/0123456789abcdef/);
     expect(go).toMatch(/hex\.DecodeString|hex\.EncodeToString/);
     expect(py).toMatch(/hexdigest|\.hex\(\)/);
+
+    // What each SDK ACCEPTS: decoded bytes, not hex text. This is the half that
+    // was missing, and it is the half that decides whether the three agree.
+    expect(ts, 'sdk-typescript must decode the candidate before comparing').toMatch(
+      /hexToBytes\(a\)[\s\S]{0,120}hexToBytes\(b\)/,
+    );
+    expect(go, 'sdk-go must decode the candidate before comparing').toMatch(
+      /hex\.DecodeString\(sigHex\)[\s\S]{0,200}hmac\.Equal/,
+    );
+    expect(py, 'sdk-python must decode the candidate before comparing').toMatch(
+      /bytes\.fromhex\(sig\)[\s\S]{0,300}compare_digest\(expected_bytes, candidate\)/,
+    );
+    // And the shape that made Python the odd one out must not return.
+    expect(
+      py,
+      'sdk-python is comparing hex TEXT again — that makes it the only SDK of the three to reject ' +
+        'an upper-case signature for the same body and secret',
+    ).not.toMatch(/compare_digest\(expected, sig\)/);
   });
 
   it("Webhook-signature export surface — each SDK exports the verify function under the canonical name. sdk-typescript: verifyWebhookSignature. sdk-go: VerifyWebhookSignature. sdk-python: verify_webhook_signature. The 3 names follow each language's naming convention (camelCase / PascalCase-public / snake_case). Drift to renaming would break customer code that imports the verifier.", () => {

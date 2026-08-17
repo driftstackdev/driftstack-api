@@ -85,7 +85,12 @@ describe('W586.C packages/sdk-python/src/driftstack/webhook_signature.py content
     // Accept if computed HMAC matches ANY of the parsed v1= signatures
     // (Stripe-style multi-signature for rotation dual-sign).
     expect(body).toMatch(
-      /return any\(hmac\.compare_digest\(expected, sig\) for sig in parsed\.signature_hexes\)/,
+      // Candidates are DECODED before comparison — hex is case-insensitive, and
+      // comparing the text made this the only SDK of the three to reject an
+      // upper-case signature. Still hmac.compare_digest, so still constant-time;
+      // invalid hex simply does not match. Cross-SDK parity for the decode lives
+      // in cross-sdk-webhook-signature-parity.
+      /for sig in parsed\.signature_hexes:[\s\S]{0,200}hmac\.compare_digest\(expected_bytes, candidate\)/,
     );
   });
 

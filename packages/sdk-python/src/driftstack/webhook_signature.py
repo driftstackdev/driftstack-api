@@ -93,7 +93,23 @@ def _verify_single_header(
     # Accept if our computed HMAC matches ANY of the header's v1= signatures
     # (constant-time per candidate), so a verifier holding either the new or
     # old secret passes during a rotation dual-sign grace window.
-    return any(hmac.compare_digest(expected, sig) for sig in parsed.signature_hexes)
+    #
+    # Compared as DECODED BYTES, not as hex text. Hex is case-insensitive by
+    # definition, and sdk-typescript (hexToBytes + XOR) and sdk-go
+    # (hex.DecodeString + hmac.Equal) both decode before comparing — a
+    # string compare made this SDK the only one of the three to reject an
+    # upper-case signature for the same body and secret. Decoding does not
+    # weaken anything: the HMAC still has to match, byte for byte, in constant
+    # time. A candidate that is not valid hex simply does not match.
+    expected_bytes = bytes.fromhex(expected)
+    for sig in parsed.signature_hexes:
+        try:
+            candidate = bytes.fromhex(sig)
+        except ValueError:
+            continue
+        if hmac.compare_digest(expected_bytes, candidate):
+            return True
+    return False
 
 
 def verify_webhook_signature(
