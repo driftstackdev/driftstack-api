@@ -1273,6 +1273,8 @@ export const sessionEvents = pgTable(
   (t) => [
     index('session_events_session_idx').on(t.sessionId),
     index('session_events_session_created_idx').on(t.sessionId, t.createdAt),
+    // 0113 — the audit archive filters on created_at alone.
+    index('session_events_created_idx').on(t.createdAt),
   ],
 );
 
@@ -1445,6 +1447,8 @@ export const webhookDeliveries = pgTable(
     index('webhook_deliveries_endpoint_idx').on(t.webhookId, t.createdAt),
     // Event id lookup for dedup / debugging.
     index('webhook_deliveries_event_idx').on(t.eventId),
+    // 0113 — the audit archive filters on created_at alone.
+    index('webhook_deliveries_created_idx').on(t.createdAt),
   ],
 );
 
@@ -1531,6 +1535,8 @@ export const adminAuditLog = pgTable(
     index('admin_audit_log_target_idx').on(t.targetAccountId, t.timestamp),
     // Filter by action (what kind of change).
     index('admin_audit_log_action_idx').on(t.action, t.timestamp),
+    // 0113 — the audit archive filters on timestamp alone.
+    index('admin_audit_log_timestamp_idx').on(t.timestamp),
   ],
 );
 
@@ -1622,6 +1628,8 @@ export const legalAcceptances = pgTable(
     index('legal_acceptances_account_idx').on(t.accountId),
     // For audit queries by document version (e.g. "who accepted v0.2.0?").
     index('legal_acceptances_doc_version_idx').on(t.documentKey, t.version),
+    // 0113 — the audit archive filters on accepted_at alone.
+    index('legal_acceptances_accepted_idx').on(t.acceptedAt),
   ],
 );
 
@@ -2168,6 +2176,12 @@ export const statusSubscribers = pgTable(
   },
   (t) => [
     index('status_subscribers_confirmed_idx').on(t.confirmedAt, t.unsubscribedAt),
+    // 0113 — the V-295c3 purge filters on unsubscribed_at alone. Partial on
+    // email IS NOT NULL: rows whose email is already erased are exactly the
+    // ones the sweep never needs to see again, and they accumulate forever.
+    index('status_subscribers_unsubscribed_purge_idx')
+      .on(t.unsubscribedAt)
+      .where(sql`${t.email} IS NOT NULL`),
     index('status_subscribers_unsub_token_idx').on(t.unsubscribeTokenHash),
     index('status_subscribers_confirm_token_idx').on(t.confirmTokenHash),
   ],

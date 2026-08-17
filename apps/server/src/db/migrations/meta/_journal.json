@@ -792,6 +792,13 @@
       "when": 1786665600000,
       "tag": "0112_drop_duplicate_scheduled_jobs_claim_index",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1786665600001,
+      "tag": "0113_retention_sweep_indexes",
+      "breakpoints": true
     }
   ]
 }
