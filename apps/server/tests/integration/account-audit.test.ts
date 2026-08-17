@@ -1,5 +1,8 @@
 // V-216 — integration tests for /v1/account/audit-log + emit wiring.
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildTestApp,
@@ -617,6 +620,109 @@ describe('GET /v1/account/audit-log — actor-privacy scrub (TD-audit-payload-sc
     expect(entry.payload).not.toHaveProperty('issued_from_ip'); // scrubbed
     expect(entry.payload).not.toHaveProperty('user_agent');
     expect(res.body).not.toContain('203.0.113.7');
+  });
+
+  // The arm above names two of the five scrubbed keys. The other three —
+  // source_ip, issued_user_agent, ip_address — are equally real: source_ip and
+  // issued_user_agent are the MFA-challenge payload shape emitted by
+  // auth-flows.ts, so an owner's IP rides in a payload under THOSE names too.
+  // Drop any one of them from ACTOR_PRIVACY_PAYLOAD_KEYS and a team member
+  // reading the owner's log sees the owner's network identity, with the whole
+  // suite still green.
+  //
+  // So the set is read from source and every member asserted, which also covers
+  // a key added later without anyone remembering this file. Each key gets a
+  // distinct value so a failure names which one leaked rather than just that
+  // something did.
+  // The scrub set is enforced whole, not two-of-five.
+  //
+  // The cross-view arm above names `issued_from_ip` and `user_agent`, and those
+  // are the only two members any audit payload actually carries today: a sweep
+  // of all 26 audit-emission sites finds that pair in auth-flows.ts and finds no
+  // site emitting `source_ip`, `issued_user_agent` or `ip_address`. (The MFA
+  // challenge does build `source_ip`/`issued_user_agent`, but that is the Redis
+  // challenge envelope — by the time the login is audited at auth-flows.ts:1056
+  // the keys have been renamed to the two already covered.)
+  //
+  // So the other three members are DEFENSIVE spellings, and one is not
+  // hypothetical: `ip_address` is what the rest of this codebase calls this data
+  // — the column at schema.ts:1522 and the response field this very route emits
+  // at line 88. A future emission site reaching for the house spelling is the
+  // realistic way an owner IP starts flowing through a payload, and this arm is
+  // what makes the scrub cover it on arrival instead of two-fifths of the way.
+  //
+  // Two separate things are pinned, because they fail differently:
+  //
+  //   honoured   every key the set declares is actually stripped. Derived from
+  //              the set literal, so a member added later is covered the moment
+  //              it is added.
+  //   declared   the set still contains the members it has. The assertions below
+  //              CANNOT see this, which was measured rather than assumed: relax
+  //              the population check, delete a member, and this file still
+  //              passes 30/30 — the fixture is built FROM the set, so a removed
+  //              key is never seeded and never looked for. Naming the members is
+  //              what makes a deletion fail, and fail saying which one went.
+  it('CRITICAL every key in the actor-privacy set is scrubbed on a cross-actor read', async () => {
+    const src = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../src/routes/account-audit.ts'),
+      'utf8',
+    );
+    const block = /ACTOR_PRIVACY_PAYLOAD_KEYS\s*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src);
+    expect(block, 'the actor-privacy key set could not be located').not.toBeNull();
+    const keys = [...(block?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+    const declared = [
+      'issued_from_ip',
+      'source_ip',
+      'ip_address',
+      'user_agent',
+      'issued_user_agent',
+    ];
+    expect(
+      declared.filter((k) => !keys.includes(k)),
+      'a key was dropped from the actor-privacy set. Nothing else in this file can see that — the ' +
+        'arms below seed their fixture from the set itself — so the scrub would silently stop ' +
+        'covering that spelling while every test stayed green. Removing one is a deliberate act; ' +
+        'if that is the intent, remove it here too',
+    ).toEqual([]);
+
+    fx = await buildTestApp();
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      { membershipId: TEAM_MEMBERSHIP_ID, ownerAccountId: TEAM_OWNER_ID, role: 'admin' },
+    ]);
+    // One row carrying every scrubbed key, each with its own traceable value.
+    const values = Object.fromEntries(keys.map((k, i) => [k, `203.0.113.${String(i + 10)}`]));
+    await fx.accountAuditRepo.insert({
+      accountId: TEAM_OWNER_ID,
+      actorType: 'customer',
+      action: 'account.login',
+      payload: { method: 'password', ...values },
+    });
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=account.login',
+      headers: { ...auth(fx), 'x-driftstack-account': `acc_${TEAM_OWNER_ID}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const entry = res.json<ListResponse>().data[0]!;
+
+    const leaked = keys.filter((k) => Object.hasOwn(entry.payload ?? {}, k));
+    expect(
+      leaked,
+      'a key in the actor-privacy set survived a team member’s cross-account read. That is the ' +
+        'owner’s network identity — the exact disclosure this scrub exists to prevent, and the ' +
+        'reader is not the data subject',
+    ).toEqual([]);
+    const leakedValues = keys.filter((k) => res.body.includes(values[k]!));
+    expect(leakedValues, 'a scrubbed value still appeared somewhere in the response body').toEqual(
+      [],
+    );
+    // Not scrubbing everything: the non-sensitive field is still there.
+    expect(
+      entry.payload?.method,
+      'the scrub removed a non-sensitive field, so the arms above would pass against a payload ' +
+        'that was simply emptied',
+    ).toBe('password');
   });
 });
 
