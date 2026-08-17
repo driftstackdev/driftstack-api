@@ -323,14 +323,31 @@ export class DurableDlqManager implements DlqManager {
       // make Postgres raise `invalid input syntax for type uuid` and surface
       // as a 500. Skipping the anchor lookup falls through to the same
       // first-page path as a cursor row that is simply not found.
+      // Scoped to the same account as the listing when one is filtered on, for
+      // the reason the sibling list() carries: an unscoped anchor resolves any
+      // delivery id in the table, so a cursor from a differently-filtered view
+      // anchors this page to a row the filter excludes and the page comes back
+      // wrong. The account filter needs the endpoint join, so the anchor does too.
       const [cursorRow] =
         parseUuidCursor(opts.cursor) === undefined
           ? []
-          : await this.database.db
-              .select({ updatedAt: webhookDeliveries.updatedAt })
-              .from(webhookDeliveries)
-              .where(eq(webhookDeliveries.id, opts.cursor))
-              .limit(1);
+          : opts.accountId === undefined
+            ? await this.database.db
+                .select({ updatedAt: webhookDeliveries.updatedAt })
+                .from(webhookDeliveries)
+                .where(eq(webhookDeliveries.id, opts.cursor))
+                .limit(1)
+            : await this.database.db
+                .select({ updatedAt: webhookDeliveries.updatedAt })
+                .from(webhookDeliveries)
+                .innerJoin(webhookEndpoints, eq(webhookDeliveries.webhookId, webhookEndpoints.id))
+                .where(
+                  and(
+                    eq(webhookDeliveries.id, opts.cursor),
+                    eq(webhookEndpoints.accountId, opts.accountId),
+                  ),
+                )
+                .limit(1);
       if (cursorRow) {
         conditions.push(
           or(

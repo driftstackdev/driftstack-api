@@ -140,6 +140,51 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // 1 grew". Nothing checked it for sessions, and the failure would be
     // invisible in aggregate — a duplicated session id in a reconciliation loop
     // reads as a real second session.
+    it('CRITICAL a cursor from another account cannot anchor an account-filtered page', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+
+      const seedSession = async (at: Date): Promise<{ accountId: string; sessionId: string }> => {
+        const accountId = randomUUID();
+        const apiKeyId = randomUUID();
+        seeded.push({ accountId, apiKeyId });
+        await client!`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`keyset-own-${accountId}@test.local`})`;
+        await client!`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+          VALUES (${apiKeyId}, ${accountId}, 'ownership-probe', ${`dsk_${apiKeyId.slice(0, 8)}`}, ${`hash_${apiKeyId}`})`;
+        const [row] = await client!`
+          INSERT INTO sessions (account_id, api_key_id, driver_session_id, created_at)
+          VALUES (${accountId}, ${apiKeyId}, ${`drv_${randomUUID()}`}, ${at.toISOString()})
+          RETURNING id`;
+        return { accountId, sessionId: row?.id as string };
+      };
+
+      // Theirs is OLDER than mine, deliberately. The keyset pages strictly
+      // backwards from the anchor, so a foreign row resolving as one filters my
+      // newer row out entirely. Ordered the other way this arm passes either way.
+      const theirs = await seedSession(new Date(Date.UTC(2026, 0, 1)));
+      const mine = await seedSession(new Date(Date.UTC(2026, 0, 2)));
+
+      const page = await repo.listAllSessions({
+        limit: 50,
+        accountId: mine.accountId,
+        cursor: theirs.sessionId,
+      });
+      expect(
+        page.items.map((r) => r.id),
+        'a session id from a different account resolved as the page anchor. The listing is ' +
+          'filtered to one account, so the anchor lookup has to be filtered the same way or the ' +
+          'page is positioned by a row the filter excludes and comes back wrong',
+      ).toEqual([mine.sessionId]);
+    });
+
     it('does not repeat or drop a session when sessions are created mid-walk (the documented concurrent-insert promise)', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {

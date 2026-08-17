@@ -129,6 +129,49 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // The case above pages a fixed set. This one adds keys WHILE the walk is in
     // progress. See _helpers/keyset-stable-under-inserts.ts for why this
     // belongs against real Postgres rather than the in-memory twin.
+    it('CRITICAL a cursor from another account cannot anchor an account-filtered page', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleApiKeysRepo({ client, db, close: async () => {} });
+
+      const seedKey = async (at: Date): Promise<{ accountId: string; keyId: string }> => {
+        const accountId = randomUUID();
+        seededAccountIds.push(accountId);
+        await client!`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`keyset-own-${accountId}@test.local`})`;
+        const kid = randomUUID();
+        const [row] = await client!`
+          INSERT INTO api_keys (account_id, name, key_prefix, key_hash, created_at)
+          VALUES (${accountId}, 'ownership', ${`dsk_${kid.slice(0, 8)}`}, ${`hash_${kid}`}, ${at.toISOString()})
+          RETURNING id`;
+        return { accountId, keyId: row?.id as string };
+      };
+
+      // Theirs is OLDER than mine, deliberately. The keyset pages strictly
+      // backwards from the anchor, so a foreign row resolving as one filters my
+      // newer key out entirely. Ordered the other way this arm passes either way.
+      const theirs = await seedKey(new Date(Date.UTC(2026, 0, 1)));
+      const mine = await seedKey(new Date(Date.UTC(2026, 0, 2)));
+
+      const page = await repo.listAllApiKeys({
+        limit: 50,
+        accountId: mine.accountId,
+        cursor: theirs.keyId,
+      });
+      expect(
+        page.items.map((k) => k.id),
+        'a key id from a different account resolved as the page anchor. The listing is filtered to ' +
+          'one account, so the anchor lookup has to be filtered the same way or the page is ' +
+          'positioned by a row the filter excludes and comes back wrong',
+      ).toEqual([mine.keyId]);
+    });
+
     it('does not repeat or drop a key when api keys are created mid-walk (the documented concurrent-insert promise)', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {

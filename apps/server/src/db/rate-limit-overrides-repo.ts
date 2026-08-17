@@ -69,7 +69,14 @@ export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
       const [c] = await this.database.db
         .select({ createdAt: rateLimitOverrides.createdAt, id: rateLimitOverrides.id })
         .from(rateLimitOverrides)
-        .where(eq(rateLimitOverrides.id, opts.cursor))
+        .where(
+          opts.accountId === undefined
+            ? eq(rateLimitOverrides.id, opts.cursor)
+            : and(
+                eq(rateLimitOverrides.id, opts.cursor),
+                eq(rateLimitOverrides.accountId, opts.accountId),
+              ),
+        )
         .limit(1);
       if (c) {
         const keyset = or(

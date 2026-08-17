@@ -139,6 +139,53 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // The case above pages a fixed set. This one adds overrides WHILE the walk
     // is in progress. See _helpers/keyset-stable-under-inserts.ts for why this
     // belongs against real Postgres rather than the in-memory twin.
+    it('CRITICAL a cursor from another account cannot anchor an account-filtered page', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleRateLimitOverridesRepo({ client, db, close: async () => {} });
+      const future = new Date(Date.UTC(2027, 0, 1));
+
+      const seedOverride = async (at: Date): Promise<{ accountId: string; overrideId: string }> => {
+        const accountId = randomUUID();
+        const apiKeyId = randomUUID();
+        seeded.push({ accountId, apiKeyId });
+        await client!`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`keyset-own-${accountId}@test.local`})`;
+        await client!`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+          VALUES (${apiKeyId}, ${accountId}, 'ownership-probe', ${`dsk_${apiKeyId.slice(0, 8)}`}, ${`hash_${apiKeyId}`})`;
+        const [row] = await client!`
+          INSERT INTO rate_limit_overrides
+            (account_id, bucket_key, capacity, refill_per_second_centi, expires_at, set_by_key_id, created_at)
+          VALUES (${accountId}, 'ownership-bucket', 100, 100, ${future.toISOString()}, ${apiKeyId}, ${at.toISOString()})
+          RETURNING id`;
+        return { accountId, overrideId: row?.id as string };
+      };
+
+      // Theirs is OLDER than mine, deliberately. The keyset pages strictly
+      // backwards from the anchor, so a foreign row resolving as one filters my
+      // newer row out entirely. Ordered the other way this arm passes either way.
+      const theirs = await seedOverride(new Date(Date.UTC(2026, 0, 1)));
+      const mine = await seedOverride(new Date(Date.UTC(2026, 0, 2)));
+
+      const page = await repo.listAll({
+        limit: 50,
+        accountId: mine.accountId,
+        cursor: theirs.overrideId,
+      });
+      expect(
+        page.items.map((r) => r.id),
+        'an override id from a different account resolved as the page anchor. The listing is ' +
+          'filtered to one account, so the anchor lookup has to be filtered the same way or the ' +
+          'page is positioned by a row the filter excludes and comes back wrong',
+      ).toEqual([mine.overrideId]);
+    });
+
     it('does not repeat or drop an override when overrides are created mid-walk (the documented concurrent-insert promise)', async () => {
       if (!dbReachable || !client) {
         if (process.env.CI) {

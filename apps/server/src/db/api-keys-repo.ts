@@ -193,7 +193,11 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
       const [c] = await this.database.db
         .select({ createdAt: apiKeys.createdAt, id: apiKeys.id })
         .from(apiKeys)
-        .where(eq(apiKeys.id, opts.cursor))
+        .where(
+          opts.accountId === undefined
+            ? eq(apiKeys.id, opts.cursor)
+            : and(eq(apiKeys.id, opts.cursor), eq(apiKeys.accountId, opts.accountId)),
+        )
         .limit(1);
       if (c) {
         const keyset = or(

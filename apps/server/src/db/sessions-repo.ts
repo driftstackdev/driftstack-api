@@ -503,7 +503,11 @@ export class DrizzleSessionRepo implements SessionRepo {
       const [c] = await this.database.db
         .select({ createdAt: sessions.createdAt, id: sessions.id })
         .from(sessions)
-        .where(eq(sessions.id, opts.cursor))
+        .where(
+          opts.accountId === undefined
+            ? eq(sessions.id, opts.cursor)
+            : and(eq(sessions.id, opts.cursor), eq(sessions.accountId, opts.accountId)),
+        )
         .limit(1);
       if (c) {
         const keyset = or(
