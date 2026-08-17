@@ -585,6 +585,63 @@ describe('api-keys page — local integration', () => {
     );
   });
 
+  // "Shown once and never stored" is a promise this page makes to the customer
+  // in its own copy, and nothing enforced the second half of it. Measured:
+  // adding a localStorage.setItem of the revealed plaintext left all 1099
+  // dashboard tests green.
+  //
+  // It matters because the failure is silent and durable. A key in
+  // localStorage survives the tab, is readable by any XSS or page-scoped
+  // extension, and is exactly what a customer who read that sentence believes
+  // cannot happen. The reveal pane is the only place the plaintext is allowed
+  // to exist.
+  it('CRITICAL create: the one-shot plaintext is revealed but never persisted', async () => {
+    const secret = 'ds_live_NEVER_PERSISTED_SECRET';
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [] }),
+        () => json({ id: 'key_new', plaintext: secret }, 201),
+        () => json({ data: [ACTIVE_KEY] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-create]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'persist probe';
+    const broad = form.querySelector(
+      'input[name="scope"][value="account_owner"]',
+    ) as HTMLInputElement | null;
+    if (broad) broad.checked = true;
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+
+    // It IS revealed — otherwise this arm would pass on a page that never
+    // showed the key at all.
+    expect(window.document.querySelector('[data-created-plaintext]')?.textContent).toBe(secret);
+
+    const stores: ReadonlyArray<readonly [string, Storage]> = [
+      ['localStorage', window.localStorage],
+      ['sessionStorage', window.sessionStorage],
+    ];
+    for (const [label, store] of stores) {
+      const dumped: string[] = [];
+      for (let i = 0; i < store.length; i += 1) {
+        const key = store.key(i);
+        if (key !== null) dumped.push(`${key}=${String(store.getItem(key))}`);
+      }
+      expect(
+        dumped.join('\n'),
+        `the one-time plaintext was written to ${label}, where it outlives the tab and is ` +
+          'readable by any XSS or page-scoped extension — the page tells the customer it is ' +
+          'never stored',
+      ).not.toContain(secret);
+    }
+    expect(window.document.cookie, 'the plaintext was written to a cookie').not.toContain(secret);
+    expect(window.location.href, 'the plaintext was put in the URL').not.toContain(secret);
+  });
+
   it('copy feedback recovers from denial and mutates on repeated success', async () => {
     const secret = 'ds_live_COPY_RECOVERY_SECRET';
     const { window, clipboardWrites } = setUpDom(loadBuiltPage(), {
