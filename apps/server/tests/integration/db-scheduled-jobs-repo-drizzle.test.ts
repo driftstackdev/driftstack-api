@@ -30,6 +30,7 @@
 //      metadata so they're not affected by the transparentParser swap, but
 //      pin the regression surface anyway.
 
+import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -46,6 +47,7 @@ const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 // path is always exercised on every push.
 let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
+const seededAccounts: string[] = [];
 
 beforeAll(async () => {
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
@@ -79,7 +81,13 @@ afterAll(async () => {
     await client`
       DELETE FROM scheduled_jobs
        WHERE job_type IN ('regression_guard_dummy', 'regression_guard_self_arm')
+          OR job_type LIKE 'regression\_guard\_dedup%'
     `.catch(() => {});
+    if (seededAccounts.length > 0) {
+      await client`
+        DELETE FROM accounts WHERE id = ANY(${client.array(seededAccounts)}::uuid[])
+      `.catch(() => {});
+    }
     await client.end({ timeout: 5 });
   }
 });
@@ -198,6 +206,157 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(await repo.markComplete(mine!.id, new Date(), 'worker-A')).toBe(true);
       // Idempotence of the fence: the lock is released, so a repeat is rejected.
       expect(await repo.markComplete(mine!.id, new Date(), 'worker-A')).toBe(false);
+    });
+
+    // The dedup itself, behaviourally.
+    //
+    // 2026-05-20: 13 pending auth_tokens.sweep rows accumulated across service
+    // restarts because `col = NULL` is never true in SQL, so the recheck never
+    // matched a GLOBAL job and every restart armed another chain. The repo now
+    // branches on `input.accountId === null` to use `IS NULL`.
+    //
+    // That branch is pinned — by two source-TEXT regexes in the content-parity
+    // and cross-source-invariant unit files. Nothing pinned the behaviour, and
+    // the difference is not academic: change the recheck's `.limit(1)` to
+    // `.limit(0)` and the dedup is completely dead, every enqueue inserting a
+    // duplicate, while all eight pinned strings still match and the whole suite
+    // passes 28390. Measured, not assumed. The self-arming arm below does not
+    // catch it either, because it enqueues once — one handler run yields one
+    // successor whether or not dedup works.
+    //
+    // These arms go through a real Postgres because the whole bug was SQL NULL
+    // semantics. An in-memory double compares with `===`, where `null === null`
+    // is true, so it agrees with the fixed code AND with the broken code — the
+    // in-memory repo in tests/integration/_helpers even documents this incident
+    // while being structurally incapable of reproducing it.
+    it('CRITICAL a GLOBAL job dedups on re-enqueue — the 2026-05-20 accumulation', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
+      const jobType = `regression_guard_dedup_global_${Date.now()}`;
+      const runAt = new Date(Date.now() + 60_000);
+
+      const first = await repo.enqueue({
+        jobType,
+        accountId: null,
+        payload: {},
+        runAt,
+        dedupOnAccountAndType: true,
+      });
+      const second = await repo.enqueue({
+        jobType,
+        accountId: null,
+        payload: {},
+        runAt,
+        dedupOnAccountAndType: true,
+      });
+      expect(first.enqueued, 'the first enqueue of a global job was suppressed').toBe(true);
+      expect(
+        second.enqueued,
+        'a second global job was enqueued while the first was still pending. This is the ' +
+          '2026-05-20 shape exactly: `account_id = NULL` never matches, so every service restart ' +
+          'arms another chain and the queue grows without anything erroring',
+      ).toBe(false);
+
+      const [row] = await client<[{ n: number }]>`
+        SELECT COUNT(*)::int AS n FROM scheduled_jobs WHERE job_type = ${jobType}`;
+      expect(row?.n, 'more than one pending row survived for a deduped global job').toBe(1);
+    });
+
+    it('CRITICAL dedup does not suppress a DIFFERENT account or job type', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      // Without this, "never insert a second row" would pass the arm above.
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
+      const jobType = `regression_guard_dedup_scoped_${Date.now()}`;
+      const runAt = new Date(Date.now() + 60_000);
+
+      const accountId = randomUUID();
+      const otherId = randomUUID();
+      for (const id of [accountId, otherId]) {
+        await client`
+          INSERT INTO accounts (id, email, status)
+          VALUES (${id}, ${`sjdedup-${id}@test.local`}, 'active')`;
+        seededAccounts.push(id);
+      }
+
+      const mine = await repo.enqueue({
+        jobType,
+        accountId,
+        payload: {},
+        runAt,
+        dedupOnAccountAndType: true,
+      });
+      const mineAgain = await repo.enqueue({
+        jobType,
+        accountId,
+        payload: {},
+        runAt,
+        dedupOnAccountAndType: true,
+      });
+      const theirs = await repo.enqueue({
+        jobType,
+        accountId: otherId,
+        payload: {},
+        runAt,
+        dedupOnAccountAndType: true,
+      });
+      const globalToo = await repo.enqueue({
+        jobType,
+        accountId: null,
+        payload: {},
+        runAt,
+        dedupOnAccountAndType: true,
+      });
+
+      expect(mine.enqueued).toBe(true);
+      expect(mineAgain.enqueued, 'an account-scoped job did not dedup against itself').toBe(false);
+      expect(
+        theirs.enqueued,
+        'one account’s pending job suppressed another account’s. Dedup is scoped to the tuple, ' +
+          'not the job type — a shared-scope dedup means a customer silently never gets a job ' +
+          'because someone else already has one',
+      ).toBe(true);
+      expect(
+        globalToo.enqueued,
+        'an account-scoped pending row suppressed the GLOBAL job of the same type, which is the ' +
+          '`IS NULL` branch matching rows it should not',
+      ).toBe(true);
+    });
+
+    it('CRITICAL a finished job does not suppress the next one', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      // The recheck excludes completed/failed rows. If it did not, a job type
+      // would dedup against its own history and never run a second time — the
+      // sweeps stop silently, which looks identical to "nothing to do".
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
+      const runAt = new Date(Date.now() + 60_000);
+
+      for (const column of ['completed_at', 'failed_at']) {
+        const jobType = `regression_guard_dedup_${column}_${Date.now()}`;
+        await repo.enqueue({ jobType, accountId: null, payload: {}, runAt });
+        await client`
+          UPDATE scheduled_jobs SET ${client(column)} = now() WHERE job_type = ${jobType}`;
+        const next = await repo.enqueue({
+          jobType,
+          accountId: null,
+          payload: {},
+          runAt,
+          dedupOnAccountAndType: true,
+        });
+        expect(
+          next.enqueued,
+          `a job whose only prior row was ${column} was treated as still pending, so this job type ` +
+            'can never be scheduled again',
+        ).toBe(true);
+      }
     });
 
     it('normalizes raw run_at before a self-arming handler feeds it to Drizzle dedup', async () => {
