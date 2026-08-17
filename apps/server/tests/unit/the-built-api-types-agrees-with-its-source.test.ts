@@ -24,10 +24,13 @@
 // mtime is the wrong instrument here — in the incident above dist was NEWER
 // than src and still wrong. This compares VALUES.
 //
-// Coverage is stated rather than assumed: the constants below are the flat
-// per-tier records. TIER_FEATURES is a Record of nested objects and is listed
-// explicitly as out of scope, so adding a new flat record picks it up
-// automatically and nesting one becomes a deliberate decision here.
+// Coverage is stated rather than assumed, and nothing is exempt: flat per-tier
+// records are compared VALUE by value through the built package's own exports,
+// and the nested records (TIER_FEATURES, and the three-level
+// TIER_RATE_LIMIT_DEFAULTS) are compared as EMITTED TEXT, since tsc copies an
+// object literal through verbatim. A constant that falls into neither set fails
+// the coverage arm, so adding one is a deliberate decision here rather than a
+// silent gap.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -37,9 +40,17 @@ import * as builtApiTypes from '@driftstack/api-types';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const SOURCE = resolve(REPO, 'packages', 'api-types', 'src', 'common.ts');
+const BUILT = resolve(REPO, 'packages', 'api-types', 'dist', 'common.js');
 
-/** Records whose values are nested objects, deliberately not compared here. */
-const OUT_OF_SCOPE = ['TIER_FEATURES', 'TIER_RATE_LIMIT_DEFAULTS'] as const;
+/**
+ * Records of nested objects. The value reader below walks one level, so these
+ * are compared as EMITTED TEXT instead: tsc copies an object literal through
+ * verbatim, so the source block and the built block are identical once
+ * comments and whitespace are normalised. That covers arbitrary nesting —
+ * TIER_RATE_LIMIT_DEFAULTS is three levels deep — without teaching the reader
+ * every shape.
+ */
+const COMPARED_AS_TEXT = ['TIER_FEATURES', 'TIER_RATE_LIMIT_DEFAULTS'] as const;
 
 const UNPARSEABLE = Symbol('unparseable');
 
@@ -108,7 +119,7 @@ describe('the built api-types agrees with its source', () => {
   const source = readFileSync(SOURCE, 'utf-8');
   const flatNames = declaredConstants(source).filter(
     (n) =>
-      !(OUT_OF_SCOPE as readonly string[]).includes(n) &&
+      !(COMPARED_AS_TEXT as readonly string[]).includes(n) &&
       flatEntries(blockFor(source, n)!).length > 0,
   );
 
@@ -135,10 +146,9 @@ describe('the built api-types agrees with its source', () => {
     // Anything declared but not compared is named, so coverage cannot quietly shrink.
     const declared = declaredConstants(source);
     const uncovered = declared.filter((n) => !flatNames.includes(n)).sort();
-    expect(
-      uncovered,
-      'a constant stopped being compared without being declared out of scope',
-    ).toEqual([...OUT_OF_SCOPE].sort());
+    expect(uncovered, 'a constant is compared by neither value nor text').toEqual(
+      [...COMPARED_AS_TEXT].sort(),
+    );
   });
 
   it('CRITICAL every built value equals the value its source declares', () => {
@@ -162,6 +172,28 @@ describe('the built api-types agrees with its source', () => {
       mismatches.sort(),
       'the suite is executing values the source no longer declares — rebuild the package ' +
         '(touch the source first; an mtime-preserving restore makes the incremental build a no-op)',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the nested records are emitted exactly as their source declares them', () => {
+    const built = readFileSync(BUILT, 'utf-8');
+    const strip = (text: string): string =>
+      text
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/[^\n]*/g, '')
+        .replace(/\s+/g, '');
+    const mismatches: string[] = [];
+    for (const name of COMPARED_AS_TEXT) {
+      const fromSource = blockFor(source, name);
+      const fromBuilt = blockFor(built, name);
+      expect(fromSource, `${name}: not found in the source`).toBeTruthy();
+      expect(fromBuilt, `${name}: not found in the built package`).toBeTruthy();
+      if (strip(fromSource!) !== strip(fromBuilt!))
+        mismatches.push(`${name}: the built block differs from the source block`);
+    }
+    expect(
+      mismatches.sort(),
+      'a nested record was built from something other than its current source',
     ).toEqual([]);
   });
 });
