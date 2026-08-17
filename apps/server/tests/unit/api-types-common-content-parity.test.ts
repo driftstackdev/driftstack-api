@@ -306,10 +306,22 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
   it('ARCHETYPE_REGISTRY is the multi-archetype catalogue (NOT a single hardcoded device): ArchetypeConfig shape + status enum + the locked id (iphone17, post-2026-06-11 cutover) is the sole status:launch entry + the full 81-slug Agent-1 catalog folds in as `available` + a legacy reference baseline retained', () => {
     // The platform models a device MATRIX; the registry is the source of
     // truth. A drift back to a single hardcoded archetype would re-break
-    // the multi-archetype architecture. The catalogue is synced from
-    // Agent-1's verified catalog (driftstack/operations/archetype-catalog.json):
-    // all 81 catalog slugs appear; only the locked id is status:'launch', the
-    // rest are status:'available', plus a single legacy `reference` baseline.
+    // the multi-archetype architecture.
+    //
+    // These are source-TEXT checks: a representative spread of slugs and the
+    // presence of each status literal. They cannot see an entry being added,
+    // removed or re-statused — the registry's population and its
+    // status-to-selectability rule are enforced at runtime in
+    // packages/api-types/tests/archetype-registry-invariants.test.ts.
+    //
+    // The prose here used to claim "all 81 catalog slugs appear". Both numbers
+    // were stale, and counting from a regex is why: the registry holds 82
+    // entries (a naive grep says 81 because the launch entry uses
+    // LOCKED_ARCHETYPE_ID, not a literal), and Agent-1's catalog
+    // (driftstack/operations/archetype-catalog.json) holds 84 — it carries
+    // three chrome-iOS slugs this registry deliberately does not expose,
+    // pending a product call. Nothing reconciles the two files; the catalog
+    // lives in another repo that this CI does not check out.
     expect(body).toMatch(/export interface ArchetypeConfig \{/);
     expect(body).toMatch(
       /export type ArchetypeStatus = 'launch' \| 'available' \| 'reference' \| 'planned';/,
