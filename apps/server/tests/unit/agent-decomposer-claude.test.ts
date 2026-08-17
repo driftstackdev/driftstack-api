@@ -16,7 +16,11 @@
 //  11. x-api-key + anthropic-version + model wired correctly
 //  12. archetype + history threaded into the messages array
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
+import { AgentIntentSchema } from '../../../../packages/api-types/src/agent-intents.js';
 import {
   ClaudeAgentDecomposer,
   __TEST_ONLY__,
@@ -188,6 +192,103 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
         { kind: 'navigate', url: 'https://example.com' },
         { kind: 'wait', condition: 'idle', timeoutMs: 5000 },
         { kind: 'capture', capture: 'screenshot' },
+      ]);
+    });
+
+    // #139 for the verb that does not exist yet.
+    //
+    // The arms around this one each name their verb, so between them they cover
+    // five of the six. Measured by deleting each member of KNOWN_INTENT_VERBS in
+    // turn and re-running this file: navigate, interact, wait, capture and
+    // scroll are all caught; deleting `behavioral_pause` leaves it 61/61 green.
+    //
+    // That single hole matters less than the shape of it. A verb-keyed intent is
+    // only unwrapped if its verb is in KNOWN_INTENT_VERBS, and a spot-check arm
+    // has to name a verb to test it — so a kind added to the canonical union and
+    // to the parser, but forgotten here, is unreachable through the shape Opus
+    // 4.x actually emits, and no arm that exists today would notice. That is
+    // #139 exactly: `.kind` undefined, the switch matches nothing, the plan
+    // collapses to zero intents, and the customer sees an AI that answers and
+    // then does nothing.
+    //
+    // Unlike a set-completeness check derived from the set it is checking, this
+    // one CAN see a deletion, because the expectation comes from an independent
+    // source — the canonical AgentIntentSchema union rather than the allowlist.
+    it('#139 CRITICAL every canonical intent kind is unwrappable from the verb-keyed shape', () => {
+      const src = readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          '../../src/services/agent-decomposer-claude.ts',
+        ),
+        'utf8',
+      );
+      const block = /KNOWN_INTENT_VERBS[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src);
+      expect(block, 'KNOWN_INTENT_VERBS could not be located').not.toBeNull();
+      const verbs = [...(block?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+
+      const kinds = AgentIntentSchema.options
+        .map((opt) => (opt.shape as { kind?: { value?: unknown } }).kind?.value)
+        .filter((k): k is string => typeof k === 'string');
+      expect(kinds.length, 'the canonical union enumerated empty').toBeGreaterThan(3);
+
+      expect(
+        kinds.filter((k) => !verbs.includes(k)),
+        'an intent kind the API accepts cannot be unwrapped from the verb-keyed shape. Opus 4.x ' +
+          'emits that shape by preference, so plans using this kind parse to zero intents and the ' +
+          'customer gets an AI that answers and then does nothing — the #139 production incident, ' +
+          'reached through a kind that was added after the fix',
+      ).toEqual([]);
+    });
+
+    it('#139 CRITICAL no primary-param entry is dead', () => {
+      // VERB_PRIMARY_PARAM is only consulted inside the KNOWN_INTENT_VERBS
+      // branch, so an entry whose verb is not in the allowlist can never be
+      // reached — it reads as configured behaviour that silently does nothing.
+      const src = readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          '../../src/services/agent-decomposer-claude.ts',
+        ),
+        'utf8',
+      );
+      const verbs = [
+        ...(/KNOWN_INTENT_VERBS[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src)?.[1] ?? '').matchAll(
+          /'([a-z_]+)'/g,
+        ),
+      ].map((m) => m[1]!);
+      const params = [
+        ...(/VERB_PRIMARY_PARAM[^=]*=\s*\{([\s\S]*?)\n\}/.exec(src)?.[1] ?? '').matchAll(
+          /^\s*([a-z_]+)\s*:/gm,
+        ),
+      ].map((m) => m[1]!);
+      expect(params.length, 'VERB_PRIMARY_PARAM parsed empty').toBeGreaterThan(3);
+      expect(
+        params.filter((p) => !verbs.includes(p)),
+        'a primary-param entry names a verb the unwrapper never sees, so it is unreachable',
+      ).toEqual([]);
+    });
+
+    it('#139 a verb-keyed behavioral_pause survives the unwrap', async () => {
+      // The one verb no other arm covers. Also the one whose params are ALL
+      // optional, so a bare `{ behavioral_pause: {} }` is legitimate — which is
+      // why omitting it from the allowlist produces an empty plan rather than
+      // anything that looks like a validation failure.
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [{ behavioral_pause: { reading_word_count: 120 } }, { behavioral_pause: {} }],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      expect(res.kind).toBe('plan');
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(
+        res.intents,
+        'a verb-keyed behavioral_pause did not survive normalization, so a plan that pauses like a ' +
+          'human reading collapses instead',
+      ).toEqual([
+        { kind: 'behavioral_pause', reading_word_count: 120 },
+        { kind: 'behavioral_pause' },
       ]);
     });
 
