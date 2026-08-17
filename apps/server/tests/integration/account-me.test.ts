@@ -154,6 +154,39 @@ describe('PATCH /v1/account/me (V-352)', () => {
     expect(body.detail).toContain('account_owner');
   });
 
+  // Item 6 — the structural invariant proves a report is wired next to this
+  // parse; this proves the wiring actually produces the header, with the keys of
+  // THIS schema. A report block copy-pasted from a neighbouring route would
+  // satisfy the structural check and tag the wrong things here.
+  it('CRITICAL a mistyped settings field is reported rather than silently ignored', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'Updated', timezonee: 'Europe/Amsterdam' },
+    });
+    expect(res.statusCode, 'reporting, not rejecting').toBe(200);
+    expect(
+      res.headers['x-driftstack-unknown-fields'],
+      'the setting the customer meant to change was dropped and the call reported success',
+    ).toBe('timezonee');
+    // And the real update still applied, so reporting did not become rejecting.
+    expect(res.json<{ name: string }>().name).toBe('Updated');
+  });
+
+  it('CRITICAL a well-formed settings update is not tagged', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'Updated', timezone: 'Europe/Amsterdam' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-driftstack-unknown-fields']).toBeUndefined();
+  });
+
   it('200 updates name + timezone', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

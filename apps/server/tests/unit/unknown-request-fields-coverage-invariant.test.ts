@@ -68,11 +68,17 @@ const PARSE_RE = /(\w+Schema)\.(?:safeParse|parse)\(\s*(?:request\.body|raw[A-Za
  */
 const WINDOW = 16;
 
+/** The schema whose keys a nearby report treats as known. */
+const KNOWN_KEYS_RE =
+  /knownKeys:\s*(?:Object\.keys\((\w+Schema)\.shape\)|knownRequestKeys\((\w+Schema)\))/;
+
 interface Site {
   readonly file: string;
   readonly line: number;
   readonly schema: string;
   readonly reports: boolean;
+  /** Schema named in the report's knownKeys, when one is present. */
+  readonly reportedSchema: string | null;
 }
 
 function scan(): Site[] {
@@ -82,14 +88,14 @@ function scan(): Site[] {
     lines.forEach((line, i) => {
       const match = PARSE_RE.exec(line);
       if (!match) return;
+      const window = lines.slice(i, i + WINDOW);
+      const keysMatch = KNOWN_KEYS_RE.exec(window.join('\n'));
       sites.push({
         file,
         line: i + 1,
         schema: match[1]!,
-        reports: lines
-          .slice(i, i + WINDOW)
-          .join('\n')
-          .includes('reportUnknownRequestFields('),
+        reports: window.join('\n').includes('reportUnknownRequestFields('),
+        reportedSchema: keysMatch ? (keysMatch[1] ?? keysMatch[2] ?? null) : null,
       });
     });
   }
@@ -123,6 +129,28 @@ describe('customer-facing writes report the fields they ignored', () => {
         'customer gets a resource configured as something they did not ask for, with nothing ' +
         'saying so. Wire reportUnknownRequestFields next to the parse, or add the route to the ' +
         'exemption list here with the reason it belongs there',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL each report describes the schema its own route parses', () => {
+    // The coverage arm above only sees that a report exists near the parse. A
+    // report block copy-pasted from a neighbouring route passes that and is
+    // actively wrong in both directions: keys the caller legitimately sent get
+    // reported as ignored, and the typo it was meant to catch does not.
+    const mismatched = sites
+      .filter((s) => s.reports && s.reportedSchema !== null && s.reportedSchema !== s.schema)
+      .map(
+        (s) =>
+          `${s.file}:${String(s.line)} parses ${s.schema}, reports ${String(s.reportedSchema)}`,
+      );
+    expect(
+      mismatched,
+      'a route reports the declared keys of a DIFFERENT schema than the one it parsed',
+    ).toEqual([]);
+
+    expect(
+      sites.filter((s) => s.reports && s.reportedSchema === null).map((s) => s.file),
+      'a report was found with no readable knownKeys expression, so the arm above cannot check it',
     ).toEqual([]);
   });
 
