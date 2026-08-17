@@ -21,7 +21,7 @@
 // - Drift on (3) — forgetting the else clause — leaves routes
 //   unregistered when the service is absent, which silently 404s.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -81,6 +81,16 @@ const FEATURES: GatedFeature[] = [
     wiredFn: 'registerAccountByokAnthropicRoutes',
     disabledFn: 'registerAccountByokAnthropicDisabledRoutes',
     depsField: 'byokAnthropicService',
+  },
+  {
+    // The seventh gate, and the one that exposed this roster as hand-maintained:
+    // it shipped without an entry here OR in the sibling disabled-stub roster, so
+    // neither its 503-not-404 behaviour nor its wiring was ever asserted.
+    name: 'internal-atlas-priority (DRIFTSTACK_FLEET_INTERNAL_TOKEN)',
+    routesFile: 'apps/server/src/routes/internal-atlas-priority.ts',
+    wiredFn: 'registerInternalAtlasPriorityRoutes',
+    disabledFn: 'registerInternalAtlasPriorityDisabledRoutes',
+    depsField: 'atlasPriorityEventsRepo',
   },
   {
     name: 'recipes (AI-B4 write-only recipe library)',
@@ -160,12 +170,51 @@ describe('activation-gate pattern cross-source invariant', () => {
         // Allow either == or !== form so the test doesn't pin the
         // exact polarity (some gates negate, some don't).
         expect(appBody).toMatch(new RegExp(`deps\\.${f.depsField}`));
-        // Both registrars must be called from app.ts.
-        expect(appBody).toMatch(new RegExp(`\\b${f.wiredFn}\\b`));
-        expect(appBody).toMatch(new RegExp(`\\b${f.disabledFn}\\b`));
+        // Both registrars must be CALLED from app.ts — matching the bare name
+        // was satisfied by the import line alone, so renaming a call site left
+        // this green while the feature was no longer wired at all. Verified by
+        // mutation: renaming `registerInternalAtlasPriorityRoutes(app, {` did
+        // not fail this arm until it required the call shape.
+        expect(
+          appBody,
+          `${f.wiredFn} is imported but never called — the feature's live routes are not wired`,
+        ).toContain(`${f.wiredFn}(app`);
+        expect(
+          appBody,
+          `${f.disabledFn} is imported but never called — the unset branch registers nothing and ` +
+            'the endpoints 404 rather than returning 503',
+        ).toContain(`${f.disabledFn}(app`);
       });
     });
   }
+
+  it('CRITICAL FEATURES covers every activation-gated feature that exists', () => {
+    // This roster listed six while routes/ defined seven. The seventh
+    // (internal-atlas-priority) shipped with no entry here and none in the
+    // sibling disabled-stub roster, so nothing asserted its wiring or its
+    // 503-not-404 behaviour. A list maintained by hand cannot notice the entry
+    // nobody added — so the population is discovered, and the roster must cover
+    // what discovery finds.
+    const discovered = readdirSync(resolve(REPO_ROOT, 'apps/server/src/routes'))
+      .filter((f) => f.endsWith('.ts'))
+      .flatMap((f) => [
+        ...read(resolve(REPO_ROOT, 'apps/server/src/routes', f)).matchAll(
+          /export function (register\w*DisabledRoutes)\(/g,
+        ),
+      ])
+      .map((m) => m[1] ?? '');
+    expect(
+      discovered.length,
+      'no gated features discovered — the convention changed',
+    ).toBeGreaterThanOrEqual(7);
+    const listed = new Set(FEATURES.map((f) => f.disabledFn));
+    expect(
+      discovered.filter((d) => !listed.has(d)),
+      'an activation-gated feature ships a disabled stub but has no FEATURES entry, so its ' +
+        'wired/disabled registrars and deps gate are never checked — the gap this roster already ' +
+        'had once',
+    ).toEqual([]);
+  });
 
   it('FeatureUnavailableError is in errors.ts (the problem-type the pattern depends on)', () => {
     const errorsBody = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
