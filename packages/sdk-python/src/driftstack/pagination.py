@@ -66,7 +66,12 @@ def iterate_paginated(
         page = fetch_page(cursor)
         yield from _extract_data(page)
         next_cursor = _extract_next_cursor(page)
-        if next_cursor is None:
+        # An empty-string cursor is "no more pages", not a cursor. Treating it
+        # as one restarts the walk: the server decodes an empty cursor as
+        # "first page", so the iterator cycles c1 -> "" -> c1 forever, yielding
+        # duplicates. The stall guard below cannot catch that, because
+        # consecutive cursors differ. sdk-go already stops here.
+        if next_cursor is None or next_cursor == "":
             return
         if next_cursor == cursor:
             raise TransportError(_CURSOR_STALL_MSG, status=0)
@@ -83,7 +88,12 @@ async def aiterate_paginated(
         for item in _extract_data(page):
             yield item
         next_cursor = _extract_next_cursor(page)
-        if next_cursor is None:
+        # An empty-string cursor is "no more pages", not a cursor. Treating it
+        # as one restarts the walk: the server decodes an empty cursor as
+        # "first page", so the iterator cycles c1 -> "" -> c1 forever, yielding
+        # duplicates. The stall guard below cannot catch that, because
+        # consecutive cursors differ. sdk-go already stops here.
+        if next_cursor is None or next_cursor == "":
             return
         if next_cursor == cursor:
             raise TransportError(_CURSOR_STALL_MSG, status=0)

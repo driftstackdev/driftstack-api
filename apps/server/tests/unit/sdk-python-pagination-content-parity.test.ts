@@ -67,10 +67,16 @@ describe('W586.B packages/sdk-python/src/driftstack/pagination.py content parity
     expect(body).toMatch(/``fetch_page\(None\)`` is called for the first page; subsequent calls/);
     expect(body).toMatch(/pass the previous page's ``next_cursor``\. Stops as soon as/);
     expect(body).toMatch(/``next_cursor`` is None\. Errors from ``fetch_page`` propagate\./);
+    // An empty cursor also ends the walk — see the sdk-typescript sibling for
+    // why treating it as a cursor loops forever. Both walkers carry it.
+    expect(
+      (body.match(/next_cursor is None or next_cursor == ""/g) ?? []).length,
+      'the sync and async walkers must not drift apart on the empty-cursor stop',
+    ).toBe(2);
     expect(body).toMatch(/Page object can be a pydantic ``BaseModel`` \(attributes\) or a raw/);
     expect(body).toMatch(/``dict`` \(keys\); both are duck-typed\./);
     expect(body).toMatch(
-      /cursor: str \| None = None\s*\n\s*while True:\s*\n\s*page = fetch_page\(cursor\)\s*\n\s*yield from _extract_data\(page\)\s*\n\s*next_cursor = _extract_next_cursor\(page\)\s*\n\s*if next_cursor is None:\s*\n\s*return/,
+      /cursor: str \| None = None\s*\n\s*while True:\s*\n\s*page = fetch_page\(cursor\)\s*\n\s*yield from _extract_data\(page\)\s*\n\s*next_cursor = _extract_next_cursor\(page\)\s*\n[\s\S]{0,500}?if next_cursor is None or next_cursor == "":\s*\n\s*return/,
     );
     // Non-advance guard then advance (a repeated cursor would otherwise hang).
     expect(body).toMatch(
@@ -83,7 +89,7 @@ describe('W586.B packages/sdk-python/src/driftstack/pagination.py content parity
       /^async def aiterate_paginated\(\s*\n\s*fetch_page: Callable\[\[str \| None\], Awaitable\[Any\]\],\s*\n\) -> AsyncIterator\[T\]:\s*\n\s*"""Async variant of :func:`iterate_paginated`\. Same semantics\."""/m,
     );
     expect(body).toMatch(
-      /cursor: str \| None = None\s*\n\s*while True:\s*\n\s*page = await fetch_page\(cursor\)\s*\n\s*for item in _extract_data\(page\):\s*\n\s*yield item\s*\n\s*next_cursor = _extract_next_cursor\(page\)\s*\n\s*if next_cursor is None:\s*\n\s*return/,
+      /cursor: str \| None = None\s*\n\s*while True:\s*\n\s*page = await fetch_page\(cursor\)\s*\n\s*for item in _extract_data\(page\):\s*\n\s*yield item\s*\n\s*next_cursor = _extract_next_cursor\(page\)\s*\n[\s\S]{0,500}?if next_cursor is None or next_cursor == "":\s*\n\s*return/,
     );
     // Async path has the same non-advance guard before the cursor advance.
     expect(body).toMatch(

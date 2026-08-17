@@ -101,7 +101,7 @@ describe('W422.A packages/sdk-typescript/src/pagination.ts content parity', () =
 
   it("CRITICAL loop body — `while (true) { const page = await fetchPage(cursor); for (const item of page.data) { yield item; } if (page.next_cursor === null) { return; } ... }`. Order is load-bearing: fetch → yield → check-stop. Drift to checking stop BEFORE yielding would skip the last page's items. (The non-advance guard + cursor advance are pinned separately below.)", () => {
     expect(body).toMatch(
-      /while \(true\) \{\s*\n?\s*const page = await fetchPage\(cursor\);\s*\n?\s*for \(const item of page\.data\) \{\s*\n?\s*yield item;\s*\n?\s*\}\s*\n?\s*if \(page\.next_cursor === null\) \{\s*\n?\s*return;\s*\n?\s*\}/,
+      /while \(true\) \{\s*\n?\s*const page = await fetchPage\(cursor\);\s*\n?\s*for \(const item of page\.data\) \{\s*\n?\s*yield item;\s*\n?\s*\}[\s\S]{0,600}?if \(page\.next_cursor === null \|\| page\.next_cursor === ''\) \{\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 
@@ -111,8 +111,30 @@ describe('W422.A packages/sdk-typescript/src/pagination.ts content parity', () =
     expect(body).toMatch(/pagination did not advance/);
   });
 
-  it('Stop condition — `page.next_cursor === null` STRICT equality. Drift to `=== undefined` would let undefined cursors loop forever; drift to `!page.next_cursor` would stop on empty string (which the server might legitimately return for a still-paginating-but-temporarily-empty page) AND on 0 / false (impossible types but still a footgun).', () => {
-    expect(body).toMatch(/if \(page\.next_cursor === null\) \{\s*\n?\s*return;\s*\n?\s*\}/);
+  // The old rationale here read: stopping on an empty string would be wrong
+  // because "the server might legitimately return [it] for a
+  // still-paginating-but-temporarily-empty page". This server cannot produce
+  // that. Every list repo emits `hasMore && last ? <id> : null` — an id is
+  // never empty, and if `data` were empty then `last` is undefined and the
+  // expression yields null, not "". So an empty cursor is never a keep-going
+  // signal; it can only come from a broken server or proxy.
+  //
+  // Which matters, because treating it as a cursor is not a harmless extra
+  // fetch: the server decodes an empty cursor as "first page", so the walk
+  // restarts and cycles c1 -> "" -> c1 forever, yielding duplicates, and the
+  // non-advance guard below never fires because consecutive cursors differ.
+  // sdk-go already stopped on it; this now matches.
+  //
+  // The `=== undefined` half of the original rationale still stands and is
+  // still pinned: strict equality on both branches, never a truthiness test,
+  // which would also stop on 0 / false.
+  it('Stop condition — null OR empty string ends the walk, both by STRICT equality (never a truthiness test)', () => {
+    expect(body).toMatch(
+      /if \(page\.next_cursor === null \|\| page\.next_cursor === ''\) \{\s*\n?\s*return;\s*\n?\s*\}/,
+    );
+    expect(body, 'a truthiness test would also stop on 0 / false').not.toMatch(
+      /if \(!page\.next_cursor\)/,
+    );
   });
 
   it('Cursor advance — `cursor = page.next_cursor;` is the loop tail, reached only after BOTH the stop-check (return on null) and the non-advance guard (throw on a repeated cursor) pass. Drift to advancing before the stop-check would fetch an extra null-cursor page on the last iteration.', () => {

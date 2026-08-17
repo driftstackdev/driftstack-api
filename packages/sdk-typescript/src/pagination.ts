@@ -44,7 +44,13 @@ export async function* iteratePaginated<T>(
     for (const item of page.data) {
       yield item;
     }
-    if (page.next_cursor === null) {
+    // An empty-string cursor is 'no more pages', not a cursor. Treating it as
+    // one restarts the walk: the server decodes an empty cursor as 'first
+    // page', so the iterator cycles c1 -> '' -> c1 forever, yielding
+    // duplicates. The repeated-cursor guard below cannot catch that, because
+    // consecutive cursors differ. sdk-go already stops here (advanceCursor:
+    // "next is nil or '' -> last page").
+    if (page.next_cursor === null || page.next_cursor === '') {
       return;
     }
     // Guard against a non-advancing cursor. Keyset pagination always returns a

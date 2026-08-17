@@ -33,6 +33,9 @@ function read(p: string): string {
 }
 
 // Paginated resource files per SDK (5 resources × 3 SDKs = 15 files).
+const TS_PAGINATION = resolve(REPO_ROOT, 'packages/sdk-typescript/src/pagination.ts');
+const GO_PAGINATION = resolve(REPO_ROOT, 'packages/sdk-go/pagination.go');
+const PY_PAGINATION = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/pagination.py');
 const TS_SESSIONS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/sessions.ts');
 const TS_PROFILES = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/profiles.ts');
 const TS_SNAPSHOTS = resolve(
@@ -151,6 +154,42 @@ describe('W689 cross-SDK pagination envelope shape parity', () => {
         );
       }
     }
+  });
+
+  // Termination on an EMPTY-STRING cursor, which the three helpers used to
+  // disagree about. Measured by running the same three page-sequences through
+  // all three: on `next_cursor: ""` sdk-go stopped, while sdk-typescript and
+  // sdk-python treated it as a real cursor and fetched again.
+  //
+  // That is not a harmless extra call. The server decodes an empty cursor as
+  // "first page", so the walk restarts and the iterator cycles c1 -> "" -> c1
+  // forever, yielding duplicates. The repeated-cursor stall guard cannot catch
+  // it, because consecutive cursors differ every time.
+  //
+  // Not reachable from this API — every list route emits `next_cursor: null`
+  // when the walk is done — but the helpers exist to make a hand-rolled cursor
+  // loop unnecessary, so they have to be right about the boundary a customer
+  // never has to think about.
+  it('CRITICAL all 3 pagination helpers stop on an empty-string cursor, not just on null', () => {
+    const ts = read(TS_PAGINATION);
+    const go = read(GO_PAGINATION);
+    const py = read(PY_PAGINATION);
+
+    expect(ts, 'sdk-typescript must treat an empty cursor as the end of the walk').toMatch(
+      /next_cursor === null \|\| page\.next_cursor === ''/,
+    );
+    expect(go, 'sdk-go must treat an empty cursor as the end of the walk').toMatch(
+      /next == nil \|\| \*next == ""/,
+    );
+    expect(py, 'sdk-python must treat an empty cursor as the end of the walk').toMatch(
+      /next_cursor is None or next_cursor == ""/,
+    );
+
+    // Python has two loops, sync and async, and they must not drift apart.
+    expect(
+      (py.match(/next_cursor is None or next_cursor == ""/g) ?? []).length,
+      'sdk-python has a sync and an async walker — both need the empty-cursor stop',
+    ).toBe(2);
   });
 
   it('TS iteratePaginated cross-resource usage — pagination helper imported in 5 resource files (the 5 paginated resources). Drift to inlining cursor walkers in each resource would defeat the W422.A centralization.', () => {
