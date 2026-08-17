@@ -2062,3 +2062,190 @@ describe('harness-control-protocol behavioral contract', () => {
     }
   });
 });
+
+// Forward-compat leniency is a property of the harness→server direction, and
+// nothing enforced it.
+//
+// The frames the harness sends are plain `z.object({...})` on purpose: A3 owns
+// the wire and adds fields to it (`tabId` is in the schema right now labelled
+// "forward-compat plumbing — A3 contract pending"). A plain object strips keys
+// it does not model, so a frame carrying a field this server has never heard of
+// still validates and still gets handled.
+//
+// Make one of them `.strict()` and that inverts: every frame carrying the new
+// field fails safeParse and is dropped whole. The schema's own comment records
+// what that looked like the last time it happened — required url/error/
+// http_status "failed safeParse on EVERY real frame → it was silently dropped →
+// the page-state store stayed empty → no live URL in the GUI". Nothing errors,
+// nothing retries; the GUI just stops knowing where the page is.
+//
+// Measured before writing this: adding `.strict()` to PageStateFrameSchema
+// leaves the entire suite green. The parity arm above pins the shape with
+// `toContain` fragments over the source, and `.strict()` changes none of them —
+// it appends to the closing paren. The wire-shape safeParse calls beside it all
+// use modelled keys, so they cannot see it either.
+//
+// The rule is NOT "harness frames are lenient" — that was the first draft of
+// this block and enumerating the frames disproved it. `intentResult` is
+// deliberately `.strict()` on both envelopes: it is a tight contract carrying a
+// bounded base64 payload, and its cheap routing header is a separate
+// `.passthrough()` schema. So the policy is per-frame, and it is pinned per
+// frame below. A blanket check would have had to be wrong in one direction or
+// the other.
+//
+// Both directions are worth catching. A lenient frame turning strict drops
+// frames the box already sends. The strict envelope turning lenient silently
+// widens a contract whose whole point is that the payload is bounded.
+//
+// Two things about the enumeration itself, both learned by getting them wrong:
+// `intentResult` is a discriminatedUnion, so the modes live one level below the
+// union member, and several frames are ZodEffects wrappers with no mode of their
+// own. Read either without unwrapping and the answer is `undefined`, which a
+// filter looking for 'strict' treats exactly like 'lenient' — the frames with
+// the most structure attached would have been the ones silently exempted. That
+// is what the "actually READ" arm is for.
+describe('harness→server frame strictness is pinned per frame', () => {
+  interface ObjectDef {
+    readonly _def?: {
+      readonly unknownKeys?: string;
+      readonly schema?: unknown;
+      readonly innerType?: unknown;
+    };
+    readonly shape?: { readonly type?: { readonly _def?: { readonly value?: unknown } } };
+  }
+  /**
+   * Flattens a union member down to the object schemas that actually carry an
+   * unknown-key mode. Two wrappers sit in the way and both would otherwise read
+   * as `undefined` — which is indistinguishable from "lenient" to a filter
+   * looking for 'strict', so the frames with the most structure attached would
+   * be the ones silently exempted:
+   *
+   *   ZodEffects        `.superRefine` puts the object under `_def.schema`.
+   *   nested unions     `intentResult` is a discriminatedUnion of two envelopes,
+   *                     so the leaves are one level further down.
+   */
+  const leaves = (s: unknown, depth = 0): ObjectDef[] => {
+    const cur = s as ObjectDef & { readonly _def?: { readonly options?: readonly unknown[] } };
+    if (depth > 6 || cur === undefined || cur === null) return [];
+    if (cur.shape !== undefined) return [cur];
+    const nested = cur._def?.options;
+    if (nested !== undefined) return nested.flatMap((o) => leaves(o, depth + 1));
+    const inner = cur._def?.schema ?? cur._def?.innerType;
+    return inner === undefined ? [cur] : leaves(inner, depth + 1);
+  };
+  const frameName = (s: ObjectDef, i: number): string => {
+    const literal = s.shape?.type?._def?.value;
+    return typeof literal === 'string' ? literal : `leaf[${String(i)}]`;
+  };
+  const outboundLeaves = (): ObjectDef[] => HarnessOutboundSchema.options.flatMap((o) => leaves(o));
+
+  it('CRITICAL the outbound union enumerated a real population', () => {
+    // Without this a broken enumeration turns both arms below into a pass over
+    // an empty list.
+    expect(
+      outboundLeaves().length,
+      'the harness outbound union enumerated empty',
+    ).toBeGreaterThanOrEqual(12);
+  });
+
+  it('CRITICAL the strictness of every frame was actually READ', () => {
+    // The instrument needs checking too. `unwrap` walks ZodEffects wrappers to
+    // find the object underneath; if it ever stops finding it, `unknownKeys`
+    // comes back undefined, the "is it strict" filter matches nothing, and the
+    // arm below passes for exactly the wrong reason — a guard reporting all
+    // clear because it read nothing at all.
+    const unread = outboundLeaves()
+      .map((leaf, i) => ({ name: frameName(leaf, i), mode: leaf._def?.unknownKeys }))
+      .filter((f) => f.mode !== 'strip' && f.mode !== 'strict' && f.mode !== 'passthrough')
+      .map((f) => f.name);
+    expect(
+      unread,
+      'the unknown-key mode could not be resolved for a frame, so the leniency check below is ' +
+        'silently exempting it rather than testing it',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL every harness→server frame carries the unknown-key mode it was given', () => {
+    // `intentResult` appears twice — the success and failure envelopes of its
+    // discriminated union, both strict.
+    const EXPECTED: Readonly<Record<string, string>> = {
+      intentResult: 'strict', // tight contract, bounded base64 payload
+      sessionStatus: 'strip',
+      heartbeat: 'strip',
+      capabilityReport: 'strip',
+      errorEvent: 'strip',
+      profileSaved: 'strip',
+      challengeDetected: 'strip',
+      pageState: 'strip',
+      profileSaveFailed: 'strip',
+      cookiesResult: 'strip',
+      setCookiesResult: 'strip',
+      navigateHistoryResult: 'strip',
+      uploadResult: 'strip',
+      downloadsList: 'strip',
+      downloadData: 'strip',
+      trimResult: 'strip',
+    };
+    const actual = outboundLeaves().map((leaf, i) => ({
+      name: frameName(leaf, i),
+      mode: String(leaf._def?.unknownKeys),
+    }));
+
+    const unlisted = actual.filter((f) => EXPECTED[f.name] === undefined).map((f) => f.name);
+    expect(
+      unlisted,
+      'a harness→server frame is not listed here, so whether it tolerates an unknown key was ' +
+        'never decided. Add it with the mode you intend: `strip` if the box owns the field set ' +
+        'and may add to it, `strict` if this is a bounded contract',
+    ).toEqual([]);
+
+    const wrong = actual
+      .filter((f) => EXPECTED[f.name] !== undefined && f.mode !== EXPECTED[f.name])
+      .map((f) => `${f.name}: expected ${String(EXPECTED[f.name])}, got ${f.mode}`);
+    expect(
+      wrong,
+      'a frame changed its unknown-key mode. Lenient→strict means every frame carrying a field ' +
+        'this server does not model now fails safeParse and is dropped whole, with nothing ' +
+        'erroring and nothing retrying — the empty page-state store and missing live URL this ' +
+        'schema already carries a comment about. Strict→lenient silently widens a contract whose ' +
+        'point is that the payload is bounded',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL a real wire frame carrying an unmodelled field still parses', () => {
+    // Ties the structural check to observable behaviour: a structural check
+    // alone would pass if the union stopped being consulted.
+    const withFutureField = {
+      type: 'pageState',
+      sessionId: 'agt_1',
+      state: 'loaded',
+      url: 'https://example.com/landed',
+      title: 'Example Domain',
+      viewportScrollY: 1280,
+    };
+    expect(
+      HarnessOutboundSchema.safeParse(withFutureField).success,
+      'a pageState frame carrying a field this server does not model was rejected outright',
+    ).toBe(true);
+  });
+
+  it('CRITICAL the CP→node request frames the server constructs stay strict', () => {
+    // The other half of the rule. Without this arm, "make everything lenient"
+    // would satisfy the check above while quietly widening the frames we build
+    // ourselves, where an unknown key means a bug on this side, not forward
+    // compatibility.
+    const serverBuilt: ReadonlyArray<readonly [string, unknown]> = [
+      ['SetCookiesRequestSchema', SetCookiesRequestSchema],
+      ['NavigateHistoryRequestSchema', NavigateHistoryRequestSchema],
+      ['TrimProfileRequestSchema', TrimProfileRequestSchema],
+    ];
+    const lenient = serverBuilt
+      .filter(([, schema]) => leaves(schema).some((l) => l._def?.unknownKeys !== 'strict'))
+      .map(([name]) => name);
+    expect(
+      lenient,
+      'a CP→node request frame stopped rejecting unknown keys. These are built by this server, so ' +
+        'an unrecognised key is our own bug and should fail loudly rather than be stripped',
+    ).toEqual([]);
+  });
+});
