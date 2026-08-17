@@ -132,8 +132,23 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
       const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
       const workerId = `regression-guard-claim-${Date.now()}`;
-      // Enqueue a due job (runAt in the past), then claim it.
-      const pastRunAt = new Date(Date.now() - 5000);
+      // Enqueue a due job, then claim it. The instant is deliberately far in
+      // the past so this row is the OLDEST due row in the table, which makes
+      // the claim below independent of how deep the queue already is.
+      //
+      // It used to be `Date.now() - 5000`, which quietly assumed the shared
+      // queue was shallower than the batch size. claimDue orders by run_at ASC
+      // and takes LIMIT batchSize; the bootstrap-chains arm alone leaves 10+
+      // pending rows behind on every run, so once ~16 older due rows have
+      // accumulated this arm claims none of its own and reds — not because
+      // claimDue broke, but because the fixture was starved. Seen locally at 31
+      // due rows against batchSize 16; CI never hit it because its Postgres
+      // container is new every run, which is exactly what made it look stable.
+      //
+      // This is positioning, not leniency: every assertion below is unchanged
+      // and still fails if claimDue mishandles Date params, which is the
+      // 2026-05-19 regression this arm exists for.
+      const pastRunAt = new Date('2020-01-01T00:00:00.000Z');
       await repo.enqueue({
         jobType: 'regression_guard_dummy',
         accountId: null,
