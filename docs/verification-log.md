@@ -34540,3 +34540,45 @@ clean; verified zero NUL bytes.
 
 `EXPECTED_TEST_FILES` 2828 → 2829, `_ALL` 2990 → 2991 — one new file, mine. The peer's own bump for
 their file had already landed, so this diff carries only my increment.
+
+## V-795 — `account_owner` documented cross-account access as impossible; it is a designed feature (2026-08-17)
+
+`packages/api-types/src/common.ts` described the `account_owner` scope with: "cross-account access is
+impossible because the route handlers always operate against `ctx.account.id`."
+
+Both halves are false, and `resolveEffectiveAccount` (`services/auth.ts`) says so in eight lines:
+given an `X-Driftstack-Account` header naming a team the caller belongs to, it returns
+`{ kind: 'team', accountId: membership.ownerAccountId, role, membership }` — an account id that is
+explicitly **not** `ctx.account.id`. Every route participating in team RBAC then scopes to the owner:
+V-786's work in `routes/agent-sessions.ts` is one, and `routes/admin.ts` mints API keys on the owner's
+account through `effectiveAccountIdForKeyWrite`.
+
+This matters more than an ordinary stale comment because the type **ships to customers**: it is
+compiled into `packages/api-types/dist/common.d.ts` and read in every SDK consumer's editor. A
+customer or auditor sizing tenancy boundaries from it was told the boundary is absolute when it is
+membership-gated by design.
+
+Corrected to state what is actually true, including the parts that make it safe rather than alarming:
+`ctx.teams` is server-derived and never client-supplied, an unrecognised id is a 403
+(`'X-Driftstack-Account references an account you are not a member of.'`), API-key writes
+additionally require the `admin` team role, and the `GET /v1/account/me` handler itself stays
+self-only — it reads `ctx.account.id` directly, though other routes in that same file do resolve an
+effective account. Each of those four was checked in source, not taken from the audit.
+
+**A convention worth naming, because this is the third time it has bitten.** My retraction quoted the
+retired sentence verbatim, so the `not.toMatch` sentinel banning it caught my own text — the same
+collision as V-783 and V-788. The rule: **the sentinel quotes, the retraction paraphrases.** A
+retraction that restates the falsehood word-for-word reintroduces it as far as any scanner is
+concerned, including the guard from V-794.
+
+Also verified rather than assumed: the pin reads `packages/api-types/src/common.ts`, not the built
+`dist`, so no `api-types` rebuild is required. The only mention of `dist` in that file is its own
+header comment.
+
+Mutation-proved: restoring the denial reds the sentinel. 207 of the 208 pins that read `common.ts`,
+the api-types scope surface or `account_owner` pass; the one failure is
+`routes-account-web-sessions-content-parity`, which reds because a peer has
+`apps/server/src/routes/account-web-sessions.ts` dirty — their in-flight work, confirmed by
+`git status` and untouched.
+
+First batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged — no file added.

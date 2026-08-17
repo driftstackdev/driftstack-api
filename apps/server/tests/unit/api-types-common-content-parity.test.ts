@@ -337,8 +337,24 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /\*\s*V-174 — scope architecture split\. Two new scopes carve up what\s*\n?\s*\*\s*'admin' did pre-V-174:/,
     );
     expect(body).toMatch(
-      /\*\s*- `account_owner` — gates customer-account control \(mint API keys,\s*\n?\s*\*\s*revoke API keys, manage subscription, \/v1\/account\/\*\)\. A customer\s*\n?\s*\*\s*logged into their own dashboard has this scope; their personal\s*\n?\s*\*\s*keys can have it; cross-account access is impossible because the\s*\n?\s*\*\s*route handlers always operate against `ctx\.account\.id`\./,
+      /\*\s*- `account_owner` — gates customer-account control \(mint API keys,\s*\n?\s*\*\s*revoke API keys, manage subscription, \/v1\/account\/\*\)\. A customer\s*\n?\s*\*\s*logged into their own dashboard has this scope; their personal\s*\n?\s*\*\s*keys can have it\./,
     );
+    // V-795 — the retracted half. This bullet used to end "cross-account access
+    // is impossible because the route handlers always operate against
+    // ctx.account.id", and both halves were false: resolveEffectiveAccount
+    // returns membership.ownerAccountId, an account that is NOT ctx.account.id,
+    // whenever the caller sends X-Driftstack-Account for a team they belong to.
+    // The type ships to customers in dist/common.d.ts, so the false sentence was
+    // an SDK-level statement about tenancy.
+    expect(body).toMatch(
+      /Cross-account access is\s*\n?\s*\*\s*therefore possible BY DESIGN and membership-gated/,
+    );
+    expect(body).toMatch(/`ctx\.teams` is\s*\n?\s*\*\s*server-derived and never client-supplied/);
+    expect(body).toMatch(/API-key writes additionally require the `admin` team role/);
+    expect(body, 'the retracted claim must not return').not.toMatch(
+      /cross-account access is impossible/i,
+    );
+    expect(body).not.toMatch(/route handlers always operate against `ctx\.account\.id`/);
     expect(body).toMatch(
       /\*\s*- `driftstack_internal_admin` — gates Driftstack-staff-only\s*\n?\s*\*\s*operations \(`\/v1\/admin\/\*`: list all accounts, suspend account,\s*\n?\s*\*\s*change tier, force-actions, audit-log read, webhook DLQ\s*\n?\s*\*\s*management\)\. Only the founder \+ Driftstack-internal accounts\s*\n?\s*\*\s*carry this scope\. The exact scope check is the application authority\s*\n?\s*\*\s*boundary; Cloudflare Access SSO on admin\.driftstack\.dev \(V-135\) is a\s*\n?\s*\*\s*separate defense-in-depth identity perimeter\./,
     );

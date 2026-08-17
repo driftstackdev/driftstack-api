@@ -1367,8 +1367,25 @@ export const SelectableArchetypeIdSchema = z
  * - `account_owner` — gates customer-account control (mint API keys,
  *   revoke API keys, manage subscription, /v1/account/*). A customer
  *   logged into their own dashboard has this scope; their personal
- *   keys can have it; cross-account access is impossible because the
- *   route handlers always operate against `ctx.account.id`.
+ *   keys can have it. The scope always resolves to exactly ONE account,
+ *   but not always the caller's own.
+ *
+ *   V-795 — this bullet used to deny cross-account reach outright, on
+ *   the grounds that handlers only ever read the caller's own account
+ *   id. Both halves were false. Per V-326 every route participating in
+ *   team RBAC
+ *   resolves its target through `resolveEffectiveAccount`
+ *   (`apps/server/src/services/auth.ts`), which returns
+ *   `membership.ownerAccountId` — an account that is NOT
+ *   `ctx.account.id` — when the caller sends `X-Driftstack-Account` for
+ *   a team they hold a confirmed membership on. Cross-account access is
+ *   therefore possible BY DESIGN and membership-gated: `ctx.teams` is
+ *   server-derived and never client-supplied, an unknown id is a 403,
+ *   and API-key writes additionally require the `admin` team role
+ *   (`effectiveAccountIdForKeyWrite` in `routes/admin.ts`). The
+ *   `GET /v1/account/me` handler itself is one that stays self-only —
+ *   it reads `ctx.account.id` directly — though other routes in that
+ *   same file do resolve an effective account.
  *
  * - `driftstack_internal_admin` — gates Driftstack-staff-only
  *   operations (`/v1/admin/*`: list all accounts, suspend account,
