@@ -109,10 +109,16 @@ describe('W585.C packages/sdk-python/src/driftstack/http.py content parity', () 
       /def request\(\s*\n\s*self,\s*\n\s*method: str,\s*\n\s*path: str,\s*\n\s*\*,\s*\n\s*params: dict\[str, Any\] \| None = None,\s*\n\s*json_body: Any \| None = None,\s*\n\s*retry: RetryConfig \| None = None,\s*\n\s*extra_headers: dict\[str, str\] \| None = None,\s*\n\s*\) -> Any:/,
     );
     expect(body).toMatch(
-      /except httpx\.TimeoutException as err:\s*\n\s*raise TransportError\("request timed out", status=0\) from err/,
+      // The chained cause is scrubbed before it is attached. httpx puts the
+      // full Request — headers included — on its transport exceptions, so the
+      // API key stayed reachable at `err.__cause__.request.headers` even though
+      // no string form of anything in the chain showed it. Behaviour is pinned
+      // in the SDK's own suite by a reachability walk; this pins that the
+      // scrubber is still in the path.
+      /except httpx\.TimeoutException as err:\s*\n\s*raise TransportError\("request timed out", status=0\) from _scrub_chained_request\(err\)/,
     );
     expect(body).toMatch(
-      /except httpx\.HTTPError as err:\s*\n\s*raise TransportError\(str\(err\), status=0\) from err/,
+      /except httpx\.HTTPError as err:\s*\n\s*raise TransportError\(str\(err\), status=0\) from _scrub_chained_request\(err\)/,
     );
     expect(body).toMatch(/with self\._client\.stream\(/);
     expect(body).toMatch(/return with_retry\(_do, retry or self\._retry\)/);

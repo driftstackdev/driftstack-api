@@ -140,6 +140,41 @@ def _is_retry_safe(method: str, headers: dict[str, str]) -> bool:
     )
 
 
+
+_REDACTED_HEADERS = ("authorization", "x-driftstack-gui-control-key", "x-byok-anthropic-api-key")
+
+
+def _scrub_chained_request(err: BaseException) -> BaseException:
+    """Strip credentials from the request httpx attaches to a transport error.
+
+    httpx puts the full :class:`httpx.Request` — headers included — on its
+    transport exceptions, and we chain those with ``raise ... from err`` so a
+    caller can see the underlying cause. The API key therefore stays reachable
+    at ``err.__cause__.request.headers['authorization']`` even though it never
+    appears in ``str()`` or ``repr()`` of anything in the chain, which is all
+    the existing leak tests looked at.
+
+    That matters for error reporters rather than for logs: Sentry and similar
+    capture exception chains and frame locals, so a transient connection
+    failure could ship a live customer key to a third party. The Go SDK does not
+    have this exposure — its chain is url.Error -> net.OpError -> syscall.Errno,
+    none of which carry headers.
+
+    The request is about to be discarded, so redacting in place costs nothing
+    and keeps the cause chain intact for debugging.
+    """
+    request = getattr(err, "request", None)
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return err
+    for name in _REDACTED_HEADERS:
+        try:
+            if name in headers:
+                headers[name] = "[redacted]"
+        except Exception:  # noqa: BLE001 - never let scrubbing mask the real error
+            pass
+    return err
+
 def _build_headers(
     api_key: str, has_body: bool, effective_account: str | None = None
 ) -> dict[str, str]:
@@ -383,9 +418,9 @@ class HttpClient:
                     content = _read_bounded_response(response)
                     return _decode_or_raise(response, content)
             except httpx.TimeoutException as err:
-                raise TransportError("request timed out", status=0) from err
+                raise TransportError("request timed out", status=0) from _scrub_chained_request(err)
             except httpx.HTTPError as err:
-                raise TransportError(str(err), status=0) from err
+                raise TransportError(str(err), status=0) from _scrub_chained_request(err)
 
         # Retry SAFETY gate — only auto-retry idempotent requests (or a
         # POST/PATCH carrying an Idempotency-Key); a keyless create must
@@ -437,9 +472,9 @@ class HttpClient:
                 content = _read_bounded_response(response, deadline)
                 return _decode_event_stream_or_raise(response, content)
         except httpx.TimeoutException as err:
-            raise TransportError("request timed out", status=0) from err
+            raise TransportError("request timed out", status=0) from _scrub_chained_request(err)
         except httpx.HTTPError as err:
-            raise TransportError(str(err), status=0) from err
+            raise TransportError(str(err), status=0) from _scrub_chained_request(err)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -521,9 +556,9 @@ class AsyncHttpClient:
                     content = await _read_bounded_response_async(response)
                     return _decode_or_raise(response, content)
             except httpx.TimeoutException as err:
-                raise TransportError("request timed out", status=0) from err
+                raise TransportError("request timed out", status=0) from _scrub_chained_request(err)
             except httpx.HTTPError as err:
-                raise TransportError(str(err), status=0) from err
+                raise TransportError(str(err), status=0) from _scrub_chained_request(err)
 
         # Retry SAFETY gate — see the sync :meth:`HttpClient.request`.
         if not _is_retry_safe(method, headers):
@@ -564,9 +599,9 @@ class AsyncHttpClient:
                 content = await _read_bounded_response_async(response, deadline)
                 return _decode_event_stream_or_raise(response, content)
         except httpx.TimeoutException as err:
-            raise TransportError("request timed out", status=0) from err
+            raise TransportError("request timed out", status=0) from _scrub_chained_request(err)
         except httpx.HTTPError as err:
-            raise TransportError(str(err), status=0) from err
+            raise TransportError(str(err), status=0) from _scrub_chained_request(err)
 
 
 # ──────────────────────────────────────────────────────────────────────────
