@@ -13,9 +13,11 @@ describe('lib/livekit-secret-encryption content parity', () => {
   it('exists at the canonical path and keeps the shared host-key contract', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/MFA_ENCRYPTION_KEY must decode to/);
-    expect(body).toMatch(/const AES_256_KEY_BYTES = 32;/);
-    expect(body).toMatch(/const GCM_IV_BYTES = 12;/);
-    expect(body).toMatch(/const GCM_TAG_BYTES = 16;/);
+    // The AES-GCM parameters are IMPORTED, not redeclared. Ten encryption
+    // modules each held their own copy with their own pin like this one, so
+    // every copy was covered and nothing required the ten to agree.
+    expect(body).toContain("from './aes-gcm-parameters.js'");
+    expect(body).not.toMatch(/const (?:AES_256_KEY_BYTES|GCM_IV_BYTES|GCM_TAG_BYTES) = /);
   });
 
   it('uses one explicit v2 prefix and a dedicated purpose', () => {

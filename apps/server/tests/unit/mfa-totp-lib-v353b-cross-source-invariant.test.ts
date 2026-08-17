@@ -116,8 +116,11 @@ describe('W964 V-353b mfa-totp lib cross-source invariant', () => {
   it('CRITICAL byte-length constants — SECRET_RAW_BYTES = 20 + GCM_IV_BYTES = 12 + GCM_TAG_BYTES = 16. The 12-byte IV + 16-byte tag are AES-256-GCM standard sizes; 20-byte secret matches RFC 4226 §5 minimum-recommended.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/mfa-totp.ts'));
     expect(p).toMatch(/const SECRET_RAW_BYTES = 20;/);
-    expect(p).toMatch(/const GCM_IV_BYTES = 12;/);
-    expect(p).toMatch(/const GCM_TAG_BYTES = 16;/);
+    // The AES-GCM parameters are IMPORTED, not redeclared. Ten encryption
+    // modules each held their own copy with their own pin like this one, so
+    // every copy was covered and nothing required the ten to agree.
+    expect(p).toContain("from './aes-gcm-parameters.js'");
+    expect(p).not.toMatch(/const (?:AES_256_KEY_BYTES|GCM_IV_BYTES|GCM_TAG_BYTES) = /);
   });
 
   // ─── BASE32_ALPHABET uppercase (distinct from W912 api-keys) ─

@@ -37,9 +37,11 @@ describe('lib/gui-control-key-encryption content parity', () => {
   });
 
   it('cryptographic sizes, bounded context, v2 magic, unique purpose and base32 alphabet are pinned', () => {
-    expect(body).toMatch(/const GCM_IV_BYTES = 12;/);
-    expect(body).toMatch(/const GCM_TAG_BYTES = 16;/);
-    expect(body).toMatch(/const AES_256_KEY_BYTES = 32;/);
+    // The AES-GCM parameters are IMPORTED, not redeclared. Ten encryption
+    // modules each held their own copy with their own pin like this one, so
+    // every copy was covered and nothing required the ten to agree.
+    expect(body).toContain("from './aes-gcm-parameters.js'");
+    expect(body).not.toMatch(/const (?:AES_256_KEY_BYTES|GCM_IV_BYTES|GCM_TAG_BYTES) = /);
     expect(body).toMatch(/const PLAINTEXT_BODY_BYTES = 20;/);
     expect(body).toMatch(/const MAX_CONTEXT_FIELD_BYTES = 256;/);
     expect(body).toMatch(/const BASE32_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';/);

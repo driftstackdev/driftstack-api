@@ -35,10 +35,7 @@ import {
   randomBytes,
   timingSafeEqual,
 } from 'node:crypto';
-
-const AES_256_KEY_BYTES = 32;
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
+import { AES_256_KEY_BYTES, GCM_IV_BYTES, GCM_TAG_BYTES } from './aes-gcm-parameters.js';
 const WRAPPED_DEK_PAYLOAD_BYTES = GCM_IV_BYTES + GCM_TAG_BYTES + AES_256_KEY_BYTES;
 const WRAPPED_DEK_BASE64_CHARS = 80;
 const TMK_SALT_PREFIX = 'tenant';

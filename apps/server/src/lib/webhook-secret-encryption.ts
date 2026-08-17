@@ -4,10 +4,7 @@
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { decryptPlatformSecret } from './platform-secret-encryption.js';
-
-const AES_256_KEY_BYTES = 32;
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
+import { AES_256_KEY_BYTES, GCM_IV_BYTES, GCM_TAG_BYTES } from './aes-gcm-parameters.js';
 const WEBHOOK_SECRET_UTF8_BYTES = 38;
 const WEBHOOK_SECRET_BLOB_BYTES = GCM_IV_BYTES + GCM_TAG_BYTES + WEBHOOK_SECRET_UTF8_BYTES;
 const WEBHOOK_SECRET_BASE64_CHARS = 88;

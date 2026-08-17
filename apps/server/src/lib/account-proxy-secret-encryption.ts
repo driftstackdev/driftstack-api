@@ -3,12 +3,9 @@
 // ordinary dispatch reads require the explicit v2 prefix and exact proxy tuple.
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { AES_256_KEY_BYTES, GCM_IV_BYTES, GCM_TAG_BYTES } from './aes-gcm-parameters.js';
 import { OpenVpnProxyConfigSchema, WireGuardProxyConfigSchema } from '@driftstack/api-types';
 import { deriveTenantMasterKey } from './profile-key-hierarchy.js';
-
-const AES_256_KEY_BYTES = 32;
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
 const MIN_ENVELOPE_BYTES = GCM_IV_BYTES + GCM_TAG_BYTES + 1;
 const PASSWORD_MAX_UTF8_BYTES = 4 * 1024;
 const OPENVPN_MAX_UTF8_BYTES = 2 * 1024 * 1024;

@@ -21,14 +21,13 @@ import {
   randomInt,
   timingSafeEqual,
 } from 'node:crypto';
+import { GCM_IV_BYTES, GCM_TAG_BYTES } from './aes-gcm-parameters.js';
 
 export const TOTP_PERIOD_SECONDS = 30;
 export const TOTP_DIGITS = 6;
 export const TOTP_DRIFT_WINDOWS = 1;
 
 const SECRET_RAW_BYTES = 20;
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
 const MAX_ACCOUNT_ID_BYTES = 256;
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 

@@ -5,10 +5,7 @@
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import type { PlatformSecretPlaintext } from './platform-secret-encryption.js';
-
-const AES_256_KEY_BYTES = 32;
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
+import { AES_256_KEY_BYTES, GCM_IV_BYTES, GCM_TAG_BYTES } from './aes-gcm-parameters.js';
 const PLATFORM_SECRET_VALUE_AAD_PURPOSE = 'driftstack.platform-secret-value';
 const PLATFORM_SECRET_VALUE_AAD_ROLE = 'value';
 const PLATFORM_SECRET_NAME_RE = /^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$/;

@@ -12,10 +12,7 @@
 // unambiguous.
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-
-const AES_256_KEY_BYTES = 32;
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
+import { AES_256_KEY_BYTES, GCM_IV_BYTES, GCM_TAG_BYTES } from './aes-gcm-parameters.js';
 const MAX_NODE_ID_BYTES = 64;
 const MAX_API_KEY_BYTES = 1_024;
 const MAX_WS_URL_BYTES = 16_384;

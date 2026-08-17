@@ -69,8 +69,11 @@ describe('W387.A apps/server/src/lib/mfa-totp.ts content parity', () => {
 
   it('SECRET_RAW_BYTES = 20 + GCM_IV_BYTES = 12 + GCM_TAG_BYTES = 16', () => {
     expect(body).toMatch(/const SECRET_RAW_BYTES = 20;/);
-    expect(body).toMatch(/const GCM_IV_BYTES = 12;/);
-    expect(body).toMatch(/const GCM_TAG_BYTES = 16;/);
+    // The AES-GCM parameters are IMPORTED, not redeclared. Ten encryption
+    // modules each held their own copy with their own pin like this one, so
+    // every copy was covered and nothing required the ten to agree.
+    expect(body).toContain("from './aes-gcm-parameters.js'");
+    expect(body).not.toMatch(/const (?:AES_256_KEY_BYTES|GCM_IV_BYTES|GCM_TAG_BYTES) = /);
   });
 
   it('BASE32_ALPHABET = RFC 4648 uppercase A-Z + 2-7 (different from api-keys.ts lowercase)', () => {

@@ -17,10 +17,7 @@
 // an explicit cast (which a code reviewer would catch).
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
-const AES_256_KEY_BYTES = 32;
+import { AES_256_KEY_BYTES, GCM_IV_BYTES, GCM_TAG_BYTES } from './aes-gcm-parameters.js';
 const BYOK_ANTHROPIC_KEY_AAD_PURPOSE = 'driftstack.byok-anthropic-key';
 const BYOK_ANTHROPIC_KEY_BODY_MAX_CHARS = 512;
 const BYOK_ANTHROPIC_KEY_MAX_PLAINTEXT_BYTES =

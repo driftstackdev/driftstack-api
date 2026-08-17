@@ -14,10 +14,7 @@
 // agent-session and its 24h TTL.
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
-const AES_256_KEY_BYTES = 32;
+import { AES_256_KEY_BYTES, GCM_IV_BYTES, GCM_TAG_BYTES } from './aes-gcm-parameters.js';
 const PLAINTEXT_BODY_BYTES = 20;
 const MAX_CONTEXT_FIELD_BYTES = 256;
 const BASE32_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';

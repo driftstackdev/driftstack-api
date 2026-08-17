@@ -49,9 +49,11 @@ describe('lib/byok-anthropic-encryption content parity', () => {
   });
 
   it('3-constant catalog pinned: GCM_IV_BYTES = 12 + GCM_TAG_BYTES = 16 + AES_256_KEY_BYTES = 32. Drift to a different IV byte-count would break the GCM standard (NIST SP 800-38D recommends 96-bit / 12-byte IVs); drift to a different tag-byte-count would weaken authentication', () => {
-    expect(body).toMatch(/const GCM_IV_BYTES = 12;/);
-    expect(body).toMatch(/const GCM_TAG_BYTES = 16;/);
-    expect(body).toMatch(/const AES_256_KEY_BYTES = 32;/);
+    // The AES-GCM parameters are IMPORTED, not redeclared. Ten encryption
+    // modules each held their own copy with their own pin like this one, so
+    // every copy was covered and nothing required the ten to agree.
+    expect(body).toContain("from './aes-gcm-parameters.js'");
+    expect(body).not.toMatch(/const (?:AES_256_KEY_BYTES|GCM_IV_BYTES|GCM_TAG_BYTES) = /);
   });
 
   it("BYOKAnthropicKeyPlaintext brand-type framing pinned: 'string & { readonly __brand: byok-anthropic-plaintext }'. + 'Compiler-enforced taint marker for the decrypted BYOK plaintext. Internal call sites must as an explicit cast to assign to a raw string — meant to make log/error/audit paths visibly unsafe in code review.' — pinned so the brand-pattern + visibly-unsafe-cast review-signal contract stay documented (drift to dropping the brand would let raw plaintext flow into logs without TypeScript catching it)", () => {

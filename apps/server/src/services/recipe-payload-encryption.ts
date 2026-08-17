@@ -13,6 +13,7 @@ import {
   AGENT_TRANSCRIPT_ENVELOPE_KIND,
   parseAgentTranscript,
 } from './agent-transcript-encryption.js';
+import { AES_256_KEY_BYTES, GCM_IV_BYTES, GCM_TAG_BYTES } from '../lib/aes-gcm-parameters.js';
 
 export const RECIPE_INTENT_LOG_ENVELOPE_KIND = 'driftstack.recipe-intent-log' as const;
 export const RECIPE_TRANSCRIPT_SNAPSHOT_ENVELOPE_KIND =
@@ -22,9 +23,6 @@ const RECIPE_INTENT_LOG_AAD_PURPOSE = 'driftstack.recipe-intent-log.v2';
 const RECIPE_TRANSCRIPT_SNAPSHOT_AAD_PURPOSE = 'driftstack.recipe-transcript-snapshot.v2';
 const INTENT_LOG_SLOT = 'intent_log';
 const TRANSCRIPT_SNAPSHOT_SLOT = 'transcript_snapshot';
-const GCM_IV_BYTES = 12;
-const GCM_TAG_BYTES = 16;
-const AES_256_KEY_BYTES = 32;
 const MAX_RECIPE_PAYLOAD_PLAINTEXT_BYTES = 64 * 1024 * 1024;
 const MIN_RECIPE_PAYLOAD_BLOB_BYTES = GCM_IV_BYTES + GCM_TAG_BYTES + 1;
 const MAX_RECIPE_PAYLOAD_BLOB_BYTES =
