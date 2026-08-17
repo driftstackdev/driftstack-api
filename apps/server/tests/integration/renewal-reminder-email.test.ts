@@ -9,6 +9,9 @@
 //   3. invoice.upcoming with an unknown customer is silently
 //      ignored (returns 200 'handled', no email).
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { signStripePayload } from '../../src/lib/stripe-signing.js';
@@ -124,6 +127,77 @@ describe('V-327 — invoice.upcoming → renewal-reminder email', () => {
     const newSends = fx.emailSends.slice(beforeCount);
     const renewalSends = newSends.filter((s) => s.template === 'billing-renewal-reminder');
     expect(renewalSends[0]!.vars.amountFormatted).toBe('12,000 JPY');
+  });
+
+  // JPY above proves the zero-decimal BRANCH. It does not prove the SET is
+  // consulted: rewrite formatCents as `if (code === 'JPY')` and that arm still
+  // passes while the other fifteen currencies silently divide by 100. A customer
+  // billed ₩120,000 would be emailed "1,200.00 KRW" — understated a hundredfold,
+  // in the one message whose entire job is telling them what they are about to
+  // be charged.
+  it('CRITICAL a zero-decimal currency OTHER than JPY also skips the decimals', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const beforeCount = fx.emailSends.length;
+    const raw = buildInvoiceUpcomingEvent({
+      eventId: 'evt_invoice_upcoming_krw',
+      invoiceId: 'in_krw',
+      stripeCustomerId: 'cus_test_default',
+      amountDue: 120000,
+      currency: 'krw',
+      nextPaymentAttemptSec: nowSec() + 7 * 24 * 60 * 60,
+    });
+    await postEvent(fx, raw);
+    const sends = fx.emailSends
+      .slice(beforeCount)
+      .filter((s) => s.template === 'billing-renewal-reminder');
+    expect(
+      sends[0]!.vars.amountFormatted,
+      'a zero-decimal currency other than JPY was divided by 100 — the renewal email understates ' +
+        'the charge by a hundredfold',
+    ).toBe('120,000 KRW');
+  });
+
+  // Membership drift is the other half, and it moves money in BOTH directions:
+  // a currency dropped from the set is understated 100x, one wrongly added is
+  // overstated 100x. The list is not ours — it is Stripe's published
+  // zero-decimal set (stripe.com/docs/currencies#zero-decimal) — so it is pinned
+  // exactly rather than sampled, and read from the source so the check cannot
+  // drift away from the code it describes.
+  it('CRITICAL the zero-decimal set is exactly Stripe’s published list', () => {
+    const src = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../src/services/account-lifecycle.ts'),
+      'utf8',
+    );
+    const block = /ZERO_DEC\s*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src);
+    expect(
+      block,
+      'the zero-decimal set could not be located in account-lifecycle.ts',
+    ).not.toBeNull();
+    const members = [...(block?.[1] ?? '').matchAll(/'([A-Z]{3})'/g)].map((m) => m[1]!).sort();
+    expect(
+      members,
+      'the zero-decimal currency set no longer matches Stripe’s published list. Adding a currency ' +
+        'that HAS decimals overstates every amount in it by 100x; dropping one that does not ' +
+        'understates by 100x. Re-check against stripe.com/docs/currencies#zero-decimal before ' +
+        'changing this',
+    ).toEqual([
+      'BIF',
+      'CLP',
+      'DJF',
+      'GNF',
+      'JPY',
+      'KMF',
+      'KRW',
+      'MGA',
+      'PYG',
+      'RWF',
+      'UGX',
+      'VND',
+      'VUV',
+      'XAF',
+      'XOF',
+      'XPF',
+    ]);
   });
 
   it('suppresses the email when account opts out via email-preferences', async () => {
