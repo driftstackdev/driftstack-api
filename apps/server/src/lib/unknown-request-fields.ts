@@ -36,6 +36,29 @@ const MAX_KEY_CHARS = 64;
  * against it would under-report (a key the schema knows but drops) and
  * over-report (a key the transform renames).
  */
+/**
+ * The declared top-level keys of a request schema, unwrapping `.refine` /
+ * `.superRefine`.
+ *
+ * A cross-field rule turns a `ZodObject` into a `ZodEffects`, which has no
+ * `.shape` — `UpdateWebhookRequestSchema` is one, because it requires at least
+ * one field to be present. The tempting shortcut at the call site is to list the
+ * keys by hand, and that is worse than the silence this module exists to fix: a
+ * field added to the schema later would not be in the hand-written list, so the
+ * API would tell a customer their perfectly valid field had been ignored.
+ * Reading the shape through the wrapper keeps the two in step for free.
+ */
+export function knownRequestKeys(schema: unknown): readonly string[] {
+  let current = schema as { shape?: Record<string, unknown>; _def?: { schema?: unknown } };
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (current?.shape !== undefined) return Object.keys(current.shape);
+    const inner = current?._def?.schema;
+    if (inner === undefined) return [];
+    current = inner as typeof current;
+  }
+  return [];
+}
+
 export function reportUnknownRequestFields(args: {
   body: unknown;
   knownKeys: readonly string[];

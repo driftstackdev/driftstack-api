@@ -2,6 +2,7 @@
 // + GET /v1/webhooks/:id/deliveries.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import {
   CreateWebhookRequestSchema,
   ListDeliveriesQuerySchema,
@@ -117,7 +118,19 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
-      const body = CreateWebhookRequestSchema.parse(request.body ?? {});
+      const rawBody = request.body ?? {};
+      const body = CreateWebhookRequestSchema.parse(rawBody);
+      // Item 6 — `events` is the field that matters here. A mistyped key is
+      // stripped, the endpoint is created subscribed to whatever the schema
+      // defaults to, and the customer sees 201 followed by deliveries that never
+      // arrive for the events they thought they had chosen.
+      reportUnknownRequestFields({
+        body: rawBody,
+        knownKeys: Object.keys(CreateWebhookRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/webhooks',
+      });
       // SSRF guard — reject a webhook URL pointed at a private/loopback/
       // reserved address or localhost (the delivery worker runs on our infra).
       const unsafe = unsafeWebhookTargetReason(body.url);
@@ -195,13 +208,23 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
   app.patch<{ Params: { id: string } }>(
     '/v1/webhooks/:id',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
-    async (request) => {
+    async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const id = uuidFromPrefixedId(request.params.id, 'whk');
       const parsed = UpdateWebhookRequestSchema.safeParse(request.body);
       if (!parsed.success)
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid body.');
+      // A partial update makes this worse than create: every field is optional,
+      // so a mistyped `events` leaves the existing subscriptions untouched and
+      // reports success, and the customer believes they changed something.
+      reportUnknownRequestFields({
+        body: request.body,
+        knownKeys: knownRequestKeys(UpdateWebhookRequestSchema),
+        reply,
+        logger: request.log,
+        route: 'PATCH /v1/webhooks/:id',
+      });
       // SSRF guard on a changed URL (partial update; url is optional).
       if (parsed.data.url !== undefined) {
         const unsafe = unsafeWebhookTargetReason(parsed.data.url);

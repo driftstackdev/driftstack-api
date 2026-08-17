@@ -14,6 +14,38 @@ const auth = (fixture: TestAppFixture): { authorization: string } => ({
 });
 
 describe('POST /v1/webhooks', () => {
+  it('CRITICAL a mistyped events key is reported rather than silently defaulted', async () => {
+    // `events` is the field that decides which deliveries ever arrive. Mistype
+    // it and zod strips it, the endpoint is created against whatever the schema
+    // leaves behind, and the customer sees 201 followed by silence on the
+    // events they believed they had subscribed to.
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: {
+        url: 'https://customer.test/hook',
+        events: ['session.completed'],
+        eventss: ['session.failed'],
+      },
+    });
+    expect(res.statusCode, 'reporting, not rejecting').toBe(201);
+    expect(res.headers['x-driftstack-unknown-fields']).toBe('eventss');
+  });
+
+  it('CRITICAL a well-formed create is not tagged', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://customer.test/hook', events: ['session.completed'] },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.headers['x-driftstack-unknown-fields']).toBeUndefined();
+  });
+
   it('201 returns plaintext secret + endpoint shape', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

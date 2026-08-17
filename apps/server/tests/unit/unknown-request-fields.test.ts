@@ -9,9 +9,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FastifyBaseLogger, FastifyReply } from 'fastify';
 import {
+  knownRequestKeys,
   reportUnknownRequestFields,
   UNKNOWN_FIELDS_HEADER,
 } from '../../src/lib/unknown-request-fields.js';
+import { z } from 'zod';
+import { UpdateWebhookRequestSchema } from '@driftstack/api-types';
 
 function makeReply(): { reply: FastifyReply; headers: Record<string, string> } {
   const headers: Record<string, string> = {};
@@ -115,5 +118,58 @@ describe('a reported field name is never cut through a character', () => {
       Buffer.from(value, 'utf8').toString('utf8'),
       'the header value must survive a UTF-8 round-trip — Node rejects it otherwise',
     ).toBe(value);
+  });
+});
+
+// Reading the declared keys off a schema that carries a cross-field rule.
+//
+// `.refine` wraps a ZodObject in a ZodEffects, which has no `.shape`. Two ways
+// to get this wrong, and they fail in opposite directions:
+//
+//   hand-listed keys   a field added to the schema later is missing from the
+//                      list, so the API reports a customer's VALID field as
+//                      ignored -- worse than the silence this module fixes.
+//   empty result       the known set is empty, so every key the caller sent is
+//                      reported as unknown. A whole request tagged as a typo.
+describe('knownRequestKeys sees through a cross-field refinement', () => {
+  it('CRITICAL returns the real keys for a .refine-wrapped schema', () => {
+    // UpdateWebhookRequestSchema requires at least one field, so it is a
+    // ZodEffects in production, not a hypothetical.
+    expect(knownRequestKeys(UpdateWebhookRequestSchema).slice().sort()).toEqual([
+      'active',
+      'description',
+      'events',
+      'url',
+    ]);
+  });
+
+  it('CRITICAL returns the keys for a plain object schema too', () => {
+    expect(
+      knownRequestKeys(z.object({ a: z.string(), b: z.number() }))
+        .slice()
+        .sort(),
+    ).toEqual(['a', 'b']);
+  });
+
+  it('CRITICAL an empty result would tag every field, so it is never the answer for a real schema', () => {
+    // The failure mode this arm guards: if the unwrap stops working, the known
+    // set is empty and `reportUnknownRequestFields` reports the caller's entire
+    // body. Nested refinements are unwrapped too.
+    const doubleWrapped = z
+      .object({ x: z.string() })
+      .refine(() => true)
+      .refine(() => true);
+    expect(knownRequestKeys(doubleWrapped)).toEqual(['x']);
+    const { reply, headers } = makeReply();
+    reportUnknownRequestFields({
+      body: { x: 'ok' },
+      knownKeys: knownRequestKeys(doubleWrapped),
+      reply,
+      route: 'TEST',
+    });
+    expect(
+      headers[UNKNOWN_FIELDS_HEADER],
+      'a valid field was reported as unknown, which is the false-positive direction',
+    ).toBeUndefined();
   });
 });
