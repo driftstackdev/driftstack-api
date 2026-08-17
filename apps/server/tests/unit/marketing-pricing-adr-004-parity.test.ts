@@ -163,7 +163,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     );
   });
 
-  it('CRITICAL Enterprise tier — monthlyUsd null + annualMonthlyEquivalentUsd 4_000 (the $4,000/mo entry floor) + annualUsd 48_000 (= 4_000 × 12, a true YEARLY total like every other tier) + Custom profiles + Custom concurrent + dedicated CSM 1h + Contact sales CTA. The $4,000/mo floor is the entry for the negotiated commitment.', () => {
+  it('CRITICAL Enterprise tier — monthlyUsd null + annualMonthlyEquivalentUsd 4_000 (the $4,000/mo entry floor) + annualUsd 48_000 (= 4_000 × 12, a true YEARLY total). Enterprise and the self-hosted SKUs divide evenly, so eq × 12 reproduces annualUsd there; on the six API tiers it does not (eq × 12 lands $2 low) — the derived rule for all of them is pricing-annual-figures-are-derived.test.ts + Custom profiles + Custom concurrent + dedicated CSM 1h + Contact sales CTA. The $4,000/mo floor is the entry for the negotiated commitment.', () => {
     expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(/monthlyUsd: null,/);
     expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(/annualMonthlyEquivalentUsd: 4_000,/);
     expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(/annualUsd: 48_000,/);
@@ -186,8 +186,8 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     const p = read(PRICING);
 
     // aiAgent: false tiers.
-    expect(tierBlockIn(read(PRICING), 'free')).toMatch(/aiAgent: false,/);
-    expect(tierBlockIn(read(PRICING), 'solo_manual')).toMatch(/aiAgent: false,/);
+    expect(tierBlockIn(p, 'free')).toMatch(/aiAgent: false,/);
+    expect(tierBlockIn(p, 'solo_manual')).toMatch(/aiAgent: false,/);
 
     // aiAgent: true tiers.
     for (const tier of [
@@ -198,9 +198,13 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
       'api_scale',
       'enterprise',
     ]) {
-      expect(p, `${tier} aiAgent: true`).toMatch(
-        new RegExp(`id: '${tier}',[\\s\\S]{0,1000}aiAgent: true,`),
-      );
+      // Scoped to the tier's own block, like the solo_manual case above. A
+      // `id: '<tier>',[\s\S]{0,1000}aiAgent: true,` window was 84 characters
+      // from overflowing on `enterprise` — documenting that tier in pricing.ts
+      // pushed the field out of range and failed this arm for a reason that
+      // had nothing to do with pricing. A char window also cannot tell its own
+      // tier's field from the NEXT tier's; tierBlockIn stops at the next id.
+      expect(tierBlockIn(p, tier), `${tier} aiAgent: true`).toMatch(/aiAgent: true,/);
     }
   });
 
