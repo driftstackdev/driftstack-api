@@ -11,6 +11,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AUTH_IP_LIMITS } from '../../src/middleware/ip-rate-limit.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -97,15 +98,27 @@ describe('Arc 6 docs.status — apps/docs/src/pages/api/status.md parity', () =>
     expect(body).toMatch(/confirmation email/i);
   });
 
-  it('subscription rate limit claim (3 per minute) matches AUTH_IP_LIMITS', () => {
-    const middleware = readFileSync(
-      resolve(REPO_ROOT, 'apps/server/src/middleware/ip-rate-limit.ts'),
-      'utf8',
+  it('CRITICAL the published subscription rate limit is READ from AUTH_IP_LIMITS, not pinned as a literal', () => {
+    // What stood here asserted only that the middleware source still contains
+    // the string "statusSubscribe" and that the page still contains the literal
+    // "3 requests per minute" — despite a title claiming it matched the
+    // constant. Measured: raising statusSubscribe to 10/min left this file at
+    // 11/11 GREEN while the page went on promising 3, so the page could
+    // under-state the real limit on an unauthenticated endpoint and nothing
+    // would say so.
+    const { capacity, refillPerSecond } = AUTH_IP_LIMITS.statusSubscribe;
+
+    // "per minute" is only an honest unit while the bucket refills its whole
+    // capacity over a minute; a different refill makes the sentence wrong even
+    // when the number matches.
+    expect(
+      refillPerSecond,
+      'the page says "per minute", which requires refill = capacity / 60',
+    ).toBeCloseTo(capacity / 60, 10);
+
+    expect(body, `the page must publish the real limit (${String(capacity)}/min)`).toMatch(
+      new RegExp(`${String(capacity)} requests per minute`),
     );
-    // The constant is in AUTH_IP_LIMITS.statusSubscribe; sanity-check
-    // that it's still named the same.
-    expect(middleware).toMatch(/statusSubscribe/);
-    expect(body).toMatch(/3 requests per minute/);
   });
 
   it('SLA window claim (30 days, ~43,200 checks) matches the per-minute probe cadence', () => {
