@@ -405,5 +405,103 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const bound = settled.filter((r) => r.status === 'fulfilled' && r.value !== null);
       expect(bound).toHaveLength(2);
     });
+
+    // ── The CAP itself (legacy path) ────────────────────────────────────
+    // Every arm above passes HIGH_CAP so the profile guard is the only
+    // variable — which is right for those arms, and is exactly why the cap
+    // comparison this method is NAMED for has never run. v8 confirms the
+    // `>= limit` branch is unexecuted. The agent-session twin was closed in
+    // a5956ac21; this is the legacy sibling, and it counts differently:
+    // `destroyed_at IS NULL` rather than a status value.
+
+    it('CRITICAL the create AT the limit is refused, with null rather than a throw', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+      const { accountId, apiKeyId } = await seedAccountWithKey(client);
+
+      expect(
+        await repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 0), 2),
+      ).not.toBeNull();
+      expect(
+        await repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 1), 2),
+      ).not.toBeNull();
+      // Null, not an exception: the caller tears down the driver session it
+      // already spun and surfaces ConcurrencyLimitError. A throw here would
+      // skip that teardown and leak a live worker.
+      expect(
+        await repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 2), 2),
+        'the concurrency limit did not refuse — a customer holds more live browser sessions than ' +
+          'their tier sells',
+      ).toBeNull();
+    });
+
+    it('CRITICAL a limit of zero refuses the first session', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+      const { accountId, apiKeyId } = await seedAccountWithKey(client);
+      expect(
+        await repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 0), 0),
+        'a zero limit still admitted a session — the >= comparison is what makes zero mean zero',
+      ).toBeNull();
+    });
+
+    it('CRITICAL a destroyed session frees its slot', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+      const { accountId, apiKeyId } = await seedAccountWithKey(client);
+      const first = await repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 0), 1);
+      expect(
+        await repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 1), 1),
+      ).toBeNull();
+      // Stamp the column the count actually keys on.
+      await client`UPDATE sessions SET destroyed_at = now() WHERE id = ${first!.id}`;
+      expect(
+        await repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 2), 1),
+        'a destroyed session still held its slot. The count would include every session the account ' +
+          'ever created, so the customer is locked out permanently after their Nth',
+      ).not.toBeNull();
+    });
+
+    it('CRITICAL another account’s sessions never consume this account’s limit', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+      const mine = await seedAccountWithKey(client);
+      const theirs = await seedAccountWithKey(client);
+      expect(
+        await repo.insertSessionIfUnderLimit(
+          mkDriverInput(theirs.accountId, theirs.apiKeyId, 0),
+          1,
+        ),
+      ).not.toBeNull();
+      expect(
+        await repo.insertSessionIfUnderLimit(mkDriverInput(mine.accountId, mine.apiKeyId, 0), 1),
+        'another account’s live session consumed this account’s allowance — once platform-wide ' +
+          'concurrency reached any one limit, nobody could start a session',
+      ).not.toBeNull();
+    });
+
+    it('CRITICAL concurrent creates cannot overshoot the limit', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+      const { accountId, apiKeyId } = await seedAccountWithKey(client);
+      // Four at once against a limit of two. Without the per-account advisory
+      // lock all four read the same stale count of zero and all four insert.
+      const settled = await Promise.all([
+        repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 0), 2),
+        repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 1), 2),
+        repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 2), 2),
+        repo.insertSessionIfUnderLimit(mkDriverInput(accountId, apiKeyId, 3), 2),
+      ]);
+      expect(
+        settled.filter((r) => r !== null).length,
+        'concurrent creates overshot the limit — the count and insert must share one transaction ' +
+          'under the per-account advisory lock, or every racer passes a stale count',
+      ).toBe(2);
+    });
   },
 );
