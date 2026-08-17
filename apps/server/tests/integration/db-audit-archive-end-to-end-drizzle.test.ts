@@ -90,6 +90,35 @@ afterAll(async () => {
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'AuditArchiveService against real Postgres (its first end-to-end run)',
   () => {
+    it('CRITICAL deletes a set larger than one statement can bind', async () => {
+      // The bind-parameter ceiling, exercised for real. `inArray` binds one
+      // parameter per id and postgres-js refuses past 65534: measured on this
+      // server, 60000 ids succeed and 70000 raise MAX_PARAMETERS_EXCEEDED.
+      //
+      // That mattered because of WHERE it threw. archiveTable uploads to R2 and
+      // inserts the ledger row BEFORE deleting, so a run over the ceiling left
+      // the rows in Postgres with the archive already written — and the next run
+      // re-selected the same set plus whatever had accrued, forever. session_events
+      // is documented in AUDIT_TABLES as growing without bound, so it is the table
+      // that reaches this first, and the retention promise would fail silently.
+      //
+      // Deliberately passes ids that do not exist: binding is what breaks, not
+      // matching, so this proves the chunking without seeding 70k rows.
+      if (!client) {
+        if (process.env.CI) {
+          throw new Error('real-PG audit-archive test: database unreachable/unmigrated in CI');
+        }
+        return;
+      }
+      const c = client;
+      const db = drizzle(c) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleArchiveTableRepo({ client: c, db, close: async () => {} });
+      const ids = Array.from({ length: 70_000 }, (_, i) => `evt_absent_${i}`);
+
+      const deleted = await repo.deleteRowsById('processed_stripe_events', ids);
+      expect(deleted, 'none of the synthetic ids exist, so nothing should be removed').toBe(0);
+    });
+
     it('CRITICAL uploads the aged rows, deletes exactly those, and leaves recent rows alone', async () => {
       if (!client) {
         if (process.env.CI) {

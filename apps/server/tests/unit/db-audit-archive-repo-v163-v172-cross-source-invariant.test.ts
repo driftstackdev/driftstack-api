@@ -29,7 +29,8 @@
 //     - legal_acceptances: lt(acceptedAt) + orderBy(acceptedAt, id).
 //     - webhook_deliveries: lt(createdAt) + orderBy(createdAt, id).
 //
-//   deleteRowsById early-return on empty ids array.
+//   deleteRowsById early-return on empty ids array, and chunking below the
+//   65534 bind-parameter ceiling.
 //
 //   DrizzleArchiveLedgerRepo 2-method surface — insertRun (8-field +
 //     deletedFromPostgres:false) + markDeletedFromPostgres.
@@ -132,7 +133,28 @@ describe('W996 db/audit-archive-repo V-163 + V-172 cross-source invariant', () =
   it("CRITICAL deleteRowsById early-return on empty ids — 'if (ids.length === 0) return 0;'. The 0-on-empty avoids emitting 'DELETE WHERE id IN ()' which some Postgres drivers reject.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/audit-archive-repo.ts'));
     expect(p).toMatch(/if \(ids\.length === 0\) return 0;/);
-    expect(p).toMatch(/const idArray = \[\.\.\.ids\];/);
+  });
+
+  it('CRITICAL deleteRowsById chunks below the bind-parameter ceiling', () => {
+    // Replaces a pin on `const idArray = [...ids]` — the single-statement shape
+    // that threw. `inArray` binds one parameter per id and postgres-js refuses
+    // past 65534 (measured: 60000 ids succeed, 70000 raise
+    // MAX_PARAMETERS_EXCEEDED). archiveTable uploads to R2 and writes the ledger
+    // row BEFORE deleting, so a run over the ceiling left the rows in Postgres
+    // with the archive already written, and every later run re-selected the same
+    // set plus whatever had accrued.
+    //
+    // The behaviour is proved against real Postgres in
+    // db-audit-archive-end-to-end-drizzle; this pins the constant it rests on,
+    // because a chunk size raised past the ceiling reintroduces the fault and is
+    // a one-token edit.
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/audit-archive-repo.ts'));
+    const m = /const DELETE_ID_CHUNK = ([\d_]+);/.exec(p);
+    expect(m, 'the chunk constant is gone — deleteRowsById may bind every id again').not.toBeNull();
+    expect(Number((m?.[1] ?? '0').replaceAll('_', ''))).toBeLessThan(65_534);
+    expect(p, 'deleteRowsById no longer iterates chunks').toMatch(
+      /for \(const chunk of chunkIds\(ids\)\)/,
+    );
   });
 
   it('CRITICAL processed_stripe_events deleteRowsById WHERE is eventId (PK is text event_id, not id). The 4-branch delete preserves the table-specific PK column.', () => {

@@ -31,6 +31,33 @@ import {
   webhookDeliveries,
 } from './schema.js';
 
+/**
+ * Ids per DELETE statement.
+ *
+ * `inArray` binds one parameter per id, and postgres-js refuses a statement
+ * with more than 65534 of them — measured against the local server:
+ * 60000 ids succeed, 70000 raise `MAX_PARAMETERS_EXCEEDED`. A single archive
+ * run past that many rows therefore threw HERE, after the R2 upload and the
+ * ledger insert had already succeeded, so the rows stayed in Postgres and the
+ * next run re-selected the same set plus whatever had accrued: the sweep could
+ * never make progress, and `session_events` — documented in AUDIT_TABLES as
+ * growing without bound because sessions are marked-destroyed rather than
+ * row-deleted — would grow forever with the retention promise silently unkept.
+ *
+ * 10_000 matches the batch size AuditArchiveService already declares, and
+ * leaves a wide margin under the limit.
+ */
+const DELETE_ID_CHUNK = 10_000;
+
+/** Split `ids` into chunks small enough to bind in one statement. */
+function chunkIds(ids: readonly string[]): string[][] {
+  const out: string[][] = [];
+  for (let i = 0; i < ids.length; i += DELETE_ID_CHUNK) {
+    out.push([...ids.slice(i, i + DELETE_ID_CHUNK)]);
+  }
+  return out;
+}
+
 export class DrizzleArchiveTableRepo implements ArchiveTableRepo {
   constructor(private readonly database: Database) {}
 
@@ -87,7 +114,17 @@ export class DrizzleArchiveTableRepo implements ArchiveTableRepo {
 
   async deleteRowsById(tableName: ArchiveTableName, ids: readonly string[]): Promise<number> {
     if (ids.length === 0) return 0;
-    const idArray = [...ids];
+    // Chunked: see DELETE_ID_CHUNK. Deleting by id in several statements
+    // removes exactly the same rows as one statement would, and the caller's
+    // `deleted === archived` assertion still holds because the counts are summed.
+    let deleted = 0;
+    for (const chunk of chunkIds(ids)) {
+      deleted += await this.deleteChunkById(tableName, chunk);
+    }
+    return deleted;
+  }
+
+  private async deleteChunkById(tableName: ArchiveTableName, idArray: string[]): Promise<number> {
     switch (tableName) {
       case 'admin_audit_log': {
         const result = await this.database.db
@@ -96,14 +133,9 @@ export class DrizzleArchiveTableRepo implements ArchiveTableRepo {
         return rowsAffected(result);
       }
       case 'processed_stripe_events': {
-        // processed_stripe_events PK is event_id (text), not id. The
-        // 'id' field on the row maps to event_id by convention in the
-        // service-layer (selectArchivableRows returns event_id under
-        // a synthetic 'id' shape — wait, no: extractId() reads row.id.
-        // The processed_stripe_events table uses event_id as PK; the
-        // service expects row.id to be the unique identifier. We
-        // project event_id → id at SELECT time below to keep the
-        // contract uniform.
+        // processed_stripe_events PK is event_id (text), not id.
+        // selectArchivableRows projects event_id → id so the service-layer
+        // contract (extractId reads row.id) stays uniform across tables.
         const result = await this.database.db
           .delete(processedStripeEvents)
           .where(inArray(processedStripeEvents.eventId, idArray));
