@@ -86,7 +86,25 @@ describe("account B cannot reach account A's crypto order", () => {
         `${route.method} /v1/billing/crypto-orders/:id${route.suffix} returned ${res.statusCode} for an unrelated account`,
       ).toBe(404);
       // A refusal must not leak the order's contents through its detail either.
-      expect(res.body).not.toContain(String(A_PRICE_CENTS));
+      //
+      // Checked against the problem document with `instance` removed rather
+      // than the raw body. `instance` is a random request UUID, so its hex can
+      // contain any short digit string by chance: a run that drew
+      // a01445a4-fdb1-4299-8816-1a9920a4e3e5 red this arm on the very price it
+      // exists to protect. Roughly one run in a few thousand, which is worse
+      // than a clean failure — a leak detector that cries wolf gets read as
+      // noise and then deleted. Every other field is still covered, so a real
+      // leak through type/title/detail still fails here.
+      const contentType = String(res.headers['content-type'] ?? '');
+      let leakSurface = res.body;
+      if (contentType.includes('json')) {
+        const { instance: _instance, ...problem } = res.json<Record<string, unknown>>();
+        leakSurface = JSON.stringify(problem);
+      }
+      expect(
+        leakSurface,
+        'the refusal echoed the order’s price back to an account that may not see the order',
+      ).not.toContain(String(A_PRICE_CENTS));
     },
   );
 
