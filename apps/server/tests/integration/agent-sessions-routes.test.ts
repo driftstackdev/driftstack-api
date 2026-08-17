@@ -576,6 +576,130 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(await fx.agentSessionsRepo!.countActive(fx.accountId)).toBe(1);
   });
 
+  // The arm above is the PRE-CHECK replay: findByIdempotencyKey sees the
+  // committed winner and short-circuits. The other half of the contract is the
+  // RACE — two same-key POSTs whose pre-checks both miss because a sibling's row
+  // is not committed yet. Both reach create, the partial unique index lets one
+  // win, and the loser takes a 23505. That catch turns the loser into a replay
+  // of the winner's 201 instead of a 500.
+  //
+  // Without it the customer gets an error for a session that DID get created:
+  // they hold a live browser and a consumed concurrency slot while being told
+  // the request failed, and a client honouring the idempotency contract may
+  // retry on top of that.
+  //
+  // The 23505 is injected rather than raced. This fixture runs the in-memory
+  // repo, which has no partial unique index — and the index itself is already
+  // proven against real Postgres in db-agent-sessions-idempotency-unique-drizzle
+  // ("first-write-wins on (account_id, idempotency_key)"). What is unproven is
+  // what the ROUTE does with the resulting error, so the error is the input.
+  // Injecting it also makes the arm deterministic instead of timing-dependent.
+
+  /** A postgres-js unique violation as drizzle 0.38 surfaces it (top level). */
+  const uniqueViolationTopLevel = (): Error =>
+    Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+
+  /** The same violation as drizzle 0.45 surfaces it (wrapped, code on `cause`). */
+  const uniqueViolationOnCause = (): Error =>
+    Object.assign(new Error('DrizzleQueryError'), {
+      cause: Object.assign(new Error('duplicate key'), { code: '23505' }),
+    });
+
+  async function raceLoserSees(makeError: () => Error): Promise<{
+    codes: number[];
+    ids: string[];
+    active: number;
+  }> {
+    const repo = fx!.agentSessionsRepo!;
+    const realFind = repo.findByIdempotencyKey.bind(repo);
+    const realCreate = repo.createIfUnderActiveCap.bind(repo);
+    let preChecks = 0;
+    let creates = 0;
+    // Both pre-checks are told "no row yet" — what an uncommitted sibling looks
+    // like. Every later call (the loser's post-23505 lookup) sees the truth.
+    vi.spyOn(repo, 'findByIdempotencyKey').mockImplementation(async (accountId, key) => {
+      preChecks += 1;
+      return preChecks <= 2 ? null : realFind(accountId, key);
+    });
+    vi.spyOn(repo, 'createIfUnderActiveCap').mockImplementation(async (args, cap) => {
+      creates += 1;
+      if (creates === 2) throw makeError();
+      return realCreate(args, cap);
+    });
+
+    const key = `idem-race-${creates}-${Math.trunc(preChecks)}-k`;
+    const post = () =>
+      fx!.app.inject({
+        method: 'POST',
+        url: '/v1/agent-sessions',
+        headers: { authorization: `Bearer ${fx!.plaintext}`, 'idempotency-key': key },
+        payload: { mode: 'ai', token_budget: 10_000 },
+      });
+    const first = await post();
+    const second = await post();
+    return {
+      codes: [first.statusCode, second.statusCode],
+      ids: [first.json<{ id: string }>().id, second.json<{ id: string }>().id],
+      active: await repo.countActive(fx!.accountId),
+    };
+  }
+
+  it('CRITICAL an idempotency RACE replays the winner instead of 500ing the loser', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const { codes, ids, active } = await raceLoserSees(uniqueViolationTopLevel);
+    expect(
+      codes,
+      'the loser of an idempotency race did not replay the winner. It sees an error for a session ' +
+        'that WAS created — holding a live browser and a concurrency slot while being told the ' +
+        'request failed',
+    ).toEqual([201, 201]);
+    expect(ids[0], 'the two same-key responses named different sessions').toBe(ids[1]);
+    expect(active, 'the race left more than one live session').toBe(1);
+  });
+
+  it('CRITICAL the race replay also works when the violation arrives wrapped on `cause`', async () => {
+    // drizzle 0.45 wraps the postgres-js error, moving `code` to err.cause. A
+    // top-level-only read would miss the 23505, fall through, and 500 — the
+    // exact regression lib/pg-error.ts exists to prevent, on the upgrade this
+    // repo has not taken yet.
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const { codes, ids, active } = await raceLoserSees(uniqueViolationOnCause);
+    expect(
+      codes,
+      'a unique violation wrapped on `cause` was not recognised — this is what the drizzle 0.45 ' +
+        'bump will surface, and it turns every idempotency race into a 500',
+    ).toEqual([201, 201]);
+    expect(ids[0]).toBe(ids[1]);
+    expect(active).toBe(1);
+  });
+
+  it('CRITICAL a NON-unique error is not laundered into an idempotent replay', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const repo = fx.agentSessionsRepo!;
+    const realCreate = repo.createIfUnderActiveCap.bind(repo);
+    let creates = 0;
+    vi.spyOn(repo, 'findByIdempotencyKey').mockResolvedValue(null);
+    vi.spyOn(repo, 'createIfUnderActiveCap').mockImplementation(async (args, cap) => {
+      creates += 1;
+      if (creates === 2) throw new Error('connection terminated unexpectedly');
+      return realCreate(args, cap);
+    });
+    const key = 'idem-race-non-unique';
+    const post = () =>
+      fx!.app.inject({
+        method: 'POST',
+        url: '/v1/agent-sessions',
+        headers: { authorization: `Bearer ${fx!.plaintext}`, 'idempotency-key': key },
+        payload: { mode: 'ai', token_budget: 10_000 },
+      });
+    expect((await post()).statusCode).toBe(201);
+    expect(
+      (await post()).statusCode,
+      'an unrelated failure was reported as a successful idempotent replay. The catch is gated on ' +
+        'the violation code precisely so a real outage is not dressed up as a success',
+    ).toBe(500);
+  });
+
   it('#63 skip_proxy_probe:true → "Launch anyway" override SKIPS the gate (a failing probe does NOT block; 201)', async () => {
     let probeCalls = 0;
     fx = await buildTestApp({
