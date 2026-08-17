@@ -139,8 +139,18 @@ def test_rate_limit_negative_retry_after_does_not_crash_sync_loop() -> None:
 
     with patch("time.sleep", side_effect=fake_sleep):
         assert with_retry(fn, RetryConfig(max_retries=2)) == "ok"
-    # Floored at 0 — never a negative sleep.
-    assert sleeps == [0.0]
+    # Never a negative sleep — `time.sleep(-N)` raises ValueError.
+    #
+    # The exact value is NOT pinned any more. A non-positive Retry-After
+    # carries no information, so it falls through to the exponential path
+    # (jittered, in [0, initial_delay_ms]) rather than being clamped to a bare
+    # 0. Pinning 0.0 pinned a jitter-free immediate retry: every client answered
+    # the same non-positive hint would wake in lockstep, which is the thundering
+    # herd full jitter exists to prevent. sdk-typescript and sdk-go gate their
+    # hint path on `> 0` for the same reason.
+    assert len(sleeps) == 1
+    assert sleeps[0] >= 0.0
+    assert sleeps[0] <= RetryConfig().initial_delay_ms / 1000
 
 
 @pytest.mark.asyncio
@@ -161,7 +171,11 @@ async def test_rate_limit_negative_retry_after_does_not_crash_async_loop() -> No
 
     with patch("asyncio.sleep", side_effect=fake_sleep):
         assert await with_retry_async(fn, RetryConfig(max_retries=2)) == "ok"
-    assert sleeps == [0.0]
+    # Same contract as the sync path — non-negative, and bounded by the
+    # exponential path's first step rather than pinned to a bare 0.
+    assert len(sleeps) == 1
+    assert sleeps[0] >= 0.0
+    assert sleeps[0] <= RetryConfig().initial_delay_ms / 1000
 
 
 def test_propagates_unexpected_exceptions_unchanged() -> None:
