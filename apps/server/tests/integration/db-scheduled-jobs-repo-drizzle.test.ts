@@ -49,6 +49,28 @@ let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
 const seededAccounts: string[] = [];
 
+/**
+ * Every fixture row that has to survive a bounded claim is dated here, on
+ * purpose older than anything else in the queue.
+ *
+ * `claimDue` orders by run_at ASC and takes LIMIT batchSize, so a fixture dated
+ * `Date.now() - 5s` quietly assumes the shared queue holds fewer than batchSize
+ * OLDER due rows. It does not: `production-bootstrap-arms-every-chain` leaves
+ * 10+ pending rows behind on every run and nothing prunes them, so a database
+ * that has served a few suite runs accumulates a backlog — measured here at 31
+ * due rows against a batch of 16. The arm then claims other tests' rows, none
+ * of its own, and reds on an invariant that never broke. CI never saw it
+ * because its Postgres container is new every run, which is exactly what made
+ * these arms look stable. Found by shuffling the integration directory: seed 29
+ * red the self-arming arm, and the same seed passed on a re-run, because the
+ * trigger is queue depth rather than order.
+ *
+ * Dating a fixture here is positioning, not leniency. Every assertion these
+ * arms make is unchanged and still fails when the behaviour under test breaks —
+ * proven by mutation rather than assumed.
+ */
+const OLDEST_DUE_INSTANT = new Date('2020-01-01T00:00:00.000Z');
+
 beforeAll(async () => {
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
@@ -80,7 +102,8 @@ afterAll(async () => {
     // No-throw on the delete (DB may already be torn down).
     await client`
       DELETE FROM scheduled_jobs
-       WHERE job_type IN ('regression_guard_dummy', 'regression_guard_self_arm')
+       WHERE job_type = 'regression_guard_dummy'
+          OR job_type LIKE 'regression\_guard\_self\_arm%'
           OR job_type LIKE 'regression\_guard\_dedup%'
     `.catch(() => {});
     if (seededAccounts.length > 0) {
@@ -132,23 +155,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
       const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
       const workerId = `regression-guard-claim-${Date.now()}`;
-      // Enqueue a due job, then claim it. The instant is deliberately far in
-      // the past so this row is the OLDEST due row in the table, which makes
-      // the claim below independent of how deep the queue already is.
-      //
-      // It used to be `Date.now() - 5000`, which quietly assumed the shared
-      // queue was shallower than the batch size. claimDue orders by run_at ASC
-      // and takes LIMIT batchSize; the bootstrap-chains arm alone leaves 10+
-      // pending rows behind on every run, so once ~16 older due rows have
-      // accumulated this arm claims none of its own and reds — not because
-      // claimDue broke, but because the fixture was starved. Seen locally at 31
-      // due rows against batchSize 16; CI never hit it because its Postgres
-      // container is new every run, which is exactly what made it look stable.
-      //
-      // This is positioning, not leniency: every assertion below is unchanged
-      // and still fails if claimDue mishandles Date params, which is the
-      // 2026-05-19 regression this arm exists for.
-      const pastRunAt = new Date('2020-01-01T00:00:00.000Z');
+      const pastRunAt = OLDEST_DUE_INSTANT;
       await repo.enqueue({
         jobType: 'regression_guard_dummy',
         accountId: null,
@@ -191,7 +198,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       await repo.enqueue({
         jobType: 'regression_guard_dummy',
         accountId: null,
-        runAt: new Date(Date.now() - 60_000),
+        runAt: OLDEST_DUE_INSTANT,
         payload: { marker },
       });
       const claimed = await repo.claimDue({ batchSize: 50, now: new Date(), workerId: 'worker-A' });
@@ -382,11 +389,17 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
       const logger = pino({ level: 'silent' });
       const workerId = `regression-guard-self-arm-${Date.now()}`;
+      // Job type is unique per run. The successor is enqueued with dedup on
+      // (accountId, jobType), so a pending row left by an earlier run of this
+      // arm — which happens whenever a run is interrupted before afterAll —
+      // suppresses the insert and the count below comes back 0. A per-run type
+      // means the dedup window can only ever see this run's rows.
+      const jobType = `regression_guard_self_arm_${Date.now()}`;
       const service = new ScheduledJobsService(repo, logger, {
         workerId,
         batchSize: 16,
       });
-      service.register('regression_guard_self_arm', async (job) => {
+      service.register(jobType, async (job) => {
         expect(job.runAt).toBeInstanceOf(Date);
         await service.enqueue({
           jobType: job.jobType,
@@ -399,10 +412,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       });
 
       await repo.enqueue({
-        jobType: 'regression_guard_self_arm',
+        jobType,
         accountId: null,
         payload: { current: workerId },
-        runAt: new Date(Date.now() - 5_000),
+        runAt: OLDEST_DUE_INSTANT,
       });
       await expect(service.processTick(new Date())).resolves.toEqual(
         expect.objectContaining({ processed: expect.any(Number) }),
@@ -411,7 +424,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const [successor] = await client<[{ pending: number }]>`
         SELECT COUNT(*)::int AS pending
           FROM scheduled_jobs
-         WHERE job_type = 'regression_guard_self_arm'
+         WHERE job_type = ${jobType}
            AND completed_at IS NULL
            AND failed_at IS NULL
            AND payload ->> 'successor' = ${workerId}
