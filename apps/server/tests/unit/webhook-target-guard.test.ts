@@ -4,6 +4,9 @@
 // every blocked range + public IPs are pinned so a typo'd CIDR (e.g. the
 // `::ffff:/96` trap that blocks all IPv4) is caught.
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   unsafeWebhookTargetReason as reason,
@@ -321,6 +324,58 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
     );
     expect(classifyUnsafeVpnTargets({ configBlob: 'script-security 1\n' })).toBeNull();
   });
+  // EVERY member of the rejection set, read from the source rather than
+  // hand-listed. The arm above names ten directives; the set holds fourteen, so
+  // route-pre-down, ipchange, learn-address, client-connect, client-disconnect,
+  // auth-user-pass-verify and up-restart were in the set with nothing asserting
+  // they are actually rejected. Each runs a command exactly like `up` — the same
+  // class as the P0 root-RCE this guard exists for.
+  //
+  // Reading the set means a directive added later is covered the moment it is
+  // added, instead of relying on whoever adds it to also remember this file. The
+  // population assertion is what stops the whole check going vacuous if the
+  // constant is renamed or reshaped: an empty parse fails loudly rather than
+  // passing zero directives.
+  it('CRITICAL every directive in the rejection set is actually rejected', () => {
+    const source = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../src/lib/webhook-target-guard.ts'),
+      'utf8',
+    );
+    const block = /DANGEROUS_OPENVPN_DIRECTIVES = new Set\(\[([\s\S]*?)\]\)/.exec(source);
+    expect(
+      block,
+      'the rejection set could not be located — this check is looking at the wrong shape',
+    ).not.toBeNull();
+    const directives = [...(block?.[1] ?? '').matchAll(/'([a-z0-9-]+)'/g)].map((m) => m[1]!);
+    expect(
+      directives.length,
+      'the parse found no directives, which would make every assertion below vacuous',
+    ).toBeGreaterThanOrEqual(14);
+
+    const notRejected = directives.filter(
+      (d) => classifyUnsafeVpnTargets({ configBlob: `${d} /tmp/payload\n` }) !== 'unsafe-directive',
+    );
+    expect(
+      notRejected,
+      'a directive sits in the rejection set but a config carrying it is accepted. Every one of ' +
+        'these runs a program on the egress host — the exact class of the P0 root-RCE, stored and ' +
+        'dispatched instead of refused at ingress',
+    ).toEqual([]);
+
+    // Same tolerance the hand-picked arms assert, applied across the whole set:
+    // operator/attacker-supplied blobs are not normalised before this runs.
+    const missedWhenShouted = directives.filter(
+      (d) =>
+        classifyUnsafeVpnTargets({ configBlob: `  ${d.toUpperCase()}\t/tmp/payload\n` }) !==
+        'unsafe-directive',
+    );
+    expect(
+      missedWhenShouted,
+      'a directive is rejected in lower case but slips through upper-cased or indented — a config ' +
+        'blob is attacker-controlled text, not something normalised on the way in',
+    ).toEqual([]);
+  });
+
   it('does NOT false-positive on a benign config, comments, or a hostname containing a keyword', () => {
     expect(
       classifyUnsafeVpnTargets({ configBlob: 'client\nremote vpn.example.com 1194\ndev tun\n' }),
