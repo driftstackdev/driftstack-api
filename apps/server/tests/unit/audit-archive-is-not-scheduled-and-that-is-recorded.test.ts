@@ -52,20 +52,65 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Source text with line comments stripped, so prose mentions do not count. */
-function code(file: string): string {
+/**
+ * Non-comment source LINES, so a prose mention does not count as usage.
+ *
+ * This deliberately does not strip comments with a regex, because two attempts
+ * to do that were both wrong on this very tree:
+ *
+ *   blocks-then-lines  a `/*` inside a LINE comment opened a bogus block that ran
+ *                      to the next `*` `/` — 2735 of bootstrap.ts's 3290 lines
+ *                      vanished, including every service construction;
+ *   lines-then-blocks  better, and still wrong: `'/* routes disabled. '` is a
+ *                      STRING, and swallowed lines 1102-3199.
+ *
+ * A regex cannot know whether `/*` is code, comment or string without lexing
+ * TypeScript. So drop the ambition: a construction is a statement on its own
+ * line, and a prose mention lives on a line that starts with `//`, `*` or `/*`.
+ * Testing the LINE is sound for that question and cannot destroy the file.
+ */
+function codeLines(file: string): string {
   return readFileSync(file, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+    .split('\n')
+    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .join('\n');
 }
 
 describe('the audit archive is dormant, and that is recorded rather than assumed', () => {
+  it('CRITICAL the comment stripper preserves real code, so "not found" means not there', () => {
+    // The arm this file exists for asserts an ABSENCE across the source tree.
+    // An absence check is only as good as the text it searches, and a stripper
+    // that eats the file reports every absence as confirmed. This is the case
+    // that would have caught the block-before-line ordering bug: bootstrap.ts
+    // wires the services, so if the stripped copy cannot see a construction we
+    // know is there, nothing below means anything.
+    const boot = codeLines(resolve(SRC, 'lib/bootstrap.ts'));
+    expect(
+      boot,
+      'the stripped bootstrap no longer contains a construction that is definitely in it — the ' +
+        'comment stripper is destroying source, and every absence assertion below is vacuous',
+    ).toContain('new SessionsService(');
+    // A second probe DEEP in the file. The first sits at line 803; both broken
+    // strippers ate everything after ~1102, so a single early probe passed while
+    // three quarters of the file was gone.
+    expect(
+      boot,
+      'a construction late in bootstrap.ts is missing from the scanned text — the tail of the ' +
+        'file is being dropped, which is exactly how the first two versions of this helper failed',
+    ).toContain('new RetentionScrubSweeperService(');
+    expect(
+      boot.length / readFileSync(resolve(SRC, 'lib/bootstrap.ts'), 'utf8').length,
+      'most of bootstrap.ts vanished from the scanned text, which dropping comment LINES alone ' +
+        'cannot explain',
+    ).toBeGreaterThan(0.4);
+  });
+
   it('CRITICAL it is still not constructed anywhere in production source', () => {
     // The moment this fails, the archive is being wired — which is good news and
     // means this whole file should go, along with the record it carries.
     const constructed = walk(SRC)
       .filter((f) => !f.endsWith('services/audit-archive.ts'))
-      .filter((f) => /new AuditArchiveService\s*\(/.test(code(f)))
+      .filter((f) => /new AuditArchiveService\s*\(/.test(codeLines(f)))
       .map((f) => f.slice(SRC.length + 1));
     expect(
       constructed,
@@ -90,7 +135,7 @@ describe('the audit archive is dormant, and that is recorded rather than assumed
     // this fails and whoever added it updates the record — the table may now be
     // bounded by something else, and that changes the story.
     const deleters = walk(SRC)
-      .filter((f) => /\.delete\(sessionEvents\)/.test(code(f)))
+      .filter((f) => /\.delete\(sessionEvents\)/.test(codeLines(f)))
       .map((f) => f.slice(SRC.length + 1));
     expect(
       deleters,
@@ -103,7 +148,7 @@ describe('the audit archive is dormant, and that is recorded rather than assumed
     // The other half of the argument. session_events has ON DELETE CASCADE; it
     // is inert only while sessions are marked-destroyed instead of deleted.
     const deletesSessions = walk(SRC)
-      .filter((f) => /\.delete\(sessions\)/.test(code(f)))
+      .filter((f) => /\.delete\(sessions\)/.test(codeLines(f)))
       .map((f) => f.slice(SRC.length + 1));
     expect(
       deletesSessions,
@@ -115,7 +160,7 @@ describe('the audit archive is dormant, and that is recorded rather than assumed
   it('CRITICAL the wired retention sweep still does not cover session_events', () => {
     // privacy.retention_scrub is the sweep that IS running. If it grows to cover
     // session_events, the gap closes by a different route and this file is done.
-    const scrub = code(resolve(SRC, 'db/retention-scrub-repo.ts'));
+    const scrub = codeLines(resolve(SRC, 'db/retention-scrub-repo.ts'));
     expect(
       scrub,
       'the retention scrub now references session_events — if it bounds the table, the archive ' +
