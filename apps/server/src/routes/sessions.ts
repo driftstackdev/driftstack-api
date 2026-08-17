@@ -13,6 +13,7 @@
 // layer is the prefix-conversion boundary; service + DB use raw uuids.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import {
   CaptureRequestSchema,
   ExtractRequestSchema,
@@ -226,6 +227,19 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       // account/profile/session/driver side effect.
       assertDirectSessionEgressAvailable(rawBody, egressProxyRequired);
       const body = CreateSessionRequestSchema.parse(rawBody);
+      // Item 6 — the motivating case, on the route it matters most. `archetype`
+      // is optional, so a mistyped key is stripped and the session is created
+      // against the default device instead. The customer gets 201 and a session
+      // that appears as something other than what they asked for, which in this
+      // product is the whole configuration. Reported, never rejected: the
+      // response body is unchanged and no existing integration can break.
+      reportUnknownRequestFields({
+        body: rawBody,
+        knownKeys: Object.keys(CreateSessionRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/sessions',
+      });
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       // 2026-05-20 — resolve profile_id binding BEFORE create so the
       // archetype default + metadata stamps flow into the session row
@@ -424,7 +438,15 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const body = NavigateRequestSchema.parse(request.body ?? {});
+      const rawActionBody = request.body ?? {};
+      const body = NavigateRequestSchema.parse(rawActionBody);
+      reportUnknownRequestFields({
+        body: rawActionBody,
+        knownKeys: Object.keys(NavigateRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/sessions/:id/navigate',
+      });
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
       await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.navigate(
@@ -452,7 +474,15 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const body = InteractRequestSchema.parse(request.body ?? {});
+      const rawActionBody = request.body ?? {};
+      const body = InteractRequestSchema.parse(rawActionBody);
+      reportUnknownRequestFields({
+        body: rawActionBody,
+        knownKeys: Object.keys(InteractRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/sessions/:id/interact',
+      });
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
       await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.interact(
@@ -490,7 +520,15 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const body = GUIInputRequestSchema.parse(request.body ?? {});
+      const rawActionBody = request.body ?? {};
+      const body = GUIInputRequestSchema.parse(rawActionBody);
+      reportUnknownRequestFields({
+        body: rawActionBody,
+        knownKeys: Object.keys(GUIInputRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/sessions/:id/gui-input',
+      });
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
       await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.guiInput(
@@ -516,7 +554,15 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const body = WaitRequestSchema.parse(request.body ?? {});
+      const rawActionBody = request.body ?? {};
+      const body = WaitRequestSchema.parse(rawActionBody);
+      reportUnknownRequestFields({
+        body: rawActionBody,
+        knownKeys: Object.keys(WaitRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/sessions/:id/wait',
+      });
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
       await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.wait(
@@ -610,7 +656,15 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const body = CaptureRequestSchema.parse(request.body ?? {});
+      const rawActionBody = request.body ?? {};
+      const body = CaptureRequestSchema.parse(rawActionBody);
+      reportUnknownRequestFields({
+        body: rawActionBody,
+        knownKeys: Object.keys(CaptureRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/sessions/:id/capture',
+      });
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
       await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.capture(
@@ -641,7 +695,15 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const body = ExtractRequestSchema.parse(request.body ?? {});
+      const rawActionBody = request.body ?? {};
+      const body = ExtractRequestSchema.parse(rawActionBody);
+      reportUnknownRequestFields({
+        body: rawActionBody,
+        knownKeys: Object.keys(ExtractRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/sessions/:id/extract',
+      });
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
       await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.extract(
@@ -665,7 +727,15 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const body = SearchRequestSchema.parse(request.body ?? {});
+      const rawActionBody = request.body ?? {};
+      const body = SearchRequestSchema.parse(rawActionBody);
+      reportUnknownRequestFields({
+        body: rawActionBody,
+        knownKeys: Object.keys(SearchRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/sessions/:id/search',
+      });
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
       await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.search(
@@ -701,7 +771,15 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const body = SessionLoginRequestSchema.parse(request.body ?? {});
+      const rawActionBody = request.body ?? {};
+      const body = SessionLoginRequestSchema.parse(rawActionBody);
+      reportUnknownRequestFields({
+        body: rawActionBody,
+        knownKeys: Object.keys(SessionLoginRequestSchema.shape),
+        reply,
+        logger: request.log,
+        route: 'POST /v1/sessions/:id/login',
+      });
       const eff = effectiveAccountIdForLiveOperation(request, ctx);
       await consumeEffectiveOwnerRateLimit(app, request, reply, eff ?? ctx.account.id, 'global');
       const result = await service.login(

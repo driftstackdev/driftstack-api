@@ -53,6 +53,61 @@ async function createSession(
 // `profile_id` key got a hard `409 profile-in-use` on every session create
 // after the first — a control-plane decision made from customer-controlled
 // input.
+// Item 6, on the route the item's own comment describes.
+//
+// `archetype` is optional on session create, so a mistyped key is stripped by
+// zod and the session is built against the default device instead. The customer
+// gets 201 and a session that appears as something other than what they asked
+// for — in a product whose value is which device you appear to be, the whole
+// configuration, silently substituted and reported as success.
+//
+// The decision recorded with this mechanism is to REPORT rather than reject:
+// making the schema strict would fix the silence and break every client already
+// sending an extra field. So the arms below pin both halves — the request still
+// succeeds exactly as before, and the ignored key stops being invisible.
+describe('POST /v1/sessions reports fields it ignored', () => {
+  it('CRITICAL a mistyped archetype is reported rather than silently defaulted', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { archetypeee: 'iphone16pro_ios18_7_safari26_4', label: 'typo' },
+    });
+    expect(res.statusCode, 'reporting, not rejecting — an existing client must not break').toBe(
+      201,
+    );
+    expect(
+      res.headers['x-driftstack-unknown-fields'],
+      'the session was created against a device the customer did not ask for, and nothing said so',
+    ).toBe('archetypeee');
+  });
+
+  it('CRITICAL a well-formed create is not tagged', async () => {
+    // Without this, tagging every request would satisfy the arm above while
+    // making the header meaningless.
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { label: 'clean' },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.headers['x-driftstack-unknown-fields']).toBeUndefined();
+  });
+
+  it('a body-less create still succeeds', async () => {
+    // The reporter reads the RAW body, which is `undefined` here rather than an
+    // object. Pinned because the obvious refactor -- routing this through the
+    // parse+report helper -- reads `request.body` directly and would turn this
+    // 201 into a 400.
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'POST', url: '/v1/sessions', headers: auth(fx) });
+    expect(res.statusCode).toBe(201);
+  });
+});
+
 describe('POST /v1/sessions — the profile guard ignores customer metadata', () => {
   it('allows a second session when the customer stores their own profile_id in metadata', async () => {
     fx = await buildTestApp();
@@ -327,6 +382,23 @@ describe('GET /v1/sessions', () => {
 });
 
 describe('POST /v1/sessions/:id/navigate', () => {
+  it('CRITICAL a mistyped action field is reported rather than silently ignored', async () => {
+    // The action routes carry the same hazard as create, one layer down: a
+    // mistyped option is stripped and the automation runs with the default
+    // instead. The request still succeeds, so without the header the customer's
+    // only signal is that the browser did something other than what they wrote.
+    fx = await buildTestApp();
+    const session = await createSession(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/sessions/${session.id}/navigate`,
+      headers: auth(fx),
+      payload: { url: 'https://example.com', wait_untill: 'load' },
+    });
+    expect(res.statusCode, 'reporting, not rejecting').toBe(200);
+    expect(res.headers['x-driftstack-unknown-fields']).toBe('wait_untill');
+  });
+
   it('200 with navigate result for happy path', async () => {
     fx = await buildTestApp();
     const session = await createSession(fx);

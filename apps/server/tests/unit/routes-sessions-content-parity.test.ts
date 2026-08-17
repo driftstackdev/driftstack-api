@@ -237,7 +237,10 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ ── POST \/v1\/sessions\/:id\/navigate ─[\s\S]*?\/\/ V-326e3 — admin-only when targeting an owner via X-Driftstack-\s*\n?\s*\/\/ Account; member role gets 403\./,
     );
-    expect(body).toMatch(/const body = NavigateRequestSchema\.parse\(request\.body \?\? \{\}\);/);
+    // Item 6 — the raw body is kept so the unknown-key reporter sees what the
+    // caller actually sent, not the parsed result with defaults filled in.
+    expect(body).toMatch(/const body = NavigateRequestSchema\.parse\(rawActionBody\);/);
+    expect(body).toContain("route: 'POST /v1/sessions/:id/navigate',");
     expect(body).toMatch(
       /return \{\s*\n?\s*url: result\.url,\s*\n?\s*final_url: result\.finalUrl,\s*\n?\s*status: result\.status,\s*\n?\s*duration_ms: result\.durationMs,\s*\n?\s*\};/,
     );
@@ -257,7 +260,8 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body, 'and the retraction itself stays').toMatch(
       /V-788 — this used to say customer keys never carry it and only/,
     );
-    expect(body).toMatch(/const body = GUIInputRequestSchema\.parse\(request\.body \?\? \{\}\);/);
+    expect(body).toMatch(/const body = GUIInputRequestSchema\.parse\(rawActionBody\);/);
+    expect(body).toContain("route: 'POST /v1/sessions/:id/gui-input',");
   });
 
   it('getState retains read:sessions but requires team-admin live-operation authority before service/driver contact', () => {
@@ -281,7 +285,8 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ V-326e3 — capture is a WRITE \(it mutates the driver state via\s*\n?\s*\/\/ screenshot\/snapshot ops \+ records billed events\)\. Admin-only on\s*\n?\s*\/\/ team-scoped requests\./,
     );
-    expect(body).toMatch(/const body = CaptureRequestSchema\.parse\(request\.body \?\? \{\}\);/);
+    expect(body).toMatch(/const body = CaptureRequestSchema\.parse\(rawActionBody\);/);
+    expect(body).toContain("route: 'POST /v1/sessions/:id/capture',");
     expect(body).toMatch(
       /return \{\s*\n?\s*kind: result\.kind,\s*\n?\s*data: result\.data,\s*\n?\s*encoding: result\.encoding,\s*\n?\s*byte_size: result\.byteSize,\s*\n?\s*duration_ms: result\.durationMs,\s*\n?\s*\};/,
     );
