@@ -104,6 +104,14 @@ async function seedOverride(
 // Reachability is decided in beforeAll, so each arm checks it rather than a
 // collection-time skipIf — which would evaluate before the probe has run.
 describe('DrizzleAccountAuthRepo.findActiveRateLimitOverrides', () => {
+  it('CRITICAL the database was reachable, so a green here is not "no database"', () => {
+    // Without this, every arm below early-returns against a dead Postgres and the
+    // file reports PASSED — a green that means nothing was tested.
+    expect(dbReachable, `no Postgres at ${DB_URL} — these arms assert nothing without it`).toBe(
+      true,
+    );
+  });
+
   it('CRITICAL an expired override is not returned, and a live one is', async () => {
     if (!dbReachable || !repo) return;
     const seeded = await seedAccount();

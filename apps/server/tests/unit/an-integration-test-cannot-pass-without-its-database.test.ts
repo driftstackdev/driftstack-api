@@ -25,9 +25,17 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const INTEGRATION_DIR = resolve(HERE, '..', 'integration');
 
-/** `if (!client) return;` and its variants — the early bail on a missing service. */
+/**
+ * `if (!client) return;` and its variants — the early bail on a missing service.
+ *
+ * The condition is matched loosely on purpose. The first version anchored the
+ * closing paren directly after the handle, so `if (!dbReachable || !repo) return;`
+ * — a perfectly ordinary compound bail — was invisible to it, and a file written
+ * that way carried the exact hole this guards while the scan reported it clean.
+ * Anything that mentions a handle inside a negated condition counts now.
+ */
 const BAILS_ON_MISSING_DEPENDENCY =
-  /if \(!\w*(?:client|redis|reachable|dbReachable)\w*\)\s*(?:return|\{[^}]*return)/i;
+  /if \(![^)]*\b(?:client|redis|reachable|dbReachable)\b[^)]*\)\s*(?:return|\{[^}]*return)/i;
 
 /**
  * Something in the file asserts the handle was actually there.

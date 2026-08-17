@@ -66,6 +66,12 @@ let client: ReturnType<typeof postgres> | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
+  it('CRITICAL the service was reachable, so a green here is not "no service"', () => {
+    // Without this, every arm below early-returns against a dead service and the
+    // file reports PASSED — a green meaning "nothing was tested".
+    expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
+  });
+
   const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
   if (isolated === null) return;
   DB_URL = isolated;

@@ -41,6 +41,12 @@ let client: ReturnType<typeof postgres> | null = null;
 const seededAccountIds: string[] = [];
 
 beforeAll(async () => {
+  it('CRITICAL the service was reachable, so a green here is not "no service"', () => {
+    // Without this, every arm below early-returns against a dead service and the
+    // file reports PASSED — a green meaning "nothing was tested".
+    expect(dbReachable, 'the integration dependency was unreachable').toBeTruthy();
+  });
+
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;

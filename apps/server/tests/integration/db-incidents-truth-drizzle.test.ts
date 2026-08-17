@@ -36,6 +36,12 @@ function input(overrides: Partial<CreateIncidentInput> = {}): CreateIncidentInpu
 }
 
 beforeAll(async () => {
+  it('CRITICAL the service was reachable, so a green here is not "no service"', () => {
+    // Without this, every arm below early-returns against a dead service and the
+    // file reports PASSED — a green meaning "nothing was tested".
+    expect(client, 'the integration dependency was unreachable').toBeTruthy();
+  });
+
   if (!RUN_DB_TESTS) return;
   admin = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   await admin`SELECT 1`;
