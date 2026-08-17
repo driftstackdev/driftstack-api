@@ -473,3 +473,57 @@ describe('incident-notifications.ts call site never logs a raw customer email', 
     expect(loggedRawEmail(logger, 'victim@example.com')).toBe(false);
   });
 });
+
+// Every credential shape this system handles, checked against the redactor in
+// one place.
+//
+// `redactText` is the last line of defence for our own logs: lib/logger.ts runs
+// it over every string in a serialized error, recursively, because pino's
+// key-based `redact.paths` cannot reach a secret quoted inside a message or a
+// nested cause. So a format the redactor does not know is a format that reaches
+// the log in clear.
+//
+// Measured rather than assumed, and one was missing: ds_live_, gck_, whsec_,
+// sk_live_ and rk_live_ all redacted, and `sk-ant-` did not. The prefix pattern
+// is underscore-separated with an alphanumeric body, so it cannot match
+// Anthropic's hyphenated `sk-ant-api03-...`. Those are the customer's
+// credentials for a THIRD party — one in our logs is their incident as much as
+// ours.
+describe('redactText covers every credential format the system handles', () => {
+  const CREDENTIALS: ReadonlyArray<readonly [string, string]> = [
+    ['driftstack api key', 'ds_live_AbCdEf0123456789XyZq'],
+    ['gui control key', 'gck_AbCdEf0123456789XyZq'],
+    ['webhook secret', 'whsec_abcdefghijklmnopqrstuvwxyz234567'],
+    ['stripe secret', 'sk_live_AbCdEf0123456789XyZq'],
+    ['stripe restricted', 'rk_live_AbCdEf0123456789XyZq'],
+    ['anthropic BYOK', 'sk-ant-api03-AbCdEf0123456789XyZq-AA'],
+  ];
+
+  it.each(CREDENTIALS)('CRITICAL a %s never survives redactText', (_label, secret) => {
+    const line = `upstream call failed for ${secret} after 2 attempts`;
+    const out = redactText(line);
+    expect(out, `${secret} reached the log in clear`).not.toContain(secret);
+    // The prefix survives so an operator can still tell WHICH credential was
+    // scrubbed — a bare [redacted] makes an incident harder to triage.
+    expect(out).toContain('[redacted]');
+  });
+
+  it('CRITICAL the surrounding line is preserved, so redaction stays diagnosable', () => {
+    // Without this, a pattern that ate the rest of the message would satisfy
+    // the arms above while destroying the log.
+    const out = redactText('upstream call failed for sk-ant-api03-AbCdEf0123456789XyZq-AA now');
+    expect(out).toContain('upstream call failed for');
+    expect(out).toContain('now');
+  });
+
+  it('CRITICAL ordinary prose that merely looks key-shaped is left alone', () => {
+    // The minimum body length is what keeps prose out; a pattern that redacted
+    // normal text would push operators to turn redaction off.
+    // Carries the real `sk-ant-` prefix with a SHORT body, so it exercises the
+    // minimum-length bound rather than failing to match the prefix at all —
+    // which is how the first version of this arm passed even with the bound
+    // removed.
+    const prose = 'the session ended because sk-ant-key was never configured';
+    expect(redactText(prose)).toBe(prose);
+  });
+});

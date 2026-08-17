@@ -153,6 +153,25 @@ const FREE_TEXT_TOKEN_RE =
 const FREE_TEXT_PREFIXED_SECRET_RE =
   /(ds_(?:live|test)_|gck_|whsec_|sk_(?:live|test)_|rk_(?:live|test)_)[A-Za-z0-9]{12,}/g;
 
+/**
+ * Anthropic BYOK keys, which the prefix pattern above cannot reach.
+ *
+ * Its body class is `[A-Za-z0-9]` and its prefixes are underscore-separated, so
+ * `sk_(live|test)_` does not match `sk-ant-api03-...` — hyphens, both in the
+ * prefix and through the body. Measured against every credential shape this
+ * system handles: ds_live_, gck_, whsec_, sk_live_ and rk_live_ were all
+ * redacted and `sk-ant-` was the only one that came through in clear.
+ *
+ * These are the customer's credentials for a THIRD party, so one reaching our
+ * logs is their incident as much as ours. Kept as its own pattern rather than
+ * widening the body class above, which would let a hyphen or underscore swallow
+ * the prose following any other secret.
+ *
+ * Documented as `sk-ant-api03-...`; matched on the `sk-ant-` base so a future
+ * apiNN revision stays covered.
+ */
+const FREE_TEXT_ANTHROPIC_KEY_RE = /(sk-ant-)[A-Za-z0-9_-]{12,}/g;
+
 const FREE_TEXT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi;
 const FREE_TEXT_BASIC_RE = /(basic\s+)[A-Za-z0-9+/]{8,}={0,2}/gi;
 
@@ -169,6 +188,7 @@ export function redactText(s: string): string {
       .replace(FREE_TEXT_BEARER_RE, '$1[redacted]')
       .replace(FREE_TEXT_BASIC_RE, '$1[redacted]')
       .replace(FREE_TEXT_PREFIXED_SECRET_RE, '$1[redacted]')
+      .replace(FREE_TEXT_ANTHROPIC_KEY_RE, '$1[redacted]')
       .replace(URL_USERINFO_RE, '$1[redacted]@')
   );
 }
