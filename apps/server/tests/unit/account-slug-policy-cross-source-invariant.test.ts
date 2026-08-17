@@ -89,12 +89,17 @@ describe('W874 AccountSlug policy cross-source invariant', () => {
 
   // ─── Customer-dashboard helper text ──────────────────────────
 
-  it("CRITICAL apps/customer-dashboard/src/pages/settings.astro slug-input helper text pins the policy — 'Lowercase a-z, 0-9, and hyphen. 3-32 chars.' + 'stable handle on support tickets, billing references, and audit entries' + 'Leave blank to keep using the account UUID'. The 3-sentence framing covers shape + use + opt-out.", () => {
+  it("CRITICAL apps/customer-dashboard/src/pages/settings.astro slug-input helper text pins the policy — 'Lowercase a-z, 0-9, and hyphen. 3-32 chars.' + the corrected 'unique handle ... saved and returned by the API' wording + 'Leave blank to keep using the account UUID'. The 3-sentence framing covers shape + use + opt-out.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro'));
     expect(p).toMatch(/Lowercase a-z, 0-9, and hyphen\. 3-32 chars\./);
-    expect(p).toMatch(
-      /stable\s*\n?\s*handle on support tickets, billing references, and audit\s*\n?\s*entries/,
-    );
+    // ⛔ This used to pin "stable handle on support tickets, billing references,
+    // and audit entries". That sentence was never true: no audit serialization
+    // references the slug, no billing or Stripe path sends it, and there is no
+    // support-ticket system in this repository. The pin recorded what the text
+    // SAID, not whether it was true, and kept it in place. Now pins the corrected
+    // wording, and `a-timezone-claim-needs-a-timezone-implementation` pairs the
+    // surface claims against the code that would have to carry them.
+    expect(p).toMatch(/A unique handle for\s*\n?\s*your account, saved and returned by the API/);
     expect(p).toMatch(/Leave blank to keep using the account UUID/);
   });
 

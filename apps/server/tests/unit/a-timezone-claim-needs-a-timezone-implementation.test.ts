@@ -108,3 +108,75 @@ describe('a local-time claim needs a local-time implementation', () => {
     ).toEqual([]);
   });
 });
+
+// The same failure a second time, on the field directly below it: the slug's
+// helper text claimed it was "Used as a stable handle on support tickets,
+// billing references, and audit entries". Measured: no audit serialization
+// references the slug, no billing or Stripe path sends it, and the repository
+// contains no support-ticket system at all. Three named surfaces, none backed.
+//
+// Generalising the detector is not worth it — "used as X" needs a mapping from
+// the prose X to the code that would implement it, and inventing that mapping
+// is how a guard starts asserting its author's guesses. Instead each named
+// SURFACE gets an explicit pairing below, and adding a claim about a new
+// surface means adding its pair here.
+// ⚠️ The first version of these detectors required the word "slug" within the
+// same sentence as the surface name. It could not match the very copy it was
+// written against — "slug" lives in the field LABEL, not in the helper sentence,
+// and the claim spans a sentence break. The anti-vacuity case below caught it on
+// the first run. They now anchor on the claim's own verb phrase instead.
+const SURFACE_CLAIMS: ReadonlyArray<{
+  claim: RegExp;
+  /** Sources that would have to mention the field for the claim to be true. */
+  backedBy: readonly string[];
+  field: string;
+}> = [
+  {
+    field: 'slug',
+    claim: /(?:handle|identifier)[^<]{0,160}\baudit entries\b/i,
+    backedBy: [
+      'apps/server/src/routes/account-audit.ts',
+      'apps/server/src/services/account-audit.ts',
+    ],
+  },
+  {
+    field: 'slug',
+    claim: /(?:handle|identifier)[^<]{0,160}\bbilling references\b/i,
+    backedBy: ['apps/server/src/services/stripe-webhooks.ts'],
+  },
+];
+
+describe('a settings field may not claim a surface that does not carry it', () => {
+  it('CRITICAL each claimed surface either carries the field or the claim is gone', () => {
+    const settings = readFileSync(resolve(DASHBOARD_SRC, 'pages', 'settings.astro'), 'utf-8');
+    const offenders: string[] = [];
+    for (const { claim, backedBy, field } of SURFACE_CLAIMS) {
+      if (!claim.test(settings)) continue;
+      const backed = backedBy.some((rel) => {
+        const source = readFileSync(resolve(REPO, rel), 'utf-8');
+        return new RegExp(`\\b${field}\\b`).test(source);
+      });
+      if (!backed)
+        offenders.push(`${field}: claimed, but ${backedBy.join(' / ')} never mention it`);
+    }
+    expect(
+      offenders.sort(),
+      'the settings page names a surface that carries this field, and none of that surface does',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the claim detectors can see the wording they exist for', () => {
+    expect(
+      SURFACE_CLAIMS[0]?.claim.test(
+        'handle on support tickets, billing references, and audit entries.',
+      ),
+      'the audit-entries detector cannot see the claim it was written for',
+    ).toBe(true);
+    expect(
+      SURFACE_CLAIMS[0]?.claim.test(
+        'A unique handle for your account, saved and returned by the API.',
+      ),
+      'the audit-entries detector says yes to the corrected copy',
+    ).toBe(false);
+  });
+});
