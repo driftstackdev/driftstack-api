@@ -29,6 +29,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { LaunchProfileRequestSchema } from '@driftstack/api-types';
 
 const ROUTES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/routes');
 
@@ -40,10 +41,16 @@ const EXEMPT_FILES = ['status-subscribe.ts'] as const;
  * Schemas that are `.strict()`, so zod REJECTS an unknown key with a 400 rather
  * than stripping it. The silent-drop this mechanism exists to surface cannot
  * happen there — the caller is already told, loudly, by the parse itself.
- * Verified rather than assumed: `LaunchProfileRequestSchema.safeParse({ label,
- * labell })` fails with "Unrecognized key(s) in object: 'labell'".
+ *
+ * The strictness is CHECKED below, not taken on trust. It is the entire reason
+ * these routes are allowed to skip the reporter, so a schema that quietly loses
+ * `.strict()` would turn this exemption into a permanent hole that still reads
+ * like a deliberate decision.
  */
-const EXEMPT_SCHEMAS = ['LaunchProfileRequestSchema'] as const;
+const EXEMPT_SCHEMAS: ReadonlyArray<readonly [string, unknown]> = [
+  ['LaunchProfileRequestSchema', LaunchProfileRequestSchema],
+];
+const EXEMPT_SCHEMA_NAMES = EXEMPT_SCHEMAS.map(([name]) => name);
 
 const isExempt = (file: string): boolean =>
   EXEMPT_PREFIXES.some((p) => file.startsWith(p)) || EXEMPT_FILES.includes(file as never);
@@ -120,7 +127,7 @@ describe('customer-facing writes report the fields they ignored', () => {
 
   it('CRITICAL every non-exempt route that parses a body also reports unknown fields', () => {
     const missing = sites
-      .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMAS.includes(s.schema as never))
+      .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMA_NAMES.includes(s.schema))
       .map((s) => `${s.file}:${String(s.line)} (${s.schema})`);
     expect(
       missing,
@@ -129,6 +136,27 @@ describe('customer-facing writes report the fields they ignored', () => {
         'customer gets a resource configured as something they did not ask for, with nothing ' +
         'saying so. Wire reportUnknownRequestFields next to the parse, or add the route to the ' +
         'exemption list here with the reason it belongs there',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL every exempt schema is actually strict, which is why it may skip the reporter', () => {
+    // The exemption's whole justification. A `.strict()` schema answers an
+    // unknown key with a 400, so nothing is silently dropped and there is
+    // nothing to report. Lose the modifier and the route starts stripping keys
+    // exactly like the ones this mechanism was built for, while the exemption
+    // above keeps waving it through.
+    const notStrict = EXEMPT_SCHEMAS.filter(([, schema]) => {
+      const parsed = (schema as { safeParse: (v: unknown) => { success: boolean } }).safeParse({
+        label: 'x',
+        __unknown_probe__: 'y',
+      });
+      return parsed.success;
+    }).map(([name]) => name);
+    expect(
+      notStrict,
+      'a schema exempted for being strict now ACCEPTS an unknown key. It is stripping fields ' +
+        'silently, which is the failure this mechanism exists to surface, and the exemption is ' +
+        'hiding it — drop the exemption and wire the reporter, or restore .strict()',
     ).toEqual([]);
   });
 
@@ -166,7 +194,7 @@ describe('customer-facing writes report the fields they ignored', () => {
       sites.some((s) => s.file.startsWith('admin-')),
       'no admin route parses a body any more — the admin exemption is stale',
     ).toBe(true);
-    const unusedSchemaExemptions = [...EXEMPT_SCHEMAS].filter(
+    const unusedSchemaExemptions = EXEMPT_SCHEMA_NAMES.filter(
       (name) => !sites.some((s) => s.schema === name),
     );
     expect(
