@@ -1,9 +1,16 @@
 // Cross-source invariant: the locked-default archetype slug
-// 'iphone16pro_ios18_7_safari26_4' appears in 3+ places — DB
-// schema defaults (profiles + sessions tables) + docs/guides/
-// profile-management.md + docs/api/profiles.md. Drift would either
-// have the DB default mint a slug the docs don't promise, or the
-// docs promise a slug the DB won't mint.
+// 'iphone17_ios18_7_safari26_4' appears in FOUR places — the DB schema
+// defaults on the profiles AND sessions tables, docs/guides/
+// profile-management.md, and docs/api/profiles.md. Drift would either have the
+// DB default mint a slug the docs don't promise, or the docs promise a slug the
+// DB won't mint.
+//
+// ⚠️ This header named 'iphone16pro_ios18_7_safari26_4' as the locked default
+// until 2026-08-16. That slug stopped being the default at the 2026-06-11
+// cutover and is now just one of the 81 selectable registry entries. The arms
+// below were correct throughout — only this description was stale, which is the
+// worse failure of the two: anyone grepping for the locked default would have
+// read it here and got the wrong answer from the guard responsible for it.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

@@ -1,6 +1,9 @@
 // W847 — V-136 LOCKED_ARCHETYPE_ID cross-source invariant. One-
 // hundred-seventy-third in the drift-guard series. Pins that the
-// canonical archetype identifier 'iphone16pro_ios18_7_safari26_4'
+// canonical archetype identifier 'iphone17_ios18_7_safari26_4' (it named the
+// pre-2026-06-11 'iphone16pro_ios18_7_safari26_4' until 2026-08-16; the arms
+// have tracked the cutover since it happened — see the note at LOCKED_ARCHETYPE_ID
+// below — but this description had not)
 // is referenced consistently across:
 //   - api-types schema (source-of-truth: LOCKED_ARCHETYPE_ID).
 //   - Integration test scenarios.ts (default archetype).
