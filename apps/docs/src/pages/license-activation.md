@@ -85,9 +85,16 @@ The same GUI binary works against any control plane — there is no "self-hosted
 ## Platform support
 
 - **macOS on Apple silicon** is the current supported distribution target.
-- Distributed builds must pass Developer ID signature, hardened-runtime, notarisation, and Gatekeeper verification before installation.
+- Builds are **not** Apple Developer ID code-signed, hardened-runtime, or
+  notarised. macOS therefore shows an unidentified-developer warning the first
+  time you launch the app: right-click it in Applications, choose **Open**, and
+  confirm. The release artifacts _are_ signed with our Tauri updater key, which
+  is what the update check below verifies — that signature proves an update came
+  from us, and is a different thing from Apple code signing.
 - Local test builds use a machine-scoped development signing identity and are not distribution artifacts.
-- The current distribution channel does not publish Windows or Linux installers.
+- The release pipeline also builds Windows (`.exe`, NSIS) and Linux
+  (`.AppImage`, `.deb`) bundles, but macOS on Apple silicon is the only platform
+  we support. Installers are published as GitHub Releases from a `gui-v*` tag.
 
 ## Updates
 

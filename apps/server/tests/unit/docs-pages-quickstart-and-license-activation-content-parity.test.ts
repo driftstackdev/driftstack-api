@@ -224,18 +224,33 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     );
   });
 
-  it('CRITICAL current platform support and signing posture are explicit without future distribution promises.', () => {
+  it('CRITICAL current platform support and signing posture are explicit without future distribution promises. V-796 RETRACTED the signing claim: gui-release.yml carries no Apple credentials at all (no APPLE_*/CSC_* secrets, no notarytool, no codesign) and tauri.conf.json sets no signingIdentity, hardenedRuntime or notarize, so a customer was told distributed builds pass a verification chain that never runs. The updater signature IS real and separate, which is why the copy distinguishes them rather than saying builds are unsigned.', () => {
     const p = read(LIC);
 
     expect(p).toMatch(
       /\*\*macOS on Apple silicon\*\* is the current supported distribution target\./,
     );
     expect(p).toMatch(
-      /Distributed builds must pass Developer ID signature, hardened-runtime, notarisation, and Gatekeeper verification before installation\./,
+      /Builds are \*\*not\*\* Apple Developer ID code-signed, hardened-runtime, or\s*\n?\s*notarised\./,
+    );
+    expect(p, 'the first-launch workaround must be actionable, not just a warning').toMatch(
+      /right-click it in Applications, choose \*\*Open\*\*, and\s*\n?\s*confirm\./,
+    );
+    expect(p, 'updater signing is real and must stay distinguished from Apple signing').toMatch(
+      /signed with our Tauri updater key/,
+    );
+    expect(p, 'the retracted verification chain must not return').not.toMatch(
+      /must pass Developer ID signature/,
     );
     expect(p).toMatch(
-      /The current distribution channel does not publish Windows or Linux installers\./,
+      /The release pipeline also builds Windows \(`\.exe`, NSIS\) and Linux\s*\n?\s*\(`\.AppImage`, `\.deb`\) bundles, but macOS on Apple silicon is the only platform\s*\n?\s*we support\./,
     );
+    // V-796 — the old line said the channel "does not publish Windows or Linux
+    // installers", which read as though macOS IS published. The matrix in
+    // gui-release.yml includes ubuntu-22.04 and windows-latest, and no gui-v* tag
+    // exists at all, so the sentence was true only in the sense that nothing is
+    // published anywhere. The replacement describes the mechanism instead.
+    expect(p).not.toMatch(/does not publish Windows or Linux installers/);
     expect(p).not.toMatch(/pending|coming soon|once the first ones ship|page is not live yet/i);
   });
 

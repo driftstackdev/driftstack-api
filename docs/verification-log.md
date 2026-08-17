@@ -34582,3 +34582,47 @@ the api-types scope surface or `account_owner` pass; the one failure is
 `git status` and untouched.
 
 First batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged — no file added.
+
+## V-796 — the desktop docs promised a Gatekeeper verification chain the pipeline never runs (2026-08-17)
+
+`apps/docs/src/pages/license-activation.md` told customers, under "Platform support":
+
+> Distributed builds must pass Developer ID signature, hardened-runtime, notarisation, and Gatekeeper
+> verification before installation.
+
+`.github/workflows/gui-release.yml` — the only workflow that publishes the desktop app — contains
+**zero** Apple signing: no `APPLE_*` or `CSC_*` secrets, no `notarytool`, no `codesign`. And
+`apps/gui-client/src-tauri/tauri.conf.json` sets no `signingIdentity`, no `hardenedRuntime` and no
+`notarize`. The chain the page said builds "must pass" does not exist, so a customer expecting a
+notarised app got an unidentified-developer warning with no explanation and no instruction.
+
+**The nuance the blunt fix would have got wrong.** That workflow has a step named "Build + sign Tauri
+bundles" and it does sign — with `TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVKEY }}`,
+the _updater_ key. That signature is real, it is what the auto-updater verifies, and the page's own
+"Updates" section correctly says "Tauri Updater checks the signed GitHub Releases manifest". Writing
+"builds are not signed" would have replaced one false sentence with a second one that contradicts an
+accurate paragraph two below it. The corrected copy names both and says they are different things.
+
+The sibling claim — "The current distribution channel does not publish Windows or Linux installers" —
+was true only in a way that misleads. The workflow matrix includes `ubuntu-22.04` and
+`windows-latest`, so those bundles _are_ built; and **no `gui-v*` tag exists** (the repo's only seven
+tags are `packages/sdk-go/*`), so nothing is published on _any_ platform, macOS included. The sentence
+implied macOS was. Replaced with the mechanism — the pipeline builds all three, macOS on Apple silicon
+is the only supported platform, installers publish as GitHub Releases from a `gui-v*` tag — which does
+not go stale when the first release lands.
+
+Constraints respected, both verified before writing rather than after:
+
+- two pins ban `pending|coming soon|once the first ones ship|page is not live yet`
+  (`docs-pages-quickstart…:239`, `docs-site-root-pages:151`), and `/pending/i` also matches
+  "depending" and "impending". The new copy contains none of them.
+- `apps/gui-client/PACKAGING.md` states the signing chain as an internal forward _requirement_ and is
+  pinned separately. Left untouched — harmonising it with the customer page would have dragged the
+  false claim back in through the other door.
+
+Five occurrences moved: two page passages, three pin assertions across two files, plus the quickstart
+pin's `it()` title. Per-occurrence negatives ban both retracted sentences. Mutation-proved: restoring
+the verification chain reds the sentinel. 15 pins over this surface green; the V-794 ratchet is
+unchanged by this batch (neither retired phrase matches its two shapes).
+
+Second batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.

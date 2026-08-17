@@ -146,8 +146,16 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(
       /\*\*macOS on Apple silicon\*\* is the current supported distribution target\./,
     );
-    expect(body).toMatch(/Developer ID signature, hardened-runtime, notarisation, and Gatekeeper/);
-    expect(body).toMatch(/does not publish Windows or Linux installers\./);
+    // V-796 — both lines retracted. gui-release.yml has no Apple signing
+    // credentials and tauri.conf.json no signingIdentity/hardenedRuntime/notarize,
+    // so the verification chain never ran; and the pipeline DOES build Windows and
+    // Linux bundles, with no gui-v* tag published on any platform.
+    expect(body).toMatch(/Builds are \*\*not\*\* Apple Developer ID code-signed/);
+    expect(body).toMatch(/macOS on Apple silicon is the only platform/);
+    expect(body).not.toMatch(
+      /Developer ID signature, hardened-runtime, notarisation, and Gatekeeper/,
+    );
+    expect(body).not.toMatch(/does not publish Windows or Linux installers/);
     expect(body).not.toMatch(/pending pre-launch|once the first ones ship|page is not live yet/i);
     expect(body).toMatch(/^## Updates$/m);
     expect(body).toMatch(
