@@ -34490,3 +34490,53 @@ and it was correct: I wrote `expect(dbReachable, '…').toBe(false); return;` in
 branch, which passes having verified nothing.
 
 `EXPECTED_TEST_FILES` unchanged — no file was added, 20 assertions were moved and one guard hardened.
+
+## V-794 — a ratchet against the two pin shapes that expire, and the bug it shipped with (2026-08-17)
+
+The parity sweep's systemic finding was that **41 of its 57 confirmed-false claims shared one of
+three text shapes that go stale by construction**. Two are mechanically catchable, and measuring
+across all 869 content-parity pins:
+
+- **future-tense promise** — "will be wired", "is a follow-up", "not yet implemented", "deferred".
+  True when written, false the moment the work lands, and the pin then holds the stale version in
+  place: whoever ships the feature has to fight a test asserting it does not exist.
+- **hand-maintained count** — "three buckets", "15 accessors", "32 route modules". Wrong on the next
+  addition, and the pin cements the old number. A count is derivable; freezing it as prose throws
+  away the only property that would keep it honest.
+
+`a-parity-pin-cannot-freeze-a-claim-that-expires.test.ts` is a **ratchet, not a clean bill**: the
+existing population is a backlog, the ceilings may only fall, and a fourth arm asserts each ceiling
+equals the measured value so there is no headroom for the next dozen to slip through unnoticed. Pin
+files' own header comments are excluded on purpose — a header reading "this used to claim X, which
+was false" is a retraction, and counting it would penalise the correct fix.
+
+**The guard shipped with a bug in its own extractor, and the story is the point.**
+
+`.not.toMatch(/…/)` contains the substring `toMatch(/…/)`. So a **retraction sentinel** — the
+`expect(body).not.toMatch(/<retired falsehood>/)` shape used throughout this log to stop a corrected
+claim returning — was scanned as though the file FROZE the claim it bans. The ratchet scored the
+correct behaviour as a violation.
+
+I then "checked" whether the fix mattered by comparing the counts with and without the exclusion, and
+got identical numbers, and reported it as latent. **That comparison measured nothing**: I had written
+the lookbehind as `(?<!\.not)\.?toMatch`, and a regex engine simply backtracks — it gives up the
+optional leading dot, matches at `toMatch`, and the four preceding characters are then `not.` rather
+than `.not`, so the negative lookbehind is satisfied and the sentinel matches anyway. Both arms of my
+comparison were the same broken code, agreeing with itself.
+
+The fixture case caught it on the first run. With the lookbehind correct (`(?<!\.not\.)`) the true
+counts are **79 / 93**, not 89 / 94: **eleven files** were being counted as offenders purely for
+carrying a sentinel that bans one of these phrases, every one of them a file somebody had already
+fixed properly — including several corrected earlier in this session. So the bug was not latent, it
+was already miscounting 11 files, and the ceilings I first wrote were inflated by ten and one.
+
+Mutation-proved three ways: breaking the lookbehind reds both the fixture and the tight arm (89 vs
+79); a new pin freezing a promise reds the ratchet (80 > 79); and a retraction does **not** red — the
+property the bug destroyed.
+
+One incidental find: the file as first written contained a **NUL byte** in a string literal, which is
+why BSD `grep` silently returned nothing on it while the file parsed and its tests passed. Rewritten
+clean; verified zero NUL bytes.
+
+`EXPECTED_TEST_FILES` 2828 → 2829, `_ALL` 2990 → 2991 — one new file, mine. The peer's own bump for
+their file had already landed, so this diff carries only my increment.
