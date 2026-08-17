@@ -51,7 +51,7 @@ export interface AccountNotificationsRoutesOptions {
 }
 
 const DEFAULT_HEARTBEAT_MS = 25_000;
-const DEFAULT_MAX_SSE_PER_ACCOUNT = 10;
+export const DEFAULT_MAX_SSE_PER_ACCOUNT = 10;
 // L1 — backpressure high-water mark, mirroring the transcript SSE (agent-sessions
 // W383). A stalled client (TCP window full) would otherwise let published events
 // buffer unboundedly in the socket (reply.raw.writableLength grows → server OOM).
