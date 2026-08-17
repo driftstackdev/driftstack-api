@@ -134,6 +134,58 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect([...collected].sort()).toEqual([...inserted].sort());
     });
 
+    it('CRITICAL another endpoint’s delivery id cannot be used as a page cursor', async () => {
+      if (!dbReachable || !client) {
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const svc = new DurableWebhookDeliveryService({ client, db, close: async () => {} }, () =>
+        Date.now(),
+      );
+
+      const seedEndpoint = async (): Promise<string> => {
+        const accountId = randomUUID();
+        const webhookId = randomUUID();
+        seeded.push({ accountId, webhookId });
+        await client!`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`durable-wh-${accountId}@test.local`})`;
+        await client!`INSERT INTO webhook_endpoints (id, account_id, url, secret, secret_prefix, events)
+          VALUES (${webhookId}, ${accountId}, 'https://example.test/hook', 'whsec_abcdefghijklmnopqrstuvwxyz234567', 'whsec_test',
+                  ARRAY['session.completed']::webhook_event_type[])`;
+        return webhookId;
+      };
+      const seedDelivery = async (webhookId: string, at: Date): Promise<string> => {
+        const [row] = await client!`
+          INSERT INTO webhook_deliveries (webhook_id, event_id, event_type, payload, created_at)
+          VALUES (${webhookId}, ${randomUUID()}, 'session.completed',
+                  ${JSON.stringify({ body: '{}', emittedAtSec: 1 })}::text::jsonb, ${at.toISOString()})
+          RETURNING id`;
+        return row?.id as string;
+      };
+
+      // Theirs is OLDER than mine, deliberately. The keyset pages strictly
+      // BACKWARDS from the anchor, so if their row resolves as an anchor my
+      // newer delivery is filtered out and the page comes back empty. Ordered
+      // the other way round this arm would pass either way.
+      const theirs = await seedEndpoint();
+      const mine = await seedEndpoint();
+      const theirDelivery = await seedDelivery(theirs, new Date(Date.UTC(2026, 0, 1)));
+      const myDelivery = await seedDelivery(mine, new Date(Date.UTC(2026, 0, 2)));
+
+      const page = await svc.list({ endpointId: mine, limit: 50, cursor: theirDelivery });
+      expect(
+        page.data.map((d) => d.id),
+        'another endpoint’s delivery id resolved as a page anchor. The anchor lookup must be ' +
+          'scoped to the endpoint being listed, or a customer can page their own history from a ' +
+          'stranger’s position — which both shifts their listing and confirms when that ' +
+          'stranger’s delivery was created',
+      ).toEqual([myDelivery]);
+    });
+
     // The case above pages a fixed set. This one enqueues deliveries WHILE the
     // walk runs — the ordinary state of a delivery list, which grows every time
     // the endpoint fires. See _helpers/keyset-stable-under-inserts.ts.

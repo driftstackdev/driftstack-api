@@ -191,13 +191,27 @@ export class DurableWebhookDeliveryService implements WebhookDeliveryService {
       // make Postgres raise `invalid input syntax for type uuid` and surface
       // as a 500. Skipping the anchor lookup falls through to the same
       // first-page path as a cursor row that is simply not found.
+      // The anchor lookup is scoped to the endpoint being listed. The cursor is
+      // customer-supplied, and an unscoped lookup resolves ANY delivery id in
+      // the table — so passing another endpoint's delivery id anchored this
+      // caller's own page to a stranger's created_at. That both shifted their
+      // listing (a newer delivery of their own filtered out, page returned
+      // empty) and confirmed the existence and creation time of a delivery
+      // belonging to someone else. Scoped, a foreign id resolves to nothing and
+      // falls through to the same first-page path as a cursor row that is
+      // simply not found.
       const [cursorRow] =
         parseUuidCursor(opts.cursor) === undefined
           ? []
           : await this.database.db
               .select({ createdAt: webhookDeliveries.createdAt })
               .from(webhookDeliveries)
-              .where(eq(webhookDeliveries.id, opts.cursor))
+              .where(
+                and(
+                  eq(webhookDeliveries.id, opts.cursor),
+                  eq(webhookDeliveries.webhookId, opts.endpointId),
+                ),
+              )
               .limit(1);
       if (cursorRow) {
         conditions.push(
