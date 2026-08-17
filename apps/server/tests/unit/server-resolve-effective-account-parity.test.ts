@@ -4,10 +4,16 @@
 // resolveEffectiveAccount is the canonical helper that consumes
 // the X-Driftstack-Account header on every team-RBAC route. Drift
 // here would silently break cross-account team passthrough on the
-// 5+ routes that depend on it (profiles, sessions, profile-snapshots,
-// webhooks, account-audit, admin).
+// routes that depend on it.
+//
+// Those routes are now DISCOVERED rather than listed. Two arms below carried
+// hardcoded lists — six and four — against a real population of ten, and each
+// entry was skipped when its file did not exist, so a rename removed a route
+// from the check without failing anything. account-me, agent-sessions, billing,
+// email-preferences, and (for the shared-import arm) profile-snapshots and
+// webhooks were never covered.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -20,6 +26,24 @@ function read(p: string): string {
 }
 
 const AUTH = resolve(REPO_ROOT, 'apps/server/src/services/auth.ts');
+
+/**
+ * Every route that calls `resolveEffectiveAccount`, discovered from source.
+ *
+ * The two arms below used hardcoded lists (six and four) against a real
+ * population of ten, and each entry was `continue`d when its file did not exist
+ * — so a rename removed a route from the check with no failure. Discovery
+ * cannot silently shrink: if the convention changes the floor arm fails.
+ */
+const RESOLVE_CONSUMERS: readonly string[] = readdirSync(
+  resolve(REPO_ROOT, 'apps/server/src/routes'),
+)
+  .filter((f) => f.endsWith('.ts'))
+  .filter((f) =>
+    /resolveEffectiveAccount/.test(read(resolve(REPO_ROOT, 'apps/server/src/routes', f))),
+  )
+  .map((f) => `apps/server/src/routes/${f}`)
+  .sort();
 
 describe('W744 server-side resolveEffectiveAccount V-326e team-RBAC parity', () => {
   it('auth.ts file exists', () => {
@@ -140,47 +164,38 @@ describe('W744 server-side resolveEffectiveAccount V-326e team-RBAC parity', () 
     );
   });
 
-  it('CRITICAL 5+ route consumers exist (sanity check the helper is used). The W697 cross-SDK audit-log + W744 server-side guards rely on this helper being called from the route handlers.', () => {
-    const routes = [
-      'apps/server/src/routes/profiles.ts',
-      'apps/server/src/routes/sessions.ts',
-      'apps/server/src/routes/profile-snapshots.ts',
-      'apps/server/src/routes/webhooks.ts',
-      'apps/server/src/routes/account-audit.ts',
-      'apps/server/src/routes/admin.ts',
-    ];
-
-    let consumerCount = 0;
-    for (const route of routes) {
-      const full = resolve(REPO_ROOT, route);
-      if (!existsSync(full)) continue;
-      const content = read(full);
-      if (/resolveEffectiveAccount/.test(content)) {
-        consumerCount += 1;
-      }
-    }
-
-    expect(consumerCount, 'route consumers of resolveEffectiveAccount').toBeGreaterThanOrEqual(5);
+  it('CRITICAL route consumers exist (sanity check the helper is used). The W697 cross-SDK audit-log + W744 server-side guards rely on this helper being called from the route handlers.', () => {
+    // Was a hardcoded list of six with a floor of five, and each entry was
+    // skipped when its file did not exist — so a rename dropped a route out
+    // silently, and one could vanish entirely while the arm stayed green. Ten
+    // routes call the helper; discovery finds them, and there is nothing to skip
+    // because every discovered path exists by construction.
+    expect(
+      RESOLVE_CONSUMERS.length,
+      'route consumers of resolveEffectiveAccount — the helper decides which account a request ' +
+        'acts on, so a drop here means routes stopped consulting it',
+    ).toBeGreaterThanOrEqual(10);
   });
 
   it("CRITICAL EFFECTIVE_ACCOUNT_HEADER constant 'x-driftstack-account' (lowercase) defined in shared lib/effective-account-header.ts; each team-RBAC route imports readEffectiveAccountHeader from there. Fastify normalizes headers to lowercase; drift to uppercase would let req.headers[CONST] return undefined.", () => {
     const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/effective-account-header.ts'));
     expect(lib).toMatch(/export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
-    const routes = [
-      'apps/server/src/routes/profiles.ts',
-      'apps/server/src/routes/sessions.ts',
-      'apps/server/src/routes/admin.ts',
-      'apps/server/src/routes/account-audit.ts',
-    ];
 
-    for (const route of routes) {
-      const full = resolve(REPO_ROOT, route);
-      if (!existsSync(full)) continue;
-      const content = read(full);
-      expect(content, `${route} imports readEffectiveAccountHeader from the shared lib`).toMatch(
-        /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
-      );
-    }
+    // Was four hardcoded routes, each skipped if absent. Every route that
+    // RESOLVES an effective account must also READ the header through the shared
+    // parser — the two go together, so the same discovered set answers both.
+    const missing = RESOLVE_CONSUMERS.filter(
+      (route) =>
+        !/import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/.test(
+          read(resolve(REPO_ROOT, route)),
+        ),
+    );
+    expect(
+      missing,
+      'a route resolves an effective account but does not read the header through the shared ' +
+        'parser, so its empty/duplicate/whitespace handling can differ from every other route ' +
+        'while still deciding which account the request acts on',
+    ).toEqual([]);
   });
 
   it('test file metadata — file exists at canonical path', () => {

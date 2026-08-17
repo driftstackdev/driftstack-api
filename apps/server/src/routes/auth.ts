@@ -48,13 +48,17 @@ import {
   ValidationError,
   ForbiddenError,
 } from '../lib/errors.js';
+import { readClientIp } from '../lib/client-ip.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 
 function clientIp(req: FastifyRequest): string | null {
-  // Fastify resolves `req.ip` honouring the X-Forwarded-For chain when
-  // trustProxy is set; falls through to the socket address otherwise.
-  return req.ip ?? null;
+  // Delegates to the shared reader so the trust boundary is decided in ONE
+  // place. This used to re-implement it (`return req.ip ?? null`) — identical
+  // behaviour, but a second copy of the rule that feeds requestedFromIp /
+  // issuedFromIp / sourceIp on every auth flow.  The local name is kept because
+  // it reads better at the call sites below.
+  return readClientIp(req);
 }
 
 function userAgent(req: FastifyRequest): string | null {

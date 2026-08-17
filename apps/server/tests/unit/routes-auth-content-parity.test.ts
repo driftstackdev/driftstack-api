@@ -89,9 +89,18 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     expect(body).toMatch(/bucketPrefix: 'auth-ip:resend-verification',/);
   });
 
-  it('clientIp + userAgent helpers: req.ip ?? null (trustProxy/X-Forwarded-For aware); UA truncated to 512 chars', () => {
+  it('clientIp delegates to the shared readClientIp (single trust boundary); userAgent truncated to 512 chars', () => {
+    // Was pinned as an inline `return req.ip ?? null` — behaviourally identical
+    // to lib/client-ip.js, but a second copy of the trust decision that feeds
+    // requestedFromIp / issuedFromIp / sourceIp on every auth flow. If the
+    // shared reader ever changes for a new proxy topology, auth must change
+    // with it rather than silently keeping the old rule.
+    expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
     expect(body).toMatch(
-      /function clientIp\(req: FastifyRequest\): string \| null \{\s*\n?\s*\/\/ Fastify resolves `req\.ip` honouring the X-Forwarded-For chain when\s*\n?\s*\/\/ trustProxy is set; falls through to the socket address otherwise\.\s*\n?\s*return req\.ip \?\? null;/,
+      /function clientIp\(req: FastifyRequest\): string \| null \{[\s\S]{0,600}?return readClientIp\(req\);/,
+    );
+    expect(body, 'the inline copy of the trust decision came back').not.toMatch(
+      /function clientIp\(req: FastifyRequest\): string \| null \{[\s\S]{0,600}?return req\.ip \?\? null;/,
     );
     expect(body).toMatch(
       /function userAgent\(req: FastifyRequest\): string \| null \{\s*\n?\s*const v = req\.headers\['user-agent'\];\s*\n?\s*if \(typeof v !== 'string' \|\| v\.length === 0\) return null;\s*\n?\s*return v\.slice\(0, 512\);/,

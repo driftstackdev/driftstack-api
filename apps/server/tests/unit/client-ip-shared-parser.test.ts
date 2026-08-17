@@ -11,7 +11,7 @@
 // `request.ip ?? null`, so a future revert to the legacy shape would
 // also re-introduce that type-level inconsistency.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -105,25 +105,105 @@ describe('readClientIp — Fastify trustProxy integration', () => {
   });
 });
 
+/**
+ * Every route consuming the shared reader, discovered from source.
+ *
+ * CONSUMER_ROUTES above is the historical record of the slice-129/130 fixes and
+ * names six admin audit-writing routes. Sixteen route files use `readClientIp`
+ * now; the ten that arrived later were never covered by the drift-guard, so a
+ * hand-rolled `clientIp` reappearing in any of them would not have failed
+ * anything. The IP recorded here is the actor_ip on audit rows, which is what
+ * makes an audit trail evidence rather than decoration.
+ */
+const DISCOVERED_CONSUMERS: readonly string[] = readdirSync(
+  resolve(REPO_ROOT, 'apps/server/src/routes'),
+)
+  .filter((f) => f.endsWith('.ts'))
+  .filter((f) =>
+    /readClientIp/.test(readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8')),
+  )
+  .map((f) => `apps/server/src/routes/${f}`)
+  .sort();
+
 describe('drift-guard: legacy hand-rolled clientIp helper must NOT be reintroduced', () => {
-  it.each(CONSUMER_ROUTES)('%s imports readClientIp from the shared lib', (relPath) => {
+  it('CRITICAL discovery found the consumers, and the historical roster is a subset of them', () => {
+    expect(
+      DISCOVERED_CONSUMERS.length,
+      'no readClientIp consumers discovered — the convention changed and the arms below cover ' +
+        'nothing',
+    ).toBeGreaterThanOrEqual(16);
+    const discovered = new Set(DISCOVERED_CONSUMERS);
+    expect(
+      CONSUMER_ROUTES.filter((r) => !discovered.has(r)),
+      'a route in the historical roster no longer uses readClientIp — the slice-129/130 fix was ' +
+        'undone and its audit rows record the load balancer IP again',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL no route decides the IP trust boundary for itself', () => {
+    // Repo-wide, not roster-wide: the legacy shape reappearing in a route nobody
+    // listed is exactly the case a roster cannot see — which is how routes/auth.ts
+    // kept its own `return req.ip ?? null` copy, unnoticed, while feeding
+    // requestedFromIp / issuedFromIp / sourceIp across every auth flow.
+    //
+    // A local helper NAME is fine (auth.ts keeps `clientIp` because it reads
+    // better at its call sites); what must not exist is a local helper that
+    // re-implements the decision instead of delegating.
+    const rogue = readdirSync(resolve(REPO_ROOT, 'apps/server/src/routes'))
+      .filter((f) => f.endsWith('.ts'))
+      .filter((f) => {
+        const body = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8');
+        const m = /function\s+clientIp\s*\([^)]*\)[^{]*\{([\s\S]{0,600}?)\n\}/.exec(body);
+        return m !== null && !m[1]?.includes('readClientIp(');
+      });
+    expect(
+      rogue,
+      'a route defines a clientIp helper that does not delegate to readClientIp, so it carries ' +
+        'its own copy of the X-Forwarded-For trust decision — one route can then record the ' +
+        'caller address and another the load balancer',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL no route reads X-Forwarded-For outside the shared reader', () => {
+    const rogue = readdirSync(resolve(REPO_ROOT, 'apps/server/src/routes'))
+      .filter((f) => f.endsWith('.ts'))
+      .filter((f) => {
+        const body = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8');
+        return body.includes('x-forwarded-for') && !body.includes('readClientIp');
+      });
+    expect(
+      rogue,
+      'a route parses X-Forwarded-For itself, so its trust model can differ from the shared ' +
+        'reader — the header is caller-supplied, and request.ip is the only authority',
+    ).toEqual([]);
+  });
+
+  it.each(DISCOVERED_CONSUMERS)('%s imports readClientIp from the shared lib', (relPath) => {
     const body = readFileSync(resolve(REPO_ROOT, relPath), 'utf8');
     expect(body).toMatch(/from ['"]\.\.\/lib\/client-ip\.js['"]/);
     expect(body).toMatch(/readClientIp/);
   });
 
-  it.each(CONSUMER_ROUTES)(
-    '%s no longer defines a local `function clientIp(...)` helper',
+  it.each(DISCOVERED_CONSUMERS)(
+    '%s defines no local clientIp, or one that delegates',
     (relPath) => {
       const body = readFileSync(resolve(REPO_ROOT, relPath), 'utf8');
       // The legacy form was `function clientIp(request: FastifyRequest): string | null {`
-      // Any local definition of clientIp() would re-introduce the
-      // drift surface this slice closes.
-      expect(body).not.toMatch(/function\s+clientIp\s*\(/);
+      // returning its own `req.ip ?? null`. The DEFINITION is not the problem —
+      // routes/auth.ts keeps the name because it reads better at its eleven call
+      // sites — re-implementing the trust decision is. So a local helper is
+      // allowed exactly when it delegates to the shared reader.
+      const local = /function\s+clientIp\s*\([^)]*\)[^{]*\{([\s\S]{0,600}?)\n\}/.exec(body);
+      if (local === null) return;
+      expect(
+        local[1] ?? '',
+        `${relPath} defines its own clientIp that does not call readClientIp, so it carries a ` +
+          'private copy of the X-Forwarded-For trust decision',
+      ).toContain('readClientIp(');
     },
   );
 
-  it.each(CONSUMER_ROUTES)('%s no longer hand-rolls the XFF split inline', (relPath) => {
+  it.each(DISCOVERED_CONSUMERS)('%s no longer hand-rolls the XFF split inline', (relPath) => {
     const body = readFileSync(resolve(REPO_ROOT, relPath), 'utf8');
     // Sentinel: the legacy form used `request.headers['x-forwarded-for']`
     // followed by `.split(',')[0]`. Either token surviving is the
