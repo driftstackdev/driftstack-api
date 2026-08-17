@@ -51,6 +51,50 @@ itself is breaking — bump major version, OR ship the new value
 behind a feature flag, OR add a transitional period where both
 old and new values are emitted.
 
+## Unrecognised request fields
+
+Request bodies are parsed permissively: a top-level field the
+endpoint does not declare is **ignored**, and the request succeeds
+exactly as if it had not been sent. That keeps adding a field
+additive rather than breaking, but on its own it means a typo is
+presented to you as success — a mistyped `archetype` on profile
+creation would return `201 Created` with the default substituted.
+
+So the ignored keys are named back to you. When an authenticated
+write carries fields the endpoint doesn't declare, the response
+includes:
+
+```
+x-driftstack-unknown-fields: timezonee
+```
+
+For example, `PATCH /v1/account/me` with body
+`{"name": "Updated", "timezonee": "Europe/Amsterdam"}` returns
+`200 OK`, applies the `name` change, and sets the header to
+`timezonee` — the timezone update was silently dropped.
+
+Specifics worth knowing:
+
+- **Comma-separated key names**, in the order the body listed them.
+- **Top-level keys only.** Nested unknown keys are not reported;
+  polymorphic and forward-compat payloads make nested reporting
+  too noisy to be useful.
+- **At most 10 keys**, each truncated to 64 characters, so a large
+  body cannot inflate the response.
+- **The header is absent** when every field was recognised — treat
+  presence, not value, as the signal.
+- **Reporting, never rejecting.** The status code and response
+  body are identical with and without unknown fields, so nothing
+  breaks by starting to send this header, and nothing breaks if
+  you ignore it.
+- **Not emitted on unauthenticated auth endpoints.** Echoing the
+  keys an anonymous caller sent back to them discloses schema
+  shape on the surface most likely to be probed.
+
+Because it is purely additive, this header is not part of the
+breaking-change contract above: treat it as a diagnostic, and do
+not parse it as a stable machine interface.
+
 ## Deprecation cycle for breaking changes
 
 When a breaking change is necessary, the sequence is:
@@ -141,6 +185,9 @@ When more than one major is active:
 - Watch the `Deprecation` + `Sunset` response headers in
   production logs. Generic SDK middleware can surface these
   automatically.
+- Log `x-driftstack-unknown-fields` in non-production. Its
+  presence means a field you sent was ignored — usually a typo,
+  occasionally a field removed on our side.
 - Read the CHANGELOG for the SDK they use; SDK CHANGELOGs
   cross-reference API-side deprecations relevant to that
   language's surface.
