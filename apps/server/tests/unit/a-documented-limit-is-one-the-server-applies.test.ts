@@ -28,7 +28,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { ProfileNameSchema } from '@driftstack/api-types';
+import { ExtractRequestSchema, InputEventSchema, ProfileNameSchema } from '@driftstack/api-types';
 import { DEFAULT_MAX_SSE_PER_ACCOUNT } from '../../src/routes/account-notifications.js';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -44,6 +44,18 @@ const PROFILE_NAME_CLAIM = {
   path: 'guides/profile-management.md',
   claim: /Profile names are free-form strings up to (\d+) characters/,
   what: 'profile name length',
+};
+
+const SWIPE_DURATION_CLAIM = {
+  path: 'guides/live-video.md',
+  claim: /`durationMs` on `swipe` is capped at (\d+)/,
+  what: 'swipe durationMs',
+};
+
+const EXTRACT_BATCH_CLAIM = {
+  path: 'guides/migrate-from-puppeteer.md',
+  claim: /up to (\d+) named selector/,
+  what: 'extractions per request',
 };
 
 const SSE_SUBSCRIBER_CLAIM = {
@@ -95,5 +107,46 @@ describe('a documented limit is one the server applies', () => {
       DEFAULT_MAX_SSE_PER_ACCOUNT,
       `the reference promises ${promised} concurrent subscribers per account, the route defaults to ${DEFAULT_MAX_SSE_PER_ACCOUNT}`,
     ).toBe(promised);
+  });
+
+  it('CRITICAL a swipe of the documented duration is accepted, one millisecond longer is not', () => {
+    const max = claimedNumber(SWIPE_DURATION_CLAIM.path, SWIPE_DURATION_CLAIM.claim, 'swipe');
+    // Otherwise-valid swipe: only durationMs varies, so a rejection can only be
+    // the bound. MAX_SWIPE_DURATION_MS had NO test naming it before this.
+    const swipe = (durationMs: number): unknown => ({
+      type: 'swipe',
+      x1: 10,
+      y1: 20,
+      x2: 30,
+      y2: 40,
+      durationMs,
+    });
+    expect(
+      InputEventSchema.safeParse(swipe(max)).success,
+      `the guide caps swipe durationMs at ${max}, but the schema rejects exactly ${max}`,
+    ).toBe(true);
+    expect(
+      InputEventSchema.safeParse(swipe(max + 1)).success,
+      `the guide caps swipe durationMs at ${max}, but the schema also accepts ${max + 1}`,
+    ).toBe(false);
+  });
+
+  it('CRITICAL an extraction batch of the documented size is accepted, one more is not', () => {
+    const max = claimedNumber(EXTRACT_BATCH_CLAIM.path, EXTRACT_BATCH_CLAIM.claim, 'extract batch');
+    const batch = (n: number): unknown => ({
+      extractions: Array.from({ length: n }, (_unused, i) => ({
+        name: `field_${i}`,
+        selector: `#f${i}`,
+        type: 'text',
+      })),
+    });
+    expect(
+      ExtractRequestSchema.safeParse(batch(max)).success,
+      `the guide promises ${max} named extractions, but the schema rejects exactly ${max}`,
+    ).toBe(true);
+    expect(
+      ExtractRequestSchema.safeParse(batch(max + 1)).success,
+      `the guide promises ${max} named extractions, but the schema also accepts ${max + 1}`,
+    ).toBe(false);
   });
 });
