@@ -144,5 +144,120 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(ours[0]!.accountId).toBe(freeAcc);
       expect(ours[0]!.status).toBe('ready');
     });
+
+    // ── Selection bounds ────────────────────────────────────────────────
+    // The arm above proves WHICH row matches. These prove the bounds around
+    // that match: the empty-input guard, the per-tier pairing, and the
+    // ordering/limit that keep one tick bounded. v8 showed the empty-cutoffs
+    // branch unexecuted, and it is the one with the largest blast radius.
+
+    async function seedAccountWithKey(
+      tier: 'free' | 'solo_manual',
+    ): Promise<{ accountId: string; apiKeyId: string }> {
+      const accountId = randomUUID();
+      const apiKeyId = randomUUID();
+      seeded.push({ accountId, apiKeyId });
+      await client!`INSERT INTO accounts (id, email, tier)
+        VALUES (${accountId}, ${`autod2-${accountId}@test.local`}, ${tier})`;
+      await client!`INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash)
+        VALUES (${apiKeyId}, ${accountId}, 'autod2', ${`dsk_${apiKeyId.slice(0, 8)}`}, ${`hash_${apiKeyId}`})`;
+      return { accountId, apiKeyId };
+    }
+
+    async function seedOne(
+      accountId: string,
+      apiKeyId: string,
+      createdAt: Date,
+      status = 'ready',
+    ): Promise<string> {
+      const [row] = await client!`
+        INSERT INTO sessions (account_id, api_key_id, driver_session_id, status, created_at)
+        VALUES (${accountId}, ${apiKeyId}, ${`drv_${randomUUID()}`}, ${status}, ${createdAt.toISOString()})
+        RETURNING id`;
+      return row?.id as string;
+    }
+
+    const makeRepo = (): DrizzleSessionRepo =>
+      new DrizzleSessionRepo({
+        client: client!,
+        db: drizzle(client!) as unknown as ReturnType<typeof drizzle<typeof schema>>,
+        close: async () => {},
+      });
+
+    it('CRITICAL an empty cutoff list selects NOTHING, not everything', async () => {
+      if (!dbReachable || !client) return;
+      const repo = makeRepo();
+      const { accountId, apiKeyId } = await seedAccountWithKey('free');
+      await seedOne(accountId, apiKeyId, new Date(Date.UTC(2020, 0, 1)));
+
+      // No tier has a duration cap configured. Without the early return the
+      // per-tier clause list is empty, `or()` over nothing contributes no
+      // predicate, and the WHERE collapses to the status filter alone — which
+      // selects every live session on the platform for destruction. Asserted
+      // as strictly empty rather than "not mine", because that is the only
+      // assertion a collapsed predicate cannot satisfy.
+      expect(
+        await repo.listExpiredForAutoDestroy({ tierCutoffs: [], limit: 100_000 }),
+        'a sweep with no configured cutoffs returned candidates — with the tier predicate gone the ' +
+          'WHERE is just the active-status filter, so this destroys every live session on the platform',
+      ).toEqual([]);
+    });
+
+    it('CRITICAL each tier is matched against its OWN cutoff', async () => {
+      if (!dbReachable || !client) return;
+      const repo = makeRepo();
+      const free = await seedAccountWithKey('free');
+      const paid = await seedAccountWithKey('solo_manual');
+      const old = new Date(Date.UTC(2026, 0, 1, 12, 0, 0));
+      // Both sessions created at the same instant. Only the free cutoff is
+      // later than it, so only the free row is expired — the paid tier's own
+      // cutoff is earlier and must not be satisfied by the free clause.
+      const freeId = await seedOne(free.accountId, free.apiKeyId, old);
+      const paidId = await seedOne(paid.accountId, paid.apiKeyId, old);
+      const rows = await repo.listExpiredForAutoDestroy({
+        tierCutoffs: [
+          { tier: 'free', expiredBefore: new Date(old.getTime() + 60 * 60 * 1000) },
+          { tier: 'solo_manual', expiredBefore: new Date(old.getTime() - 60 * 60 * 1000) },
+        ],
+        limit: 100_000,
+      });
+      const ids = rows.map((r) => r.id);
+      expect(ids, 'the free-tier session past its own cutoff was not selected').toContain(freeId);
+      expect(
+        ids,
+        'a session was matched against ANOTHER tier’s cutoff — the per-tier clauses are OR’d, so ' +
+          'each must pair its tier with its own timestamp or one tier’s deadline destroys another’s',
+      ).not.toContain(paidId);
+    });
+
+    it('CRITICAL candidates come back oldest-first and bounded by the limit', async () => {
+      if (!dbReachable || !client) return;
+      const repo = makeRepo();
+      const { accountId, apiKeyId } = await seedAccountWithKey('free');
+      const base = Date.UTC(2026, 0, 1, 12, 0, 0);
+      const oldest = await seedOne(accountId, apiKeyId, new Date(base - 3 * 60 * 60 * 1000));
+      const middle = await seedOne(accountId, apiKeyId, new Date(base - 2 * 60 * 60 * 1000));
+      const newest = await seedOne(accountId, apiKeyId, new Date(base - 1 * 60 * 60 * 1000));
+      const cutoff = { tier: 'free' as const, expiredBefore: new Date(base) };
+
+      const all = await repo.listExpiredForAutoDestroy({
+        tierCutoffs: [cutoff],
+        limit: 100_000,
+      });
+      const mine = all.filter((r) => r.accountId === accountId).map((r) => r.id);
+      expect(
+        mine,
+        'the sweep is not oldest-first, so the longest-overrunning sessions are not the ones ' +
+          'reaped first and a busy tick can starve them indefinitely',
+      ).toEqual([oldest, middle, newest]);
+
+      // A bounded tick: three candidates exist here alone, so a limit of two
+      // must return exactly two rows.
+      const bounded = await repo.listExpiredForAutoDestroy({ tierCutoffs: [cutoff], limit: 2 });
+      expect(
+        bounded,
+        'the limit did not bound the batch — one tick could load the whole backlog',
+      ).toHaveLength(2);
+    });
   },
 );
