@@ -52,11 +52,22 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(/^import \{ z \} from 'zod';/m);
   });
 
-  it('Iso8601Schema: datetime({offset:true}) + describe "ISO 8601 timestamp with timezone offset"; UuidSchema', () => {
+  it('Iso8601Schema: datetime({offset:true}) + a 1970 floor + describe "ISO 8601 timestamp with timezone offset"; UuidSchema', () => {
     expect(body).toMatch(/export const UuidSchema = z\.string\(\)\.uuid\(\);/);
-    expect(body).toMatch(
-      /export const Iso8601Schema = z\s*\n?\s*\.string\(\)\s*\n?\s*\.datetime\(\{ offset: true \}\)\s*\n?\s*\.describe\('ISO 8601 timestamp with timezone offset, e\.g\. 2026-05-02T09:15:00Z'\);/,
+    // Pinned as fragments rather than one closed multi-line regex. The chain
+    // grew a `.refine` and the old regex matched the whole declaration in one
+    // piece, so it broke on a change it was not written to police. Fragments
+    // survive reflow and say which part moved.
+    expect(body).toContain('export const Iso8601Schema = z');
+    expect(body).toContain('.datetime({ offset: true })');
+    expect(body).toContain(
+      ".describe('ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z')",
     );
+    // The floor itself. Timestamp filters are handed straight to a timestamptz
+    // comparison, so a year Postgres cannot store becomes a 500 from a query
+    // string; `packages/api-types/tests/iso8601-timestamp-floor.test.ts` pins
+    // the behaviour, this pins that the shared schema still carries it.
+    expect(body).toContain('Number(value.slice(0, 4)) >= 1970');
   });
 
   it('PaginationQuery framing pinned: opaque cursor strings; servers may swap encoding later without breaking clients; limit coerce 1..100 default 50 + cursor min-1 max-512 optional (slice 148 cap)', () => {

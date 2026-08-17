@@ -6,9 +6,26 @@ import { z } from 'zod';
 
 export const UuidSchema = z.string().uuid();
 
+/**
+ * `.datetime()` already refuses the extended ±YYYYYY form, so anything reaching
+ * the refinement has a four-digit year — but it accepts `0000-…`, and there is
+ * no year zero. A request filter carrying one is parsed into a Date, handed
+ * straight to a timestamptz comparison, and Postgres raises "date/time field
+ * value out of range": a 500 from a query string. Verified on
+ * GET /v1/admin/audit-log, whose `from` reaches `gte(timestamp, …)`.
+ *
+ * The floor is the epoch rather than year 1 because every timestamp this API
+ * accepts or emits describes something this system recorded. Postgres would
+ * store years 1..1969 without complaint; they are refused here because they
+ * cannot be legitimate, and refusing them turns a 500 into a 400 that names the
+ * field.
+ */
 export const Iso8601Schema = z
   .string()
   .datetime({ offset: true })
+  .refine((value) => Number(value.slice(0, 4)) >= 1970, {
+    message: 'timestamp must be at or after 1970-01-01',
+  })
   .describe('ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z');
 
 // Cursor pagination — opaque cursor strings; servers may swap encoding later

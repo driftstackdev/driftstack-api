@@ -164,6 +164,39 @@ describe('GET /v1/admin/audit-log', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  // Sibling of the malformed-cursor arm above, same failure mode from a
+  // different parameter. `from`/`to` are parsed into Dates and handed to
+  // `gte(adminAuditLog.timestamp, ...)`. Against a real Postgres,
+  // `0000-01-01T00:00:00.000Z` fails that comparison outright -- "date/time
+  // field value out of range" -- so before the shared Iso8601Schema carried a
+  // floor, this query string produced a 500. There is no year zero; the value
+  // cannot be legitimate, so it belongs in the 400 bucket with the bad cursor.
+  it.each([
+    ['from', '/v1/admin/audit-log?from=0000-01-01T00:00:00.000Z'],
+    ['to', '/v1/admin/audit-log?to=0000-01-01T00:00:00.000Z'],
+    ['from (year one)', '/v1/admin/audit-log?from=0001-01-01T00:00:00Z'],
+  ])(
+    '400 on a %s timestamp Postgres cannot store, rather than a 500 from the comparison',
+    async (_label, url) => {
+      fx = await buildTestApp();
+      const res = await fx.app.inject({ method: 'GET', url, headers: auth(fx) });
+      expect(res.statusCode, `${url} did not come back as a 400`).toBe(400);
+    },
+  );
+
+  it('an ordinary from/to window is still accepted', async () => {
+    // Without this the arm above would pass if the filter stopped working.
+    fx = await buildTestApp();
+    await seedThreeAuditRows(fx);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/audit-log?from=1970-01-01T00:00:00.000Z&to=2999-01-01T00:00:00.000Z',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ data: unknown[] }>().data.length).toBeGreaterThan(0);
+  });
+
   it('filters by action', async () => {
     fx = await buildTestApp();
     await seedThreeAuditRows(fx);
