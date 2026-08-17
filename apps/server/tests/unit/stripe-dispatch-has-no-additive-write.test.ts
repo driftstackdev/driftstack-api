@@ -14,6 +14,22 @@
 // guard was written: eleven write statements across the two files, seven `.set(`
 // calls, zero additive writes.
 //
+// Writes are not the only side effect on this path, and the sentence above used to
+// read as though they were. `dispatch` also SENDS EMAIL: `invoice.payment_succeeded`
+// and `invoice.payment_failed` call into AccountLifecycleService, and a send is not
+// an upsert — under the same race both deliveries would send. That is safe by a
+// different mechanism entirely, in a different file: the C6 `claimBillingEmail`
+// INSERT … ON CONFLICT DO NOTHING taken BEFORE each send, enforced by
+// `every-lifecycle-email-is-send-once.test.ts`. Said here because a reader
+// checking whether this race is safe should not conclude from this file that
+// writes are the whole question.
+//
+// Which is also why the scan below follows the call, not the file. `dispatch`
+// reaches exactly two collaborators — `this.repo` and `this.accountLifecycle` —
+// and an accumulation behind the second would double under this race while being
+// invisible to a scan of the first. Both are in scope. Measured on adding them:
+// account-lifecycle contributes 3 writes and 2 `.set(` calls, zero additive.
+//
 // The property is therefore CONDITIONAL, and nothing enforced the condition. Add
 // one `balance = balance + delta` to a handler and the documented, accepted race
 // silently becomes a double-credit — with the idempotency test still green,
@@ -31,7 +47,14 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, '..', '..', 'src');
 
-const DISPATCH_PATH_FILES = ['services/stripe-webhooks.ts', 'db/stripe-webhooks-repo.ts'] as const;
+const DISPATCH_PATH_FILES = [
+  'services/stripe-webhooks.ts',
+  'db/stripe-webhooks-repo.ts',
+  // Reached from dispatch via `this.accountLifecycle.emit` on the two invoice
+  // events. An additive write here runs twice under the same race.
+  'services/account-lifecycle.ts',
+  'db/account-lifecycle-repo.ts',
+] as const;
 
 /**
  * An additive write: a column read back into its own update, a compound
@@ -63,10 +86,17 @@ describe('Stripe dispatch path carries no additive write', () => {
       (n, rel) => n + (read(rel).match(/\.(insert|update)\(/g)?.length ?? 0),
       0,
     );
-    // Floors below the measured 11 writes / 7 sets, so ordinary edits do not trip
+    // Floors below the measured 14 writes / 9 sets, so ordinary edits do not trip
     // them while a scan that stopped seeing the files does.
-    expect(writes, 'write statements found on the dispatch path').toBeGreaterThanOrEqual(8);
+    expect(writes, 'write statements found on the dispatch path').toBeGreaterThanOrEqual(10);
     expect(read('db/stripe-webhooks-repo.ts')).toContain('onConflictDoNothing');
+    // Per-file, because a total floor is satisfied by the Stripe pair alone: the
+    // lifecycle files could stop contributing entirely and the sum would still
+    // clear it, leaving the extension above decorative.
+    expect(
+      read('db/account-lifecycle-repo.ts').match(/\.(insert|update)\(/g)?.length ?? 0,
+      'the lifecycle repo stopped contributing writes, so extending the scan to it now proves nothing',
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it('CRITICAL no additive write exists on the path. dispatch() runs BEFORE the idempotency insert, so a concurrent delivery executes every handler twice — that is only harmless while each one is an upsert or a set. One accumulation here turns an accepted race into a double-credit, and the idempotency test stays green because it asserts the flag, not the arithmetic.', () => {
