@@ -21,6 +21,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AUTH_TOKEN_TTL_MS } from '../../src/lib/auth-tokens.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -71,8 +72,22 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
   });
 
   it("V-079 change-password via password-reset request framing: 'We email you a magic link to confirm. The link expires after 60 minutes; old sessions stay signed in until they naturally expire.' + POST /v1/auth/password-reset/request { email } — pinned so the magic-link UX + the 60-min expiry (this flow issues AUTH_TOKEN_TTL_MS.passwordReset = 60min via requestPasswordReset, NOT the 15-min magicLink) + the old-sessions-stay-alive contract all survive (drift to revoke-on-reset would force customers to re-login everywhere on a routine password change)", () => {
-    expect(body).toMatch(
-      /We email you a magic link to confirm\. The link expires after 60\s*\n?\s*minutes; old sessions stay signed in until they naturally expire\./,
+    // DERIVED from the constant, not pinned as a literal. The previous version
+    // hardcoded `60` in this regex, which meant the pin would have survived a
+    // change to AUTH_TOKEN_TTL_MS.passwordReset — and worse, it would have
+    // REQUIRED the page to keep claiming 60 minutes after the real expiry moved.
+    // A parity pin that outlives the number it mirrors does not protect the
+    // claim, it freezes a false one; that failure mode has already been found
+    // three times in this suite (R2 bucket names, Postmark template names, the
+    // slug's "audit entries" sentence).
+    const resetMinutes = AUTH_TOKEN_TTL_MS.passwordReset / 60_000;
+    expect(
+      body,
+      `the page must state the real password-reset expiry (${String(resetMinutes)} minutes)`,
+    ).toMatch(
+      new RegExp(
+        `We email you a magic link to confirm\\. The link expires after ${String(resetMinutes)}\\s*\\n?\\s*minutes; old sessions stay signed in until they naturally expire\\.`,
+      ),
     );
     expect(body).toMatch(
       /boundedFetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/request', \{\s*\n?\s*method: 'POST',/,
