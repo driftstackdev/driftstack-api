@@ -11,10 +11,33 @@
 // Migrations here are hand-authored, so nothing derives the DDL from the enum
 // declarations. The two agree only because someone kept them agreeing.
 //
-// Direction is deliberate: schema value -> database value. The reverse is NOT
-// asserted, because a value living in the DB type that schema.ts no longer
-// declares is a retired option (account_tier still carries 'starter' and 'pro'
-// from 0000), and Postgres cannot drop an enum value anyway.
+// Direction is deliberate: schema value -> database value. The reverse is not
+// asserted HERE, because a value living in the DB type that schema.ts no longer
+// declares is a retired option, and Postgres cannot drop an enum value in place.
+//
+// ⚠️ CORRECTION 2026-08-17. This paragraph used to cite "account_tier still
+// carries 'starter' and 'pro' from 0000" as the example. It does not.
+// Migration 0006 DROPs the type and recreates it as
+// ('trial_pack', 'solo_manual', … 'enterprise') — dropping and recreating is
+// exactly how this codebase retires enum values, and it removed both. After
+// 0065 renames 'trial_pack' to 'free', the type holds precisely the eight
+// values schema.ts declares, with nothing retired.
+//
+// The stale example was a symptom, not a typo: the reader below matches only
+// CREATE TYPE and ADD VALUE, so it UNIONS every value the migrations ever
+// created and never sees a drop-and-recreate. That is why 'starter' looked
+// present, and it is why the reverse direction genuinely cannot be asserted
+// from this reader — it would treat a value retired at 0006 as still live. The
+// arms below are unaffected: a union is a superset, so "schema value exists in
+// the DB type" stays sound. It does mean a retired value RE-added to schema.ts
+// passes here (measured: adding 'starter' back reds only the sibling guard).
+//
+// The reverse direction IS covered, by
+// schema-enums-match-their-migration-history, which replays CREATE / ADD VALUE /
+// RENAME VALUE / DROP TYPE and asserts exact equality both ways. That guard and
+// this one overlap on the schema -> database half; this one reads the DDL
+// directly and states the customer-facing consequence, and that one replays the
+// full history and catches a schema.ts that has fallen BEHIND its migrations.
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
