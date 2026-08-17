@@ -18,29 +18,39 @@
 // could.
 //
 // That leaves the docs, which describe the DEFAULTS and cannot interpolate.
-// This pairs them, reading both sides out of the source rather than restating
-// any figure: the caps come from the route's own default parameters and the
-// labels from the same formatter the messages use, so a cap change with stale
-// docs fails here.
+// This pairs them, restating no figure: the caps are IMPORTED from
+// lib/upload-caps.ts and the labels come from the same formatter the messages
+// use, so a cap change with stale docs fails here.
 //
-// SCOPE: this is a documentation-agreement check, not behavioural coverage.
-// The per-session lifetime cap still has no test that exercises the rejection
-// path — `upload-account-inflight-cap` covers the per-account cap only. Stated
-// so a green here is not mistaken for the cap being tested.
+// SCOPE — corrected. An earlier version of this header said the per-session
+// lifetime cap "has no test that exercises the rejection path" and that
+// `upload-account-inflight-cap` covered the per-account cap only. Both are
+// wrong: that suite drives the lifetime rejection in six arms. What none of
+// them exercises is the DEFAULT — every arm injects a small cap, because that
+// is the only way to trigger a rejection without moving gigabytes. So the
+// defaults are reachable in production and unreachable in the suite, which is
+// exactly why doubling the lifetime default once left all 28,038 tests green.
+// This file is what covers the default values; the behaviour around them is
+// covered there.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { binarySizeLabel } from '../../src/lib/binary-size-label.js';
+import {
+  SESSION_UPLOAD_MAX_LIFETIME_BYTES_DEFAULT,
+  UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES_DEFAULT,
+  UPLOAD_MAX_FILE_BYTES_DEFAULT,
+} from '../../src/lib/upload-caps.js';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const ROUTE = resolve(REPO, 'apps', 'server', 'src', 'routes', 'agent-sessions.ts');
 const DOC = resolve(REPO, 'apps', 'docs', 'src', 'pages', 'api', 'agent-sessions.md');
 
 interface Cap {
-  /** Reads the byte expression out of the route source. */
-  source: RegExp;
+  /** The default the route applies when nothing is injected. */
+  enforced: number;
   /** How the docs phrase it, with the figure captured. */
   published: RegExp;
   what: string;
@@ -49,53 +59,38 @@ interface Cap {
 const CAPS: readonly Cap[] = [
   {
     what: 'per-file decoded size',
-    source: /const UPLOAD_MAX_FILE_BYTES = ([\d\s*]+);/,
+    enforced: UPLOAD_MAX_FILE_BYTES_DEFAULT,
     published: /decoded\s+size is capped at \*\*([\d.]+ [KMG]i?B)\*\* per file/,
   },
   {
     what: 'per-account concurrent volume',
-    source: /uploadMaxAccountInFlightBytes = ([\d\s*]+),/,
+    enforced: UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES_DEFAULT,
     published: /per-account concurrent upload volume \(([\d.]+ [KMG]i?B)\)/,
   },
   {
     what: 'per-session lifetime total',
-    source: /sessionUploadMaxLifetimeBytes = ([\d\s*]+),/,
+    enforced: SESSION_UPLOAD_MAX_LIFETIME_BYTES_DEFAULT,
     published: /per-session lifetime totals \(([\d.]+ [KMG]i?B)\)/,
   },
 ];
-
-/** `64 * 1024 * 1024` → 67108864. Only multiplication of integers is accepted. */
-function evalProduct(expression: string): number {
-  const parts = expression
-    .trim()
-    .split('*')
-    .map((p) => p.trim());
-  expect(
-    parts.every((p) => /^\d+$/.test(p)),
-    `cap expression "${expression}" is no longer a plain product — teach this reader the new shape`,
-  ).toBe(true);
-  return parts.reduce((total, p) => total * Number(p), 1);
-}
 
 describe('the documented upload caps are the enforced ones', () => {
   const route = readFileSync(ROUTE, 'utf-8');
   const doc = readFileSync(DOC, 'utf-8');
 
   it('CRITICAL the readers find real values on both sides', () => {
-    for (const { source, published, what } of CAPS) {
-      expect(source.exec(route)?.[1], `${what}: cap not found in the route source`).toBeTruthy();
+    for (const { enforced, published, what } of CAPS) {
+      expect(enforced, `${what}: the imported default is not a positive size`).toBeGreaterThan(0);
       expect(published.exec(doc)?.[1], `${what}: claim not found in the docs`).toBeTruthy();
     }
     expect(binarySizeLabel(64 * 2 ** 20)).toBe('64 MiB');
     expect(binarySizeLabel(512 * 2 ** 20)).toBe('512 MiB');
     expect(binarySizeLabel(2 * 2 ** 30)).toBe('2 GiB');
-    expect(evalProduct('64 * 1024 * 1024')).toBe(67108864);
   });
 
   it('CRITICAL every documented cap equals the cap the route defaults to', () => {
     const wrong: string[] = [];
-    for (const { source, published, what } of CAPS) {
-      const enforced = evalProduct(source.exec(route)![1]!);
+    for (const { enforced, published, what } of CAPS) {
       const claimed = published.exec(doc)![1]!;
       const expected = binarySizeLabel(enforced);
       if (claimed !== expected)
@@ -117,6 +112,16 @@ describe('the documented upload caps are the enforced ones', () => {
     ])
       expect(route, `upload rejection message no longer derives its size: ${marker}`).toContain(
         marker,
+      );
+    // Importing the defaults only proves the docs match those constants; it
+    // says nothing about the route still applying them. Link the two.
+    for (const applied of [
+      'uploadMaxAccountInFlightBytes = UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES_DEFAULT',
+      'sessionUploadMaxLifetimeBytes = SESSION_UPLOAD_MAX_LIFETIME_BYTES_DEFAULT',
+      'UPLOAD_MAX_FILE_BYTES = UPLOAD_MAX_FILE_BYTES_DEFAULT',
+    ])
+      expect(route, `the route no longer defaults to the shared constant: ${applied}`).toContain(
+        applied,
       );
     expect(
       /at most \d+ ?[KMG]i?B of uploads/.test(route),

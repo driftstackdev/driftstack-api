@@ -723,7 +723,17 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       "streamingState: z.enum(['provisioning', 'live', 'blank', 'failed']).optional(),",
     );
     expect(body).toContain("egressState: z.enum(['live', 'dead_proxy']).optional(),");
-    expect(body).toContain("message: 'capabilityReport must serialize to at most 65536 bytes',");
+    // Derived, not quoted. The size used to appear twice — `> 64 * 1024` in
+    // the check and a hardcoded "65536" in the message beside it — the same
+    // shape as the upload-cap messages that drifted. Both now read the one
+    // constant, so this pins the LINK rather than the number.
+    expect(body).toContain('export const CAPABILITY_REPORT_MAX_BYTES = 64 * 1024;');
+    expect(body).toContain(
+      "if (Buffer.byteLength(JSON.stringify(frame), 'utf8') > CAPABILITY_REPORT_MAX_BYTES) {",
+    );
+    expect(body).toContain(
+      'message: `capabilityReport must serialize to at most ${CAPABILITY_REPORT_MAX_BYTES} bytes`,',
+    );
   });
 
   it('behavioral: HarnessOutbound accepts a valid heartbeat + rejects a malformed one (now typed, not passthrough)', () => {

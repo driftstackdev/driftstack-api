@@ -124,6 +124,8 @@ export const HARNESS_RESULT_MIME_MAX_LENGTH = 255;
 export const HARNESS_DOWNLOAD_MAX_FILES = 2000;
 export const HARNESS_INTENT_OUTPUT_MAX_BYTES = 8 * 1024 * 1024;
 export const HARNESS_DOWNLOAD_DATA_MAX_BYTES = 64 * 1024 * 1024;
+/** Serialized size ceiling for a capabilityReport frame. */
+export const CAPABILITY_REPORT_MAX_BYTES = 64 * 1024;
 export const PAGE_STATE_URL_MAX_LENGTH = 8192;
 export const PAGE_STATE_TEXT_MAX_LENGTH = 4096;
 export const PROFILE_SAVED_INLINE_MAX_BYTES = 256 * 1024;
@@ -1231,10 +1233,10 @@ const CapabilityReportPayloadSchema = z.object({
 });
 
 export const CapabilityReportSchema = CapabilityReportPayloadSchema.transform((frame, ctx) => {
-  if (Buffer.byteLength(JSON.stringify(frame), 'utf8') > 64 * 1024) {
+  if (Buffer.byteLength(JSON.stringify(frame), 'utf8') > CAPABILITY_REPORT_MAX_BYTES) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: 'capabilityReport must serialize to at most 65536 bytes',
+      message: `capabilityReport must serialize to at most ${CAPABILITY_REPORT_MAX_BYTES} bytes`,
     });
     return z.NEVER;
   }

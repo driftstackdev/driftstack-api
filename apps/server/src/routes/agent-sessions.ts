@@ -18,6 +18,11 @@
 // reviews this constant before flipping the gate on.
 
 import { binarySizeLabel } from '../lib/binary-size-label.js';
+import {
+  SESSION_UPLOAD_MAX_LIFETIME_BYTES_DEFAULT,
+  UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES_DEFAULT,
+  UPLOAD_MAX_FILE_BYTES_DEFAULT,
+} from '../lib/upload-caps.js';
 import { reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -1710,10 +1715,10 @@ export function registerAgentSessionsRoutes(
     proxyPrelaunchProbeEnabled = true,
     driverSessionsRepo,
     r2,
-    uploadMaxAccountInFlightBytes = 512 * 1024 * 1024,
+    uploadMaxAccountInFlightBytes = UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES_DEFAULT,
     relayMaxAccountInFlight = 16,
     uploadMaxAccountInFlightCount = 4,
-    sessionUploadMaxLifetimeBytes = 2 * 1024 * 1024 * 1024,
+    sessionUploadMaxLifetimeBytes = SESSION_UPLOAD_MAX_LIFETIME_BYTES_DEFAULT,
     sessionUploadMaxLifetimeCount = 500,
   } = deps;
 
@@ -2971,7 +2976,7 @@ export function registerAgentSessionsRoutes(
   // DISCRIMINATED 200 body in every relay case (ok / unavailable / timeout / error)
   // so the GUI renders expected-inert states without HTTP-error noise. Client-side
   // validation failures (malformed body / empty / >64 MiB) are 400s.
-  const UPLOAD_MAX_FILE_BYTES = 64 * 1024 * 1024; // harness cap (W2851)
+  const UPLOAD_MAX_FILE_BYTES = UPLOAD_MAX_FILE_BYTES_DEFAULT; // harness cap (W2851)
   // 64 MiB raw → ~85.4 MiB base64; allow that + the JSON envelope with margin.
   // Beyond this Fastify 413s before the handler; the handler is the authoritative
   // 64-MiB-decoded enforcer.
