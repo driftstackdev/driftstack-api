@@ -102,11 +102,17 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
 
   it('runComponentCheck: per-check timeoutMs override fallback to COMPONENT_TIMEOUT_MS; Promise.race timeout; catch → degraded', () => {
     expect(body).toMatch(
-      /async function runComponentCheck\(check: ReadinessCheck\): Promise<ComponentResult> \{\s*\n?\s*const startedAt = new Date\(\);\s*\n?\s*try \{\s*\n?\s*const timeoutMs = check\.timeoutMs \?\? COMPONENT_TIMEOUT_MS;/,
+      /async function runComponentCheck\(check: ReadinessCheck\): Promise<ComponentResult> \{/,
     );
+    expect(body).toMatch(/const startedAt = new Date\(\);/);
+    expect(body).toMatch(/const timeoutMs = check\.timeoutMs \?\? COMPONENT_TIMEOUT_MS;/);
+    expect(body).toMatch(/await Promise\.race\(\[\s*\n?\s*check\.fn\(\),/);
     expect(body).toMatch(
-      /await Promise\.race\(\[\s*\n?\s*check\.fn\(\),\s*\n?\s*new Promise<never>\(\(_, reject\) => setTimeout\(\(\) => reject\(new Error\('timeout'\)\), timeoutMs\)\),\s*\n?\s*\]\);/,
+      /timer = setTimeout\(\(\) => reject\(new Error\('timeout'\)\), timeoutMs\);/,
     );
+    // The losing timer is cancelled — otherwise every /v1/status request leaves
+    // one pending timer per readiness check alive for the full timeout.
+    expect(body).toMatch(/\} finally \{\s*\n?\s*if \(timer !== undefined\) clearTimeout\(timer\);/);
     expect(body).toMatch(
       /return \{\s*\n?\s*name: check\.name,\s*\n?\s*status: 'operational',\s*\n?\s*last_checked_at: startedAt\.toISOString\(\),\s*\n?\s*\};/,
     );

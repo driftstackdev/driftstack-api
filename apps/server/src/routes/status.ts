@@ -79,11 +79,20 @@ function summarizeIncident(row: IncidentRow): PublicIncidentSummary {
 
 async function runComponentCheck(check: ReadinessCheck): Promise<ComponentResult> {
   const startedAt = new Date();
+  // The losing side of the race has to be cancelled. When the probe wins, an
+  // uncleared timer stays pending for the FULL timeout, so every /v1/status
+  // request leaves one live timer per readiness check behind — keeping the
+  // event loop awake and delaying shutdown by up to that long. The /ready twin
+  // (runWithTimeout in lib/app.ts) already clears in a finally; this is the
+  // same race and needs the same cleanup.
+  let timer: NodeJS.Timeout | undefined;
   try {
     const timeoutMs = check.timeoutMs ?? COMPONENT_TIMEOUT_MS;
     await Promise.race([
       check.fn(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+      }),
     ]);
     return {
       name: check.name,
@@ -96,6 +105,8 @@ async function runComponentCheck(check: ReadinessCheck): Promise<ComponentResult
       status: 'degraded',
       last_checked_at: startedAt.toISOString(),
     };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
