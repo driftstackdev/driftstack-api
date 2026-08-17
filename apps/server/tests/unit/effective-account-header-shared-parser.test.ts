@@ -14,10 +14,12 @@
 //   - duplicate header → first wins
 //   - valid acc_<uuid> → returned trimmed
 //
-// Drift-guard: all 7 consumer routes import from the shared lib
-// and the legacy hand-rolled helper MUST NOT come back.
+// Drift-guard: every consumer route imports from the shared lib and the
+// legacy hand-rolled helper MUST NOT come back. The consumer list is
+// discovered from routes/ rather than trusted, because it had already drifted
+// (7 listed, 11 real).
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -40,7 +42,23 @@ const CONSUMER_ROUTES = [
   'apps/server/src/routes/account-audit.ts',
   'apps/server/src/routes/sessions.ts',
   'apps/server/src/routes/email-preferences.ts',
+  'apps/server/src/routes/account-me.ts',
+  'apps/server/src/routes/agent-sessions.ts',
+  'apps/server/src/routes/billing.ts',
 ];
+
+/**
+ * Routes that touch the header WITHOUT the shared parser, each with the reason.
+ *
+ * `billing-crypto` does not resolve an effective account at all — it REJECTS the
+ * header, because crypto checkout is self-workspace only. Its own test is
+ * deliberately stricter than `readEffectiveAccountHeader`: the shared parser
+ * takes the first value and trims, so `'   '` and `['', 'acc_x']` both read as
+ * ABSENT, while the rejection guard treats either as present and returns 400.
+ * For a guard, stricter is the safe direction, and routing it through the shared
+ * parser would LOOSEN it. Verified below rather than asserted.
+ */
+const DELIBERATE_NON_CONSUMERS = ['apps/server/src/routes/billing-crypto.ts'];
 
 function fakeRequest(headerValue: string | string[] | undefined): FastifyRequest {
   return {
@@ -103,7 +121,79 @@ describe('readEffectiveAccountHeader — shared parser', () => {
     });
   });
 
-  describe('drift-guard: 7 consumer routes import from the shared lib', () => {
+  describe('drift-guard: every consumer route imports from the shared lib', () => {
+    // The hand roster listed seven. Eleven route files consume this header now —
+    // account-me, agent-sessions, billing and billing-crypto arrived later and
+    // were never checked. All four already import the shared parser, so this was
+    // an unenforced state rather than a live defect; but the header decides WHICH
+    // ACCOUNT a request acts on, so a route quietly reintroducing its own parse
+    // (and with it the empty-string handling this slice fixed) is the kind of
+    // drift that ends in acting on the wrong account.
+    it('CRITICAL the roster covers every route that consumes the header', () => {
+      const discovered = readdirSync(resolve(REPO_ROOT, 'apps/server/src/routes'))
+        .filter((f) => f.endsWith('.ts'))
+        .filter((f) =>
+          /readEffectiveAccountHeader|EFFECTIVE_ACCOUNT_HEADER/.test(
+            readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8'),
+          ),
+        )
+        .map((f) => `apps/server/src/routes/${f}`);
+      expect(
+        discovered.length,
+        'discovery found no consumers — the convention changed',
+      ).toBeGreaterThanOrEqual(11);
+      const accounted = new Set<string>([...CONSUMER_ROUTES, ...DELIBERATE_NON_CONSUMERS]);
+      expect(
+        discovered.filter((d) => !accounted.has(d)),
+        'a route consumes the effective-account header but is in neither CONSUMER_ROUTES nor ' +
+          'DELIBERATE_NON_CONSUMERS, so nothing checks that it uses the shared parser — a ' +
+          'hand-rolled copy there would parse the header that decides which account the request ' +
+          'acts on. Add it to the roster, or to the exceptions WITH a reason',
+      ).toEqual([]);
+    });
+
+    it('CRITICAL a route bypassing the shared parser is a NAMED exception, not an accident', () => {
+      // The property the roster is a proxy for, asserted over every route rather
+      // than over a list someone maintains. Reads the header via the canonical
+      // constant too — checking only for the raw string would miss exactly the
+      // route this arm was written for.
+      const bypassing = readdirSync(resolve(REPO_ROOT, 'apps/server/src/routes'))
+        .filter((f) => f.endsWith('.ts'))
+        .filter((f) => {
+          const body = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes', f), 'utf8');
+          const touches =
+            body.includes('x-driftstack-account') || body.includes('EFFECTIVE_ACCOUNT_HEADER');
+          return touches && !body.includes('readEffectiveAccountHeader(');
+        })
+        .map((f) => `apps/server/src/routes/${f}`);
+      expect(
+        bypassing.filter((b) => !DELIBERATE_NON_CONSUMERS.includes(b)),
+        'a route reaches for the effective-account header without the shared parser and without ' +
+          'being a documented exception, so its empty/duplicate/whitespace handling can differ ' +
+          'from every other route',
+      ).toEqual([]);
+    });
+
+    it('CRITICAL the crypto-checkout rejection guard stays at least as strict as the parser', () => {
+      // It is an exception because it is STRICTER. If it is ever "tidied" into
+      // the shared parser, `'   '` and `['', 'acc_x']` start reading as absent
+      // and the self-workspace-only rule silently stops rejecting them.
+      const body = readFileSync(
+        resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'),
+        'utf8',
+      );
+      expect(
+        body,
+        'the crypto-checkout guard no longer tests EVERY duplicate header value, so a request ' +
+          'sending an empty first value and a real second one would slip the self-workspace check',
+      ).toMatch(/Array\.isArray\(rawActAsAccount\)\s*\n?\s*\?\s*rawActAsAccount\.some\(/);
+      expect(
+        body,
+        'the crypto-checkout guard no longer rejects on a present header, so an impersonation ' +
+          'header would be silently ignored on a money path rather than returning 400',
+      ).toMatch(/if \(hasActAsAccount\) \{/);
+    });
+
     for (const route of CONSUMER_ROUTES) {
       it(`${route} uses the shared readEffectiveAccountHeader`, () => {
         const body = readFileSync(resolve(REPO_ROOT, route), 'utf8');
