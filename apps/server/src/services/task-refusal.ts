@@ -30,6 +30,8 @@
 // split a keyword), zero-width chars (invisible splitters), bidi overrides
 // (reorder what a reviewer sees), BOM. The parity test pins this source
 // string against A3's definition so the two can't drift apart silently.
+import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
+
 const DANGEROUS_UNICODE =
   // eslint-disable-next-line no-control-regex -- the class intentionally spans control chars
   /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g;
@@ -74,7 +76,7 @@ export interface RefusalPatternData {
  */
 export function normalizeTaskForScreening(task: string): string {
   const raw = typeof task === 'string' ? task : '';
-  const bounded = raw.length > MAX_SCREEN_CHARS ? raw.slice(0, MAX_SCREEN_CHARS) : raw;
+  const bounded = sliceWithoutSplittingSurrogate(raw, MAX_SCREEN_CHARS);
   return bounded
     .replace(DANGEROUS_UNICODE, '')
     .normalize('NFKC')

@@ -117,7 +117,9 @@ describe('W927 V-541.C cost-alert-dispatcher cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cost-alert-dispatcher.ts'));
     expect(p).toMatch(/const ALERT_SINK_ERROR_MAX_CHARS = 500;/);
     expect(p).toMatch(/message: safeAlertSinkError\(err\),/);
-    expect(p).toMatch(/redactText\(raw\.slice\(0, ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS\)\)/);
+    expect(p).toMatch(
+      /redactText\(sliceWithoutSplittingSurrogate\(raw, ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS\)\)/,
+    );
   });
 
   // ─── DispatchResult 2-counter shape ──────────────────────────

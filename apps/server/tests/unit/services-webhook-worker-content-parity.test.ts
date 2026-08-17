@@ -117,9 +117,11 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     expect(body).toMatch(/import \{ redactText \} from '\.\.\/lib\/redact-url\.js';/);
     expect(body).toMatch(/const TRANSPORT_ERROR_MAX_CHARS = 500;/);
     expect(body).toMatch(/if \(error\.name === 'AbortError'\) return 'timeout';/);
-    expect(body).toMatch(/error\.message\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/);
     expect(body).toMatch(
-      /\(redactText\(bounded\) \|\| 'transport failure'\)\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/,
+      /sliceWithoutSplittingSurrogate\(error\.message, TRANSPORT_ERROR_MAX_CHARS\)/,
+    );
+    expect(body).toMatch(
+      /sliceWithoutSplittingSurrogate\(\s*\n?\s*redactText\(bounded\) \|\| 'transport failure',\s*\n?\s*TRANSPORT_ERROR_MAX_CHARS,\s*\n?\s*\)/,
     );
   });
 
@@ -178,11 +180,11 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     expect(body).toMatch(/chunks\.push\(value\.slice\(0, bytesToKeep\)\);/);
     expect(body).toMatch(/await reader\.cancel\(\)\.catch\(\(\) => undefined\);/);
     expect(body).toMatch(
-      /Buffer\.concat\(chunks, total\)\s*\n?\s*\.toString\('utf8'\)\s*\n?\s*\.slice\(0, EXCERPT_MAX_CHARS\);/,
+      /sliceWithoutSplittingSurrogate\(\s*\n?\s*Buffer\.concat\(chunks, total\)\.toString\('utf8'\),\s*\n?\s*EXCERPT_MAX_CHARS,\s*\n?\s*\)/,
     );
     // text() fallback only for bodyless test-double responses; null on throw.
     expect(body).toMatch(
-      /if \(!body\) \{\s*\n?\s*const text = await response\.text\(\);\s*\n?\s*return text\.slice\(0, EXCERPT_MAX_CHARS\);/,
+      /if \(!body\) \{\s*\n?\s*const text = await response\.text\(\);\s*\n?\s*return sliceWithoutSplittingSurrogate\(text, EXCERPT_MAX_CHARS\);/,
     );
     expect(body).toMatch(/\} catch \{\s*\n?\s*return null;\s*\n?\s*\}/);
   });

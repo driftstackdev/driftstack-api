@@ -16,6 +16,7 @@
 // "fire or skip" and packages the alert payload.
 
 import type { CostMonitoringAccountSummary, CostMonitoringService } from './cost-monitoring.js';
+import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 import type { ThresholdState } from '../lib/cost-estimator.js';
 import { redactText } from '../lib/redact-url.js';
 
@@ -29,8 +30,8 @@ function safeAlertSinkError(err: unknown): string {
   } catch {
     raw = 'alert sink failed';
   }
-  return redactText(raw.slice(0, ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS)).slice(
-    0,
+  return sliceWithoutSplittingSurrogate(
+    redactText(sliceWithoutSplittingSurrogate(raw, ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS)),
     ALERT_SINK_ERROR_MAX_CHARS,
   );
 }

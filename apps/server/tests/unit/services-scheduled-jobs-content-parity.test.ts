@@ -167,7 +167,7 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
     expect(body).toMatch(/const SCHEDULED_JOB_ERROR_PRE_REDACT_MAX_CHARS = 2_000;/);
     expect(body).toMatch(/const message = safeScheduledJobError\(err\);/);
     expect(body).toMatch(
-      /return redactText\(raw\.slice\(0, SCHEDULED_JOB_ERROR_PRE_REDACT_MAX_CHARS\)\)\.slice\(/,
+      /redactText\(sliceWithoutSplittingSurrogate\(raw, SCHEDULED_JOB_ERROR_PRE_REDACT_MAX_CHARS\)\)/,
     );
   });
 

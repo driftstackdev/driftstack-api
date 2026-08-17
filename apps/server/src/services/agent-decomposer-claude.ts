@@ -25,6 +25,7 @@
 //     a refuse would silently mask the bug).
 
 import { CLAUDE_MODELS, DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
+import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 import {
   AgentDecomposerSettledError,
   requireAgentDecomposerContinuation,
@@ -282,7 +283,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
     // Hard-bound the observation so a multi-MB page can't blow context/cost.
     const observation =
       args.observation.length > MAX_OBSERVATION_CHARS
-        ? args.observation.slice(0, MAX_OBSERVATION_CHARS)
+        ? sliceWithoutSplittingSurrogate(args.observation, MAX_OBSERVATION_CHARS)
         : args.observation;
     const body = JSON.stringify({
       model,

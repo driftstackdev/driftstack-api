@@ -212,9 +212,11 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(
       /if \(error\.name === 'AbortError' \|\| error\.name === 'TimeoutError'\) return 'timeout';/,
     );
-    expect(body).toMatch(/error\.message\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/);
     expect(body).toMatch(
-      /\(redactText\(bounded\) \|\| 'transport failure'\)\.slice\(0, TRANSPORT_ERROR_MAX_CHARS\)/,
+      /sliceWithoutSplittingSurrogate\(error\.message, TRANSPORT_ERROR_MAX_CHARS\)/,
+    );
+    expect(body).toMatch(
+      /sliceWithoutSplittingSurrogate\(\s*\n?\s*redactText\(bounded\) \|\| 'transport failure',\s*\n?\s*TRANSPORT_ERROR_MAX_CHARS,\s*\n?\s*\)/,
     );
     expect(body).not.toMatch(/errorMessage: e\?\.message/);
   });
@@ -228,7 +230,9 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(
       /decoder\.decode\(value\.subarray\(0, bytesToKeep\), \{ stream: true \}\)/,
     );
-    expect(body).toMatch(/parts\.join\(''\)\.slice\(0, RESPONSE_EXCERPT_MAX_CHARS\)/);
+    expect(body).toMatch(
+      /sliceWithoutSplittingSurrogate\(parts\.join\(''\), RESPONSE_EXCERPT_MAX_CHARS\)/,
+    );
     expect(body).not.toMatch(/await response\.text\(\)/);
   });
 

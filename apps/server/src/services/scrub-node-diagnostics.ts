@@ -10,6 +10,7 @@
 // failed relays DO forward the free-form detail, so they must scrub it first.
 
 import { redactText } from '../lib/redact-url.js';
+import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 
 // `direct=<token>` — the documented egress-leak format. Catches the node IP
 // whether it is IPv4 or IPv6 (the whole token after `direct=` is redacted).
@@ -50,7 +51,7 @@ export function customerSafeNodeDiagnostic(
   // Inspect the complete admitted input before applying the caller's output
   // bound. Otherwise a URL credential whose terminating `@` falls just beyond
   // that output boundary can leave its userinfo prefix visible.
-  const bounded = value.slice(0, CUSTOMER_NODE_DIAGNOSTIC_INPUT_MAX_LENGTH);
+  const bounded = sliceWithoutSplittingSurrogate(value, CUSTOMER_NODE_DIAGNOSTIC_INPUT_MAX_LENGTH);
   const scrubbed = scrubNodeDiagnostics(redactText(bounded));
   return (scrubbed.length > 0 ? scrubbed : fallback).slice(0, boundedMax);
 }

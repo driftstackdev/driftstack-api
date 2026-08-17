@@ -24,6 +24,7 @@
 // stores the count.
 
 import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 import { signWebhookPayload } from '../lib/webhook-signing.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
 import type {
@@ -775,7 +776,7 @@ async function readResponseExcerpt(response: Response): Promise<string | null> {
       }
     }
     parts.push(decoder.decode());
-    return parts.join('').slice(0, RESPONSE_EXCERPT_MAX_CHARS);
+    return sliceWithoutSplittingSurrogate(parts.join(''), RESPONSE_EXCERPT_MAX_CHARS);
   } catch {
     return null;
   } finally {
@@ -791,8 +792,11 @@ function safeTransportError(error: Error): string {
   // Attempt history and the DLQ reason are customer-visible persisted data.
   // Bound before redaction so an attacker-sized exception cannot turn the
   // diagnostic path into a second resource-exhaustion surface.
-  const bounded = error.message.slice(0, TRANSPORT_ERROR_MAX_CHARS);
-  return (redactText(bounded) || 'transport failure').slice(0, TRANSPORT_ERROR_MAX_CHARS);
+  const bounded = sliceWithoutSplittingSurrogate(error.message, TRANSPORT_ERROR_MAX_CHARS);
+  return sliceWithoutSplittingSurrogate(
+    redactText(bounded) || 'transport failure',
+    TRANSPORT_ERROR_MAX_CHARS,
+  );
 }
 
 async function loadAttempts(database: Database, deliveryId: string): Promise<DeliveryAttempt[]> {

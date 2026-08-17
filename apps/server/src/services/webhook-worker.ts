@@ -14,6 +14,7 @@
 // (already in DrizzleWebhooksRepo.claim).
 
 import type { Logger } from '../lib/logger.js';
+import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 import { METRIC_NAMES } from './metrics-registry.js';
 import { redactText } from '../lib/redact-url.js';
 import { signWebhookPayload } from '../lib/webhook-signing.js';
@@ -554,7 +555,7 @@ async function readExcerpt(response: Response): Promise<string | null> {
     // always carry a ReadableStream body, so the SIZE cap below applies in prod.
     if (!body) {
       const text = await response.text();
-      return text.slice(0, EXCERPT_MAX_CHARS);
+      return sliceWithoutSplittingSurrogate(text, EXCERPT_MAX_CHARS);
     }
     const reader = body.getReader();
     const chunks: Uint8Array[] = [];
@@ -577,7 +578,10 @@ async function readExcerpt(response: Response): Promise<string | null> {
       // body / decompression bomb early instead of buffering it all.
       await reader.cancel().catch(() => undefined);
     }
-    return Buffer.concat(chunks, total).toString('utf8').slice(0, EXCERPT_MAX_CHARS);
+    return sliceWithoutSplittingSurrogate(
+      Buffer.concat(chunks, total).toString('utf8'),
+      EXCERPT_MAX_CHARS,
+    );
   } catch {
     return null;
   }
@@ -589,8 +593,11 @@ function safeTransportError(error: Error): string {
   // rely on Pino's `err` serializer. Bound before redaction to avoid processing
   // an attacker-sized exception, then bound again because replacement markers
   // can be longer than the credential they replace.
-  const bounded = error.message.slice(0, TRANSPORT_ERROR_MAX_CHARS);
-  return (redactText(bounded) || 'transport failure').slice(0, TRANSPORT_ERROR_MAX_CHARS);
+  const bounded = sliceWithoutSplittingSurrogate(error.message, TRANSPORT_ERROR_MAX_CHARS);
+  return sliceWithoutSplittingSurrogate(
+    redactText(bounded) || 'transport failure',
+    TRANSPORT_ERROR_MAX_CHARS,
+  );
 }
 
 function defaultSleep(ms: number): Promise<void> {

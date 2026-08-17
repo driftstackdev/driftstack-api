@@ -15,6 +15,7 @@
 // handler.
 
 import type { Logger } from '../lib/logger.js';
+import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 import { redactText } from '../lib/redact-url.js';
 
 const SCHEDULED_JOB_ERROR_MAX_CHARS = 500;
@@ -29,8 +30,8 @@ function safeScheduledJobError(err: unknown): string {
   } catch {
     raw = 'scheduled job failed';
   }
-  return redactText(raw.slice(0, SCHEDULED_JOB_ERROR_PRE_REDACT_MAX_CHARS)).slice(
-    0,
+  return sliceWithoutSplittingSurrogate(
+    redactText(sliceWithoutSplittingSurrogate(raw, SCHEDULED_JOB_ERROR_PRE_REDACT_MAX_CHARS)),
     SCHEDULED_JOB_ERROR_MAX_CHARS,
   );
 }

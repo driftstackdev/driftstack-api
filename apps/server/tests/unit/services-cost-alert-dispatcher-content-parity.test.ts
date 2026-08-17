@@ -140,7 +140,9 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
     expect(body).toMatch(/const ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS = 2_000;/);
     expect(body).toMatch(/message: safeAlertSinkError\(err\),/);
     expect(body).toMatch(
-      /return redactText\(raw\.slice\(0, ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS\)\)\.slice\(/,
+      // Surrogate-safe on BOTH bounds: a plain slice can cut an emoji in half and
+      // the orphaned surrogate reaches the alert sink as U+FFFD.
+      /redactText\(sliceWithoutSplittingSurrogate\(raw, ALERT_SINK_ERROR_PRE_REDACT_MAX_CHARS\)\)/,
     );
   });
 
