@@ -46,18 +46,26 @@ class RetryConfig:
 def _backoff_delay_ms(attempt: int, cfg: RetryConfig, retry_after_seconds: int | None) -> int:
     """Compute the next sleep with full jitter; cap at ``max_delay_ms``.
 
-    If the server set a ``Retry-After`` (rate-limit case), it wins —
-    we never retry sooner than the server asks. Otherwise it's
-    exponential-backoff with full jitter (random uniform between 0
-    and the next exponential value).
+    If the server set a POSITIVE ``Retry-After`` (rate-limit case), it
+    wins — we never retry sooner than the server asks. Otherwise, and
+    for a non-positive hint, it's exponential-backoff with full jitter
+    (random uniform between 0 and the next exponential value).
     """
-    if retry_after_seconds is not None:
-        # Floor at 0 — a malformed/negative Retry-After (header parse or
-        # problem-body field) must never turn into a negative sleep. The
-        # sync path's `time.sleep(-N)` raises ValueError; the async path's
-        # `asyncio.sleep(-N)` silently no-ops — clamp here so both behave
-        # the same (immediate retry), matching the TS/Go SDKs.
-        return max(0, min(retry_after_seconds * 1000, cfg.max_delay_ms))
+    if retry_after_seconds is not None and retry_after_seconds > 0:
+        return min(retry_after_seconds * 1000, cfg.max_delay_ms)
+    # A non-positive hint carries no information, so fall through to the
+    # exponential path rather than sleeping for it. This matters because the
+    # hint path has no jitter: returning it directly for 0 (or for a
+    # malformed/negative header, which parses to <= 0) produced a fixed 0 ms
+    # delay, so a client would burn its whole retry budget in a tight loop and
+    # every client hammering the same endpoint would wake in lockstep — the
+    # thundering herd the full-jitter backoff exists to prevent. It also kept
+    # the sync and async paths honest: `time.sleep(-N)` raises ValueError while
+    # `asyncio.sleep(-N)` silently no-ops.
+    #
+    # sdk-typescript gates on `err.retryAfterSeconds > 0` and sdk-go on
+    # `retryAfter > 0`, both falling through to exponential for anything else.
+    # This is that same boundary.
     capped = min(cfg.initial_delay_ms * (cfg.backoff_multiplier**attempt), cfg.max_delay_ms)
     return int(random.uniform(0, capped))
 

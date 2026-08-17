@@ -55,7 +55,10 @@ describe('W815 cross-SDK retry policy parity', () => {
       /\/\/\s+- Honour Retry-After when the error is a RateLimitError or 429/,
     );
     expect(read(PY)).toMatch(
-      /If the server set a ``Retry-After`` \(rate-limit case\), it wins —\s*\n\s+we never retry sooner than the server asks\./,
+      // Wrap-tolerant, and POSITIVE is load-bearing: a non-positive hint is
+      // treated as no hint and falls through to jittered backoff, because the
+      // hint path has no jitter and a zero would produce a lockstep hot loop.
+      /If the server set a POSITIVE ``Retry-After`` \(rate-limit case\), it\s*\n\s+wins — we never retry sooner than the server asks\./,
     );
     expect(read(GO)).toMatch(/Honours Retry-After when the error is a RateLimitError\./);
   });
@@ -96,7 +99,7 @@ describe('W815 cross-SDK retry policy parity', () => {
   it("CRITICAL all 3 retry implementations use 'full jitter' (random uniform in [0, computed delay]). TS: 'Random jitter in [0, computed delay] (full jitter)'. Python: 'random uniform between 0 and the next exponential value'. Go: 'uniformly random in [0, InitialDelay * 2^attempt]'. Full jitter is the AWS Architecture Blog standard — drift to fixed jitter would re-synchronize concurrent retries.", () => {
     expect(read(TS)).toMatch(/\/\/\s+- Random jitter in \[0, computed delay\] \(full jitter\)/);
     expect(read(PY)).toMatch(
-      /exponential-backoff with full jitter \(random uniform between 0\s*\n\s+and the next exponential value\)\./,
+      /exponential-backoff with full jitter\s*\n?\s*\(random uniform between 0\s*\n?\s*and the next exponential value\)\./,
     );
     expect(read(GO)).toMatch(/sleep is uniformly random in \[0, InitialDelay \* 2\^attempt\]/);
   });

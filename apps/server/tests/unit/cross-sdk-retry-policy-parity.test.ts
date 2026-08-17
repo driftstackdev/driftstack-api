@@ -66,6 +66,43 @@ describe('W679 cross-SDK retry-policy semantics parity', () => {
     expect(py).toMatch(/Retry-After/);
   });
 
+  // The boundary the other arms step over: what a NON-POSITIVE Retry-After
+  // means. The hint path has no jitter, so an SDK that treats 0 as a hint
+  // sleeps a fixed 0 ms — it burns its whole retry budget in a tight loop and
+  // every client hammering the same endpoint wakes in lockstep, which is the
+  // thundering herd the full-jitter backoff above exists to prevent.
+  //
+  // sdk-python used to do exactly that: `if retry_after_seconds is not None`
+  // took the hint path for 0 and, via a max(0, ...) clamp, for a negative
+  // (malformed) value too. Measured before the fix — attempt 0 returned a fixed
+  // 0 ms for both, where TS and Go returned 0..199 ms of jittered backoff.
+  //
+  // Our own server cannot produce it: every rate-limit path floors the header
+  // at `Math.max(1, Math.ceil(ms / 1000))`. This is about the SDK being sound
+  // against a hint it did not generate.
+  it('CRITICAL a non-positive Retry-After is treated as NO hint in all 3 SDKs, not as a zero sleep', () => {
+    const ts = read(TS_RETRY);
+    const go = read(GO_RETRY);
+    const py = read(PY_RETRY);
+
+    // Each gates the hint path on a strictly-positive value.
+    expect(ts, 'sdk-typescript must gate the Retry-After path on > 0').toMatch(
+      /retryAfterSeconds\s*>\s*0/,
+    );
+    expect(go, 'sdk-go must gate the Retry-After path on > 0').toMatch(/retryAfter\s*>\s*0/);
+    expect(py, 'sdk-python must gate the Retry-After path on > 0').toMatch(
+      /retry_after_seconds\s+is\s+not\s+None\s+and\s+retry_after_seconds\s*>\s*0/,
+    );
+
+    // And the shape that caused it must not come back: clamping a non-positive
+    // hint to zero and returning it IS the bug, however defensively it reads.
+    expect(
+      py,
+      'sdk-python is clamping a non-positive Retry-After to 0 and returning it — that is the ' +
+        'jitter-free hot-retry loop, not a defensive floor',
+    ).not.toMatch(/return\s+max\(0,\s*min\(retry_after_seconds/);
+  });
+
   it('CRITICAL RateLimitError + TransportError retryable across all 3 SDKs. These error classes are transient (429 with a retry hint, or network failure) and must stay retryable. sdk-typescript expresses this by delegating shouldRetry to the public isRetryable() (which retries transport / internal / rate_limited) — so TransportError retryability lives in errors.ts:isRetryable, not as a literal instanceof check in retry.ts. Drift to making either non-retryable would silently let customers fail-fast on transient errors.', () => {
     const ts = read(TS_RETRY);
     const go = read(GO_RETRY);

@@ -67,12 +67,17 @@ describe('W586.A packages/sdk-python/src/driftstack/retry.py content parity', ()
       /^def _backoff_delay_ms\(attempt: int, cfg: RetryConfig, retry_after_seconds: int \| None\) -> int:$/m,
     );
     expect(body).toMatch(/"""Compute the next sleep with full jitter; cap at ``max_delay_ms``\./);
-    expect(body).toMatch(/If the server set a ``Retry-After`` \(rate-limit case\), it wins —/);
-    expect(body).toMatch(/we never retry sooner than the server asks\. Otherwise it's/);
-    expect(body).toMatch(/exponential-backoff with full jitter \(random uniform between 0/);
+    expect(body).toMatch(/If the server set a POSITIVE ``Retry-After`` \(rate-limit case\), it/);
+    expect(body).toMatch(/wins — we never retry sooner than the server asks\. Otherwise, and/);
+    // Wrap-tolerant: the phrase spans a line break in the docstring.
+    expect(body).toMatch(/exponential-backoff with full jitter\s*\n?\s*\(random uniform between 0/);
     expect(body).toMatch(/and the next exponential value\)\./);
+    // Gated on a strictly-positive hint. A non-positive value carries no
+    // information and the hint path has no jitter, so returning it produced a
+    // fixed 0 ms sleep — a tight, lockstep retry loop. Cross-SDK parity for
+    // this boundary is held in cross-sdk-retry-policy-parity.
     expect(body).toMatch(
-      /if retry_after_seconds is not None:\s*\n(?:\s*#.*\n)*\s*return max\(0, min\(retry_after_seconds \* 1000, cfg\.max_delay_ms\)\)/,
+      /if retry_after_seconds is not None and retry_after_seconds > 0:\s*\n\s*return min\(retry_after_seconds \* 1000, cfg\.max_delay_ms\)/,
     );
     expect(body).toMatch(
       /capped = min\(cfg\.initial_delay_ms \* \(cfg\.backoff_multiplier\*\*attempt\), cfg\.max_delay_ms\)\s*\n\s*return int\(random\.uniform\(0, capped\)\)/,
