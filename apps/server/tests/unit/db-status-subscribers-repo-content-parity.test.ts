@@ -129,13 +129,20 @@ describe('W447.B apps/server/src/db/status-subscribers-repo.ts content parity', 
     );
   });
 
-  it("purgeEmails framing pinned: empty early-return; sets email:null + clear confirmTokenHash/confirmExpiresAt/unsubscribeTokenHash; comment 'Clear the tokens too — they're all derivative of the email.'; inArray batched returning {id}; returns result.length", () => {
+  it("purgeEmails framing pinned: empty early-return; chunked; sets email:null + clear confirmTokenHash/confirmExpiresAt/unsubscribeTokenHash; comment 'Clear the tokens too — they're all derivative of the email.'; inArray per chunk returning {id}; sums the counts", () => {
     expect(body).toMatch(
       /async purgeEmails\(ids: readonly string\[\]\): Promise<number> \{\s*\n?\s*if \(ids\.length === 0\) return 0;/,
     );
     expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*email: null,\s*\n?\s*\/\/ Clear the tokens too — they're all derivative of the email\.\s*\n?\s*confirmTokenHash: null,\s*\n?\s*confirmExpiresAt: null,\s*\n?\s*unsubscribeTokenHash: null,\s*\n?\s*\}\)\s*\n?\s*\.where\(inArray\(statusSubscribers\.id, \[\.\.\.ids\]\)\)\s*\n?\s*\.returning\(\{ id: statusSubscribers\.id \}\);\s*\n?\s*return result\.length;/,
+      /\.set\(\{\s*\n?\s*email: null,\s*\n?\s*\/\/ Clear the tokens too — they're all derivative of the email\.\s*\n?\s*confirmTokenHash: null,\s*\n?\s*confirmExpiresAt: null,\s*\n?\s*unsubscribeTokenHash: null,\s*\n?\s*\}\)\s*\n?\s*\.where\(inArray\(statusSubscribers\.id, chunk\)\)\s*\n?\s*\.returning\(\{ id: statusSubscribers\.id \}\);/,
     );
+    // The four NULLed columns are the privacy property and stay pinned above.
+    // What changed is the statement count: processPurge selects every row past
+    // the cutoff with no limit, so binding them all threw past 65534 ids and
+    // the 90-day erasure never ran. Chunking is now the load-bearing part.
+    expect(body).toMatch(/for \(const chunk of chunkIds\(ids\)\)/);
+    expect(body).toMatch(/purged \+= result\.length;/);
+    expect(body).toMatch(/from '\.\/chunk-ids\.js'/);
   });
 
   it('file exists at canonical path', () => {

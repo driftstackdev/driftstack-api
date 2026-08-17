@@ -21,6 +21,7 @@ import type {
   ArchiveTableName,
   ArchiveTableRepo,
 } from '../services/audit-archive.js';
+import { chunkIds } from './chunk-ids.js';
 import type { Database } from './client.js';
 import {
   adminAuditLog,
@@ -30,33 +31,6 @@ import {
   sessionEvents,
   webhookDeliveries,
 } from './schema.js';
-
-/**
- * Ids per DELETE statement.
- *
- * `inArray` binds one parameter per id, and postgres-js refuses a statement
- * with more than 65534 of them — measured against the local server:
- * 60000 ids succeed, 70000 raise `MAX_PARAMETERS_EXCEEDED`. A single archive
- * run past that many rows therefore threw HERE, after the R2 upload and the
- * ledger insert had already succeeded, so the rows stayed in Postgres and the
- * next run re-selected the same set plus whatever had accrued: the sweep could
- * never make progress, and `session_events` — documented in AUDIT_TABLES as
- * growing without bound because sessions are marked-destroyed rather than
- * row-deleted — would grow forever with the retention promise silently unkept.
- *
- * 10_000 matches the batch size AuditArchiveService already declares, and
- * leaves a wide margin under the limit.
- */
-const DELETE_ID_CHUNK = 10_000;
-
-/** Split `ids` into chunks small enough to bind in one statement. */
-function chunkIds(ids: readonly string[]): string[][] {
-  const out: string[][] = [];
-  for (let i = 0; i < ids.length; i += DELETE_ID_CHUNK) {
-    out.push([...ids.slice(i, i + DELETE_ID_CHUNK)]);
-  }
-  return out;
-}
 
 export class DrizzleArchiveTableRepo implements ArchiveTableRepo {
   constructor(private readonly database: Database) {}

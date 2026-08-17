@@ -126,8 +126,13 @@ describe('W1012 db/status-subscribers-repo V-295c3 cross-source invariant', () =
     expect(p).toMatch(/confirmTokenHash: null,/);
     expect(p).toMatch(/confirmExpiresAt: null,/);
     expect(p).toMatch(/unsubscribeTokenHash: null,/);
-    expect(p).toMatch(/\.where\(inArray\(statusSubscribers\.id, \[\.\.\.ids\]\)\)/);
-    expect(p).toMatch(/return result\.length;/);
+    // Chunked since the bind-parameter ceiling fix: processPurge has no limit,
+    // so an unbounded backlog made a single statement throw and the erasure
+    // never happened. The four NULLed columns above are the privacy property;
+    // this is what makes it reachable at scale.
+    expect(p).toMatch(/\.where\(inArray\(statusSubscribers\.id, chunk\)\)/);
+    expect(p).toMatch(/for \(const chunk of chunkIds\(ids\)\)/);
+    expect(p).toMatch(/purged \+= result\.length;/);
   });
 
   it('CRITICAL toRow 8-field shape — id + email + confirmTokenHash + confirmExpiresAt + confirmedAt + unsubscribeTokenHash + unsubscribedAt + createdAt.', () => {

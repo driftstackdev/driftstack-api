@@ -3,6 +3,7 @@
 import { and, desc, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import type { StatusSubscriberRow, StatusSubscribersRepo } from '../services/status-subscribers.js';
 import type { Database } from './client.js';
+import { chunkIds } from './chunk-ids.js';
 import { statusSubscribers } from './schema.js';
 
 type DbRow = typeof statusSubscribers.$inferSelect;
@@ -163,17 +164,24 @@ export class DrizzleStatusSubscribersRepo implements StatusSubscribersRepo {
 
   async purgeEmails(ids: readonly string[]): Promise<number> {
     if (ids.length === 0) return 0;
-    const result = await this.database.db
-      .update(statusSubscribers)
-      .set({
-        email: null,
-        // Clear the tokens too — they're all derivative of the email.
-        confirmTokenHash: null,
-        confirmExpiresAt: null,
-        unsubscribeTokenHash: null,
-      })
-      .where(inArray(statusSubscribers.id, [...ids]))
-      .returning({ id: statusSubscribers.id });
-    return result.length;
+    // Chunked: processPurge selects every row unsubscribed before the cutoff
+    // with no limit, so a backlog past the bind-parameter ceiling made this
+    // throw and the 90-day email erasure never happened. See db/chunk-ids.ts.
+    let purged = 0;
+    for (const chunk of chunkIds(ids)) {
+      const result = await this.database.db
+        .update(statusSubscribers)
+        .set({
+          email: null,
+          // Clear the tokens too — they're all derivative of the email.
+          confirmTokenHash: null,
+          confirmExpiresAt: null,
+          unsubscribeTokenHash: null,
+        })
+        .where(inArray(statusSubscribers.id, chunk))
+        .returning({ id: statusSubscribers.id });
+      purged += result.length;
+    }
+    return purged;
   }
 }

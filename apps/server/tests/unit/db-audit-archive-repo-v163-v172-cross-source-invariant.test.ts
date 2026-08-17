@@ -148,10 +148,18 @@ describe('W996 db/audit-archive-repo V-163 + V-172 cross-source invariant', () =
     // db-audit-archive-end-to-end-drizzle; this pins the constant it rests on,
     // because a chunk size raised past the ceiling reintroduces the fault and is
     // a one-token edit.
+    // The constant moved to db/chunk-ids.ts once two more repos turned out to
+    // have the same unbounded shape (subscriber purge, orphan-blob reaper), so
+    // it is read from there. The value itself is asserted against the driver's
+    // real ceiling in the integration guard.
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/audit-archive-repo.ts'));
-    const m = /const DELETE_ID_CHUNK = ([\d_]+);/.exec(p);
-    expect(m, 'the chunk constant is gone — deleteRowsById may bind every id again').not.toBeNull();
+    const shared = read(resolve(REPO_ROOT, 'apps/server/src/db/chunk-ids.ts'));
+    const m = /export const ID_BIND_CHUNK = ([\d_]+);/.exec(shared);
+    expect(m, 'the shared chunk constant is gone — repos may bind every id again').not.toBeNull();
     expect(Number((m?.[1] ?? '0').replaceAll('_', ''))).toBeLessThan(65_534);
+    expect(p, 'audit-archive no longer uses the shared chunk helper').toMatch(
+      /from '\.\/chunk-ids\.js'/,
+    );
     expect(p, 'deleteRowsById no longer iterates chunks').toMatch(
       /for \(const chunk of chunkIds\(ids\)\)/,
     );

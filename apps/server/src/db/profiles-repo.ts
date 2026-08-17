@@ -18,6 +18,7 @@ import type {
 // hand-duplicated threshold that could drift from it.
 import { computeAccountStorageState } from '../services/profile-storage-quota.js';
 import type { Database } from './client.js';
+import { chunkIds } from './chunk-ids.js';
 import { accounts, profiles } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
 import {
@@ -654,11 +655,20 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
   // input short-circuits (an empty IN () is a degenerate/invalid SQL clause).
   async findExistingProfileIds(ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set<string>();
-    const rows = await this.database.db
-      .select({ id: profiles.id })
-      .from(profiles)
-      .where(inArray(profiles.id, ids));
-    return new Set(rows.map((r) => r.id));
+    // Chunked: the orphan-blob reaper passes one id per sealed blob in the
+    // bucket (listObjects paginates to exhaustion), so this grows with stored
+    // profiles and would cross the bind-parameter ceiling. That sweeper is
+    // wrapped to never throw, so the failure would have been a log line and a
+    // reap pass that silently did nothing. See db/chunk-ids.ts.
+    const found = new Set<string>();
+    for (const chunk of chunkIds(ids)) {
+      const rows = await this.database.db
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(inArray(profiles.id, chunk));
+      for (const r of rows) found.add(r.id);
+    }
+    return found;
   }
 
   // Anti-abuse companion (2026-06-17) — user-initiated permanent delete of ONE
