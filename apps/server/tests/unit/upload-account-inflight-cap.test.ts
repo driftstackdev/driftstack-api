@@ -37,6 +37,7 @@ import {
 } from '../integration/_helpers/build-test-app.js';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { registerAgentSessionsRoutes } from '../../src/routes/agent-sessions.js';
+import { binarySizeLabel } from '../../src/lib/binary-size-label.js';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import type { AgentRuntime } from '../../src/services/agent-runtime.js';
 import type { FleetControlRegistry } from '../../src/services/fleet-control-registry.js';
@@ -823,7 +824,13 @@ describe('POST /v1/agent-sessions/:id/files — the LIFETIME cap holds under CON
     expect(bodies.filter((b) => b.status === 'ok')).toHaveLength(2);
     const shed = bodies.filter((b) => b.status === 'error');
     expect(shed).toHaveLength(1);
-    expect(shed[0]!.reason).toMatch(/at most 2 GiB of total uploads per session/);
+    // Derived, not quoted: this arm injects a tiny lifetime cap, and the
+    // message must name THAT cap. It previously asserted 'at most 2 GiB'
+    // and passed only because the message hardcoded the default — the
+    // server was rejecting at a few KiB while telling the customer 2 GiB.
+    expect(shed[0]!.reason).toContain(
+      `at most ${binarySizeLabel(CHUNK_B64.length * 2)} of total uploads per session`,
+    );
     expect(entered).toHaveLength(2);
   });
 

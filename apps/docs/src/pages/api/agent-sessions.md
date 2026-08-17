@@ -799,7 +799,7 @@ shape.
 Uploads a file into the running session's **isolated upload area**
 so it can be attached to a page's `<input type="file">`. The decoded
 size is capped at **64 MiB** per file (larger, or an empty file, is
-a `400`); per-account concurrent upload volume (512 MB) and
+a `400`); per-account concurrent upload volume (512 MiB) and
 per-session lifetime totals (2 GiB) are also capped — an over-cap
 request returns `status: "error"` with the cap named in `reason`.
 

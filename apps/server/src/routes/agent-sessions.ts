@@ -17,6 +17,7 @@
 // v0 launch — tier-derived caps land in B3 (separate slice). Founder
 // reviews this constant before flipping the gate on.
 
+import { binarySizeLabel } from '../lib/binary-size-label.js';
 import { reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -3071,8 +3072,7 @@ export function registerAgentSessionsRoutes(
         return {
           handle: null,
           status: 'error' as const,
-          reason:
-            'account upload limit reached: at most 512 MB of uploads in flight at once — wait for in-progress uploads to finish',
+          reason: `account upload limit reached: at most ${binarySizeLabel(UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES)} of uploads in flight at once — wait for in-progress uploads to finish`,
         };
       }
       if (inFlightCount + 1 > UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT) {
@@ -3096,8 +3096,7 @@ export function registerAgentSessionsRoutes(
         return {
           handle: null,
           status: 'error' as const,
-          reason:
-            'session upload limit reached: at most 2 GiB of total uploads per session — start a new session to upload more',
+          reason: `session upload limit reached: at most ${binarySizeLabel(SESSION_UPLOAD_MAX_LIFETIME_BYTES)} of total uploads per session — start a new session to upload more`,
         };
       }
       if (lifetimeCount + 1 > SESSION_UPLOAD_MAX_LIFETIME_COUNT) {
@@ -3150,7 +3149,9 @@ export function registerAgentSessionsRoutes(
           throw new BadRequestError('Uploaded file is empty (dataB64 decoded to 0 bytes).');
         }
         if (bytes.length > UPLOAD_MAX_FILE_BYTES) {
-          throw new BadRequestError('Uploaded file is too large. Max 64 MiB.');
+          throw new BadRequestError(
+            `Uploaded file is too large. Max ${binarySizeLabel(UPLOAD_MAX_FILE_BYTES)}.`,
+          );
         }
         // Control plane not wired (stateless deploy / no fleet registry).
         if (fleetControlRegistry === undefined) {
