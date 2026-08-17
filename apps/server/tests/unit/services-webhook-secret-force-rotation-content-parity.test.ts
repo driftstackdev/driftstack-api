@@ -4,7 +4,7 @@
 // import, construct or schedule this service. Direct unit coverage remains to
 // preserve the implementation until a secure one-time handoff is designed.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -37,6 +37,45 @@ describe('services/webhook-secret-force-rotation content parity', () => {
     expect(bootstrap).toContain('webhooksRepo.clearStaleSecretPrev({ now })');
     expect(bootstrap).toContain('jobType: WEBHOOK_SECRET_PREV_CLEANUP_JOB_TYPE,');
     expect(bootstrap).not.toContain('webhookSecretPrevCleanupTimer');
+  });
+
+  it('CRITICAL stays dark across ALL of src, not just bootstrap', () => {
+    // The arm above reads bootstrap.ts only. The boundary it protects is "this
+    // service never runs in production", and nothing about that is specific to
+    // one file — app.ts wires plenty of services, and a wiring added there would
+    // satisfy every check above while the sweep starts discarding secrets whose
+    // plaintext has no customer recovery channel.
+    //
+    // Matches CONSTRUCTION and IMPORT rather than the name: three service files
+    // legitimately mention it in comments describing the shared tick shape, and
+    // a name-only scan would either flag those or have to be weakened to nothing.
+    const SRC = resolve(REPO_ROOT, 'apps/server/src');
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = resolve(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (!entry.name.endsWith('.ts') || full === LIB) continue;
+        const body = read(full);
+        if (
+          /new WebhookSecretForceRotationService\s*\(/.test(body) ||
+          /from '[^']*webhook-secret-force-rotation\.js'/.test(body)
+        ) {
+          offenders.push(full.slice(SRC.length + 1));
+        }
+      }
+    };
+    walk(SRC);
+    expect(
+      offenders,
+      'the dormant force-rotation service is constructed or imported in production source. Its ' +
+        'sweep replaces a webhook secret and discards the plaintext, and the plaintext-once API ' +
+        'cannot reveal it afterwards — customers would be left with an endpoint they can no ' +
+        'longer verify signatures for, and no recovery channel',
+    ).toEqual([]);
   });
 
   it('file exists at canonical path', () => {
