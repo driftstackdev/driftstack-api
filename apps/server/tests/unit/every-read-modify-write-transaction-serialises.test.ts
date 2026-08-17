@@ -26,25 +26,41 @@
 // test, because the race needs concurrency to show and unit tests are
 // sequential.
 //
-// SCOPE, measured rather than asserted, because it is narrower than the title
-// suggests. This proves a serialiser was CHOSEN, not that it covers the read.
+// WHAT THIS ADDS, and what it does not — both measured, because the first
+// version of this comment overstated one and omitted the other.
+//
+// It is not the only guard here. `every-tier-cap-has-an-atomic-backstop` already
+// enumerates the db/ methods named `*IfUnder*` / `*WithLimit` and requires each
+// to hold `.for('update')`, `pg_advisory_xact_lock` or `FOR UPDATE`. For the cap
+// enforcers, that overlaps this file almost exactly, and it was written first.
+//
+// What is left over is the naming. That guard matches a CONVENTION; this one
+// matches the SHAPE (a select and a write inside one transaction), so it also
+// covers `platform-secrets.upsert`, `scheduled-jobs.enqueue`,
+// `mfa.startEnrollmentIfNotEnrolled`, `incidents.addUpdate` and
+// `removeMemberWithInvites` — none of which the name pattern reaches — and it
+// recognises two idioms that one does not, ON CONFLICT and DELETE … RETURNING.
+// A future cap enforcer called `reserveSlot` is invisible to a name scan and
+// visible here.
+//
+// SCOPE: this proves a serialiser was CHOSEN, not that it covers the read.
 // Mutation-tested at the boundary:
 //
 //   caught     every serialiser removed from insertEndpointIfUnderLimit
 //   caught     every serialiser removed from createIfUnderActiveCap
 //   SURVIVED   the ACCOUNT advisory lock removed from insertSessionIfUnderLimit
 //
-// That last one is the honest limit. insertSessionIfUnderLimit takes two locks —
-// per-account, then per-profile — and deleting the account lock leaves the
-// profile lock in the body, so a presence check still sees `pg_advisory_xact_lock`
-// while the cap it made atomic is now racy. Distinguishing them needs to know
-// which lock covers which read, which is not a thing a source scan can decide.
+// insertSessionIfUnderLimit takes two locks — per-account, then per-profile — so
+// deleting the one that makes the cap atomic leaves the other in the body and a
+// presence check still sees `pg_advisory_xact_lock`. Telling them apart needs to
+// know which lock covers which read, which a source scan cannot decide.
 //
-// So: this stops the next cap-enforcing method being written with NO mechanism
-// at all, which is the failure that actually happens. It will not catch a lock
-// that is present but wrong. The correctness of individual locks is covered
-// where they live — the profile single-session guard has its own cross-surface
-// race tests.
+// That is a limit of THIS file, not a hole in the product, and the difference
+// matters: `db-sessions-concurrency-drizzle` catches that exact mutation, at
+// "6 concurrent inserts on a limit-3 account yield EXACTLY 3 rows". Verified by
+// running it against the mutation rather than assuming. Behaviour under real
+// concurrency is what proves a lock correct; a source scan can only prove one
+// was chosen, which is why the no-mechanism-at-all case is the job it is for.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
