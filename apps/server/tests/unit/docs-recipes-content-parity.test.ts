@@ -45,7 +45,9 @@ describe('AI-B4 sub-slice 8.20.m docs/api/recipes.md parity', () => {
   it('label length bound matches the route source (1-120 after trim)', () => {
     expect(body).toMatch(/1-120 characters after trim/);
     // The route source must declare the same bound.
-    expect(routeSource).toMatch(/label: z\.string\(\)\.min\(1\)\.max\(120\)/);
+    expect(routeSource).toMatch(
+      /label: z\s*\.?\s*\.?string\(\)\s*\.?\s*\.min\(1\)\s*\.?\s*\.max\(120\)/,
+    );
   });
 
   it('description length bound matches the route source (≤2000)', () => {

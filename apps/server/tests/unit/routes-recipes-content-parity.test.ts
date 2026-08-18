@@ -44,7 +44,10 @@ describe('routes/recipes content parity', () => {
       /\/\/ Cap at 100 chars — canonical `agt_<36-char-uuid>` is 40 chars,\s*\n?\s*\/\/ in-memory test fixtures use `agt_inmem_<counter>` \(~19 chars\)\.\s*\n?\s*\/\/ Without a cap, a customer could POST a multi-MB string that\s*\n?\s*\/\/ flows into the 404 NotFoundError detail and bloats the\s*\n?\s*\/\/ problem\+json body\./,
     );
     expect(body).toMatch(/agent_session_id: z\.string\(\)\.min\(1\)\.max\(100\),/);
-    expect(body).toMatch(/label: z\.string\(\)\.min\(1\)\.max\(120\),/);
+    // Newline-tolerant since the chain gained a `.refine` for blank-after-trim and
+    // prettier wraps it. The BOUND is what this pins; a line break is not a change
+    // to it, and a pin that fails on reformatting trains readers to ignore it.
+    expect(body).toMatch(/label: z\s*\.string\(\)\s*\.min\(1\)\s*\.max\(120\)/);
     expect(body).toMatch(/description: z\.string\(\)\.max\(2000\)\.optional\(\),/);
   });
 

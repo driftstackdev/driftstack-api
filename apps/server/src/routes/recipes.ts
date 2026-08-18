@@ -33,7 +33,27 @@ const CreateRecipeRequestSchema = z.object({
   // flows into the 404 NotFoundError detail and bloats the
   // problem+json body.
   agent_session_id: z.string().min(1).max(100),
-  label: z.string().min(1).max(120),
+  // `.min(1)` counts RAW characters, so a label of three spaces passes zod and then
+  // reaches `validateLabelAndDescription`, which trims first and throws a plain
+  // `Error` — not an ApiError — so the customer got a 500 for typing whitespace.
+  // Measured: `{"label":"   "}` answered 500 before this refine. The service and repo
+  // copies stay as they are; they are defence in depth for callers that do not arrive
+  // through this schema, and this is the boundary where every other validation failure
+  // on this route is already turned into a 400.
+  //
+  // ⚠️ Two content-parity guards pinned the single-line spelling of this chain.
+  // Prettier wraps it once a refine is added, whatever the message length, so those
+  // pins are updated in the same commit to be newline-tolerant — they protect the
+  // BOUND, and a line break is not a change to it.
+  //
+  // Deliberately NOT quoting the pinned substring here: a comment that repeats the
+  // exact text a guard matches inflates every later count over that text. It did —
+  // a mutation over the bound found two occurrences, one of them this comment.
+  label: z
+    .string()
+    .min(1)
+    .max(120)
+    .refine((v) => v.trim().length > 0, 'label cannot be blank'),
   description: z.string().max(2000).optional(),
 });
 
