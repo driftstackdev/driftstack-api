@@ -9,9 +9,13 @@
 // `/v1/whoami`, which carries `requireAuth` and `rateLimit('global')`. So this
 // is latent, not live, and it is worth being precise about how latent:
 //
-//   * Stripping `requireAuth` from `/v1/whoami` reds exactly ONE test — the
-//     hand-written content-parity pin that holds that line verbatim. None of
-//     the five route guards notice, because the file is outside their root.
+//   * BEFORE this file existed, stripping `requireAuth` from `/v1/whoami` red
+//     exactly ONE test — the hand-written content-parity pin that holds that
+//     line verbatim. None of the five route guards noticed, because the file is
+//     outside their root. Re-measured 2026-08-17: it now reds TWO, that pin plus
+//     this file's own arm, which is the whole point. The count is written as a
+//     BEFORE reading because a bare "reds exactly one" would read as current
+//     state and be wrong the moment a guard is added — which is what happened.
 //   * Adding a NEW unauthenticated route there reds three tests. But all three
 //     check DOCUMENTATION coverage — openapi-route-coverage twice and
 //     public-route-has-a-consumer. Document the route and give it a consumer

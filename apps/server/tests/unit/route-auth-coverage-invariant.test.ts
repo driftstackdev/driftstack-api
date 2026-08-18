@@ -4,6 +4,19 @@
 // Discover the full surface first. Public-looking paths, handler-body auth text
 // and registration formatting never grant an exemption implicitly.
 
+// SCOPE NOTE — why scanning `src/routes` (plus lib/app.ts) is sufficient.
+//
+// This guard cannot see a route registered anywhere else, and that is not a
+// hole only because `route-registration-locations-are-pinned` asserts routes
+// live under `src/routes` with exactly one named exception (`lib/app.ts`, whose
+// own routes it auth-checks separately). Verified by mutation 2026-08-17:
+// registering an unauthenticated `/v1/sneaky/leak` in `src/lib/errors-helpers.ts`
+// leaves THIS file green and reds that one.
+//
+// So the two are a pair. Widening or narrowing either scan without the other
+// reopens the gap, and the failure would be silent here — a route this parser
+// never reads is a route it reports as compliant.
+
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
