@@ -145,19 +145,42 @@ describe('W573.B /docs/gui-client/audit-current-state.md content parity', () => 
 
   it('Dimensions 8-13 + Section-14 endpoint + P0/P1/P2/T3 summaries + Conclusion framing pinned', () => {
     expect(body).toMatch(/### 8\. Tier-aware enforcement/);
-    expect(body).toMatch(
-      /\*\*Current:\*\* Not implemented\. No tier reading from API; no concurrent-cap gating in the GUI\./,
+    // V-866 — §8 recorded tier-aware enforcement as an unbuilt P0 launch-blocker.
+    // It shipped: SessionsView reads concurrent_session_cap and greys the
+    // New-session button, ProfilesView mirrors that on Launch, and V-239 gates
+    // New/Duplicate/Import on profile_cap. One negative per stale sentence, so a
+    // partial restoration cannot pass.
+    expect(body, 'the not-implemented verdict is gone').not.toMatch(
+      /\*\*Current:\*\* Not implemented\. No tier reading from API/,
     );
-    expect(body).toMatch(
-      /Server-side enforcement IS in place \(V-073 concurrent-cap enforcement at `\/v1\/sessions POST`\);/,
+    expect(body, 'and the claim the GUI does not pre-empt the 402').not.toMatch(
+      /the GUI just doesn't show the cap or pre-empt the 402 response\./,
     );
-    expect(body).toMatch(/the GUI just doesn't show the cap or pre-empt the 402 response\./);
-    expect(body).toMatch(/server returns `402 ConcurrencyLimitExceeded`, GUI shows error banner\./);
-    expect(body).toMatch(
-      /Per file 128 spec, GUI should display "X of Y concurrent sessions" \+ disable-when-full so the customer never sees the 402 unless racing\./,
+    expect(body, 'and the gap describing the customer meeting a 402 banner').not.toMatch(
+      /server returns `402 ConcurrencyLimitExceeded`, GUI shows error banner\./,
     );
-    expect(body).toMatch(/\*\*Priority:\*\* \*\*P0 launch-blocking\*\* for Manual-tier UX\./);
-    expect(body).toMatch(/Estimated ~2-3hr Tier-1 work:/);
+    // Asserted positively, per V-794: state what IS true rather than freezing an
+    // absence. Server-side enforcement is unchanged and still worth pinning.
+    expect(body, 'the section records the shipped state').toMatch(
+      /\*\*Current \(V-866\): SHIPPED\./,
+    );
+    expect(body, 'and still credits the server-side half').toMatch(
+      /Server-side V-073 enforcement\s*\n?\s*is unchanged/,
+    );
+    // V-866 continued — the same §8 sentences, frozen a second time in this
+    // block. The first grep found only the earlier copy; this is the fourth time
+    // this arc that a claim lived in a spot the obvious search missed, and the
+    // second time within a single file.
+    expect(body, 'the file-128 behaviour is described as shipped, not owed').toMatch(
+      /is what ships\./,
+    );
+    expect(body, 'the P0 label is gone — it was closed long before this').not.toMatch(
+      /\*\*Priority:\*\* \*\*P0 launch-blocking\*\* for Manual-tier UX\./,
+    );
+    expect(body, 'and the estimate with it').not.toMatch(/Estimated ~2-3hr Tier-1 work:/);
+    expect(body, 'the four planned steps are recorded as done').toMatch(
+      /all four are in the GUI today:/,
+    );
     expect(body).toMatch(/1\. Read tier \+ concurrent cap on settings load/);
     expect(body).toMatch(
       /2\. Display "X \/ Y concurrent sessions" in `SessionsView\.tsx` header\./,

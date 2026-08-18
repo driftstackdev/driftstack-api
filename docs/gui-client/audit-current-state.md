@@ -93,11 +93,22 @@ The headline finding: **the GUI client is more complete than the launch checklis
 
 ### 8. Tier-aware enforcement
 
-**Current:** Not implemented. No tier reading from API; no concurrent-cap gating in the GUI. Session creation button is always enabled when API key present (`SessionsView.tsx:119`, no tier conditional). Server-side enforcement IS in place (V-073 concurrent-cap enforcement at `/v1/sessions POST`); the GUI just doesn't show the cap or pre-empt the 402 response.
+**Current (V-866): SHIPPED. This section recorded it as a P0 launch-blocker long after it was built.**
 
-**Gap:** Customer experience: hits "Spawn session", server returns `402 ConcurrencyLimitExceeded`, GUI shows error banner. Per file 128 spec, GUI should display "X of Y concurrent sessions" + disable-when-full so the customer never sees the 402 unless racing.
+The GUI reads the tier and both caps off `accountMe` and gates on them. `SessionsView` derives
+`concurrent_session_cap` and folds the active agent count in so the header shows "X / Y" and the
+New-session button greys at the cap. `ProfilesView` mirrors that gate on Launch, and V-239 gates
+New / Duplicate / Import on `profile_cap` with a tier-named reason. Server-side V-073 enforcement
+is unchanged; the GUI now pre-empts the 402 rather than surfacing it.
 
-**Priority:** **P0 launch-blocking** for Manual-tier UX. Estimated ~2-3hr Tier-1 work:
+The citation this section offered as proof of absence — `SessionsView.tsx:119`, "no tier
+conditional" — is today the line that reads the cap. A line number is the fastest-rotting evidence
+a document can carry, and quoting one to prove a NEGATIVE inverts the moment the file changes.
+
+**Gap:** None. The file-128 behaviour described here — display "X of Y concurrent sessions" and
+disable-when-full so the customer never meets the 402 unless racing — is what ships.
+
+**Priority:** Closed. The four steps below were the plan, and all four are in the GUI today:
 
 1. Read tier + concurrent cap on settings load (need to confirm endpoint — likely `/v1/account` or similar; if missing, add to `apps/server` first).
 2. Display "X / Y concurrent sessions" in `SessionsView.tsx` header.

@@ -37431,3 +37431,44 @@ caller — a doc pin cannot do that and should not pretend to. Ratchet back to 7
 Worth recording that the ratchet fired on its own author within minutes of the commit it was
 written to catch. That is the property V-833 asks for: only a guard that recomputes can contradict
 the person who wrote it.
+
+## V-866 — a P0 launch-blocker that shipped, still recorded as unbuilt and frozen by two pins (2026-08-18)
+
+**Instrument: the 75 pins V-794 already knows about.** V-794's ratchet caps NEW pins that freeze a
+future-tense promise; the ceiling of 75 means 75 files were grandfathered in. V-865 proved one such
+pin had already expired, so the obvious question was how many of the other 74 freeze a promise that
+has since been kept. Extracted every offender and the exact phrase each freezes. **Most are not
+defects**: they pin documents that legitimately record deferrals ("## What's deferred
+post-launch"), which is an accurate description of a status document, not a stale claim. The
+defective shape is narrower — a pin freezing "X is not built" where X now is.
+
+**Three were concretely checkable. One was accurate, two had expired.**
+`recapture/runs/*` really is still unimplemented, so that pin stands. `PlaywrightDriver`, pinned as
+something to configure "once it lands", is at `apps/server/src/drivers/playwright.ts`. And this one.
+
+**`docs/gui-client/audit-current-state.md` §8 records tier-aware enforcement as "Not implemented"
+and "P0 launch-blocking".** It ships. `SessionsView` reads `concurrent_session_cap`, folds the
+active agent count in, renders the "X / Y" header and greys the New-session button at the cap.
+`ProfilesView` mirrors that gate on Launch, and V-239 gates New / Duplicate / Import on
+`profile_cap` with a tier-named reason. All four of the section's own numbered "Tier-1 work" steps
+are in the GUI. Server-side V-073 is unchanged; the GUI now pre-empts the 402 instead of surfacing
+it, which is precisely the file-128 behaviour the section lists as owed.
+
+**The sharpest detail.** The section cites `SessionsView.tsx:119` — "no tier conditional" — as its
+evidence of absence. Line 119 today is `const concurrentCap = accountMe?.concurrent_session_cap ??
+null;`. The line offered as proof the gate does not exist is the line that implements it. A line
+number is the fastest-rotting evidence a document can carry, and citing one to prove a NEGATIVE
+inverts the moment the file moves.
+
+**Why it matters beyond tidiness.** This is a launch-readiness document. Someone triaging P0
+blockers reads a shipped feature as outstanding work and either re-implements it or reports a gap
+that closed — the same two costs V-826 identified for a stale register, here on the launch list.
+
+**Two pins, and the second was in the same file.** The obvious grep found the §8 "Current" sentence;
+a second `it()` block later in the same file froze the "Gap" and "Priority" lines too, and only the
+run caught it. Fourth time this arc a claim lived where the first search did not look, and the first
+time both copies were in one file. Fixed together with one negative per stale sentence — the
+mutation proof restores the P0 label alone and still fails.
+
+Positives asserted rather than absences frozen, per V-794's own advice and the V-865 correction that
+prompted it. Mutation-proved three ways; document restored byte-identical.
