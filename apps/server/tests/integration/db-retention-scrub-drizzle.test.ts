@@ -47,6 +47,17 @@ const NOW = new Date('2026-08-12T00:00:00.000Z');
 const LONG_AGO = new Date(NOW.getTime() - 200 * DAY_MS);
 /** Comfortably INSIDE it — must survive untouched. */
 const RECENT = new Date(NOW.getTime() - 10 * DAY_MS);
+/**
+ * The two rows either side of the cutoff.
+ *
+ * LONG_AGO and RECENT sit 110 days apart across a 90-day window — nowhere near the
+ * edge — so an operator flip or a window off by a day passes both. The predicate is
+ * `destroyed_at < cutoff` (strict), so a row exactly AT the cutoff is INSIDE and must
+ * survive; one second older is out. Scrubbing early destroys customer data before the
+ * 90 days the privacy policy promises, and it cannot be undone.
+ */
+const AT_CUTOFF = new Date(NOW.getTime() - 90 * DAY_MS);
+const JUST_PAST_CUTOFF = new Date(NOW.getTime() - 90 * DAY_MS - 1000);
 /** Seeded into `sessions.metadata`; the in-window row must still hold exactly this. */
 const SEEDED_METADATA = { note: 'customer metadata' };
 
@@ -115,6 +126,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       recentSession: string;
       oldKey: string;
       recentKey: string;
+      atCutoffSession: string;
+      justPastSession: string;
+      atCutoffKey: string;
+      justPastKey: string;
     }> {
       if (!client) throw new Error('real PostgreSQL setup failed');
       const accountId = randomUUID();
@@ -147,6 +162,11 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const recentKey = await mkKey(RECENT);
       const oldSession = await mkSession(LONG_AGO, oldKey);
       const recentSession = await mkSession(RECENT, recentKey);
+      // The boundary pair, seeded alongside so one sweep decides all four rows.
+      const atCutoffKey = await mkKey(AT_CUTOFF);
+      const justPastKey = await mkKey(JUST_PAST_CUTOFF);
+      const atCutoffSession = await mkSession(AT_CUTOFF, atCutoffKey);
+      const justPastSession = await mkSession(JUST_PAST_CUTOFF, justPastKey);
 
       // A usage record on the OLD session — the billing row §9 keeps for 7 years.
       await client`
@@ -165,7 +185,16 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           VALUES (${randomUUID()}, ${accountId}, ${sid}, 'login', 'queued',
                   ${randomUUID()}, ${NOW.toISOString()}, ${hex64()})`;
       }
-      return { oldSession, recentSession, oldKey, recentKey };
+      return {
+        oldSession,
+        recentSession,
+        oldKey,
+        recentKey,
+        atCutoffSession,
+        justPastSession,
+        atCutoffKey,
+        justPastKey,
+      };
     }
 
     function sweeper(): RetentionScrubSweeperService {
@@ -237,6 +266,39 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       // under SQL three-valued logic — NULL < cutoff is NULL, so such a row is
       // never selected — and an arm for it would pin a state the query cannot
       // reach. Verified against the database rather than assumed.
+    });
+
+    it('CRITICAL the cutoff is bracketed: a row exactly AT 90 days survives and one a second older is scrubbed. The two rows the other arms use sit 110 days apart across the window, so an operator flip or a window off by a day passes them both. Early scrubbing is the direction that costs: it destroys a name, a hash and a customer label before the 90 days the privacy policy promises, and nothing brings them back.', async () => {
+      if (!dbReachable) return;
+      const seeded = await seed();
+      await sweeper().tickOnce(NOW);
+
+      // AT the cutoff — `destroyed_at < cutoff` is strict, so this row is INSIDE.
+      const [atSession] = await client!<Array<{ label: string | null; metadata: unknown }>>`
+        SELECT label, metadata FROM sessions WHERE id = ${seeded.atCutoffSession}`;
+      expect(
+        atSession?.label,
+        'a session destroyed exactly at the 90-day cutoff was scrubbed — the window is one row too wide',
+      ).toBe('customer label');
+      const [atKey] = await client!<Array<{ name: string }>>`
+        SELECT name FROM api_keys WHERE id = ${seeded.atCutoffKey}`;
+      expect(
+        atKey?.name,
+        'a key revoked exactly at the cutoff was anonymised early, and that cannot be undone',
+      ).toBe('customer named this key');
+
+      // One second older — outside, and must be scrubbed.
+      const [pastSession] = await client!<Array<{ label: string | null }>>`
+        SELECT label FROM sessions WHERE id = ${seeded.justPastSession}`;
+      expect(
+        pastSession?.label,
+        'a session one second past the cutoff kept its label — the window is one row too narrow',
+      ).toBeNull();
+      const [pastKey] = await client!<Array<{ name: string }>>`
+        SELECT name FROM api_keys WHERE id = ${seeded.justPastKey}`;
+      expect(pastKey?.name, 'a key one second past the cutoff kept its name').toBe(
+        RETENTION_SCRUB_SENTINEL,
+      );
     });
 
     it('CRITICAL a scrubbed session KEEPS its row, so usage_records (7-year billing data) survive', async () => {
