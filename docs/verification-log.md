@@ -34876,3 +34876,41 @@ evidence was in the same file, a few lines down.
 `it(` counts unchanged in all three (verified against HEAD). `EXPECTED_TEST_FILES` unchanged.
 
 Ninth batch of the re-verified plan.
+
+## V-804 — the webhook routes documented themselves as self-only after the cross-account cycle landed (2026-08-18)
+
+`routes/webhooks.ts` carried, above `GET /v1/webhooks`:
+
+> POST/DELETE on webhooks remain self-only until the V-326e write-side cycle picks them up
+> (admin-only per Q1).
+
+That cycle landed. Mapping every effective-account call site to its enclosing route shows
+`effectiveAccountIdForWrite` used by **POST /v1/webhooks**, **DELETE /v1/webhooks/:id**, **PATCH**,
+**rotate-secret**, **test**, and **delivery-replay** — six write paths, none self-only. That helper
+is the V-326e5 admin-only gate: a member-role team request gets
+`ForbiddenError('Webhook writes on a team owner require admin role on that team.')`, an admin acts on
+the owner. Reads allow both roles; writes require admin.
+
+This sits in the same family as V-795 — a comment asserting a tenancy boundary that the code
+deliberately crosses. Anyone reasoning about blast radius from this file would conclude a compromised
+member credential cannot touch an owner's webhook endpoints. It can, if the credential holds admin on
+that team, which is the design.
+
+**A note on how the mapping was done, because my first attempt was wrong.** Splitting the file at
+`app.<verb>(` boundaries and asking whether each slice mentions an effective-account call reported
+`False` for every route, including the GET the file's own comment says is owner-scoped — the slicing
+was landing inside the registration options rather than the handler. The reliable version indexes the
+registrations, then locates each `resolveEffectiveAccount` / `effectiveAccountIdForWrite` occurrence
+and asks which registration precedes it. A tool that answers "no" everywhere deserves the same
+suspicion as one that answers "yes" everywhere.
+
+**And my patch broke the file again in the now-familiar way.** Replacing a regex that sits inside
+`expect(…(\n  /…/,\n);` while adding my own closing `);` leaves a stray one; the file stopped parsing
+and vitest reported `Tests  no tests` rather than a failure. That is the third instance this session
+(V-790, V-799, here). The `it(` count check caught it immediately — HEAD 16, file 16, but zero
+registered — and it is now the reflex rather than the afterthought.
+
+Mutation-proved: reinstating the self-only sentence reds the sentinel. 39 pins over the webhook and
+V-326e5 surface green; `it(` count unchanged at 16.
+
+Twelfth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.

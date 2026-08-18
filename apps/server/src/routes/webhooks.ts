@@ -154,8 +154,15 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
 
   // V-330f — read endpoints + per-endpoint counts, scoped to the
   // OWNER when X-Driftstack-Account is set. Read-only; both roles
-  // allowed. POST/DELETE on webhooks remain self-only until the
-  // V-326e write-side cycle picks them up (admin-only per Q1).
+  // allowed.
+  //
+  // V-804 — this used to add that the write verbs stayed self-scoped
+  // pending the V-326e write-side cycle. That cycle landed: POST,
+  // DELETE, PATCH, rotate-secret, test and delivery-replay all resolve
+  // the target through `effectiveAccountIdForWrite`, which is the V-326e5
+  // admin-only gate — a member-role team request gets a ForbiddenError,
+  // an admin acts on the owner. Reads allow both roles; writes require
+  // admin. Nothing on this route is self-only any more.
   app.get(
     '/v1/webhooks',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },

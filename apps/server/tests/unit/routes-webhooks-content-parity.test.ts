@@ -120,9 +120,19 @@ describe('W439.A apps/server/src/routes/webhooks.ts content parity', () => {
     );
   });
 
-  it('V-330f GET /v1/webhooks framing pinned: read endpoints + per-endpoint counts scoped to OWNER when X-Driftstack-Account set; read-only — both roles allowed; POST/DELETE on webhooks remain self-only until V-326e write-side cycle picks them up (admin-only per Q1)', () => {
+  it('V-330f GET /v1/webhooks framing pinned: read endpoints + per-endpoint counts scoped to OWNER when X-Driftstack-Account set; read-only — both roles allowed; V-804 retracted the self-only half: POST/DELETE/PATCH/rotate-secret/test/replay all resolve through effectiveAccountIdForWrite (V-326e5), so writes are admin-only on a team owner rather than self-scoped', () => {
     expect(body).toMatch(
-      /\/\/ V-330f — read endpoints \+ per-endpoint counts, scoped to the\s*\n?\s*\/\/ OWNER when X-Driftstack-Account is set\. Read-only; both roles\s*\n?\s*\/\/ allowed\. POST\/DELETE on webhooks remain self-only until the\s*\n?\s*\/\/ V-326e write-side cycle picks them up \(admin-only per Q1\)\./,
+      /\/\/ V-330f — read endpoints \+ per-endpoint counts, scoped to the\s*\n?\s*\/\/ OWNER when X-Driftstack-Account is set\. Read-only; both roles\s*\n?\s*\/\/ allowed\./,
+    );
+    // V-804 — the write verbs are no longer self-scoped. POST, DELETE, PATCH,
+    // rotate-secret, test and delivery-replay all resolve through
+    // effectiveAccountIdForWrite, the V-326e5 admin-only gate.
+    expect(body).toMatch(/Nothing on this route is self-only any more\./);
+    expect(body).toMatch(
+      /which is the V-326e5\s*\n?\s*\/\/ admin-only gate — a member-role team request gets a ForbiddenError/,
+    );
+    expect(body, 'the retracted self-only claim must not return').not.toMatch(
+      /remain self-only until the/,
     );
     expect(body).toMatch(
       /const rowsWithCounts = await service\.listWithCounts\(\s*\n?\s*ctx,\s*\n?\s*effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\},\s*\n?\s*\);\s*\n?\s*return \{ data: rowsWithCounts\.map\(\(r\) => publicEndpoint\(r\.endpoint, r\.counts\)\) \};/,
