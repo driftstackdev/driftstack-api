@@ -6,8 +6,14 @@
 //
 //   • V-685 doc-comment framing.
 //   • W198 BUCKETS values mirror TIER_RATE_LIMIT_DEFAULTS in
-//     packages/api-types/src/common.ts; only 'global' + 'sessions:create'
-//     enforced today.
+//     packages/api-types/src/common.ts.
+//
+// V-813 — this header used to name the enforced set, and named it short:
+// it listed the two buckets that existed when it was written, while the
+// server was gating four. The count does not belong in prose on either
+// side. `rate-limits-doc-bucket-parity.test.ts` now derives the set from
+// TIER_RATE_LIMIT_DEFAULTS in BOTH directions; this file pins wording
+// only, and deliberately asserts nothing about how many rows there are.
 //   • Per-account (not per-key) bucket scope.
 //   • 4-rate-limit-header surface: Limit / Remaining / Reset / Bucket.
 //   • 429 RFC 7807 problem+json with 'rate-limited' type URI +
@@ -35,22 +41,31 @@ function read(p: string): string {
 describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-685 + W198 TIER_RATE_LIMIT_DEFAULTS-source-of-truth framing pinned: 'rate-limits developer docs. Companion to /docs/webhooks + /docs/api-quickstart; describes the bucket model, the headers returned on every response, what to do when 429ed, and how to request an override.' + W198 'values mirror the live TIER_RATE_LIMIT_DEFAULTS table in packages/api-types/src/common.ts' + 'The bucket set is intentionally small today — only global and sessions:create are enforced server-side.' — pinned so the V-685 anchor + W198 TIER_RATE_LIMIT_DEFAULTS-anchor + only-2-buckets-enforced commitment survives", () => {
+  it("V-685 + W198 source-of-truth framing pinned: the doc-comment anchor and the statement that the rendered values mirror the live TIER_RATE_LIMIT_DEFAULTS table. V-813 REMOVED this case's third clause, which quoted a sentence claiming the enforced set was smaller than it was — that clause was pinned prose asserting a count, and the sentinel below forbids either stale phrasing returning.", () => {
     expect(body).toMatch(
       /\/\/ V-685 — rate-limits developer docs\. Companion to \/docs\/webhooks \+\s*\n?\s*\/\/ https:\/\/docs\.driftstack\.dev\/quickstart-curl\/; describes the bucket model, the headers\s*\n?\s*\/\/ returned on every response, what to do when 429ed, and how to\s*\n?\s*\/\/ request an override\./,
     );
     expect(body).toMatch(
       /\/\/ W198 — values mirror the live `TIER_RATE_LIMIT_DEFAULTS` table in\s*\n?\s*\/\/ `packages\/api-types\/src\/common\.ts`\./,
     );
-    // v2-#8 sub-slice 8.20 added the agent_sessions:message bucket;
-    // the doc comment was rewritten to enumerate all 3 buckets.
-    expect(body).toMatch(
-      /Three buckets\s*\n?\s*\/\/ today: `global` \+ `sessions:create` \+ `agent_sessions:message`/,
+    // The rationale for each isolated bucket, which is worth pinning —
+    // unlike the count, which is not.
+    expect(body).toMatch(/LLM-driven message loops can't drain global/);
+    expect(body).toMatch(/keystroke\/pointer stream of a live takeover/);
+
+    // V-813 SENTINEL. Both spellings of the stale count are banned. The
+    // first froze a set of three while the server gated four; the second
+    // is the older two-bucket phrasing this file's header used to carry.
+    // A count in prose is wrong on the next addition and, pinned, it
+    // stops the page being corrected at all — which is exactly what
+    // happened here for the whole life of the input_event bucket.
+    expect(body, 'the bucket count must not be restated in prose').not.toMatch(/Three buckets/);
+    expect(body, 'the bucket count must not be restated in prose').not.toMatch(
+      /only `?global`? (?:\+|and) `?sessions:create`? are enforced/,
     );
-    expect(body).toMatch(/LLM-driven message loops\s*\n?\s*\/\/ can't drain global/);
   });
 
-  it("2-BUCKETS array pinned: 'global' (every authenticated request, default catch-all) Solo 120/120 + API Builder 1,800/1,800 + 'sessions:create' (POST /v1/sessions, burst-sensitive, throttled-tighter-than-global) Solo 10/2 + API Builder 60/60 — pinned so the 2-bucket surface + Solo/Builder rate-pair sample stays consistent with TIER_RATE_LIMIT_DEFAULTS (drift to a different rate-pair would create marketing↔common.ts divergence)", () => {
+  it("BUCKETS row wording pinned: 'global' (every authenticated request, default catch-all) Solo 120/120 + API Builder 1,800/1,800 + 'sessions:create' (POST /v1/sessions, burst-sensitive, throttled-tighter-than-global) Solo 10/2 + API Builder 60/60 — pinned so the Solo/Builder rate-pair sample stays consistent with TIER_RATE_LIMIT_DEFAULTS (drift to a different rate-pair would create marketing↔common.ts divergence). V-813 retitled this case: it used to name a row count, and the numbers are what matter here.", () => {
     expect(body).toMatch(/name: 'global'/);
     expect(body).toMatch(
       /Every authenticated request increments this bucket\. The default rate-limit catch-all\./,
@@ -67,9 +82,19 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
     expect(body).toMatch(/soloSustained: '2 req\/min'/);
     expect(body).toMatch(/apiBuilderBurst: '60 burst'/);
     expect(body).toMatch(/apiBuilderSustained: '60 req\/min'/);
+
+    // V-813 — the row that was missing. Its absence is why a customer
+    // sizing a takeover client against this table had no figure to size
+    // against, one paragraph below prose telling them there were four
+    // buckets and to validate the header against four values.
+    expect(body).toMatch(/name: 'agent_sessions:input_event'/);
+    expect(body).toMatch(/soloBurst: '360 burst'/);
+    expect(body).toMatch(/soloSustained: '5,400 req\/min'/);
+    expect(body).toMatch(/apiBuilderBurst: '600 burst'/);
+    expect(body).toMatch(/apiBuilderSustained: '9,000 req\/min'/);
   });
 
-  it("Per-account-not-per-key + tier-comparison cross-link pinned. V-753 REPLACED the Free-equals-Solo-Manual clause: every one of free's four buckets is SMALLER, so the page now states free's own numbers and this pin forbids the old claim returning (a second pin in marketing-site/tests carries the cross-source check against TIER_RATE_LIMIT_DEFAULTS.free)", () => {
+  it("Per-account-not-per-key + tier-comparison cross-link pinned. V-753 REPLACED the Free-equals-Solo-Manual clause: EVERY one of free's buckets is SMALLER (V-813 dropped the numeral — 'every' is the stronger claim and does not need updating when a bucket is added), so the page now states free's own numbers and this pin forbids the old claim returning (a second pin in marketing-site/tests carries the cross-source check against TIER_RATE_LIMIT_DEFAULTS.free)", () => {
     expect(body).toMatch(
       /Buckets are <strong>per account<\/strong>, not per API key\. If\s*\n?\s*you mint 10 keys to spread your load, you're still hitting\s*\n?\s*the same buckets — the limit is on the account\./,
     );

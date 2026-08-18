@@ -35220,3 +35220,68 @@ Mutation-proved: reinstating the calling-account-only sentence reds its sentinel
 recipes surface green, `it(` count unchanged at 11.
 
 Seventeenth batch. `EXPECTED_TEST_FILES` unchanged.
+
+## V-813 — the rate-limits table was one row short, and two pins held it there (2026-08-18)
+
+Action 30. The customer-facing `/docs/rate-limits` table rendered three buckets while the
+server enforces four. `agent_sessions:input_event` is not a planned bucket: it is a live
+`preHandler` gate on `POST /v1/agent-sessions/:id/input-event`
+(`routes/agent-sessions.ts:3723`), it is returned by `GET /v1/account/rate-limits`, it is in
+the OpenAPI enum, and it is defined for all eight tiers in `TIER_RATE_LIMIT_DEFAULTS`.
+
+**The report framed this as "the page documents three"; that is not quite right, and the
+narrower truth is worse.** The page's PROSE was already correct and had been for a while —
+it names all four, gives input_event's Free and Solo figures, and ends: "so validate that
+header against four values, not three." The paragraph immediately below it rendered a table
+with three rows. A customer sizing a takeover client reads the table.
+
+**Two pins made the table uncorrectable.** `docs-rate-limits-parity.test.ts` asserted
+`names.sort()` equalled a hard-coded three-element list, so adding the row turned a suite
+red; and the content-parity pin froze the page comment's stale count with a `toMatch`. This
+is V-794's thesis with no interpretation required: the pin did not merely fail to catch the
+drift, it was the reason the drift could not be repaired. Anyone who tried would have hit a
+red test and reasonably concluded the page was right and they were wrong.
+
+**The guard that existed was one-directional.** `rate-limits-doc-bucket-parity.test.ts`
+checked doc ⊆ enforced — it catches a FABRICATED bucket, which was the 2024 defect it was
+written for, and is structurally blind to a MISSING one. It was green throughout. A subset
+check reads like parity and is half of one; the missing direction is the more damaging one,
+because a bucket you can be 429ed by is worse undocumented than a bucket that does not exist
+is over-documented.
+
+Fixed, all derived from `TIER_RATE_LIMIT_DEFAULTS` so none of it can go stale again:
+
+- the row added, with the real figures (Solo 360 burst / 5,400 req/min; API Builder 600 /
+  9,000), and the page comment's count replaced with a note saying not to restate one;
+- the hard-coded three-name list replaced by a comparison against
+  `Object.keys(TIER_RATE_LIMIT_DEFAULTS.solo_manual)`, with vacuity floors on both sides;
+- the reverse direction added to the bucket-parity guard — every enforced bucket must appear
+  in the table, naming the undocumented ones in the failure message;
+- the numbers check widened from two buckets to all of them AND tied ROW BY ROW. It had been
+  searching the whole document for a bare `N burst` substring, which `360 burst` satisfies
+  for a bucket whose real capacity is 60. Mutation M3 confirms the new form catches exactly
+  that.
+
+**Two further corrections found while verifying, neither in the report.**
+
+`routes/agent-sessions.ts` said the burst would be "tier-derived when B3 ships; today every
+account shares the static cap". It has always been tier-derived: `bucketConfigFor` reads
+`TIER_RATE_LIMIT_DEFAULTS[tier][bucketKey]`, populated for every tier from 240 on free to
+12,000 on enterprise. What the bucket actually lacks is a per-account admin OVERRIDE path,
+which `routes/account-rate-limits.ts` states correctly. A future-tense promise about work
+that had already landed, one level down from the doc it explains.
+
+And V-794's own header listed this instance among fixes already "in the log" when no fix had
+landed — the sweep's finding transcribed as a closure. It was wrong from the day I wrote it
+until this entry, in the file whose entire subject is claims that expire. Corrected to cite
+V-numbers that exist, with the mistake left on the record above it.
+
+Ratchet 93 → 92: the content-parity pin carried the shape twice — the false frozen count,
+and a title naming how many buckets Free undercuts. The second was TRUE and merely fragile;
+dropping the numeral ("every one of free's buckets is smaller") made it a stronger claim as
+well as a retired offender. The tight `toBe` arm is what forced the ratchet into this commit
+rather than leaving slack for later.
+
+Mutations: row deleted → 3 server tests + 1 marketing test fail; stale count reinstated →
+sentinel fires; capacity swapped to a substring-compatible wrong value → row-by-row tie
+fires. Restores byte-identical from a scratchpad snapshot.

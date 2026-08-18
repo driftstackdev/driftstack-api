@@ -48,16 +48,33 @@ describe('W243.B rate-limits doc parity', () => {
     expect(doc).toContain(PROBLEM_TYPES.ConcurrencyLimit);
   });
 
-  it('rate-limit-bucket numbers line up with TIER_RATE_LIMIT_DEFAULTS', () => {
-    // solo_manual / api_builder figures rendered in the table. Convert
-    // refill/sec → req/min for the doc framing.
+  it('V-813 every enforced bucket row carries the capacity TIER_RATE_LIMIT_DEFAULTS actually holds, matched ROW BY ROW. Two weaknesses fixed at once: this case checked only global and sessions:create, so the two buckets added later could print any number at all; and it searched the whole document for a bare "N burst" substring, which "360 burst" satisfies for a bucket whose real capacity is 60.', () => {
     const solo = TIER_RATE_LIMIT_DEFAULTS['solo_manual'];
     const builder = TIER_RATE_LIMIT_DEFAULTS['api_builder'];
-    // Capacities (burst).
-    expect(doc).toMatch(new RegExp(`${solo.global.capacity.toString()} burst`));
-    expect(doc).toMatch(new RegExp(`${solo['sessions:create'].capacity.toString()} burst`));
-    expect(doc).toMatch(new RegExp(`${builder.global.capacity.toLocaleString()} burst`));
-    expect(doc).toMatch(new RegExp(`${builder['sessions:create'].capacity.toString()} burst`));
+    const keys = Object.keys(solo) as (keyof typeof solo)[];
+    expect(keys.length, 'buckets read from the live defaults table').toBeGreaterThan(3);
+
+    const arr = doc.match(/BUCKETS\s*=\s*\[([\s\S]*?)\];/)?.[1] ?? '';
+    expect(arr.length, 'BUCKETS array parsed out of the page').toBeGreaterThan(200);
+
+    const rows = new Map<string, { solo: string; builder: string }>();
+    for (const m of arr.matchAll(
+      /name:\s*'([^']+)'[\s\S]*?soloBurst:\s*'([^']+)'[\s\S]*?apiBuilderBurst:\s*'([^']+)'/g,
+    )) {
+      rows.set(m[1] as string, { solo: m[2] as string, builder: m[3] as string });
+    }
+    expect(rows.size, 'table rows parsed with all three fields').toBe(keys.length);
+
+    for (const k of keys) {
+      const row = rows.get(k);
+      expect(row, `no table row for enforced bucket ${k}`).toBeDefined();
+      expect(row?.solo, `solo_manual ${k} burst`).toBe(
+        `${solo[k].capacity.toLocaleString()} burst`,
+      );
+      expect(row?.builder, `api_builder ${k} burst`).toBe(
+        `${builder[k].capacity.toLocaleString()} burst`,
+      );
+    }
   });
 
   it('uses the canonical rate-limit problem-type URI', () => {

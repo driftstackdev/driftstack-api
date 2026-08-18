@@ -9,10 +9,19 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // W198 — values mirror the live `TIER_RATE_LIMIT_DEFAULTS` table in
 // `packages/api-types/src/common.ts`. Each bucket has a capacity
 // (burst size) and a refill rate; the columns show "burst / sustained
-// per minute" so customers can size both at a glance. Three buckets
-// today: `global` + `sessions:create` + `agent_sessions:message`
-// (v2-#8 sub-slice 8.20 isolated cap so LLM-driven message loops
-// can't drain global).
+// per minute" so customers can size both at a glance.
+//
+// One row per ENFORCED bucket. `agent_sessions:message` is an isolated
+// cap so LLM-driven message loops can't drain global (v2-#8 sub-slice
+// 8.20); `agent_sessions:input_event` is the same idea for the
+// keystroke/pointer stream of a live takeover.
+//
+// V-813 — do NOT restate the bucket count in prose here. This comment
+// carried a count one short of what the server enforced, and the pins
+// over it froze the stale number: one asserted the array held exactly
+// the names it had that day, so the page could not be corrected
+// without editing a test first. Both sides now DERIVE the set from
+// TIER_RATE_LIMIT_DEFAULTS — add the row, and let the guards count.
 const BUCKETS = [
   {
     name: 'global',
@@ -37,6 +46,14 @@ const BUCKETS = [
     soloSustained: '20 req/min',
     apiBuilderBurst: '300 burst',
     apiBuilderSustained: '180 req/min',
+  },
+  {
+    name: 'agent_sessions:input_event',
+    desc: 'POST /v1/agent-sessions/:id/input-event — keystrokes and pointer events during a live takeover. Sized for a human input stream, so it is far wider than the other buckets; it is separate so a 120Hz input stream cannot burn your generic-API quota.',
+    soloBurst: '360 burst',
+    soloSustained: '5,400 req/min',
+    apiBuilderBurst: '600 burst',
+    apiBuilderSustained: '9,000 req/min',
   },
 ];
 ---

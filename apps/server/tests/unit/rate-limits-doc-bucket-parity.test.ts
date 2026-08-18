@@ -48,6 +48,30 @@ describe('W198 rate-limits doc ↔ TIER_RATE_LIMIT_DEFAULTS parity', () => {
     ).toEqual([]);
   });
 
+  // V-813 — the case above checks doc ⊆ enforced. That direction alone
+  // catches a FABRICATED bucket and is structurally blind to a MISSING
+  // one, which is the failure that actually happened: agent_sessions:
+  // input_event was a live preHandler gate, published by GET /v1/account/
+  // rate-limits, listed in the OpenAPI enum and named in the page's own
+  // prose — and absent from the page's table, with this guard green the
+  // whole time. A one-directional subset check reads like parity and is
+  // half of one.
+  it('V-813 CRITICAL every ENFORCED bucket appears in the doc table. The reverse of the case above, and the half that was missing: a bucket added to TIER_RATE_LIMIT_DEFAULTS and wired to a route is one customers can be 429ed by, so leaving it out of the table they size their clients against is the more damaging direction of the two.', () => {
+    const docBuckets = new Set<string>();
+    for (const m of DOC.matchAll(/name:\s*'([^']+)'/g)) docBuckets.add(m[1] as string);
+
+    expect(REAL_BUCKETS.size, 'buckets read from the live defaults table').toBeGreaterThan(3);
+    expect(docBuckets.size, 'bucket rows parsed out of the doc').toBeGreaterThan(3);
+
+    const undocumented = [...REAL_BUCKETS].filter((b) => !docBuckets.has(b)).sort();
+    expect(
+      undocumented,
+      `The rate limiter enforces bucket(s) the customer-facing table never mentions. ` +
+        `Add a row to apps/marketing-site/src/pages/docs/rate-limits.astro with the ` +
+        `capacity and refill for each. Undocumented: ${undocumented.join(', ')}`,
+    ).toEqual([]);
+  });
+
   it('W201 — the 429 example references the real RateLimited problem-type URI', () => {
     // Customers parse `type` to dispatch on error class; if the doc
     // advertises a URI the server doesn't actually return, customer

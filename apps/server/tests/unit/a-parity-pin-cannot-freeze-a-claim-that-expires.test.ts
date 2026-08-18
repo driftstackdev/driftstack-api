@@ -16,11 +16,20 @@
 //     property that would keep it honest.
 //
 // An adversarial sweep over the 292 claim-bearing parity pins confirmed 57 false
-// frozen claims, and 41 of them were one of these two shapes. Instances fixed
-// elsewhere in the log: rate-limits documenting three buckets while four are
-// enforced; architecture.md naming two drivers where there are three; an sdk-go
-// client claiming 15 resource accessors against 19; a heartbeat sweep whose
-// comment still promised a wiring that had long since landed.
+// frozen claims, and 41 of them were one of these two shapes. Instances since
+// closed and recorded in the log: architecture.md naming two drivers where there
+// are three (V-806); an sdk-go client claiming 15 resource accessors against 19
+// (V-811); a heartbeat sweep whose comment still promised a wiring that had long
+// since landed (V-808); the rate-limits page rendering a table one row short of
+// the enforced bucket set (V-813).
+//
+// That last line was WRONG when this header was first written. It listed the
+// rate-limits instance among the fixes, and no fix had landed — the sweep's
+// finding got transcribed as though it were a closure. It stayed wrong until
+// V-813 actually did the work and read this paragraph on the way past. A header
+// asserting the state of work elsewhere is itself a claim that expires, in the
+// file whose whole subject is claims that expire; the log entry is the record,
+// and a citation here is only safe once the V-number exists.
 //
 // THIS IS A RATCHET, NOT A CLEAN BILL. 172 pin files carry one of these shapes
 // today; fixing them is a backlog, not a commit. The ceilings below may only
@@ -59,6 +68,13 @@ const HAND_MAINTAINED_COUNT =
  * MEASURED 2026-08-17 with a CORRECT extractor. May only fall; raising either is
  * the bug this file is about.
  *
+ * Ratcheted 93 → 92 by V-813, which retired the rate-limits pin's frozen bucket
+ * count. That file carried the shape TWICE: a `toMatch` freezing the stale count
+ * in the page's own comment, and a title naming how many buckets the free tier
+ * undercuts. The first was false and blocked the page from being corrected; the
+ * second was true and merely fragile, and dropping the numeral made it a
+ * stronger claim as well as a retired offender.
+ *
  * Ratcheted 78 → 77 by V-809, which retired the network-architecture banner's
  * "once … signs off" promise.
  *
@@ -72,7 +88,7 @@ const HAND_MAINTAINED_COUNT =
  * that were both broken — the comparison measured nothing and agreed with itself.
  * The fixture case below is what actually caught it.
  */
-const CEILINGS = { futureTense: 77, handMaintainedCount: 93 } as const;
+const CEILINGS = { futureTense: 77, handMaintainedCount: 92 } as const;
 
 function parityPinFiles(): string[] {
   return readdirSync(UNIT_DIR)

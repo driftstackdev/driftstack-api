@@ -58,14 +58,22 @@ describe('W341.A /docs/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity', () => {
     expect(body).toMatch(/apiBuilderSustained:\s*'60 req\/min'/);
   });
 
-  it('page enumerates exactly the three bucket keys (global + sessions:create + agent_sessions:message)', () => {
-    // v2-#8 sub-slice 8.20 added agent_sessions:message as the 3rd
-    // enforced bucket — isolated cap so LLM-driven message loops
-    // can't drain the global cap.
+  it('V-813 the rendered table is exactly the ENFORCED bucket set, DERIVED from TIER_RATE_LIMIT_DEFAULTS instead of listed here. The previous version of this case hard-coded the bucket names that existed the day it was written, so once agent_sessions:input_event became a live preHandler gate the page could not be corrected without first editing this test — a pin holding a customer-facing table one row short of what the server actually enforces, for the entire life of that bucket.', () => {
     const bucketMatch = body.match(/BUCKETS\s*=\s*\[([\s\S]*?)\];/);
     expect(bucketMatch).not.toBeNull();
-    const names = [...bucketMatch![1]!.matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]!);
-    expect(names.sort()).toEqual(['agent_sessions:message', 'global', 'sessions:create']);
+    const names = [...bucketMatch![1]!.matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]!).sort();
+
+    // Every tier carries the same bucket shape; solo_manual is the sample.
+    // The floor is a vacuity guard: an empty parse on either side would
+    // make the comparison below agree with itself over nothing.
+    const enforced = Object.keys(TIER_RATE_LIMIT_DEFAULTS.solo_manual).sort();
+    expect(enforced.length, 'enforced buckets read from the live table').toBeGreaterThan(3);
+    expect(names.length, 'bucket rows parsed out of the page').toBeGreaterThan(3);
+
+    expect(
+      names,
+      'the rendered table must equal the enforced set exactly — no fabricated row, and no enforced bucket left out of the table customers size their clients against',
+    ).toEqual(enforced);
   });
 
   it('page declares the four canonical X-RateLimit-* response headers', () => {

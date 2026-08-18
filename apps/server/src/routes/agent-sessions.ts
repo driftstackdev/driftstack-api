@@ -3717,9 +3717,14 @@ export function registerAgentSessionsRoutes(
         controlKeyOrAccountAuth('write'),
         // Dedicated bucket — separate from the generic 'global' so
         // a customer's 120Hz input stream doesn't burn through their
-        // generic-API quota. Tier-derived burst when B3 ships; today
-        // every account shares the static cap defined in
-        // TIER_RATE_LIMIT_DEFAULTS.
+        // generic-API quota.
+        //
+        // V-813 — the burst IS tier-derived today. `bucketConfigFor`
+        // reads TIER_RATE_LIMIT_DEFAULTS[tier]['agent_sessions:input_event'],
+        // which is populated for all eight tiers (240 on free through
+        // 12,000 on enterprise). What this bucket lacks is a per-account
+        // admin OVERRIDE path, so it always resolves to the tier default
+        // — see routes/account-rate-limits.ts, which says exactly that.
         app.rateLimit('agent_sessions:input_event'),
       ],
     },
