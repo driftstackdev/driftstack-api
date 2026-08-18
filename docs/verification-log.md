@@ -35143,3 +35143,35 @@ Mutation-proved: reinstating the `retry`-argument opt-in reds the sentinel. 211 
 and docs surface green, `it(` count unchanged at 6.
 
 Fifteenth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-811 — the Go SDK pin named fifteen accessors; nineteen exist, and four were pinned nowhere (2026-08-18)
+
+`sdk-go-client-content-parity` asserted the `Client` struct's resource accessors one regex per field,
+with the count "15 resource accessors" in both its header bullet and its `it()` title. The struct has
+**nineteen**. The four the pin never named — **`Archetypes`, `Egress`, `AgentSessions`, `Recipes`** —
+were covered by no assertion in the file, so any of them could have been renamed or deleted with the
+suite green. They are public SDK surface: a Go customer's `client.Recipes` disappearing is a compile
+break in their code, not ours.
+
+**Fixed by deriving rather than re-counting**, which is the whole point. Bumping 15 → 19 would have
+restored a number that goes stale on the next accessor, and V-794 ratchets against exactly that shape.
+The case now parses the accessor block out of `client.go` and asserts two properties instead:
+
+- **every** accessor's field name equals its `*NameResource` type — the invariant the twenty-odd
+  per-line regexes were really testing one at a time, now covering all nineteen including any added
+  tomorrow;
+- the four formerly-unpinned names are present by name, so a deletion is loud rather than silent.
+
+Plus a vacuity floor, because an empty parse would have satisfied both.
+
+The `V-NNN` provenance comments stay pinned as literals — those are prose about _why_ an accessor
+exists, not an inventory, and they do not drift when one is added.
+
+Mutation-proved both arms: deleting `Recipes` reds the coverage check naming it, and renaming
+`Egress` to `EgressX` reds the field-matches-type check with `EgressX:Egress`. 217 pins across the
+SDK surface green, `it(` count unchanged at 8.
+
+Sixteenth batch of the re-verified plan. The ratchet is unmoved — a count inside an `it()` title is
+caught by `HAND_MAINTAINED_COUNT` only when it matches one of the enumerated nouns, and "resource
+accessors" is one of them, so this retirement is worth checking against the ceiling next time the
+count is measured rather than assumed.

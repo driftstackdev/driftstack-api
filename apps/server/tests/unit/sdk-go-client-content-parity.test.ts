@@ -5,7 +5,8 @@
 //
 //   • Constants: DefaultBaseURL = https://api.driftstack.dev,
 //     DefaultTimeout = 30s.
-//   • 15 resource accessors on Client struct (Sessions, APIKeys,
+//   • Resource accessors on Client struct — DERIVED, not counted
+//     (V-811: the old bullet said 15 and there are 19). Formerly (Sessions, APIKeys,
 //     Usage, Webhooks, Profiles, ProfileSnapshots, Billing,
 //     CryptoOrders, Auth, Account, Mfa, AuditLog, EmailPreferences,
 //     Legal, Team).
@@ -49,35 +50,51 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     expect(body).toMatch(/^const DefaultTimeout = 30 \* time\.Second$/m);
   });
 
-  it('Client struct: apiKey/baseURL/http/retry private + 15 resource accessors (Sessions/APIKeys/Usage/Webhooks/Profiles/ProfileSnapshots/Billing/CryptoOrders/Auth/Account/Mfa/AuditLog/EmailPreferences/Legal/Team) with V-NNN inline comments', () => {
+  it('Client struct: private fields + EVERY resource accessor, DERIVED from client.go rather than listed. V-811 — this used to name fifteen accessors and there are nineteen; Archetypes, Egress, AgentSessions and Recipes were pinned nowhere, so four public SDK surfaces could be renamed or deleted with the suite green. A hand-maintained inventory is the shape V-794 ratchets against, so the count is now computed on both sides and compared.', () => {
+    expect(body).toMatch(/^type Client struct \{$/m);
     // gofmt re-aligns these on every regen so absorb whitespace with \s+
     // rather than pinning exact column-counts (broke after 0fd7d437 sweep).
-    expect(body).toMatch(/^type Client struct \{$/m);
     expect(body).toMatch(/^\s*apiKey\s+string$/m);
     expect(body).toMatch(/^\s*baseURL\s+string$/m);
     expect(body).toMatch(/^\s*http\s+\*http\.Client$/m);
     expect(body).toMatch(/^\s*retry\s+RetryConfig$/m);
-    expect(body).toMatch(/Sessions\s+\*SessionsResource/);
-    expect(body).toMatch(/APIKeys\s+\*APIKeysResource/);
-    expect(body).toMatch(/Usage\s+\*UsageResource/);
-    expect(body).toMatch(/Webhooks\s+\*WebhooksResource/);
-    expect(body).toMatch(/Profiles\s+\*ProfilesResource/);
-    expect(body).toMatch(/ProfileSnapshots\s+\*ProfileSnapshotsResource/);
-    expect(body).toMatch(/Billing\s+\*BillingResource/);
+
+    // Every `Name *NameResource` field in the accessor block, taken from the
+    // struct itself. Nothing here restates a number a human has to remember.
+    const block = body.slice(
+      body.indexOf('// Resource accessors (filled in by New).'),
+      body.indexOf('\n}', body.indexOf('// Resource accessors (filled in by New).')),
+    );
+    const accessors = [...block.matchAll(/^\t([A-Z]\w*)\s+\*(\w+)Resource/gm)].map((m) => ({
+      field: m[1]!,
+      type: m[2]!,
+    }));
+
+    // Vacuity: an empty parse would make both checks below pass over nothing.
+    expect(accessors.length, 'resource accessors parsed off the Client struct').toBeGreaterThan(15);
+
+    // Each accessor's field name must match its resource type, which is the
+    // invariant the old per-line regexes were really asserting one at a time.
+    const mismatched = accessors
+      .filter((a) => a.field !== a.type)
+      .map((a) => `${a.field}:${a.type}`);
+    expect(mismatched, 'accessor field name does not match its Resource type:').toEqual([]);
+
+    // The four that no assertion previously covered, named so a deletion is loud.
+    for (const name of ['Archetypes', 'Egress', 'AgentSessions', 'Recipes']) {
+      expect(
+        accessors.map((a) => a.field),
+        `${name} was unpinned before V-811 and must stay covered`,
+      ).toContain(name);
+    }
+
+    // The V-NNN provenance comments stay pinned — they are prose, not inventory.
     expect(body).toMatch(/\/\/ V-666 — crypto-checkout \/ crypto-orders\./);
-    expect(body).toMatch(/CryptoOrders\s+\*CryptoOrdersResource/);
-    expect(body).toMatch(/Auth\s+\*AuthResource/);
-    expect(body).toMatch(/Account\s+\*AccountResource/);
     expect(body).toMatch(/\/\/ V-353b \/ V-448 — MFA enrollment management\./);
-    expect(body).toMatch(/Mfa\s+\*MfaResource/);
     expect(body).toMatch(/\/\/ V-216 \/ V-449 — append-only customer audit log\./);
-    expect(body).toMatch(/AuditLog\s+\*AuditLogResource/);
     expect(body).toMatch(/\/\/ V-204 \/ V-449 — email opt-in\/opt-out preferences\./);
-    expect(body).toMatch(/EmailPreferences\s+\*EmailPreferencesResource/);
     expect(body).toMatch(/\/\/ V-049 \/ V-458 — legal acceptance\./);
-    expect(body).toMatch(/Legal\s+\*LegalResource/);
     expect(body).toMatch(/\/\/ V-298c — Team RBAC\. Auth path integration is V-298d\./);
-    expect(body).toMatch(/Team\s+\*TeamResource/);
   });
 
   it('Functional options: WithBaseURL trim trailing slash + WithHTTPClient + WithRetry + WithTimeout (only when http nil) pinned', () => {
