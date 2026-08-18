@@ -155,6 +155,90 @@ describe('POST /v1/billing/checkout-session', () => {
     expect(body.detail ?? '').toContain('allowlist');
   });
 
+  // ── the parser-quirk class the allowlist comment warns about ────────────────
+  //
+  // `routes-billing-v082-v248-cross-source-invariant` pins the rationale in prose —
+  // "the defensive-parsing reject prevents a URL-parser-quirk bypass" — and sends no
+  // request. The two arms above cover a plain off-allowlist host for success_url and a
+  // malformed value for cancel_url: complementary halves, so neither FIELD was fully
+  // covered and no parser quirk was covered at all. `validateReturnUrl` runs at two
+  // separate call sites, so every case below is driven through BOTH fields; a check
+  // removed from one of them is exactly the one-of-N miss that half-coverage hides.
+  //
+  // MEASURED before asserting: the accept case is the uppercase host, because
+  // `new URL().origin` lowercases it and DNS is case-insensitive. That one is a
+  // deliberate 200, and it is included so the matrix is not all-refusals — a
+  // validator that rejected everything would satisfy every 400 below.
+  const CHECKOUT_URL_CASES: ReadonlyArray<{
+    label: string;
+    url: string;
+    expect: 200 | 400;
+    why: string;
+  }> = [
+    {
+      label: 'userinfo before an attacker host',
+      url: 'https://app.driftstack.dev@attacker.example.com/phishing',
+      expect: 400,
+      why: 'the allowlisted host appears in the string but `origin` is the attacker — a startsWith or includes check would pass this, an origin comparison cannot',
+    },
+    {
+      label: 'allowlisted host as a SUBDOMAIN of an attacker domain',
+      url: 'https://app.driftstack.dev.attacker.example.com/phishing',
+      expect: 400,
+      why: 'the classic suffix trick: everything the eye reads first is allowlisted',
+    },
+    {
+      label: 'http downgrade of an allowlisted host',
+      url: 'http://app.driftstack.dev/billing/success',
+      expect: 400,
+      why: 'origin carries the SCHEME, and only the https form is listed — a customer landing on http after paying is a downgrade the allowlist is entitled to refuse',
+    },
+    {
+      label: 'allowlisted host on a non-default port',
+      url: 'https://app.driftstack.dev:8443/billing/success',
+      expect: 400,
+      why: 'origin carries the PORT, so a host-only comparison would admit any port on the real domain',
+    },
+    {
+      label: 'a javascript: URL',
+      url: 'javascript:alert(1)',
+      expect: 400,
+      why: 'it PARSES — new URL() accepts it — so the malformed-URL branch never fires and only the origin check ("null") refuses it',
+    },
+    {
+      label: 'uppercase allowlisted host',
+      url: 'https://APP.DRIFTSTACK.DEV/billing/success',
+      expect: 200,
+      why: 'DNS is case-insensitive and new URL() lowercases the host, so this is the same origin — the accept case that keeps this matrix from being all-refusals',
+    },
+  ];
+
+  for (const field of ['success_url', 'cancel_url'] as const) {
+    for (const c of CHECKOUT_URL_CASES) {
+      it(`${String(c.expect)} for ${field}: ${c.label}. ${c.why}`, async () => {
+        fx = await buildTestApp();
+        const res = await fx.app.inject({
+          method: 'POST',
+          url: '/v1/billing/checkout-session',
+          headers: { authorization: `Bearer ${fx.plaintext}` },
+          payload: {
+            tier: 'api_builder',
+            billing_period: 'monthly',
+            [field]: c.url,
+          },
+        });
+        expect(res.statusCode, `${field}=${c.url} -> ${res.statusCode}: ${res.body}`).toBe(
+          c.expect,
+        );
+        if (c.expect === 400) {
+          // The message has to name the field, or a customer with both set cannot
+          // tell which one was refused.
+          expect(res.json<{ detail?: string }>().detail ?? '').toContain(field);
+        }
+      });
+    }
+  }
+
   it('400 when cancel_url is malformed', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
