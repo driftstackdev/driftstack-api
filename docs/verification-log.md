@@ -37193,3 +37193,56 @@ already covers it. A lint-style rule over bare catches would fight the legitimat
 **Recorded so it is not re-run.** ~90 claims verified, three instruments, zero defects. The error
 attribution in this codebase is disciplined; V-857 was the outlier, and it was the one place a
 cause was named on a path that could not know it.
+
+## V-861 — decision taken on admin read auditing, and the constraint that shapes it (2026-08-18)
+
+**Decision (D-3 from V-829), taken rather than parked.** Admin reads that return _identifiable
+customer data or platform secrets_ should write an audit row; aggregate and configuration reads
+should not. V-829 left this open on the cost objection — "a row per list call on hot dashboard
+endpoints is a real cost against a real control" — and that objection is answered by the split
+rather than by refusing to choose: the expensive half is exactly the low-value half.
+
+**Enumerated, not estimated.** 35 admin GET routes today, **0 audited**. (The naive scan reported
+one, `/v1/admin/audit-log`, which matches on "audit" because it _reads_ the audit log. A first pass
+also reported 22 because the path literal often sits on the line after `app.get(` — the count only
+settled once I reused the extractor V-820 already had.)
+
+_Audit — returns identifiable customer data or secrets:_ `/v1/admin/api-keys` (every customer's
+keys), `/v1/admin/accounts`, `/accounts/:id`, `/accounts/:id/usage`, `/cost/accounts/:id`,
+`/usage/accounts/:id`, `/crypto-orders`, `/crypto-orders.csv` (bulk payment export),
+`/crypto-orders/:order_id`, `/crypto-orders/:order_id/events`, `/sessions`, `/owner/secrets`,
+`/oauth/clients`, `/oauth/clients/:id`, `/webhook-deliveries/:id`.
+
+_Do not audit — aggregates, config, platform state:_ `/overview`, `/sessions/stats`,
+`/billing/subscriptions/stats`, `/cost/overview`, `/cost/config`, `/crypto-orders/stats`,
+`/crypto-orders/daily`, `/crypto-orders/idempotency-metrics`, `/crypto-orders/pending-age`,
+`/incidents`, `/incidents/:id`, `/owner/platform-status`, `/owner/pricing`,
+`/rate-limit-overrides`, `/status-subscribers`, `/validation-schedules`, `/webhook-dlq`,
+`/atlas-priority/queue`, `/atlas-priority/event/:id`, `/audit-log`.
+
+**The constraint nobody had written down, and the reason this is not a small change.**
+`admin_audit_log.action` is a closed Postgres enum (`pgEnum('admin_audit_action', …)`), so every
+new audit action costs a migration — and `ALTER TYPE … ADD VALUE` is **irreversible**, since
+Postgres cannot drop an enum value. That reframes the work: the read actions must land as ONE
+batched migration adding the full set at once, not trickled in per route, because each trickle is
+a permanent addition to a customer-facing schema. It also explains why reads were never audited —
+`admin-api-keys.ts` says so in its header ("Read-only; no audit row written for the read"), a
+documented choice, not an oversight.
+
+**Not executed here, on purpose.** The first step is an irreversible production schema change and
+the standing hold on this work is no-deploy, so it cannot be verified on staging first. Deciding
+was mine to do; shipping an unverifiable irreversible migration was not. The decision, the split
+and the batching requirement are recorded so the migration can be written as one reviewed unit.
+
+**One thing fixed now.** V-820's own prose over-claimed. Its header recorded "31 admin GET routes"
+(35 today) and its arm was titled as catching the count rising — which it never did, and the
+count rose 31→35 with the suite green. The assertions were never wrong: `unaudited.length ===
+gets.length` enforces the all-or-nothing split and fails the moment one read starts auditing,
+which is the invariant worth having. Only the sentences around it claimed more. Retitled to claim
+exactly what it enforces, and the hardcoded counts removed rather than corrected — the file
+derives both sets on every run, so a number written beside it can only rot (the V-855 lesson).
+
+**Near-miss worth recording.** My first mutation proof of that arm passed, which would have read as
+a weak guard. The mutation had never applied — a perl substitution that silently matched nothing.
+Checking `git diff --stat` showed an empty diff. Re-run with a verified edit, the arm failed as it
+should. A mutation proof that does not confirm the mutation landed proves nothing about the guard.

@@ -6,8 +6,13 @@
 // the request — there is no audit best-effort path". A compliance reader takes
 // that as total coverage of the admin surface. Measured, it is half of one:
 //
-//   • all 30 mutating `/v1/admin/*` routes DO write an audit row;
-//   • NONE of the 31 admin GET routes do.
+//   • every mutating `/v1/admin/*` route DOES write an audit row;
+//   • NONE of the admin GET routes do.
+//
+// Counts are deliberately absent. This file derives both sets on every run, and
+// V-861 found the figures written here had already drifted — the GET count was
+// recorded as 31 and is 35 today, without anything failing, because the arms
+// below assert the all-or-nothing split rather than a size.
 //
 // Several of those reads expose customer data — `GET /v1/admin/api-keys` lists
 // every customer's keys, and the per-account cost / usage / detail endpoints
@@ -119,7 +124,7 @@ describe('V-820 every admin mutation writes an audit row', () => {
     ).toEqual([]);
   });
 
-  it('CRITICAL the unaudited-reads gap is recorded with its real size, so it cannot quietly grow. Admin GETs are NOT audited today — this arm does not demand they are, it demands the number stays honest. If it rises, someone added another unaudited read of customer data; if it falls to zero, reads are audited now and this arm and the decisions.md clause should both be retired.', () => {
+  it('CRITICAL admin reads are unaudited as a whole, not in part. This arm does not demand they be audited and does not police how many there are — an earlier title claimed it caught the count rising, which it never did (V-861: 31 became 35 with this green). What it enforces is that the state stays all-or-nothing, so the moment ONE read starts auditing, the decisions.md clause describing reads as uniformly unaudited is wrong and this fails until someone writes the real split.', () => {
     const gets = adminRoutes()
       .filter(isAdmin)
       .filter((r) => r.verb === 'GET');
