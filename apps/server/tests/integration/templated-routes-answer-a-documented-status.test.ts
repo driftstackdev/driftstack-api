@@ -77,7 +77,31 @@ interface Probe {
 }
 
 const probes: Probe[] = [];
+const malformed: Probe[] = [];
 let retried = 0;
+
+/**
+ * An id that is neither a bare uuid nor the prefixed form any route asks for.
+ *
+ * The sweep above deliberately sends a WELL-FORMED id that belongs to nobody, and
+ * every other id-probing suite in this repo does the same — `SYNTHETIC_ID` here,
+ * `nonexistentLike()` in the cross-account files, a never-created uuid in the
+ * route tests. Nothing had ever sent a value the id parser cannot parse at all,
+ * so a route that reaches its handler with unparseable input, or hands it to a
+ * query, had no test anywhere.
+ *
+ * That gap has produced real defects twice: V-716 found a loose
+ * `[0-9a-fA-F-]{36}` check letting a malformed id become a 500 on two routes, and
+ * `findAccountIdFromCustomerOrRef` compares a caller-supplied string against a
+ * `uuid` column where Postgres raises 22P02 rather than coercing.
+ *
+ * ⚠️ What this sweep can and cannot see. `buildTestApp` wires the IN-MEMORY repos,
+ * which compare strings and never cast — so a Postgres cast error is invisible
+ * here by construction. This checks the layer it can: parse, validate and handler
+ * code reached with input the route was not written for. The database half needs
+ * a real Postgres and belongs with the repo tests.
+ */
+const MALFORMED_ID = 'not-a-uuid';
 
 beforeAll(async () => {
   fx = await buildTestApp({
@@ -145,6 +169,30 @@ beforeAll(async () => {
         documents404: op.responses?.['404'] !== undefined,
         problemShaped,
       });
+
+      // Second probe, same operation: an id the parser cannot parse. No retry
+      // here — a 400 is the CORRECT answer to unparseable input, so re-asking in
+      // the prefixed format would only measure the parser twice.
+      const bad = await send(path.replace(/\{[^}]+\}/g, MALFORMED_ID));
+      let badShaped: boolean | null = null;
+      if (bad.statusCode >= 400) {
+        let body: Record<string, unknown> = {};
+        try {
+          body = bad.json<Record<string, unknown>>();
+        } catch {
+          body = {};
+        }
+        badShaped =
+          String(bad.headers['content-type'] ?? '').includes('application/problem+json') &&
+          ['type', 'title', 'status'].every((k) => body[k] !== undefined);
+      }
+      malformed.push({
+        op: `${method.toUpperCase()} ${path}`,
+        status: bad.statusCode,
+        documented: op.responses?.[String(bad.statusCode)] !== undefined,
+        documents404: op.responses?.['404'] !== undefined,
+        problemShaped: badShaped,
+      });
     }
   }
 }, 180_000);
@@ -204,6 +252,55 @@ describe('templated routes answer a documented status for a nonexistent id', () 
     expect(
       probes.filter((p) => p.problemShaped === false).map((p) => `${p.op} -> ${String(p.status)}`),
       'templated route(s) whose error body is not application/problem+json with type/title/status:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the malformed sweep ran over the same population. It shares the loop with the sweep above, so a change that skipped it would leave every absence assertion below satisfied on an empty set — the same no-op-reads-as-clean failure the retry floor exists for.', () => {
+    expect(malformed.length, 'operations probed with an unparseable id').toBe(probes.length);
+    expect(malformed.length, 'the malformed sweep collected nothing').toBeGreaterThanOrEqual(95);
+  });
+
+  // ⚠️ The first version of this arm asserted `status >= 500` and FAILED on
+  // `GET` and `POST /v1/sessions/{id}/proxy` -> 503. Measured before writing it up:
+  // the WELL-FORMED sweep gets 503 from those two as well, and both document it.
+  // It is the deployment's capability gate ahead of the id — customer-configurable
+  // egress has no backend here — not a crash on bad input, and the
+  // cross-account-session-isolation suite already exempts the same pair for the
+  // same reason. A blunt 5xx ban would have reported a deliberate, contract-declared
+  // answer as a defect.
+  //
+  // So the property splits in two, and both halves are worth having: a 500 is never
+  // a contract no matter what the spec says, and any OTHER 5xx has to at least be
+  // declared.
+  it('CRITICAL an unparseable id never produces a 500. Every id-probing suite in this repo sends a well-formed id that belongs to nobody, so nothing had ever asked what happens when the parser cannot parse at all — and that exact gap produced V-716, where a loose id check turned a malformed id into a 500 on two routes. A 500 is the server telling the customer they broke it, on input a customer sends by pasting the wrong thing.', () => {
+    expect(
+      malformed.filter((p) => p.status === 500).map((p) => `${p.op} -> ${String(p.status)}`),
+      'templated route(s) answering 500 for an unparseable id:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL any other 5xx for a malformed id is at least documented. A 503 from a capability gate is a deliberate answer and stays allowed; an UNDECLARED 5xx is the shape of something escaping rather than being decided.', () => {
+    expect(
+      malformed
+        .filter((p) => p.status >= 500 && !p.documented)
+        .map((p) => `${p.op} -> ${String(p.status)}`),
+      'templated route(s) answering an undocumented 5xx for an unparseable id:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL a malformed id gets a documented status too. A route that answers 400 for garbage input while documenting only 404 leaves every generated SDK without a branch for the most common client mistake there is.', () => {
+    expect(
+      malformed.filter((p) => !p.documented).map((p) => `${p.op} -> ${String(p.status)}`),
+      'templated route(s) returning an undocumented status for an unparseable id:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL a malformed id gets an RFC 7807 body. This is the response a customer meets after a copy-paste error, and it is the one most likely to be handled by code rather than read by a person.', () => {
+    expect(
+      malformed
+        .filter((p) => p.problemShaped === false)
+        .map((p) => `${p.op} -> ${String(p.status)}`),
+      'templated route(s) whose malformed-id error body is not application/problem+json:',
     ).toEqual([]);
   });
 });
