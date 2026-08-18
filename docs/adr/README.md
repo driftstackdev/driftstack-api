@@ -27,7 +27,7 @@ load-bearing contextual decisions.
 ```
 # ADR-NNN — Short title
 
-**Status:** Accepted | Superseded by ADR-MMM | Deprecated
+**Status:** Proposed | Accepted | Superseded by ADR-MMM | Deprecated
 **Date:** YYYY-MM-DD
 **Tier:** 1 | 2 | 3 (per AGENTS.md autonomy tiers)
 **Related D-entry:** D-NNN (if applicable)
@@ -59,6 +59,22 @@ Specific conditions that should prompt re-evaluation of this decision.
 Format each as a bullet that names the triggering condition + the
 metric or event that detects it.
 ```
+
+## Status
+
+Four values, and nothing else:
+
+- **Proposed** — written, not yet reviewed. The decision it records may
+  already be implemented; being built is not the same as being agreed,
+  and this status says which one is outstanding.
+- **Accepted** — reviewed and in force.
+- **Superseded by ADR-MMM** — replaced. The replacement must exist.
+- **Deprecated** — no longer in force and not replaced.
+
+`Proposed` was added to this list on 2026-08-18. Two ADRs had been
+using it since May while this section allowed only the other three, so
+the format spec and the record it describes disagreed for three months
+in the one place a reader goes to learn what a status means.
 
 ## Numbering
 

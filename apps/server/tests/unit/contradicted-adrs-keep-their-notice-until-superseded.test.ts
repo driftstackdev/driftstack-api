@@ -125,6 +125,33 @@ describe('a contradicted ADR keeps its notice until a superseding ADR exists', (
     ).toBe(true);
   });
 
+  it('CRITICAL every ADR status is one the README defines. The README IS the definition of the vocabulary — it is where someone opening the set cold learns what a status means — and it listed three values while two ADRs had been carrying a fourth since May. A parity pin required the three-value line verbatim, so the omission was not merely unnoticed, it was enforced. Derived from the README now, so adding a status means defining it.', () => {
+    const readme = readFileSync(resolve(ADR_DIR, 'README.md'), 'utf8');
+    const spec = /\*\*Status:\*\*(.*)/.exec(readme)?.[1] ?? '';
+    const vocabulary = spec
+      .split('|')
+      .map((s) => s.trim())
+      // `Superseded by ADR-MMM` is a template; match on its stem.
+      .map((s) => s.replace(/\s+by ADR-MMM$/, ''))
+      .filter((s) => s.length > 0);
+    expect(vocabulary.length, 'no status vocabulary parsed out of the README').toBeGreaterThan(2);
+
+    const offenders: string[] = [];
+    for (const file of readdirSync(ADR_DIR).filter((f) => /^ADR-\d+/.test(f))) {
+      const status = (/\*\*Status:\*\*(.*)/.exec(read(file))?.[1] ?? '').trim();
+      // The leading word is the status; everything after it is commentary —
+      // `(pending review)`, or the dated reality note the arms above require.
+      const head = status.split(/[\s(—]/)[0] ?? '';
+      if (!vocabulary.some((v) => head === v.split(' ')[0])) offenders.push(`${file}: ${status}`);
+    }
+    expect(
+      offenders.sort(),
+      'ADR status(es) the README does not define. Either use one of its values, or add the new ' +
+        'one to the README Status section with what it means — an undefined status is a word ' +
+        'whose meaning lives only in the head of whoever typed it:',
+    ).toEqual([]);
+  });
+
   it('CRITICAL neither ADR silently claims to still be the current decision', () => {
     for (const { file } of CONTRADICTED) {
       const body = read(file);
