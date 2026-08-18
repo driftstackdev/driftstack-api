@@ -35071,3 +35071,45 @@ which change bought the slot and does not read the number as arbitrary. `handMai
 Two down from the measured 89 at the start of the arc. This should have ridden along in V-808 itself;
 the ratchet caught the omission one command later, which is the correct failure mode for a guard whose
 job is to notice.
+
+## V-809 — the network-architecture doc said nothing had been wired, and pointed a live domain at the wrong host (2026-08-18)
+
+Two claims in `docs/network-architecture.md`, both load-bearing for anyone reasoning about the
+deployment.
+
+**"Nothing has been wired in code yet — this doc is the contract that fleet code and control-plane
+code will respect once it is signed off."** Much of it has shipped in this repo: `infra/nginx/` holds
+the Hetzner edge config including `cloudflare-real-ip.conf`, fleet authentication is implemented in
+`services/fleet-node-auth.ts` with the client-certificate surface in `routes/fleet-events.ts`,
+`apps/status-site/` exists, and the dashboard deploys via
+`.github/workflows/deploy-customer-dashboard.yml`. The banner now says the sections describe live
+surfaces and that any remaining unbuilt item is scoped rather than the whole document.
+
+**"`docs.driftstack.dev`, and (future) `app.driftstack.dev`. Static on Cloudflare Pages; signup flow
+lives on the control plane and is served via `app.driftstack.dev` reverse-proxied to the Hetzner VM."**
+`deploy-customer-dashboard.yml` deploys it as its own **Cloudflare Pages project**. It is not
+"(future)", and nothing about it is served through the Hetzner VM. That matters beyond tidiness: it is
+a static SPA calling the control-plane API **cross-origin**, which is exactly why the CORS allowlist is
+load-bearing — a reader who believed in the reverse proxy would think same-origin and misjudge the
+whole auth-cookie and CORS story.
+
+**The sentinel-vs-retraction collision, fifth occurrence.** My correction wrote "it is not
+reverse-proxied to the Hetzner VM" — containing the banned phrase verbatim, so the sentinel caught my
+own text. Paraphrased to "neither a future surface nor served through the Hetzner VM at all". The rule
+from V-795 keeps being right and keeps not being applied at the moment of writing; running the pin
+straight after the prose edit is what catches it every time.
+
+**I also worked this batch inefficiently and it is worth recording.** I fixed the pin one assertion
+per command — four round-trips for one case — before printing the whole `it()` block and rewriting it
+in a single pass. When more than two assertions in one case reference the changed text, read the case
+first.
+
+Six occurrences moved: two prose passages and four pin assertions, plus both `it()` title fragments.
+Mutation-proved: reinstating either claim reds its sentinel. 10 pins over the network surface green,
+`it(` count unchanged at 6.
+
+Ratchet: retiring the banner's "once … signs off" dropped the future-tense count 78 → 77, and V-794's
+tight arm demanded the ceiling move in this commit. It is included here rather than as a follow-up,
+which is the lesson V-808a taught one commit earlier.
+
+Fourteenth batch of the re-verified plan.

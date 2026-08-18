@@ -34,23 +34,28 @@ function read(p: string): string {
 describe('W548.C /docs/network-architecture.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + founder-review-required + v0.1.0-draft framing pinned: '# Driftstack — network architecture' + '**Founder review required before fleet integration begins.** The control-plane → Mac-Mini-fleet auth path described in §4 is the primary load-bearing decision; v1 is \"public internet + signed JWT over mTLS\" with WireGuard mesh as a v2 improvement.' + 'Nothing has been wired in code yet — this doc is the contract that fleet code (Agent 1's territory) and control-plane code (this repo) will respect once the founder signs off.' + '**Effective:** 2026-05-03 · **Version:** 0.1.0-draft (Workstream A foundational)' — pinned so the founder-review-required-before-fleet-integration + §4-primary-load-bearing-decision + v1-signed-JWT-over-mTLS + v2-WireGuard-mesh + Agent-1-fleet-territory + v0.1.0-draft-Workstream-A-foundational commitment survives", () => {
+  it("Header + founder-review-required + v0.1.0-draft framing pinned: '# Driftstack — network architecture' + '**Founder review required before fleet integration begins.** The control-plane → Mac-Mini-fleet auth path described in §4 is the primary load-bearing decision; v1 is \"public internet + signed JWT over mTLS\" with WireGuard mesh as a v2 improvement.' + 'Nothing has been wired in code yet — this doc is the contract that fleet code (Agent 1's territory) and c(V-809 retired the nothing-is-wired banner: nginx edge config, fleet auth, status site and dashboard deploy all exist)' + '**Effective:** 2026-05-03 · **Version:** 0.1.0-draft (Workstream A foundational)' — pinned so the founder-review-required-before-fleet-integration + §4-primary-load-bearing-decision + v1-signed-JWT-over-mTLS + v2-WireGuard-mesh + Agent-1-fleet-territory + v0.1.0-draft-Workstream-A-foundational commitment survives", () => {
     expect(body).toMatch(/^# Driftstack — network architecture$/m);
     expect(body).toMatch(/> \*\*Founder review required before fleet integration begins\.\*\*/);
     expect(body).toMatch(/> control-plane → Mac-Mini-fleet auth path described in §4 is the/);
     expect(body).toMatch(/> primary load-bearing decision; v1 is "public internet \+ signed JWT/);
     expect(body).toMatch(/> over mTLS" with WireGuard mesh as a v2 improvement\./);
-    expect(body).toMatch(
-      /Nothing has\s*\n>\s*been wired in code yet — this doc is the contract that fleet code/,
+    // V-809 — the forward-contract banner is retired. infra/nginx/ carries the
+    // Hetzner edge config, fleet-node-auth.ts implements fleet authentication,
+    // apps/status-site/ exists, and the dashboard has a deploy workflow. The doc
+    // describes live surfaces now.
+    expect(body).toMatch(/\*\*V-809 — this is no longer a forward contract\.\*\*/);
+    expect(body).toMatch(/`infra\/nginx\/` carries the Hetzner edge config/);
+    expect(body).toMatch(/treat any remaining unbuilt item as scoped rather than the/);
+    expect(body, 'the nothing-is-wired banner must not return').not.toMatch(
+      /been wired in code yet/,
     );
-    expect(body).toMatch(/> \(Agent 1's territory\) and control-plane code \(this repo\) will/);
-    expect(body).toMatch(/> respect once the founder signs off\./);
     expect(body).toMatch(
       /\*\*Effective:\*\* 2026-05-03 · \*\*Version:\*\* 0\.1\.0-draft \(Workstream A foundational\)/,
     );
   });
 
-  it("Overview 3-surface inventory framing pinned: '## Overview' + 'Driftstack at launch is a single-region deployment with three network surfaces:' + '1. **Customer ↔ control plane** — public HTTPS API on `api.driftstack.dev`. TLS terminated at Cloudflare, plain HTTP to the Hetzner VM over a Cloudflare Tunnel.' + '2. **Customer ↔ marketing site** — public HTTPS on `driftstack.dev`, `docs.driftstack.dev`, and (future) `app.driftstack.dev`. Static on Cloudflare Pages; signup flow lives on the control plane and is served via `app.driftstack.dev` reverse-proxied to the Hetzner VM.' + '3. **Control plane ↔ Mac Mini fleet** — the load-bearing internal surface. v1 plan: signed JWT over mTLS, fleet pulls work from the control plane; v2: WireGuard mesh.' + 'This doc focuses on (3) because (1) and (2) are standard public-internet patterns. (3) involves cross-provider trust between the Hetzner VM and the MacStadium-hosted fleet.' — pinned so the 3-surface-inventory + single-region-launch + (3)-load-bearing-cross-provider-trust + v1-signed-JWT-mTLS-fleet-pulls + v2-WireGuard-mesh commitment survives", () => {
+  it("Overview 3-surface inventory framing pinned: '## Overview' + 'Driftstack at launch is a single-region deployment with three network surfaces:' + '1. **Customer ↔ control plane** — public HTTPS API on `api.driftstack.dev`. TLS terminated at Cloudflare, plain HTTP to the Hetzner VM over a Cloudflare Tunnel.' + '2. **Customer ↔ marketing site** — public HTTPS on `driftstack.dev`, `docs.driftstack.dev`, and (future) `app.driftstack.dev`. Static on Cloudflare Pages; signup flow lives and app.driftstack.dev is its own Cloudflare Pages project, not a reverse proxy (V-809).' + '3. **Control plane ↔ Mac Mini fleet** — the load-bearing internal surface. v1 plan: signed JWT over mTLS, fleet pulls work from the control plane; v2: WireGuard mesh.' + 'This doc focuses on (3) because (1) and (2) are standard public-internet patterns. (3) involves cross-provider trust between the Hetzner VM and the MacStadium-hosted fleet.' — pinned so the 3-surface-inventory + single-region-launch + (3)-load-bearing-cross-provider-trust + v1-signed-JWT-mTLS-fleet-pulls + v2-WireGuard-mesh commitment survives", () => {
     expect(body).toMatch(/## Overview/);
     expect(body).toMatch(/Driftstack at launch is a single-region deployment with three/);
     expect(body).toMatch(/network surfaces:/);
@@ -60,9 +65,27 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     expect(body).toMatch(
       /2\. \*\*Customer ↔ marketing site\*\* — public HTTPS on `driftstack\.dev`,/,
     );
-    expect(body).toMatch(/`docs\.driftstack\.dev`, and \(future\) `app\.driftstack\.dev`\. Static/);
-    expect(body).toMatch(/on Cloudflare Pages; signup flow lives on the control plane and is/);
-    expect(body).toMatch(/served via `app\.driftstack\.dev` reverse-proxied to the Hetzner VM\./);
+    expect(body).toMatch(
+      /`docs\.driftstack\.dev`, and `app\.driftstack\.dev`, all static on\s*\n?\s*Cloudflare Pages\./,
+    );
+    expect(body, 'the (future) qualifier is retired — the dashboard is deployed').not.toMatch(
+      /\(future\) `app\.driftstack\.dev`/,
+    );
+    // V-809 — the dashboard is a static Pages SPA calling the API cross-origin;
+    // the signup flow is not served by a control-plane reverse proxy.
+    expect(body).toMatch(
+      /The dashboard is a\s*\n?\s*static SPA that calls the control-plane API cross-origin/,
+    );
+    expect(body).not.toMatch(/signup flow lives on the control plane/);
+    // V-809 — app.driftstack.dev is its own Cloudflare Pages project, deployed by
+    // deploy-customer-dashboard.yml. It is neither "(future)" nor reverse-proxied.
+    expect(body).toMatch(/`app\.driftstack\.dev` is its own Cloudflare\s*\n?\s*Pages project/);
+    expect(body).toMatch(
+      /it is neither a future\s*\n?\s*surface nor served through the Hetzner VM at all\./,
+    );
+    expect(body, 'the reverse-proxy claim must not return').not.toMatch(
+      /reverse-proxied to the Hetzner VM\./,
+    );
     expect(body).toMatch(/3\. \*\*Control plane ↔ Mac Mini fleet\*\* — the load-bearing internal/);
     expect(body).toMatch(/surface\. v1 plan: signed JWT over mTLS, fleet pulls work from the/);
     expect(body).toMatch(/control plane; v2: WireGuard mesh\./);

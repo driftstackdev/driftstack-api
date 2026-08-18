@@ -59,6 +59,9 @@ const HAND_MAINTAINED_COUNT =
  * MEASURED 2026-08-17 with a CORRECT extractor. May only fall; raising either is
  * the bug this file is about.
  *
+ * Ratcheted 78 → 77 by V-809, which retired the network-architecture banner's
+ * "once … signs off" promise.
+ *
  * Ratcheted 79 → 78 by V-808, which retired the future-tense promises in the
  * agent-executor and pair-mode-heartbeat-sweep headers. Both of those files left
  * the offender set, and the tight arm below is what forced this line to move in
@@ -69,7 +72,7 @@ const HAND_MAINTAINED_COUNT =
  * that were both broken — the comparison measured nothing and agreed with itself.
  * The fixture case below is what actually caught it.
  */
-const CEILINGS = { futureTense: 78, handMaintainedCount: 93 } as const;
+const CEILINGS = { futureTense: 77, handMaintainedCount: 93 } as const;
 
 function parityPinFiles(): string[] {
   return readdirSync(UNIT_DIR)

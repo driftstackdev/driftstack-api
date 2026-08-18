@@ -3,10 +3,19 @@
 > **Founder review required before fleet integration begins.** The
 > control-plane → Mac-Mini-fleet auth path described in §4 is the
 > primary load-bearing decision; v1 is "public internet + signed JWT
-> over mTLS" with WireGuard mesh as a v2 improvement. Nothing has
-> been wired in code yet — this doc is the contract that fleet code
-> (Agent 1's territory) and control-plane code (this repo) will
-> respect once the founder signs off.
+> over mTLS" with WireGuard mesh as a v2 improvement.
+>
+> **V-809 — this is no longer a forward contract.** The banner used to say
+> nothing had been wired in code and that both sides would respect the doc
+> once it was signed off. Much of it has since shipped in this repo:
+> `infra/nginx/` carries the Hetzner edge config including
+> `cloudflare-real-ip.conf`, fleet authentication is implemented in
+> `apps/server/src/services/fleet-node-auth.ts` with the client-certificate
+> surface in `fleet-events.ts`, `apps/status-site/` exists, and the customer
+> dashboard deploys via `.github/workflows/deploy-customer-dashboard.yml`.
+> Read the sections below as describing live surfaces unless a section says
+> otherwise, and treat any remaining unbuilt item as scoped rather than the
+> whole document.
 
 **Effective:** 2026-05-03 · **Version:** 0.1.0-draft (Workstream A foundational)
 
@@ -19,9 +28,13 @@ network surfaces:
    `api.driftstack.dev`. TLS terminated at Cloudflare, plain HTTP to
    the Hetzner VM over a Cloudflare Tunnel.
 2. **Customer ↔ marketing site** — public HTTPS on `driftstack.dev`,
-   `docs.driftstack.dev`, and (future) `app.driftstack.dev`. Static
-   on Cloudflare Pages; signup flow lives on the control plane and is
-   served via `app.driftstack.dev` reverse-proxied to the Hetzner VM.
+   `docs.driftstack.dev`, and `app.driftstack.dev`, all static on
+   Cloudflare Pages. V-809 — `app.driftstack.dev` is its own Cloudflare
+   Pages project, deployed by
+   `.github/workflows/deploy-customer-dashboard.yml`; it is neither a future
+   surface nor served through the Hetzner VM at all. The dashboard is a
+   static SPA that calls the control-plane API cross-origin, which is why
+   the CORS allowlist matters (see the control-plane surface above).
 3. **Control plane ↔ Mac Mini fleet** — the load-bearing internal
    surface. v1 plan: signed JWT over mTLS, fleet pulls work from the
    control plane; v2: WireGuard mesh.
