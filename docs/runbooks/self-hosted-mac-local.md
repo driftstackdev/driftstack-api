@@ -142,7 +142,9 @@ docker compose exec redis redis-cli FLUSHALL
 up -d`.
 - **Stripe webhooks don't fire**: dev mode uses Stripe CLI's
   `stripe listen --forward-to localhost:3000/v1/webhooks/stripe`. See
-  `docs/operations/stripe-cli-setup.md` for the test-mode key wiring.
+  `docs/deployment/stripe-webhook-testing.md` for the test-mode key
+  wiring — it covers `stripe login`, the `stripe listen` forward, and
+  setting the printed signing secret as STRIPE_WEBHOOK_SECRET.
 - **Tauri dev hangs at "Compiling tauri"**: cold compile is slow on
   Apple Silicon (~3 min); warm rebuilds are <10s. Don't kill it
   prematurely.
@@ -155,6 +157,7 @@ up -d`.
   URL scheme registration test on macOS.
 - `docs/operations/launch-day-runbook.md` — production launch steps
   (different from this — production targets Hetzner).
-- `docs/architecture/afp-harness-configuration.md` — Agent 1 cross-
-  reference for the WebKit driver's harness branching when DRIVER=
-  webkit eventually integrates.
+- Agent 1 owns the WebKit driver's harness branching for the eventual
+  DRIVER=webkit integration. There is no document for it in this repo
+  yet — ask on the A2-A3 bus rather than following a path here, so this
+  list does not carry a link that resolves to nothing during an incident.
