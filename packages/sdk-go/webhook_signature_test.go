@@ -102,6 +102,47 @@ func TestVerifyWebhookSignature_FutureTimestamp(t *testing.T) {
 	}
 }
 
+// The skew comparison is exclusive, so the boundary itself is inside the window. The
+// two arms above sit ten minutes out against a five-minute tolerance — nowhere near
+// the edge — so an operator flip or a widened window passes both. These bracket it on
+// each side. sdk-typescript and sdk-python carry the same points, because a customer
+// picks one SDK and gets whatever that one enforces.
+func TestVerifyWebhookSignature_AtToleranceEdge(t *testing.T) {
+	t.Parallel()
+	body := []byte("edge")
+	secret := "whsec_xx"
+	now := time.Now().Truncate(time.Second)
+	atEdge := now.Add(-DefaultWebhookTolerance)
+	header := sign(body, secret, atEdge.Unix())
+	if !VerifyWebhookSignature(body, header, secret, VerifyWebhookOptions{Now: now}) {
+		t.Fatal("expected a signature exactly at the tolerance edge to pass")
+	}
+}
+
+func TestVerifyWebhookSignature_OneSecondBeyondEdge(t *testing.T) {
+	t.Parallel()
+	body := []byte("edge")
+	secret := "whsec_xx"
+	now := time.Now().Truncate(time.Second)
+	beyond := now.Add(-DefaultWebhookTolerance - time.Second)
+	header := sign(body, secret, beyond.Unix())
+	if VerifyWebhookSignature(body, header, secret, VerifyWebhookOptions{Now: now}) {
+		t.Fatal("expected a signature one second past the edge to fail")
+	}
+}
+
+func TestVerifyWebhookSignature_OneSecondBeyondEdgeInTheFuture(t *testing.T) {
+	t.Parallel()
+	body := []byte("edge")
+	secret := "whsec_xx"
+	now := time.Now().Truncate(time.Second)
+	beyond := now.Add(DefaultWebhookTolerance + time.Second)
+	header := sign(body, secret, beyond.Unix())
+	if VerifyWebhookSignature(body, header, secret, VerifyWebhookOptions{Now: now}) {
+		t.Fatal("expected a future signature one second past the edge to fail")
+	}
+}
+
 func TestVerifyWebhookSignature_FieldOrderIndependent(t *testing.T) {
 	t.Parallel()
 	body := []byte("x")

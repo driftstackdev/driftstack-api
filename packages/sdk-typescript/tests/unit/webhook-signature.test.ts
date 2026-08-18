@@ -74,6 +74,79 @@ describe('verifyWebhookSignature', () => {
     expect(ok).toBe(true);
   });
 
+  // ── the FUTURE half of the skew window ──────────────────────────────────────
+  //
+  // The two arms above walk the PAST only. `sdk-typescript-webhook-signature-content-parity`
+  // states why that is not enough, in its own words: "the `Math.abs` is load-bearing —
+  // it catches BOTH past-stale (replay) AND future-clock-skew (attacker forging a
+  // timestamp far in the future). Drift to one-sided `now - timestampMs >` would let
+  // future-dated signatures slip through." It asserts the SUBSTRING `Math.abs`, which
+  // any rewrite that keeps the call while changing the comparison would satisfy.
+  //
+  // MEASURED: replacing `Math.abs(now - parsed.timestampMs)` with
+  // `(now - parsed.timestampMs)` — one-sided, so a future-dated signature never
+  // expires — left all 244 SDK unit tests green.
+  //
+  // ⚠️ The other two SDKs already cover this. sdk-python has
+  // `test_rejects_future_timestamp_outside_tolerance` and sdk-go has `farFuture :=
+  // now.Add(10 * time.Minute)`; TypeScript was the odd one out on a security property
+  // its own siblings check. Cross-SDK parity is not a nicety here — a customer picks
+  // one SDK and gets whatever that one enforces.
+  it('rejects a FUTURE-dated timestamp outside tolerance. A forged far-future timestamp is a signature that never expires: it stays inside any past-only window forever, so the replay bound the header exists to impose simply does not apply to it.', async () => {
+    const now = Date.now();
+    const t = Math.floor(now / 1000) + 600; // 10 minutes ahead
+    const body = 'x';
+    const ok = await verifyWebhookSignature({
+      body,
+      header: sign(body, t),
+      secret: SECRET,
+      nowMs: now,
+    });
+    expect(ok, 'a signature dated 10 minutes in the future was accepted').toBe(false);
+  });
+
+  // The comparison is `> tolerance * 1000` — exclusive — so exactly-at-tolerance is
+  // INSIDE the window. Both edges are driven because an off-by-one that flipped the
+  // operator would still pass every arm above: 200s and 600s are nowhere near 300s.
+  it('accepts a timestamp exactly AT the tolerance edge, past side. The check is exclusive (`>`), so the boundary itself is inside the window — pinning it means a flip to `>=` is a failure rather than a silent one-second narrowing.', async () => {
+    const now = Date.now();
+    const t = Math.floor(now / 1000) - 300; // default tolerance is 300s
+    const body = 'edge';
+    const ok = await verifyWebhookSignature({
+      body,
+      header: sign(body, t),
+      secret: SECRET,
+      nowMs: Math.floor(now / 1000) * 1000,
+    });
+    expect(ok, 'a signature exactly at the tolerance edge was rejected').toBe(true);
+  });
+
+  it('rejects one second BEYOND the tolerance edge, past side. With the arm above this brackets the boundary, so a widened window cannot pass as "still within tolerance".', async () => {
+    const now = Date.now();
+    const t = Math.floor(now / 1000) - 301;
+    const body = 'edge';
+    const ok = await verifyWebhookSignature({
+      body,
+      header: sign(body, t),
+      secret: SECRET,
+      nowMs: Math.floor(now / 1000) * 1000,
+    });
+    expect(ok, 'a signature one second past the edge was accepted').toBe(false);
+  });
+
+  it('rejects one second beyond the tolerance edge, FUTURE side. The same bracket on the half nothing was walking — and the half a one-sided comparison leaves wide open.', async () => {
+    const now = Date.now();
+    const t = Math.floor(now / 1000) + 301;
+    const body = 'edge';
+    const ok = await verifyWebhookSignature({
+      body,
+      header: sign(body, t),
+      secret: SECRET,
+      nowMs: Math.floor(now / 1000) * 1000,
+    });
+    expect(ok, 'a signature one second into the future beyond tolerance was accepted').toBe(false);
+  });
+
   it('rejects malformed header', async () => {
     expect(
       await verifyWebhookSignature({ body: 'x', header: 'not-a-valid-header', secret: SECRET }),

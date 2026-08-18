@@ -114,6 +114,48 @@ def test_rejects_future_timestamp_outside_tolerance() -> None:
     )
 
 
+# The comparison is `abs(...) > tolerance_sec` — EXCLUSIVE — so the boundary itself is
+# inside the window. The two arms above sit at 600s against a 300s tolerance, nowhere
+# near the edge, so an operator flip or a widened window passes both. These bracket it
+# on the past side and the future side; sdk-typescript carries the same four points and
+# sdk-go the same two edges, because a customer picks one SDK and gets whatever that one
+# enforces.
+def test_accepts_timestamp_exactly_at_the_tolerance_edge() -> None:
+    body = b"edge"
+    secret = "whsec_xx"
+    now = float(int(time.time()))
+    at_edge = int(now) - 300  # default tolerance is 300s
+    header = _sign(body, secret, at_edge)
+
+    assert (
+        verify_webhook_signature(body=body, header=header, secret=secret, now_seconds=now) is True
+    )
+
+
+def test_rejects_one_second_beyond_the_tolerance_edge() -> None:
+    body = b"edge"
+    secret = "whsec_xx"
+    now = float(int(time.time()))
+    beyond = int(now) - 301
+    header = _sign(body, secret, beyond)
+
+    assert (
+        verify_webhook_signature(body=body, header=header, secret=secret, now_seconds=now) is False
+    )
+
+
+def test_rejects_one_second_beyond_the_edge_on_the_future_side() -> None:
+    body = b"edge"
+    secret = "whsec_xx"
+    now = float(int(time.time()))
+    beyond = int(now) + 301
+    header = _sign(body, secret, beyond)
+
+    assert (
+        verify_webhook_signature(body=body, header=header, secret=secret, now_seconds=now) is False
+    )
+
+
 def test_accepts_str_body_and_bytes_body_equivalently() -> None:
     body_bytes = b'{"k":"v"}'
     body_str = '{"k":"v"}'
@@ -272,9 +314,7 @@ def test_case_insensitivity_does_not_weaken_verification() -> None:
     wrong = f"t={ts},v1={_sig_hex(body, 'whsec_other', ts).upper()}"
     assert not verify_webhook_signature(body=body, header=wrong, secret=secret)
     # Not hex at all: refused, not crashed.
-    assert not verify_webhook_signature(
-        body=body, header=f"t={ts},v1={'z' * 64}", secret=secret
-    )
+    assert not verify_webhook_signature(body=body, header=f"t={ts},v1={'z' * 64}", secret=secret)
     # Odd-length hex: refused, not crashed.
     odd = _sig_hex(body, secret, ts)[:-1]
     assert not verify_webhook_signature(body=body, header=f"t={ts},v1={odd}", secret=secret)
