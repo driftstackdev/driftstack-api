@@ -77,9 +77,11 @@ Returns the same shape as `GET /v1/account/me` with the new values applied.
 
 `POST /v1/account/me/avatar` —
 
-Inline base64 body. The image is stored privately on Cloudflare R2
-(its storage network can replicate outside the EU); the response
-includes a presigned read URL.
+Inline base64 body. The image is stored on Cloudflare R2 in the
+public-readable bucket (its storage network can replicate outside the
+EU). The response includes a presigned read URL, which is a stable
+time-limited link rather than an access control — anyone holding the
+object URL can fetch it. Treat an avatar as public content.
 Field shape:
 
 ```json
@@ -93,9 +95,11 @@ Field shape:
 - Max raw size: 2 MiB (route body limit is 3.5 MiB to allow the base64 envelope).
 - Returns `{ avatar_url, content_type, bytes }`.
 
-`DELETE /v1/account/me/avatar` clears the avatar pointer; the R2
-object is left in place (a sweeper job collects orphaned keys
-off the hot path).
+`DELETE /v1/account/me/avatar` clears the avatar pointer on your
+account, so the image stops being served from `/v1/account/me`. The R2
+object itself is left in place and there is no sweeper collecting
+orphaned keys today, so a previously-shared object URL keeps resolving.
+Do not treat the delete as an erasure of the image.
 
 ## Active sign-ins
 

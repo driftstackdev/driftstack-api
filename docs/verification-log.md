@@ -34626,3 +34626,42 @@ the verification chain reds the sentinel. 15 pins over this surface green; the V
 unchanged by this batch (neither retired phrase matches its two shapes).
 
 Second batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-797 — avatars documented as stored privately and garbage-collected; neither is true (2026-08-18)
+
+`apps/docs/src/pages/api/account.md` made two claims about account avatars.
+
+**"The image is stored privately on Cloudflare R2."** The upload path presigns through `r2Public`
+(`routes/account-me.ts`, `presignAvatar`), which is the client for `R2_BUCKET_PUBLIC` — the bucket
+`bootstrap.ts` describes in its own words as "a SEPARATE **public-readable** R2 bucket", explicitly
+contrasted there with the recordings bucket which "must remain private". So the image is in the
+public bucket, and the presigned URL is a stable time-limited link rather than a confidentiality
+control: anyone holding the object URL can fetch it.
+
+**"a sweeper job collects orphaned keys off the hot path."** No such sweeper exists. Scanning all of
+`apps/server/src` with comments stripped, nothing outside `openapi.ts` and `schema.ts` mentions
+avatars alongside sweeping at all, and no service, scheduled job or chain touches avatar keys. The
+route's own comment is honest and says so — "a **future** sweeper job collects orphaned avatar keys"
+— so the customer page had promoted a future-tense internal note into a present-tense customer
+guarantee.
+
+Together they are worse than separately: a customer deletes their avatar, having been told it was
+stored privately and that orphans get collected, and in reality the image remains in a
+**public-readable** bucket indefinitely with any previously-shared URL still resolving. The page now
+says exactly that, and tells them not to read the delete as an erasure.
+
+**The source comment is left alone deliberately.** `routes/account-me.ts:820-824` is accurate —
+future tense, and its aside that "avatars are already public-readable" is the fact the docs
+contradicted. Three pins freeze that comment (`routes-account-me-content-parity:199/:201/:20`);
+editing it to match the customer page would have been the wrong direction of travel and would have
+red them. The docs were the false half.
+
+Four occurrences moved across two pin files — two regexes and two `it()` titles, one of which called
+the phantom sweeper "the load-bearing async-GC contract". Per-occurrence negatives ban both retracted
+claims. Mutation-proved: restoring either reds its sentinel. 35 pins over this surface green.
+
+One correction to the audit that produced this: it called the R2 key "guessable". It is a uuid and
+is not. The exposure is that the bucket is public-readable and the object outlives the delete, which
+is what the copy now says.
+
+Third batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.

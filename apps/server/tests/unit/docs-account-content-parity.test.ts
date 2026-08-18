@@ -65,9 +65,15 @@ describe('docs api/account content parity', () => {
     expect(body).toMatch(/route body limit is 3\.5 MiB to allow the base64 envelope/);
   });
 
-  it('avatar DELETE retention framing pinned: R2 object is left in place + sweeper job collects orphaned keys (drift to claiming synchronous R2 delete would mislead customers about deletion latency; drift to dropping the sweeper mention would hide WHY the R2 keys persist briefly)', () => {
+  it('avatar DELETE retention framing, corrected by V-797. This pinned "a sweeper job collects orphaned keys off the hot path" as a load-bearing async-GC contract. No such sweeper exists: routes/account-me.ts itself says a FUTURE sweeper, and no service, scheduled job or chain touches avatar keys. The page now tells customers the object persists and a previously-shared URL keeps resolving.', () => {
     expect(body).toMatch(
-      /the R2\s+object is left in place \(a sweeper job collects orphaned keys\s+off the hot path\)/,
+      /The R2\s*\n?object itself is left in place and there is no sweeper collecting\s*\n?orphaned keys today/,
+    );
+    expect(body, 'and the consequence is stated, not just the mechanism').toMatch(
+      /a previously-shared object URL keeps resolving/,
+    );
+    expect(body, 'the phantom garbage collector must not return').not.toMatch(
+      /a sweeper job collects orphaned keys/,
     );
   });
 });

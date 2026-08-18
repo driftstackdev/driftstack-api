@@ -190,20 +190,28 @@ describe('W770 docs /api/account content parity', () => {
   // claim; the buckets live in Cloudflare's default jurisdiction
   // (EU + US replication; founder soften decision 2026-07-07), so the
   // page now states the honest posture.
-  it('CRITICAL avatar R2 storage framing pinned: private, replication outside the EU possible (S38: EU-jurisdiction claim retired)', () => {
+  it('CRITICAL avatar R2 storage framing, corrected by V-797. This pinned "stored privately on Cloudflare R2". The upload path uses r2Public — the bucket bootstrap.ts itself calls public-readable and explicitly contrasts with the private recordings bucket — so the presigned URL is a stable time-limited link, not a confidentiality control', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The image is stored privately on Cloudflare R2\s*\n?\(its storage network can replicate outside the EU\); the response\s*\n?\s*includes a presigned read URL\./,
+      /The image is stored on Cloudflare R2 in the\s*\n?public-readable bucket \(its storage network can replicate outside the\s*\n?EU\)\./,
     );
+    expect(p, 'the presign must be described as a link, not access control').toMatch(
+      /a stable\s*\n?time-limited link rather than an access control/,
+    );
+    expect(p, 'the privacy claim must not return').not.toMatch(/stored privately on Cloudflare R2/);
     expect(p).not.toMatch(/EU-jurisdiction/);
   });
 
-  it("CRITICAL DELETE avatar leaves-R2-object-orphan-for-sweeper framing pinned. The 'clears the avatar pointer; the R2 object is left in place (a sweeper job collects orphaned keys off the hot path)' wording is the load-bearing async-GC contract.", () => {
+  it("CRITICAL DELETE avatar framing, corrected by V-797. The old wording called a sweeper collecting orphaned keys the load-bearing async-GC contract; there is no such sweeper anywhere in src, and the route's own comment says a FUTURE one. The page now says the object persists and a shared URL keeps resolving, so a customer does not read the delete as an erasure.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /clears the avatar pointer; the R2\s*\n?object is left in place \(a sweeper job collects orphaned keys\s*\n?off the hot path\)\./,
+      /clears the avatar pointer on your\s*\n?account, so the image stops being served from `\/v1\/account\/me`\./,
+    );
+    expect(p).toMatch(/there is no sweeper collecting\s*\n?orphaned keys today/);
+    expect(p, 'the phantom garbage collector must not return').not.toMatch(
+      /a sweeper job collects orphaned keys/,
     );
   });
 
