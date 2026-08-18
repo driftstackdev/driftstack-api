@@ -52,9 +52,21 @@ describe('docs/api/recipes content parity', () => {
     expect(body).toMatch(/never exposed to an ordinary\s*\n?\s*`read`-scope caller\./);
   });
 
-  it('Create body 3-field validation framing pinned: agent_session_id required + cross-account 404 + label 1-120 chars after trim + description optional up to 2000 chars + 201 Created response. Drift to dropping the cross-account-404 anti-enumeration would leak agent-session-id existence to attackers', () => {
+  it('Create body 3-field validation framing pinned: agent_session_id required + ACCESS-scoped 404 (V-812: owner OR team admin, not calling-account-only) + label 1-120 chars after trim + description optional up to 2000 chars + 201 Created response. Drift to dropping the cross-account-404 anti-enumeration would leak agent-session-id existence to attackers', () => {
+    // V-812 — "must belong to the calling account" was false. The route gates on
+    // callerCanAccessAgentSession(ctx, ownerAccountId), which returns true for the
+    // owner OR an admin member of the owner's team (V-736), so a team admin
+    // snapshotting the owner's session gets a 201. The 404-not-403 anti-enumeration
+    // posture is real and stays pinned.
     expect(body).toMatch(
-      /- `agent_session_id` — required\. Must belong to the calling\s*\n?\s*account; cross-account references return 404\./,
+      /- `agent_session_id` — required\. Must be a session you can ACCESS: one\s*\n?\s*your own account owns, or one owned by a team you hold the \*\*admin\*\*\s*\n?\s*role on \(V-736\)\./,
+    );
+    expect(body).toMatch(/a team admin snapshotting the owner's session gets/);
+    expect(body, 'the calling-account-only claim must not return').not.toMatch(
+      /Must belong to the calling/,
+    );
+    expect(body, 'anti-enumeration must stay 404 rather than 403').toMatch(
+      /404 rather than 403 so the response does not confirm the session exists/,
     );
     expect(body).toMatch(/- `label` — required\. 1-120 characters after trim\./);
     expect(body).toMatch(/- `description` — optional\. Up to 2000 characters\./);

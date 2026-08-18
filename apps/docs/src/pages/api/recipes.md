@@ -56,8 +56,11 @@ Request body:
 }
 ```
 
-- `agent_session_id` — required. Must belong to the calling
-  account; cross-account references return 404.
+- `agent_session_id` — required. Must be a session you can ACCESS: one
+  your own account owns, or one owned by a team you hold the **admin**
+  role on (V-736). V-812 — this used to say the session must belong to
+  the calling account; a team admin snapshotting the owner's session gets
+  a `201`, not the refusal the sentence implied. Anything else references return 404.
 - `label` — required. 1-120 characters after trim.
 - `description` — optional. Up to 2000 characters.
 
@@ -159,9 +162,9 @@ recipe is still useful as a transcript-only snapshot.
 
 ## Errors
 
-| Status | Type                | When                                                                     |
-| -----: | ------------------- | ------------------------------------------------------------------------ |
-|    400 | validation          | body fails schema (missing label, label > 120 chars, description > 2000) |
-|    404 | not-found           | `agent_session_id` doesn't exist or belongs to another account           |
-|    401 | unauthorized        | missing or invalid bearer token                                          |
-|    503 | feature-unavailable | recipe storage is not enabled for this deployment                        |
+| Status | Type                | When                                                                                                                                                   |
+| -----: | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+|    400 | validation          | body fails schema (missing label, label > 120 chars, description > 2000)                                                                               |
+|    404 | not-found           | `agent_session_id` doesn't exist, or belongs to an account you cannot access — 404 rather than 403 so the response does not confirm the session exists |
+|    401 | unauthorized        | missing or invalid bearer token                                                                                                                        |
+|    503 | feature-unavailable | recipe storage is not enabled for this deployment                                                                                                      |

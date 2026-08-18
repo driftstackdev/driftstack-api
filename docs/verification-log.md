@@ -35175,3 +35175,48 @@ Sixteenth batch of the re-verified plan. The ratchet is unmoved — a count insi
 caught by `HAND_MAINTAINED_COUNT` only when it matches one of the enumerated nouns, and "resource
 accessors" is one of them, so this retirement is worth checking against the ceiling next time the
 count is measured rather than assumed.
+
+## V-812 — recipes documented cross-account creates as impossible; a team admin gets a 201 (2026-08-18)
+
+`apps/docs/src/pages/api/recipes.md` said of `POST /v1/recipes`:
+
+> `agent_session_id` — required. **Must belong to the calling account**; cross-account references
+> return 404.
+
+`routes/recipes.ts` gates on `callerCanAccessAgentSession(ctx, source.accountId)`, which returns true
+when the caller owns the session **or** holds the `admin` role on the owning team (V-736). Its own
+comment says so: "The caller must be able to ACCESS the session — its owner, or an admin member of the
+owner's team". So a team admin snapshotting the owner's session gets a `201`, not the refusal the
+sentence describes.
+
+Third instance of the same shape this arc, after V-795 (`account_owner` "cross-account access is
+impossible") and V-804 (webhook writes "remain self-only"). Team RBAC widened access on route after
+route and the prose stayed at the pre-V-326 world in each of them.
+
+The anti-enumeration posture is real and stays pinned: the refusal is a 404 rather than a 403
+precisely so the response does not confirm the session exists. The corrected table row now says that
+explicitly rather than implying the 404 means "not yours".
+
+**Action 19 is REFUTED, and the existing pin is what stopped me shipping a wrong "fix".**
+`agent-sessions.md` says HTTP manual-input dispatch is unavailable and returns
+`503 feature-unavailable`. Reading `routes/agent-sessions.ts` alone contradicts that: there is a
+`reply.code(200).send({ kind: 'forwarded', duration_ms: 0 })` for `event.type === 'ping'`, with a
+comment explaining it refreshes pair ownership. I was about to correct the doc — and connect it to
+V-785, since a client that never pings gets auto-handed-back after 30s.
+
+But that path sits behind `currentState.kind === 'human-driving'`, and
+`sdk-current-state-copy-parity.test.ts` had already written the chain down:
+`human-driving` is produced only by `takeover-grant`, and nothing emits it (V-757, re-verified in
+V-785). I re-checked all three links with comments stripped — **no** emitter of `takeover-grant`, **no**
+direct `kind: 'human-driving'` constructor, and V-757's guard still lists it in `KNOWN_UNEMITTED`. The
+`forwarded` branch is unreachable, the doc is accurate, and the report's claim that "`ping` returns
+200" is true of the code and false of the system.
+
+That is the sharpest lesson of the batch: **reading one route in isolation is not verification when
+reachability depends on a fact established elsewhere.** The pin encoded that fact, which is the case
+for reading pins before editing rather than only after they go red.
+
+Mutation-proved: reinstating the calling-account-only sentence reds its sentinel. 27 pins over the
+recipes surface green, `it(` count unchanged at 11.
+
+Seventeenth batch. `EXPECTED_TEST_FILES` unchanged.
