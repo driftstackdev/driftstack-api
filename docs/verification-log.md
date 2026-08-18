@@ -36572,3 +36572,38 @@ pattern is that every one of them looked plausible until checked.
 
 Mutation: a `/dispute` endpoint added to the guide that no route serves → the arm names it.
 Restores byte-identical. `it(` 3 → 4, one arm added to an existing file, so no ratchet change.
+
+## V-845 — the reverse-direction survey, finished, with what it did and did not find (2026-08-18)
+
+V-843 found a page by asking which customer doc pages no pin references. That question is
+cheap and answers a real gap — pin-auditing cannot reach a page no pin mentions — so I asked
+it of every customer-facing surface. Recording the numbers so nobody re-runs the survey.
+
+| Surface                             | Pages | Pinned | Unpinned | Outcome                                  |
+| ----------------------------------- | ----: | -----: | -------: | ---------------------------------------- |
+| `apps/docs/src/pages`               |    57 |     55 |        2 | **1 finding** (V-843), 1 clean (V-844)   |
+| `apps/marketing-site/src/pages`     |    61 |     55 |        6 | 0 findings                               |
+| `apps/customer-dashboard/src/pages` |    24 |     24 |        0 | nothing unguarded                        |
+| SDK + `api-types` source comments   |     — |      — |        — | 2 promise-shaped comments, both accurate |
+
+**The marketing result is worth stating rather than glossing.** Six unpinned pages sounds like
+exposure and is not: `glossary`, `how-it-works` and the four `use-cases/*` pages carry almost
+no checkable claim between them — one hard-number page, `use-cases/multi-account.astro`, saying
+manual tiers run "1/3/8 concurrent" and "10–200" stored profiles. Both are right
+(`TIER_CONCURRENT_SESSION_LIMITS` is 1/3/8 across solo/team/agency; `PROFILES_PER_TIER` is
+10/50/200), and the page carries its own audit comment recording that an earlier revision had
+conflated concurrency with profile count and was reworded. A page that has already been through
+a truth audit and says so is the opposite of a risk.
+
+**What the survey is good for, and what it is not.** It finds pages nothing watches. It does
+NOT find false claims on pages something watches badly — that is what the 292-pin sweep was
+for, and what V-813, V-820 and V-825 each turned up in a guard that was looking in one
+direction only. The two questions are complements: "is anything watching this?" and "is the
+thing watching it actually checking?" Neither substitutes for the other, and this arc needed
+both.
+
+With this the productive surfaces are worked: the report's 292 pins (38 actions, V-782 → V-828),
+the unpinned server source (54 candidates, 4 findings, V-838 → V-842), the unpinned customer
+pages (V-843 → V-844), my own fifty entries (V-831 → V-835), and this survey. Further scanning
+would mean inventing filters with worse yield than the four already tried, and V-830 records
+what that produces.
