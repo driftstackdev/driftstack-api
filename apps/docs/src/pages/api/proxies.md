@@ -148,27 +148,41 @@ Every field is optional. For the password:
 `DELETE /v1/account/me/proxies/{id}` → `204` (idempotent; `404` for an
 unknown id).
 
-## Test reachability
+## Test a proxy
 
 `POST /v1/account/me/proxies/{id}/test`
 
-Runs a server-side TCP-reachability probe to the proxy's `host:port` and
-returns a result (always `200` — an unreachable proxy is a result, not
-an error):
+Answers one question: **would a session launched through this proxy work right
+now?** For a `socks5` proxy that is the same check the launch gate runs — TCP
+connect, SOCKS5 handshake, authentication, `CONNECT`, and a real request through
+the tunnel — so a green test and a successful launch mean the same thing. Always
+`200`; a proxy that fails the test is a result, not an error:
 
 ```json
 { "ok": true, "latency_ms": 142 }
 ```
 
 ```json
-{ "ok": false, "reason": "Proxy unreachable. Check the host, port, and firewall." }
+{
+  "ok": false,
+  "reason": "The proxy connected but could not reach the internet. Its upstream egress is blocked."
+}
 ```
 
-Failure reasons are stable customer guidance. Raw socket, DNS, TLS, and remote
-proxy response text is kept out of the API response.
+`reason` is a fixed sentence written for a person to read and act on, drawn from
+the same four cases the launch gate reports (see
+[Why a launch is refused](#why-a-launch-is-refused)). It is not an enum — branch
+on the `reason` field of a `422` instead. Raw socket, DNS, TLS, and remote proxy
+response text never reach the API response.
 
-This confirms the proxy port is reachable; SOCKS5 authentication is not
-exercised by the probe.
+A proxy that authenticates but cannot route is the case worth knowing about: it
+looks healthy to anything that only opens the port, and it fails every launch.
+This test reports it.
+
+Two cases fall back to a plain TCP-reachability check, which confirms the port
+answers and nothing more: an `openvpn` or `wireguard` wire (there is no
+`host:port` to dial for the tunnel itself), and a deployment with no proxy
+connectivity probe configured.
 
 ## Route a session through a proxy
 
@@ -188,3 +202,45 @@ schemes. Omit it to use the default egress.
 > The Driftstack desktop app manages this for you: add a proxy under
 > **Proxies**, set it as a profile's default, and launching the profile
 > routes that session through it automatically.
+
+## Why a launch is refused
+
+Before a session is created, Driftstack proves the proxy can actually carry it.
+If it cannot, the create returns `422`
+`errors.driftstack.dev/proxy-validation-failed` and **no session is created and
+nothing is billed** — the refusal happens before any browser starts.
+
+The problem body carries a `reason` alongside the human `detail`:
+
+```json
+{
+  "type": "https://errors.driftstack.dev/proxy-validation-failed",
+  "title": "Proxy validation failed",
+  "status": 422,
+  "detail": "The proxy connected but could not reach the internet — its upstream egress is blocked.",
+  "reason": "egress_blocked",
+  "resource": "proxy"
+}
+```
+
+`reason` is a closed set. Branch on it — `detail` is prose and may be reworded.
+
+| Reason           | What it means                                                             | What fixes it                                              |
+| ---------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `unreachable`    | Nothing answered at `host:port`.                                          | Check the host, the port, and that the proxy is online.    |
+| `auth_failed`    | The proxy answered and rejected the username or password.                 | Re-enter the credentials.                                  |
+| `timeout`        | The proxy accepted the connection but did not finish in time.             | It is overloaded or half-down; retry, then change proxy.   |
+| `egress_blocked` | The proxy authenticated, then refused or failed to reach the destination. | Ask the provider — this is usually plan, quota, or an ACL. |
+
+`egress_blocked` is the one that surprises people. The credentials are correct
+and the proxy is up, so anything that only checks reachability calls it healthy;
+the provider is simply declining to route. A provider that has suspended an
+account, exhausted its bandwidth quota, or restricted destinations by ruleset
+answers every `CONNECT` this way. Nothing on the Driftstack side will change it.
+
+To distinguish "this proxy is broken" from "this provider is refusing
+everything", test a second proxy from a different provider: if that one launches,
+the fault is the first provider's.
+
+Retrying a `422` with the same proxy will fail the same way — it is a statement
+about the proxy, not a transient error, so the SDKs do not retry it.

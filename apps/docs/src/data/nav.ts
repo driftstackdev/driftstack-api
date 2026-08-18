@@ -332,7 +332,7 @@ export const DOC_NAV: DocNavSection[] = [
           { href: '/api/proxies/#create', label: 'Create', method: 'POST' },
           { href: '/api/proxies/#update', label: 'Update', method: 'PUT' },
           { href: '/api/proxies/#delete', label: 'Delete', method: 'DELETE' },
-          { href: '/api/proxies/#test-reachability', label: 'Test reachability', method: 'POST' },
+          { href: '/api/proxies/#test-a-proxy', label: 'Test a proxy', method: 'POST' },
         ],
       },
       // Account + access control.
