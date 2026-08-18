@@ -29,7 +29,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 2889;
+export const EXPECTED_TEST_FILES = 2890;
 
 /**
  * Files the ROOT config collects — both vitest projects, which is what CI's
@@ -49,7 +49,7 @@ export const EXPECTED_TEST_FILES = 2889;
  * successful run, because a gate that does not name its own blind spot gets read
  * as covering everything.
  */
-export const EXPECTED_TEST_FILES_ALL = 3054;
+export const EXPECTED_TEST_FILES_ALL = 3055;
 
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.

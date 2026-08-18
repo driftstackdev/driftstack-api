@@ -115,6 +115,37 @@ out. A late-arriving payment to a cancelled order leaves the
 order cancelled but records the `payment_id` for support
 reconciliation.
 
+## Price a product before ordering
+
+`POST /v1/billing/crypto-checkout/quote`
+
+Returns the price a checkout order would be created for, without creating
+one. Requires the `read:billing` scope. The quote reads the same pricing
+source as order creation, so the preview always equals the amount you will
+be charged.
+
+```json
+{ "product": "solo_manual" }
+```
+
+```json
+{ "product": "solo_manual", "price_cents": 7900, "price_currency": "USD" }
+```
+
+## Receipts
+
+Every order has a receipt in three formats, all requiring `read:billing`:
+
+| Endpoint                                              | Returns                               |
+| ----------------------------------------------------- | ------------------------------------- |
+| `GET /v1/billing/crypto-orders/:order_id/receipt`     | normalized receipt JSON               |
+| `GET /v1/billing/crypto-orders/:order_id/receipt.txt` | the same receipt as `text/plain`      |
+| `GET /v1/billing/crypto-orders/:order_id/receipt.pdf` | the same receipt as `application/pdf` |
+
+Like every endpoint on this page they are scoped to the calling account:
+an order id belonging to someone else returns 404, not 403, so the API
+never confirms that another account's order exists.
+
 ## List customer orders
 
 `GET /v1/billing/crypto-orders`

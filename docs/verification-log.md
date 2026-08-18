@@ -36490,3 +36490,48 @@ of the defect.
 The remaining occurrences are conditional descriptions of runtime states — "absent consumer →
 ignored", "null = not wired" — which read like promises to a regex and are accurate prose. They
 are not a backlog.
+
+## V-843 — the crypto API page omitted four live endpoints, and nothing pinned it (2026-08-18)
+
+The unpinned-source scan (V-842) closed the SERVER surface. The same question one level up:
+which customer DOC pages does no pin reference at all? Of 57 pages under
+`apps/docs/src/pages`, **55 are pinned and 2 are not** — `api/billing-crypto.md` and
+`guides/crypto-troubleshooting.md`. Both crypto, the subsystem V-827 and V-839 had just been
+through.
+
+`api/billing-crypto.md` documents checkout, order lookup, the note PATCH, cancel and the
+webhook event. It omits four registered customer endpoints:
+
+| Endpoint                                    | Scope          | What the customer loses                     |
+| ------------------------------------------- | -------------- | ------------------------------------------- |
+| `POST /v1/billing/crypto-checkout/quote`    | `read:billing` | has to create a real order to learn a price |
+| `GET /v1/billing/crypto-orders/:id/receipt` | `read:billing` | no invoice                                  |
+| `GET …/receipt.txt`                         | `read:billing` | —                                           |
+| `GET …/receipt.pdf`                         | `read:billing` | no PDF for accounting                       |
+
+On a payment surface an undocumented endpoint is one the customer cannot use. The quote route's
+own comment says it exists so "the preview always equals the amount the order is created for" —
+a customer who cannot find it discovers the price by committing to it.
+
+**The interesting fact is not the omission, it is that this page was invisible.** Fifty-five of
+fifty-seven pages have a pin; this one did not, so no amount of pin-auditing — which is what the
+sweep report did, across 292 of them — could ever have reached it. The two unpinned pages were
+found by asking which pages the pins DON'T mention, which is the same reverse-direction question
+as V-813's missing bucket and V-820's unaudited reads. Three times now the answer has been where
+the guard was not looking.
+
+Fixed the page and added the pin it never had. Both directions are derived from source: every
+registered `billing-crypto*` route must appear on the page, and every crypto path on the page
+must be a registered route. The route scan strips comments first, because those route files
+carry their own endpoint inventory in a header — counting it would let the roster agree with a
+comment instead of with the registrations, which is precisely how V-841's dormancy claim
+survived.
+
+Mutations: `receipt.pdf` removed from the page → the missing-endpoint arm names it; a
+`/refund` endpoint added that no route serves → the fabricated-path arm names it. Restores
+byte-identical.
+
+Ratchet: EXPECTED_TEST_FILES 2889 → 2890, \_ALL 3054 → 3055 (one file, mine).
+
+`guides/crypto-troubleshooting.md` remains unpinned and unexamined — named here so the second
+of the two is not forgotten now that the first is closed.
