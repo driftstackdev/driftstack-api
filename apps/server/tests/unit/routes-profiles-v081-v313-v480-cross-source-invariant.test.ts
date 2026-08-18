@@ -24,7 +24,7 @@
 //   description + last_used_at ISO|null + created_at + updated_at).
 //
 //   V-313 clone framing — 'Same admin-only-on-team gate as create.
-//   Tier cap is checked server-side (matches the create path); 402 /
+//   Tier cap is checked server-side (matches the create path); 429 /
 //   TierLimit on exceeded. Body `name` optional — server auto-derives
 //   a non-conflicting `${source} (copy)` if omitted'.
 //
@@ -117,10 +117,10 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
 
   // ─── V-313 clone ─────────────────────────────────────────────
 
-  it("CRITICAL V-313 clone framing — 'Same admin-only-on-team gate as create. Tier cap is checked server-side (matches the create path); 402 / TierLimit on exceeded. Body `name` optional — server auto-derives a non-conflicting `${source} (copy)` if omitted'. The auto-derived-name design lets the dashboard's right-click 'Duplicate' work without a confirmation modal.", () => {
+  it("CRITICAL V-313 clone framing — 'Same admin-only-on-team gate as create. Tier cap is checked server-side (matches the create path); 429 / TierLimit on exceeded (V-814 corrected the status). Body `name` optional — server auto-derives a non-conflicting `${source} (copy)` if omitted'. The auto-derived-name design lets the dashboard's right-click 'Duplicate' work without a confirmation modal.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profiles.ts'));
     expect(p).toMatch(/Same admin-only-on-team gate as create\. Tier cap is checked/);
-    expect(p).toMatch(/server-side \(matches the create path\); 402 \/ TierLimit on/);
+    expect(p).toMatch(/server-side \(matches the create path\); 429 \/ TierLimit on/);
     expect(p).toMatch(/exceeded\. Body `name` optional — server auto-derives a non-/);
     expect(p).toMatch(/conflicting `\$\{source\} \(copy\)` if omitted\./);
   });

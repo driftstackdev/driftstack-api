@@ -69,8 +69,30 @@ Concrete enforcement implications (handled in V-073 — V-072 slot was skipped d
 - Postgres `account_tier` enum drops `'free' | 'starter' | 'solo' | 'builder' | 'scale' | 'enterprise'` and becomes `'trial_pack' | 'solo_manual' | 'team_manual' | 'agency_manual' | 'api_starter' | 'api_builder' | 'api_scale' | 'enterprise'`. Pre-launch — no production customers — so the migration drops + recreates rather than preserving values.
 - `TIER_CONCURRENT_SESSION_LIMITS` becomes the only tier-limit metric on paid tiers.
 - `TIER_QUOTAS.session_minute` removed. Trial-pack `trial_pack_credit_cents` decrement at $0.18/hr stays per ADR-003 (the only place hours metering survives).
-- New `PROFILES_PER_TIER` map enforces profile count at the `/v1/profiles` creation endpoint. Exceeding profile cap → 402 with profile-cap-reached body + upgrade link.
-- Concurrent cap exceeded at session-creation → 429 (rate-limit semantic, not 402 — payment-required is for trial-pack states only).
+- New `PROFILES_PER_TIER` map enforces profile count at the `/v1/profiles` creation endpoint. Exceeding profile cap → 429 with the `https://errors.driftstack.dev/tier-limit` problem type. **This diverges from what this ADR originally decided — see the implementation note below.**
+- Concurrent cap exceeded at session-creation → 429 with the `https://errors.driftstack.dev/concurrency-limit` problem type.
+
+> **Implementation note (V-814, 2026-08-18) — what shipped differs from the decision above.**
+>
+> As accepted, this ADR specified `402 Payment Required` with a `profile-cap-reached` body
+> and an upgrade link for the profile cap, and drew a deliberate contrast with the
+> concurrency cap at 429 ("payment-required is for trial-pack states only"). What shipped
+> does not implement that contrast. Both caps return **429**: the profile cap throws
+> `TierLimitError` (`lib/errors.ts` — `status: 429`, type `.../tier-limit`) and the
+> concurrency cap throws `ConcurrencyLimitError` (type `.../concurrency-limit`). There is no
+> `profile-cap-reached` identifier anywhere in the codebase, and the extensions on the wire
+> are `{ limit, current, resource, tier }` — no upgrade link.
+>
+> The two bullets above have been rewritten to describe the shipped behaviour, because this
+> ADR is cited as a spec by other documents and a reader had no way to tell the decision from
+> the implementation. **Whether to move the profile cap to 402 as originally decided is an
+> open product decision, not a documentation fix** — it is a breaking change to a live status
+> code, and the SDKs dispatch on the problem-type URI rather than the status, so they are
+> unaffected either way (`tier_limit` is classified non-retryable in all three).
+>
+> A raw-HTTP consumer is the one at risk: told to branch on 402, they get 429, which a
+> generic client reads as "rate limited, back off and retry" — a transient status for a
+> permanent condition that no amount of waiting clears.
 
 ## Consequences
 

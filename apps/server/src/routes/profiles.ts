@@ -347,9 +347,14 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
 
   // ── POST /v1/profiles/:id/clone (V-313) ──────────────────────────────
   // Same admin-only-on-team gate as create. Tier cap is checked
-  // server-side (matches the create path); 402 / TierLimit on
+  // server-side (matches the create path); 429 / TierLimit on
   // exceeded. Body `name` optional — server auto-derives a non-
   // conflicting `${source} (copy)` if omitted.
+  //
+  // V-814 — the status above read 402 until it was checked against
+  // the class: TierLimitError has always been status 429, type
+  // `.../tier-limit`. ADR-004 specified 402 (V-814) for this path and
+  // the implementation never followed; see the note in that ADR.
   app.post<{ Params: { id: string } }>(
     '/v1/profiles/:id/clone',
     { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },

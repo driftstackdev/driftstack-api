@@ -99,7 +99,7 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
     );
   });
 
-  it("4-card tier-switching mechanics: 'Upgrade mid-month' (immediate + prorate) + 'Downgrade at renewal' (end-of-period + readable-but-uncreatable) + 'Cancel any time' (end-of-period + 30-day-data-retention) + 'Annual vs monthly' (~20% off + monthly→annual instant / annual→monthly at term end) — pinned so the 4 tier-switching policies stay consistent (drift to dropping 'readable but uncreatable' on downgrade would surprise customers when profile-creation hits a 402; drift to changing the 30-day-data-retention would create marketing↔DPA divergence)", () => {
+  it("4-card tier-switching mechanics: 'Upgrade mid-month' (immediate + prorate) + 'Downgrade at renewal' (end-of-period + readable-but-uncreatable) + 'Cancel any time' (end-of-period + 30-day-data-retention) + 'Annual vs monthly' (~20% off + monthly→annual instant / annual→monthly at term end) — pinned so the 4 tier-switching policies stay consistent (drift to dropping 'readable but uncreatable' on downgrade would surprise customers when profile-creation hits the tier cap; drift to changing the 30-day-data-retention would create marketing↔DPA divergence)", () => {
     // S20b 2026-07-06 plain words — all 4 policies still asserted with the
     // same facts (proration, keep-but-can't-create on downgrade, 30-day
     // retention then DPA-schedule deletion, ~20% annual).

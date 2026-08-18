@@ -35285,3 +35285,75 @@ rather than leaving slack for later.
 Mutations: row deleted → 3 server tests + 1 marketing test fail; stale count reinstated →
 sentinel fires; capacity swapped to a substring-compatible wrong value → row-by-row tie
 fires. Restores byte-identical from a scratchpad snapshot.
+
+## V-814 — ADR-004 decided 402 for the profile cap; the server has always sent 429 (2026-08-18)
+
+Action 33. The report said ADR-004 documents a `402 profile-cap-reached` that does not
+exist. Verified from both sides, and it is larger than one ADR line.
+
+**What the ADR decided.** "New `PROFILES_PER_TIER` map enforces profile count at the
+`/v1/profiles` creation endpoint. Exceeding profile cap → 402 with profile-cap-reached body
+
+- upgrade link", followed by a deliberate contrast: "Concurrent cap exceeded at
+  session-creation → 429 (rate-limit semantic, not 402 — payment-required is for trial-pack
+  states only)."
+
+**What ships.** Both caps are 429. The profile cap throws `TierLimitError`
+(`lib/errors.ts:212` — `status: 429`, type `.../tier-limit`); the concurrency cap throws
+`ConcurrencyLimitError`, also 429. The contrast the ADR draws between them does not exist in
+the code. `profile-cap-reached` appears nowhere in the repo; the extensions on the wire are
+`{ current, limit, resource, tier }`, with no upgrade link. (All 12 `TierLimitError` throw
+sites send exactly that set — a first pass here reported that 8 of them sent no extensions,
+which was an artifact of an extractor that only matched multi-line object literals and then,
+once fixed, of one that consumed its own delimiter and dropped alternating keys. Both were
+caught by re-measuring before the number was written down, not after.)
+
+**It had propagated into five source and doc sites and eight parity pins.** ADR-004,
+`routes/profiles.ts` ("402 / TierLimit on exceeded"), `services/profile-snapshots.ts`
+("TierLimitError 402 when exceeded"), `routes/account-me.ts` ("before the API enforces the
+cap with a 402"), and the `profile-limit.spec.ts` header. Pins froze all of it, including
+one whose own TITLE quoted both cap bullets verbatim. Nothing was inconsistent: the repo
+agreed with itself, and was wrong everywhere. This is the failure mode a text pin cannot
+address — it proves the sentence is present, and every one of these sentences was present.
+
+**Customer impact, stated precisely.** SDK users are unaffected: all three SDKs dispatch on
+the problem-type URI, and TS classifies `tier_limit` as non-retryable (`isRetryable` switches
+on `kind`, not status), so nobody retry-loops. The exposure is a raw-HTTP consumer following
+the docs — told to branch on 402, they get 429, which a generic client reads as "back off and
+retry" for a condition no amount of waiting clears.
+
+Corrected all five sites plus the eight pins. The ADR keeps its decision text and gains a
+blockquoted implementation note recording the divergence, because it is cited as a spec by
+other documents and a reader could not previously tell the decision from the implementation.
+**Whether to move the profile cap to 402 as originally decided is a product decision, not a
+doc fix** — it is a breaking change to a live status code — so it is flagged, not taken.
+
+New guard `a-documented-error-status-is-derived-from-its-class.test.ts` derives
+`TierLimitError`'s status from the class and defends the corrected claim.
+
+**The guard I did not ship, and why.** The first version scanned every file for an HTTP
+status within 40 characters of any error-class name. It found 40+ violations and nearly all
+were false: `V-485` and `V-174` are entry numbers shaped exactly like statuses, and any
+sentence enumerating several errors cross-matches every pair inside the window. It was
+shippable only with a ~40-entry allowlist, which is the shape V-802's comment calls a
+blindfold. Proximity cannot separate "X returns 402" from "X, and separately, 402". The
+shipped guard is deliberately narrow and says so.
+
+**The mutation proof caught the guard passing a mutation it should have failed.** To let
+retractions stay legible I first excused any line whose one-line neighbourhood mentioned the
+real status. Reintroducing "Exceeding profile cap → 402" as a normative ADR bullet then
+PASSED — because the very next bullet legitimately says 429. The exemption was widest exactly
+where the false claim belongs. Replaced with a same-line `V-814` marker requirement: one
+marker per correction, and it cannot be satisfied by an accident of layout. Re-mutated; it
+now fires.
+
+Mutations: `TierLimitError` moved to 402 → the premise arm fails first and names itself as
+needing retirement; the bullet reintroduced → caught; `profile-cap-reached` emitted from
+`services/profiles.ts` → caught. Restores byte-identical.
+
+Ratchet: EXPECTED_TEST_FILES 2883 → 2884, \_ALL 3046 → 3047 (one file, mine).
+
+**Open, not closed:** the `tier-limit` extensions carry `resource`, while all three SDKs
+expose `record_type` / `recordType` / `RecordType` for that problem type. The server has
+never sent `record_type` — it exists only as a DB column and in a hand-written Go SDK test
+fixture. Next entry.

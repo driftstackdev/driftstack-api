@@ -74,7 +74,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
   it('V-237 framing pinned: GET /v1/account/me identity + tier + concurrent-session usage/cap + profile usage/cap; file 128 spec mirror', () => {
     expect(body).toMatch(/V-237 — customer self-profile endpoint\./);
     expect(body).toMatch(
-      /GET \/v1\/account\/me — returns the calling account's identity \+ tier\s*\n?\s*\/\/\s*\+ concurrent-session usage\/cap \+ profile usage\/cap\. Powers the GUI\s*\n?\s*\/\/\s*client's tier-aware enforcement display \(file 128 spec mirror\) so\s*\n?\s*\/\/\s*the customer sees "X \/ Y concurrent sessions" \+ "P \/ Q profiles"\s*\n?\s*\/\/\s*before the API enforces the cap with a 402\./,
+      /GET \/v1\/account\/me — returns the calling account's identity \+ tier\s*\n?\s*\/\/\s*\+ concurrent-session usage\/cap \+ profile usage\/cap\. Powers the GUI\s*\n?\s*\/\/\s*client's tier-aware enforcement display \(file 128 spec mirror\) so\s*\n?\s*\/\/\s*the customer sees "X \/ Y concurrent sessions" \+ "P \/ Q profiles"\s*\n?\s*\/\/\s*before the API enforces the cap with a 429 tier-limit problem/,
     );
     expect(body).toMatch(
       /Distinct from `\/v1\/account\/rate-limits` \(per-bucket limit config\)\s*\n?\s*\/\/\s*and `\/v1\/account\/audit-log` \(event ledger\) — this is the dashboard\s*\n?\s*\/\/\s*header view\./,

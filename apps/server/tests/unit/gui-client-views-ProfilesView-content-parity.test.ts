@@ -1,7 +1,7 @@
 // W485.A — drift guard for apps/gui-client/src/views/ProfilesView.tsx.
 // Profiles view: list/create/delete V-136 persistent identity slots
 // with V-239 cap-gate. Drift here either drops the V-239 cap-gating
-// (customer sees a 402/cap-error from server in normal flow instead
+// (customer sees a 429 tier-limit cap-error from server in normal flow instead
 // of a disabled button + tooltip) or breaks the auto-poll cleanup
 // (poll continues after unmount + chews API quota).
 //

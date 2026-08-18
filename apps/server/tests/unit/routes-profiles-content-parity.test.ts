@@ -159,9 +159,9 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
     );
   });
 
-  it('V-313 POST /v1/profiles/:id/clone framing pinned: same admin-only-on-team gate as create; tier cap server-side (matches create path) → 402/TierLimit; name optional — server auto-derives non-conflicting `${source} (copy)` if omitted', () => {
+  it('V-313 POST /v1/profiles/:id/clone framing pinned: same admin-only-on-team gate as create; tier cap server-side (matches create path) → 429/TierLimit (V-814 corrected from 402); name optional — server auto-derives non-conflicting `${source} (copy)` if omitted', () => {
     expect(body).toMatch(
-      /\/\/ ── POST \/v1\/profiles\/:id\/clone \(V-313\) ─[\s\S]*?\/\/ Same admin-only-on-team gate as create\. Tier cap is checked\s*\n?\s*\/\/ server-side \(matches the create path\); 402 \/ TierLimit on\s*\n?\s*\/\/ exceeded\. Body `name` optional — server auto-derives a non-\s*\n?\s*\/\/ conflicting `\$\{source\} \(copy\)` if omitted\./,
+      /\/\/ ── POST \/v1\/profiles\/:id\/clone \(V-313\) ─[\s\S]*?\/\/ Same admin-only-on-team gate as create\. Tier cap is checked\s*\n?\s*\/\/ server-side \(matches the create path\); 429 \/ TierLimit on\s*\n?\s*\/\/ exceeded\. Body `name` optional — server auto-derives a non-\s*\n?\s*\/\/ conflicting `\$\{source\} \(copy\)` if omitted\./,
     );
     expect(body).toMatch(
       /const parsed = CloneProfileRequestSchema\.safeParse\(req\.body \?\? \{\}\);/,

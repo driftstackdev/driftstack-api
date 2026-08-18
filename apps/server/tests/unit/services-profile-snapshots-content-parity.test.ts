@@ -20,7 +20,7 @@
 //   • restore: tier-cap shared with ProfilesService.create
 //     (profileLimitFor); name uniqueness check; emits 'profile.created'
 //     audit with restored_from_snapshot link.
-//   • TierLimitError on tier-cap exceeded (402-equivalent).
+//   • TierLimitError on tier-cap exceeded (status 429, type tier-limit).
 //   • ConflictError on duplicate name.
 //   • delete: 404 if not found or wrong account.
 //   • emitAuditBestEffort: try/catch swallows audit failure (matches
@@ -56,7 +56,7 @@ describe('W401.C apps/server/src/services/profile-snapshots.ts content parity', 
     expect(body).toMatch(/- list: per-profile or per-account\./);
     expect(body).toMatch(/- get: single by id \(account-scoped; 404 cross-account\)\./);
     expect(body).toMatch(
-      /- restore: create a NEW profile from the snapshot's captured\s*\n?\s*\/\/\s*archetype \+ a customer-supplied name\. Tier-cap shared with\s*\n?\s*\/\/\s*ProfilesService\.create \(TierLimitError 402 when exceeded\)\./,
+      /- restore: create a NEW profile from the snapshot's captured\s*\n?\s*\/\/\s*archetype \+ a customer-supplied name\. Tier-cap shared with\s*\n?\s*\/\/\s*ProfilesService\.create \(TierLimitError 429 when exceeded/,
     );
     expect(body).toMatch(/- delete: hard-delete the snapshot row \(only mutation\)\./);
   });

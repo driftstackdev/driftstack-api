@@ -5,8 +5,8 @@
 // profiles 8+ hours daily), drops the 8-paid-tier + 3-self-hosted-
 // tier inventory (would diverge from Stripe 19 price ID inventory
 // + account_tier Postgres enum), or weakens the V-073 enforcement
-// implications (would drift from PROFILES_PER_TIER + 402-on-cap +
-// 429-on-concurrent semantics).
+// implications (would drift from PROFILES_PER_TIER + the 429 tier-limit
+// and 429 concurrency-limit semantics that actually ship).
 //
 //   • Status: Accepted, 2026-05-03, Contractual.
 //   • Related V-entry: V-061 + V-071 + V-073.
@@ -16,7 +16,9 @@
 //   • API: $149 / $499 / $1,499 monthly; 25/100/500 profiles.
 //   • Self-hosted: $1,000 / $2,000 / $4,000+/mo.
 //   • Annual discount: 20% across all tiers. Setup fees: zero.
-//   • 19 Stripe price IDs total. 402 profile-cap + 429 concurrent-cap.
+//   • 19 Stripe price IDs total. Both caps are 429 — V-814 corrected an
+//     ADR bullet that specified a payment-required status for the profile
+//     cap, a contrast the implementation never drew.
 //   • account_tier enum: trial_pack + 3 manual + 3 api + enterprise.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -87,7 +89,7 @@ describe('W550.C /docs/adr/ADR-004-pricing-restructure-two-ladder.md content par
     );
   });
 
-  it("V-073 enforcement implications framing pinned: 'Postgres `account_tier` enum drops `'free' | 'starter' | 'solo' | 'builder' | 'scale' | 'enterprise'` and becomes `'trial_pack' | 'solo_manual' | 'team_manual' | 'agency_manual' | 'api_starter' | 'api_builder' | 'api_scale' | 'enterprise'`.' + '`TIER_CONCURRENT_SESSION_LIMITS` becomes the only tier-limit metric on paid tiers.' + '`TIER_QUOTAS.session_minute` removed. Trial-pack `trial_pack_credit_cents` decrement at $0.18/hr stays per ADR-003' + 'New `PROFILES_PER_TIER` map enforces profile count at the `/v1/profiles` creation endpoint. Exceeding profile cap → 402 with profile-cap-reached body + upgrade link.' + 'Concurrent cap exceeded at session-creation → 429 (rate-limit semantic, not 402 — payment-required is for trial-pack states only).' — pinned so the account_tier-old-vs-new-enum + TIER_CONCURRENT_SESSION_LIMITS-only + TIER_QUOTAS.session_minute-removed + PROFILES_PER_TIER-map + 402-profile-cap + 429-concurrent-cap commitment survives", () => {
+  it("V-073 enforcement implications framing pinned: 'Postgres `account_tier` enum drops `'free' | 'starter' | 'solo' | 'builder' | 'scale' | 'enterprise'` and becomes `'trial_pack' | 'solo_manual' | 'team_manual' | 'agency_manual' | 'api_starter' | 'api_builder' | 'api_scale' | 'enterprise'`.' + '`TIER_CONCURRENT_SESSION_LIMITS` becomes the only tier-limit metric on paid tiers.' + '`TIER_QUOTAS.session_minute` removed. Trial-pack `trial_pack_credit_cents` decrement at $0.18/hr stays per ADR-003' + the `PROFILES_PER_TIER` enforcement bullet and the concurrency-cap bullet — pinned so the account_tier-old-vs-new-enum + TIER_CONCURRENT_SESSION_LIMITS-only + TIER_QUOTAS.session_minute-removed + PROFILES_PER_TIER-map commitments survive. V-814 REWROTE this title: it used to quote both cap bullets verbatim, including a payment-required status and a body identifier the server has never emitted, so the pin's own title was a second copy of the false claim", () => {
     expect(body).toMatch(/Postgres `account_tier` enum drops `'free' \| 'starter' \| 'solo' \|/);
     expect(body).toMatch(/'builder' \| 'scale' \| 'enterprise'` and becomes `'trial_pack' \|/);
     expect(body).toMatch(/'solo_manual' \| 'team_manual' \| 'agency_manual' \| 'api_starter' \|/);
@@ -101,11 +103,28 @@ describe('W550.C /docs/adr/ADR-004-pricing-restructure-two-ladder.md content par
     expect(body).toMatch(
       /New `PROFILES_PER_TIER` map enforces profile count at the `\/v1\/profiles` creation endpoint\./,
     );
+    // V-814 — these two bullets now describe what ships. The profile cap
+    // throws TierLimitError (status 429, type .../tier-limit); the ADR as
+    // accepted specified a payment-required status with a body identifier
+    // that exists nowhere in the codebase, and the implementation note
+    // below the bullets records that divergence rather than hiding it.
     expect(body).toMatch(
-      /Exceeding profile cap → 402 with profile-cap-reached body \+ upgrade link\./,
+      /Exceeding profile cap → 429 with the `https:\/\/errors\.driftstack\.dev\/tier-limit` problem type\./,
     );
     expect(body).toMatch(
-      /Concurrent cap exceeded at session-creation → 429 \(rate-limit semantic, not 402 — payment-required is for trial-pack states only\)\./,
+      /Concurrent cap exceeded at session-creation → 429 with the `https:\/\/errors\.driftstack\.dev\/concurrency-limit` problem type\./,
+    );
+    expect(body, 'the ADR must carry the divergence note, not just the corrected bullets').toMatch(
+      /Implementation note \(V-814, 2026-08-18\) — what shipped differs from the decision above\./,
+    );
+
+    // SENTINEL — the retired claim must not return. There is no
+    // profile-cap-reached identifier in the codebase and no 402 on this path.
+    expect(body, 'the retired payment-required claim must not return').not.toMatch(
+      /profile cap → 402/,
+    );
+    expect(body, 'the fabricated body identifier must not return').not.toMatch(
+      /profile-cap-reached body/,
     );
   });
 

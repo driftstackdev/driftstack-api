@@ -3,7 +3,9 @@
 // Workstream. PROFILES_PER_TIER + profileLimitFor() helper landed in
 // V-073 as the data-layer surface; this test exercises the helper
 // directly until the route exists, then converts to a real HTTP test
-// (create N profiles → N+1 fails with 402 + profile-cap-reached body).
+// (create N profiles → N+1 fails with 429 + the tier-limit problem type;
+// V-814 corrected this from 402 + a profile-cap-reached body, neither of
+// which the server has ever produced).
 //
 // Per ADR-004 + V-073:
 //   free:    1
@@ -68,8 +70,8 @@ test.describe('profileLimitFor (placeholder until /v1/profiles route lands)', ()
 // TODO (Workstream F or Manual-tier-specific Workstream): when /v1/profiles
 // route lands, replace these unit-style assertions with real HTTP tests:
 //   - POST /v1/profiles N times for tier with limit N → all 201
-//   - POST /v1/profiles N+1th time → 402 with profile-cap-reached body +
+//   - POST /v1/profiles N+1th time → 429 with the tier-limit problem type +
 //     upgrade link
 //   - DELETE /v1/profiles/{id} frees a slot; next POST 201
-//   - Enterprise account → unlimited (no 402, even at high counts;
+//   - Enterprise account → unlimited (no tier-limit error at any count;
 //     bound by per-account override only)

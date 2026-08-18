@@ -17,7 +17,7 @@
 //     - get: single by id (account-scoped; 404 cross-account).
 //     - restore: create NEW profile from snapshot's captured
 //       archetype + customer-supplied name. Tier-cap shared with
-//       ProfilesService.create (TierLimitError 402 when exceeded).
+//       ProfilesService.create (TierLimitError 429 when exceeded).
 //     - delete: hard-delete (only mutation; snapshots are otherwise
 //       immutable).
 //

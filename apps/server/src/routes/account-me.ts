@@ -3,7 +3,8 @@
 // + concurrent-session usage/cap + profile usage/cap. Powers the GUI
 // client's tier-aware enforcement display (file 128 spec mirror) so
 // the customer sees "X / Y concurrent sessions" + "P / Q profiles"
-// before the API enforces the cap with a 402.
+// before the API enforces the cap with a 429 tier-limit problem
+// (V-814 — this said 402, which the server has never returned here).
 //
 // Distinct from `/v1/account/rate-limits` (per-bucket limit config)
 // and `/v1/account/audit-log` (event ledger) — this is the dashboard
