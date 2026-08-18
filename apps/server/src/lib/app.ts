@@ -1199,6 +1199,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       accountProxiesRepo: deps.accountProxiesRepo ?? null,
       profileMasterKey: deps.profileMasterKey ?? null,
       ...(deps.proxyTcpProbe !== undefined ? { proxyTcpProbe: deps.proxyTcpProbe } : {}),
+      // Same probe + resolver the pre-launch gate uses, so `…/proxies/:id/test`
+      // predicts a launch instead of reporting port reachability.
+      ...(deps.proxyConnectivityProbe !== undefined
+        ? { proxyConnectivityProbe: deps.proxyConnectivityProbe }
+        : {}),
+      ...(deps.accountProxiesService !== undefined
+        ? { accountProxiesService: deps.accountProxiesService }
+        : {}),
       // Audit egress-config changes (proxy.created / proxy.deleted).
       ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
       // 2026-05-19 — OAuth-IDP avatar fallback for the avatar_url

@@ -334,6 +334,46 @@ describe('POST /v1/account/me/proxies/:id/test', () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  it('CRITICAL the connection test answers "will this launch?", not "is the port open?". A proxy can accept TCP and authenticate perfectly and still refuse to route — SOCKS5 reply 0x02 — which is exactly what blocked every launch on 2026-08-18 while every reachability check reported healthy. A green Test beside a red launch leaves a customer with no way to reconcile them, and the reasonable conclusion is that the product is broken.', async () => {
+    // The launch probe refuses; the reachability probe would have PASSED. The
+    // route must report the launch verdict, so the two cannot disagree.
+    fx = await buildTestApp({
+      proxyConnectivityProbe: {
+        probe: () => Promise.resolve({ ok: false, reason: 'egress_blocked' }),
+      } as unknown as ConstructorParameters<typeof Object>[0] as never,
+      proxyTcpProbe: () => Promise.resolve(),
+    });
+    const id = await makeProxy('routes-nowhere.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ ok: boolean; reason?: string }>();
+    expect(body.ok, 'a proxy that cannot route must not test green').toBe(false);
+    expect(body.reason, 'and it must say what the launch gate would say').toBe(
+      'The proxy connected but could not reach the internet. Its upstream egress is blocked.',
+    );
+  });
+
+  it('CRITICAL a proxy the launch probe accepts still tests green, so the stricter check cannot simply fail everything. Without this the arm above is satisfied by a route that reports failure unconditionally.', async () => {
+    fx = await buildTestApp({
+      proxyConnectivityProbe: {
+        probe: () => Promise.resolve({ ok: true }),
+      } as unknown as ConstructorParameters<typeof Object>[0] as never,
+      proxyTcpProbe: () => Promise.reject(new Error('the TCP fallback must not be consulted')),
+    });
+    const id = await makeProxy('routes-fine.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ ok: boolean }>().ok, 'a working proxy must still test green').toBe(true);
+  });
 });
 
 describe('account_owner scope', () => {

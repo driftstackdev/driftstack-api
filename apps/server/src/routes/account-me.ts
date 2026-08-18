@@ -39,6 +39,7 @@ import type {
   AccountProxyRow,
   AccountProxyRowUpdates,
 } from '../db/account-proxies-repo.js';
+import type { AccountProxiesService } from '../services/account-proxies.js';
 import {
   encryptAccountProxySecret,
   type AccountProxySecretSlot,
@@ -98,6 +99,34 @@ export interface AccountMeRoutesOptions {
    *  endpoint (resolves on connect, rejects on timeout/refused). Defaults to the
    *  SOCKS5 backend's defaultTcpProbe; tests inject a deterministic stub. */
   proxyTcpProbe?: (host: string, port: number, timeoutMs: number) => Promise<void>;
+  /**
+   * The SAME probe the pre-launch gate runs. When present, `…/proxies/:id/test`
+   * answers the question a customer is actually asking — "will this proxy let me
+   * launch?" — instead of "is the port open?".
+   *
+   * Those diverged, and the divergence is what a real block looked like from the
+   * outside on 2026-08-18: five proxies that TCP-connected and authenticated
+   * cleanly, so every reachability check said healthy, while the provider
+   * refused every CONNECT and the launch gate blocked all of them. A customer
+   * with a green Test and a red launch has no way to reconcile the two, and the
+   * reasonable conclusion is that the product is broken.
+   */
+  proxyConnectivityProbe?: {
+    probe(descriptor: {
+      protocol: 'socks5';
+      host: string;
+      port: number;
+      username?: string;
+      password?: string;
+    }): Promise<{ ok: boolean; reason?: string }>;
+  };
+  /**
+   * Resolves the stored row to dispatch config (decrypts the password). Typed as
+   * a Pick of the real service rather than a restated shape: `resolveForDispatch`
+   * returns a socks5 config OR a VPN wire OR null, and writing that union out by
+   * hand here would drift from the service the gate calls.
+   */
+  accountProxiesService?: Pick<AccountProxiesService, 'resolveForDispatch'>;
   /** Best-effort audit emitter for proxy.created / proxy.deleted (egress-config
    *  changes are security-relevant + already have dashboard labels/filters).
    *  Omitted → no audit (the customer op still succeeds). */
@@ -124,6 +153,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   const accountProxiesRepo = opts.accountProxiesRepo ?? null;
   const proxyMasterKey = opts.profileMasterKey ?? null;
   const proxyTcpProbe = opts.proxyTcpProbe ?? defaultTcpProbe;
+  const proxyConnectivityProbe = opts.proxyConnectivityProbe;
+  const accountProxiesService = opts.accountProxiesService;
   const accountAudit = opts.accountAudit ?? null;
 
   // Best-effort audit emit for proxy lifecycle (egress-config changes). Carries
@@ -742,6 +773,59 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         };
       }
       const startedAt = Date.now();
+      // Prefer the LAUNCH probe. A reachability check answers a question nobody
+      // asked: a proxy can accept TCP and authenticate perfectly and still refuse
+      // to route, which is what "SOCKS5 reply 0x02 not allowed by ruleset" means
+      // and what blocked every launch on 2026-08-18 while every reachability
+      // check reported healthy. Falling back to TCP only when the probe or the
+      // resolver is absent (fixtures, and deployments with no master key).
+      if (
+        proxyConnectivityProbe !== undefined &&
+        accountProxiesService !== undefined &&
+        row.scheme === 'socks5'
+      ) {
+        const resolved = await accountProxiesService.resolveForDispatch({
+          proxyId: row.id,
+          accountId: ctx.account.id,
+          tier: ctx.account.tier,
+        });
+        if (resolved === null) {
+          return {
+            ok: false as const,
+            reason: 'This proxy’s stored configuration could not be read. Re-add it and try again.',
+          };
+        }
+        // A VPN wire carries `type`, not host/port — nothing to dial with a
+        // SOCKS5 probe. Unreachable for a scheme-socks5 row, but the union says
+        // it is possible, so fall through to the reachability check rather than
+        // asserting it away.
+        if (!('host' in resolved)) {
+          await proxyTcpProbe(row.host, row.port, 8_000);
+          return { ok: true as const, latency_ms: Date.now() - startedAt };
+        }
+        const result = await proxyConnectivityProbe.probe({
+          protocol: 'socks5',
+          host: resolved.host,
+          port: resolved.port,
+          ...(resolved.username !== undefined ? { username: resolved.username } : {}),
+          ...(resolved.password !== undefined ? { password: resolved.password } : {}),
+        });
+        if (result.ok) return { ok: true as const, latency_ms: Date.now() - startedAt };
+        // The same four sentences the desktop client renders, so a customer who
+        // reads one and then the other is not told two different stories.
+        const copy: Record<string, string> = {
+          unreachable: 'The proxy did not answer. Check the host and port, and that it is online.',
+          auth_failed: 'The proxy rejected the username and password. Re-enter them and try again.',
+          timeout: 'The proxy was too slow to respond. It may be overloaded — try again shortly.',
+          egress_blocked:
+            'The proxy connected but could not reach the internet. Its upstream egress is blocked.',
+        };
+        return {
+          ok: false as const,
+          reason:
+            copy[result.reason ?? ''] ?? 'The proxy could not be verified. Check its details.',
+        };
+      }
       try {
         await proxyTcpProbe(row.host, row.port, 8_000);
         return { ok: true as const, latency_ms: Date.now() - startedAt };
