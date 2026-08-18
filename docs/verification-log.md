@@ -35916,3 +35916,57 @@ immediately after the prose edit. Knowing the rule has never once been what caug
 
 Mutations: the captures line restored, and the `complete` step restored → each fires its
 sentinel. Restores byte-identical. `it(` count unchanged at 4.
+
+## V-829 — index of the decisions this sweep surfaced and did not take (2026-08-18)
+
+The parity sweep is closed: all 38 actions are accounted for (V-782 → V-828), two of the
+report's claims were refuted, and one was already covered by prior art. Ten findings ended in
+a decision rather than a fix. They are scattered across ten log entries, which is the wrong
+shape for something somebody has to act on, so they are collected here. **Nothing below was
+decided by me. Each is recorded where it lives, guarded so it cannot drift further, and left
+open on purpose.**
+
+**Customer-visible behaviour**
+
+1. **Profile cap returns 429, ADR-004 decided 402** (V-814). SDKs dispatch on the problem-type
+   URI so they are unaffected; a raw-HTTP consumer is told to branch on a status that never
+   arrives. Moving it is a breaking change to a live status code.
+2. **A typo-level legal-document edit blocks API-key minting account-wide** (V-821).
+   `content_hash_changed` fires with no version bump and nothing filters by reason. A reworded
+   liability clause is exactly the case you want to force re-acceptance on; a fixed typo is
+   exactly the case you do not.
+3. **Admin READ endpoints write no audit row** (V-820). All 30 mutating `/v1/admin/*` routes
+   audit; none of the 31 GETs do, including ones exposing every customer's API keys. A row per
+   list call on hot dashboard endpoints is a real cost against a real control.
+
+**Architecture**
+
+4. **L-001 is violated by a second mechanics surface** (V-825). The moat decision confines
+   coordinate primitives to one gated, unexported surface; `/v1/agent-sessions/:id/input-event`
+   meets none of its three conditions. Either L-001 is amended — defensible, since a human
+   driving a takeover is the case the exception was written for — or a surface in three shipped
+   SDKs is withdrawn.
+5. **Team `viewer` role is designed and unbuilt** (V-822). The enum ships `['member','admin']`.
+   The read-only stakeholder case is currently served by granting `member`, which also permits
+   creating sessions.
+6. **Egress is constructed, wired, and never invoked** (V-823). `applyToSession()` has no
+   caller; every customer-facing egress surface 503s. Planning-133 cross-agent work.
+7. **The audit archive has never run** (prior art, V-826-adjacent). `session_events` grows for
+   the lifetime of the deployment and the only thing that would bound it is dormant.
+
+**Surface / policy**
+
+8. **Three admin-oauth paths ship in the SDK-facing OpenAPI spec** (V-824) while the source
+   comment said admin endpoints are withheld as internal-only.
+9. **A planned capture endpoint requires retention the privacy policy forbids** (V-828).
+   Building it needs the policy changed first.
+10. **`schema.ts`'s V-298 changelog is a drift generator** — flagged in V-826 and not acted on.
+    Deleting it would lose why the slices split as they did; the honest fix is a decision about
+    where that history belongs, not a deletion.
+
+**What the sweep says about the guards themselves.** Three separate drift guards were found
+watching one side of their own invariant — V-813's doc ⊆ enforced (blind to a missing bucket),
+V-820's mutations-only (blind to unaudited reads), V-825's gui-input-only (blind to the
+surface that violates L-001). In each case the direction that was easy to check got checked
+and the other one was assumed. That is the most reusable finding here, and it is not in the
+report.
