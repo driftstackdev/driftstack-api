@@ -37295,3 +37295,36 @@ have been green too.
 Mutation-proved on four arms — publishing an extra admin path, unpublishing an OAuth one,
 restoring the false comment, and gating the spec route — with all three sources restored
 byte-identical.
+
+## V-863 — the schema changelog that had already drifted once, relocated (2026-08-18)
+
+**D-10 from V-829, taken.** `schema.ts` carried a per-slice delivery changelog under the team-RBAC
+tables — "V-298a (this commit): tables + migration only", then V-298b/c/d. V-826 flagged it as a
+drift generator and left the disposal open, because deleting it would lose why the slices split.
+
+**It had already drifted, which settles the argument.** The V-298d entry once claimed the
+customer-dashboard /team UI was mock data. It was live, and V-826 corrected it by appending
+"V-826: this said mock data only" _underneath the wrong line_ — patching a changelog in place
+rather than removing the thing that generates the drift. A comment written in the present tense of
+one commit ("this commit: tables only") cannot stay true in a file read months later.
+
+**The split that was actually needed.** The block held two different things and V-829 treated them
+as one. The architectural half — why membership is modelled as accounts joined to an owner account,
+why the auth path still resolves to a single accountId, what the two tables are and their natural
+key — is schema documentation, present-tense and useful. It stays untouched. The delivery-order
+half is git history and nothing else, and all four slices have shipped. Replaced with one sentence
+naming what is live, plus the reason the sequencing is gone so nobody helpfully restores it.
+
+**The pin the obvious grep would have missed — except it didn't, because the rule says use both.**
+`db-schema-content-parity.test.ts` froze five of those changelog lines. Removing the source text
+without it would have turned a green suite red on a file I had not opened. Fixed in the same
+commit with **one negative per removed line** rather than a single combined assertion: the
+mutation proof shows why, because reintroducing _only_ the V-298c line still fails. A combined
+negative would have passed a partial restoration.
+
+The V-826 sentinel ("the /team UI is not mock data") is kept as-is. It is still true, it is still
+worth asserting, and it now sits beside negatives that stop the sentence it was correcting from
+coming back at all — which is the stronger form of the same guarantee.
+
+Three mutations proved: full changelog restored, one line restored, and the new present-tense
+statement removed. Source restored byte-identical.

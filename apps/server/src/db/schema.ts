@@ -2060,15 +2060,16 @@ export type NewSystemHealthProbe = typeof systemHealthProbes.$inferInsert;
 //     the invitee when they accept. Token-hashed at rest (V-070
 //     auth-tokens.ts pattern).
 //
-// V-298 splits:
-//   V-298a (this commit): tables + migration only. No service / route
-//     / auth path integration yet — the table shape lands first so
-//     future slices can build against a stable schema.
-//   V-298b: TeamMembersService + invite/accept routes.
-//   V-298c: auth path integration (member can act as owner per role).
-//   V-298d: customer-dashboard /team UI — LIVE against /v1/team/*
-//     (team.astro fetches members, invites, accept and remove).
-//     V-826: this said mock data only.
+// Team RBAC v1 is complete: these tables, TeamMembersService with the
+// invite/accept routes, auth-path integration (a member acts as the owner
+// account per role), and the customer-dashboard /team UI against /v1/team/*.
+//
+// V-863 — the per-slice delivery order that used to sit here is gone. It was
+// written in the present tense of a single commit ("this commit: tables +
+// migration only"), so it aged into a false description of a shipped feature
+// and had already been corrected in place once, when its dashboard entry still
+// said the UI was mock data. Delivery sequencing is what git history is for.
+// What a reader of this file needs is the shape above and whether it is live.
 
 export const teamRole = pgEnum('team_role', ['member', 'admin']);
 

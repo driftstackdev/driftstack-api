@@ -193,7 +193,7 @@ describe('W616 apps/server/src/db/schema.ts content parity', () => {
     expect(body).toMatch(/export const scheduledJobs = pgTable\(/);
   });
 
-  it('V-295a/b status-page tables (incidents 2-table shape + incident_updates + system_health_probes 60s poller + V-298a team_members/team_invites V-298 split a→d + V-295c3 status_subscribers double-opt-in + sha256-at-rest tokens) pinned', () => {
+  it('V-295a/b status-page tables (incidents 2-table shape + incident_updates + system_health_probes 60s poller + V-298a team_members/team_invites + V-295c3 status_subscribers double-opt-in + sha256-at-rest tokens) pinned', () => {
     expect(body).toMatch(/V-295a — public-status incidents\./);
     expect(body).toMatch(/\/\/ Two-table shape: `incidents` holds the current state \(severity,/);
     expect(body).toMatch(
@@ -204,11 +204,21 @@ describe('W616 apps/server/src/db/schema.ts content parity', () => {
     expect(body).toMatch(/V-295b — health probe history\./);
     expect(body).toMatch(/export const systemHealthProbes = pgTable\(/);
     expect(body).toMatch(/V-298a — team membership \(Team RBAC v1\)\./);
-    expect(body).toMatch(/\/\/ V-298 splits:/);
-    expect(body).toMatch(/V-298a \(this commit\): tables \+ migration only\./);
-    expect(body).toMatch(/V-298b: TeamMembersService \+ invite\/accept routes\./);
-    expect(body).toMatch(/V-298c: auth path integration \(member can act as owner per role\)\./);
-    expect(body).toMatch(/V-298d: customer-dashboard \/team UI — LIVE against \/v1\/team\/\*/);
+    // V-863 — the per-slice delivery changelog was removed from schema.ts. It
+    // was written in the present tense of one commit, so it aged into a false
+    // description of a shipped feature and had already been patched in place
+    // once (V-826, when its dashboard entry still said mock data). One negative
+    // per removed line, so a partial reintroduction cannot pass.
+    expect(body, 'the slice-changelog header is gone').not.toMatch(/\/\/ V-298 splits:/);
+    expect(body, 'and its "this commit" line').not.toMatch(
+      /\(this commit\): tables \+ migration only/,
+    );
+    expect(body, 'and the V-298b entry').not.toMatch(/V-298b: TeamMembersService/);
+    expect(body, 'and the V-298c entry').not.toMatch(/V-298c: auth path integration/);
+    expect(body, 'and the V-298d entry').not.toMatch(/V-298d: customer-dashboard/);
+    expect(body, 'replaced by a present-tense statement of what is live').toMatch(
+      /Team RBAC v1 is complete: these tables, TeamMembersService with the/,
+    );
     // V-826 SENTINEL — the page has fetched live endpoints since V-298c.
     expect(body, 'the /team UI is not mock data').not.toMatch(/currently mock data only/);
     expect(body).toMatch(/export const teamMembers = pgTable\(/);
