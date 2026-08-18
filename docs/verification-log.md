@@ -36234,3 +36234,42 @@ rotted, in an entry about hand-maintained claims, written two entries after V-83
 that only a guard which recomputes can catch its author. I wrote that sentence and then, in the
 next entry, asserted six verifications from memory. The lesson does not transfer by being
 written down.
+
+## V-837 — the team-role rule, derived instead of described (2026-08-18)
+
+Acting on V-833 rather than leaving it as an observation: taking the one claim in this arc that
+was actually wrong and giving it a guard that recomputes.
+
+The team-role gating rule has now been stated wrongly twice in the same two documents. V-822
+found `docs/architecture/team-roles-taxonomy.md` and `docs/decisions.md` claiming team roles
+gate the dashboard ONLY, while thirteen route modules gate `/v1/*` on them. V-831 found my
+replacement wrong in turn — "reads are role-agnostic", generalised from one module that happens
+not to check role, when `GET /v1/agent-sessions` requires `admin` because agent sessions carry
+transcripts and live control state.
+
+Both times a text pin froze the sentence and the suite stayed green over it. A text pin asserts
+what its author wrote; it cannot disagree with them.
+
+`the-team-role-read-write-split-is-derived-not-described.test.ts` computes the split from the
+routes: every `role === 'admin'` check, attributed to its enclosing handler or helper, with
+comments stripped first so a retraction naming a role check is not counted as one. Three arms
+that matter:
+
+- every GET gated on `admin` must equal the recorded set, which is `['/v1/agent-sessions']`;
+- every role check outside a handler must sit in a known write-gating helper — without this,
+  moving a read gate into a helper would make it stop looking like a GET and the check would go
+  quiet instead of failing;
+- the taxonomy doc must carry the exception for as long as the set is non-empty.
+
+**The mutation that matters reproduces my own mistake in code.** Adding an admin check to
+`GET /v1/account/audit-log` — narrowing a read exactly as V-822's prose wrongly implied could
+not happen — fails the first arm, names the route, and says to update both documents in the
+same commit. That is the guard I should have written in V-822 instead of a sentence.
+
+Also proven: a read gate hidden in an unnamed helper fails the second arm; deleting the
+exception from the taxonomy doc fails the third. Restores byte-identical.
+
+The full run that caught this file's absence from the pin is the file-count arm doing its job —
+it failed until the ratchet was raised, which is what it is for.
+
+Ratchet: EXPECTED_TEST_FILES 2888 → 2889, \_ALL 3053 → 3054 (one file, mine).
