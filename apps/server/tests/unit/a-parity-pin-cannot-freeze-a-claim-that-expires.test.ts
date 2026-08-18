@@ -68,6 +68,13 @@ const HAND_MAINTAINED_COUNT =
  * MEASURED 2026-08-17 with a CORRECT extractor. May only fall; raising either is
  * the bug this file is about.
  *
+ * Ratcheted 77 → 76 (futureTense) by V-838, which retired the usage-series pin's
+ * frozen "writers not wired" claim. Caught by the tight arm in the next full
+ * run, exactly as the V-819 note below predicted it would be — and for the same
+ * reason: I edited a pin and did not re-run this file. The note has now failed
+ * to change my behaviour twice, which says the note is not the mechanism. The
+ * arm is.
+ *
  * Ratcheted 92 → 91 by V-819, which retired the DR checklist pin's frozen module
  * count. That correction landed in its own commit WITHOUT re-running this file,
  * and the tight arm below caught it in the next full suite — which is the arm
@@ -94,7 +101,7 @@ const HAND_MAINTAINED_COUNT =
  * that were both broken — the comparison measured nothing and agreed with itself.
  * The fixture case below is what actually caught it.
  */
-const CEILINGS = { futureTense: 77, handMaintainedCount: 91 } as const;
+const CEILINGS = { futureTense: 76, handMaintainedCount: 91 } as const;
 
 function parityPinFiles(): string[] {
   return readdirSync(UNIT_DIR)
