@@ -36441,3 +36441,52 @@ Two mutations, one per direction: the dormancy claim restored → the sentinel f
 service itself is intentionally not wired here". That "here" means "in this file", and it is
 accurate — V-808 already corrected the sweep's own header to record that `bootstrap.ts` drives
 it on a 5s interval. Same words, different claim.
+
+## V-842 — the unpinned-source scan, worked through and closed (2026-08-18)
+
+Closing the surface V-838 opened, with the numbers rather than an impression.
+
+**Why the surface existed.** The sweep report audited the 292 claim-bearing PARITY PINS. A
+claim living in source that no pin freezes was outside its corpus by construction, and V-794's
+ratchet only scans files matching `content-parity`. So every "not wired / deferred / will land"
+sentence in `apps/server/src` was unexamined — 54 occurrences across 36 files.
+
+**Yield: four findings, twelve rejections.**
+
+- **V-838** — `GET /v1/usage/series` documented as returning empty buckets because the
+  `usage_records` writers were unwired. They are wired; the zeros come from a
+  `generate_series` left-join, which is what let the claim survive.
+- **V-839** — the crypto rail documented as returning 501 stubs when unconfigured. There are no
+  stubs, no 501 exists in this server, and the sibling billing rail implements exactly the
+  posture the comment described while crypto does not.
+- **V-840** — `RealAgentExecutor` claiming the runtime "still uses StubAgentExecutor", in the
+  file whose header V-808 had already corrected for the same staleness.
+- **V-841** — a rotation-reminder service documented as dormant that has been emailing
+  customers since its daily sweep was wired.
+
+Rejected after checking, and named so they are not re-derived: the WebKit driver stub, the MFA
+optional-dep conditional, the playwright dev-driver capture-kind slip, the 91-day webhook
+force-rotation producer (genuinely unwired), `crypto-orders.ts`'s `paidEmailNotifier` (unwired
+and impeccably documented), `usage.ts`'s Stripe Meter deferral (`session_minute` is still in
+the enum), `stripe-webhooks.ts`'s invoice-receipt wire-in (a retraction — S44 landed it),
+`agent-pair-mode-heartbeat.ts`'s "not wired here" (means "in this file"), `sessions.ts`'s IP
+blocklisting, `fleet-control-registry.ts`'s absent-consumer branch, `account-proxies.ts`'s
+probe-writer, and `webhook-rotation-reminder.ts` (already a retraction).
+
+**What made the four findable was not reading harder.** Reading each comment in turn is how the
+twelve rejections happened, and it is slow. The instrument that worked was cross-referencing:
+take every file whose comments claim deferral, take the classes it exports, and check whether
+`bootstrap.ts` or `app.ts` constructs one. That narrowed thirty files to thirteen, four of which
+were already the findings. The same shape as every good guard in this arc — compare two sources
+rather than read one closely.
+
+**A caution on that instrument.** It is a filter, not a verdict. Nine of its thirteen hits were
+false: a file can claim deferral about a FEATURE while its class is wired for other reasons,
+which is exactly `crypto-orders.ts`, and is why the filter's output still has to be read. A
+filter that flags thirteen and means four is useful; one that flags thirty-four and means
+nothing, as in V-830, is not. The difference is whether the filter encodes the actual mechanism
+of the defect.
+
+The remaining occurrences are conditional descriptions of runtime states — "absent consumer →
+ignored", "null = not wired" — which read like promises to a regex and are accurate prose. They
+are not a backlog.
