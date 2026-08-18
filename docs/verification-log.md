@@ -35745,3 +35745,60 @@ than described.
 
 Mutation: one admin-oauth path removed from the spec → the arm fires with the diff. Restores
 byte-identical. `it(` 13 → 14, one case added.
+
+## V-825 — L-001 permits one mechanics surface; a second one shipped (2026-08-18)
+
+`docs/locked-decisions.md` L-001, "The customer-facing API is intent-only", is the decision
+the product calls its moat: customers say WHAT they want, never HOW to mechanically do it.
+It allows mechanics primitives in exactly one place — the GUI's manual-control mode, where a
+human is literally clicking pixels — and only on a surface that is (1) server-internal,
+schemas NOT in `@driftstack/api-types`; (2) gated behind the `gui_control` API-key scope; and
+(3) absent from the customer SDKs.
+
+`POST /v1/sessions/:id/gui-input` was built to all three. Its schema lives in
+`apps/server/src/schemas/gui-input.ts`, the route requires `gui_control`, and
+`OAUTH_ALLOWED_SCOPES` omits that scope so an OAuth client cannot even request it. The source
+comment there cites `docs/locked-decisions.md` by name.
+
+`POST /v1/agent-sessions/:id/input-event` meets **none** of the three.
+
+- **The schema is on the customer surface.** `InputEventSchema`
+  (`packages/api-types/src/agent-input-event.ts`) is a 12-variant union re-exported through
+  the barrel. `mouseMove` and `tap` carry raw integer `x`/`y`; `keyDown`/`keyUp` carry `key`
+  plus `modifiers`. L-001's own ❌ list names exactly `tap_at(x, y)` and
+  `key_down('a'); key_up('a')`.
+- **No `gui_control` gate.** The preHandler is `controlKeyOrAccountAuth('write')` — a
+  per-session control key, or an ordinary customer API key carrying `write`.
+- **Full SDK exposure.** `sendInputEvent` / `send_input_event` / `SendInputEvent` ship in all
+  three SDKs, and the endpoint is in the published OpenAPI spec.
+
+**The existing guard is the third in this sweep found watching one side of its own
+invariant.** `gui-input-l001-cross-source-invariant.test.ts` reads `schemas/gui-input.ts` and
+nothing else, so it watches the surface that COMPLIES and cannot see the one that does not.
+V-813's bucket guard checked doc ⊆ enforced and was blind to a missing bucket; V-820's audit
+invariant covered mutations and was blind to reads. Same shape three times: the direction that
+was easy to check got checked.
+
+**I nearly refuted this and was wrong.** My first check grepped `packages/api-types/src/index.ts`
+for `InputEventSchema`, found nothing, and I was ready to record the report's claim as false.
+The re-export is a wildcard — `export * from './agent-input-event.js'` — so a name grep on a
+barrel proves nothing. Confirmed by loading the built package and testing the key. The new
+guard asserts the wildcard line itself for exactly this reason, with the near-miss written
+into the case title.
+
+**Not resolved here, deliberately.** Withdrawing the surface breaks three shipped SDKs.
+Amending L-001 is defensible: a human driving a pair-mode takeover is the same "the human's
+cadence IS the behavior" case the exception was written for, and the gui-input carve-out
+already concedes the principle. That is a product decision. What was wrong is that neither
+choice had been made — L-001 states three conditions as fact, and a reader had no way to learn
+that one of the two mechanics surfaces meets none of them.
+
+The new guard pins the current state in both directions: the mechanics vocabulary may not
+widen without a decision, the barrel re-export is asserted (so honouring condition 1 fails
+loudly and prompts removing the note), the two routes must keep differing in exactly the way
+L-001 cares about, and the note must stay in `locked-decisions.md` while the divergence does.
+
+Mutations: a 13th variant added; the barrel re-export removed; the note deleted; the second
+route given a `gui_control` gate — each fires its own arm. Restores byte-identical.
+
+Ratchet: EXPECTED_TEST_FILES 2887 → 2888, \_ALL 3052 → 3053 (one file, mine).

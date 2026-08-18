@@ -59,6 +59,44 @@ there's no automation. Mechanics-level primitives there are fine —
 
 This keeps the customer SDK surface clean and the gating explicit.
 
+> **⚠ V-825 — a SECOND mechanics surface shipped, and it meets none of
+> the three conditions above.**
+>
+> The three bullets hold for `POST /v1/sessions/:id/gui-input`, which was
+> built to them: its schema lives in `apps/server/src/schemas/gui-input.ts`,
+> the route requires the `gui_control` scope, and `OAUTH_ALLOWED_SCOPES`
+> omits that scope so an OAuth client cannot request it.
+>
+> `POST /v1/agent-sessions/:id/input-event` is a different surface and it
+> does not:
+>
+> - **Schema is in `@driftstack/api-types`.** `InputEventSchema`
+>   (`packages/api-types/src/agent-input-event.ts`) is a 12-variant union
+>   re-exported through the barrel at `index.ts`. `mouseMove` and `tap`
+>   carry raw integer `x`/`y`; `keyDown`/`keyUp` carry `key` + `modifiers`.
+>   Those are precisely the ❌ examples this decision lists — `tap_at(x, y)`
+>   and `key_down('a'); key_up('a')`.
+> - **No `gui_control` gate.** The route's preHandler is
+>   `controlKeyOrAccountAuth('write')`: either a per-session
+>   `gui_control_key`, or an ordinary customer API key carrying `write`.
+> - **Full SDK exposure.** `sendInputEvent` / `send_input_event` /
+>   `SendInputEvent` ship in the TypeScript, Python and Go SDKs, and the
+>   endpoint is in the published OpenAPI spec.
+>
+> The existing drift guard could not catch this: `gui-input-l001-cross-
+source-invariant.test.ts` reads `schemas/gui-input.ts` and nothing else,
+> so it watches the surface that complies and is blind to the one that does
+> not.
+>
+> **This needs a decision and is not a documentation fix.** Either L-001 is
+> amended to permit a mechanics surface for live-takeover — which is a
+> coherent position, since a human driving a pair-mode session is the same
+> "human cadence IS the behavior" case the exception was written for — or
+> the agent-sessions surface is withdrawn, which breaks three shipped SDKs.
+> Recorded here rather than resolved, so the divergence stops being
+> invisible. The guard added in V-825 pins the current state so it cannot
+> widen further without somebody noticing.
+
 ### Drift detection
 
 When proposing a change to a public schema, ask:
