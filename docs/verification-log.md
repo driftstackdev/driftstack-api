@@ -37415,3 +37415,19 @@ asserting work is still _pending_ — and that is what surfaced this. The remain
 recorded rather than swept, because the count was never the finding.
 
 Mutation-proved three ways, ADR restored byte-identical.
+
+**V-865 addendum — my fix tripped V-794, and V-794 was right.** The commit above pinned §3's new
+status wording, including the literal phrase marking the section unimplemented. The V-794 ratchet
+went 75→76 and failed the suite. That guard exists to stop a pin freezing a claim that expires, and
+this was exactly one: the sentence stops being true the day somebody wires the sweep, and the pin
+would then fight the engineer who did it. Replacing a false present-tense claim with a frozen
+statement of its absence is the same defect one step removed.
+
+Both text pins removed. What remains is a negative (the present-tense cadence claim is gone) and a
+fact that does not expire (the ledger table shipped). Dormancy is left to
+`audit-archive-is-not-scheduled-and-that-is-recorded`, which DERIVES it from the absence of a
+caller — a doc pin cannot do that and should not pretend to. Ratchet back to 75, tight, no headroom.
+
+Worth recording that the ratchet fired on its own author within minutes of the commit it was
+written to catch. That is the property V-833 asks for: only a guard that recomputes can contradict
+the person who wrote it.

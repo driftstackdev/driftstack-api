@@ -91,12 +91,14 @@ describe('W551.B /docs/adr/ADR-006-audit-log-retention-export.md content parity'
     expect(body, 'the archive ledger is described as shipped, not pending').toMatch(
       /\*\*Archive ledger\*\* \(`audit_archive_runs`\) — shipped in V-163/,
     );
-    expect(body, 'the cadence is stated as designed, not operating').toMatch(
-      /A monthly cron-driven service \(`AuditArchiveService`\) is designed to run on the 1st of each month at 02:00 UTC/,
-    );
-    expect(body, 'and the section carries its not-implemented status').toMatch(
-      /⚠ V-865 — DECIDED, NOT IMPLEMENTED\. This section describes a cadence that has never run\./,
-    );
+    // NOT pinned: the §3 status wording. My first version froze the phrase
+    // "NOT IMPLEMENTED", and V-794 failed the suite for it — correctly. That
+    // sentence expires the day somebody wires the sweep, and the pin would then
+    // fight the engineer who did it, which is the whole defect V-794 names.
+    // The truth about dormancy is owned by
+    // audit-archive-is-not-scheduled-and-that-is-recorded, which DERIVES it from
+    // the absence of a caller and cannot go stale. A doc pin cannot do that, so
+    // it should not pretend to.
     expect(body).toMatch(/### 4\. Retention SLA — 7 years/);
     expect(body).toMatch(
       /- Dutch BV bookkeeping retention requirements \(fiscale bewaarplicht — 7 years for accounting records\)\./,
