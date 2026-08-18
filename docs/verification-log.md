@@ -34750,3 +34750,41 @@ Mutation-proved: reinstating "no DB persistence yet" reds both files. 157 pins o
 surface green, with `it(` counts unchanged in all three files (7, 23, 16).
 
 Sixth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-800 — a founder-facing test runbook said the deep-link hand-off never fires; it has been firing (2026-08-18)
+
+`docs/founder-actions/v328-tauri-deep-link-test.md` exists to be read mid-manual-test. It said:
+
+> The server-side change is NOT in this slice. Until it lands, the desktop app behaves identically to
+> V-268 (polling-only), since the deep-link listener never fires (no driftstack:// URL is ever
+> opened). The native deep-link plumbing is ready; it just sits idle until the dashboard page emits
+> the redirect.
+
+The dashboard page emits the redirect. `apps/customer-dashboard/src/pages/cli/authorize.astro`
+defines `returnToDesktop(delayMs)`, which assigns
+`driftstack://auth/callback?code=…&state=…`, and calls it with **600 ms on the success path** — the
+delay is deliberate, so the confirmation is visible before the OS swaps focus — and with **0 on the
+retry path** when the authorize outcome is unknown.
+
+The failure mode is specific to who reads this file: someone testing the hand-off by hand, told in
+advance that it cannot work. They would take a working feature for a broken one, or skip the test the
+document exists to drive. The polling loop is still the fallback and the doc now says so accurately —
+`returnToDesktop` swallows a throw, and the comment there records that the poller is what catches an
+unregistered URL scheme.
+
+A second stale sentence outlived my first replacement — "The native deep-link plumbing is ready; it
+just sits idle until the dashboard page emits the redirect", plus the follow-on it gated ("That
+follow-on lands as `V-328e` once the founder confirms…"). Both are now retired: the listener is
+registered, the dashboard emits, and what remains is the per-platform manual confirmation, not a wait
+on the server.
+
+**The sentinel-versus-retraction convention bit for the fourth time.** V-795 named the rule — the
+sentinel quotes, the retraction paraphrases — and my first draft here still wrote the banned phrase
+verbatim into the correction, so the negative caught my own text. Naming a convention has not been
+enough to make me apply it; the check that catches it every time is running the pin immediately after
+editing the prose, which is now part of the loop rather than a step at the end.
+
+Mutation-proved: reinstating the never-fires claim reds the sentinel. 66 pins over the deep-link /
+CLI-authorize surface green, `it(` count unchanged at 6.
+
+Fifth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.

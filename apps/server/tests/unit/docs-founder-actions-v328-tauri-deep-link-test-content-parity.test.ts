@@ -110,25 +110,25 @@ describe('W545.B /docs/founder-actions/v328-tauri-deep-link-test.md content pari
     expect(body).toMatch(/relies on the polling loop to keep working\./);
   });
 
-  it("Server-side V-328e follow-on + Rollback framing pinned: '## Server-side dashboard work (separate slice)' + 'The dashboard's `/auth/cli-callback` page currently shows a \"click to approve\" UI that mints a key + lets the desktop app pick it up via the V-268 polling loop. V-328 expects the page to ALSO emit a `window.location.href = \"driftstack://auth/callback?code=...&state=...\"` redirect on success so the OS hand-off fires.' + 'The server-side change is NOT in this slice. Until it lands, the desktop app behaves identically to V-268 (polling-only), since the deep-link listener never fires (no driftstack:// URL is ever opened). The native deep-link plumbing is ready; it just sits idle until the dashboard page emits the redirect.' + 'That follow-on lands as `V-328e` once the founder confirms the per-platform native bundle test above.' + '## Rollback' + 'If a per-platform test reveals a regression that's hard to fix quickly:' + 'git revert <V-328-commit-sha>' + 'The pre-V-328 polling loop is fully functional and ships as a fallback even with V-328 active, so a revert just removes the listener registration — no data loss, no key re-mint required.' — pinned so the V-328e follow-on + /auth/cli-callback window.location.href + polling-fallback-still-works-after-revert + no-data-loss-no-key-re-mint commitment survives", () => {
+  it("Server-side V-328e follow-on + Rollback framing pinned: '## Server-side dashboard work (separate slice)' + (V-800 retracted the not-in-this-slice / listener-never-fires framing: cli/authorize.astro emits the redirect on success today) '## Rollback' + 'If a per-platform test reveals a regression that's hard to fix quickly:' + 'git revert <V-328-commit-sha>' + 'The pre-V-328 polling loop is fully functional and ships as a fallback even with V-328 active, so a revert just removes the listener registration — no data loss, no key re-mint required.' — pinned so the V-328e follow-on + /auth/cli-callback window.location.href + polling-fallback-still-works-after-revert + no-data-loss-no-key-re-mint commitment survives", () => {
     expect(body).toMatch(/## Server-side dashboard work \(separate slice\)/);
-    expect(body).toMatch(/The dashboard's `\/auth\/cli-callback` page currently shows a/);
-    expect(body).toMatch(/"click to/);
-    expect(body).toMatch(/approve" UI that mints a key \+ lets the desktop app pick it up via/);
-    expect(body).toMatch(/the V-268 polling loop\. V-328 expects the page to ALSO emit a/);
-    expect(body).toMatch(
-      /`window\.location\.href = "driftstack:\/\/auth\/callback\?code=\.\.\.&state=\.\.\."`/,
+    // V-800 — the dashboard side SHIPPED. cli/authorize.astro defines
+    // returnToDesktop(delayMs), which assigns driftstack://auth/callback, and
+    // calls it with 600 on the success path and 0 on the unknown-outcome retry.
+    // The old assertions froze the opposite and would have had the founder read
+    // a working hand-off as a broken one mid-test.
+    expect(body).toMatch(/mints a key, lets the desktop app pick/);
+    expect(body).toMatch(/`returnToDesktop\(delayMs\)`, which assigns/);
+    expect(body).toMatch(/delay on the success path/);
+    expect(body).toMatch(/with 0 on the retry path when the authorize outcome is/);
+    expect(body, 'the retraction stays so this cannot quietly revert').toMatch(
+      /V-800 — this section used to say the redirect was not in the slice/,
     );
-    expect(body).toMatch(/redirect on success so the OS hand-off fires\./);
-    expect(body).toMatch(/The server-side change is NOT in this slice\. Until it lands, the/);
-    expect(body).toMatch(/desktop app behaves identically to V-268 \(polling-only\), since the/);
-    expect(body).toMatch(
-      /deep-link listener never fires \(no driftstack:\/\/ URL is ever opened\)\./,
-    );
-    expect(body).toMatch(/The native deep-link plumbing is ready; it just sits idle until the/);
-    expect(body).toMatch(/dashboard page emits the redirect\./);
-    expect(body).toMatch(/That follow-on lands as `V-328e` once the founder confirms the/);
-    expect(body).toMatch(/per-platform native bundle test above\./);
+    expect(body).not.toMatch(/deep-link listener never fires/);
+    expect(body).not.toMatch(/The server-side change is NOT in this slice/);
+    expect(body).not.toMatch(/it just sits idle until the/);
+    expect(body).toMatch(/Both halves are now live: the native listener is registered and the/);
+    expect(body).toMatch(/manual confirmation below, not a wait on the server side\./);
     expect(body).toMatch(/## Rollback/);
     expect(body).toMatch(/git revert <V-328-commit-sha>/);
     expect(body).toMatch(/The pre-V-328 polling loop is fully functional and ships as a/);

@@ -84,20 +84,25 @@ relies on the polling loop to keep working.
 
 ## Server-side dashboard work (separate slice)
 
-The dashboard's `/auth/cli-callback` page currently shows a "click to
-approve" UI that mints a key + lets the desktop app pick it up via
-the V-268 polling loop. V-328 expects the page to ALSO emit a
-`window.location.href = "driftstack://auth/callback?code=...&state=..."`
-redirect on success so the OS hand-off fires.
+The dashboard's authorize page mints a key, lets the desktop app pick
+it up via the V-268 polling loop, AND emits the deep-link hand-off.
+`apps/customer-dashboard/src/pages/cli/authorize.astro` defines
+`returnToDesktop(delayMs)`, which assigns
+`driftstack://auth/callback?code=…&state=…`, and calls it with a 600 ms
+delay on the success path (so the confirmation is visible before the OS
+swaps focus) and with 0 on the retry path when the authorize outcome is
+unknown.
 
-The server-side change is NOT in this slice. Until it lands, the
-desktop app behaves identically to V-268 (polling-only), since the
-deep-link listener never fires (no driftstack:// URL is ever opened).
-The native deep-link plumbing is ready; it just sits idle until the
-dashboard page emits the redirect.
-
-That follow-on lands as `V-328e` once the founder confirms the
-per-platform native bundle test above.
+V-800 — this section used to say the redirect was not in the slice, and
+that the OS hand-off consequently stayed idle because nothing ever
+opened the custom scheme. Both stopped being true when that page landed. A founder
+reading this mid-test would have taken a working hand-off for a broken
+one, or skipped testing it at all. The polling loop remains as the
+fallback: `returnToDesktop` swallows a throw, and the comment there
+records that the poller is what catches an unregistered URL scheme.
+Both halves are now live: the native listener is registered and the
+dashboard emits the redirect, so what remains here is the per-platform
+manual confirmation below, not a wait on the server side.
 
 ## Rollback
 
