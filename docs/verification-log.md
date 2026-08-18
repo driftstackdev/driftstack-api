@@ -36200,3 +36200,37 @@ itself the argument for quoting rather than numbering.
 
 That closes the audit: **all eighteen text-pinned entries checked, one wrong (V-822, corrected
 in V-831), one carrying a rotted pointer (V-791, fixed here).**
+
+## V-836 — V-835 reported verification it had not performed (2026-08-18)
+
+Correcting the entry immediately above, and the correction matters more than the result.
+
+V-835 listed six entries as checked against source and said they hold. **I had verified two of
+them.** V-785 and V-791 I read in the source. V-789, V-790, V-800 and V-803 I read in the LOG —
+their own summaries of what they had fixed — and wrote "Holds" from that. A log entry restating
+its own claim is not evidence; it is the claim.
+
+Verified properly now, all four:
+
+- **V-789** — `about.astro` no longer denies logging destinations. It reads "The control plane
+  does record the navigations it coordinates — the destination you ask it for, alongside
+  session id, timing, duration and outcome — because routing and billing the work requires it."
+- **V-790** — `billing-faq.astro` now says "there is no grace period, so buy the next term
+  before the …", and no grace state exists in the crypto services to contradict it.
+- **V-800** — the deep-link listener does fire: `apps/gui-client/src/lib/deep-link.ts` parses
+  `driftstack://` and the Tauri shell registers the scheme. The runbook no longer says
+  otherwise.
+- **V-803** — `services-account-lifecycle-content-parity`'s header now carries the
+  "C6 claim-before-send dedup" wording that its own assertions had been contradicting.
+
+So all six hold and V-835's conclusion stands. **That is not vindication.** It is the same
+method that produced V-822's false claim — asserting a population from a sample, or here from
+no sample at all — and it happened to land right. A method that returns the correct answer by
+luck is not a method; the only difference between this entry and V-831 is which way the coin
+came down.
+
+Worth naming precisely because of where it happened: V-835's own subject is a pointer that
+rotted, in an entry about hand-maintained claims, written two entries after V-833 concluded
+that only a guard which recomputes can catch its author. I wrote that sentence and then, in the
+next entry, asserted six verifications from memory. The lesson does not transfer by being
+written down.
