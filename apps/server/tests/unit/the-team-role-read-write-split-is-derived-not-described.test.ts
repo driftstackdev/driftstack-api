@@ -76,7 +76,7 @@ function roleChecks(): Check[] {
       ...src.matchAll(/app\.(get|post|patch|delete|put)[^\n]*\n?\s*'(\/v1\/[^']*)'/g),
     ].map((m) => ({
       at: m.index ?? 0,
-      verb: (m[1] as string).toUpperCase(),
+      verb: (m[1] as string).toUpperCase() as Check['kind'],
       path: m[2] as string,
     }));
     const fns = [...src.matchAll(/function (\w+)/g)].map((m) => ({
