@@ -79,18 +79,36 @@ describe('W557.B /docs/runbooks/self-hosted-mac-local.md content parity', () => 
     expect(body).toMatch(/Astro apps in dev — they pick up the local API automatically\./);
   });
 
-  it("V-333b Playwright + DRIVER=webkit-NotIntegratedError framing pinned: '## Switch to the real browser path (V-333b — pending)' + 'Once the PlaywrightDriver lands (V-333b), set in `apps/server/.env`' + 'DRIVER=playwright' + 'PLAYWRIGHT_BROWSER=webkit  # or 'chromium' / 'firefox'' + 'Restart the API server. Sessions now spawn a real browser visible on the Mac desktop.' + 'Until V-333b ships, `DRIVER=webkit` returns `DriverNotIntegratedError` per design — the WebKit fork (Agent 1 repo) lands the production driver separately.' — pinned so the V-333b-pending + DRIVER=playwright-PLAYWRIGHT_BROWSER + 3-browser-options + DRIVER=webkit-NotIntegratedError + Agent-1-repo-separately commitment survives", () => {
-    expect(body).toMatch(/## Switch to the real browser path \(V-333b — pending\)/);
-    expect(body).toMatch(
-      /Once the PlaywrightDriver lands \(V-333b\), set in `apps\/server\/\.env`:/,
+  it("V-333b Playwright + DRIVER=webkit-NotIntegratedError framing pinned: '## Switch to the real browser path (V-333b — shipped)' + 'DRIVER=playwright' + 'PLAYWRIGHT_BROWSER=webkit  # or 'chromium' / 'firefox'' + 'Restart the API server. Sessions now spawn a real browser visible on the Mac desktop.' + 'Until V-333b ships, `DRIVER=webkit` returns `DriverNotIntegratedError` per design — the WebKit fork (Agent 1 repo) lands the production driver separately.' — pinned so the V-333b-pending + DRIVER=playwright-PLAYWRIGHT_BROWSER + 3-browser-options + DRIVER=webkit-NotIntegratedError + Agent-1-repo-separately commitment survives", () => {
+    // V-866 — this section read "pending" and "once the PlaywrightDriver
+    // lands" after it landed: PlaywrightDriver is a real 270-line Driver at
+    // apps/server/src/drivers/playwright.ts and DRIVER=playwright is
+    // selectable. One negative per stale sentence.
+    expect(body, 'the pending heading is gone').not.toMatch(
+      /## Switch to the real browser path \(V-333b — pending\)/,
+    );
+    expect(body, 'and the once-it-lands instruction').not.toMatch(
+      /Once the PlaywrightDriver lands \(V-333b\), set in/,
+    );
+    expect(body, 'the section records the driver as shipped').toMatch(
+      /## Switch to the real browser path \(V-333b — shipped\)/,
     );
     expect(body).toMatch(/DRIVER=playwright/);
     expect(body).toMatch(/PLAYWRIGHT_BROWSER=webkit {2}# or 'chromium' \/ 'firefox'/);
     expect(body).toMatch(/Restart the API server\. Sessions now spawn a real browser visible on/);
     expect(body).toMatch(/the Mac desktop\./);
-    expect(body).toMatch(/Until V-333b ships, `DRIVER=webkit` returns/);
-    expect(body).toMatch(/`DriverNotIntegratedError` per design — the WebKit fork \(Agent 1/);
-    expect(body).toMatch(/repo\) lands the production driver separately\./);
+    // The webkit CONCLUSION is still true — every method of drivers/webkit.ts
+    // throws — but its premise died with V-333b. Right answer, dead reason.
+    expect(body, 'the dead premise is gone').not.toMatch(/Until V-333b ships, `DRIVER=webkit`/);
+    expect(body, 'the behaviour itself still holds and is still pinned').toMatch(
+      /`DRIVER=webkit` returns `DriverNotIntegratedError` per design/,
+    );
+    expect(body, 'and it is decoupled from V-333b').toMatch(
+      /conditional on V-333b, which has shipped/,
+    );
+    expect(body, 'the Agent-1-fork attribution survives the rewrap').toMatch(
+      /is the fork in the Agent 1 repo and lands separately\./,
+    );
   });
 
   it("Reset-between-runs + common-pitfalls framing pinned: 'TRUNCATE TABLE' + 'sessions, profiles, api_keys, web_sessions, accounts, account_audit_log' + 'admin_audit_log, webhook_endpoints, webhook_deliveries, stripe_events' + 'subscriptions, usage_records, rate_limit_overrides, status_subscribers' + 'incidents, incident_updates, scheduled_jobs, team_members, team_invites' + 'legal_acceptances RESTART IDENTITY CASCADE' + 'docker compose exec redis redis-cli FLUSHALL' + '**GUI's First-Run Wizard fails**: usually a base-URL mismatch. The GUI self-hosted default is `http://localhost:3000` (matches the dev API) per `apps/gui-client/src/lib/settings.ts`' + '**Migrations fail with \"extension uuid-ossp not found\"**' + 'docker compose down -v && docker compose' + '**Tauri dev hangs at \"Compiling tauri\"**: cold compile is slow on Apple Silicon (~3 min); warm rebuilds are <10s.' — pinned so the TRUNCATE-CASCADE-table-inventory + Redis-FLUSHALL + GUI-self-hosted-default-3000 + uuid-ossp-down-v + Tauri-cold-3min-warm-10s commitment survives", () => {

@@ -95,9 +95,12 @@ To target the local API, the GUI's First-Run Wizard accepts
    `DRIVER=mock` (default), the session is in-memory only — actions
    like navigate succeed but no real browser opens.
 
-## Switch to the real browser path (V-333b — pending)
+## Switch to the real browser path (V-333b — shipped)
 
-Once the PlaywrightDriver lands (V-333b), set in `apps/server/.env`:
+V-866: this section read "pending" and "once the PlaywrightDriver lands" after
+it had landed. `PlaywrightDriver` is a real driver in
+`apps/server/src/drivers/playwright.ts` and `DRIVER=playwright` is selectable.
+Set in `apps/server/.env`:
 
 ```
 DRIVER=playwright
@@ -107,9 +110,10 @@ PLAYWRIGHT_BROWSER=webkit  # or 'chromium' / 'firefox'
 Restart the API server. Sessions now spawn a real browser visible on
 the Mac desktop. The GUI client + dashboard are unchanged.
 
-Until V-333b ships, `DRIVER=webkit` returns
-`DriverNotIntegratedError` per design — the WebKit fork (Agent 1
-repo) lands the production driver separately.
+`DRIVER=webkit` returns `DriverNotIntegratedError` per design — every
+method of `drivers/webkit.ts` throws. That is unchanged and is NOT
+conditional on V-333b, which has shipped: the production WebKit driver
+is the fork in the Agent 1 repo and lands separately.
 
 ## Resetting between runs
 

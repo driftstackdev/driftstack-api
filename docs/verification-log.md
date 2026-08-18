@@ -37472,3 +37472,33 @@ mutation proof restores the P0 label alone and still fails.
 
 Positives asserted rather than absences frozen, per V-794's own advice and the V-865 correction that
 prompted it. Mutation-proved three ways; document restored byte-identical.
+
+## V-867 — the second expired promise from the same sweep: a driver that landed (2026-08-18)
+
+`docs/runbooks/self-hosted-mac-local.md` headed a section "V-333b — **pending**" and told the
+operator to configure `DRIVER=playwright` "once the PlaywrightDriver lands". It landed:
+`apps/server/src/drivers/playwright.ts` is a 270-line class implementing `Driver`, and
+`drivers/index.ts` dispatches on `config.driver === 'playwright'`. An operator following this
+runbook would skip a step that works.
+
+**The interesting half is the sentence I did NOT delete.** The same block said "Until V-333b ships,
+`DRIVER=webkit` returns `DriverNotIntegratedError` per design". The conclusion is still true —
+every method of `drivers/webkit.ts` throws — but its premise died with V-333b. A right answer for a
+dead reason is the harder case: deleting it loses a true warning, keeping it teaches that the
+warning expires when V-333b ships, which already happened. Decoupled instead — the behaviour is
+restated as unconditional and attributed to the Agent 1 fork, which is the actual reason.
+
+Two pins updated with per-occurrence negatives. A third assertion in the same block then failed on
+the RE-WRAP rather than the content: it froze `repo) lands the production driver separately.`, a
+fragment that only existed because of where the old paragraph broke lines. Rewriting the prose moved
+the break and the regex missed. Worth recording as its own hazard — a pin can depend on line
+wrapping, so a purely editorial reflow breaks it, and the failure names a phrase that is still
+present in the document.
+
+Mutation-proved: restoring the pending heading fails, and restoring the dead premise ALONE fails.
+Runbook restored byte-identical.
+
+**Instrument yield.** Of the three checkable expired-promise candidates from the V-794 offender set,
+two were real (V-866, this) and one — `recapture/runs/*` — was accurate and left alone. The other
+71 offenders are overwhelmingly pins on documents that legitimately record deferrals, which is not
+this defect. Recorded so the set is not re-swept wholesale.
