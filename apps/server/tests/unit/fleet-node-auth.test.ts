@@ -171,6 +171,85 @@ describe('V-820 FleetNodeAuthImpl.verify', () => {
     expect(res).toEqual({ ok: false, reason: 'too_long_lived' });
   });
 
+  // ── the edges of the two lifetime checks ────────────────────────────────────
+  //
+  // The arms above accept at exp = NOW + 60 and reject at a delta of 3600, against a
+  // 300-second cap. 240 seconds inside and 3300 outside — nowhere near either edge.
+  //
+  // MEASURED: raising MAX_JWT_LIFETIME_SECONDS from 300 to 3000, a TENFOLD widening of
+  // the window a stolen node JWT stays usable in, left all 24 fleet-node auth tests
+  // green. 60 is still under 3000 and 3600 is still over it, so every existing arm
+  // agrees with a cap ten times too generous.
+  //
+  // There are TWO caps and each has its own edge: the iat→exp DELTA
+  // (`exp - iat > MAX`) and the absolute window from now
+  // (`exp - now > MAX + CLOCK_SKEW`). Both comparisons are exclusive, so the edge
+  // itself is inside. Widening either one lengthens how long a compromised node
+  // keeps authenticating off one signature.
+  it('a JWT whose lifetime is EXACTLY the cap is accepted. The comparison is exclusive, so 300 is legal — pinning it means a narrowing to 299 fails here rather than quietly rejecting nodes that are behaving correctly.', async () => {
+    const jwt = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S,
+      exp: NOW_S + 300,
+      nonce: 'edge-ok',
+    });
+    const res = await auth.verify(jwt, NOW);
+    expect(res.ok, 'a JWT with exactly the maximum lifetime was refused').toBe(true);
+  });
+
+  it('one second OVER the cap is refused. With the arm above this brackets the delta check — and a widened cap is the direction that matters, because it extends the window a stolen node JWT stays usable in.', async () => {
+    const jwt = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S,
+      exp: NOW_S + 301,
+      nonce: 'edge-bad',
+    });
+    const res = await auth.verify(jwt, NOW);
+    expect(res).toEqual({ ok: false, reason: 'too_long_lived' });
+  });
+
+  // ⚠️ The ABSOLUTE window's own edge interlocks with the other two checks, and the
+  // first attempt at this arm failed because of it. To sit exactly at
+  // `exp - now == MAX + CLOCK_SKEW` the token needs `iat == now + CLOCK_SKEW`: any
+  // earlier iat pushes the iat→exp DELTA over its own cap and the delta check fires
+  // first, any later one trips `future_iat`. So there is exactly ONE shape at that
+  // edge, and one second beyond it is unreachable in isolation — the delta check or
+  // future_iat always decides first. The out-from-further arm above
+  // ("exp more than the lifetime cap from NOW") is what covers the absolute check's
+  // reject side; this covers its accept side, which nothing did.
+  it('the ABSOLUTE window edge is accepted in its one reachable shape: iat exactly at the clock-skew allowance and exp exactly MAX + CLOCK_SKEW from now. Narrowing either constant refuses a node that is behaving correctly, and this is the only token that can prove the boundary is where the constants say.', async () => {
+    const jwt = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S + 60, // exactly CLOCK_SKEW_SECONDS ahead — future_iat is exclusive
+      exp: NOW_S + 60 + 300, // delta exactly MAX; exp - now exactly MAX + CLOCK_SKEW
+      nonce: 'abs-edge',
+    });
+    const res = await auth.verify(jwt, NOW);
+    expect(res.ok, 'a JWT at the absolute-window edge was refused').toBe(true);
+  });
+
+  // CLOCK_SKEW_SECONDS needs its own bracket, and the accept-side arm above cannot
+  // provide it: a token at iat = now + 60 stays inside a WIDER allowance too, so
+  // widening the skew tenfold left it green. This is the reject side, one second past
+  // the allowance — the arm that makes the skew constant mean 60 rather than "some
+  // number at least 60". A generous skew is a real weakening: it is how far into the
+  // future a node may date a token, and every second of it extends the window a
+  // pre-minted token stays usable in.
+  it('an iat ONE SECOND past the clock-skew allowance is refused as future_iat. The existing future-iat arm dates the token an hour ahead, which passes any skew under an hour — this is the one that pins the allowance itself.', async () => {
+    const jwt = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S + 61, // CLOCK_SKEW_SECONDS is 60, and the check is exclusive
+      exp: NOW_S + 61 + 300, // delta exactly at the cap, so the delta check passes first
+      nonce: 'skew-bad',
+    });
+    const res = await auth.verify(jwt, NOW);
+    expect(res).toEqual({ ok: false, reason: 'future_iat' });
+  });
+
   it('signature signed by a different key → ok=false reason signature_invalid', async () => {
     const otherPair = await makeKeyPair();
     const jwt = await signJwt(otherPair.privateKey, {
