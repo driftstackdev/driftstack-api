@@ -714,7 +714,7 @@ const accountId = account.id;
             costBody.innerHTML =
               '<div class="flex items-baseline justify-between mb-3">' +
               '<p class="text-2xl font-semibold text-tk-ink">' + cents(br.totalCents) + '</p>' +
-              '<span class="inline-flex items-center rounded-full ' + stateCls + ' px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide">' + (br.thresholdState || '—') + '</span>' +
+              '<span class="inline-flex items-center rounded-full ' + stateCls + ' px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide">' + escapeHtml(br.thresholdState || '—') + '</span>' +
               '</div>' +
               '<div class="space-y-2">' +
               bar('Compute', br.computeCents) +
@@ -722,7 +722,11 @@ const accountId = account.id;
               bar('Egress', br.egressCents) +
               bar('Sub-processor', subprocessor) +
               '</div>' +
-              '<p class="mt-3 text-xs text-tk-ink-3">Cycle: ' + (b.billing_cycle || b.billingCycle || '—') + '</p>';
+              // The cycle is echoed back from the `billing_cycle` query
+              // parameter. It is regex-anchored server-side, so nothing
+              // markup-shaped survives validation — but a request value landing
+              // in staff markup should not depend on a pattern two files away.
+              '<p class="mt-3 text-xs text-tk-ink-3">Cycle: ' + escapeHtml(b.billing_cycle || b.billingCycle || '—') + '</p>';
           })
           .catch(() => {
             if (isCurrent() && costBody)

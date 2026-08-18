@@ -147,8 +147,11 @@ const R2_FALLBACK_URL =
     return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
   }
 
+  // `text` is escaped here, not at the call sites — see the note on the copy in
+  // index.astro. The arguments are enum-constrained today; the escape makes that
+  // a property of this helper rather than of a column three layers away.
   function badge(text, classes) {
-    return `<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${classes.join(' ')}">${text}</span>`;
+    return `<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${classes.join(' ')}">${escapeHtml(text)}</span>`;
   }
 
   function escapeHtml(s) {

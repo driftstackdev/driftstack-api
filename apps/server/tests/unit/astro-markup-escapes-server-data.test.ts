@@ -34,6 +34,28 @@
 // helper that its caller relies on is not caught here. That is a real limit,
 // not an oversight: it needs call-site binding, and claiming otherwise would be
 // the more dangerous error.
+//
+// WHAT THE LIMIT COST, MEASURED. The scan judges an operand unsafe and then
+// reports it only if it is a data access or an unknown callee. Everything else
+// it looks at and says nothing about — 60 operands, against the 6 it names. So
+// the limit above was not merely un-tracked, it was INVISIBLE: nothing showed
+// how much of the surface fell into it.
+//
+// The sharp end of that set is a parameter written raw into markup, because
+// there the value does reach the page and the safety argument is entirely about
+// the CALLER. `PARAMETERS_WRITTEN_RAW` pins it as an exact roster, so a new
+// helper of that shape has to be looked at rather than joining a silent
+// majority. It does not need call-site binding to be worth having: it does not
+// claim the roster is safe, it claims the roster is CHECKED.
+//
+// Fixed while measuring it: `badge(text, classes)` on the public status page.
+// Three copies of that helper exist; incident.astro escaped `text` and
+// index.astro and history.astro did not. Every argument is `inc.severity` or
+// `inc.status` — postgres enum columns, zod enums on write — so nothing
+// markup-shaped could reach them and there was no live defect. But the page is
+// public and unauthenticated, the helper is named for its shape rather than its
+// argument, and the escape was three layers away in a DB column. Both copies now
+// escape, which is why they are absent from the roster below.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
@@ -115,9 +137,46 @@ const NUMERIC_COUNTS_WRITTEN_RAW = [
   'apps/admin-panel/src/pages/incidents/index.astro: metadata.openTotal',
   'apps/admin-panel/src/pages/incidents/index.astro: metadata.resolvedTotal',
   'apps/customer-dashboard/src/pages/webhooks.astro: counts.dlq',
+  // Surfaced by the `(x || 0)` unwrap below, not by a new call site.
+  // `z.number().int().nonnegative()` in api-types/webhooks.ts.
+  'apps/customer-dashboard/src/pages/webhooks.astro: e.consecutive_failures',
   'apps/status-site/src/pages/history.astro: feed.open_count',
   'apps/status-site/src/pages/history.astro: feed.total',
   'apps/status-site/src/pages/index.astro: feed.total',
+];
+
+/**
+ * Helper parameters written into markup with no escape, each read by hand.
+ *
+ * Every one is safe for the same reason — the helper is called only with
+ * page-local string literals — and that reason is the one this analysis cannot
+ * see, so it is recorded rather than inferred:
+ *
+ *   mk(cmd) / mk(label)      four calls, all `mk('cordon', 'Cordon', warn)`
+ *                            shaped. The node id in the same template IS
+ *                            escaped, so the raw operands here are a deliberate
+ *                            distinction, not an oversight.
+ *   renderUnavailable(message) x2, renderAuditsUnavailable(message)
+ *                            error copy, every call site a literal. Notably NOT
+ *                            an API error body: `window.driftstackRequestError-
+ *                            Message(...)` output goes to showBanner, which sets
+ *                            textContent.
+ *   bar(label)               'Compute' / 'Egress' / 'Storage' / 'Sub-processor'.
+ *   emptyState(iconPath)     an SVG path literal placed inside a `d="…"`
+ *                            attribute; the headline and body beside it are
+ *                            escaped.
+ *
+ * An exact roster, not an allowlist: an entry that stops matching fails too, so
+ * it cannot quietly turn from "checked" into "ignored".
+ */
+const PARAMETERS_WRITTEN_RAW = [
+  'apps/admin-panel/src/pages/fleet.astro: mk(cmd)',
+  'apps/admin-panel/src/pages/fleet.astro: mk(label)',
+  'apps/admin-panel/src/pages/incidents/index.astro: renderUnavailable(message)',
+  'apps/admin-panel/src/pages/index.astro: renderAuditsUnavailable(message)',
+  'apps/admin-panel/src/pages/shells/account-detail.astro: bar(label)',
+  'apps/customer-dashboard/src/pages/api-keys.astro: renderUnavailable(message)',
+  'apps/customer-dashboard/src/pages/team.astro: emptyState(iconPath)',
 ];
 
 function astroFiles(): string[] {
@@ -187,6 +246,38 @@ function literalText(n: ts.Node): string {
   return '';
 }
 
+/**
+ * The values an operand can actually evaluate to, unwrapping the wrappers that
+ * carry no markup of their own: parentheses, `||`/`??` defaults, and `?:`.
+ *
+ * The reporting step used to test the operand NODE — so `data.x` was reported
+ * and `(data.x || '—')` was not, and `(x || '—')` is the more common way to
+ * write it. Four server values were being written into markup unescaped and
+ * named by nothing, including `b.billing_cycle`, which the admin panel echoes
+ * back from a query parameter. `safe()` already saw through this — it judged all
+ * four unsafe — so the miss was purely in what got REPORTED, which is the worst
+ * place for it: the guard knew and said nothing.
+ */
+function defaultChainLeaves(n: ts.Node, out: ts.Node[] = []): ts.Node[] {
+  if (ts.isParenthesizedExpression(n)) return defaultChainLeaves(n.expression, out);
+  if (
+    ts.isBinaryExpression(n) &&
+    (n.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+      n.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+  ) {
+    defaultChainLeaves(n.left, out);
+    defaultChainLeaves(n.right, out);
+    return out;
+  }
+  if (ts.isConditionalExpression(n)) {
+    defaultChainLeaves(n.whenTrue, out);
+    defaultChainLeaves(n.whenFalse, out);
+    return out;
+  }
+  out.push(n);
+  return out;
+}
+
 /** Any escaping call — or point-free reference, as in `.map(escapeHtml)`. */
 function containsEscaper(node: ts.Node): boolean {
   let found = false;
@@ -245,6 +336,27 @@ function structurallySafe(n: ts.Node): boolean {
   return false;
 }
 
+/**
+ * `fn(param)` for the nearest enclosing function that declares `id` as a
+ * parameter, or null if `id` is not a parameter of anything containing it.
+ * Walking OUT from the identifier is what makes this exact — a page-wide map of
+ * declarations cannot tell one `message` from another, and this guard already
+ * has a first-wins `decls` map that conflates them.
+ */
+function enclosingParameterOwner(id: ts.Identifier): string | null {
+  for (let n: ts.Node | undefined = id.parent; n; n = n.parent) {
+    if (!ts.isFunctionDeclaration(n) && !ts.isFunctionExpression(n) && !ts.isArrowFunction(n))
+      continue;
+    if (!n.parameters.some((p) => ts.isIdentifier(p.name) && p.name.text === id.text)) continue;
+    if (ts.isFunctionDeclaration(n) && n.name) return `${n.name.text}(${id.text})`;
+    const { parent } = n;
+    if (parent && ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name))
+      return `${parent.name.text}(${id.text})`;
+    return `<anonymous>(${id.text})`;
+  }
+  return null;
+}
+
 interface Scan {
   readonly markupExpressions: number;
   readonly operandsJudged: number;
@@ -253,6 +365,7 @@ interface Scan {
   readonly parseFailures: string[];
   readonly rawDataAccess: string[];
   readonly unknownCallees: string[];
+  readonly rawParameters: string[];
 }
 
 function scan(): Scan {
@@ -263,6 +376,7 @@ function scan(): Scan {
   const parseFailures: string[] = [];
   const rawDataAccess: string[] = [];
   const unknownCallees: string[] = [];
+  const rawParameters: string[] = [];
 
   for (const file of astroFiles()) {
     const rel = relative(REPO, file);
@@ -437,22 +551,34 @@ function scan(): Scan {
             operandsJudged++;
             if (containsEscaper(part)) operandsEscaped++;
             if (safe(part)) continue;
-            // A helper call or a bare local is a different question — does the
-            // helper escape what it is handed? — and is out of scope above.
-            if (
-              ts.isCallExpression(part) &&
-              ts.isIdentifier(part.expression) &&
-              !fns.has(part.expression.text) &&
-              !ESCAPERS.has(part.expression.text) &&
-              !JS_GLOBALS.has(part.expression.text)
-            ) {
-              unknownCallees.push(`${rel}: ${part.expression.text}()`);
+            // Report on what the operand can EVALUATE TO, not on its outermost
+            // node — `(data.x || '—')` reaches the page exactly as `data.x` does.
+            for (const leaf of defaultChainLeaves(part)) {
+              if (safe(leaf)) continue;
+              // A helper call or a bare local is a different question — does the
+              // helper escape what it is handed? — and is out of scope above.
+              if (
+                ts.isCallExpression(leaf) &&
+                ts.isIdentifier(leaf.expression) &&
+                !fns.has(leaf.expression.text) &&
+                !ESCAPERS.has(leaf.expression.text) &&
+                !JS_GLOBALS.has(leaf.expression.text)
+              ) {
+                unknownCallees.push(`${rel}: ${leaf.expression.text}()`);
+              }
+              if (
+                (ts.isPropertyAccessExpression(leaf) || ts.isElementAccessExpression(leaf)) &&
+                isDataAccess(leaf)
+              )
+                rawDataAccess.push(`${rel}: ${leaf.getText(sf).replace(/\s+/g, ' ')}`);
+              // The stated limit of this guard, made countable: the value lands
+              // in markup here, and every argument for its safety is about the
+              // CALLER.
+              if (ts.isIdentifier(leaf)) {
+                const owner = enclosingParameterOwner(leaf);
+                if (owner !== null) rawParameters.push(`${rel}: ${owner}`);
+              }
             }
-            if (
-              (ts.isPropertyAccessExpression(part) || ts.isElementAccessExpression(part)) &&
-              isDataAccess(part)
-            )
-              rawDataAccess.push(`${rel}: ${part.getText(sf).replace(/\s+/g, ' ')}`);
           }
         }
         ts.forEachChild(n, walk);
@@ -469,6 +595,7 @@ function scan(): Scan {
     parseFailures,
     rawDataAccess,
     unknownCallees,
+    rawParameters,
   };
 }
 
@@ -507,6 +634,17 @@ describe('server data reaching browser-parsed markup is escaped', () => {
       [...new Set(unknownCallees)].sort(),
       'markup built by a callee that is neither declared in the page, trusted as an escaper, nor a JS built-in:',
     ).toEqual([]);
+  });
+
+  it("CRITICAL every helper parameter written raw into markup is one that was checked. This is the guard's own stated limit turned into a roster: it cannot bind a parameter to its call sites, so it cannot judge these — but it CAN insist that the set stays the hand-read one. Before this arm the set was not merely unjudged, it was invisible: 60 operands were looked at and passed over in silence against the 6 the guard names, and `badge(text)` on the public status page sat among them, unescaped in two of its three copies.", () => {
+    const { rawParameters } = scan();
+    expect(
+      [...new Set(rawParameters)].sort(),
+      'a helper writes a parameter into markup with no escape. Read every call site: if they are ' +
+        'all page-local literals, add it here with that reason. If any passes server or ' +
+        'customer-supplied data, escape it in the helper — the call sites are the wrong place, ' +
+        'because the next caller will not know:',
+    ).toEqual(PARAMETERS_WRITTEN_RAW);
   });
 
   it('CRITICAL no server-supplied value is written into markup unescaped. The status page is unauthenticated and its incident feed is operator-authored; the dashboard renders customer-authored key names into HTML attributes. Deleting either escape today fails nothing.', () => {

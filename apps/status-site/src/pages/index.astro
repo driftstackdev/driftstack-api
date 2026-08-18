@@ -270,9 +270,14 @@ const R2_FALLBACK_URL =
     return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
   }
 
+  // `text` is escaped here, not at the call sites. Today every caller passes
+  // `inc.severity` / `inc.status`, which are postgres enum columns and zod
+  // enums on write, so nothing markup-shaped can reach this — but that safety
+  // lives three layers away, and this page is public and unauthenticated. The
+  // sibling copy in incident.astro already escapes; these two did not.
   function badge(text, classes) {
     const cls = classes.join(' ');
-    return `<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${cls}">${text}</span>`;
+    return `<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${cls}">${escapeHtml(text)}</span>`;
   }
 
   function renderOverall(state, openCount) {
