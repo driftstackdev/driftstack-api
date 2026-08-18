@@ -162,6 +162,11 @@ identity provider.
 }
 ```
 
+`provider` is `google` or `github`. `provider_email`, `last_login_at`
+and `last_revoked_at` are all nullable — a link created before the
+provider returned an email, or never signed in with since, reads `null`
+rather than being omitted.
+
 A non-null `last_revoked_at` means the provider link was revoked on the
 provider's side; sign in with a password or re-link to restore it.
 Removing a link from the Driftstack side is not exposed yet.

@@ -36839,3 +36839,30 @@ sentence, not as a checked claim, and it happened to be nearly true. V-836 recor
 shape and the same escape; the honest reading is that summary sentences in this log get written
 faster than they get verified, and the only correction that has worked is checking them one at
 a time.
+
+## V-852 — checking the documentation I wrote yesterday against the code (2026-08-18)
+
+V-850 documented `GET /v1/account/me/oauth-links`. I derived the response shape from
+`publicLink()` and shipped it. Re-reading the type rather than the function body turns up two
+things a caller needs that I left out.
+
+**`provider_email`, `last_login_at` and `last_revoked_at` are all `string | null`.** My example
+showed a populated `provider_email` and a null `last_revoked_at`, which lets a reader infer that
+the first is always present. It is not: `PublicOAuthLink` types it nullable, and the mapper
+passes `row.providerEmail` straight through. A consumer who treats it as a string breaks on the
+first link whose provider withheld an email.
+
+**`provider` is typed `string` in the route, but the vocabulary is closed at two.**
+`auth-oauth-client.ts` declares `z.enum(['google', 'github'])` and
+`oauth-client-service.ts` types the field `'google' | 'github'`. The response type widens it to
+`string`, so the schema does not tell a reader what to switch on. Naming the two values in the
+prose is the honest fix; widening the response type would be a source change I have no reason
+to make.
+
+Neither is a defect in the endpoint. Both are gaps in what I wrote about it, found by checking
+my own output the way I check everyone else's — which is a habit this arc has had to learn
+twice (V-836, V-851) and which cost one commit here rather than an entry retracting a customer
+doc later.
+
+Rebuilt the docs and re-ran the three guards V-850 established as this page's obligations; the
+nav child and both censuses are unaffected because the section did not move.
