@@ -29,16 +29,25 @@ function read(p: string): string {
 describe('W586.A packages/sdk-python/src/driftstack/retry.py content parity', () => {
   const body = read(LIB);
 
-  it('Module docstring + TS SDK retry.ts mirror + Retry-After honoured + read-shaped retried + mutating-no-retry-unless-opt-in framing pinned', () => {
+  it('Module docstring + TS SDK retry.ts mirror + Retry-After honoured + read-shaped retried + mutating-retries-need-an-Idempotency-Key framing pinned (V-810 corrected the opt-in: the `retry` argument tunes policy only)', () => {
     expect(body).toMatch(/^"""Exponential-backoff retry policy with full jitter\.\n/);
     expect(body).toMatch(
       /Mirrors `packages\/sdk-typescript\/src\/retry\.ts`\. Honours `Retry-After`/,
     );
     expect(body).toMatch(/when the server set one \(the SDK's HTTP layer maps it onto the/);
     expect(body).toMatch(/RateLimitError before retry decides\)\. Idempotent or read-shaped/);
-    expect(body).toMatch(/methods are retried; mutating methods that lack server-side idempotency/);
-    expect(body).toMatch(/keys are NOT retried by default — callers can opt in via the/);
-    expect(body).toMatch(/``retry`` argument on the HTTP client\./);
+    expect(body).toMatch(
+      /methods are retried; a mutating method is retried only when the request\s*\n?carries a usable ``Idempotency-Key`` header/,
+    );
+    // V-810 — _is_retry_safe(method, headers) never consults the `retry`
+    // argument, so it tunes the policy and cannot grant eligibility. The old
+    // text named it as the opt-in and omitted the header, which is the only
+    // thing that actually works.
+    expect(body).toMatch(
+      /tunes the POLICY — attempts,\s*\n?backoff, jitter — and does not make a request eligible/,
+    );
+    expect(body).toMatch(/:func:`driftstack\.http\._is_retry_safe`/);
+    expect(body, 'the wrong opt-in must not return').not.toMatch(/callers can opt in via the/);
   });
 
   it('RetryConfig dataclass: max_retries=3 + initial_delay_ms=200 + max_delay_ms=10_000 + backoff_multiplier=2.0 + enabled=True + retryable_errors default-factory (TransportError, RateLimitError)', () => {

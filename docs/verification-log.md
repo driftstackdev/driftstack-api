@@ -35113,3 +35113,33 @@ tight arm demanded the ceiling move in this commit. It is included here rather t
 which is the lesson V-808a taught one commit earlier.
 
 Fourteenth batch of the re-verified plan.
+
+## V-810 — the Python SDK named the wrong retry opt-in, and omitted the one that works (2026-08-18)
+
+`packages/sdk-python/src/driftstack/retry.py`'s module docstring said:
+
+> mutating methods that lack server-side idempotency keys are NOT retried by default — callers can
+> **opt in via the `retry` argument on the HTTP client**.
+
+`_is_retry_safe(method, headers)` in `http.py` takes exactly two things — the method and the headers
+— and the `retry` argument is not among them. Eligibility is: an idempotent method, **or** any method
+carrying a usable `Idempotency-Key`. The `retry` argument tunes the policy (attempts, backoff,
+jitter); it has never made a mutating request eligible.
+
+So the sentence is wrong in the costly direction. A customer whose `POST`s were not being retried
+reads it, passes a `retry=` config, and nothing changes — while the one mechanism that would work,
+the `Idempotency-Key` header, is the single thing the paragraph never mentions. `_is_retry_safe`'s own
+docstring explains the design properly, including why a blank key is the worst case; the module
+docstring one file over contradicted it.
+
+Corrected to state the header as the opt-in, name `_is_retry_safe` as the decider, and say plainly
+what the `retry` argument does and does not do.
+
+**Action 27 is REFUTED.** The report claimed the SDK's auth docstring "invents
+`refresh_token`/`access_token`". Neither string appears anywhere in
+`packages/sdk-python/**/*.py`. Nothing to fix; recorded so the claim is not re-derived later.
+
+Mutation-proved: reinstating the `retry`-argument opt-in reds the sentinel. 211 pins across the SDK
+and docs surface green, `it(` count unchanged at 6.
+
+Fifteenth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
