@@ -37139,3 +37139,57 @@ pin here would trade a real guarantee for the appearance of one.
 
 **Recorded so it is not re-run.** Six trees, one instrument, one comment fix. Combined with V-842,
 V-845 and V-853, the stale-claim surface across this repository is now scanned end to end.
+
+## V-860 — the V-857 defect class, bounded: one instance, already fixed (2026-08-18)
+
+**A new instrument, from V-857's actual fault.** V-857 was not merely a stale string. Fifteen test
+files render that surface and none asserted what it said, so the real class is _customer-facing
+strings that make factual claims no test checks_. Three passes, narrowing each time:
+
+1. **Unasserted explanation strings** across gui-client, customer-dashboard and admin-panel —
+   literals ≥25 chars that explain why something is unavailable, whose text appears in no test file
+   (a 2,826-file, 26MB test corpus). **82 in 31 files.** Most describe runtime session state
+   ("session is no longer live", "the device isn't reachable"), which is true by construction
+   inside the branch that renders it. Not a defect class.
+2. **Product-state claims** — the subset blaming OUR build, deployment, tier or config rather than
+   the user's session, which is what can go stale while the surrounding code stays correct.
+   **63 unasserted.** Seven verified against source in depth (below).
+3. **Cause-naming strings behind a cause-erasing catch** — V-857's precise fault: `probeProxyExit`
+   swallowed every failure into `null`, and the card named one specific cause. **19 bare
+   swallow-and-return sites in 17 files.** One is `probeProxyExit` itself, which is the instrument
+   rediscovering the known defect and the reason to trust the other eighteen.
+
+**Result: 0 new defects.** What was checked, not skimmed:
+
+- **`browser-sign-in.ts`** tells the customer "This server does not support secure browser sign-in.
+  Update the server and desktop app together." It fires when `/v1/auth/cli-authorize/initiate`
+  returns 200 with a `user_code` failing `^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$`. The server's
+  `generateUserCode` emits exactly `XXXX-XXXX` from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — the same
+  32-symbol set, I/O/0/1 excluded on both sides. So the branch is unreachable against a current
+  server and fires only on real version skew, where "update both together" is the correct remedy.
+  The diagnosis is loose (a 200 means the server DOES support the flow, with an incompatible code
+  format) but the remedy is right and the condition is real. Not worth a change.
+- **`api-keys.astro`** repeats "requires an API-enabled tier and verified write access" four times.
+  Verified: `api-keys.ts` calls `requireTierFeature(tier, 'apiAccess')` on both create and rotate,
+  and the dashboard's own `showPaidGuidance && canWriteSelectedAccount()` maps to the two
+  conjuncts. The create-path gate is conditional — `if (input.provenance !== 'cli_device')` — which
+  looked like an asymmetry against the unconditional rotate gate, and is deliberate: Free stays
+  usable through the browser-authorized desktop flow that mints a provenance-bound device
+  credential, and device keys are barred from rotation separately. All four accurate.
+- **`SimulatorWindow.tsx`** downloads panel attributes each cause to a distinguishable signal —
+  401/403 credential expiry, 404 session gone, 503 not enabled on this deployment, else transient.
+  This is the inverse of V-857 and the pattern the rest of the codebase follows.
+- **`AgentChatView.tsx`**'s idle placeholder says the live view "turns on when the live driver is
+  enabled for this deployment" — a conditional about the future, not an assertion about now.
+- **`mintGuiControlKey`** is the only bare-catch null whose file also carries a cause-naming string.
+  It is not that string's source: "Session control credential unavailable" is thrown from a
+  separate explicit check on an absent control key. All three callers take `?? undefined` and fall
+  back to the account-key path; none attributes a cause. Correct.
+
+**No guard added, deliberately.** The class is now bounded at one instance, and V-857's guard
+already covers it. A lint-style rule over bare catches would fight the legitimate majority — the
+`return []` loaders whose callers render "no items", never a reason.
+
+**Recorded so it is not re-run.** ~90 claims verified, three instruments, zero defects. The error
+attribution in this codebase is disciplined; V-857 was the outlier, and it was the one place a
+cause was named on a path that could not know it.
