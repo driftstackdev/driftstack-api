@@ -37246,3 +37246,52 @@ derives both sets on every run, so a number written beside it can only rot (the 
 a weak guard. The mutation had never applied — a perl substitution that silently matched nothing.
 Checking `git diff --stat` showed an empty diff. Re-run with a verified edit, the arm failed as it
 should. A mutation proof that does not confirm the mutation landed proves nothing about the guard.
+
+## V-862 — the whole internal admin surface is published to customers (2026-08-18)
+
+**Started as D-8 and is larger than D-8 recorded.** V-829 logged "three admin-oauth paths ship in
+the SDK-facing OpenAPI spec while the source comment said admin endpoints are withheld". The
+comment is real and false — `openapi.ts` said `/v1/admin/oauth/*` "are NOT registered — they're
+internal-only" — but the spec carries **61 `/v1/admin/*` paths**, not three, including
+`/v1/admin/owner/secrets/{name}/reveal`, `/v1/admin/accounts/{id}/delete` and
+`/v1/admin/api-keys/{id}/revoke`.
+
+**Two customer-facing distributions, both verified rather than assumed.**
+
+- `GET /openapi.json` is registered with **no preHandler** and rendered at `/docs` by Scalar.
+  Confirmed by an existing integration test's own behaviour: `templated-routes-refuse-anonymous-
+callers` fetches it anonymously to build its fixture. It could not do that if the route were
+  gated.
+- `packages/sdk-python/openapi.json` ships inside the Python SDK, and `_generated/models.py`
+  carries classes for the three admin component schemas (`AdminAccount`, `AdminAuditLogEntry`,
+  `AdminSubscriptionStatsResponse`).
+
+**What this is not.** Access is unaffected. The routes require the `driftstack_internal_admin`
+scope, and the anonymous-caller test proves templated routes answer 401/403 without credentials.
+Nothing here is exploitable on its own, and saying otherwise would be the over-claim this sweep
+keeps catching in the report. It is disclosure of SHAPE — every privileged path, its parameters,
+its response schema — and the argument for fixing it is not obscurity, which is weak. It is
+audience: a customer who installs the Python SDK receives a file enumerating the endpoint that
+reveals platform secrets, and Python classes generated from it.
+
+**Decision.** The internal admin surface should not ship in the customer artefact. The proper fix
+filters `/v1/admin/*` from the generated spec, drops the orphaned component schemas, and
+regenerates the published Python SDK. Blast radius was measured before deciding:
+`post-deploy-verify.mjs` requires only two `/v1/status/*` paths, and no spec or SDK test references
+admin at all — so the change is contained. It is still subtractive against a served endpoint and a
+published package, and it deserves to land as one reviewed unit rather than be rushed in beside a
+comment correction. Not done here, and named rather than implied.
+
+**Landed now: the false claim, and a ceiling.** The comment is corrected in place — it was the
+reason nobody looked, since a reader who trusted it had no cause to check. The new guard pins the
+published admin surface as a CEILING that may only fall: 61 paths, 3 schemas. A new admin route
+widens what every SDK installer is handed and now fails, which makes adding one a decision rather
+than a side effect. When the filter lands the numbers go to zero and the guard is deleted with it.
+
+The guard also asserts the three OAuth paths are present **positively**, not just counted. The
+original defect was a false sentence with a green suite behind it; a guard that only counted would
+have been green too.
+
+Mutation-proved on four arms — publishing an extra admin path, unpublishing an OAuth one,
+restoring the false comment, and gating the spec route — with all three sources restored
+byte-identical.

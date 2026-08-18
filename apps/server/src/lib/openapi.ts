@@ -2086,8 +2086,16 @@ function buildRegistry(): OpenAPIRegistry {
   // Arc 7 docs.openapi — OAuth 2.0 public dance (V-667). The 4
   // standard-spec endpoints third-party clients use to obtain access
   // tokens on a customer's behalf. Full prose at
-  // docs.driftstack.dev/api/oauth. Admin endpoints (/v1/admin/oauth/*)
-  // are NOT registered — they're internal-only.
+  // docs.driftstack.dev/api/oauth.
+  //
+  // V-862 — this comment used to say the admin OAuth endpoints
+  // (/v1/admin/oauth/*) are NOT registered because they are internal-only.
+  // All three of them are in the generated spec, along with 58 other
+  // /v1/admin/* paths, and the spec is served unauthenticated at
+  // /openapi.json and shipped inside the Python SDK. The claim was false in
+  // the one direction that matters: a reader trusting it would not think to
+  // check. Whether the internal surface belongs in a customer artefact is
+  // recorded as a decision in the verification log, not settled here.
   // Caps below MUST mirror apps/server/src/routes/oauth.ts so the
   // openapi spec the SDKs consume matches the actual route validator
   // (slice 117 added the route-side caps; this slice aligns the spec).
