@@ -33,98 +33,69 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleIncidentsRepo } from '../../src/db/incidents-repo.js';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 const HOUR = 60 * 60 * 1000;
 
-let admin: ReturnType<typeof postgres> | null = null;
 let sql: ReturnType<typeof postgres> | null = null;
 let repo: DrizzleIncidentsRepo | null = null;
 let dbReachable = false;
 
 /**
- * A schema of this file's own, exactly as db-incidents-truth-drizzle.test.ts
- * already does it.
+ * A database of this file's own, via the helper the repo already has for
+ * exactly this: `_helpers/isolated-database.ts`, whose header opens "A
+ * dedicated Postgres database for a test file that runs a GLOBAL sweep". The
+ * feed reads every incident in the table, which is that.
  *
  * This file used to read the SHARED `public.incidents`, with a comment saying
  * "sharing a database with whatever else is present is the realistic condition
- * anyway". That is true of production and false of an assertion: the feed reads
- * every incident in the table, so a single open public incident left behind by
- * another suite takes the one slot `limit: 1` asks for, and the arm below reads
- * as "displaced by resolved history" when it was displaced by another OPEN
- * incident — the feed behaving correctly. That is what a full run went red on
- * while this file passed alone.
+ * anyway". True of production and false of an assertion: one open public
+ * incident left by another suite takes the single slot `limit: 1` asks for, and
+ * the arm below then reads as "displaced by resolved history" when it was
+ * displaced by another OPEN incident — the feed behaving correctly. That is what
+ * a full run went red on while this file passed alone. It ran the other way too:
+ * this file's seeds were visible to every other suite reading `incidents` for as
+ * long as it ran.
  *
- * It also ran the other way: this file's own seeds were visible to every other
- * suite reading `incidents` for as long as it ran.
- *
- * A per-file schema fixes both directions and lets the arms assert what they
- * actually mean. `LIKE public.incidents INCLUDING ALL` copies the constraints
- * and defaults, so the rows are the same rows.
+ * My first fix copied the two tables into a per-file SCHEMA by hand. It worked,
+ * and it carried two traps this does not: `LIKE` does not copy the enum TYPES,
+ * so `public` had to stay on the search path — and with `public` on the path a
+ * missing table copy falls through to the shared table silently. The helper
+ * creates and MIGRATES a whole database, so neither trap exists.
  */
-const TEST_SCHEMA = `t_public_feed_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+const ISOLATED_DB_NAME = 'driftstack_iso_incidents_public_feed';
 
 beforeAll(async () => {
-  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  sql = postgres(isolated, { max: 2 });
   try {
-    await probe`SELECT 1`;
-    await probe.end({ timeout: 1 });
+    await sql`SELECT 1 FROM incidents LIMIT 0`;
   } catch {
-    await probe.end({ timeout: 1 }).catch(() => {});
+    await sql.end({ timeout: 1 }).catch(() => {});
+    sql = null;
     return;
   }
-  admin = postgres(DB_URL, { max: 1 });
-  try {
-    await admin`SELECT 1 FROM incidents LIMIT 0`;
-  } catch {
-    await admin.end({ timeout: 1 }).catch(() => {});
-    admin = null;
-    return;
-  }
-  await admin.unsafe(`CREATE SCHEMA "${TEST_SCHEMA}"`);
-  await admin.unsafe(
-    `CREATE TABLE "${TEST_SCHEMA}".incidents (LIKE public.incidents INCLUDING ALL)`,
-  );
-  await admin.unsafe(
-    `CREATE TABLE "${TEST_SCHEMA}".incident_updates (LIKE public.incident_updates INCLUDING ALL)`,
-  );
-  // `public` stays on the path AFTER this schema, because the enum types the
-  // seeds cast to (incident_severity / incident_status) live there and are not
-  // copied by `LIKE`. Tables resolve here first — asserted below rather than
-  // assumed, since a missing copy would otherwise fall through to the shared
-  // table silently and the isolation would be gone without a symptom.
-  sql = postgres(DB_URL, {
-    max: 2,
-    connection: { options: `-c search_path=${TEST_SCHEMA},public` },
-  });
-  const [current] = await sql<Array<{ value: string }>>`SELECT current_schema() AS value`;
-  expect(current?.value, 'the reader must be pinned to this file’s schema').toBe(TEST_SCHEMA);
-  const [resolved] = await sql<Array<{ ns: string }>>`
-    SELECT n.nspname AS ns FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE c.oid = 'incidents'::regclass`;
-  expect(resolved?.ns, 'unqualified `incidents` must resolve to this file’s copy').toBe(
-    TEST_SCHEMA,
-  );
+  // The beforeEach below TRUNCATEs. That is safe on this file's own database and
+  // destructive on any other, so the connection is checked rather than trusted:
+  // if this ever points at the shared database — a bad edit, or the helper
+  // handing back a fallback URL — it must fail here and not quietly wipe every
+  // other suite's incidents. Verified by mutation: pointing the client at
+  // DATABASE_URL truncated the shared table before this assertion existed.
+  const [db] = await sql<Array<{ name: string }>>`SELECT current_database() AS name`;
+  expect(db?.name, 'this file truncates, so it must be on its OWN database').toBe(ISOLATED_DB_NAME);
   dbReachable = true;
   repo = new DrizzleIncidentsRepo({ db: drizzle(sql) } as unknown as never);
 });
 
 // Each arm asserts over the whole table, so it starts from an empty one.
 beforeEach(async () => {
-  if (!dbReachable || !admin) return;
-  await admin.unsafe(
-    `TRUNCATE "${TEST_SCHEMA}".incident_updates, "${TEST_SCHEMA}".incidents CASCADE`,
-  );
+  if (!dbReachable || !sql) return;
+  await sql`TRUNCATE incident_updates, incidents CASCADE`;
 });
 
 afterAll(async () => {
   await sql?.end({ timeout: 2 }).catch(() => undefined);
-  if (admin) {
-    await admin.unsafe(`DROP SCHEMA IF EXISTS "${TEST_SCHEMA}" CASCADE`).catch(() => undefined);
-    await admin.end({ timeout: 2 }).catch(() => undefined);
-  }
 });
 
 /** Each arm still markers its rows, so a failure message names them. */
@@ -151,9 +122,10 @@ const titles = (feed: { rows: { title: string }[] }): string[] => feed.rows.map(
 
 describe('the public incident feed', () => {
   it('CRITICAL the database was reachable, so a green here is not "no database"', () => {
-    expect(dbReachable, `no Postgres at ${DB_URL} — these arms assert nothing without it`).toBe(
-      true,
-    );
+    expect(
+      dbReachable,
+      `no Postgres, or ${ISOLATED_DB_NAME} could not be created — these arms assert nothing without it`,
+    ).toBe(true);
   });
 
   it('CRITICAL a private incident never reaches the public feed', async () => {
