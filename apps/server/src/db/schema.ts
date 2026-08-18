@@ -2066,7 +2066,9 @@ export type NewSystemHealthProbe = typeof systemHealthProbes.$inferInsert;
 //     future slices can build against a stable schema.
 //   V-298b: TeamMembersService + invite/accept routes.
 //   V-298c: auth path integration (member can act as owner per role).
-//   V-298d: customer-dashboard /team UI (currently mock data only).
+//   V-298d: customer-dashboard /team UI — LIVE against /v1/team/*
+//     (team.astro fetches members, invites, accept and remove).
+//     V-826: this said mock data only.
 
 export const teamRole = pgEnum('team_role', ['member', 'admin']);
 

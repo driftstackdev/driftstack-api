@@ -35802,3 +35802,46 @@ Mutations: a 13th variant added; the barrel re-export removed; the note deleted;
 route given a `gui_control` gate — each fires its own arm. Restores byte-identical.
 
 Ratchet: EXPECTED_TEST_FILES 2887 → 2888, \_ALL 3052 → 3053 (one file, mine).
+
+## V-826 — three stale claims: a sub-processor register, a schema changelog, a coverage title (2026-08-18)
+
+Action 37's v278 item and action 38's remaining two. Grouped because each is one sentence and
+one pin, and because they share a diagnosis: a snapshot written once and read as current.
+
+**1. A GDPR sub-processor register under-declaring a processor that holds customer data.**
+`docs/progress/v278-final-state.md`, under the heading "## Sub-processor map (live; matches
+DPA Annex 3)", said Cloudflare provides "DNS + CDN + Pages + Workers + (R2 not yet wired into
+the API; deferred)". R2 is wired and holds customer data in four places: avatars
+(`routes/account-me.ts`), sealed profile blobs (`services/profile-store.ts`), status snapshots
+and archived audit rows. `docs/legal/dpa.md` Annex 3 has listed Cloudflare R2 all along,
+including that R2's default jurisdiction replicates EU + US.
+
+So the customer-facing contract was right and the internal register was wrong — which is the
+safe direction of the two, and still the wrong state for a document whose heading asserts the
+two match. The sentinel bans the retired clause, because under-declaring a processor holding
+customer data is the direction that matters.
+
+**2. A changelog inside a schema file.** `db/schema.ts` said "V-298d: customer-dashboard /team
+UI (currently mock data only)". `team.astro` has fetched `/v1/team/*` since V-298c — four live
+call sites. The report suggested deleting the roadmap block outright, on the grounds that a
+changelog inside a schema file is a drift generator. That is a fair point and I did not take
+it: the block records why the V-298 slices split the way they did, which is not recoverable
+from the schema, and deleting history to prevent staleness trades one problem for a worse one.
+Corrected in place with a sentinel instead.
+
+**3. A stale number in a test title, which is the one place nothing checks it.** The vitest
+coverage pin's HEADER was corrected by V-803 from 80/80/80/75 to the enforced 85/83/84/75. Its
+`it()` TITLE still said 80/80/80/75. The assertion underneath already reads the real values
+from `vitest.config.ts`, so the suite was green while the case announced the wrong numbers.
+
+That last one is worth more than its size. The report called it "cosmetic — the gate is
+correct and nobody is misled operationally", and that is true of the coverage figures. It is
+not true of the shape: **V-803 fixed one occurrence of a stale number in a file and left
+another in the same file.** The header was prose and got read; the title was prose in an
+argument position and did not. Removed rather than corrected — the numbers live in
+`vitest.config.ts` and the assertions already derive them, so the title has no business
+restating them at all.
+
+Mutations: the R2-deferred clause restored, and the mock-data clause restored → each fires its
+sentinel. The vitest title carries no assertion of its own and needs no sentinel; removing the
+figures is the fix. Restores byte-identical.

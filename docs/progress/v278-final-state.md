@@ -61,7 +61,12 @@ founder shares their Origin CA Key + agent re-runs cert generation.
 - **Upstash** (eu-central) — managed Redis 7. Single database; prod +
   staging share with `stg:` key prefix until V-278.L split.
 - **Cloudflare** (global, EU-jurisdiction R2) — DNS + CDN + Pages +
-  Workers + (R2 not yet wired into the API; deferred).
+  Workers + R2, which IS wired into the API and holds customer data:
+  avatars (`routes/account-me.ts`), sealed profile blobs
+  (`services/profile-store.ts`), status snapshots and archived audit
+  rows. V-826 corrected this entry, which described R2 as deferred
+  under a heading that calls this map live and says it matches DPA
+  Annex 3 — and Annex 3 has listed Cloudflare R2 all along.
 - **Postmark** (US) — transactional email; sender domain
   `driftstack.dev` DKIM-verified. Server "driftstack-transactional",
   DeliveryType=Live.

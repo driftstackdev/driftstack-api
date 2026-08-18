@@ -104,7 +104,12 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
     expect(body).toMatch(
       /- \*\*Cloudflare\*\* \(global, EU-jurisdiction R2\) — DNS \+ CDN \+ Pages \+/,
     );
-    expect(body).toMatch(/Workers \+ \(R2 not yet wired into the API; deferred\)\./);
+    expect(body).toMatch(/Workers \+ R2, which IS wired into the API and holds customer data:/);
+    // V-826 SENTINEL — a sub-processor register that under-declares a
+    // processor holding customer data is the one direction that matters.
+    expect(body, 'R2 is wired and holds customer data').not.toMatch(
+      /R2 not yet wired into the API/,
+    );
     expect(body).toMatch(/- \*\*Postmark\*\* \(US\) — transactional email; sender domain/);
     expect(body).toMatch(/`driftstack\.dev` DKIM-verified\. Server "driftstack-transactional",/);
     expect(body).toMatch(/DeliveryType=Live\./);

@@ -208,7 +208,9 @@ describe('W616 apps/server/src/db/schema.ts content parity', () => {
     expect(body).toMatch(/V-298a \(this commit\): tables \+ migration only\./);
     expect(body).toMatch(/V-298b: TeamMembersService \+ invite\/accept routes\./);
     expect(body).toMatch(/V-298c: auth path integration \(member can act as owner per role\)\./);
-    expect(body).toMatch(/V-298d: customer-dashboard \/team UI \(currently mock data only\)\./);
+    expect(body).toMatch(/V-298d: customer-dashboard \/team UI — LIVE against \/v1\/team\/\*/);
+    // V-826 SENTINEL — the page has fetched live endpoints since V-298c.
+    expect(body, 'the /team UI is not mock data').not.toMatch(/currently mock data only/);
     expect(body).toMatch(/export const teamMembers = pgTable\(/);
     expect(body).toMatch(/export const teamInvites = pgTable\(/);
     expect(body).toMatch(
