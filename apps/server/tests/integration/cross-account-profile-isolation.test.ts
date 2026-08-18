@@ -22,6 +22,7 @@ import {
   seedAdditionalAccount,
   type TestAppFixture,
 } from './_helpers/build-test-app.js';
+import { assertCensusSaw, opsUnder, registeredOps } from './_helpers/registered-ops.js';
 
 let fx: TestAppFixture;
 
@@ -287,34 +288,6 @@ describe('routes whose foreign-reference contract is not 404 are still safe', ()
 // This arm reads the routes Fastify actually registered, so it cannot be fooled
 // by which FILE a route lives in, which is the specific way `/launch` hid.
 describe('every id-taking profile route has a cross-account arm', () => {
-  /** Parse `printRoutes` into "VERB /full/path". */
-  function registeredOps(tree: string): Set<string> {
-    const out = new Set<string>();
-    const stack: string[] = [];
-    for (const raw of tree.split('\n')) {
-      if (raw.trim() === '') continue;
-      const markerAt = raw.search(/[├└]/);
-      const depth = markerAt < 0 ? 0 : Math.floor(markerAt / 4);
-      const body = markerAt < 0 ? raw.trim() : raw.slice(markerAt + 4).trim();
-      const m = /^(\S*?)\s*(?:\(([A-Z, ]+)\))?$/.exec(body);
-      if (m === null) continue;
-      stack.length = depth;
-      stack[depth] = m[1] ?? '';
-      if (m[2] === undefined) continue;
-      const full =
-        stack
-          .slice(0, depth + 1)
-          .join('')
-          .replace(/\/$/, '') || '/';
-      for (const method of m[2].split(',')) {
-        const verb = method.trim();
-        if (verb === 'HEAD' || verb === 'OPTIONS') continue;
-        out.add(`${verb} ${full}`);
-      }
-    }
-    return out;
-  }
-
   /**
    * Routes whose cross-account arm is a BESPOKE `it()` in this file rather than a
    * row in the table, because each asserts something the shared arm cannot.
@@ -338,13 +311,8 @@ describe('every id-taking profile route has a cross-account arm', () => {
 
   it('CRITICAL a new /v1/profiles/:id route must be in the table or named as covered by a bespoke arm. Otherwise its ownership check ships untested — which is how /launch, /transfer and POST /snapshots each came to have none, on the resource holding a customer’s saved browser identity.', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
-    const registered = [...registeredOps(fx.app.printRoutes({ commonPrefix: false }))].filter(
-      (op) => /^[A-Z]+ \/v1\/profiles\/:id(\/|$)/.test(op),
-    );
-    expect(
-      registered.length,
-      'the route census parsed as empty — the parser, not the app',
-    ).toBeGreaterThan(5);
+    const registered = opsUnder(fx.app.printRoutes({ commonPrefix: false }), '/v1/profiles/:id');
+    assertCensusSaw(registered, '/v1/profiles/:id', 6);
 
     const covered = new Set(
       PROFILE_ROUTES.map((r) => `${r.method} /v1/profiles/:id${r.suffix.split('?')[0] ?? ''}`),

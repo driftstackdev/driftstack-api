@@ -26,6 +26,7 @@ import {
   seedAdditionalAccount,
   type TestAppFixture,
 } from './_helpers/build-test-app.js';
+import { assertCensusSaw, opsUnder } from './_helpers/registered-ops.js';
 
 let fx: TestAppFixture;
 
@@ -144,5 +145,44 @@ describe("account B cannot reach account A's saved proxy", () => {
     expect(ownerView.statusCode).toBe(200);
     expect(ownerView.body, "the owner's proxy must be untouched").toContain(A_PROXY_LABEL);
     expect(ownerView.body).not.toContain('attacker.test');
+  });
+});
+
+// ─── the table is no longer allowed to drift ────────────────────────────────
+//
+// Every table in this family was hand-written, and hand-written tables have gone
+// stale three times on record: `/launch` and `/transfer` were absent from the
+// profile table because they register in a different FILE, `POST /profiles/:id/
+// snapshots` was absent because it APPEARS in an isolation file as fixture setup,
+// and five agent-session routes were absent for the reading-the-file reason. This
+// table matches its registrations today; the arm is what keeps that true after the
+// next route lands, because adding one fails nothing here on its own.
+//
+// a saved proxy is the customer’s own paid egress credential — a new route here lets one customer use, alter or delete another customer’s infrastructure.
+describe('every id-taking route in this family is in the isolation table', () => {
+  it('CRITICAL a new /v1/account/me/proxies/:id route must be added to PROXY_ROUTES, or its ownership check ships untested', async () => {
+    // Build our own fixture rather than reusing whatever the previous arm left in
+    // `fx`. Reading a closed instance's route tree happens to work, so the
+    // order-dependence would not have surfaced as a failure — it would have surfaced
+    // as this arm throwing the day someone reordered the file.
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const registered = opsUnder(
+      fx.app.printRoutes({ commonPrefix: false }),
+      '/v1/account/me/proxies/:id',
+    );
+    // A base path whose parameter name is wrong matches nothing and would pass
+    // while checking nothing — the crypto-order routes register `:order_id`, not
+    // `:id`, which is exactly the typo this refuses to make silently.
+    assertCensusSaw(registered, '/v1/account/me/proxies/:id', 3);
+
+    const covered = new Set(
+      PROXY_ROUTES.map(
+        (r) => `${r.method} /v1/account/me/proxies/:id${r.suffix.split('?')[0] ?? ''}`,
+      ),
+    );
+    const missing = registered.filter((op) => !covered.has(op));
+    expect(missing, `these routes have no cross-account arm:\n  ${missing.join('\n  ')}`).toEqual(
+      [],
+    );
   });
 });

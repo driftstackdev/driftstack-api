@@ -70,6 +70,7 @@ import {
   seedAdditionalAccount,
   type TestAppFixture,
 } from './_helpers/build-test-app.js';
+import { assertCensusSaw, opsUnder, registeredOps } from './_helpers/registered-ops.js';
 
 let fx: TestAppFixture;
 
@@ -172,34 +173,6 @@ describe("account B cannot reach account A's agent session on any route", () => 
 // so a route added through any path — a new `app.post`, a helper, a plugin —
 // has to be either covered above or exempted here with a reason.
 describe('every id-taking agent-session route is in the isolation table', () => {
-  /** Parse `printRoutes` into "VERB /full/path", mirroring the route-coverage invariant. */
-  function registeredOps(tree: string): Set<string> {
-    const out = new Set<string>();
-    const stack: string[] = [];
-    for (const raw of tree.split('\n')) {
-      if (raw.trim() === '') continue;
-      const markerAt = raw.search(/[├└]/);
-      const depth = markerAt < 0 ? 0 : Math.floor(markerAt / 4);
-      const body = markerAt < 0 ? raw.trim() : raw.slice(markerAt + 4).trim();
-      const m = /^(\S*?)\s*(?:\(([A-Z, ]+)\))?$/.exec(body);
-      if (m === null) continue;
-      stack.length = depth;
-      stack[depth] = m[1] ?? '';
-      if (m[2] === undefined) continue;
-      const full =
-        stack
-          .slice(0, depth + 1)
-          .join('')
-          .replace(/\/$/, '') || '/';
-      for (const method of m[2].split(',')) {
-        const verb = method.trim();
-        if (verb === 'HEAD' || verb === 'OPTIONS') continue;
-        out.add(`${verb} ${full}`);
-      }
-    }
-    return out;
-  }
-
   // Routes that take an :id but are deliberately outside this boundary. Each
   // needs a reason, because "not covered" and "not applicable" must not look the
   // same from here — that ambiguity is what let five routes sit uncovered.
@@ -229,9 +202,11 @@ describe('every id-taking agent-session route is in the isolation table', () => 
 
   it('CRITICAL a new :id route must be added to AGENT_ROUTES or exempted with a reason — otherwise its ownership check ships untested, which is exactly how /cookies/set, /input-event, /files, /downloads/content and /history came to have none', async () => {
     fx = await buildTestApp({ tier: 'api_builder', enableAgentRuntime: true });
-    const registered = [...registeredOps(fx.app.printRoutes({ commonPrefix: false }))].filter(
-      (op) => /^[A-Z]+ \/v1\/agent-sessions\/:id(\/|$)/.test(op),
+    const registered = opsUnder(
+      fx.app.printRoutes({ commonPrefix: false }),
+      '/v1/agent-sessions/:id',
     );
+    assertCensusSaw(registered, '/v1/agent-sessions/:id', 15);
 
     // Compare on method + path only; the table's query strings are fixture
     // detail, not part of the route identity.
