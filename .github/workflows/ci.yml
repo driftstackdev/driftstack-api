@@ -74,6 +74,29 @@ jobs:
       - name: Build SDK (tsup ESM + CJS + .d.ts)
         run: npm run build --workspace packages/sdk-typescript
 
+      # The TS counterpart of the Python wheel smoke test. That one asserted a
+      # hand-listed SEVEN accessors while the client exposed nineteen, so a
+      # packaging error dropping a resource shipped green; this side had no
+      # artifact check at all. Source-level parity IS guarded
+      # (cross-sdk-resource-surface-parity), but that reads src/, not dist/ — and
+      # a resource can be present in client.ts and absent from the built package
+      # if the entry point or exports map stops re-exporting it.
+      #
+      # Expectation derived from the source, asserted against the BUILT bundle.
+      - name: SDK build smoke (every source-declared resource survives the build)
+        run: |
+          node -e "
+          const fs = require('fs');
+          const src = fs.readFileSync('packages/sdk-typescript/src/client.ts', 'utf8');
+          const expected = [...new Set([...src.matchAll(/readonly (\w+):\s*\w+Resource/g)].map((m) => m[1]))].sort();
+          if (expected.length < 15) throw new Error('source scan found only ' + expected.length + ' resources');
+          const { Driftstack } = require('./packages/sdk-typescript/dist/index.js');
+          const client = new Driftstack({ apiKey: 'ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
+          const missing = expected.filter((k) => client[k] === undefined);
+          if (missing.length) throw new Error('built client is missing: ' + missing.join(', '));
+          console.log('sdk build smoke ok — all ' + expected.length + ' source-declared resources survive the build');
+          "
+
       # Runs HERE because it scans the BUILT html of all six customer-facing
       # apps. It was defined in package.json and invoked by nothing — no job, no
       # hook, no other script — so a guard against shipping "coming soon" copy or

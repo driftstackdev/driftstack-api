@@ -177,6 +177,24 @@ describe('W723 GitHub Actions ci.yml workflow parity', () => {
     expect(c).toMatch(/run: pytest -v/);
   });
 
+  it('CRITICAL the TypeScript SDK build is smoke-tested against the BUILT bundle, with the expectation derived from source. cross-sdk-resource-surface-parity reads src/, so it cannot see a resource that survives compilation but is dropped from the package entry or exports map', () => {
+    const c = read(CI);
+    expect(c, 'the SDK build smoke step is gone').toMatch(
+      /SDK build smoke \(every source-declared resource survives the build\)/,
+    );
+    // Same three properties as the Python side: derived, asserted against the
+    // artifact, and floored so an empty extraction cannot pass.
+    expect(c, 'the resource list is hand-written rather than derived').toMatch(
+      /matchAll\(\/readonly \(\\w\+\)/,
+    );
+    expect(c, 'the smoke no longer loads the built bundle').toMatch(
+      /sdk-typescript\/dist\/index\.js/,
+    );
+    expect(c, 'the source-scan floor is gone, so an empty extraction would pass').toMatch(
+      /expected\.length < 15/,
+    );
+  });
+
   it('CRITICAL the Python wheel smoke-test derives its accessor list from source and checks both clients. A hand-written subset is what this replaced: it asserted 7 while the client exposed 19, so a packaging error dropping crypto_orders, mfa, team, audit_log or agent_sessions shipped green', () => {
     const c = read(CI);
 
