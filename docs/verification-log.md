@@ -37101,3 +37101,41 @@ restored byte-identical.
 **What V-856 got right**, and I am not retracting: V-759 does carry two unrelated findings, the
 suffixed entries (`V-278.A`, `V-466.go`, `V-359-sdk`) are deliberate rather than collisions, and
 renumbering is the wrong remedy in an append-only log.
+
+## V-859 — the unbuilt-claim instrument across six unscanned trees: nine occurrences, no defects (2026-08-18)
+
+**Scope.** V-838/V-841 applied a stale-promise scan to `apps/server/src`; V-857 applied it to
+`apps/gui-client/src`. This run covers the trees neither touched: `customer-dashboard`,
+`admin-panel`, `status-site`, `marketing-site`, `docs` and all of `packages/`. The pattern is the
+claim-shaped one V-857 arrived at (asserting a dependency is unbuilt), not the tense-shaped one
+that found only two of that finding's five sites.
+
+**Result: 9 occurrences across 5 packages, 0 defects.** Most are ordinary prose the pattern cannot
+distinguish from a claim — "when your request lands", "When a feature lands in one SDK but not
+another". Three were verified against source rather than read:
+
+- **`packages/sdk-typescript/examples/egress-flow.ts` and `egress-openvpn.ts`** warn that they
+  cannot run today because `POST /v1/sessions/:id/proxy` throws on every deployment. Verified:
+  `routes/session-proxy.ts` throws `FeatureUnavailableError` in the live registration path and
+  again in the disabled one, so no configuration makes it succeed. The warning is accurate and the
+  examples are exemplary rather than defective — they say so at the top, unprompted.
+- **`apps/docs/src/pages/api/billing.md`** claims the portal-redirect route returns the same 503
+  when billing is unwired, and — unlike `GET /v1/billing` — does not honour `X-Driftstack-Account`.
+  Both verified: the redirect is in the disabled-stub list, it reads `ctx.account.id` directly, and
+  `GET /v1/billing` resolves the act-as header via `resolveEffectiveAccount` (V-326c). The
+  neighbouring "the same four paths" comment is also exact — four stubs, not five.
+
+**One correction made.** `AgentChatView`'s live-view docblock said `AgentSessionPanel` is mounted
+with `interactive` left at its default. It is mounted with an explicit `interactive={false}`. Zero
+functional difference and the code is the safer of the two, but the comment described a mechanism
+the code does not use — and on a read-only guarantee ("the agent is the sole driver") the mechanism
+is the point. Corrected to say what it does, and why explicit beats defaulted here.
+
+**No guard added, deliberately.** The natural guard is a source-text pin asserting the prop value,
+which is the instrument V-833 records as unable to contradict its own author — the weakness this
+whole sweep exists to remove. The explicit `interactive={false}` is self-documenting, and
+`agent-session-panel.test.tsx` already covers the panel's interactive behaviour directly. Adding a
+pin here would trade a real guarantee for the appearance of one.
+
+**Recorded so it is not re-run.** Six trees, one instrument, one comment fix. Combined with V-842,
+V-845 and V-853, the stale-claim surface across this repository is now scanned end to end.

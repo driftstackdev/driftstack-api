@@ -1117,10 +1117,12 @@ type WatchState =
  * via the SDK) and renders the live stream so the user watches the automation
  * drive the phone in realtime.
  *
- * READ-ONLY by design: AgentSessionPanel is mounted with `interactive` left at
- * its default (false), so the LK.6.d input-capture is NOT wired — taps / scrolls
- * / keystrokes on this video never reach the device. The agent is the sole
- * driver; the user only watches and cannot interfere by clicking the view.
+ * READ-ONLY by design: AgentSessionPanel is mounted with an explicit
+ * `interactive={false}`, so the LK.6.d input-capture is NOT wired — taps /
+ * scrolls / keystrokes on this video never reach the device. The agent is the
+ * sole driver; the user only watches and cannot interfere by clicking the view.
+ * Stated explicitly rather than relying on the prop's default, so the guarantee
+ * survives a change to that default (V-859).
  */
 // Perf — memoized so a composer-keystroke re-render of AgentChatView (which owns
 // the `draft` state and re-renders ~10+/sec while typing) does NOT reconcile this
