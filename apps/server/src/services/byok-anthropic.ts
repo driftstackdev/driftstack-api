@@ -5,7 +5,13 @@
 // Surface:
 //   - `setKey`     — encrypt customer's Anthropic key + persist
 //   - `clearKey`   — delete the row (NULL ciphertext + timestamps)
-//   - `getPlaintext` — decrypt for the AgentRuntime call site ONLY
+//   - `getPlaintext` — decrypt. TWO call sites, both deliberate: the
+//                      AgentRuntime path in routes/agent-sessions.ts, and the
+//                      POST /byok-anthropic-key/test handler, which needs the
+//                      real key to ask Anthropic whether it works. The set is
+//                      pinned by byok-plaintext-call-sites-are-pinned.test.ts —
+//                      a third one is a new place a customer secret can escape,
+//                      and should be a decision rather than a diff.
 //   - `getMetadata`  — non-secret read for the dashboard ("Key set on …",
 //                      "Last used …"); never returns plaintext
 //   - `touchLastUsed` — bump `last_used_at` after a successful Claude call

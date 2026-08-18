@@ -31,9 +31,32 @@ describe('services/byok-anthropic content parity', () => {
   });
 
   it("5-method service surface framing pinned: setKey + clearKey + getPlaintext + getMetadata + touchLastUsed. Drift to dropping touchLastUsed would break the dashboard's 'Last used …' display + the silent-fallthrough TTL gate (it relies on last_used_at-vs-set_at to identify stale keys)", () => {
-    expect(body).toMatch(
-      /\/\/ Surface:\s*\n?\s*\/\/ {3}- `setKey` {5}— encrypt customer's Anthropic key \+ persist\s*\n?\s*\/\/ {3}- `clearKey` {3}— delete the row \(NULL ciphertext \+ timestamps\)\s*\n?\s*\/\/ {3}- `getPlaintext` — decrypt for the AgentRuntime call site ONLY\s*\n?\s*\/\/ {3}- `getMetadata` {2}— non-secret read for the dashboard \("Key set on …",\s*\n?\s*\/\/ {22}"Last used …"\); never returns plaintext\s*\n?\s*\/\/ {3}- `touchLastUsed` — bump `last_used_at` after a successful Claude call/,
-    );
+    // The five method names and their one-line purposes, matched individually
+    // rather than as one long verbatim block.
+    //
+    // The block form pinned getPlaintext's description as "decrypt for the
+    // AgentRuntime call site ONLY", which had stopped being true — the /test
+    // handler decrypts too, and has since it shipped. Correcting the comment
+    // failed this arm, which is a pin holding a false statement in place: the
+    // same failure as the V-750 checklist number. The surface is what this case
+    // is named for and is what it now checks; the call-site set is enforced by
+    // byok-plaintext-call-sites-are-pinned.
+    expect(body).toMatch(/\/\/ Surface:/);
+    for (const [method, purpose] of [
+      ['setKey', /encrypt customer's Anthropic key \+ persist/],
+      ['clearKey', /delete the row \(NULL ciphertext \+ timestamps\)/],
+      ['getPlaintext', /decrypt/],
+      ['getMetadata', /non-secret read for the dashboard/],
+      ['touchLastUsed', /bump `last_used_at` after a successful Claude call/],
+    ] as const) {
+      expect(body, `the ${method} line is gone from the Surface block`).toMatch(
+        new RegExp(`\\/\\/ {3}- \`${method}\``),
+      );
+      expect(body, `the ${method} purpose no longer reads as documented`).toMatch(purpose);
+    }
+    // getMetadata's guarantee is the one worth holding verbatim: it is the read
+    // the dashboard calls, and "never returns plaintext" is the property.
+    expect(body).toMatch(/never returns plaintext/);
   });
 
   it("Q3 account-owner-only authorisation framing pinned: 'Account-owner-only authorisation (Q3 verdict). Team members on a shared account may USE the resolved key (the AgentRuntime resolves from the owner's account) but cannot SET/CLEAR via this service — route-layer auth enforces the owner-only gate.' — pinned so the owner-vs-member split + the route-layer-enforces contract stay documented (drift would let team members rotate the owner's BYOK key without consent)", () => {
