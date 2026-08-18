@@ -219,6 +219,84 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     expect(cache.size()).toBe(0);
   });
 
+  // ── retry policy ────────────────────────────────────────────────
+  //
+  // The gate retries a failed probe exactly once, and only for `unreachable`.
+  // The source explains both halves: rotating residential exits drop a dial and
+  // stream fine on the next one, so a single transient miss must not fail a
+  // launch; `auth_failed` means wrong credentials, where a retry cannot help and
+  // repeated attempts risk the provider locking the account.
+  //
+  // That policy was previously guarded only by accident. Widening the condition
+  // to retry EVERY failure did red the suite — but via the injection-detail case
+  // below, which happens to count probe calls. A property nothing states is a
+  // property that survives only as long as an unrelated fixture keeps its shape.
+
+  it('CRITICAL retries ONCE on a transient unreachable, then blocks if it fails again', async () => {
+    const probeFn = vi.fn().mockResolvedValue({ ok: false, reason: 'unreachable' });
+    const probe = { probe: probeFn } as unknown as ProxyConnectivityProbe;
+    const { service } = makeService({ host: '203.0.113.7', port: 1080 });
+    await expect(
+      runProxyPrelaunchGate({
+        tier: 'api_builder',
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_flaky',
+        accountId: 'acc_1',
+        logger: logger(),
+      }),
+    ).rejects.toBeInstanceOf(ProxyValidationFailedError);
+    expect(
+      probeFn.mock.calls.length,
+      'a transient unreachable must be retried exactly once — no retry fails launches on rotating ' +
+        'residential exits, more than one turns a dead proxy into a slow create',
+    ).toBe(2);
+  });
+
+  it('CRITICAL a transient unreachable that succeeds on the retry lets the launch through', async () => {
+    const probeFn = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, reason: 'unreachable' })
+      .mockResolvedValueOnce({ ok: true });
+    const probe = { probe: probeFn } as unknown as ProxyConnectivityProbe;
+    const { service } = makeService({ host: '203.0.113.7', port: 1080 });
+    await expect(
+      runProxyPrelaunchGate({
+        tier: 'api_builder',
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_flaky',
+        accountId: 'acc_1',
+        logger: logger(),
+      }),
+    ).resolves.toBeUndefined();
+    expect(probeFn.mock.calls.length, 'the retry is what makes this pass').toBe(2);
+  });
+
+  it('CRITICAL NEVER retries auth_failed — wrong credentials, and repeats risk a provider lockout', async () => {
+    const probeFn = vi.fn().mockResolvedValue({ ok: false, reason: 'auth_failed' });
+    const probe = { probe: probeFn } as unknown as ProxyConnectivityProbe;
+    const { service } = makeService({ host: '203.0.113.7', port: 1080 });
+    await expect(
+      runProxyPrelaunchGate({
+        tier: 'api_builder',
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_badcreds',
+        accountId: 'acc_1',
+        logger: logger(),
+      }),
+    ).rejects.toBeInstanceOf(ProxyValidationFailedError);
+    expect(
+      probeFn.mock.calls.length,
+      'auth_failed was retried. A retry cannot fix wrong credentials, and repeated failed auth is ' +
+        'how a provider locks the customer’s account',
+    ).toBe(1);
+  });
+
   it('never forwards remote-controlled probe detail into the customer 422', async () => {
     const hostile = `HTTP/1.1 599 ${'remote prose '.repeat(30_000)}secret=do-not-reflect`;
     const probeFn = vi.fn().mockResolvedValue({
