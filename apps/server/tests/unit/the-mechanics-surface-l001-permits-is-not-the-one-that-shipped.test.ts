@@ -124,4 +124,18 @@ describe('V-825 the mechanics surface L-001 permits is not the one that shipped'
       /`POST \/v1\/agent-sessions\/:id\/input-event` is a different surface/,
     );
   });
+
+  it('V-864 CRITICAL the amendment naming the CREDENTIAL as the operative condition is recorded. V-825 left this as amend-or-withdraw, which is a false choice: the exception rests on there being no automation to bypass, that is a claim about the caller, and an ordinary write key evidences nothing about who is calling. Without this paragraph a reader still meets the original binary and cannot see that the remedy is narrower than withdrawing a surface from three shipped SDKs.', () => {
+    const locked = readFileSync(LOCKED, 'utf8');
+    expect(locked, 'the amendment itself').toMatch(
+      /V-864 — amend-or-withdraw was a false choice, and the answer is neither/,
+    );
+    expect(locked, 'and it must state the rule in terms of the credential').toMatch(
+      /mechanics-level primitives may live on a surface\s*>?\s*whose credential establishes a human-driven session/,
+    );
+    expect(
+      locked,
+      'and record that it is not yet applied, so the note cannot read as done',
+    ).toMatch(/\*\*Not yet\s*>?\s*applied\.\*\*/);
+  });
 });

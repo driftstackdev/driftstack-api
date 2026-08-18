@@ -88,14 +88,37 @@ source-invariant.test.ts` reads `schemas/gui-input.ts` and nothing else,
 > so it watches the surface that complies and is blind to the one that does
 > not.
 >
-> **This needs a decision and is not a documentation fix.** Either L-001 is
-> amended to permit a mechanics surface for live-takeover — which is a
-> coherent position, since a human driving a pair-mode session is the same
-> "human cadence IS the behavior" case the exception was written for — or
-> the agent-sessions surface is withdrawn, which breaks three shipped SDKs.
-> Recorded here rather than resolved, so the divergence stops being
-> invisible. The guard added in V-825 pins the current state so it cannot
-> widen further without somebody noticing.
+> **V-864 — amend-or-withdraw was a false choice, and the answer is neither.**
+>
+> The exception above rests on one sentence: "there's no automation simulation
+> to bypass because there's no automation." That is a claim about the CALLER,
+> not about the endpoint. Nothing on the agent-sessions surface establishes
+> that the caller is a human. `controlKeyOrAccountAuth('write')` accepts a
+> per-session `gui_control_key` — which the GUI mints for a live takeover, and
+> which does evidence a human — OR an ordinary customer API key carrying
+> `write`, which evidences nothing. The same route therefore serves a human
+> driving a pair-mode session and a script tapping coordinates in a loop, and
+> only the first is the case this exception was written for.
+>
+> So the operative condition was never the use case; it is the **credential**.
+> The three bullets above are one way to prove a human is on the other end
+> (a scope customer keys never carry). A per-session control key minted for an
+> observed takeover is another, and a better fit for pair mode. What cannot
+> stand is a mechanics surface reachable with a credential that proves nothing.
+>
+> **Amended, therefore:** mechanics-level primitives may live on a surface
+> whose credential establishes a human-driven session. `gui_control` scope
+> qualifies. A per-session control key qualifies. An ordinary customer key
+> carrying `write` does not.
+>
+> That makes the remedy narrower than withdrawal. `sendInputEvent` stays in all
+> three SDKs and keeps working for control-key callers, which is how the GUI
+> uses it; what changes is that an ordinary `write` key stops being sufficient.
+> That is still a breaking change for any customer scripting it today — and
+> that population is precisely the moat erosion this decision exists to
+> prevent, so it is a deliberate call to make, not a silent flip. **Not yet
+> applied.** The route still accepts a `write` key, the V-825 guard still pins
+> that, and the guard fails the day it changes.
 
 ### Drift detection
 

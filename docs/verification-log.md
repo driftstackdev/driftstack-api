@@ -37328,3 +37328,43 @@ coming back at all — which is the stronger form of the same guarantee.
 
 Three mutations proved: full changelog restored, one line restored, and the new present-tense
 statement removed. Source restored byte-identical.
+
+## V-864 — D-4 was a false binary; the operative condition is the credential (2026-08-18)
+
+**V-825 framed it as amend-or-withdraw.** Either L-001 is amended to permit a mechanics surface for
+live takeover — coherent, since a human driving a pair-mode session is the "human cadence IS the
+behavior" case the exception was written for — or `POST /v1/agent-sessions/:id/input-event` is
+withdrawn, breaking `sendInputEvent` in three shipped SDKs. Both options are bad, which is why it
+sat open.
+
+**Neither is right, and L-001's own text says why.** The exception rests on one sentence: _"there's
+no automation simulation to bypass because there's no automation."_ That is a claim about the
+CALLER, not about the endpoint. Nothing on the agent-sessions surface establishes that a human is
+on the other end. Its preHandler is `controlKeyOrAccountAuth('write')`, which accepts either a
+per-session `gui_control_key` — minted by the GUI for an observed takeover, and genuine evidence of
+a human — **or** an ordinary customer API key carrying `write`, which is evidence of nothing. One
+route, two callers: a human driving pair mode, and a script tapping coordinates in a loop. Only the
+first is what the exception contemplates, and the endpoint cannot tell them apart.
+
+So the condition was never the use case. It is the **credential**. The three original bullets
+(server-internal schema, `gui_control` scope, no SDK exposure) are one way to prove a human is
+calling; a per-session control key is another, and a better fit for pair mode. What cannot stand is
+a mechanics surface reachable with a credential that proves nothing.
+
+**Amendment recorded in `docs/locked-decisions.md`:** mechanics-level primitives may live on a
+surface whose credential establishes a human-driven session. `gui_control` qualifies. A per-session
+control key qualifies. An ordinary customer key carrying `write` does not.
+
+**Why this is worth more than picking one of the two originals.** It makes the remedy much
+narrower. `sendInputEvent` stays in all three SDKs and keeps working for control-key callers, which
+is how the GUI actually uses it. What changes is that an ordinary `write` key stops being
+sufficient. That is still breaking for any customer scripting it today — and that population is
+exactly the moat erosion L-001 exists to prevent — so it is a deliberate call about a live auth
+gate, not something to flip quietly while closing a sweep. **Not applied.** The route still accepts
+a `write` key and V-825's guard still pins that, so the day it changes, the guard fails and
+whoever changed it meets this note.
+
+**Guard.** V-825's file gains an arm asserting the amendment is present, states the rule in terms
+of the credential rather than the use case, and still reads as unapplied — so the note cannot decay
+into sounding done. Mutation-proved three ways: header removed, rule weakened back to a use-case
+test, and the unapplied marker flipped to applied. Doc restored byte-identical.
