@@ -2,7 +2,7 @@ import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
+import { assertIsolatedDatabase, ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzleBYOKAnthropicRepo } from '../../src/db/byok-anthropic-repo.js';
 import {
   BYOK_ANTHROPIC_KEY_V2_PREFIX,
@@ -70,6 +70,8 @@ beforeAll(async () => {
     throw error;
   }
   client = postgres(DB_URL, { max: 1 });
+  // This file TRUNCATEs `accounts`, which cascades to most of the schema.
+  await assertIsolatedDatabase(client, ISOLATED_DB_NAME);
   await client.unsafe(`CREATE SCHEMA "${TEST_SCHEMA}"`);
   await client.unsafe(`
     CREATE TABLE "${TEST_SCHEMA}".accounts (

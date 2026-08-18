@@ -14,7 +14,7 @@ import {
   encryptAccountProxySecret,
   readAccountProxySecret,
 } from '../../src/lib/account-proxy-secret-encryption.js';
-import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
+import { assertIsolatedDatabase, ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { wrapAccountSecret } from '../../src/lib/profile-key-hierarchy.js';
 import type * as schema from '../../src/db/schema.js';
 
@@ -93,6 +93,8 @@ beforeAll(async () => {
     admin = null;
     throw error;
   }
+  // This file TRUNCATEs; prove the connection before anything destructive runs.
+  await assertIsolatedDatabase(admin, ISOLATED_DB_NAME);
   await admin.unsafe(`CREATE SCHEMA "${TEST_SCHEMA}"`);
   await admin.unsafe(`
     CREATE TABLE "${TEST_SCHEMA}".account_proxies (

@@ -5,7 +5,7 @@ import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
+import { assertIsolatedDatabase, ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzlePlatformSecretsRepo } from '../../src/db/platform-secrets-repo.js';
 import { PlatformSecretsService } from '../../src/services/platform-secrets.js';
 import {
@@ -75,6 +75,8 @@ beforeAll(async () => {
     admin = null;
     throw error;
   }
+  // This file TRUNCATEs; prove the connection before anything destructive runs.
+  await assertIsolatedDatabase(admin, ISOLATED_DB_NAME);
   await admin.unsafe(`CREATE SCHEMA "${TEST_SCHEMA}"`);
   await admin.unsafe(`
     CREATE TABLE "${TEST_SCHEMA}".platform_secrets (

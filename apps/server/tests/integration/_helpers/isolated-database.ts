@@ -89,3 +89,37 @@ export async function ensureIsolatedDatabase(name: string): Promise<string | nul
     await migrator.end({ timeout: 5 }).catch(() => {});
   }
 }
+
+/**
+ * Refuse to proceed unless `client` is connected to the isolated database.
+ *
+ * For files that TRUNCATE. On their own database that is free; pointed anywhere
+ * else it destroys whatever every other suite was relying on, and it does so
+ * silently — the run stays green because the rows it deleted belonged to
+ * somebody else.
+ *
+ * That is not hypothetical. Proving the public-feed isolation, a mutation that
+ * pointed the client back at `DATABASE_URL` truncated the SHARED `incidents`
+ * table, deleted the probe row the experiment was measuring, and SURVIVED —
+ * because it had destroyed the evidence that would have failed it.
+ *
+ * `ensureIsolatedDatabase` returns a URL; nothing makes a caller connect with
+ * it. This closes that gap at the only place it matters, and it is deliberately
+ * a throw rather than an expect so it reads the same from a beforeAll as from a
+ * helper.
+ */
+export async function assertIsolatedDatabase(
+  client: ReturnType<typeof postgres>,
+  name: string,
+): Promise<void> {
+  const rows = (await client`SELECT current_database() AS name`) as unknown as Array<{
+    name: string;
+  }>;
+  const actual = rows[0]?.name;
+  if (actual !== name) {
+    throw new Error(
+      `refusing to run: expected the isolated database "${name}" but this client is on ` +
+        `"${actual ?? '<unknown>'}". A TRUNCATE here would delete other suites' rows.`,
+    );
+  }
+}

@@ -33,7 +33,7 @@ import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DrizzleIncidentsRepo } from '../../src/db/incidents-repo.js';
-import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
+import { assertIsolatedDatabase, ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -82,8 +82,7 @@ beforeAll(async () => {
   // handing back a fallback URL — it must fail here and not quietly wipe every
   // other suite's incidents. Verified by mutation: pointing the client at
   // DATABASE_URL truncated the shared table before this assertion existed.
-  const [db] = await sql<Array<{ name: string }>>`SELECT current_database() AS name`;
-  expect(db?.name, 'this file truncates, so it must be on its OWN database').toBe(ISOLATED_DB_NAME);
+  await assertIsolatedDatabase(sql, ISOLATED_DB_NAME);
   dbReachable = true;
   repo = new DrizzleIncidentsRepo({ db: drizzle(sql) } as unknown as never);
 });
