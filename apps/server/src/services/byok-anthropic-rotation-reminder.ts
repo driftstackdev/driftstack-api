@@ -11,10 +11,17 @@
 // (via PUT /v1/account/me/byok-anthropic-key). The reminder is a
 // nag, not a side-effecting action.
 //
-// Wiring (deferred to a follow-up): a scheduled job calls tickOnce
-// once per day. Until that wire lands, this service is dormant —
-// no reminders fire. The schema (v2-#11 migration 0049) is already
-// in place.
+// Wiring: LANDED. `bootstrap.ts` registers this through
+// `wireDailyMaintenanceSweep` under `BYOK_ANTHROPIC_ROTATION_REMINDER_JOB_TYPE`,
+// which calls `tickOnce(now)` once per day, and the job type is in
+// `EXPECTED_RECURRING_JOB_TYPES` so the chain-liveness gauge watches it.
+// Reminders fire. The schema (v2-#11 migration 0049) is in place.
+//
+// V-841 — this said the wire was deferred and the service dormant, with no
+// reminders firing. It has been sending customer email since the sweep was
+// wired. Nothing here contradicted itself, which is why it survived: the
+// dormancy claim and the code that fires the reminder live in different
+// files, and the pin over this header only ever compared it to itself.
 
 import type { Logger } from '../lib/logger.js';
 import type { EmailService } from './email.js';

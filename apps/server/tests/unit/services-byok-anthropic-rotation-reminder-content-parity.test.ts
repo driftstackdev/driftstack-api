@@ -36,10 +36,22 @@ describe('services/byok-anthropic-rotation-reminder content parity', () => {
     );
   });
 
-  it("Wiring-deferred framing pinned: 'Wiring (deferred to a follow-up): a scheduled job calls tickOnce once per day. Until that wire lands, this service is dormant — no reminders fire. The schema (v2-#11 migration 0049) is already in place.' — pinned so the dormant-until-cron-wired + once-per-day + v2-#11 migration 0049 schema-already-shipped contract stays documented", () => {
+  it('Wiring framing pinned, and checked against bootstrap rather than against itself. V-841 corrected this case: it froze a claim that the service was dormant and fired no reminders, which stopped being true when the daily sweep was wired and stayed pinned regardless', () => {
     expect(body).toMatch(
-      /\/\/ Wiring \(deferred to a follow-up\): a scheduled job calls tickOnce\s*\n?\s*\/\/ once per day\. Until that wire lands, this service is dormant —\s*\n?\s*\/\/ no reminders fire\. The schema \(v2-#11 migration 0049\) is already\s*\n?\s*\/\/ in place\./,
+      /\/\/ Wiring: LANDED\. `bootstrap\.ts` registers this through\s*\n?\s*\/\/ `wireDailyMaintenanceSweep`/,
     );
+    // V-841 — CROSS-SOURCE, because a pin over this header could only ever
+    // compare it to itself. The dormancy claim was false for as long as the
+    // sweep has been wired, and nothing in this file could see that.
+    const boot = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'),
+      'utf8',
+    ).replace(/\/\/[^\n]*/g, '');
+    expect(
+      boot,
+      'the daily sweep that fires these reminders — if this goes, the header must say dormant again',
+    ).toMatch(/byokAnthropicRotationReminderService\.tickOnce\(now\)/);
+    expect(body, 'the service is not dormant').not.toMatch(/this service is dormant/);
   });
 
   it('4-constant catalog pinned: REMINDER_THRESHOLD_DAYS=60 + COOLDOWN_DAYS=7 + MS_PER_DAY + ROTATION_TARGET_DAYS=90. + matches the slice-254 webhook-rotation-reminder cohort exactly (cross-service alignment). Drift to a different threshold/cooldown would diverge from the webhook-rotation reminder cohort + the BYOKAnthropicService 90-day TTL (slice 234)', () => {

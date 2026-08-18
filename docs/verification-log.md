@@ -36403,3 +36403,41 @@ exactly what would have turned it into a false positive.
 
 Mutation: the unconditional-stub claim restored → the sentinel fires. Restores byte-identical.
 `it(` count unchanged at 13.
+
+## V-841 — a service documented as dormant has been emailing customers (2026-08-18)
+
+Fourth finding from the unpinned-source scan, and the first with live customer impact.
+
+`services/byok-anthropic-rotation-reminder.ts` sends BYOK key-rotation nag emails. Its header
+said:
+
+> Wiring (deferred to a follow-up): a scheduled job calls tickOnce once per day. Until that
+> wire lands, **this service is dormant — no reminders fire.**
+
+The wire landed. `bootstrap.ts` registers it through `wireDailyMaintenanceSweep` under
+`BYOK_ANTHROPIC_ROTATION_REMINDER_JOB_TYPE`, whose `run` callback is
+`byokAnthropicRotationReminderService.tickOnce(now)`. The job type is also in
+`EXPECTED_RECURRING_JOB_TYPES`, so V-784's chain-liveness gauge has been watching it. Reminders
+have been going to customers for as long as that sweep has existed, from a file that says none
+do.
+
+**Why nothing caught it.** The file does not contradict itself — that is the whole difficulty.
+V-803 found three pins whose header argued with their own assertions, and those were findable
+by reading one file. Here the dormancy claim is in the service and the code that fires the
+reminder is in `bootstrap.ts`, and the content-parity pin over the header only ever compared
+the header to itself. A text pin cannot see across that gap; it froze the sentence, the suite
+went green, and the sentence was wrong for months.
+
+Corrected, and the pin is now CROSS-SOURCE: it reads `bootstrap.ts` with comments stripped and
+requires the `tickOnce` call to be there. If the sweep is ever removed, the assertion fails and
+tells the reader the header must go back to saying dormant. That is the V-833 shape — a guard
+that recomputes rather than one that restates.
+
+Two mutations, one per direction: the dormancy claim restored → the sentinel fires; the sweep's
+`tickOnce` call removed from bootstrap → the cross-source arm fires. Restores byte-identical.
+`it(` count unchanged at 12.
+
+**Related, checked, and left alone**: `services/agent-pair-mode-heartbeat.ts` says "the sweep
+service itself is intentionally not wired here". That "here" means "in this file", and it is
+accurate — V-808 already corrected the sweep's own header to record that `bootstrap.ts` drives
+it on a 5s interval. Same words, different claim.
