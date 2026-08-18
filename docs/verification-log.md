@@ -36089,3 +36089,46 @@ it was about an authorization boundary, and it was pinned by a guard I wrote in 
 — so the suite went green over it and would have kept doing so. The rate that matters is not
 how often I am wrong but whether anything except a deliberate re-check would ever have caught
 it, and here nothing would have.
+
+## V-833 — which of this arc's fixes can catch me being wrong, and which cannot (2026-08-18)
+
+V-831 found a claim of mine that was wrong, pinned by a guard I wrote in the same commit, with
+the suite green over it. That is a property of the FIX SHAPE, not of that one mistake, so it is
+worth stating which of this arc's fixes have it.
+
+Classifying the fifty entries by what backs them:
+
+- **27 are backed by a derived guard** — one that reads two sources and recomputes. V-813's
+  bucket set from `TIER_RATE_LIMIT_DEFAULTS`, V-815's wire keys from the server's throw sites,
+  V-820's route roster, V-825's variant union, V-823's no-caller walk. If my prose about any of
+  these is wrong, the guard disagrees with it on the next run.
+- **18 rest only on single-source text pins.** The pin asserts the sentence I wrote. If the
+  sentence is wrong, the pin freezes it and the suite stays green — which is exactly what
+  happened to V-822 for as long as it took me to go looking.
+
+**A bounded check, stated as bounded.** I did not re-verify all eighteen. I took the four in
+the family most likely to be wrong — the team-RBAC corrections, where access rules had already
+widened underneath the docs three times — and checked each against source:
+
+- V-795 (`account_owner` cross-account access is real) — holds; `resolveEffectiveAccount`
+  returns the team owner's id for a member's header.
+- V-804 (webhook writes gate on admin) — holds; `effectiveAccountIdForWrite`.
+- V-812 (a team admin gets 201 on recipes) — holds; `recipes.ts` gates on
+  `callerCanAccessAgentSession`, which admits owner-or-team-admin.
+- V-822 (reads are role-agnostic) — **wrong**, corrected in V-831.
+
+One in four in the family I judged riskiest. **Fourteen text-pinned entries remain unchecked**,
+and I am not going to imply otherwise by reporting the three passes as though they cleared the
+set.
+
+**The structural point.** A correction that ends in a text pin inherits the corrector's
+fallibility and adds nothing that could detect it — the pin's job is to stop OTHERS changing
+the sentence, not to stop the sentence being wrong when written. A derived guard is the only
+one of the two shapes that can contradict its own author. Where a claim is derivable, deriving
+it is not a nicety; it is the difference between a fix that can be wrong forever and one that
+cannot.
+
+That reframes V-829's summary. The reusable output of this arc is not the one-directional-guard
+pattern, which V-830 showed does not generalise. It is this: **prefer the guard that recomputes,
+and when you cannot have one, say so out loud** — because 18 of my own 50 fixes are sitting on
+the weaker shape and only the log records which.
