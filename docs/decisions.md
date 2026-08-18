@@ -112,6 +112,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
 - **Decision:** the hot path for rate limiting writes to Redis (token bucket, per-account-per-bucket-key). Postgres `rate_limit_buckets` is a durability snapshot synced periodically (Phase 3 will define the period); it's not read on the hot path.
 - **Reasoning:** Redis gives sub-millisecond INCR/DECR with TTL semantics natural to a token bucket. Postgres gives durability so a Redis flush or eviction doesn't reset all customer rate limits, and gives an SQL-queryable surface for analytics/admin tools. Two-tier storage at this seam is a known-good pattern.
+- **Reality check 2026-08-18:** only the Redis half exists. The `rate_limit_buckets` table is created by migration `0000` and declared in `schema.ts`, and **nothing reads or writes it** — no insert, no select, no sync job; the only references outside the schema declaration are migration snapshots, the e2e truncation list and content-parity pins. So the durability the second half of this decision buys is not bought: a Redis flush or eviction today does reset every customer's rate-limit counters. That may well be an acceptable trade at this scale — a reset gives customers _more_ quota, not less, and the buckets are short-lived — but it is the opposite of what this entry describes, and someone reading it while planning capacity would believe otherwise. Deciding whether to build the sync or drop the table is a Tier-2 call and is not made here.
 - **Tier:** 2.
 - **V-log:** V-002.
 

@@ -127,7 +127,7 @@ Tables grouped by domain:
 
 - **Accounts + auth**: `accounts` (with `password_hash`, `email_verified_at`, `stripe_customer_id`, `trial_pack_*`, `tier`, `status`), `api_keys`, `email_verify_tokens`, `magic_link_tokens`, `password_reset_tokens`, `web_sessions`.
 - **Sessions**: `sessions`, `session_events`, `profiles`.
-- **Metering**: `usage_records`, `rate_limit_buckets` (snapshots), `rate_limit_overrides`.
+- **Metering**: `usage_records`, `rate_limit_overrides`, and `rate_limit_buckets` — which exists in the schema but is **never written**; the live counters are in Redis and the durability snapshot D-015 describes was never built (see the reality check on D-015).
 - **Outbound webhooks**: `webhook_endpoints`, `webhook_deliveries`.
 - **Inbound Stripe**: `processed_stripe_events` (idempotency ledger), `subscriptions` (mirror of Stripe subscription state).
 - **Admin / audit**: `admin_audit_log` (append-only).
