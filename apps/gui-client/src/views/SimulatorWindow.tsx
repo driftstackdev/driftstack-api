@@ -2774,7 +2774,7 @@ export function SimulatorWindow(): JSX.Element {
   useEffect(() => {
     // A new room/session starts with a clean control-health slate — never carry
     // a latched controlUnreachable badge across a session switch.
-    setControlUnreachable(false);
+    setControlLinkUnreachable(false);
     let cancelled = false;
     // Upgrades scrub historical WebView plaintext synchronously, but never read
     // or import it and never enumerate old gui_control Keychain items.
@@ -3129,8 +3129,19 @@ export function SimulatorWindow(): JSX.Element {
   // Non-fatal control-channel health: set when the FIRST input publish fails
   // (the LiveKit data channel is effectively dead, so taps/keys aren't reaching
   // the device). Surfaced as a small badge rather than blocking the view.
-  const [controlUnreachable, setControlUnreachable] = useState(false);
+  const [controlLinkUnreachable, setControlLinkUnreachable] = useState(false);
   const [controlReceiptIssue, setControlReceiptIssue] = useState<InputReceiptIssue>(null);
+  // The badge is the OR of two INDEPENDENT conditions, derived rather than stored.
+  //
+  // It used to be one boolean written by both, and each writer clobbered the other:
+  // refreshControl's success path cleared a live receipt timeout (opening a pane wiped
+  // "Device did not confirm the last input" while inputs were still unconfirmed), and a
+  // confirmed tap cleared the badge the expired-gui_control_key branch raises — the one
+  // signal telling the operator that live-status detection is degraded and the session
+  // needs reopening. Deriving it means a fix to one condition can no longer silence the
+  // other, and the message below can trust controlReceiptIssue to describe the reason
+  // the badge is actually up.
+  const controlUnreachable = controlLinkUnreachable || controlReceiptIssue !== null;
   // Temporary ordered-channel backpressure. Fresh input is deliberately paused
   // during this window so it cannot replay late against another page; unlike
   // controlUnreachable this self-clears on buffer drain and needs no reconnect.
@@ -4580,8 +4591,9 @@ export function SimulatorWindow(): JSX.Element {
       ) {
         return;
       }
+      // Receipt health only — the derived badge above ORs this with the link half, so
+      // an ack must not clear a control-plane failure it says nothing about.
       setControlReceiptIssue(issue);
-      setControlUnreachable(issue !== null);
     });
     return () => {
       unsubscribe();
@@ -5083,7 +5095,7 @@ export function SimulatorWindow(): JSX.Element {
     if (room === null) return;
     resetInputReceipts(room);
     setControlReceiptIssue(null);
-    setControlUnreachable(false);
+    setControlLinkUnreachable(false);
   }, [room, activeTabId, connState, manualInputControl.epoch]);
 
   // Live URL via the page-state API (A3 W2730): the box reports pageState over the
@@ -5391,7 +5403,7 @@ export function SimulatorWindow(): JSX.Element {
             lifecycleTerminal: false,
             capabilityReport: null,
           });
-          setControlUnreachable(true);
+          setControlLinkUnreachable(true);
         });
     };
     tick();
@@ -6144,7 +6156,7 @@ export function SimulatorWindow(): JSX.Element {
       }
       if (ownerRoom !== nextRoom) return;
       if (current?.sessionId === ownerSessionId && current.room === nextRoom) {
-        setControlUnreachable(false);
+        setControlLinkUnreachable(false);
         return;
       }
       updateManualInputControl({}, true);
@@ -6157,7 +6169,7 @@ export function SimulatorWindow(): JSX.Element {
       setPublisherState('waiting');
       inputCongestedRef.current = false;
       setInputCongested(false);
-      setControlUnreachable(false);
+      setControlLinkUnreachable(false);
     },
     [updateManualInputControl],
   );
@@ -6275,7 +6287,7 @@ export function SimulatorWindow(): JSX.Element {
         if (s.terminal) setSessionEnded({ reason: s.errorEvent?.code ?? s.closedReason });
         // A successful control round-trip proves the session is reachable —
         // clear any stale "control may not be reaching the device" badge.
-        setControlUnreachable(false);
+        setControlLinkUnreachable(false);
       })
       .catch((err: unknown) => {
         if (
@@ -6295,7 +6307,7 @@ export function SimulatorWindow(): JSX.Element {
           capabilityReport: null,
         });
         setControlError(controlErrorMessage(err));
-        setControlUnreachable(true);
+        setControlLinkUnreachable(true);
         console.warn('[simulator] control fetch failed; manual input disabled:', err);
       });
   }, [sessionId, controlAuth, updateManualInputControl]);
@@ -7937,7 +7949,7 @@ export function SimulatorWindow(): JSX.Element {
                       resumeDeferredActivation(sessionId, ownerRoom);
                     }}
                     onPublishError={(ownerRoom) => {
-                      if (ownsPanelRoom(sessionId, ownerRoom)) setControlUnreachable(true);
+                      if (ownsPanelRoom(sessionId, ownerRoom)) setControlLinkUnreachable(true);
                     }}
                     onInputCongestionChange={(congested, ownerRoom) => {
                       if (!ownsPanelRoom(sessionId, ownerRoom)) return;
