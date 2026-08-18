@@ -258,7 +258,11 @@ describe('CreateApiKeyRequestSchema', () => {
     const scopes = [...ApiKeyScopeSchema.options];
     const r = CreateApiKeyRequestSchema.parse({ name: 'all-scopes', scopes });
     expect(r.scopes).toEqual(scopes);
-    expect(r.scopes).toHaveLength(19);
+    // V-848 — this asserted toHaveLength(19). The line above already compares
+    // against the enum's own options, so the count proved nothing the equality
+    // did not, and broke on every scope added. Kept as a vacuity floor: an
+    // empty options array would satisfy toEqual and say nothing.
+    expect(r.scopes.length, 'the scope enum is non-trivial').toBeGreaterThan(10);
   });
 
   it('rejects duplicate, over-roster and abusive scope arrays', () => {

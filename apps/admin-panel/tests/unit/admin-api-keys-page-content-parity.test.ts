@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ApiKeyScopeSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -131,7 +132,10 @@ describe('admin-panel /api-keys source contract', () => {
     ]) {
       expect(scopeRoster).toContain(`'${scope}'`);
     }
-    expect(scopeRoster.match(/^\s*'[^']+',?$/gm)).toHaveLength(19);
+    // V-848 — DERIVED. This asserted 19 by hand, and `schemas.test.ts` in the
+    // server workspace asserted the same 19 for the same enum. Adding a scope
+    // broke both, in two workspaces, and neither failure mentioned the other.
+    expect(scopeRoster.match(/^\s*'[^']+',?$/gm)).toHaveLength(ApiKeyScopeSchema.options.length);
     expect(body).toMatch(/isIsoTimestampOrNull\(value\.last_used_at\)/);
     expect(body).toMatch(/isIsoTimestampOrNull\(value\.revoked_at\)/);
     expect(body).toMatch(/isIsoTimestampOrNull\(value\.expires_at\)/);

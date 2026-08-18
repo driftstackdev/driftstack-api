@@ -36686,3 +36686,41 @@ Mutation: a `/v1/undocumented-new-thing` path added to the spec → the coverage
 Restores byte-identical.
 
 Ratchet: EXPECTED_TEST_FILES 2890 → 2891, \_ALL 3055 → 3056 (one file, mine).
+
+## V-848 — measuring the "where else is it" rule instead of restating it (2026-08-18)
+
+V-847 stated a rule after hitting it three times — when a number is wrong, ask where ELSE it
+is — and noted that stating it had not yet caught the next one. V-833's whole point is that a
+note is not a mechanism, so I measured instead.
+
+**The measurement, and its first two failures.** Numeric assertions appearing in more than one
+pin file: **58**, almost all HTTP status codes and shared tier constants that legitimately
+repeat. Narrowed to counts of a POPULATION — routes, anchors, endpoints, scopes, templates —
+in the surrounding context: **4**, of which two are HTTP codes sitting near the word "route"
+and one is the rate-limit capacity 120, derived on both sides since V-813.
+
+**One real instance.** `ApiKeyScopeSchema` has 19 members and two files hard-coded it:
+`apps/server/tests/unit/schemas.test.ts` and
+`apps/admin-panel/tests/unit/admin-api-keys-page-content-parity.test.ts`. Adding a scope broke
+both, in two workspaces, and neither failure would have mentioned the other.
+
+The server one was worse than duplicated — it was redundant. The line above it already asserts
+`toEqual(scopes)` where `scopes` IS `ApiKeyScopeSchema.options`, so the length check proved
+nothing the equality did not and broke on every addition. Replaced with a vacuity floor, which
+is the only thing a length adds there: an empty options array would satisfy `toEqual` and say
+nothing. The admin-panel one now reads `ApiKeyScopeSchema.options.length`, so the page roster
+is checked against the enum rather than against a number somebody has to remember.
+
+**So the rule does not indicate a backlog.** Three instances of "fixed one copy, missed the
+other" (V-840, V-826, V-847) plus this one is four, and the systematic scan says there is not a
+fifth of this shape waiting. Worth knowing, and worth not implying otherwise: the pattern is
+real and the population is small.
+
+**My first mutation proof was invalid and I nearly recorded it.** I added a 20th scope to
+`packages/api-types/src/common.ts` and both suites passed, which I briefly read as the
+derivation working. It is not: the admin-panel test imports `@driftstack/api-types`, which
+resolves to the BUILT package — `dist` still had 19, so the mutation never reached the code
+under test. Confirmed by reading both counts. The valid proofs mutate the page roster instead:
+removing a scope fails the containment arm, adding one the enum lacks fails the length arm with
+"expected 19, got 20" where the 19 is derived. This is the second time in this sweep that a
+mutation silently failed to apply and the green looked like evidence.
