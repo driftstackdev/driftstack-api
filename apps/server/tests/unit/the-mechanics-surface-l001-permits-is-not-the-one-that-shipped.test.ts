@@ -27,13 +27,20 @@
 //   3. `sendInputEvent` ships in all three SDKs and the endpoint is in the spec.
 //
 // WHAT THIS FILE DOES NOT DO. It does not assert the violation away, and it
-// does not assert that the surface should be withdrawn. Withdrawing it breaks
-// three shipped SDKs, and amending L-001 is a defensible alternative — a human
-// driving a pair-mode takeover is the same "the human's cadence IS the
-// behavior" case the exception was written for. That is a decision.
+// does not assert that the surface should be withdrawn.
 //
-// What it does: pin the CURRENT state so the divergence cannot widen quietly,
-// and fail if either side moves — so whoever resolves it does so on purpose.
+// V-864 resolved the framing this file originally recorded. It presented the
+// choice as amend L-001 or withdraw a surface shipping in three SDKs, and that
+// was a false binary. The exception rests on there being no automation to
+// bypass, which is a claim about the CALLER; an ordinary `write` key evidences
+// nothing about who is calling, so the operative condition is the credential
+// rather than the use case. L-001 now says so. The gate itself is unchanged —
+// the route still accepts a `write` key — which is why every arm below still
+// describes a live divergence rather than a closed one.
+//
+// What this file does: pin the CURRENT state so the divergence cannot widen
+// quietly, and fail if either side moves — so whoever applies the amendment
+// does it on purpose and meets the note while doing so.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
