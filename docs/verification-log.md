@@ -36866,3 +36866,43 @@ doc later.
 
 Rebuilt the docs and re-ran the three guards V-850 established as this page's obligations; the
 nav child and both censuses are unaffected because the section did not move.
+
+## V-853 — the doc-example-versus-schema scan finds nothing, and why (2026-08-18)
+
+V-852 found that a doc example of mine implied a nullable field was always present. The harder
+version of that shape is a documented field that does not exist at all — the V-815 defect
+(a reader consuming a key the server never sends) moved from SDK to documentation. Worth a
+scan; recording the result so it is not re-run.
+
+**First cut: 55 hits, all noise.** Comparing every JSON example on an api page against the
+spec's 2xx response schema counts request bodies and RFC 7807 error envelopes as mismatches,
+because neither is a 2xx response. Excluding problem-body keys and allowing request-schema
+fields brings it to **13**.
+
+**Both strongest leads are artifacts.**
+
+`agent-sessions.md` documents `pair_mode_state` containing `requestedByClientId` and
+`requestedAt` — camelCase in an otherwise snake_case API, which reads like an obvious defect.
+It is not: `services/agent-pair-mode-state.ts` declares
+`{ kind: 'takeover-pending'; requestedByClientId: string; requestedAt: string }`. The server
+really does emit those keys. The scan flagged them because the schema is
+`z.object({ kind: z.string() }).passthrough()` — a passthrough union that deliberately declares
+only the discriminant, so the spec under-describes a shape the docs describe fully. Docs right,
+schema thin, customer served.
+
+`auth.md`'s `mfa_required` / `challenge_token` example is a documented alternate branch of the
+login response — `routes/auth.ts` builds exactly those fields — attributed by my scanner to
+`/v1/auth/verify-email` because that was the nearest preceding declared endpoint. My
+attribution rule was wrong, not the page.
+
+**So: no defect, and the scan is not worth keeping.** Two of two strongest candidates dissolved
+on inspection, and the remaining eleven have the same two shapes. A guard built on this would
+need a passthrough-aware schema walk and a better example-to-endpoint attribution than "nearest
+preceding heading", and would still be checking a property — "every documented field is in the
+spec" — that passthrough schemas make deliberately false.
+
+That is the fifth scan this arc that produced a large confident number and no finding
+(V-830's subset guards, V-814's status proximity, V-844's concrete-id paths, V-848's duplicated
+numerics, this). Each was cheap and each is recorded. The pattern worth carrying is not that
+scanning fails — four other scans DID find defects — but that the first number a scan produces
+has never once been the answer.
