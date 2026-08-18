@@ -19,7 +19,8 @@
 //
 //   driftstack_internal_admin scope required on every admin endpoint.
 //
-//   PUBLIC_ID_RE prefix_uuid pattern — '^[a-z]{3}_(uuid)$'.
+//   PUBLIC_ID_RE prefix_uuid pattern — '^[a-z]+_(uuid)$' (see the arm for why
+//   the exactly-three form was wrong for this file).
 //
 //   publicIncident envelope shape — 11 fields including affected_components
 //   (spread to new array, not aliased) + ISO timestamps + public flag.
@@ -103,10 +104,19 @@ describe('W1042 routes/admin-incidents V-295a + V-281 cross-source invariant', (
 
   // ─── PUBLIC_ID_RE prefix pattern ─────────────────────────────
 
-  it("CRITICAL PUBLIC_ID_RE — '^[a-z]{3}_(uuid)$'. The 3-letter prefix + UUID-with-dashes design matches the rest of the public-id roster.", () => {
+  // ⛔ This arm used to pin '^[a-z]{3}_(uuid)$' and justify it as "the 3-letter
+  // prefix … matches the rest of the public-id roster". The roster is not
+  // all-three-letter, and THIS FILE is one of the counterexamples: it mints
+  // `incu_<uuid>` for incident updates, six lines below the regex that could not
+  // parse it. profile-snapshots.ts mints `psnap_` and carries the flexible form for
+  // exactly that reason. Nothing parsed an `incu_` id back, so it was latent rather
+  // than broken — the first route to accept one would have 400d on an id the API
+  // itself issued. The pin follows the widened regex, and the rationale is corrected
+  // rather than restated.
+  it("CRITICAL PUBLIC_ID_RE — '^[a-z]+_(uuid)$'. The character class has to admit every prefix this file MINTS, `incu_` included; which prefix a route accepts is enforced by uuidFromPrefixedId's startsWith, not by the class.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'));
     expect(p).toMatch(
-      /const PUBLIC_ID_RE = \/\^\[a-z\]\{3\}_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\//,
+      /const PUBLIC_ID_RE = \/\^\[a-z\]\+_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\//,
     );
   });
 

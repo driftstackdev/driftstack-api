@@ -37,7 +37,14 @@ import { readClientIp } from '../lib/client-ip.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 
-const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+// `[a-z]+` rather than `[a-z]{3}`: this file MINTS `incu_<uuid>` for incident
+// updates, a four-letter prefix the exactly-three form cannot parse. Nothing
+// parses an `incu_` id back today, so this was latent rather than broken — but
+// the first route to accept one would have 400d on an id the API itself issued.
+// Widening the character class cannot loosen WHICH prefix is accepted: that is
+// enforced by `value.startsWith(`${expectedPrefix}_`)` in uuidFromPrefixedId
+// below. Same reason profile-snapshots.ts carries the flexible form for `psnap`.
+const PUBLIC_ID_RE = /^[a-z]+_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
