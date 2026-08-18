@@ -36799,3 +36799,43 @@ occurrence is not a mechanism either; the guard is.
 
 Mutation: the new section deleted → the coverage arm names `/v1/account/me/oauth-links`, which
 it could not have done before the exemption came off. Restores byte-identical.
+
+## V-851 — auditing V-829's own claim, and the one gap it had (2026-08-18)
+
+V-829 indexed ten decisions this sweep surfaced and did not take, and asserted that each is
+"recorded where it lives, guarded so it cannot drift further". V-836 caught me stating
+verification I had not performed, so I checked that claim rather than trusting it.
+
+**Nine of the ten hold.** Each has a guard whose arms assert the decision's substance, not
+merely a file with a plausible name: the profile-cap status derived from `TierLimitError`, the
+legal reason-set, the admin mutation roster, the L-001 mechanics vocabulary, the session-proxy
+no-caller walk, the audit-archive record, the admin-oauth spec roster, the v552 sentinel, and
+the schema changelog line.
+
+**The tenth was guarded by accident, and incompletely.** "Team `viewer` is designed but
+unbuilt" is protected by two pins I did not write — `db-schema-content-parity` and
+`team-role-cross-source-invariant` both assert
+`pgEnum('team_role', ['member', 'admin'])`. So the DECISION cannot change silently: adding
+`viewer` turns both red.
+
+But nothing tied those to the prose. Building `viewer` would fire two schema pins, someone
+would update them, and `docs/architecture/team-roles-taxonomy.md` would go on saying "two of
+these four ship" — which is the fix-one-copy shape this arc has now hit five times (V-840,
+V-826, V-847, V-850's nav comment, and this). The difference here is that I had already written
+the entry claiming it was guarded.
+
+Closed by deriving the tie: V-837's guard now reads the enum out of `schema.ts`, asserts it
+carries exactly `member` and `admin`, and requires the taxonomy note to be present and to quote
+that same enum. Ship `viewer` and the arm fails on the enum comparison, naming the doc that
+needs updating — rather than leaving the prose to be found later by someone reading it.
+
+Mutation: `viewer` added to the enum → the arm reports `['admin','member','viewer']` against
+the expected pair. Restores byte-identical. `it(` 4 → 5 in an existing file, so no ratchet
+change.
+
+**What the audit says about the index.** Nine right, one right-by-luck, zero wrong. That is a
+better rate than the entry deserved — I wrote "guarded so it cannot drift" as a summary
+sentence, not as a checked claim, and it happened to be nearly true. V-836 recorded the same
+shape and the same escape; the honest reading is that summary sentences in this log get written
+faster than they get verified, and the only correction that has worked is checking them one at
+a time.

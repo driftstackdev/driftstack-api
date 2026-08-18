@@ -33,6 +33,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const ROUTES = resolve(REPO_ROOT, 'apps/server/src/routes');
 const TAXONOMY = resolve(REPO_ROOT, 'docs/architecture/team-roles-taxonomy.md');
+const SCHEMA = resolve(REPO_ROOT, 'apps/server/src/db/schema.ts');
 
 /**
  * Helpers whose whole job is to gate a WRITE on the admin role, plus the
@@ -132,5 +133,22 @@ describe('V-837 the team-role read/write split is derived, not described', () =>
     const doc = readFileSync(TAXONOMY, 'utf8');
     expect(doc).toMatch(/\*\*Reads are role-agnostic with one exception\*\*/);
     expect(doc, 'the exception must name the route').toMatch(/`GET \/v1\/agent-sessions`/);
+  });
+
+  it("V-851 CRITICAL the taxonomy doc's shipped-roles note matches the enum it describes. Two pre-existing pins already fail if `viewer` is added to team_role, so the DECISION cannot change silently — but nothing tied those to the prose. Building viewer would fire the enum pins, someone would update them, and the doc would go on saying two of four ship. That is the fix-one-copy shape this arc has now hit five times, and this is the tie that closes it here.", () => {
+    const schema = readFileSync(SCHEMA, 'utf8').replace(/\/\/[^\n]*/g, '');
+    const m = /teamRole = pgEnum\('team_role', \[([^\]]*)\]\)/.exec(schema);
+    expect(m, 'the team_role enum declaration').not.toBeNull();
+    const shipped = [...(m?.[1] ?? '').matchAll(/'([^']+)'/g)].map((x) => x[1] as string).sort();
+    expect(shipped, 'roles the enum actually carries').toEqual(['admin', 'member']);
+
+    const doc = readFileSync(TAXONOMY, 'utf8');
+    expect(
+      doc,
+      'the note must state how many of the designed roles ship, and stay true to the enum above',
+    ).toMatch(/\*\*V-822 — two of these four ship\.\*\*/);
+    expect(doc, 'and must quote the enum it is describing').toMatch(
+      /`pgEnum\('team_role', \['member', 'admin'\]\)`/,
+    );
   });
 });
