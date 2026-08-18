@@ -35450,3 +35450,29 @@ variable is `body`, which vitest reported as `ReferenceError: p is not defined` 
 failure, and worth contrasting with the silent one this session keeps producing. A stray `);`
 makes vitest report "no tests" and stay green; a wrong identifier inside a registered case
 fails properly. The `it(` count check caught neither, because the count was right both times.
+
+## V-818 — a pin counted four encodeURIComponent sites and ten exist (2026-08-18)
+
+Action 35. Two hand-maintained numbers in
+`sdk-typescript-resources-profiles-content-parity.test.ts`, both wrong, both wrong in the
+same direction and for the same reason.
+
+The header said "encodeURIComponent on :id (4 occurrences: get + update + delete + clone)".
+There are **ten**. The `it()` title said "Wire-path inventory — 3 distinct path templates".
+There are **eleven**. Six id-bearing endpoints landed after those numbers were written —
+export, launch, purge, restore, transfer, trim — and nothing made either number move,
+because nothing was checking them: the assertions underneath only ever matched three
+specific templates and never asked how many there were.
+
+**Fixed by deleting both counts rather than correcting them.** A corrected count is wrong
+again on the twelfth endpoint. What the "4 occurrences" note was really gesturing at is an
+invariant — _no id reaches a path unencoded_ — so that is what the arm asserts now: parse
+every `` path: `…` `` template out of the resource and fail on any `${` that is not
+`${encodeURIComponent`. It recomputes, so it cannot go stale, and unlike the tally it
+actually defends something. A raw `${id}` in a path is an injection seam; the count would
+not have caught one, and did not catch six new endpoints.
+
+Mutation: `trim`'s template changed to interpolate a raw `${id}` → the invariant names the
+offending template. Restores byte-identical. Ratchet unchanged — "3 distinct path templates"
+never matched HAND_MAINTAINED_COUNT (a word sits between the numeral and the noun), so
+removing it moves no ceiling; the fix stands on its own merits rather than on the meta-guard.

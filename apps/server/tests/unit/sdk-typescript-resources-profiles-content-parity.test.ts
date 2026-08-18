@@ -22,9 +22,17 @@
 //   • update is PARTIAL (PATCH not PUT) — drift to PUT would force
 //     callers to send the entire profile shape on every edit,
 //     losing field-level partial-update.
-//   • encodeURIComponent on :id (4 occurrences: get + update +
-//     delete + clone). iterate doesn't have a direct call site
-//     because it delegates via this.list().
+//   • encodeURIComponent on :id — applied at every id-bearing call
+//     site. iterate doesn't have a direct one because it delegates
+//     via this.list().
+//
+//     V-818 — this said "4 occurrences: get + update + delete + clone"
+//     and there are ten. Six id-bearing endpoints landed after the
+//     count was written (export, launch, purge, restore, transfer,
+//     trim) and nothing made the number move. The count is the part
+//     that goes stale; the INVARIANT — no id reaches a path
+//     unencoded — is what the arm below actually checks, and it does
+//     not need a number at all.
 //   • CloneProfileRequest default-empty parameter — drift to
 //     required body would force callers to write clone(id, {})
 //     even when they want server-default auto-naming.
@@ -154,10 +162,23 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     expect(body).not.toMatch(/method: 'PUT'/);
   });
 
-  it('Wire-path inventory — 3 distinct path templates: bare /v1/profiles (create + list) + /v1/profiles/${id} (get + update + delete) + /v1/profiles/${id}/clone (clone). Drift to a per-action GET (e.g. /v1/profiles/${id}/details) would break the "actions are POST-only" invariant; drift to a PATCH-without-:id would break partial-update addressing.', () => {
+  it('Wire-path inventory — the resource addresses profiles at the bare collection path, at /v1/profiles/${id}, and at per-action sub-paths beneath it. Drift to a per-action GET (e.g. /v1/profiles/${id}/details) would break the "actions are POST-only" invariant; drift to a PATCH-without-:id would break partial-update addressing. V-818 dropped the template COUNT from this title: it said three, there are eleven, and the shape is what matters here rather than the tally.', () => {
     expect(body).toMatch(/path: '\/v1\/profiles'/);
     expect(body).toMatch(/path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}`/);
     expect(body).toMatch(/path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}\/clone`/);
+
+    // V-818 — the invariant the stale count was gesturing at, derived: EVERY
+    // id-bearing path template interpolates through encodeURIComponent. A raw
+    // `${id}` in a path is a path-traversal / injection seam, and it is exactly
+    // what a hand-maintained "4 occurrences" note stops catching the moment a
+    // fifth endpoint lands — which is what happened six times over.
+    const rawIdInPath = [...body.matchAll(/path: `([^`]*)`/g)]
+      .map((m) => m[1] as string)
+      .filter((tpl) => /\$\{(?!encodeURIComponent)/.test(tpl));
+    expect(rawIdInPath, 'path template interpolates an id without encodeURIComponent:').toEqual([]);
+
+    const encoded = [...body.matchAll(/encodeURIComponent\(id\)/g)].length;
+    expect(encoded, 'id-bearing call sites, counted not remembered').toBeGreaterThan(3);
   });
 
   it('Tier-cap framing thread — appears in EXACTLY 3 JSDoc blocks (create JSDoc "Tier-limit" + clone JSDoc "Tier-cap" + import JSDoc "Tier-cap"). The thread tells customers every profile-minting verb (create / clone / import) counts against the tier cap — drift to dropping a cross-reference would silently let customers think they can bypass the cap.', () => {
