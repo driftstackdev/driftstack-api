@@ -3,9 +3,11 @@
 **Status:** locked as of V-142 (2026-05-05) per founder DECISION 5 in
 the overnight directive.
 **Owner:** Driftstack engineering.
-**Audience:** future engineers wiring multi-seat account support
-(currently scaffolded in `apps/customer-dashboard/src/pages/team.astro`,
-backend doesn't yet ship multi-user accounts in V-079 schema).
+**Audience:** engineers working on multi-seat account support, which has
+SHIPPED — `team_members` + `team_invites` in the schema, six routes under
+`/v1/team/*`, and a live `apps/customer-dashboard/src/pages/team.astro`.
+This line previously said the backend did not yet ship multi-user
+accounts (V-822).
 
 ## Why this exists
 
@@ -15,8 +17,9 @@ Starter are 1-seat; Team Manual = 5 seats; Agency Manual = 15 seats; API
 ladder includes 5+ seats per tier. When multi-seat accounts ship,
 each seat needs an addressable role with a clear capability surface.
 
-`/team` UI scaffolded in V-139 surfaces the four-role taxonomy already
-— this doc is the authoritative description.
+`/team` UI scaffolded in V-139 surfaces the roles that exist — this doc
+is the authoritative description of the DESIGN. Read the next section
+for the gap between it and the implementation (V-822).
 
 ## The four roles
 
@@ -25,6 +28,20 @@ owner > admin > member > viewer
 ```
 
 Each role inherits the role below it; permissions are additive.
+
+> **V-822 — two of these four ship.** The Postgres enum is
+> `pgEnum('team_role', ['member', 'admin'])`. `viewer` exists nowhere in
+> the server, in `packages/api-types`, or in the dashboard's role picker,
+> which offers Member and Admin. `owner` is real but is not a role VALUE —
+> it is the account that owns the team, carried as
+> `team_members.owner_account_id`, so there is no owner row to hold a role.
+>
+> The four-role model below is the locked V-142 design and is left intact
+> as such. **Building `viewer` is an open product decision**, not a
+> documentation fix — the read-only stakeholder case it exists for is
+> currently served by giving someone `member`, which also lets them create
+> sessions. Sections describing owner and viewer permissions are
+> therefore aspirational, not a description of the running system.
 
 ### Owner
 
@@ -114,9 +131,25 @@ Viewers cannot:
 
 ## API key scope ↔ team role mapping
 
-Critical distinction: **team roles** gate dashboard UI access; **API key
-scopes** gate `/v1/*` HTTP routes. They overlap in some places + diverge
-in others.
+Critical distinction: **API key scopes** gate `/v1/*` HTTP routes, and
+**team roles gate them too** — the two compose, they are not split by
+layer. They overlap in some places + diverge in others.
+
+> **V-822 correction.** This paragraph used to say team roles gated the
+> dashboard only and scopes gated the API. That is not what shipped and it
+> is the most dangerous sentence in this document: an engineer adding a
+> team-scoped route from that description writes a scope check, skips the
+> role check, and ships a hole.
+>
+> What actually happens: a request carrying `X-Driftstack-Account` is
+> resolved by `resolveEffectiveAccount()` against the caller's
+> memberships. **Writes on another account require the `admin` role**
+> (`effectiveAccountIdForWrite()` throws `ForbiddenError` for a member);
+> **reads are role-agnostic** — a member can read the owner's audit log,
+> usage and profiles. Thirteen route modules do this today: account-audit,
+> account-me, admin, agent-sessions, agent-sessions-livekit-token,
+> agent-sessions-transport-report, billing, email-preferences,
+> profile-snapshots, profiles, recipes, sessions, webhooks.
 
 | API key scope | Team roles allowed to mint a key with this scope |
 | ------------- | ------------------------------------------------ |
@@ -136,7 +169,30 @@ cycle. See `docs/architecture/api-versioning.md` (V-220) §
 "Per-resource versioning notes — `/v1/api-keys/*`" for the full
 breaking-change taxonomy and the path V-174 took when expanding scopes.
 
-## Backend implementation notes (forward-looking)
+## Backend implementation notes (SHIPPED — see the correction below)
+
+> **V-822.** This section was headed "forward-looking" and described
+> multi-seat as work still to do. It shipped. What is actually in the repo:
+>
+> - **Database**: `team_members` and `team_invites`, joining `accounts` to
+>   `accounts` — NOT to a `users` table, which does not exist in this schema
+>   at all. Columns are `owner_account_id`, `member_account_id`, `role`,
+>   `invited_at`, `accepted_at`, `invited_by_account_id`.
+> - **Role enum**: `pgEnum('team_role', ['member', 'admin'])` — see the
+>   correction under "The four roles".
+> - **Routes**: six under `/v1/team/*` — `POST` and `GET /v1/team/invites`,
+>   `POST /v1/team/invites/accept`, `GET /v1/team/members`,
+>   `GET /v1/team/owners`, `DELETE /v1/team/members/:id`. The paths below are
+>   the sketch, and differ: there is no `PATCH .../role` endpoint, and
+>   `/v1/team/owners` was never sketched.
+> - **Auth**: membership rides on `AccountContext.teams` and is resolved per
+>   request by `resolveEffectiveAccount()`, not via "the API key's owning
+>   user" — there is no user to own it.
+>
+> The sketch is kept below as the record of what was planned. Read it as
+> history, not as a description of the running system.
+
+The original forward-looking sketch, verbatim:
 
 V-079 auth-flow schema only models single-user accounts today
 (`accounts` table 1:1 with `users` table). Multi-seat accounts require:

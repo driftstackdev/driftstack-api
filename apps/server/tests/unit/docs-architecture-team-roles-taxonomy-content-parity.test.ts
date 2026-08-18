@@ -34,24 +34,34 @@ function read(p: string): string {
 describe('W558.C /docs/architecture/team-roles-taxonomy.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + V-142-locked + V-079-V-139 framing pinned: '# Team roles taxonomy' + '**Status:** locked as of V-142 (2026-05-05) per founder DECISION 5 in' + 'the overnight directive.' + '**Owner:** Driftstack engineering.' + '**Audience:** future engineers wiring multi-seat account support' + '(currently scaffolded in `apps/customer-dashboard/src/pages/team.astro`,' + 'backend doesn't yet ship multi-user accounts in V-079 schema).' + 'Solo Manual + API Starter are 1-seat; Team Manual = 5 seats; Agency Manual = 15 seats' + 'API ladder includes 5+ seats per tier.' + '`/team` UI scaffolded in V-139 surfaces the four-role taxonomy already' — pinned so the V-142-locked-2026-05-05 + DECISION-5-founder + V-079-single-user-today + Solo-1/Team-5/Agency-15 seat-inventory + V-139-/team-UI-scaffold commitment survives", () => {
+  it('Header framing pinned: the V-142 lock date, the owner line, the seat inventory (Solo/Starter 1, Team 5, Agency 15, API ladder 5+), and an audience line that now says multi-seat SHIPPED. V-822 rewrote two clauses this case used to quote — that the backend did not yet ship multi-user accounts, and that the /team UI already surfaced four roles. Both were false and both are banned by sentinels below', () => {
     expect(body).toMatch(/^# Team roles taxonomy$/m);
     expect(body).toMatch(
       /\*\*Status:\*\* locked as of V-142 \(2026-05-05\) per founder DECISION 5 in/,
     );
     expect(body).toMatch(/the overnight directive\./);
     expect(body).toMatch(/\*\*Owner:\*\* Driftstack engineering\./);
-    expect(body).toMatch(/\*\*Audience:\*\* future engineers wiring multi-seat account support/);
     expect(body).toMatch(
-      /\(currently scaffolded in `apps\/customer-dashboard\/src\/pages\/team\.astro`,/,
+      /\*\*Audience:\*\* engineers working on multi-seat account support, which has/,
     );
-    expect(body).toMatch(/backend doesn't yet ship multi-user accounts in V-079 schema\)\./);
+    expect(body).toMatch(/a live `apps\/customer-dashboard\/src\/pages\/team\.astro`/);
+    expect(body).toMatch(
+      /SHIPPED — `team_members` \+ `team_invites` in the schema, six routes under/,
+    );
+    // V-822 SENTINEL — multi-seat shipped; the header may not say it has not.
+    expect(body, 'multi-seat is implemented').not.toMatch(
+      /\*\*Audience:\*\*[\s\S]{0,200}backend doesn't yet ship multi-user accounts/,
+    );
     expect(body).toMatch(/Solo Manual \+ API/);
     expect(body).toMatch(
       /Starter are 1-seat; Team Manual = 5 seats; Agency Manual = 15 seats; API/,
     );
     expect(body).toMatch(/ladder includes 5\+ seats per tier\./);
-    expect(body).toMatch(/`\/team` UI scaffolded in V-139 surfaces the four-role taxonomy already/);
+    expect(body).toMatch(/`\/team` UI scaffolded in V-139 surfaces the roles that exist/);
+    // V-822 SENTINEL — the dashboard's role picker offers Member and Admin only.
+    expect(body, 'the /team UI does not surface four roles').not.toMatch(
+      /surfaces the four-role taxonomy already/,
+    );
   });
 
   it("4-role hierarchy + additive-inheritance framing pinned: '## The four roles' + 'owner > admin > member > viewer' + 'Each role inherits the role below it; permissions are additive.' + '### Owner' + 'The single authoritative principal on the account. Created automatically' + 'at signup; transferable on request via support workflow.' + 'Manage billing — change plan, payment method, cancel subscription.' + 'Invite + remove team members.' + 'Change member roles' + 'Transfer ownership.' + 'Delete the account (hard-delete cascade per /settings danger-zone).' + 'There is exactly one owner per account.' + 'There is no \"ownerless\" state.' — pinned so the 4-role-hierarchy + additive-inheritance + owner-5-permission + exactly-one-owner + no-ownerless-state commitment survives", () => {
@@ -103,10 +113,22 @@ describe('W558.C /docs/architecture/team-roles-taxonomy.md content parity', () =
     expect(body).toMatch(/scope on an API key/);
   });
 
-  it("API-key-scope ↔ team-role mapping + closed-scope-enum framing pinned: '## API key scope ↔ team role mapping' + '**team roles** gate dashboard UI access; **API key' + 'scopes** gate `/v1/*` HTTP routes.' + '| API key scope | Team roles allowed to mint a key with this scope |' + '| `read`        | owner, admin' + '| `write`       | owner, admin' + '| `admin`       | owner, admin' + '| `gui_control` | owner, admin' + 'Members + viewers don't mint API keys — they use keys an admin minted' + 'The scope enum itself is closed; adding a new scope is a breaking' + 'change for strictly-typed SDK consumers and triggers the deprecation' + 'cycle.' + '`docs/architecture/api-versioning.md` (V-220) §' + '\"Per-resource versioning notes — `/v1/api-keys/*`\"' + 'breaking-change taxonomy and the path V-174 took when expanding scopes.' — pinned so the role-gates-dashboard-scope-gates-routes + 4-scope-mint-table (all-owner-admin) + members-don't-mint + closed-scope-enum-breaking + V-220-V-174 commitment survives", () => {
+  it("API-key-scope ↔ team-role mapping + closed-scope-enum framing pinned. V-822 REPLACED the layer-split sentence this case used to quote: team roles gate /v1/* as well as the dashboard, so the old wording would have an engineer skip the role check on a new route. Still pinned: '## API key scope ↔ team role mapping' + '| API key scope | Team roles allowed to mint a key with this scope |' + '| `read`        | owner, admin' + '| `write`       | owner, admin' + '| `admin`       | owner, admin' + '| `gui_control` | owner, admin' + 'Members + viewers don't mint API keys — they use keys an admin minted' + 'The scope enum itself is closed; adding a new scope is a breaking' + 'change for strictly-typed SDK consumers and triggers the deprecation' + 'cycle.' + '`docs/architecture/api-versioning.md` (V-220) §' + '\"Per-resource versioning notes — `/v1/api-keys/*`\"' + 'breaking-change taxonomy and the path V-174 took when expanding scopes.' — pinned so the role-gates-dashboard-scope-gates-routes + 4-scope-mint-table (all-owner-admin) + members-don't-mint + closed-scope-enum-breaking + V-220-V-174 commitment survives", () => {
     expect(body).toMatch(/## API key scope ↔ team role mapping/);
-    expect(body).toMatch(/\*\*team roles\*\* gate dashboard UI access; \*\*API key/);
-    expect(body).toMatch(/scopes\*\* gate `\/v1\/\*` HTTP routes\./);
+    expect(body).toMatch(/\*\*API key scopes\*\* gate `\/v1\/\*` HTTP routes, and/);
+    expect(body).toMatch(
+      /\*\*team roles gate them too\*\* — the two compose, they are not split by/,
+    );
+    // V-822 — the correction must carry the mechanism, not just the verdict:
+    // writes on another account need admin, reads do not.
+    expect(body).toMatch(/\*\*Writes on another account require the `admin` role\*\*/);
+    expect(body).toMatch(/\*\*reads are role-agnostic\*\*/);
+    // SENTINEL — the retired split. Thirteen route modules resolve team
+    // membership; an engineer reading the old sentence writes a scope check,
+    // skips the role check, and ships a hole.
+    expect(body, 'team roles gate /v1/* too').not.toMatch(
+      /team roles\*\* gate dashboard UI access/,
+    );
     expect(body).toMatch(/\| API key scope \| Team roles allowed to mint a key with this scope \|/);
     expect(body).toMatch(/\| `read`\s+\| owner, admin/);
     expect(body).toMatch(/\| `write`\s+\| owner, admin/);
@@ -123,8 +145,15 @@ describe('W558.C /docs/architecture/team-roles-taxonomy.md content parity', () =
     );
   });
 
-  it("Backend implementation 5-pillar + 5-route framing pinned: '## Backend implementation notes (forward-looking)' + 'V-079 auth-flow schema only models single-user accounts today' + '(`accounts` table 1:1 with `users` table)' + '**Database**: a `team_members` table joining `accounts` to' + '`users` with a `role: enum('owner', 'admin', 'member', 'viewer')`' + 'column + `invited_at` + `joined_at` + `invited_by_user_id`.' + '**Auth**: `AccountContext` extends to carry the calling user's' + 'role via the API key's owning user.' + '**Routes**:' + '`POST /v1/team/invite` (owner-only)' + '`POST /v1/team/accept`' + '`GET /v1/team/members`' + '`PATCH /v1/team/members/:id/role` (owner-only)' + '`DELETE /v1/team/members/:id` (owner-only)' + '**Email**: 2 new transactional templates — invite + role-change-' + 'notification. Postmark template ids per V-052 sub-processor list.' + '**Customer dashboard**: `/team` page wires to the live endpoints' — pinned so the V-079-1:1-accounts-users + 5-pillar-backend (DB + Auth + Routes + Email + Customer-dashboard) + 5-team-route + 2-email-template + V-052-Postmark commitment survives", () => {
-    expect(body).toMatch(/## Backend implementation notes \(forward-looking\)/);
+  it("Backend implementation sketch pinned AS HISTORY. V-822 re-headed the section and added a correction above it, because multi-seat shipped with a different shape than the sketch describes; the sketch text below is kept verbatim and still pinned. Formerly: '## Backend implementation notes (forward-looking)' + 'V-079 auth-flow schema only models single-user accounts today' + '(`accounts` table 1:1 with `users` table)' + '**Database**: a `team_members` table joining `accounts` to' + '`users` with a `role: enum('owner', 'admin', 'member', 'viewer')`' + 'column + `invited_at` + `joined_at` + `invited_by_user_id`.' + '**Auth**: `AccountContext` extends to carry the calling user's' + 'role via the API key's owning user.' + '**Routes**:' + '`POST /v1/team/invite` (owner-only)' + '`POST /v1/team/accept`' + '`GET /v1/team/members`' + '`PATCH /v1/team/members/:id/role` (owner-only)' + '`DELETE /v1/team/members/:id` (owner-only)' + '**Email**: 2 new transactional templates — invite + role-change-' + 'notification. Postmark template ids per V-052 sub-processor list.' + '**Customer dashboard**: `/team` page wires to the live endpoints' — pinned so the V-079-1:1-accounts-users + 5-pillar-backend (DB + Auth + Routes + Email + Customer-dashboard) + 5-team-route + 2-email-template + V-052-Postmark commitment survives", () => {
+    expect(body).toMatch(/## Backend implementation notes \(SHIPPED — see the correction below\)/);
+    // V-822 — the sketch below is KEPT VERBATIM as the record of what was
+    // planned, so the assertions that follow still pass and no sentinel bans
+    // its text. What must be present is the correction ABOVE it; without that,
+    // a reader takes the sketch for a description of the running system.
+    expect(body).toMatch(/> \*\*V-822\.\*\* This section was headed "forward-looking"/);
+    expect(body).toMatch(/NOT to a `users` table, which does not exist in this schema/);
+    expect(body).toMatch(/The original forward-looking sketch, verbatim:/);
     expect(body).toMatch(/V-079 auth-flow schema only models single-user accounts today/);
     expect(body).toMatch(/\(`accounts` table 1:1 with `users` table\)/);
     expect(body).toMatch(/1\. \*\*Database\*\*: a `team_members` table joining `accounts` to/);

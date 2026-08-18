@@ -35598,3 +35598,61 @@ the discrimination arm fires; the retired discretion claim restored → the pin'
 fires. Restores byte-identical.
 
 Ratchet: EXPECTED_TEST_FILES 2886 → 2887, \_ALL 3050 → 3051 (one file, mine).
+
+## V-822 — the team-roles docs describe a system that did not ship (2026-08-18)
+
+Action 23. (No V-816 was ever issued — it was reserved for this work early in the batch and
+the entry was renumbered when three other findings landed first. Nothing is missing.)
+
+Four false claims in `docs/architecture/team-roles-taxonomy.md` and `docs/decisions.md`,
+listed by how much damage each does.
+
+**1. The layer split, and it is the dangerous one.** The taxonomy doc's own "Critical
+distinction" read: "**team roles** gate dashboard UI access; **API key scopes** gate `/v1/*`
+HTTP routes." `decisions.md` said the same in the locked-decisions register: "Roles gate
+dashboard UI only."
+
+**Thirteen `/v1/*` route modules resolve team membership** — account-audit, account-me, admin,
+agent-sessions, agent-sessions-livekit-token, agent-sessions-transport-report, billing,
+email-preferences, profile-snapshots, profiles, recipes, sessions, webhooks. A request
+carrying `X-Driftstack-Account` goes through `resolveEffectiveAccount()`; **writes on another
+account require the `admin` role** (`effectiveAccountIdForWrite()` throws `ForbiddenError` for
+a member) and **reads are role-agnostic** — a member can read the owner's audit log.
+
+An engineer adding a team-scoped route from that sentence writes a scope check, skips the role
+check, and ships an authorization hole — from the document that calls itself the authoritative
+description. Three findings earlier in this same arc (V-795, V-804, V-812) were each one route
+whose prose had not caught up with team RBAC; this is the sentence that told everyone the
+prose did not need to.
+
+**2. Multi-seat is described as unbuilt.** Both docs say the V-079 schema is still
+single-user-per-account. `team_members` and `team_invites` exist, with six live routes:
+`POST`/`GET /v1/team/invites`, `POST /v1/team/invites/accept`, `GET /v1/team/members`,
+`GET /v1/team/owners`, `DELETE /v1/team/members/:id`. `decisions.md` also named the tables
+`account_users` / `account_invites`, which is not what shipped.
+
+**3. There is no `users` table.** The sketch says `team_members` joins `accounts` to `users`
+and that `AccountContext` would carry "the calling user's role via the API key's owning user".
+The schema has no `users` table at all — `team_members` joins `accounts` to `accounts` via
+`owner_account_id` / `member_account_id`. There is no user to own a key.
+
+**4. Four roles are documented; two ship.** `pgEnum('team_role', ['member', 'admin'])`.
+`viewer` appears nowhere in the server, `packages/api-types`, or the dashboard's role picker,
+which offers Member and Admin. `owner` is real but is not a role VALUE — it is the account
+that owns the team, so there is no owner row to hold a role. The customer surface is
+CORRECT here; it is the architecture docs that describe a system nobody built.
+
+**Building `viewer` is an open product decision** and is not taken. The four-role model is the
+locked V-142 design and is left intact as design, with what shipped stated beside it. The
+read-only stakeholder case it exists for is currently served by granting `member`, which also
+lets that person create sessions — worth knowing before deciding.
+
+**The forward-looking sketch is kept verbatim, deliberately, and no sentinel bans its text.**
+It is the record of what was planned, and deleting it would destroy the only account of why
+the shipped shape differs. What the pin now requires is the CORRECTION above it: a reader who
+meets the sketch without that block takes it for a description of the running system, which is
+exactly what happened for however long this has been wrong.
+
+Mutations: each of the three retired claims restored in turn → its sentinel fires. Restores
+byte-identical. `it(` count unchanged at 7; three case titles paraphrased because each quoted
+the claim it was pinning.
