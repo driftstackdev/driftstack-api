@@ -32638,15 +32638,24 @@ so the next iteration — or a peer — implements the correct version rather th
 
 ## V-759 — privacy-policy §9 retention windows, implemented as anonymisation (2026-08-12)
 
-> **Disambiguation (V-856).** The number V-759 is used TWICE in this log, on unrelated
-> findings: the entry above it retracts V-748 ("both disclosed deletions are structurally
-> impossible"), and this one implements the §9 windows as anonymisation. Both are bare
-> `V-759`, unlike V-278.A / V-466.go / V-359-sdk which are deliberately suffixed. At least
-> five test files cite "V-759" and land on whichever a reader finds first —
-> `privacy-retention-window-matches-the-sweeper` and `audit-archive-is-not-scheduled` mean
-> THIS entry; `retention-sweeps-are-unconditional-invariant` and
-> `the-retention-audit-does-not-outlive-its-findings` mean the retraction above.
-> Neither is renumbered: the log is append-only and the citations already point at both.
+> **Disambiguation (V-856, corrected by V-858).** The number V-759 is used TWICE in this log,
+> on unrelated findings: the entry above retracts V-748 ("both disclosed deletions are
+> structurally impossible"), and this one implements the §9 windows as anonymisation. Both are
+> bare `V-759`, unlike V-278.A / V-466.go / V-359-sdk which are deliberately suffixed.
+>
+> **V-858 read the citations instead of inferring them.** Nine files cite "V-759" — six tests
+> (`privacy-retention-window-matches-the-sweeper`, `audit-archive-is-not-scheduled-and-that-is-
+recorded`, `retention-scrub-sweeper`, `retention-sweeps-are-unconditional-invariant`,
+> `the-retention-audit-does-not-outlive-its-findings`, `db-retention-scrub-drizzle`) and three
+> source modules (`retention-scrub-repo.ts`, `retention-scrub-sweeper.ts`, `bootstrap.ts`).
+> Every one of them means THIS entry — the §9 anonymisation sweep and its sweeper. NOTHING in
+> the codebase cites the retraction above.
+>
+> V-856 claimed a two-and-two split and was wrong: it attributed citations from their filenames
+> rather than reading them. `the-retention-audit-does-not-outlive-its-findings` says "V-759
+> landed `retention-scrub-sweeper.ts`" — the implementation. So the collision is real but is
+> misdirecting no reader today; the hazard is prospective, for whoever next cites V-759 meaning
+> the retraction. Neither entry is renumbered — the log is append-only.
 
 Implements the design recorded under V-758's correction
 (`docs/internal/2026-08-12-retention-anonymisation-design.md`). §9 disclosed two windows that
@@ -37053,3 +37062,42 @@ Mutation-proved on all four load-bearing arms; all four sources restored byte-id
 `invoke` being absent outside Tauri. In the packaged app that cannot happen, so the two causes the
 old text named are genuinely impossible there — but the new wording deliberately names no
 mechanism, because the catch cannot distinguish one.
+
+## V-858 — V-856's census was wrong in every figure, and wrong about the harm (2026-08-18)
+
+**Correcting my own entry, for the third time in this arc** (V-831 corrected V-822, V-836
+corrected V-835). V-856 reported a census of this log and got each number wrong:
+
+| V-856 said          | Actually                                                                                                                                                                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 800 headings        | 844 lines begin `## V-`                                                                                                                                                                                                                                          |
+| 783 distinct        | 783 is the count of canonical `## V-<n> ` headings; 779 of those numbers are distinct                                                                                                                                                                            |
+| nine numbers repeat | three do among canonical headings — V-219, V-535, V-759. Flattening the 61 suffixed headings (`V-068.1`, `V-184a`, `V-202b/c/d`, `V-214b`, …) onto base integers gives 28, of which 25 are pure flattening artifacts. Nine matches no population I can construct |
+
+**And it was wrong about the harm, which matters more.** V-856 said four test files cite V-759,
+splitting two-and-two across the two entries, so a reader lands on whichever they reach first.
+Nine files cite it — six tests and three source modules (`retention-scrub-repo.ts`,
+`retention-scrub-sweeper.ts`, `bootstrap.ts`) — and **every one means the retention
+implementation**. Nothing in the codebase cites the V-748 retraction. V-856 attributed citations
+from their filenames without opening them: `the-retention-audit-does-not-outlive-its-findings`
+reads "V-759 landed `retention-scrub-sweeper.ts`", which is unambiguously the implementation.
+
+So the collision is real but misdirects no reader today. The hazard is prospective — for whoever
+next cites V-759 meaning the retraction. The disambiguation note has been rewritten to say that,
+and to attribute all nine citations rather than four.
+
+**Root cause, same as the last two.** Every wrong figure came from a derivation that was run once
+and never re-run, then quoted. My own recorded discipline says to enumerate the set rather than
+report its size, and V-856 reported five sizes. The correction is not a better count — it is a
+guard that recounts.
+
+**Fix.** New guard `a-verification-log-number-resolves-to-one-finding.test.ts` derives the census
+from the log on every run: a heading reusing a number fails unless declared with a reason, a
+declared number that stops being shared fails as stale, and a number whose entries are unrelated
+must carry a disambiguation note. Three numbers are declared today. Mutation-proved on all four
+arms — two against the log, two against the roster to confirm it is load-bearing — and both files
+restored byte-identical.
+
+**What V-856 got right**, and I am not retracting: V-759 does carry two unrelated findings, the
+suffixed entries (`V-278.A`, `V-466.go`, `V-359-sdk`) are deliberate rather than collisions, and
+renumbering is the wrong remedy in an append-only log.
