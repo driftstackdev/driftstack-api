@@ -433,6 +433,100 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(after?.active).toBe(false);
   });
 
+  // ── the other side of the threshold, and the reset ──────────────────────────
+  //
+  // The arms around this one drive the count UP to 50 and assert the endpoint is
+  // disabled. The only "still enabled" assertion in the file sits at ONE consecutive
+  // failure — forty-nine short of the edge — so an off-by-one that tombstoned at 49
+  // passes everything here. That direction is the expensive one: V-714 disabled
+  // endpoints ~6x early and the state is irreversible, and the docs tell customers to
+  // watch `consecutive_failures` precisely because 50 is the number that matters.
+  //
+  // Same four-point discipline the webhook clock-skew window needed: at the edge, one
+  // below, one beyond, and the way back.
+  it('#6b: a failing tick that lands on FORTY-NINE leaves the endpoint ENABLED. One below the threshold is what makes "disables at 50" mean 50 rather than "somewhere around 50" — and an endpoint tombstoned one failure early is a customer outage nobody can undo, which is what V-714 was at 6x.', async () => {
+    const { repo, endpoint } = await setupRepoWithEndpoint();
+    const seedId = repo.getAllDeliveries()[0]?.id ?? '';
+    // Seed to 48 through the repo, then let the WORKER take it to 49. Seeding all
+    // the way to 49 with recordRetry proves nothing about the threshold: the repo
+    // bumps the counter, the worker decides to disable, so a seed-only arm never
+    // reaches maybeAutoDisable at all. The first version of this test did exactly
+    // that and both "disable early" mutations survived it.
+    for (let i = 0; i < 48; i += 1) {
+      await repo.recordRetry(seedId, {
+        responseStatus: 500,
+        responseExcerpt: null,
+        lastError: null,
+        attempts: 1,
+        nextAttemptAt: new Date(NOW.getTime() + 60 * 60_000),
+      });
+    }
+    await repo.enqueueDelivery({
+      webhookId: endpoint.id,
+      eventId: '44444444-5555-6666-7777-888888888888',
+      eventType: 'session.completed',
+      payload: { id: '44444444-5555-6666-7777-888888888888', type: 'session.completed', data: {} },
+      nextAttemptAt: NOW,
+    });
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 500 }),
+      now: constNow,
+    });
+    await worker.tickOnce();
+
+    const at49 = await repo.findEndpointById(endpoint.id);
+    expect(at49?.consecutiveFailures, 'the failing tick did not land on 49').toBe(49);
+    expect(
+      at49?.disabledAt,
+      'the endpoint was disabled at 49 consecutive failures — one short of the documented threshold',
+    ).toBeNull();
+    expect(at49?.active, 'the endpoint was deactivated one failure early').toBe(true);
+  });
+
+  it('#6c: a SUCCESSFUL delivery resets the counter, so a long-lived endpoint cannot accumulate its way to a tombstone. The worker contract says "2xx → recordDelivered (resets consecutiveFailures)" and nothing drove it: without the reset, an endpoint that failed 49 times, then delivered cleanly for a month, is disabled by its next single failure.', async () => {
+    const { repo, endpoint } = await setupRepoWithEndpoint();
+    const seedId = repo.getAllDeliveries()[0]?.id ?? '';
+    for (let i = 0; i < 49; i += 1) {
+      await repo.recordRetry(seedId, {
+        responseStatus: 500,
+        responseExcerpt: null,
+        lastError: null,
+        attempts: 1,
+        nextAttemptAt: new Date(NOW.getTime() + 60 * 60_000),
+      });
+    }
+    expect((await repo.findEndpointById(endpoint.id))?.consecutiveFailures).toBe(49);
+
+    // One clean delivery through the real worker path.
+    await repo.enqueueDelivery({
+      webhookId: endpoint.id,
+      eventId: '33333333-4444-5555-6666-777777777777',
+      eventType: 'session.completed',
+      payload: { id: '33333333-4444-5555-6666-777777777777', type: 'session.completed', data: {} },
+      nextAttemptAt: NOW,
+    });
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 200 }),
+      now: constNow,
+    });
+    const { outcomes } = await worker.tickOnce();
+    expect(
+      outcomes.some((o) => o.kind === 'delivered'),
+      'the clean delivery did not succeed',
+    ).toBe(true);
+
+    const after = await repo.findEndpointById(endpoint.id);
+    expect(
+      after?.consecutiveFailures,
+      'a successful delivery did not reset the consecutive-failure count',
+    ).toBe(0);
+    expect(after?.disabledAt, 'the endpoint was disabled despite a successful delivery').toBeNull();
+  });
+
   it('two same-endpoint failures in ONE batch cross the threshold off the LIVE counter (not the stale claim-time snapshot) → endpoint disabled', async () => {
     // Regression for the stale-snapshot double-count: deliver() captures
     // endpoint.consecutiveFailures once at claim time, and a batch runs its
