@@ -35656,3 +35656,45 @@ exactly what happened for however long this has been wrong.
 Mutations: each of the three retired claims restored in turn → its sentinel fires. Restores
 byte-identical. `it(` count unchanged at 7; three case titles paraphrased because each quoted
 the claim it was pinning.
+
+## V-823 — the session-proxy 503 blames deployment config; it is unfinished wiring (2026-08-18)
+
+Action 25. The report called this "two false comments over dead code". It is not dead code and
+the comments are false in a specific, operationally expensive way.
+
+`routes/session-proxy.ts` has two registrars. The DISABLED one 503s both verbs. The ACTIVE
+one — registered when `sessionEgressService` is present — destructures it as `_service`,
+**never calls it**, and 503s POST / 404s GET. `bootstrap.ts` constructs
+`new SocksProxyBackend()` unconditionally, so **the active registrar is what runs in every
+real deployment**. `applyToSession()` and `releaseFromSession()` have no callers anywhere in
+the server.
+
+So the two registrars differ only in the GET status, and the customer-visible behaviour is
+identical whether or not a backend exists.
+
+**Why the wording matters.** The POST handler said "This deployment does not expose a
+session-egress backend" and the GET said the 404 was because "no backend wired". Both run
+only when a backend IS wired. An operator debugging "why is egress unavailable" reads that,
+goes looking through deployment config and env vars, finds `SocksProxyBackend` correctly
+constructed and passed in, and has nothing left to check — because the actual answer is that
+the route layer was never plumbed to the service it receives. `bootstrap.ts` compounded it:
+"instantiate eagerly so the route surface activates from process start" is true, and what it
+activates to is a 503.
+
+The customer-facing STRING is fine and unchanged — "unavailable on this deployment" is
+accurate either way, and deliberately says nothing about why. Only the internal comments
+moved.
+
+Wiring the edge is planning-133 cross-agent work, not a doc fix, so it is flagged and not
+taken. What this commit does is make the state legible at the three places someone would look.
+
+The pin gains a DERIVED arm rather than another text assertion: it walks `apps/server/src`
+with comments stripped and asserts `applyToSession()` has no caller. When someone wires it,
+that fails and the whole correction block has to come out — the record cannot outlive the
+fact. `bootstrap-unwired-optional-deps-are-declared.test.ts` covers the opposite direction (a
+dep bootstrap never passes); this is a dep bootstrap DOES pass that the consumer never
+invokes, which nothing was watching.
+
+Mutations: each retired comment restored in turn → its sentinel fires; `applyToSession`
+called from the route → the derived arm fires. Restores byte-identical. `it(` 12 → 13, one
+case added.

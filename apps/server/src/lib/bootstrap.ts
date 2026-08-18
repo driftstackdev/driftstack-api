@@ -1209,6 +1209,12 @@ export async function createProductionDeps(
   // no external deps; instantiate eagerly so the route surface
   // activates from process start. The backend itself accepts
   // SOCKS5 + rejects OpenVPN/WireGuard with a typed error.
+  //
+  // V-823 — what "activates" buys today is the ACTIVE registrar's
+  // request validation (schema + body/URL session_id match), and then a
+  // 503: routes/session-proxy.ts takes this service and never calls it,
+  // and applyToSession() has no caller anywhere. Wiring that edge is
+  // planning-133 work, not a config change.
   const sessionEgressService = new SocksProxyBackend();
 
   // AI-B4 — recipes repo (write-only at v1.0). Backed by Postgres

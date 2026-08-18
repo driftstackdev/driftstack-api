@@ -6,9 +6,9 @@
 // key). The route layer ONLY validates the shape + dispatches to the
 // service; never echoes body fields in error responses.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -20,6 +20,50 @@ function read(p: string): string {
 }
 
 describe('routes/session-proxy content parity', () => {
+  // V-823 — the correction block must be present, and the two claims it
+  // retires must not return. An operator who reads the original comments goes
+  // hunting through deployment config for a backend that is already built.
+  it('V-823 CRITICAL the header records that BOTH registrars are stubs, and blames the right thing. bootstrap constructs SocksProxyBackend unconditionally, so the ACTIVE registrar is what runs in every real deployment — and it destructures the service as `_service` and never calls it. applyToSession() has no caller anywhere in the server.', () => {
+    const src = read(LIB);
+    expect(src).toMatch(/V-823 — READ THIS BEFORE DEBUGGING A 503 HERE\. Both registrars are/);
+    expect(src).toMatch(
+      /never calls it\. `applyToSession\(\)` and `releaseFromSession\(\)` have no/,
+    );
+    expect(src, 'the 503 is an unfinished wiring, not a deployment state').toMatch(
+      /It\s*\n\/\/ is an unfinished route-to-service edge\./,
+    );
+    expect(src, 'the POST comment must not blame deployment config').not.toMatch(
+      /\/\/ This deployment does not expose a session-egress backend\./,
+    );
+    expect(src, 'the GET comment must not blame an unwired backend').not.toMatch(
+      /has a proxy applied \(no backend wired\)/,
+    );
+
+    // DERIVED — the claim the comment block makes, checked rather than
+    // trusted. `bootstrap-unwired-optional-deps-are-declared.test.ts` covers
+    // the opposite direction (a dep bootstrap never passes); this is a dep
+    // bootstrap DOES pass, that the consumer never invokes. If someone wires
+    // the edge, this fails and the whole comment block above has to go.
+    const SERVER_SRC = resolve(REPO_ROOT, 'apps/server/src');
+    const callers: string[] = [];
+    const walk = (dir: string): void => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, e.name);
+        if (e.isDirectory()) {
+          if (e.name !== 'migrations') walk(full);
+        } else if (e.name.endsWith('.ts')) {
+          const text = readFileSync(full, 'utf8').replace(/\/\/[^\n]*/g, '');
+          if (/\.applyToSession\(/.test(text)) callers.push(full.slice(REPO_ROOT.length + 1));
+        }
+      }
+    };
+    walk(SERVER_SRC);
+    expect(
+      callers,
+      'applyToSession() now has a caller — the egress edge is wired, so delete the V-823 block in session-proxy.ts and the note in bootstrap.ts:',
+    ).toEqual([]);
+  });
+
   const body = read(LIB);
 
   it('file exists at canonical path', () => {
@@ -35,9 +79,9 @@ describe('routes/session-proxy content parity', () => {
     );
   });
 
-  it("Activation-gate framing pinned: 'routes register only when sessionEgressService is wired in AppDeps (i.e., a concrete SOCKS5/OpenVPN/WireGuard backend is configured). Until then registerSessionProxyDisabledRoutes registers 503 FeatureUnavailable stubs so the customer dashboard + SDK clients get a machine-readable signal instead of bare 404.' — pinned so the 3-backend-types + 503-vs-404 + machine-readable-signal contract all stay documented", () => {
+  it('Activation-gate framing pinned — the 3 backend types, the 503-vs-404 split, and the machine-readable-signal contract. V-823 added the correction that follows it: BOTH registrars are stubs today, so the gate describes a distinction the code does not yet make', () => {
     expect(body).toMatch(
-      /\/\/ Activation gate: routes register only when `sessionEgressService` is\s*\n?\s*\/\/ wired in AppDeps \(i\.e\., a concrete SOCKS5\/OpenVPN\/WireGuard backend\s*\n?\s*\/\/ is configured\)\. Until then `registerSessionProxyDisabledRoutes`\s*\n?\s*\/\/ registers 503 FeatureUnavailable stubs so the customer dashboard \+\s*\n?\s*\/\/ SDK clients get a machine-readable signal instead of bare 404\./,
+      /\/\/ Activation gate: routes register only when `sessionEgressService` is\s*\n?\s*\/\/ wired in AppDeps \(i\.e\., a concrete SOCKS5\/OpenVPN\/WireGuard backend\s*\n?\s*\/\/ is configured\)\. Otherwise `registerSessionProxyDisabledRoutes`\s*\n?\s*\/\/ registers 503 FeatureUnavailable stubs so the customer dashboard \+\s*\n?\s*\/\/ SDK clients get a machine-readable signal instead of bare 404\./,
     );
   });
 
@@ -93,9 +137,9 @@ describe('routes/session-proxy content parity', () => {
     expect(handlerDetail).not.toMatch(/EG-API-1\.2|EG-API-1\.6|planning 133|not yet|roadmap/);
   });
 
-  it("GET 404-no-proxy-config framing pinned: 'EG-API-1.6 backs this with a real read from session-egress state (config_hash + type + safeguard flags only — never raw config). For now the route surfaces 404 because no session has a proxy applied (no backend wired); same activation-gate logic as POST.' + NotFoundError('No proxy config for this session.') — pinned so the config_hash-only + never-raw-config + same-as-POST activation-gate contract stays documented", () => {
+  it('GET 404-no-proxy-config framing pinned — config_hash-only, never-raw-config, and the reason for the 404. V-823 corrected that reason: it blamed an unwired backend, and one is wired; nothing can have a proxy applied because POST never reaches the service', () => {
     expect(body).toMatch(
-      /\/\/ EG-API-1\.6 backs this with a real read from session-egress\s*\n?\s*\/\/ state \(config_hash \+ type \+ safeguard flags only — never raw\s*\n?\s*\/\/ config\)\. For now the route surfaces 404 because no session\s*\n?\s*\/\/ has a proxy applied \(no backend wired\); same activation-gate\s*\n?\s*\/\/ logic as POST\./,
+      /\/\/ EG-API-1\.6 backs this with a real read from session-egress\s*\n?\s*\/\/ state \(config_hash \+ type \+ safeguard flags only — never raw\s*\n?\s*\/\/ config\)\. For now the route surfaces 404 because no session can\s*\n?\s*\/\/ have a proxy applied: POST above never reaches the backend, so\s*\n?\s*\/\/ nothing ever writes the state this would read/,
     );
     expect(body).toMatch(/throw new NotFoundError\('No proxy config for this session\.'\);/);
   });
