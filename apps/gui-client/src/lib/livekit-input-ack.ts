@@ -6,6 +6,16 @@ type Listener = (issue: InputReceiptIssue) => void;
 
 interface ReceiptState {
   pending: Map<string, { sequence: number; timer: ReturnType<typeof setTimeout> }>;
+  /**
+   * Receipts whose deadline elapsed, id -> the sequence their timeout was published at.
+   *
+   * A timeout is a PREDICTION that the device will never answer, and the device is free
+   * to disprove it by answering late. Without this, the ack that disproves it arrives to
+   * find no pending entry and is consumed inertly, so the banner keeps saying "did not
+   * confirm" about an input the device confirmed. On a device whose round trip is simply
+   * slower than the deadline that is every input, and the badge never clears.
+   */
+  timedOut: Map<string, number>;
   listeners: Set<Listener>;
   issue: InputReceiptIssue;
   nextSequence: number;
@@ -23,6 +33,7 @@ function stateFor(room: Room): ReceiptState {
   if (state === undefined) {
     state = {
       pending: new Map(),
+      timedOut: new Map(),
       listeners: new Set(),
       issue: null,
       nextSequence: 0,
@@ -40,11 +51,24 @@ function publish(state: ReceiptState, issue: InputReceiptIssue, sequence: number
   for (const listener of state.listeners) listener(issue);
 }
 
+/**
+ * Remember a timed-out receipt so a late ack can still settle it, bounded exactly like
+ * `pending` so a device that never answers cannot grow this without limit.
+ */
+function rememberTimeout(state: ReceiptState, id: string, sequence: number): void {
+  if (state.timedOut.size >= MAX_PENDING_INPUT_RECEIPTS) {
+    const oldest = state.timedOut.keys().next().value;
+    if (oldest !== undefined) state.timedOut.delete(oldest);
+  }
+  state.timedOut.set(id, sequence);
+}
+
 function expireOldest(state: ReceiptState): void {
   const oldest = state.pending.entries().next().value;
   if (oldest === undefined) return;
   clearTimeout(oldest[1].timer);
   state.pending.delete(oldest[0]);
+  rememberTimeout(state, oldest[0], oldest[1].sequence);
   publish(state, 'timeout', oldest[1].sequence);
 }
 
@@ -56,6 +80,9 @@ export function registerInputReceipt(
   if (!INPUT_ID.test(id) || !Number.isFinite(deadlineMs) || deadlineMs <= 0) return;
   const state = stateFor(room);
   const prior = state.pending.get(id);
+  // A re-registered id supersedes any earlier verdict about it, including a timeout we
+  // are still holding open for a late ack.
+  state.timedOut.delete(id);
   if (prior !== undefined) {
     clearTimeout(prior.timer);
     state.pending.delete(id);
@@ -64,6 +91,7 @@ export function registerInputReceipt(
   const timer = setTimeout(() => {
     if (state.pending.get(id)?.timer !== timer) return;
     state.pending.delete(id);
+    rememberTimeout(state, id, sequence);
     publish(state, 'timeout', sequence);
   }, deadlineMs);
   state.pending.set(id, { sequence, timer });
@@ -90,8 +118,20 @@ export function handleInputAck(room: Room, value: unknown): boolean {
     return true;
   }
   const state = states.get(room);
-  const pending = state?.pending.get(record.id);
-  if (state === undefined || pending === undefined) return true;
+  if (state === undefined) return true;
+  const pending = state.pending.get(record.id);
+  if (pending === undefined) {
+    // A LATE ack for a receipt we already gave up on. The device answered after all, so
+    // the timeout was a wrong prediction and this is the correction — settle it at the
+    // sequence the timeout was published at, which leaves `publish` to discard it if a
+    // NEWER input has settled since. Anything else keeps a stale "did not confirm" on
+    // screen for an input that was confirmed.
+    const timedOutSequence = state.timedOut.get(record.id);
+    if (timedOutSequence === undefined) return true;
+    state.timedOut.delete(record.id);
+    publish(state, record.status === 'applied' ? null : record.status, timedOutSequence);
+    return true;
+  }
   clearTimeout(pending.timer);
   state.pending.delete(record.id);
   publish(state, record.status === 'applied' ? null : record.status, pending.sequence);
@@ -102,6 +142,7 @@ export function resetInputReceipts(room: Room): void {
   const state = stateFor(room);
   for (const pending of state.pending.values()) clearTimeout(pending.timer);
   state.pending.clear();
+  state.timedOut.clear();
   state.nextSequence = 0;
   state.settledSequence = 0;
   state.issue = null;
@@ -117,4 +158,15 @@ export function subscribeInputReceiptIssues(room: Room, listener: Listener): () 
 
 export function pendingInputReceiptCount(room: Room): number {
   return states.get(room)?.pending.size ?? 0;
+}
+
+/**
+ * How many timed-out receipts are still settleable by a late ack.
+ *
+ * Exported so the bound on that map is testable. It is fed by a device that is NOT
+ * answering, which is exactly the condition under which unbounded growth would go
+ * unnoticed, so "it is capped" needs to be an assertion rather than a comment.
+ */
+export function timedOutInputReceiptCount(room: Room): number {
+  return states.get(room)?.timedOut.size ?? 0;
 }
