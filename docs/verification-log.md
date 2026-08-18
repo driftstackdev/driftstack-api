@@ -36162,3 +36162,41 @@ V-828, V-831. The last five were written in the past few hours with mutation pro
 current source, so the genuinely cold ones are the first six. Stated so the next person knows
 which end of the list to start from, and so nobody reads "the arc was audited" as "the arc was
 audited exhaustively".
+
+## V-835 — the cold six, and two citations that had drifted off their lines (2026-08-18)
+
+Finishing the backlog. V-834 named six text-pinned entries as the genuinely cold ones. Checked
+against source:
+
+- **V-785** — the parked pair-mode revert is process-local. `bootstrap.ts` constructs
+  `InMemoryPairModeHeartbeatTracker`, and the V-785 comment seeding it from the database on
+  restart is still in place. Holds.
+- **V-789** — the about page's logging denial. Holds (the correction is in the page and the
+  privacy policy agrees with it).
+- **V-790** — the crypto billing FAQ's grace-period promise. Holds.
+- **V-791** — the status endpoint's posture. Holds: `status.ts` says "Absence must fail closed
+  in the public response rather than fabricating an all-clear", which is the opposite of the
+  "fail-open" the pin header used to claim.
+- **V-800**, **V-803** — hold.
+
+**But V-791's correction embedded a line number, and it drifted.** I wrote "status.ts:138 says
+…"; the quoted text now sits at :175. The claim was right and the pointer rotted — a line
+number in a comment is a hand-maintained pointer, the same shape V-794 polices for counts, and
+I introduced one while fixing a different stale claim.
+
+Measured the class before deciding what to do about it. Ninety-four `file:line` citations live
+in the unit pins, but "line beyond end of file" catches none of them — V-791's `:138` still
+exists, it just holds different code. The check that means something is whether the cited line
+still contains the text the comment quotes, and only **two** citations are written that way.
+Both had drifted: mine, and `faq-doc-parity.test.ts` pointing at `common.ts:76` for a free-tier
+line that now lives at :93.
+
+**Two is not a class**, so no guard — V-830's lesson, applied to my own finding this time.
+Both are fixed by deleting the line number and keeping the quoted text, which is greppable and
+cannot rot: `grep "Absence must fail"` and `grep "manual-only (no API)"` each resolve to exactly
+one line today and will keep resolving wherever the text moves. The other 92 citations point at
+line numbers without quoting anything, so there is nothing to check them against — which is
+itself the argument for quoting rather than numbering.
+
+That closes the audit: **all eighteen text-pinned entries checked, one wrong (V-822, corrected
+in V-831), one carrying a rotted pointer (V-791, fixed here).**

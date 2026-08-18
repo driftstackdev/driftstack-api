@@ -27,11 +27,11 @@
 //     30d window). Empty array when the service is undefined (fresh
 //     fixtures) or publicFeed() throws.
 //   • V-791 — that last line used to end "(fail-open posture)", which is
-//     the exact inverse of the code. status.ts:138 says "Absence must fail
+//     the exact inverse of the code. status.ts says "Absence must fail
 //     closed in the public response rather than fabricating an all-clear",
-//     the catch at :149-153 sets incidentDataComplete=false under "never
+//     its catch sets incidentDataComplete=false under "never
 //     convert an incident storage failure into an operational/all-clear
-//     claim", :156-159 escalates operational → degraded, and :164 emits
+//     claim", it escalates operational → degraded, and emits
 //     open_incidents: null. An operator seeing `degraded` with an empty
 //     incident list and reading "fail-open" concludes "empty means all
 //     clear, false alarm" — when it means incident storage is unavailable.
