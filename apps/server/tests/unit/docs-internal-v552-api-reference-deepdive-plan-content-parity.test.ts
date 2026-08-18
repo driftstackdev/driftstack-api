@@ -75,8 +75,23 @@ describe('W564.B /docs/internal/v552-api-reference-deepdive-plan.md content pari
     expect(body).toMatch(/Some endpoints carry enough subtlety that they deserve a 2000-word/);
     expect(body).toMatch(/`POST \/v1\/sessions` — concurrent-cap \+ tier interaction \+ behaviour/);
     expect(body).toMatch(/`POST \/v1\/webhooks\/stripe` — signature verification \+ idempotency/);
-    expect(body).toMatch(/`POST \/v1\/auth\/cli-authorize\/\{initiate,complete\}`/);
-    expect(body).toMatch(/`GET \/v1\/captures\/:id` — content-type negotiation \+ R2 streaming/);
+    expect(body).toMatch(
+      /`POST \/v1\/auth\/cli-authorize\/\{initiate,bind-device-code,exchange\}`/,
+    );
+    // V-828 SENTINEL — there is no `complete` route; the flow is
+    // initiate -> bind-device-code -> exchange.
+    expect(body, 'no cli-authorize/complete endpoint exists').not.toMatch(
+      /cli-authorize\/\{initiate,complete\}/,
+    );
+    expect(body).toMatch(
+      /`POST \/v1\/sessions\/:id\/capture` — content-type negotiation \+ inline-bytes/,
+    );
+    expect(body).toMatch(/V-828 — the endpoint this line originally named cannot be built as/);
+    // SENTINEL — the planned shape needs artifact retention, which the privacy
+    // policy forbids in three places. Not a stale path; a forbidden design.
+    expect(body, 'no /v1/captures route, and retention is ruled out').not.toMatch(
+      /`GET \/v1\/captures\/:id`/,
+    );
     expect(body).toMatch(/Each deep-dive at `apps\/docs\/src\/pages\/deep-dives\/<endpoint>\.md`/);
   });
 

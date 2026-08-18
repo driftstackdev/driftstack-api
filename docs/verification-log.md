@@ -35886,3 +35886,33 @@ rather than edited away. `docs/adr/README.md` says the same.
 
 Mutations: the V-413 gate reopened → the sentinel fires; the ADR note's marker removed → its
 assertion fires. Restores byte-identical. `it(` counts unchanged at 4 and 6.
+
+## V-828 — a planned endpoint a shipped legal commitment forbids (2026-08-18)
+
+Action 37's last item. `docs/internal/v552-api-reference-deepdive-plan.md` lists four "hard
+endpoints" to write deep-dives for. Two of the four do not exist.
+
+**`POST /v1/auth/cli-authorize/{initiate,complete}`** — the real flow is `initiate` →
+`bind-device-code` → `exchange`. There is no `complete` route. A stale path, corrected.
+
+**A GET on a top-level captures collection, with "R2 streaming semantics + retention policy"**
+— and this one is not a stale path. There is no `/v1/captures` route at all; capture is
+`POST /v1/sessions/:id/capture`, which returns the bytes **inline**. A retrievable-by-id
+capture requires retaining the artifact, and `docs/legal/privacy-policy.md` forbids exactly
+that in three separate places, including the data-handling row: "API Capture artifacts |
+Returned inline to Customer; the Capture endpoint does not retain the response bytes."
+
+So the plan does not merely name the wrong path. **It plans an architecture that a shipped
+customer commitment rules out**, and it had been sitting in the deep-dive queue as though it
+were ordinary documentation work. Building it needs the privacy policy changed first, which is
+a decision. Recorded next to the corrected line rather than deleted, because the fact that
+someone planned it is the useful part.
+
+**The retraction collided with its own sentinel for the eighth time this session.** I wrote
+the note quoting the retired path, and the sentinel banning that path matched my own note. The
+rule — SENTINEL quotes, RETRACTION paraphrases — is in my per-batch discipline and I have now
+broken it eight times. What catches it every time is the same thing: running the pin
+immediately after the prose edit. Knowing the rule has never once been what caught it.
+
+Mutations: the captures line restored, and the `complete` step restored → each fires its
+sentinel. Restores byte-identical. `it(` count unchanged at 4.

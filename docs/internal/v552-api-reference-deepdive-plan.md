@@ -89,10 +89,25 @@ deep-dive vs a 50-word reference entry. Candidates:
   on retry.
 - `POST /v1/webhooks/stripe` — signature verification + idempotency +
   partial-state recovery.
-- `POST /v1/auth/cli-authorize/{initiate,complete}` — polling-loop
-  semantics + token-expiry handling.
-- `GET /v1/captures/:id` — content-type negotiation + R2 streaming
-  semantics + retention policy.
+- `POST /v1/auth/cli-authorize/{initiate,bind-device-code,exchange}` —
+  polling-loop semantics + token-expiry handling. (V-827/V-828: the plan
+  named an `complete` step; the flow is initiate → bind-device-code →
+  exchange, and no `complete` route exists.)
+- `POST /v1/sessions/:id/capture` — content-type negotiation + inline-bytes
+  semantics.
+
+  > **V-828 — the endpoint this line originally named cannot be built as
+  > described.** It named a GET on a top-level captures collection, with R2
+  > streaming and a retention policy. No such route exists; capture is
+  > `POST /v1/sessions/:id/capture`, which returns the bytes INLINE. And a
+  > retrievable-by-id capture requires retaining the artifact, which
+  > `docs/legal/privacy-policy.md` forbids in three places — including
+  > Annex-style row "API Capture artifacts | Returned inline to Customer;
+  > the Capture endpoint does not retain the response bytes."
+  >
+  > So this was not a stale path, it was a planned architecture a shipped
+  > legal commitment rules out. Building it would need the privacy policy
+  > changed first, which is a decision, not a doc fix.
 
 Each deep-dive at `apps/docs/src/pages/deep-dives/<endpoint>.md`.
 Authored, not generated.
