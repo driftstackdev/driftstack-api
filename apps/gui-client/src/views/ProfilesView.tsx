@@ -2398,32 +2398,58 @@ export function ProfilesView({
       // refreshes the account_proxies row + caches its id locally; we pass that
       // id as proxy_id.
       //
-      // FAIL CLOSED on a sync failure (founder-hit sweep 2026-07-08): this profile
-      // has a proxy BOUND (pickProxy returned it), so if ensureServerProxy THROWS
-      // (SSRF-rejected host / 4xx / offline blip) we must NOT fall back to launching
-      // without proxy_id — the server treats an absent proxy_id as operator-default
-      // egress, so the session would leak out through Driftstack's shared/datacenter
-      // IP instead of the user's configured proxy. That is an egress-identity LEAK —
-      // the exact thing an anti-detect tool must never do — and the server's own
-      // fail-closed guard only covers a present-but-UNRESOLVABLE proxy_id, not an
-      // OMITTED one, so the GUI must not omit it. Abort + tell the customer instead
-      // of the old silent console.warn proxy-less fallback. (ensureServerProxy
-      // returns undefined only for the no-API-key case, which fails at create anyway.)
-      let proxyIdForLaunch: string | undefined;
-      try {
-        proxyIdForLaunch = await ensureServerProxy(proxy);
-      } catch (err) {
-        console.warn('proxy account-sync failed; aborting launch to avoid an egress leak', err);
-        const leakMsg =
-          `Couldn’t set up the proxy “${proxy.label}” for this session, so it was NOT launched — ` +
-          `starting it would have sent traffic through Driftstack’s default IP instead of your ` +
-          `proxy. Check the proxy and try again.`;
+      // FAIL CLOSED when the sync does not yield an id (founder-hit sweep 2026-07-08):
+      // this profile has a proxy BOUND (pickProxy returned it), so we must NOT fall
+      // back to launching without proxy_id — the server treats an absent proxy_id as
+      // operator-default egress, so the session would leak out through Driftstack's
+      // shared/datacenter IP instead of the user's configured proxy. That is an
+      // egress-identity LEAK — the exact thing an anti-detect tool must never do — and
+      // the server's own fail-closed guard only covers a present-but-UNRESOLVABLE
+      // proxy_id, not an OMITTED one, so the GUI must not omit it.
+      //
+      // ⚠️ There are TWO ways not to get an id, and the sweep only closed one of them.
+      // A THROW (SSRF-rejected host / 4xx / offline blip) was caught; `undefined` was
+      // waved through with "only the no-API-key case, which fails at create anyway",
+      // and the create body below then OMITTED proxy_id — the exact leak, written out
+      // in full, three lines under the comment forbidding it. That branch is unreachable
+      // TODAY only because `client` is null whenever the API key is empty (buildClient),
+      // and handleLaunch returns early on `!client`. That is a fact about a different
+      // module, unstated here, and it is the only thing standing between this call site
+      // and the leak: one more `return undefined` inside ensureServerProxy (an
+      // unsupported scheme, a cleared key mid-flight) reinstates it silently.
+      //
+      // So both outcomes are refused the same way, and there is no proxy-less create
+      // body left to fall into. AgentChatView's resolveProfileProxyId already treats
+      // `undefined` as `blocked` for the same reason; the two mirrored launch paths now
+      // agree. `undefined` gets its own sentence because its cause is different: nothing
+      // failed, we simply cannot prove the session would exit on the customer's proxy.
+      const reportEgressBlock = async (leakMsg: string): Promise<void> => {
         if (opts.skipProxyDownConfirm) {
           // Bulk launch — don't stack a modal per profile; surface via the error banner.
           setState((s) => ({ ...s, error: leakMsg }));
         } else {
           await confirm(leakMsg, { confirmLabel: 'OK' });
         }
+      };
+      let proxyIdForLaunch: string | undefined;
+      try {
+        proxyIdForLaunch = await ensureServerProxy(proxy);
+      } catch (err) {
+        console.warn('proxy account-sync failed; aborting launch to avoid an egress leak', err);
+        await reportEgressBlock(
+          `Couldn’t set up the proxy “${proxy.label}” for this session, so it was NOT launched — ` +
+            `starting it would have sent traffic through Driftstack’s default IP instead of your ` +
+            `proxy. Check the proxy and try again.`,
+        );
+        return; // finally resets busyId; NO proxy-less create body is built
+      }
+      if (proxyIdForLaunch === undefined) {
+        console.warn('proxy account-sync returned no id; aborting launch to avoid an egress leak');
+        await reportEgressBlock(
+          `Couldn’t set up the proxy “${proxy.label}” for this session, so it was NOT launched — ` +
+            `starting it would have sent traffic through Driftstack’s default IP instead of your ` +
+            `proxy. Reconnect your API key in Settings and try again.`,
+        );
         return; // finally resets busyId; NO proxy-less create body is built
       }
       // Attach THIS profile so the session restores/persists its saved browser
@@ -2448,22 +2474,19 @@ export function ProfilesView({
       // default proxy-exit auto-derive. Validated at save time (profiles-meta
       // cleanEntry + the edit modal), re-bounded server-side on create.
       const geoOverride = profilesMeta[profile.id]?.geolocation;
-      const createBody: CreateAgentSessionRequest & { skip_proxy_probe?: boolean } =
-        proxyIdForLaunch !== undefined
-          ? {
-              profile_id: profile.id,
-              proxy_id: proxyIdForLaunch,
-              mode: 'manual',
-              initial_url: startUrl,
-              ...(geoOverride !== undefined ? { geolocation: geoOverride } : {}),
-              ...(skipProxyProbe ? { skip_proxy_probe: true } : {}),
-            }
-          : {
-              profile_id: profile.id,
-              mode: 'manual',
-              initial_url: startUrl,
-              ...(geoOverride !== undefined ? { geolocation: geoOverride } : {}),
-            };
+      // proxy_id is unconditional: the only paths that reach here have a resolved id.
+      // A profile with no bound proxy returned above ("Sessions require a proxy on this
+      // deployment"), and both no-id outcomes returned as an egress block. There is
+      // deliberately no proxy-less variant of this object — the leak is not guarded
+      // against, it is unwritable.
+      const createBody: CreateAgentSessionRequest & { skip_proxy_probe?: boolean } = {
+        profile_id: profile.id,
+        proxy_id: proxyIdForLaunch,
+        mode: 'manual',
+        initial_url: startUrl,
+        ...(geoOverride !== undefined ? { geolocation: geoOverride } : {}),
+        ...(skipProxyProbe ? { skip_proxy_probe: true } : {}),
+      };
       // Idempotency-Key on create: the server runs a pre-launch proxy probe (up to ~12s)
       // before responding, so a launch feels slow and a network blip can drop the 201
       // AFTER the server already created the session. With a stable key the SDK can
