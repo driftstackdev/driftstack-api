@@ -94,15 +94,34 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
     expect(body).toMatch(/## Cross-repo dependencies \(Agent 1\)/);
   });
 
-  // V-750 — the roll-up header is from 2026-05-09 (V-361) while the verification
-  // log is at V-750, so anyone reading a row as current state is reading a
-  // three-month-old snapshot. The staleness warning is the only thing standing
-  // between that and a wrong launch decision, and nothing else fails if it is
-  // deleted — hence pinned. It also records WHICH items were deliberately left
-  // alone because their truth lives outside this repo.
+  // The roll-up header is from 2026-05-09 (V-361) while the verification log is
+  // hundreds of entries past it, so anyone reading a row as current state is
+  // reading a months-old snapshot. The staleness warning is the only thing
+  // standing between that and a wrong launch decision, and nothing else fails if
+  // it is deleted — hence pinned. It also records WHICH items were deliberately
+  // left alone because their truth lives outside this repo.
+  //
+  // This case used to pin the literal `reached **V-750**`, which made a decaying
+  // fact MANDATORY: the log passed V-750 within a week, and the assertion meant
+  // the page could not be corrected without failing here. A pin that freezes a
+  // number the world keeps changing turns a warning about staleness into a
+  // staleness of its own. What is pinned now is the durable part — that the
+  // warning names the roll-up it is warning about, and tells the reader how to
+  // measure the gap themselves.
   it('V-750 staleness warning is present and still names the un-verifiable founder-side items', () => {
     expect(body).toMatch(/Staleness warning — read before trusting any row/);
-    expect(body).toContain('reached **V-750**');
+    // The roll-up reference the warning is about — stable, unlike a log head.
+    expect(body).toContain('2026-05-09 (V-361)');
+    expect(body).toMatch(
+      /compare the roll-up\s*\n?>?\s*reference against the head of `docs\/verification-log\.md`/,
+    );
+    // And it must NOT reintroduce a hard-coded log position, which is what made
+    // this pin freeze a false statement in the first place.
+    expect(
+      body,
+      'the warning quotes a fixed verification-log position again — that number goes stale within ' +
+        'days and the pin then makes the stale value mandatory',
+    ).not.toMatch(/reached \*\*V-\d+\*\*/);
     expect(body).toMatch(/Deliberately NOT changed/);
     expect(body).toMatch(/Re-verify those against the actual dashboards before launch/);
     // The two contradicted ADRs must stay named here, since the ADR files are not

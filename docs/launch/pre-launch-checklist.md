@@ -14,9 +14,13 @@ SDK + audit cleanup absorbed).
 
 > ### ⚠️ Staleness warning — read before trusting any row (V-750, 2026-08-10)
 >
-> The roll-up above is from **2026-05-09 (V-361)**. The verification log has since
-> reached **V-750**. This page has NOT been re-rolled since, so treat it as a
-> 2026-05 snapshot with the corrections below applied, not as current state.
+> The roll-up above is from **2026-05-09 (V-361)**, and this page has NOT been
+> re-rolled since — so treat it as a 2026-05 snapshot with the corrections below
+> applied, not as current state. For how far behind that is, compare the roll-up
+> reference against the head of `docs/verification-log.md`; the gap was ~400
+> entries when this warning was written on 2026-08-10 and only grows. Quoting a
+> fixed number here would itself go stale, which is the failure this warning is
+> about.
 >
 > **Corrected in place on 2026-08-10** (each verified against the repo):
 > the Test-coverage row's figures; the "crypto rail deferred" line (the crypto rail
