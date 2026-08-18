@@ -134,6 +134,8 @@ be charged.
 
 ## Receipts
 
+`GET /v1/billing/crypto-orders/:order_id/receipt`
+
 Every order has a receipt in three formats, all requiring `read:billing`:
 
 | Endpoint                                              | Returns                               |

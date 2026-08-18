@@ -185,7 +185,7 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     expect(offenders).toEqual([]);
   });
 
-  it('the tree carries a substantial endpoint census (133 API + 8 webhooks; includes the public archetype catalog endpoint)', () => {
+  it('the tree carries a substantial endpoint census (135 API + 8 webhooks; includes the public archetype catalog endpoint). V-846 raised it from 133: V-843 documented the crypto quote and receipt endpoints, which the page had been omitting, and every documented endpoint earns a nav child', () => {
     const apiTotal = (apiSection?.items ?? []).reduce((n, i) => n + (i.children?.length ?? 0), 0);
     const webhooksTotal = (webhooksSection?.items ?? []).reduce(
       (n, i) => n + (i.children?.length ?? 0),
@@ -195,7 +195,7 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     // nav children match each page's h2 endpoint set byte-for-byte. The +1 is
     // `/api/account/#profile-organization-taxonomy`, the resource `98d767a73`
     // added to api/account.md without a sidebar entry.
-    expect(apiTotal).toBe(133);
+    expect(apiTotal).toBe(135);
     expect(webhooksTotal).toBe(8);
   });
 });

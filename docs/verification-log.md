@@ -36607,3 +36607,35 @@ the unpinned server source (54 candidates, 4 findings, V-838 → V-842), the unp
 pages (V-843 → V-844), my own fifty entries (V-831 → V-835), and this survey. Further scanning
 would mean inventing filters with worse yield than the four already tried, and V-830 records
 what that produces.
+
+## V-846 — documenting four endpoints had three downstream obligations I did not meet (2026-08-18)
+
+V-843 added the crypto quote and receipt endpoints to `api/billing-crypto.md`. The full run
+after it came back with two failures, both mine, and the interesting part is that neither was
+about the endpoints being wrong.
+
+**1. `docs-nav-endpoint-children-integrity` — every documented endpoint earns a nav child.**
+That guard derives the expected nav children from each api page: an `##` section becomes a nav
+entry when a backticked `` `METHOD /path` `` sits at paragraph start. My two new sections had no
+nav entries, so a customer reading the sidebar still could not find the quote or the receipts —
+the exact discoverability failure V-843 set out to fix, moved one layer up. Fixed by adding both
+children in page order.
+
+The receipts section needed a second change to qualify: it led with prose and a format table, so
+the guard did not see an endpoint there at all. Rather than drop the nav child to match, I gave
+the section the `` `GET /v1/billing/crypto-orders/:order_id/receipt` `` declaration line its
+siblings have. Matching the guard by removing the entry would have satisfied the test and left
+the customer where they started.
+
+**2. A hand-maintained endpoint census, 133 → 135.** The same file pins the total nav endpoint
+count. Exactly the shape V-794 ratchets — and correctly so here: the census is the thing that
+notices when a page grows without the nav following, which is what had just happened.
+
+**3. The docs `dist` went stale**, caught by the artifact-freshness gate. Rebuilt, not repinned.
+
+**What this says about the fix.** Adding a section to a documentation page is not a
+documentation edit; it is an edit to a page, a navigation tree, a census, and a built artifact,
+three of which are enforced and one of which I had to be told about twice. Every one of those
+guards existed already and every one did its job. The failure was mine for treating the page as
+the whole surface — the same mistake in miniature as the sweep's own recurring lesson that a
+claim lives in more places than the one you are reading.

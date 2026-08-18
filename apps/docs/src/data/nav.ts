@@ -518,6 +518,16 @@ export const DOC_NAV: DocNavSection[] = [
             method: 'POST',
           },
           {
+            href: '/api/billing-crypto/#price-a-product-before-ordering',
+            label: 'Price a product before ordering',
+            method: 'POST',
+          },
+          {
+            href: '/api/billing-crypto/#receipts',
+            label: 'Receipts',
+            method: 'GET',
+          },
+          {
             href: '/api/billing-crypto/#list-customer-orders',
             label: 'List customer orders',
             method: 'GET',
