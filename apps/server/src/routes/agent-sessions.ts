@@ -1498,6 +1498,14 @@ export async function runProxyPrelaunchGate(args: {
         host: descriptor.host,
         port: descriptor.port,
         reason: result.reason,
+        // `reason` is a four-value enum; `detail` carries the byte that names
+        // the cause — "proxy CONNECT failed (SOCKS5 reply 0x05)" is a refusal by
+        // the provider, 0x02 is "not allowed by ruleset", and a caught exception
+        // puts its message here. Without it, every provider-side refusal logs as
+        // an indistinguishable `egress_blocked` and triage starts from scratch.
+        // Never contains credentials: the probe builds it from protocol bytes
+        // and error messages only.
+        detail: result.detail,
       },
       'pre-launch proxy probe FAILED; blocking launch (no dispatch)',
     );

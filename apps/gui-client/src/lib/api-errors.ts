@@ -11,6 +11,7 @@ import { readBoundedDiagnosticJson } from './read-bounded-json';
  */
 export async function readApiErrorMessage(res: Response): Promise<string> {
   let problemType = '';
+  let reason: KnownReason | undefined;
   try {
     // Older hook tests use structural response doubles with json() but no
     // body/headers. A real fetch Response always has a body property, so only
@@ -22,18 +23,57 @@ export async function readApiErrorMessage(res: Response): Promise<string> {
     if (typeof body.type === 'string' && body.type.startsWith(PROBLEM_TYPE_PREFIX)) {
       problemType = body.type;
     }
+    // `reason` is CONTRACTUAL, the same class as `type` — a closed enum the
+    // server documents, not prose. It is accepted only when it matches one of
+    // the literals below, and it selects fixed client-side copy exactly as
+    // `type` does; no server string is ever rendered.
+    const raw = (body as { reason?: unknown }).reason;
+    if (typeof raw === 'string' && isKnownReason(raw)) reason = raw;
   } catch {
     /* Invalid or oversized body; classify from the status only. */
   }
-  return fixedApiErrorMessage(problemType, res.status);
+  return fixedApiErrorMessage(problemType, res.status, reason);
 }
 
 const PROBLEM_TYPE_PREFIX = 'https://errors.driftstack.dev/';
 
-export function fixedApiErrorMessage(problemType: string, status: number): string {
+/**
+ * The proxy-validation reasons the server documents. Closed set, mirrored from
+ * `ProxyValidationFailedError` and `ProxyProbeReason`.
+ */
+const KNOWN_REASONS = ['unreachable', 'auth_failed', 'timeout', 'egress_blocked'] as const;
+type KnownReason = (typeof KNOWN_REASONS)[number];
+const isKnownReason = (v: string): v is KnownReason =>
+  (KNOWN_REASONS as readonly string[]).includes(v);
+
+/**
+ * Fixed copy per proxy-validation reason.
+ *
+ * Without this, all four collapse into "The proxy could not be verified. Check
+ * its details and try again." — which tells a customer whose credentials were
+ * rejected to go and check a proxy that is answering perfectly well, and tells
+ * one whose proxy is offline the same thing. The server has always sent the
+ * discriminator; the client was throwing it away.
+ */
+const PROXY_REASON_COPY: Record<KnownReason, string> = {
+  unreachable: 'The proxy did not answer. Check the host and port, and that it is online.',
+  auth_failed: 'The proxy rejected the username and password. Re-enter them and try again.',
+  timeout: 'The proxy was too slow to respond. It may be overloaded — try again shortly.',
+  egress_blocked:
+    'The proxy connected but could not reach the internet. Its upstream egress is blocked.',
+};
+
+export function fixedApiErrorMessage(
+  problemType: string,
+  status: number,
+  reason?: KnownReason,
+): string {
   const kind = problemType.startsWith(PROBLEM_TYPE_PREFIX)
     ? problemType.slice(PROBLEM_TYPE_PREFIX.length)
     : '';
+  if (kind === 'proxy-validation-failed' && reason !== undefined) {
+    return PROXY_REASON_COPY[reason];
+  }
   const exact: Record<string, string> = {
     'email-already-registered': 'An account with this email already exists. Sign in instead.',
     'email-not-verified': 'Verify your email address before signing in.',

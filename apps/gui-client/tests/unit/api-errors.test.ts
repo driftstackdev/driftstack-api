@@ -1,7 +1,7 @@
 // V-534.BV — unit tests for readApiErrorMessage.
 
 import { describe, expect, it, vi } from 'vitest';
-import { readApiErrorMessage } from '../../src/lib/api-errors';
+import { fixedApiErrorMessage, readApiErrorMessage } from '../../src/lib/api-errors';
 import { DIAGNOSTIC_JSON_MAX_BYTES } from '../../src/lib/read-bounded-json';
 
 function makeResponse(body: unknown, status = 400): Response {
@@ -127,5 +127,33 @@ describe('V-534.BV readApiErrorMessage', () => {
       'The service is temporarily unavailable. Try again shortly.',
     );
     expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('CRITICAL a proxy failure names WHICH failure, because the four mean different things to a customer. All four used to render "The proxy could not be verified. Check its details and try again." — which sends someone whose credentials were rejected to go and inspect a proxy that is answering perfectly, and tells someone whose provider refused the tunnel the same. The server has always sent the discriminator in `reason`; the client threw it away. Measured on a real launch failure: reason=egress_blocked, host gate.nodemaven.com, and the customer-visible text said nothing about egress.', () => {
+    const t = 'https://errors.driftstack.dev/proxy-validation-failed';
+    expect(fixedApiErrorMessage(t, 422, 'auth_failed')).toMatch(
+      /rejected the username and password/i,
+    );
+    expect(fixedApiErrorMessage(t, 422, 'unreachable')).toMatch(/did not answer/i);
+    expect(fixedApiErrorMessage(t, 422, 'timeout')).toMatch(/too slow/i);
+    expect(fixedApiErrorMessage(t, 422, 'egress_blocked')).toMatch(/could not reach the internet/i);
+    // All four must be DISTINCT — a mapping that collapses any two is the bug.
+    const all = (['unreachable', 'auth_failed', 'timeout', 'egress_blocked'] as const).map((r) =>
+      fixedApiErrorMessage(t, 422, r),
+    );
+    expect(new Set(all).size, 'each reason needs its own copy').toBe(4);
+  });
+
+  it('CRITICAL an absent or unknown reason still gets the safe generic copy, and no server prose is ever rendered. The reason is accepted only when it matches the documented enum — anything else falls back, so a server that starts sending a new value cannot put arbitrary text in front of a customer.', async () => {
+    const t = 'https://errors.driftstack.dev/proxy-validation-failed';
+    expect(fixedApiErrorMessage(t, 422)).toMatch(/could not be verified/i);
+    const res = {
+      status: 422,
+      json: () =>
+        Promise.resolve({ type: t, reason: 'sudden_new_value', detail: 'RAW SERVER PROSE' }),
+    } as unknown as Response;
+    const msg = await readApiErrorMessage(res);
+    expect(msg, 'an unknown reason falls back').toMatch(/could not be verified/i);
+    expect(msg, 'server prose is never reflected').not.toMatch(/RAW SERVER PROSE/);
   });
 });

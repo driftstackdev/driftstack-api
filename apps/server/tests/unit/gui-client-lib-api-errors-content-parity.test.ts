@@ -21,10 +21,18 @@ describe('apps/gui-client/src/lib/api-errors.ts content parity', () => {
     expect(body).toContain("const PROBLEM_TYPE_PREFIX = 'https://errors.driftstack.dev/'");
   });
 
-  it('classifies only the stable problem namespace and status', () => {
+  it('classifies only the stable problem namespace, the status, and the documented reason enum', () => {
     expect(body).toContain('body.type.startsWith(PROBLEM_TYPE_PREFIX)');
-    expect(body).toContain('return fixedApiErrorMessage(problemType, res.status)');
-    expect(body).toContain('function fixedApiErrorMessage(problemType: string, status: number)');
+    expect(body).toContain('return fixedApiErrorMessage(problemType, res.status, reason)');
+    // `reason` joined the signature so a proxy failure can say WHICH failure.
+    // It is the same class of input as `type` — a closed enum the server
+    // documents — and is accepted only through `isKnownReason`, so the
+    // never-reflect-server-prose rule this file guards is unchanged. Measured
+    // on a real launch failure: reason=egress_blocked reached the client and
+    // rendered as the generic "could not be verified".
+    expect(body).toContain('function fixedApiErrorMessage(');
+    expect(body).toContain('reason?: KnownReason');
+    expect(body).toContain('isKnownReason(raw)');
   });
 
   it('never reads or returns upstream detail/title prose', () => {
