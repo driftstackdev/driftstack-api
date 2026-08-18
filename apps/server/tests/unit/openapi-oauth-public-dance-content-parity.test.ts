@@ -4,8 +4,20 @@
 // the spec — generated SDKs would lose typed surfaces for the
 // OAuth flow.
 //
-// Admin endpoints (/v1/admin/oauth/clients/*) are intentionally NOT
-// in the spec (internal-only).
+// V-824 — the line here used to say admin endpoints
+// (/v1/admin/oauth/clients/*) are intentionally NOT in the spec because
+// they are internal-only. THREE of them are in it, in the very spec file
+// shipped inside the Python SDK package. The arm below derives that
+// instead of asserting it, so whichever way the policy settles, the
+// comment and the artifact cannot disagree again.
+//
+// The sibling claim — "the 4 standard-spec endpoints third-party clients
+// use" — was checked and is CORRECT, though routes/oauth.ts registers
+// five. `authorize/complete` is the dashboard's consent submission: it
+// requires an interactive web session and explicitly refuses API keys, so
+// a third-party client never calls it and an SDK-facing spec is right to
+// omit it. Counting registered routes and expecting five here would have
+// been a wrong fix that looked like a right one.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +27,19 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const OPENAPI_SRC = resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts');
+
+/**
+ * Admin-oauth paths that ARE published in the spec the SDKs consume.
+ *
+ * V-824 — the header comment said this set was empty and internal-only. It is
+ * not. Recorded rather than silently accepted: publishing an admin surface in
+ * an SDK-facing artifact is a decision, and it should be a visible one.
+ */
+const ADMIN_OAUTH_PUBLISHED: readonly string[] = [
+  '/v1/admin/oauth/clients',
+  '/v1/admin/oauth/clients/{id}',
+  '/v1/admin/oauth/clients/{id}/rotate-secret',
+];
 
 describe('OpenAPI — OAuth 2.0 public dance endpoints', () => {
   const src = readFileSync(OPENAPI_SRC, 'utf8');
@@ -97,5 +122,20 @@ describe('OpenAPI — OAuth 2.0 public dance endpoints', () => {
       src.indexOf('RateLimitBucketOpenApi'),
     );
     expect(slice.includes('/v1/admin/oauth/clients')).toBe(false);
+  });
+
+  // V-824 — derived, in the direction the prose got wrong.
+  it('V-824 CRITICAL the admin-oauth spec posture matches what the comment claims. The header asserted these are withheld as internal-only; three are published in the spec that ships inside the Python SDK package. Deriving it means the claim and the artifact cannot drift apart again — if the policy is that they stay published, the roster below records it; if they should be withheld, this fails until they are.', () => {
+    const spec = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'packages/sdk-python/openapi.json'), 'utf8'),
+    ) as { paths: Record<string, unknown> };
+    const published = Object.keys(spec.paths);
+    expect(published.length, 'paths parsed out of the published spec').toBeGreaterThan(100);
+
+    const adminOauth = published.filter((p) => p.startsWith('/v1/admin/oauth/')).sort();
+    expect(
+      adminOauth,
+      'admin-oauth paths in the shipped spec — the header comment describes this set, so they must agree:',
+    ).toEqual(ADMIN_OAUTH_PUBLISHED);
   });
 });

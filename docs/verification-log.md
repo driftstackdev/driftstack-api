@@ -35698,3 +35698,50 @@ invokes, which nothing was watching.
 Mutations: each retired comment restored in turn → its sentinel fires; `applyToSession`
 called from the route → the derived arm fires. Restores byte-identical. `it(` 12 → 13, one
 case added.
+
+## V-824 — admin-oauth endpoints documented as withheld are published in the SDK spec (2026-08-18)
+
+From action 37's "every `/v1/…` path literal in docs must exist in the OpenAPI spec" idea. I
+measured that guard before building it, and it is not viable repo-wide: 302 distinct `/v1`
+literals across `docs/**`, **131** absent from the spec — almost all extraction artifacts
+(truncated paths, bare `/v1/admin` prefixes) or historical mentions in the append-only
+verification log. Shipping it would have meant a ~131-entry allowlist, the blindfold shape
+V-814 rejected.
+
+Narrowed to backticked references in `apps/docs/src/pages/**` — the customer-facing set —
+it is 129 references and **5** mismatches, which is a real guard. Those five, checked
+individually:
+
+- `/v1/whoami`, `/v1/oauth/authorize/complete`, `/v1/status/stream` — **the routes exist**
+  and are absent from the published spec.
+- `/v1/sessions/:id/livekit-token` in `reference/metrics.md` — a CORRECT historical mention;
+  the line says the route "was removed". A naive guard penalises exactly the right thing to
+  write, the same shape as V-794's lookbehind.
+- `/v1/account/me/byok-anthropic` in `api/bundled-llm.md` — a genuine typo; the endpoint is
+  `…-key`. Fixed here.
+
+**I nearly shipped two wrong findings out of this, and caught both by checking.**
+
+First: I concluded `/v1/whoami` was fiction because it is not in any `routes/*.ts`. It is
+registered directly in `lib/app.ts:1817`, returns exactly the JSON `reference/scopes.md`
+documents, and is auth-gated. My grep scope was wrong, not the doc.
+
+Second: `routes/oauth.ts` registers FIVE `/v1/oauth/*` routes and the spec publishes four, so
+I wrote a guard asserting all five must be published — it went red on
+`authorize/complete` and I was about to "fix the spec". `authorize/complete` requires an
+interactive dashboard web session and **explicitly refuses API keys**, with a comment
+explaining that accepting one would let a stolen limited credential launder itself into an
+independent OAuth token. A third-party client never calls it. So the header's "the 4
+standard-spec endpoints third-party clients use" is CORRECT, and omitting it from an
+SDK-facing spec is principled. Counting registered routes and demanding five would have been
+a wrong fix that looked like a right one — the same trap as action 19.
+
+**What IS false**, and is all this entry claims: the same header said "Admin endpoints
+(`/v1/admin/oauth/clients/*`) are intentionally NOT in the spec (internal-only)". Three of
+them are — `/v1/admin/oauth/clients`, `…/{id}`, `…/{id}/rotate-secret` — in the spec file
+shipped inside the Python SDK package. Publishing an admin surface in an SDK-facing artifact
+is a decision; it should be a visible one, so the roster is now derived and recorded rather
+than described.
+
+Mutation: one admin-oauth path removed from the spec → the arm fires with the diff. Restores
+byte-identical. `it(` 13 → 14, one case added.

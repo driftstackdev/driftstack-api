@@ -120,7 +120,7 @@ Constraints:
 > a 403 `forbidden` tier error. Opting **out** (`consent: false`)
 > and cap-only updates are accepted on every tier, so a downgraded
 > account can always switch bundled access off. BYOK key management
-> (`/v1/account/me/byok-anthropic`) is not tier-gated beyond the
+> (`/v1/account/me/byok-anthropic-key`) is not tier-gated beyond the
 > AI-agent tiers themselves.
 
 Response (200) is the post-update settings record:
