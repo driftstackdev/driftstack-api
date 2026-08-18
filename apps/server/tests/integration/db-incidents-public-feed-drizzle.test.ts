@@ -138,9 +138,24 @@ describe('the public incident feed', () => {
 
   it('CRITICAL an open incident is never pushed off the feed by resolved history', async () => {
     if (!dbReachable || !repo) return;
+    const since = new Date(Date.now() - 24 * HOUR);
+    // The slot budget is measured, not assumed to be one.
+    //
+    // This used to pass `limit: 1` and read as "the single available slot". That
+    // is only true when this test's incident is the sole open PUBLIC one, and
+    // the incidents table is shared: any other suite that leaves an open public
+    // incident behind takes the slot first, and the failure then reads as
+    // "displaced by resolved history" when it was displaced by another OPEN
+    // incident — which is the feed behaving correctly. Observed as an
+    // order-dependent red in a full run that passed this file in isolation.
+    //
+    // Counting the incumbents and asking for exactly one slot beyond them keeps
+    // the property intact: the resolved rows below still have to lose that slot
+    // to the open one. What changes is that the premise is now measured.
+    const incumbentOpen = (await repo.publicFeed({ since, limit: 200 })).openCount;
     const open = `open-${randomUUID()}`;
     // Resolved rows are seeded FIRST and more recently, so any ordering that is
-    // not "open first" would let them take the single available slot.
+    // not "open first" would let them take the one remaining slot.
     for (let i = 0; i < 3; i++) {
       await seedIncident({
         marker: `resolved-${randomUUID()}`,
@@ -150,7 +165,7 @@ describe('the public incident feed', () => {
       });
     }
     await seedIncident({ marker: open, isPublic: true, status: 'investigating' });
-    const feed = await repo.publicFeed({ since: new Date(Date.now() - 24 * HOUR), limit: 1 });
+    const feed = await repo.publicFeed({ since, limit: incumbentOpen + 1 });
     expect(
       titles(feed).some((t) => t.startsWith(open)),
       'the live incident was displaced by resolved history — the page would show an all-clear ' +
