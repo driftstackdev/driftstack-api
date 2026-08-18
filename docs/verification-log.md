@@ -36361,3 +36361,45 @@ saying the production WebKit driver "lands when Agent 1's WebKit Phase 2 closes"
 a status claim. `drivers/playwright.ts` naming `'state'` among unwired capture kinds when the
 enum says `dom_snapshot` is a real slip, but that driver is dev/E2E-only by its own factory
 comment, so it is trivia rather than a finding.
+
+## V-840 — the same stale claim, twice in one file; V-808 fixed one copy (2026-08-18)
+
+Third finding from the unpinned-source scan, and it is a repeat of a shape this arc has now
+seen three times.
+
+`services/agent-executor.ts`, on the `RealAgentExecutor` class: "NOT wired into bootstrap yet —
+**the runtime still uses StubAgentExecutor** — pending the real-session-provisioning check."
+
+The first half is true: nothing in `lib/` imports `RealAgentExecutor`. The second half is not.
+`bootstrap.ts` selects `ControlPlaneAgentExecutor` when `config.fleetControlPlaneEnabled` is
+set, and `StubAgentExecutor` only otherwise — with a twenty-line comment right there explaining
+that the control-plane executor exists precisely to stop the stub's "synthetic per-intent
+successes" reaching customers.
+
+**V-808 corrected this exact staleness in this exact file, at the header, and left this copy on
+the class declaration two hundred lines down.** The header now reads "Two executors live here
+and BOTH are shipped"; the class still said the runtime was the stub. That is the V-826 shape —
+the vitest pin whose header was fixed and whose `it()` title kept the stale numbers — and the
+V-838 shape, where a claim survived because its consequence looked identical to the truth.
+Three instances now: a correction reliably fixes the copy you were reading.
+
+The header's other clause survives scrutiny: the config default for `driver` really is `'mock'`,
+and `drivers/webkit.ts` is a stub, so "dispatch hits the deterministic mock" is right.
+
+No pin froze the stale sentence, which is why it survived V-808. The content-parity pin now
+asserts the corrected wording and bans the old one, so the two halves of the file cannot drift
+apart again.
+
+**Checked and NOT a finding — a near-miss worth recording.** `services/crypto-orders.ts:344`
+opens "⚠️ NOT WIRED IN PRODUCTION. bootstrap.ts does not pass this". Coming straight from V-839,
+where I had just established that bootstrap DOES construct and pass `cryptoOrdersService`, that
+reads like a contradiction. It is not: "this" is `paidEmailNotifier`, an optional dependency of
+the service, genuinely unwired — and the comment says so accurately, explains that paying
+customers still get the tier-changed email via `tierActivator`, calls the missing receipt a
+product decision rather than an oversight, and cross-references
+`bootstrap-unwired-optional-deps-are-declared.test.ts` where it is formally declared. It is the
+best-maintained comment I have read in this sweep. Fresh context from the previous finding is
+exactly what would have turned it into a false positive.
+
+Mutation: the unconditional-stub claim restored → the sentinel fires. Restores byte-identical.
+`it(` count unchanged at 13.

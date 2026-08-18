@@ -297,11 +297,17 @@ export interface RealAgentExecutorDeps {
  * typed failure — it has no driver gesture AND no direction in AgentIntent
  * (genuinely underspecified; resolved in the customer-schema increment).
  *
- * NOT wired into bootstrap yet — the runtime still uses StubAgentExecutor —
- * pending the real-session-provisioning check (the wired executor 400s without
- * a real /v1/sessions session; agent-runtime uses 'unattached' when none).
- * prod driver is `mock`, so once wired, dispatch hits the deterministic mock
- * until Agent-1's webkit driver lands.
+ * NOT wired into bootstrap — nothing in `lib/` imports this class — pending the
+ * real-session-provisioning check (it 400s without a real /v1/sessions session;
+ * agent-runtime uses 'unattached' when none). The default driver is `mock`, so
+ * once wired, dispatch hits the deterministic mock until the webkit driver lands.
+ *
+ * V-840 — this said the runtime "still uses StubAgentExecutor", full stop. It
+ * does not: bootstrap picks `ControlPlaneAgentExecutor` when
+ * `fleetControlPlaneEnabled` is set and the stub only otherwise. V-808 corrected
+ * the same staleness in this file's HEADER and left this copy of it on the class,
+ * which is the shape V-826 found in the vitest pin: the header gets read, the
+ * declaration two hundred lines down does not.
  */
 export class RealAgentExecutor implements AgentExecutor {
   constructor(private readonly deps: RealAgentExecutorDeps) {}

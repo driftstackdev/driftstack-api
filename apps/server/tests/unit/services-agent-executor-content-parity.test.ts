@@ -31,6 +31,15 @@ describe('services/agent-executor content parity', () => {
 
   it("V-808 corrected the stub-then-real framing: BOTH StubAgentExecutor and RealAgentExecutor are exported from this file, and ControlPlaneAgentExecutor is a third, so the promised follow-up had already landed. The halt-on-first-failure behaviour the header describes is real and is now asserted against the code. Old text pinned against it now.' — pinned so the deterministic-stub-for-now + AI-B2.b SessionsService-real-follow-up + stable-interface contract all stay documented", () => {
     expect(body).toMatch(/\/\/ Two executors live here and BOTH are shipped: `StubAgentExecutor`/);
+
+    // V-840 — the SAME staleness lived twice in this file. V-808 fixed the
+    // header above and left it on the RealAgentExecutor declaration, which
+    // claimed the runtime still used the stub. bootstrap picks
+    // ControlPlaneAgentExecutor when fleetControlPlaneEnabled is set.
+    expect(body).toMatch(/NOT wired into bootstrap — nothing in `lib\/` imports this class/);
+    expect(body, 'the runtime is not unconditionally the stub').not.toMatch(
+      /the runtime still uses StubAgentExecutor/,
+    );
     expect(body).toMatch(/\/\/ `RealAgentExecutor`, which dispatches against the in-process/);
     // V-808 — RealAgentExecutor is exported from this same file, so the
     // "a later follow-up replaces the stub" promise had already been kept.
