@@ -48,7 +48,7 @@ describe('W563.B /docs/internal/postmark-approval-request.md content parity', ()
     expect(body).toMatch(/\[`docs\/verification-log\.md`\]\(\.\.\/verification-log\.md\)\./);
   });
 
-  it("Q1 first-provider + Q2 12-transactional-template framing pinned: 'Postmark is the first email provider for Driftstack.' + 'reputation for high deliverability' + 'clean separation of transactional vs broadcast streams' + 'DKIM/Return-Path verified domain setup is' + 'honest API pricing matched to our expected' + 'sub-1k/month launch volume.' + 'Transactional only — every message is triggered by a customer-initiated' + 'action or a per-account lifecycle event.' + 'Signup verification (one per account; expires in ~3h)' + 'Password reset (on-demand, customer-initiated)' + 'Magic-link sign-in (on-demand, customer-initiated)' + 'MFA enrollment confirmation (on-demand, customer-initiated)' + 'Billing receipts (Stripe webhook → email, one per successful charge)' + 'Trial-pack purchase confirmation (one per purchase)' + 'Subscription tier change notifications (one per change,' + 'First-failure activation nudge (one-shot per account, after first' + 'First-success activation email (one-shot per account, after first' + 'Webhook quota warnings (80% / 100% thresholds, only when subscribed)' + 'Status-page subscription confirmation (double opt-in)' + 'Team invitation (when an account admin invites a teammate; one-shot' + 'All sent via the default `outbound` Message Stream.' — pinned so the 4-Q1-reason (deliverability + transactional-broadcast-separation + DKIM-setup + honest-pricing) + sub-1k/month + 12-transactional-template + outbound-Message-Stream commitment survives", () => {
+  it("Q1 first-provider + Q2 12-transactional-template framing pinned: 'Postmark is the first email provider for Driftstack.' + 'reputation for high deliverability' + 'clean separation of transactional vs broadcast streams' + 'DKIM/Return-Path verified domain setup is' + 'honest API pricing matched to our expected' + 'sub-1k/month launch volume.' + 'Transactional only — every message is triggered by a customer-initiated' + 'action or a per-account lifecycle event.' + 'Signup verification (single-use link, expires in 30 minutes…)' + 'Password reset (on-demand, customer-initiated)' + 'Magic-link sign-in (on-demand, customer-initiated)' + 'Billing receipts (Stripe webhook → email, one per successful charge)' + 'Subscription tier change notifications (one per change,' + 'First-failure activation nudge (one-shot per account, after first' + 'First-success activation email (one-shot per account, after first' + 'Status-page subscription confirmation (double opt-in)' + 'Team invitation (when an account admin invites a teammate; one-shot' + 'All sent via the default `outbound` Message Stream.' — V-798 RETRACTED four rows: the ~3h TTL was really 30 minutes and the link re-mints on resend; MFA-enrollment and trial-pack confirmations have no template; the quota-warning template was deleted as a draft that never had send methods. This is a sub-processor compliance submission, so it must not enumerate mail the product cannot produce. Pinned so the 4-Q1-reason (deliverability + transactional-broadcast-separation + DKIM-setup + honest-pricing) + sub-1k/month + 12-transactional-template + outbound-Message-Stream commitment survives", () => {
     expect(body).toMatch(/Postmark is the first email provider for Driftstack\./);
     expect(body).toMatch(/reputation for high deliverability/);
     expect(body).toMatch(/clean separation of transactional vs/);
@@ -58,19 +58,33 @@ describe('W563.B /docs/internal/postmark-approval-request.md content parity', ()
     expect(body).toMatch(/sub-1k\/month launch volume\./);
     expect(body).toMatch(/Transactional only — every message is triggered by a customer-initiated/);
     expect(body).toMatch(/action or a per-account lifecycle event\./);
-    expect(body).toMatch(/- Signup verification \(one per account; expires in ~3h\)/);
+    expect(body).toMatch(
+      /- Signup verification \(single-use link, expires in 30 minutes per\s*\n?\s*`AUTH_TOKEN_TTL_MS\.signupVerification`/,
+    );
+    expect(body, 'the ~3h TTL was wrong by an order of magnitude').not.toMatch(/expires in ~3h/);
     expect(body).toMatch(/- Password reset \(on-demand, customer-initiated\)/);
     expect(body).toMatch(/- Magic-link sign-in \(on-demand, customer-initiated\)/);
-    expect(body).toMatch(/- MFA enrollment confirmation \(on-demand, customer-initiated\)/);
+    // V-798 — no MFA template exists in the TEMPLATES map.
+    expect(body, 'a template the product cannot send must not be submitted').not.toMatch(
+      /- MFA enrollment confirmation/,
+    );
     expect(body).toMatch(
       /- Billing receipts \(Stripe webhook → email, one per successful charge\)/,
     );
-    expect(body).toMatch(/- Trial-pack purchase confirmation \(one per purchase\)/);
+    // V-798 — trial_pack was retired by migration 0065; no template exists.
+    expect(body).not.toMatch(/- Trial-pack purchase confirmation/);
     expect(body).toMatch(/- Subscription tier change notifications \(one per change,/);
     expect(body).toMatch(/- First-failure activation nudge \(one-shot per account, after first/);
     expect(body).toMatch(/- First-success activation email \(one-shot per account, after first/);
-    expect(body).toMatch(
-      /- Webhook quota warnings \(80% \/ 100% thresholds, only when subscribed\)/,
+    // V-798 — email.ts's own header records the quota-warning template as a
+    // draft that "never had send methods" and was DELETED.
+    expect(body).not.toMatch(/- Webhook quota warnings/);
+    // The rows that ARE real and were missing from the submission.
+    expect(body).toMatch(/- Payment-failure notice \(Stripe webhook → email/);
+    expect(body).toMatch(/- Renewal reminder \(Stripe upcoming-invoice notice/);
+    expect(body).toMatch(/- BYOK Anthropic key rotation reminder/);
+    expect(body, 'the list must name its source of truth').toMatch(
+      /this list is the `TEMPLATES` map in `apps\/server\/src\/services\/email\.ts`/,
     );
     expect(body).toMatch(/- Status-page subscription confirmation \(double opt-in\)/);
     expect(body).toMatch(/- Team invitation \(when an account admin invites a teammate; one-shot/);

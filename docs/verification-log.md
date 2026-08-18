@@ -34665,3 +34665,43 @@ is not. The exposure is that the bucket is public-readable and the object outliv
 is what the copy now says.
 
 Third batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-798 — a sub-processor compliance submission enumerated mail the product cannot send (2026-08-18)
+
+`docs/internal/postmark-approval-request.md` answers Postmark's Q2, "What types of messages do you
+intend to send", with a list of templates "in production today". Four rows were wrong.
+
+- **"Signup verification (one per account; expires in ~3h)"** —
+  `AUTH_TOKEN_TTL_MS.signupVerification` is `30 * 60 * 1000`, i.e. **30 minutes**, out by an order of
+  magnitude; and the resend button re-mints the token, so it is not one-per-account either.
+- **"MFA enrollment confirmation"** — no such template. The `TEMPLATES` map in
+  `services/email.ts` holds 20 entries and none of them is MFA.
+- **"Trial-pack purchase confirmation"** — no such template; `trial_pack` was retired by
+  `migrations/0065_retire_trial_pack_free_tier.sql`.
+- **"Webhook quota warnings (80% / 100% thresholds)"** — `email.ts`'s own header records this one
+  precisely: the "quota-warning + session-event-digest **draft templates (never had send methods)**
+  were DELETED".
+
+Three of the four name mail the product has never been able to produce. This document is a
+submission to a sub-processor for account approval, so the direction of the error is the bad one —
+over-declaring what will be sent, to the party whose anti-abuse review depends on the answer.
+
+Corrected against the `TEMPLATES` map, and the three real rows the submission had omitted are now
+listed: the payment-failure notice, the renewal reminder, and the webhook/BYOK rotation reminders.
+The doc now names its source of truth, so the next reader regenerates rather than edits prose.
+
+**A near-miss worth recording in full, because the tooling failure was mine and it was silent.** My
+first pass at the `it()` title used `rindex('it(')` for the start and a forward `index("', () => {")`
+for the end. The title is a long `'…' + '…'` concatenation, so the forward search overshot and the
+replacement **deleted two entire test cases**. The file still parsed, the suite still reported
+green — `Tests 2 passed (2)`. I caught it only because I compare registered-test count against `it(`
+occurrences now: HEAD had 4, the file had 2. Restored from HEAD, re-applied the four regex edits, and
+replaced only the individual title FRAGMENTS. Final state: 4 `it(`, 4 registered, 4 passing.
+
+That is the same failure as V-793 from the other end — there an assertion existed but never ran; here
+two cases silently stopped existing. Both are invisible without counting.
+
+Mutation-proved: restoring an unsendable row reds its sentinel. 36 pins over the email/Postmark
+surface green.
+
+Fourth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.

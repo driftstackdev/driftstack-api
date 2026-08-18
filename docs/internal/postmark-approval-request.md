@@ -34,23 +34,35 @@ sub-1k/month launch volume.
 
 ### Q2: What types of messages do you intend to send with Postmark?
 
+V-798 — this list is the `TEMPLATES` map in `apps/server/src/services/email.ts`,
+which currently holds 20 entries. Three rows previously named here could not be
+sent at all: MFA enrollment confirmation and trial-pack purchase confirmation
+have no template, and the quota-warning template was deleted (that file's own
+header records it as a draft that "never had send methods"). A submission to a
+sub-processor should not enumerate mail the product cannot produce.
+
 Transactional only — every message is triggered by a customer-initiated
 action or a per-account lifecycle event. No newsletters, no broadcasts,
 no purchased-list mailings. Specific templates in production today:
 
-- Signup verification (one per account; expires in ~3h)
+- Signup verification (single-use link, expires in 30 minutes per
+  `AUTH_TOKEN_TTL_MS.signupVerification`; the resend button re-mints it,
+  so it is not one-per-account)
 - Password reset (on-demand, customer-initiated)
 - Magic-link sign-in (on-demand, customer-initiated)
-- MFA enrollment confirmation (on-demand, customer-initiated)
 - Billing receipts (Stripe webhook → email, one per successful charge)
-- Trial-pack purchase confirmation (one per purchase)
+- Payment-failure notice (Stripe webhook → email, one per failed charge)
+- Renewal reminder (Stripe upcoming-invoice notice, ahead of a renewal
+  charge)
+- Webhook signing-secret rotation reminder, grace-expiry notice, and
+  force-rotation notice (per-endpoint, cadence-limited)
+- BYOK Anthropic key rotation reminder (per-key, cadence-limited)
 - Subscription tier change notifications (one per change,
   customer-initiated)
 - First-failure activation nudge (one-shot per account, after first
   session failure)
 - First-success activation email (one-shot per account, after first
   successful session)
-- Webhook quota warnings (80% / 100% thresholds, only when subscribed)
 - Status-page subscription confirmation (double opt-in)
 - Team invitation (when an account admin invites a teammate; one-shot
   per invite)
