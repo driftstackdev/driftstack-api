@@ -16,14 +16,25 @@
 // a build, while CI runs the full scan against real `dist/` output after the
 // build step.
 
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 import {
   ALLOWED_PHRASES,
+  APPS,
   customerVisibleText,
   hasForbidden,
   hasInternalMarker,
   renderedText,
 } from '../check-rendered-product-status.mjs';
+
+const SCRIPT_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'check-rendered-product-status.mjs',
+);
 
 describe('rendered product-status guard', () => {
   it('CRITICAL flags an unshipped-feature promise in customer-visible copy', () => {
@@ -78,6 +89,37 @@ describe('rendered product-status guard', () => {
 
   it('does not confuse the two scanners — an internal marker is not forbidden copy', () => {
     expect(hasForbidden(customerVisibleText('<main>Live</main><pre>V-666.BY</pre>'))).toBe(false);
+  });
+
+  it('CRITICAL pins the scanned apps, including the one deliberately left out', () => {
+    // The set was unpinned, so an app could join or leave without anyone
+    // deciding. Both directions matter: a dropped app stops being scanned
+    // silently, and an added one can create false coverage.
+    expect(
+      [...APPS].sort(),
+      'the scanned-app set changed — adding or dropping one must be deliberate',
+    ).toEqual([
+      'admin-panel',
+      'customer-dashboard',
+      'docs',
+      'errors-site',
+      'marketing-site',
+      'status-site',
+    ]);
+
+    // gui-client is the one that looks like an oversight and is not. Its dist is
+    // a Tauri shell — 7860 bytes of markup carrying 72 characters of visible
+    // text — and the copy a customer reads lives in the JS bundle, which this
+    // guard strips before scanning. Adding it would scan nothing and report the
+    // desktop client as covered.
+    expect(APPS, 'gui-client was added — it would scan a shell, not its copy').not.toContain(
+      'gui-client',
+    );
+    const source = readFileSync(SCRIPT_PATH, 'utf8');
+    expect(
+      source,
+      'the reason gui-client is excluded is gone, so the omission reads as an oversight again',
+    ).toMatch(/gui-client is deliberately ABSENT/);
   });
 
   it('CRITICAL pins the allowlist size, so silencing the guard is a deliberate edit', () => {

@@ -4,6 +4,21 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
+// The apps whose BUILT html a customer or operator reads. Pinned by
+// scripts/tests/check-rendered-product-status.test.ts so adding or dropping one
+// is a deliberate edit.
+//
+// gui-client is deliberately ABSENT, and that is worth writing down because it
+// looks like an oversight: it is the desktop app customers install, so "scan the
+// customer-facing apps" reads as though it belongs. It does not. Its dist is a
+// Tauri shell — index.html is 7860 bytes of markup carrying 72 characters of
+// visible text ("Driftstack" and a spinner keyframe) — and every word a customer
+// reads lives in the JS bundle, which this guard strips before scanning, exactly
+// as it strips <script> in the web apps. Adding it would scan nothing and report
+// the desktop client as covered, which is worse than the honest gap.
+//
+// If the desktop client's copy ever needs this guard, it needs a different
+// scanner (one that reads the bundle), not an entry here.
 const APPS = [
   'marketing-site',
   'docs',
@@ -44,7 +59,7 @@ const ALLOWED_PHRASES = [
   // was wired to run it.
   'voided rather than deferred',
 ];
-export { ALLOWED_PHRASES, FORBIDDEN, INTERNAL_MARKERS };
+export { ALLOWED_PHRASES, APPS, FORBIDDEN, INTERNAL_MARKERS };
 
 async function htmlFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
