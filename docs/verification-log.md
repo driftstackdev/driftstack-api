@@ -36535,3 +36535,40 @@ Ratchet: EXPECTED_TEST_FILES 2889 → 2890, \_ALL 3054 → 3055 (one file, mine)
 
 `guides/crypto-troubleshooting.md` remains unpinned and unexamined — named here so the second
 of the two is not forgotten now that the first is closed.
+
+## V-844 — the second unpinned page is accurate, and a near-miss that would have said otherwise (2026-08-18)
+
+Closing the backlog item V-843 named. `guides/crypto-troubleshooting.md` was the other customer
+page no pin referenced. Read end to end against source, it is **accurate throughout** — order
+listing and the `?status=` filter, the cancel endpoint, the idempotent-replay behaviour
+(`Idempotent-Replayed: 1` really is emitted, and the order routes really do withhold the payment
+address so the replay is the only way back to it), and all three receipt formats.
+
+Worth noting for V-843: the receipts were documented HERE all along. The API reference omitted
+what the troubleshooting guide already explained, so the endpoints were never unknown — just
+unreachable from the page a customer looks at first.
+
+**The near-miss.** The guide names `expired` and `refunded` as statuses. The order-status enum
+is `pending | confirming | paid | failed | partial | cancelled` in both `api-types` and the
+service — neither `expired` nor `refunded` is in it, and `cancelled` is missing from the guide.
+That is a finished finding as far as a diff of two lists goes.
+
+It is wrong. The sentence reads "NowPayments reported a terminal non-paid status for the payment
+(`failed`, `expired`, or `refunded`)" — the PROVIDER's vocabulary, not Driftstack's, and
+`crypto-orders.ts` maps all three of those provider statuses onto Driftstack `failed`. The guide
+is precise; the list-diff was not. Comparing two vocabularies without checking which one each
+sentence is speaking produces exactly this, and it is the fourth time in this arc that context
+refuted a finding I had already assembled.
+
+The guide now gets the fabricated-path arm of V-843's guard, but NOT the completeness arm: a
+troubleshooting guide has no duty to enumerate the API, only a duty not to invent an endpoint.
+
+**And the arm's first run was itself wrong.** It reported three fabricated endpoints — the
+guide's own curl examples, which use a concrete `ord_a1b2c3d4e5f6` where the route declares a
+param, and my normaliser only mapped `:order_id`. Fourth crude extractor in this session to
+produce a confident false answer, after the TierLimitError key scan, the admin-route
+brace-match, and the scope enum parsed without stripping comments. The fix is one line; the
+pattern is that every one of them looked plausible until checked.
+
+Mutation: a `/dispute` endpoint added to the guide that no route serves → the arm names it.
+Restores byte-identical. `it(` 3 → 4, one arm added to an existing file, so no ratchet change.

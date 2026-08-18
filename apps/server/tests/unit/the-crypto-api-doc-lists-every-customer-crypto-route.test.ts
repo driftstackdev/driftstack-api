@@ -33,6 +33,13 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const ROUTES = resolve(REPO_ROOT, 'apps/server/src/routes');
 const DOC = resolve(REPO_ROOT, 'apps/docs/src/pages/api/billing-crypto.md');
+/**
+ * The OTHER page no pin referenced. V-844 read it end to end and found it
+ * accurate, so it gets the fabricated-path arm but not the completeness one:
+ * a troubleshooting guide is not an API reference and has no duty to list
+ * every endpoint. It does have a duty not to invent one.
+ */
+const GUIDE = resolve(REPO_ROOT, 'apps/docs/src/pages/guides/crypto-troubleshooting.md');
 
 /**
  * Customer crypto routes registered by the server, normalised to the `:id`
@@ -54,11 +61,20 @@ function registeredRoutes(): string[] {
   return [...found].sort();
 }
 
-function documentedRoutes(): string[] {
-  const doc = readFileSync(DOC, 'utf8');
+function documentedRoutes(source = DOC): string[] {
+  const doc = readFileSync(source, 'utf8');
   const found = new Set<string>();
   for (const m of doc.matchAll(/(\/v1\/billing\/crypto[A-Za-z0-9_\-/:.]*)/g)) {
-    found.add((m[1] as string).replace(':order_id', ':id').replace(/[.,)]+$/, ''));
+    found.add(
+      (m[1] as string)
+        .replace(':order_id', ':id')
+        // Prose and curl examples use a concrete id where the route
+        // declares a param. Without this the guide's own examples read as
+        // three fabricated endpoints — which is what the first run of this
+        // arm reported, confidently and wrongly.
+        .replace(/\/ord_[A-Za-z0-9]+/, '/:id')
+        .replace(/[.,)]+$/, ''),
+    );
   }
   return [...found].sort();
 }
@@ -80,5 +96,12 @@ describe('V-843 the crypto API doc lists every customer crypto route', () => {
   it('CRITICAL the page names no crypto route the server does not register. The opposite failure and the more embarrassing one — a customer following the docs gets a 404 on an endpoint that never existed. V-824 spent real time working out which side was wrong when the docs and the OpenAPI spec disagreed; deriving both sides from source removes the question.', () => {
     const fabricated = documentedRoutes().filter((d) => !registeredRoutes().includes(d));
     expect(fabricated, 'path named on the page that no route registers:').toEqual([]);
+  });
+
+  it("V-844 CRITICAL the troubleshooting guide names no crypto route the server does not register. It was the second of the two customer pages no pin referenced. Read end to end it is accurate — including the NowPayments statuses `expired` and `refunded`, which are the PROVIDER's vocabulary mapped to Driftstack `failed`, not invented order statuses. This arm keeps it that way without pretending a guide must enumerate the API.", () => {
+    const fabricated = documentedRoutes(GUIDE).filter((d) => !registeredRoutes().includes(d));
+    expect(fabricated, 'path named in the troubleshooting guide that no route registers:').toEqual(
+      [],
+    );
   });
 });
