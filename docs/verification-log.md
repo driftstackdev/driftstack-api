@@ -36639,3 +36639,50 @@ three of which are enforced and one of which I had to be told about twice. Every
 guards existed already and every one did its job. The failure was mine for treating the page as
 the whole surface — the same mistake in miniature as the sweep's own recurring lesson that a
 claim lives in more places than the one you are reading.
+
+## V-847 — the nav census lives in two files, and a guard that refused its own author (2026-08-18)
+
+Two things, one commit.
+
+**1. The second census.** V-846 raised a hand-maintained nav count from 133 to 135 after
+documenting the crypto endpoints. The next full run failed on a DIFFERENT count in a DIFFERENT
+file — `docs-data-nav-content-parity` pins "61 top-level routes + 141 child anchors", which my
+two nav children made 143. Same tree, two independent censuses, and fixing the one the failure
+pointed at left the other stale.
+
+That is the third time in this arc: V-808 corrected the agent-executor header and left the copy
+on the class (V-840); V-803 corrected the vitest coverage header and left the numbers in the
+`it()` title (V-826); now this. The pattern is consistent enough to state as a rule — **when a
+number is wrong, the question is not "where is it" but "where else is it"** — and consistent
+enough to note that stating it has not yet been what catches the next one. The full run has
+caught all three.
+
+**2. A new guard, and it rejected its author's roster on the first run.** The measurement behind
+it: the spec shipped inside the Python SDK publishes 164 non-admin operations; six paths are
+mentioned nowhere in `apps/docs/src/pages`. None is a defect. `/v1/egress/echo` and
+`/v1/fleet/events` are infrastructure; `/v1/sessions/:id/proxy` is undocumented because every
+path through it 503s (V-823); and three OAuth-CLIENT paths — `oauth-client/start`,
+`oauth-client/confirm-merge`, `account/me/oauth-links` — have no page because `api/oauth.md`
+documents Driftstack as an OAuth PROVIDER, which is a different feature. The first two of those
+are consumed by the dashboard SPA; `oauth-links` takes a `read` scope and a customer with a key
+can call it, which makes it the strongest candidate of the six for a page.
+
+`every-published-customer-path-is-documented-or-declared.test.ts` requires each published
+customer path to be documented OR listed with a reason, and — the arm that matters — requires
+every listed exemption to still be undocumented, so the roster cannot become a list nobody
+rechecks.
+
+**That arm failed on its first run, against me.** I had exempted `/health` and `/version` as
+"operational probes". `api/status.md` names `/health` and `api/sessions.md` names `/version`;
+both were already documented, so both exemptions were false the moment I typed them. The guard
+refused its author's roster before it ever refused anyone else's, which is the only reason that
+arm is worth writing — V-802 calls the alternative a blindfold, and I had begun building one.
+
+I did NOT write the missing OAuth-client pages. Which of those belong in customer documentation
+is an audience question: publishing an SPA-internal auth step as a customer endpoint is a
+choice, and so is withholding a readable one.
+
+Mutation: a `/v1/undocumented-new-thing` path added to the spec → the coverage arm names it.
+Restores byte-identical.
+
+Ratchet: EXPECTED_TEST_FILES 2890 → 2891, \_ALL 3055 → 3056 (one file, mine).
