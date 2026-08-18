@@ -1,13 +1,13 @@
 // W405.C — drift guard for apps/server/src/services/crypto-orders.ts.
-// V-666.B in-memory crypto-orders state machine + NowPayments IPN
+// V-666.B crypto-orders state machine + NowPayments IPN
 // fan-in. V-666.AT append-only event log + V-666.AO idempotency +
 // V-666.J customer cancel + V-666.K bulk-sweep. Drift here either
 // breaks the forward-only state machine (paid → pending reverse
 // allowed) or scrambles V-666.AN failed-transition fan-out source
 // labels.
 //
-//   • V-666.B framing pinned: in-memory order store + IPN flow + no
-//     DB yet (V-666.C follow-up gated on real merchant traffic).
+//   • V-799: the store is the crypto_orders TABLE. `repo` is required
+//     and bootstrap wires DrizzleCryptoOrdersRepo.
 //   • CryptoOrderStatus: 6-literal union with V-666.J cancelled
 //     terminal.
 //   • V-666.AT CryptoOrderEvent: append-only event log; 5-source
@@ -50,12 +50,12 @@ function read(p: string): string {
 describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-666.B framing pinned: in-memory store + NowPayments IPN flow + no DB yet (V-666.C follow-up)', () => {
+  it('V-666.B framing, corrected by V-799. This pinned "in-memory order store" and "no DB persistence yet", both false since the table landed: `repo` is a REQUIRED constructor field, bootstrap passes new DrizzleCryptoOrdersRepo(dbHandle), and cryptoOrders is a real pgTable. The operator runbook had inherited the same fiction and told on-call to expect every order to vanish on deploy.', () => {
     expect(body).toMatch(/V-666\.B — crypto-orders service\./);
-    expect(body).toMatch(/In-memory order store \+ state machine for the NowPayments IPN flow\./);
-    expect(body).toMatch(
-      /V-666\.B posture: no DB persistence yet \(crypto_orders table is a\s*\n?\s*\/\/\s*V-666\.C follow-up gated on real merchant traffic\)\./,
-    );
+    expect(body).toMatch(/Order store \+ state machine for the NowPayments IPN flow\./);
+    expect(body, 'the in-memory framing must not return').not.toMatch(/In-memory order store/);
+    expect(body).toMatch(/V-799 — this header used to say there was no DB persistence and that/);
+    expect(body).not.toMatch(/no DB persistence yet/);
   });
 
   it('CryptoOrderStatus: 6-literal union (pending/confirming/paid/failed/partial + V-666.J cancelled terminal)', () => {

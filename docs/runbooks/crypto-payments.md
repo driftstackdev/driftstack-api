@@ -1,7 +1,7 @@
 # Crypto-payments operator runbook (V-675)
 
 Operational reference for the V-666 family — NowPayments IPN
-ingestion, the in-memory `CryptoOrdersService` order state machine,
+ingestion, the `CryptoOrdersService` order state machine,
 the customer-facing `/v1/billing/crypto-checkout` route (V-666.C),
 and the admin lookup routes (V-666.D).
 
@@ -33,9 +33,11 @@ Read this when:
          └── HMAC-SHA512 signature verification gate
 ```
 
-> **In-memory posture.** The repo is a `Map` in process memory. On
-> every deploy or restart, all crypto orders are dropped. This is
-> acceptable today because (a) we have no live merchant account
+> **Persistence.** Orders live in the `crypto_orders` table and survive
+> deploys and restarts. `CryptoOrdersService` takes `repo` as a
+> REQUIRED constructor field and bootstrap passes
+> `new DrizzleCryptoOrdersRepo(dbHandle)`, so no production path can
+> run against an in-memory store. This is acceptable today because (a) we have no live merchant account
 > wired, (b) the early-customer cadence is manual-handoff (founder
 > reconciles each order in Stripe Dashboard / NowPayments dashboard
 > separately). The V-666.E follow-up wires a `crypto_orders` table
@@ -165,7 +167,7 @@ not by Driftstack. The flow:
 4. If the customer needs to retry, mint a new order via the
    normal checkout flow.
 
-Do NOT mutate the in-memory store by hand — the order's terminal
+Do NOT edit `crypto_orders` rows by hand — the order's terminal
 state is the customer-visible truth, and the IPN flow will
 overwrite manual changes.
 
@@ -173,7 +175,7 @@ overwrite manual changes.
 
 | Symptom                                         | Likely cause + action                                                                                                                                                                                                                                                   |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| All orders gone after a deploy                  | Expected — in-memory repo. Any in-flight orders are recoverable from the NowPayments dashboard by payment_id.                                                                                                                                                           |
+| Orders missing after a deploy                   | NOT expected — `crypto_orders` is a Postgres table and survives restarts. Query the table by `order_id` before assuming loss; if rows really are absent, that is a real incident, not the storage model.                                                                |
 | Order shows `paid` but customer not upgraded    | The downstream tier-flip wiring (V-666.E) is not yet built — founder runs it manually until the wiring lands.                                                                                                                                                           |
 | Duplicate `paid` IPN                            | Idempotent — service is no-op on same-state writes. No action needed.                                                                                                                                                                                                   |
 | Late `confirming` IPN after `paid`              | Rejected by `isTerminalForward` — logged, no state change.                                                                                                                                                                                                              |
@@ -193,8 +195,9 @@ The current "wire-ready" posture flips to "live" when:
    to the customer.
 4. The customer-facing crypto checkout flow is unblocked in the
    GUI (V-534.J button + view).
-5. A `crypto_orders` table replaces the in-memory repo (V-666.E
-   DB migration).
+5. ~~A `crypto_orders` table replaces the in-memory repo (V-666.E
+   DB migration).~~ **Done** — the table exists and bootstrap wires
+   `DrizzleCryptoOrdersRepo`; this is no longer a prerequisite.
 
 Until then: the route mints orders + accepts IPNs, but the
 customer-visible payment-address flow is documented as "support

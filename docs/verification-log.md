@@ -34705,3 +34705,48 @@ Mutation-proved: restoring an unsendable row reds its sentinel. 36 pins over the
 surface green.
 
 Fourth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-799 — an operator runbook told on-call that crypto orders vanish on every deploy (2026-08-18)
+
+`docs/runbooks/crypto-payments.md` is the on-call reference for the NowPayments flow. It said:
+
+> **In-memory posture.** The repo is a `Map` in process memory. On every deploy or restart, all
+> crypto orders are dropped.
+
+and carried the same fiction in four more places: the header ("the in-memory `CryptoOrdersService`"),
+the remediation instruction ("Do NOT mutate the in-memory store by hand"), a failure-mode table row
+("All orders gone after a deploy | **Expected** — in-memory repo"), and go-live prerequisite #5
+("A `crypto_orders` table replaces the in-memory repo") listed as still outstanding.
+
+None of it is true. `cryptoOrders` is a real `pgTable` in `schema.ts`; `repo: CryptoOrdersRepo` is a
+**required** constructor field on `CryptoOrdersService`; and `bootstrap.ts` passes
+`new DrizzleCryptoOrdersRepo(dbHandle)`. No production path can run against a `Map`.
+
+This is the most operationally dangerous item in the sweep so far, and the direction matters: an
+on-call engineer finding orders missing after a deploy reads "**Expected**" and stops investigating
+what would be real data loss; the same engineer looking for a paid order does not query the table it
+is actually in. Money is on the other end of both.
+
+The source header had the same claim ("no DB persistence yet (crypto_orders table is a V-666.C
+follow-up gated on real merchant traffic)") — the runbook inherited it from there, so both moved
+together, with the required-`repo` fact stated as the reason it cannot drift back.
+
+**Three pin files, and the third was found only by the wide sweep.** After
+`docs-runbooks-crypto-payments-content-parity` and `services-crypto-orders-content-parity` were
+green, the 157-file surface caught
+`crypto-orders-v666b-state-machine-cross-source-invariant` freezing it twice more, in an `it()` title
+and a four-assertion block. That is the third time this session a claim lived in a file the obvious
+grep did not name.
+
+**Three of my own errors in one batch, each caught by a different check.** A `"In-memory"` inserted
+inside a double-quoted `it("…")` broke the transform — the file failed to COLLECT while the run still
+reported 1954 tests passing, the same signature as V-790's orphaned paren. A sentinel written as
+`/The in-memory\s/` was too broad and failed against _correct_ code: the service legitimately keeps
+an in-memory cache and single-flight as a same-process fast-path in front of the DB and says so, and
+a blanket ban would forbid accurate text — narrowed to the retracted sentence. And two positive
+assertions further down the same block still required the retired wording; the run named them.
+
+Mutation-proved: reinstating "no DB persistence yet" reds both files. 157 pins over the crypto
+surface green, with `it(` counts unchanged in all three files (7, 23, 16).
+
+Sixth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.

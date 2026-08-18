@@ -2,17 +2,16 @@
 // Two-hundred-seventieth in the drift-guard series. Pins the crypto-
 // order service contract:
 //
-//   V-666.B anchor — 'crypto-orders service. In-memory order store +
+//   V-666.B anchor — 'crypto-orders service. Order store +
 //   state machine for the NowPayments IPN flow. Customer-side
 //   /checkout/crypto opens an order → backend records it + returns
 //   the payment address → NowPayments IPN posts status updates →
 //   service transitions the order state'.
 //
-//   V-666.B posture — 'no DB persistence yet (crypto_orders table
-//   is a V-666.C follow-up gated on real merchant traffic). The
-//   in-memory store works for the early-customer manual-handoff
-//   cadence the founder expects in the first 4-8 weeks
-//   post-merchant-account-go-live'.
+//   V-799 — the posture bullet here used to quote 'no DB persistence
+//   yet' and an in-memory store. crypto_orders is a real table, `repo`
+//   is a REQUIRED constructor field, and bootstrap wires
+//   DrizzleCryptoOrdersRepo, so that has been false since it landed.
 //
 //   CryptoOrderStatus 6-value union:
 //     - 'pending' (awaiting payment).
@@ -75,10 +74,11 @@ function read(p: string): string {
 describe('W944 V-666.B crypto-orders cross-source invariant', () => {
   // ─── V-666.B anchor + state-machine framing ──────────────────
 
-  it("CRITICAL apps/server/src/services/crypto-orders.ts header pins V-666.B anchor — 'V-666.B — crypto-orders service. In-memory order store + state machine for the NowPayments IPN flow'. The V-666.B anchor is the policy provenance.", () => {
+  it("CRITICAL apps/server/src/services/crypto-orders.ts header pins V-666.B anchor — 'V-666.B — crypto-orders service. Order store + state machine for the NowPayments IPN flow' (V-799 retracted the In-memory framing). The V-666.B anchor is the policy provenance.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/crypto-orders.ts'));
     expect(p).toMatch(/V-666\.B — crypto-orders service/);
-    expect(p).toMatch(/In-memory order store \+ state machine for the NowPayments IPN flow/);
+    expect(p).toMatch(/Order store \+ state machine for the NowPayments IPN flow/);
+    expect(p, 'V-799 — the in-memory framing must not return').not.toMatch(/In-memory order store/);
   });
 
   // ─── 4-step flow framing ─────────────────────────────────────
@@ -92,13 +92,20 @@ describe('W944 V-666.B crypto-orders cross-source invariant', () => {
 
   // ─── V-666.B in-memory posture + V-666.C follow-up ───────────
 
-  it("CRITICAL V-666.B in-memory posture framing — 'no DB persistence yet (crypto_orders table is a V-666.C follow-up gated on real merchant traffic). The in-memory store works for the early-customer manual-handoff cadence the founder expects in the first 4-8 weeks post-merchant-account-go-live'. The 4-8-week + manual-handoff scope is the V-666.B trade-off.", () => {
+  it("CRITICAL V-666.B persistence framing, corrected by V-799. This froze 'no DB persistence yet' and an in-memory store; crypto_orders is a real table, repo is a REQUIRED field and bootstrap wires DrizzleCryptoOrdersRepo, so it had been false since the table landed. The operator runbook inherited the same fiction and told on-call to expect orders to vanish on every deploy. The 4-8-week manual-handoff trade-off it described expired with the table.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/crypto-orders.ts'));
-    expect(p).toMatch(/V-666\.B posture: no DB persistence yet \(crypto_orders table is a/);
-    expect(p).toMatch(/V-666\.C follow-up gated on real merchant traffic\)\./);
-    expect(p).toMatch(/The in-memory/);
-    expect(p).toMatch(/store works for the early-customer manual-handoff cadence the/);
-    expect(p).toMatch(/founder expects in the first 4-8 weeks post-merchant-account-go-live/);
+    // V-799 — all three assertions froze a posture that stopped being true when
+    // the crypto_orders table landed. What replaces them is the proof the claim
+    // cannot drift back: repo is required and bootstrap wires the Drizzle repo.
+    expect(p).toMatch(/V-799 — this header used to say there was no DB persistence/);
+    expect(p).toMatch(/`repo` is a REQUIRED constructor field/);
+    expect(p).not.toMatch(/no DB persistence yet/);
+    // Narrow on purpose: crypto-orders legitimately keeps an in-memory cache +
+    // single-flight as a same-process fast-path IN FRONT of the DB, and says so.
+    // A blanket /the in-memory/ ban would forbid that accurate text — the first
+    // version of this sentinel did exactly that and failed against correct code.
+    expect(p).not.toMatch(/in-memory store works for the early-customer/);
+    expect(p).not.toMatch(/first 4-8 weeks post-merchant-account-go-live/);
   });
 
   // ─── CryptoOrderStatus 6-value union ─────────────────────────

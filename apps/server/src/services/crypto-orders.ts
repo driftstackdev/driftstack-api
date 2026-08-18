@@ -1,14 +1,17 @@
 // V-666.B — crypto-orders service.
 //
-// In-memory order store + state machine for the NowPayments IPN flow.
+// Order store + state machine for the NowPayments IPN flow.
 // Customer-side `/checkout/crypto` opens an order → backend records
 // it + returns the payment address → NowPayments IPN posts status
 // updates → service transitions the order state.
 //
-// V-666.B posture: no DB persistence yet (crypto_orders table is a
-// V-666.C follow-up gated on real merchant traffic). The in-memory
-// store works for the early-customer manual-handoff cadence the
-// founder expects in the first 4-8 weeks post-merchant-account-go-live.
+// V-799 — this header used to say there was no DB persistence and that
+// the crypto_orders table was a later follow-up gated on merchant
+// traffic. That table exists, `repo` is a REQUIRED constructor field
+// below, and bootstrap passes `new DrizzleCryptoOrdersRepo(dbHandle)`,
+// so no production path has ever run against an in-memory store since
+// it landed. The operator runbook had inherited the same fiction and
+// told on-call to expect orders to vanish on every deploy.
 
 import { createHash as nodeCreateHash } from 'node:crypto';
 
