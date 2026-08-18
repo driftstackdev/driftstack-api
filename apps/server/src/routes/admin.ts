@@ -229,9 +229,16 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
   // ── GET /v1/usage/series ──────────────────────────────────────────────
   // V-170 — daily-bucketed usage series for sparkline rendering.
   // Customer-dashboard /usage consumes this. Default 30 days, max 90.
-  // Empty buckets today (usage_records writers not wired); the endpoint
-  // returns the contract shape with zeros so the dashboard can render
-  // empty-state correctly.
+  // Buckets carry real data. `DrizzleAgentDecomposerUsageRecorder` inserts
+  // into `usage_records` on every decompose call and is wired at bootstrap;
+  // `bundled-llm-repo` writes there too. An account with no usage still gets
+  // the contract shape with zeros — `dailyBucketsForRange` left-joins onto a
+  // `generate_series`, so empty days are zeros rather than missing rows, and
+  // the dashboard's empty state still renders.
+  //
+  // V-838 — this said the writers were not wired and the endpoint therefore
+  // returned nothing but zeros. Reading that, an engineer treats a live
+  // customer-facing sparkline as an unfinished stub.
   // V-330e — same effective-account treatment as /v1/usage above.
   app.get(
     '/v1/usage/series',

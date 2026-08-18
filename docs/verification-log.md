@@ -36273,3 +36273,43 @@ The full run that caught this file's absence from the pin is the file-count arm 
 it failed until the ratchet was raised, which is what it is for.
 
 Ratchet: EXPECTED_TEST_FILES 2888 → 2889, \_ALL 3053 → 3054 (one file, mine).
+
+## V-838 — a live customer sparkline documented as an unwired stub (2026-08-18)
+
+First finding from a surface the sweep never covered. The report audited the 292
+**claim-bearing parity pins**; a claim sitting in source that no pin freezes was out of scope
+by construction, and V-794's ratchet only scans pin files. So I scanned the server source for
+the shapes V-794 polices: 54 future-tense promises across 36 files.
+
+Most are true — genuinely unwired things, correctly described. The yield is in the ones that
+have since shipped, which is the same instinct that drove the whole arc.
+
+`routes/admin.ts`, on `GET /v1/usage/series`: "Empty buckets today (**usage_records writers not
+wired**); the endpoint returns the contract shape with zeros so the dashboard can render
+empty-state correctly."
+
+The writers are wired. `DrizzleAgentDecomposerUsageRecorder` inserts into `usage_records` on
+every decompose call, is constructed at `bootstrap.ts:1358` and passed in at `:1473`;
+`bundled-llm-repo` writes there too. The endpoint serves real rows. The zeros are not an
+unwired-writer stub at all — `dailyBucketsForRange` left-joins onto a `generate_series`, so a
+day with no activity is a zero rather than a missing row, which is a different mechanism with
+the same visible output. That coincidence is what let the claim survive: the endpoint returns
+zeros for a quiet account, exactly as an unwired one would.
+
+Consequence: an engineer reading it treats a live customer-facing sparkline as an unfinished
+stub — either "fixing" something that works, or discounting its output during an
+investigation. `apps/customer-dashboard/src/pages/usage.astro` fetches it for real.
+
+Frozen twice, in `routes-admin-content-parity` and
+`routes-admin-v326e6-v330e-cross-source-invariant` — both the regex and both `it()` titles.
+The report never flagged it, which is not a criticism of the report: this claim was in its
+corpus, and 65 candidates out of 292 were always going to leave some behind.
+
+**Two mistakes of mine on the way, both caught by running the pin.** I inserted assertions
+using `p` into a file whose variable is `body` — the same slip as V-817, and again a loud
+`ReferenceError`-class failure rather than a silent one. And I applied the leftover-assertion
+fix to the wrong file of the two, which the exact-match assert refused rather than silently
+patching nothing.
+
+Mutation: the not-wired claim restored → both sentinels fire. Restores byte-identical. `it(`
+counts unchanged at 17 and 15.

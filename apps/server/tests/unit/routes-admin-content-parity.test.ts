@@ -149,10 +149,14 @@ describe('W420.A apps/server/src/routes/admin.ts content parity', () => {
     );
   });
 
-  it('V-170 framing pinned: GET /v1/usage/series daily-bucketed sparkline; default 30 days / max 90; usage_records writers not yet wired (empty buckets contract shape)', () => {
+  it('V-170 framing pinned: GET /v1/usage/series daily-bucketed sparkline; default 30 days / max 90; zeros come from the generate_series left-join for days with no rows. V-838 retitled this: it used to say the writers were unwired, and they are wired at bootstrap', () => {
     expect(body).toMatch(
-      /\/\/ V-170 — daily-bucketed usage series for sparkline rendering\.\s*\n?\s*\/\/ Customer-dashboard \/usage consumes this\. Default 30 days, max 90\.\s*\n?\s*\/\/ Empty buckets today \(usage_records writers not wired\); the endpoint\s*\n?\s*\/\/ returns the contract shape with zeros so the dashboard can render\s*\n?\s*\/\/ empty-state correctly\./,
+      /\/\/ V-170 — daily-bucketed usage series for sparkline rendering\.\s*\n?\s*\/\/ Customer-dashboard \/usage consumes this\. Default 30 days, max 90\./,
     );
+    // V-838 — the endpoint serves real rows; the zeros are per-day gaps from a
+    // generate_series left-join, not an unwired-writer stub.
+    expect(body).toMatch(/Buckets carry real data\./);
+    expect(body, 'the writers are wired').not.toMatch(/usage_records writers not wired/);
     expect(body).toMatch(
       /const series = await usageService\.dailySeries\(ctx, query\.days \?\? 30, undefined, \{\s*\n?\s*\.\.\.\(effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\}\),\s*\n?\s*\}\);/,
     );

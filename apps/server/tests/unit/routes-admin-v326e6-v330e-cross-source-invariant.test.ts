@@ -154,13 +154,15 @@ describe('W1049 routes/admin V-326e6 + V-330e cross-source invariant', () => {
 
   // ─── V-170 usage series ──────────────────────────────────────
 
-  it("CRITICAL V-170 usage/series framing — 'daily-bucketed usage series for sparkline rendering. Customer-dashboard /usage consumes this. Default 30 days, max 90. Empty buckets today (usage_records writers not wired); the endpoint returns the contract shape with zeros so the dashboard can render empty-state correctly'. The 30-default + 90-max + empty-state-with-zeros design lets the dashboard render before the writers land.", () => {
+  it("CRITICAL V-170 usage/series framing — 'daily-bucketed usage series for sparkline rendering. Customer-dashboard /usage consumes this. Default 30 days, max 90. Empty buckets today (usage_records writers not wired); the endpoint returns the contract shape with zeros so the dashboard can render empty-state correctly'. The 30-default + 90-max + zeros-for-empty-days design keeps the contract shape stable for accounts with gaps. V-838 corrected this case: it described the endpoint as serving nothing but zeros because the writers had not landed, and they had.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin.ts'));
     expect(p).toMatch(/V-170 — daily-bucketed usage series for sparkline rendering\./);
     expect(p).toMatch(/Customer-dashboard \/usage consumes this\. Default 30 days, max 90\./);
-    expect(p).toMatch(/Empty buckets today \(usage_records writers not wired\); the endpoint/);
-    expect(p).toMatch(/returns the contract shape with zeros so the dashboard can render/);
-    expect(p).toMatch(/empty-state correctly\./);
+    expect(p).toMatch(/Buckets carry real data\. `DrizzleAgentDecomposerUsageRecorder` inserts/);
+    // V-838 SENTINEL — writers are wired at bootstrap; the claim must not return.
+    expect(p, 'usage_records writers are wired').not.toMatch(/usage_records writers not wired/);
+    expect(p).toMatch(/the contract shape with zeros — `dailyBucketsForRange` left-joins onto a/);
+    expect(p).toMatch(/`generate_series`, so empty days are zeros rather than missing rows/);
   });
 
   it('CRITICAL usage/series default days — 30 (via ?? 30 in the dailySeries call). Matches the V-170 framing comment; drift would diverge dashboard contract from server default.', () => {
