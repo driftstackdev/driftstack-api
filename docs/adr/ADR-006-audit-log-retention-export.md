@@ -56,7 +56,23 @@ JSON Lines chosen over Parquet because:
 
 ### 3. Archive cadence — monthly sweep
 
-A monthly cron-driven service (`AuditArchiveService`, lands in V-NNN) runs on the 1st of each month at 02:00 UTC:
+> **⚠ V-865 — DECIDED, NOT IMPLEMENTED. This section describes a cadence that has never run.**
+>
+> `AuditArchiveService` was built (V-163) and its repo layer with it (V-172), but nothing invokes
+> `archiveAll()`. It is not constructed in `bootstrap.ts`, no recurring job claims it, and
+> `every-service-is-wired-or-recorded-as-dormant` lists it as dormant for exactly this reason.
+> The original sentence carried an unfilled version placeholder while describing the sweep in the
+> present tense — written prospectively, phrased as fact, and never true.
+>
+> **Nothing has been archived and nothing has been deleted.** No audit row has aged out of
+> Postgres, and `session_events` — added to `AUDIT_TABLES` by W438 — grows without bound, because
+> this dormant sweep is the only thing that would prune it. Read §4's seven-year SLA against that:
+> the retention floor is met trivially, since no data has ever been removed. The ceiling is not.
+>
+> Enabling it is a data-destructive operation on a compliance surface and is recorded as an open
+> operational decision (D-7), not an oversight to be quietly closed.
+
+A monthly cron-driven service (`AuditArchiveService`) is designed to run on the 1st of each month at 02:00 UTC:
 
 1. Selects rows older than 90 days from each audit table.
 2. Streams them to R2 in batched 10k-row JSONL chunks (avoids loading entire result set into memory).
@@ -111,7 +127,7 @@ When a customer fully exits (account deleted), the cascade is:
 
 ## Operational notes
 
-- **Archive ledger** (`audit_archive_runs`) schema lands in V-NNN follow-on:
+- **Archive ledger** (`audit_archive_runs`) — shipped in V-163; the table is in `schema.ts`. It has no rows, because the sweep that writes them has never run (see the V-865 note in §3):
   ```
   CREATE TABLE audit_archive_runs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -6,8 +6,12 @@
 // column per `tableName` argument. This header said "four" until
 // 2026-08-17 — session_events was added by W438 and the count was not.
 //
-// Lifecycle: monthly cron-driven service (deployment-time scheduler;
-// not in this commit) calls AuditArchiveService.archiveAll(), which
+// Lifecycle as DESIGNED (ADR-006 §3) — note that it has never run: no
+// scheduler was ever added, nothing constructs AuditArchiveService, and
+// V-865 marks the ADR section accordingly. The sentence here used to say
+// the scheduler was simply "not in this commit", which read as pending
+// when it was permanent. When wired, a monthly cron-driven service
+// calls AuditArchiveService.archiveAll(), which
 // iterates AUDIT_TABLES and calls archiveTable(tableName) per table.
 // Each archiveTable() call:
 //   1. selectArchivableRows() — SELECT rows older than 90 days from

@@ -74,8 +74,28 @@ describe('W551.B /docs/adr/ADR-006-audit-log-retention-export.md content parity'
     expect(body).toMatch(/### 2\. Archive \(Cloudflare R2\) — JSON Lines, gzip-compressed/);
     expect(body).toMatch(/partitioned by `YYYY\/MM\/`/);
     expect(body).toMatch(/### 3\. Archive cadence — monthly sweep/);
-    expect(body).toMatch(
-      /A monthly cron-driven service \(`AuditArchiveService`, lands in V-NNN\) runs on the 1st of each month at 02:00 UTC/,
+    // V-865 — this pin used to freeze "A monthly cron-driven service
+    // (`AuditArchiveService`, lands in V-NNN) runs on the 1st of each month",
+    // which described a sweep that has never executed. Six arms of
+    // audit-archive-is-not-scheduled-and-that-is-recorded prove it is dormant,
+    // so the suite was simultaneously asserting the cadence runs and proving it
+    // does not. Per-occurrence negatives, so neither half can come back alone.
+    expect(body, 'the present-tense claim that the sweep runs is gone').not.toMatch(
+      /`AuditArchiveService`, lands in V-NNN\) runs on the 1st/,
+    );
+    // Scoped to §3 deliberately. A blanket ban on the placeholder failed on my
+    // first run and was right to: §5's "Phase 1 lands as a follow-on" is still
+    // TRUE — no admin audit-export route exists — so forbidding the string
+    // document-wide asserted something I had not verified. §7's ledger claim
+    // was stale (audit_archive_runs shipped in V-163) and is corrected.
+    expect(body, 'the archive ledger is described as shipped, not pending').toMatch(
+      /\*\*Archive ledger\*\* \(`audit_archive_runs`\) — shipped in V-163/,
+    );
+    expect(body, 'the cadence is stated as designed, not operating').toMatch(
+      /A monthly cron-driven service \(`AuditArchiveService`\) is designed to run on the 1st of each month at 02:00 UTC/,
+    );
+    expect(body, 'and the section carries its not-implemented status').toMatch(
+      /⚠ V-865 — DECIDED, NOT IMPLEMENTED\. This section describes a cadence that has never run\./,
     );
     expect(body).toMatch(/### 4\. Retention SLA — 7 years/);
     expect(body).toMatch(

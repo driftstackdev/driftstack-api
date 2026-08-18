@@ -37368,3 +37368,50 @@ whoever changed it meets this note.
 of the credential rather than the use case, and still reads as unapplied — so the note cannot decay
 into sounding done. Mutation-proved three ways: header removed, rule weakened back to a use-case
 test, and the unapplied marker flipped to applied. Doc restored byte-identical.
+
+## V-865 — an ADR describing a retention sweep that has never run, frozen by a pin (2026-08-18)
+
+**Found while verifying D-7, and it is not what D-7 said.** V-829 recorded the audit archive as an
+open decision with prior art. The remediation side turns out to be closed already: `RECORDED_DORMANT`
+names `AuditArchiveService` with the reason, `audit-archive-is-not-scheduled-and-that-is-recorded`
+proves it six ways, and the unbounded-select risk has its own recorded-decision guard. Nothing to
+add there — what remains is the operational call to enable a data-deleting job.
+
+**But `ADR-006 §3` said the sweep runs.** In the present tense: "A monthly cron-driven service
+(`AuditArchiveService`, lands in V-NNN) **runs** on the 1st of each month at 02:00 UTC", then four
+numbered steps ending in DELETE. Verified against source this session: `archiveAll()` has no caller
+anywhere, the service is never constructed, none of the 11 registered jobs claims it, and the wired
+retention scrub does not touch `session_events`. The unfilled version placeholder is the tell —
+written prospectively, phrased as fact.
+
+**And a parity pin froze that sentence**, so the suite simultaneously asserted the cadence runs and
+proved it does not, in two files neither of which knew about the other. That is
+[[feedback_parity_pins_freeze_false_claims]] on an architecture document.
+
+**Stated fairly.** ADR-006 is `Status: Proposed`, so an unimplemented section is not by itself a
+failure — and I am not calling this a compliance breach. What makes it a defect is partial
+implementation: the service shipped (V-163), its repo layer shipped (V-172), and the
+`audit_archive_runs` ledger table is in `schema.ts`. A reader sees built code, a live table, and a
+document saying it runs monthly. Nothing tells them no row has ever been archived or deleted.
+
+**Fixed.** §3 carries a not-implemented status block naming what exists, what does not, and that
+`session_events` grows unbounded because this dormant sweep is its only pruner. The cadence is now
+stated as designed rather than operating. The pin moves in the same commit with per-occurrence
+negatives. The repo comment that called the missing scheduler "not in this commit" — reading as
+pending when it is permanent — is corrected too.
+
+**Two mistakes of my own, both caught by the work.** My status block _quoted_ the placeholder string
+its own negative forbids: the ninth time the retraction-quotes-the-sentinel collision has bitten
+here, and the reason the rule says retractions paraphrase. Then my negative banned that placeholder
+document-wide and failed again — correctly, because §5's "Phase 1 lands as a follow-on" is still
+TRUE, no admin audit-export route exists. A blanket negative asserted something I had not verified.
+Narrowed to §3, and §7's genuinely stale ledger claim corrected separately: `audit_archive_runs`
+shipped, so "schema lands in a follow-on" was false in the other direction.
+
+**Instrument.** This came from generalising V-863: commit-relative language in durable files. 16
+occurrences across 14 files. Most are harmless retrospective description ("this slice adds the
+atlas layer") that remains true of the file. The defective shape is narrower — a statement
+asserting work is still _pending_ — and that is what surfaced this. The remaining candidates are
+recorded rather than swept, because the count was never the finding.
+
+Mutation-proved three ways, ADR restored byte-identical.
