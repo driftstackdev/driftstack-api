@@ -36132,3 +36132,33 @@ That reframes V-829's summary. The reusable output of this arc is not the one-di
 pattern, which V-830 showed does not generalise. It is this: **prefer the guard that recomputes,
 and when you cannot have one, say so out loud** — because 18 of my own 50 fixes are sitting on
 the weaker shape and only the log records which.
+
+## V-834 — six of the fourteen unchecked text-pinned claims, verified (2026-08-18)
+
+Working the backlog V-833 named rather than leaving it as an observation. Each of these rests
+on a single-source text pin, so the pin cannot contradict me; the only way to know they are
+true is to read the source again.
+
+- **V-795** — `account_owner` cross-account access is real. `resolveEffectiveAccount` returns
+  the team owner's id for a member's `X-Driftstack-Account` header. Holds.
+- **V-798** — the Postmark Q2 submission's signup-verification TTL. `AUTH_TOKEN_TTL_MS
+.signupVerification` is `30 * 60 * 1000`, so the original "~3h" was out by an order of
+  magnitude, and no MFA-enrollment template exists in the email service. Both halves hold.
+- **V-799** — crypto orders survive a deploy. `cryptoOrders = pgTable('crypto_orders', …)`;
+  the runbook's "a `Map` in process memory, dropped on every deploy" was false. Holds.
+- **V-804** — webhook writes gate on admin via `effectiveAccountIdForWrite`. Holds.
+- **V-810** — `_is_retry_safe(method, headers)` takes exactly those two parameters, so the
+  `retry` argument cannot opt a keyless mutation in and the `Idempotency-Key` header is the
+  real opt-in. Holds.
+- **V-812** — `recipes.ts` gates on `callerCanAccessAgentSession`, which returns true for the
+  owner or a team admin, so a team admin does get a 201. Holds.
+
+Six checked, six hold. With V-831's correction and the three team-RBAC checks already in
+V-833, that is **seven of the eighteen text-pinned entries verified against source, one of
+which was wrong**.
+
+**Eleven remain unchecked**: V-785, V-789, V-790, V-791, V-800, V-803, V-818, V-826, V-827,
+V-828, V-831. The last five were written in the past few hours with mutation proofs against
+current source, so the genuinely cold ones are the first six. Stated so the next person knows
+which end of the list to start from, and so nobody reads "the arc was audited" as "the arc was
+audited exhaustively".
