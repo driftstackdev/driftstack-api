@@ -136,10 +136,40 @@ describe('W762 docs /api/api-keys content parity', () => {
     expect(p).not.toMatch(/list sessions, recordings|recordings API/i);
   });
 
-  it("CRITICAL gui_control reserved-for-GUI framing pinned. The 'Reserved for the GUI Client; do not request manually' wording protects against customers requesting the GUI scope on application keys.", () => {
+  it('CRITICAL the gui_control row says who may ASK for it, and does not claim the platform withholds it. This pin used to require "Reserved for the GUI Client; do not request manually", and its own description said that wording "protects against customers requesting the GUI scope on application keys" — a docs sentence protects against nothing. V-788 had already corrected the same framing in reference/scopes.md and in the source: ELEVATED_SCOPES withholds only admin and driftstack_internal_admin, so any account_owner on an apiAccess tier can mint a key carrying gui_control. This page kept telling customers otherwise, and the pin kept it there.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Reserved for the GUI Client; do not request manually\./);
+    expect(p, 'the superseded reserved-for-GUI wording is back').not.toMatch(
+      /Reserved for the GUI Client/i,
+    );
+    expect(p, 'the row must say that asking is unrestricted').toMatch(
+      /nothing restricts who may ask/i,
+    );
+    // The OAuth fence is the one place it IS enforced, and saying so is the
+    // difference between "we stop you" and "you must stop yourself".
+    expect(p, 'the row must say the OAuth path does not grant it').toMatch(/OAuth/);
+  });
+
+  it('CRITICAL api-keys.md and reference/scopes.md agree about who may request gui_control. Two customer-facing pages describing the same scope diverged for months — one said it was reserved and must not be requested, the other said no check restricts who may ask. A customer who read the first one and believed it was reading a security boundary that does not exist.', () => {
+    const scopes = read(resolve(dirname(PAGE), '..', 'reference', 'scopes.md'));
+    const claimsReserved = (s: string): boolean =>
+      /Reserved for the GUI Client|do not request manually/i.test(s);
+    // scopes.md writes it as "no tier or deployment check restricts who may
+    // ask"; api-keys.md as "nothing restricts who may ask". Both are the same
+    // claim, and a window narrow enough to miss one of them would pass this
+    // arm while the pages still disagreed.
+    const claimsUnrestricted = (s: string): boolean =>
+      /\b(?:no|nothing)\b[^.]{0,60}restricts who may ask/i.test(s);
+    for (const [name, body] of [
+      ['api/api-keys.md', read(PAGE)],
+      ['reference/scopes.md', scopes],
+    ] as const) {
+      expect(claimsReserved(body), `${name} calls gui_control reserved — it is not`).toBe(false);
+      expect(
+        claimsUnrestricted(body),
+        `${name} must state that nothing restricts who may ask for gui_control`,
+      ).toBe(true);
+    }
   });
 
   it("CRITICAL driftstack_internal_admin staff-only framing pinned. The 'Internal Driftstack staff scope; never granted to customer accounts' wording is the customer-trust contract.", () => {

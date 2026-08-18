@@ -167,13 +167,13 @@ key instead.
 
 ## Scopes
 
-| Scope                       | Capability                                                                                        |
-| --------------------------- | ------------------------------------------------------------------------------------------------- |
-| `read`                      | Read-only access to list/get endpoints such as sessions, profiles, and usage.                     |
-| `write`                     | Mutations (create/destroy sessions, profiles, etc.). Does NOT include read — pair it with `read`. |
-| `account_owner`             | Self-service mutations (create/rotate/revoke API keys, billing portal redirect).                  |
-| `gui_control`               | Reserved for the GUI Client; do not request manually.                                             |
-| `driftstack_internal_admin` | Internal Driftstack staff scope; never granted to customer accounts.                              |
+| Scope                       | Capability                                                                                                                                                                                                                                                              |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`                      | Read-only access to list/get endpoints such as sessions, profiles, and usage.                                                                                                                                                                                           |
+| `write`                     | Mutations (create/destroy sessions, profiles, etc.). Does NOT include read — pair it with `read`.                                                                                                                                                                       |
+| `account_owner`             | Self-service mutations (create/rotate/revoke API keys, billing portal redirect).                                                                                                                                                                                        |
+| `gui_control`               | Manual-control plane for the desktop client. Never granted unless a mint request asks for it explicitly — but nothing restricts who may ask, so it is a scope you withhold from application keys, not one the platform withholds for you. Not obtainable through OAuth. |
+| `driftstack_internal_admin` | Internal Driftstack staff scope; never granted to customer accounts.                                                                                                                                                                                                    |
 
 There is no default scope set — `scopes` is required on create
 (at least one entry; omitting it is a `400`). Most application
