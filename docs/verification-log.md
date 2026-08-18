@@ -35476,3 +35476,33 @@ Mutation: `trim`'s template changed to interpolate a raw `${id}` → the invaria
 offending template. Restores byte-identical. Ratchet unchanged — "3 distinct path templates"
 never matched HAND_MAINTAINED_COUNT (a word sits between the numeral and the noun), so
 removing it moves no ceiling; the fix stands on its own merits rather than on the meta-guard.
+
+## V-819 — the DR completeness check expected half the control plane (2026-08-18)
+
+Action 8. `docs/internal/v542-backup-verification-checklist.md` step **B5** — the
+disaster-recovery check that the restored control plane came up whole — asked the operator to
+confirm the module count matched "32 modules per V-540.A audit" and that
+`/openapi.json` exposed "≥ ~80 paths".
+
+There are **60** route modules and **208** distinct `/v1` paths.
+
+**A floor is only a check when it sits near the ceiling.** This one sat at 38% of the real
+path count, so a restore that brought up a third of the control plane would clear it
+comfortably and get ticked off as complete — in the one procedure whose entire job is
+detecting an incomplete restore. The failure mode is not that the number is untidy; it is that
+the check cannot fail for the reason it exists.
+
+Rewritten to derive both sides and compare restored against production
+(`ls apps/server/src/routes/*.ts | wc -l` and `jq '.paths | keys | length'`), with today's
+figures recorded as a sanity anchor rather than as the pass condition. Two sentinels ban the
+retired figures.
+
+**The retraction collided with its own sentinel, for the seventh time this session.** I wrote
+the correction note quoting `"expect ≥ ~80 paths"`, and the sentinel banning that string
+matched my own note. The rule is stated in my per-batch discipline and I still broke it: the
+SENTINEL quotes, the RETRACTION paraphrases. Naming the rule has never been what catches this
+— running the pin immediately after the prose edit is. The second sentinel
+(`production: 32 modules`) survived only because my note happened to omit the two-word prefix,
+which is luck, not care.
+
+Mutation: both figures reinstated → the sentinels fire. Restores byte-identical.

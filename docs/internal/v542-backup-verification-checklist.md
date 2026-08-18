@@ -52,10 +52,24 @@ rev-parse HEAD` → stored at `/tmp/dr-rehearse-pre-head.txt`.
       reconnection loop.
 - [ ] **B4.** Control plane boots; `/health` returns 200 with the expected
       shape `{ "ok": true }`.
-- [ ] **B5.** Control plane registers every route (count matches
-      production: 32 modules per V-540.A audit). Manual check:
-      `curl /openapi.json | jq '.paths | keys | length'` → expect ≥ ~80
-      paths (each module declares 2-4 routes).
+- [ ] **B5.** Control plane registers every route. Do NOT eyeball this
+      against a remembered number — derive both sides:
+      `ls apps/server/src/routes/*.ts | wc -l` for the module count and
+      `curl /openapi.json | jq '.paths | keys | length'` for the paths,
+      and require the restored instance to MATCH the same two commands
+      run against production. At the time of writing that is 60 modules
+      and 208 paths.
+
+      V-819 — this step named a module count from the V-540.A audit and
+      a minimum path count, and both were roughly half of reality. A
+      disaster-recovery completeness check whose floor sits that far
+      below the truth cannot detect the thing it exists for: a restore
+      that brought up a third of the control plane would clear ~80 paths
+      comfortably and be ticked off as complete. A floor is only a check
+      when it is close to the ceiling, which is why this now compares
+      restored against production rather than against a number somebody
+      has to remember to update.
+
 - [ ] **B6.** Optional seed data applied if rehearsal mode = `seeded`.
 - [ ] **B7.** Rehearsal cleanup runs without orphaning containers /
       volumes.

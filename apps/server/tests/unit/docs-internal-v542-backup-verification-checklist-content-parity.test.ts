@@ -57,7 +57,7 @@ describe('W563.C /docs/internal/v542-backup-verification-checklist.md content pa
     expect(body).toMatch(/- \*\*Quarterly post-launch\*\* — production rehearsal cadence\./);
   });
 
-  it("A-E 5-phase rehearsal checklist framing pinned: '### A. Pre-rehearsal state' + '**A1.** Production HEAD recorded' + '/tmp/dr-rehearse-pre-head.txt' + '**A2.** Postgres production snapshot available within last 24h.' + 'Neon's automated daily snapshot' + '### B. Rehearsal execution' + '**B1.** `bash scripts/dr-rehearse.sh` runs end-to-end without' + '**B2.** Postgres container starts within 30s; Drizzle migrations' + '**B4.** Control plane boots; `/health` returns 200 with the expected' + '`{ \"ok\": true }`' + '**B5.** Control plane registers every route (count matches' + 'production: 32 modules per V-540.A audit).' + '`curl /openapi.json | jq '.paths | keys | length'` → expect ≥ ~80' + '### C. Restore-completeness verification' + '**C1.** Account count in restored DB matches production account' + '**C3.** R2 object count match — sample 10 random object keys' + '**C4.** Sub-processor configuration sanity — Postmark / Sentry /' + 'The rehearsal must NOT use production sub-processor' + '### D. Roll-forward decision' + '**D2.** Rehearsal duration recorded — full A→C path should' + 'complete in under 5 minutes. Above 10 min indicates infra drift' + '### E. Post-rehearsal cleanup' + '**E1.** Rehearsal containers + volumes destroyed.' + '**E3.** Checklist results logged with date + pass/fail per item' + 'docs/runbooks/incidents.md' + 'docs/runbooks/dr-rehearsal-history.md' — pinned so the A1-/tmp/dr-rehearse-pre-head.txt + A2-Neon-daily-snapshot + B1-end-to-end-no-non-zero + B2-30s-Postgres-start + B4-/health-200-{ok:true} + B5-32-modules-V-540.A-~80-paths + C1-account-count + C3-10-random-R2-keys + C4-no-prod-sub-proc-creds + D2-5min-10min-infra-drift + E3-incidents.md-dr-rehearsal-history.md commitment survives", () => {
+  it("A-E 5-phase rehearsal checklist framing pinned: '### A. Pre-rehearsal state' + '**A1.** Production HEAD recorded' + '/tmp/dr-rehearse-pre-head.txt' + '**A2.** Postgres production snapshot available within last 24h.' + 'Neon's automated daily snapshot' + '### B. Rehearsal execution' + '**B1.** `bash scripts/dr-rehearse.sh` runs end-to-end without' + '**B2.** Postgres container starts within 30s; Drizzle migrations' + '**B4.** Control plane boots; `/health` returns 200 with the expected' + '`{ \"ok\": true }`' + the B5 derive-and-compare instruction (V-819 replaced two remembered figures that were each about half of reality) + '### C. Restore-completeness verification' + '**C1.** Account count in restored DB matches production account' + '**C3.** R2 object count match — sample 10 random object keys' + '**C4.** Sub-processor configuration sanity — Postmark / Sentry /' + 'The rehearsal must NOT use production sub-processor' + '### D. Roll-forward decision' + '**D2.** Rehearsal duration recorded — full A→C path should' + 'complete in under 5 minutes. Above 10 min indicates infra drift' + '### E. Post-rehearsal cleanup' + '**E1.** Rehearsal containers + volumes destroyed.' + '**E3.** Checklist results logged with date + pass/fail per item' + 'docs/runbooks/incidents.md' + 'docs/runbooks/dr-rehearsal-history.md' — pinned so the A1-/tmp/dr-rehearse-pre-head.txt + A2-Neon-daily-snapshot + B1-end-to-end-no-non-zero + B2-30s-Postgres-start + B4-/health-200-{ok:true} + B5-derive-both-sides-and-match-production + C1-account-count + C3-10-random-R2-keys + C4-no-prod-sub-proc-creds + D2-5min-10min-infra-drift + E3-incidents.md-dr-rehearsal-history.md commitment survives", () => {
     expect(body).toMatch(/### A\. Pre-rehearsal state/);
     expect(body).toMatch(/\*\*A1\.\*\* Production HEAD recorded/);
     expect(body).toMatch(/\/tmp\/dr-rehearse-pre-head\.txt/);
@@ -70,9 +70,19 @@ describe('W563.C /docs/internal/v542-backup-verification-checklist.md content pa
       /\*\*B4\.\*\* Control plane boots; `\/health` returns 200 with the expected/,
     );
     expect(body).toMatch(/`\{ "ok": true \}`/);
-    expect(body).toMatch(/\*\*B5\.\*\* Control plane registers every route \(count matches/);
-    expect(body).toMatch(/production: 32 modules per V-540\.A audit\)\./);
-    expect(body).toMatch(/`curl \/openapi\.json \| jq '\.paths \| keys \| length'` → expect ≥ ~80/);
+    expect(body).toMatch(/\*\*B5\.\*\* Control plane registers every route\./);
+    expect(body).toMatch(
+      /Do NOT eyeball this\s*\n\s*against a remembered number — derive both sides:/,
+    );
+    expect(body).toMatch(
+      /require the restored instance to MATCH the same two commands\s*\n\s*run against production\./,
+    );
+
+    // V-819 SENTINELS — the retired figures must not return. Both were about
+    // half of reality, which is worse than absent: a DR completeness check
+    // whose floor sits that low passes a restore that came up a third built.
+    expect(body, 'the stale module count must not return').not.toMatch(/production: 32 modules/);
+    expect(body, 'the stale path floor must not return').not.toMatch(/expect ≥ ~80/);
     expect(body).toMatch(/### C\. Restore-completeness verification/);
     expect(body).toMatch(/\*\*C1\.\*\* Account count in restored DB matches production account/);
     expect(body).toMatch(/\*\*C3\.\*\* R2 object count match — sample 10 random object keys/);
