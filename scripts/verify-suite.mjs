@@ -29,18 +29,67 @@
 import { spawn, spawnSync } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 2869;
+export const EXPECTED_TEST_FILES = 2870;
 
 /**
- * Files the ROOT config collects — every project, which is what CI runs.
+ * Files the ROOT config collects — both vitest projects, which is what CI's
+ * `build-test` job runs.
  *
- * CI ran `npx vitest run --coverage` directly, so it inherited NONE of the
- * judgement below: vitest exits 0 on a run whose workers died, which is the
- * exact incident this file was written for. The count differs from the node
- * project's because the root config also collects the gui-client and app
- * projects. Raise when adding tests, same as the other pin.
+ * That job used to call `npx vitest run --coverage` directly, so it inherited
+ * NONE of the judgement below: vitest exits 0 on a run whose workers died, which
+ * is the exact incident this file was written for. The count differs from the
+ * node project's because the root config also collects the gui-client project.
+ * Raise when adding tests, same as the other pin.
+ *
+ * ⚠️ `--all` is ONE CI JOB, not CI. This comment used to say "every project,
+ * which is what CI runs", and that reading has been repeated in commit messages
+ * as "verified at the CI bar" — a claim about the whole pipeline made from a
+ * green that covers a fifth of it. CI has five jobs; this is `build-test`. The
+ * other four are enumerated in NOT_COVERED_BY_THIS_GATE and reported on every
+ * successful run, because a gate that does not name its own blind spot gets read
+ * as covering everything.
  */
-export const EXPECTED_TEST_FILES_ALL = 3032;
+export const EXPECTED_TEST_FILES_ALL = 3033;
+
+/**
+ * The CI jobs this gate does NOT run, with how to run each locally.
+ *
+ * Measured 2026-08-18, all green, none of it by this gate: 199 Playwright tests
+ * over 29 spec files, 362 Python tests, and the Go suite. Those 29 spec files
+ * are the ONLY tests that exercise `apps/server/src/db/**` against a real
+ * Postgres — the same directory the coverage config excludes on the grounds that
+ * it is "exercised by e2e". So the layer the coverage gate declines to measure is
+ * also the layer this gate never executes, and neither of them says so.
+ *
+ * Keyed by the job id in `.github/workflows/ci.yml`. A new job there must be
+ * added here or the ci-jobs census fails — the point being that "not run by this
+ * gate" and "not a test job" must never look the same from a green run.
+ */
+export const NOT_COVERED_BY_THIS_GATE = [
+  {
+    job: 'e2e',
+    what: '199 Playwright tests — the only ones hitting real Postgres + Redis',
+    local: 'DATABASE_URL=<disposable db> REDIS_URL=<unused index> node scripts/e2e-local.mjs',
+  },
+  {
+    job: 'python-sdk',
+    what: '362 pytest tests + ruff/mypy',
+    local: 'packages/sdk-python && ./.venv/bin/python -m pytest -q',
+  },
+  {
+    job: 'go-sdk',
+    what: 'go vet, go test, and the examples build',
+    local: 'packages/sdk-go && go vet ./... && go test ./...',
+  },
+  {
+    job: 'bench-regression',
+    what: 'perf regression check (advisory — does not gate a merge)',
+    local: 'npm run bench',
+  },
+];
+
+/** The CI job this gate IS. Named so the census can tell it apart from a gap. */
+export const THIS_GATE_IS_CI_JOB = 'build-test';
 
 /**
  * Judge a completed vitest run.
@@ -149,6 +198,16 @@ if (process.argv[1]?.endsWith('verify-suite.mjs') === true) {
           `verify-suite: NOTE — ${String(verdict.skippedFiles)} test file(s) were collected but ` +
             'never executed. Most gate on DATABASE_URL; set it to the local Postgres to run them.',
         );
+      }
+      // Printed on SUCCESS, deliberately. A blind spot mentioned only in a
+      // comment is one nobody reads at the moment it matters, which is the moment
+      // a green appears and gets called "the CI bar".
+      console.log(
+        `verify-suite: this is CI job "${THIS_GATE_IS_CI_JOB}" — ` +
+          `${String(NOT_COVERED_BY_THIS_GATE.length)} other CI job(s) are NOT run here:`,
+      );
+      for (const s of NOT_COVERED_BY_THIS_GATE) {
+        console.log(`  - ${s.job}: ${s.what}\n      ${s.local}`);
       }
       process.exit(0);
     }
