@@ -36906,3 +36906,31 @@ That is the fifth scan this arc that produced a large confident number and no fi
 numerics, this). Each was cheap and each is recorded. The pattern worth carrying is not that
 scanning fails — four other scans DID find defects — but that the first number a scan produces
 has never once been the answer.
+
+## V-854 — checking that this arc's guards actually run (2026-08-18)
+
+Eleven guard files were added over this arc. Every one of them passed when I invoked it
+directly, which proves it works and not that the suite runs it. A guard collected by nobody is
+the exact failure this arc kept finding one level down — V-793's assertions inside `beforeAll`
+that vitest silently dropped, V-813's guard checking one direction, V-825's reading only the
+compliant surface. Worth confirming rather than assuming about my own output.
+
+**My first check was worthless and I nearly believed it.** I grepped the last full-run log for
+each guard's filename and got zero for all eight. That is not evidence of anything: vitest's
+default reporter prints FAILING files only, so a green run mentions no passing file by name.
+Absence in that log is the expected result whether the guard ran or not — the sixth measurement
+artifact this arc, and the third where a zero looked like a finding.
+
+Two checks that do prove it:
+
+- **Verbose reporter.** Re-run with `--reporter=verbose` and every arm prints by name with its
+  own title. All four spot-checked files list every case.
+- **Population membership.** Replicating `countTestFiles()`'s own globs — the walk that
+  `scripts/tests/verify-suite.test.ts` pins with an exact-match assertion — gives 2891 files,
+  matching `EXPECTED_TEST_FILES`, and every one of the eleven guards is in that set. Since that
+  pin is an equality rather than a floor, a guard sitting outside the collected population would
+  make the count disagree, and it does not.
+
+So the arc's guards are collected, run, and counted. Nothing to fix — recorded because "I ran
+it myself and it passed" is the weakest possible evidence that a check is live, and I had been
+relying on it eleven times over.
