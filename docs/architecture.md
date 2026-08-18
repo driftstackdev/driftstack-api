@@ -200,6 +200,17 @@ Event kinds wired today (`LifecycleEvent` discriminated union):
 - `session.success.first` — V-304a. First successful session on the account. One-shot per account (column-based dedup).
 - `subscription.tier_changed` — V-202b. Emitted from `StripeWebhooksService.handleSubscriptionUpsert` / `handleSubscriptionDeleted`. Audit + email; short-circuits on no-op transitions.
 - `subscription.renewal_reminder` — V-327. Emitted from the Stripe `invoice.upcoming` webhook (~7 days before renewal). Email-only.
+- `billing.payment_succeeded` — emitted from the Stripe webhook on a successful
+  charge. Ledger-backed dedup on the event id, same discipline as
+  `subscription.renewal_reminder`.
+- `billing.payment_failed` — emitted on a failed charge. Deliberately absent from
+  `OptOutableEmailEventSchema`, so no `shouldSend` opt-out gate runs for it: a
+  customer cannot mute the notice that their payment did not go through. Same
+  ledger-backed dedup.
+
+V-805 — this list documented four kinds while six are wired; the two `billing.*`
+kinds were missing, including the one that is deliberately not opt-outable, which
+is the one a reader most needs to know about.
 
 (The two `trial_pack` lifecycle kinds were removed with the dead trial_pack lifecycle — no production path ever emitted them.)
 

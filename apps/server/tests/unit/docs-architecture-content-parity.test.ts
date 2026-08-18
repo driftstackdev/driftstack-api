@@ -228,4 +228,26 @@ describe('W548.A /docs/architecture.md content parity', () => {
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
+
+  it('CRITICAL the documented LifecycleEvent kinds are DERIVED from the union, not remembered. V-805 found the list documenting four kinds while six were wired — the two billing.* ones were absent, including billing.payment_failed, which is deliberately excluded from OptOutableEmailEventSchema so a customer cannot mute a failed-payment notice. That is precisely the kind a reader needs, and a hand-maintained list is the shape V-794 ratchets against.', () => {
+    const service = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/src/services/account-lifecycle.ts'),
+      'utf8',
+    );
+    const wired = new Set(
+      [...service.matchAll(/\bkind:\s*'([a-z]+\.[a-z_.]+)'/g)].map((m) => m[1]!),
+    );
+
+    // Vacuity: an empty union would make the subset check pass against nothing.
+    expect(wired.size, 'lifecycle kinds found in the union').toBeGreaterThanOrEqual(6);
+
+    const documented = new Set(
+      [...body.matchAll(/^- `([a-z]+\.[a-z_.]+)` — /gm)].map((m) => m[1]!),
+    );
+    const missing = [...wired].filter((k) => !documented.has(k)).sort();
+    expect(
+      missing,
+      'lifecycle kinds wired in account-lifecycle.ts but absent from the architecture doc:',
+    ).toEqual([]);
+  });
 });

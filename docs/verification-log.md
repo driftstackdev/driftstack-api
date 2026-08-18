@@ -34914,3 +34914,32 @@ Mutation-proved: reinstating the self-only sentence reds the sentinel. 39 pins o
 V-326e5 surface green; `it(` count unchanged at 16.
 
 Twelfth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-805 — the architecture doc listed four lifecycle event kinds; six are wired (2026-08-18)
+
+`docs/architecture.md` has a section headed "Event kinds wired today (`LifecycleEvent` discriminated
+union)". It listed four: `session.failed.first`, `session.success.first`,
+`subscription.tier_changed`, `subscription.renewal_reminder`.
+
+`services/account-lifecycle.ts` wires six. The two missing were `billing.payment_succeeded` and
+`billing.payment_failed`, and the second is the one that matters: its own comment records that it is
+**deliberately absent from `OptOutableEmailEventSchema`, so no `shouldSend` gate runs** — a customer
+cannot mute the notice that their payment did not go through. That is the single most consequential
+entry in the union and it was the one nobody had written down.
+
+Both are now documented, including the non-opt-outable property and the ledger-backed dedup they
+share with the renewal reminder.
+
+**The parity pin passed throughout**, because it froze the surrounding prose about the five-step
+dispatch and never the kind list. So I did what V-802 did instead of fixing the list by hand: a new
+case in the same pin file derives the union from `kind: '…'` occurrences in the service and asserts
+every wired kind appears in the doc, with a vacuity floor so an empty union cannot satisfy it. A
+hand-maintained inventory is the shape V-794 ratchets against; the answer is to stop maintaining it.
+
+No new test file — the case was appended to the existing architecture pin, so the count pins are
+untouched and `it(` went 8 → 9 by intent.
+
+Mutation-proved: deleting `billing.payment_failed` from the doc reds the derived case with that exact
+kind named. 31 pins over the architecture and lifecycle surface green.
+
+Tenth batch of the re-verified plan.
