@@ -14,18 +14,47 @@
 
 set -euo pipefail
 
+# Anchored to this script rather than $PWD so the build-age comparison below
+# reads the right history when invoked from cron, a systemd unit, or another
+# repo entirely.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Commits-behind-HEAD that --check tolerates. Overridable so an operator mid
+# release train can raise it deliberately instead of learning to ignore a red.
+MAX_BEHIND="${DEPLOY_MAX_BEHIND:-100}"
+
+# How far a running build is behind this checkout, as "<commits> <built-date>".
+# Either field is "?" when the sha is not an object this clone knows — a shallow
+# or stale clone must not silently report "0 behind", which is the one answer
+# that would be read as healthy.
+#
+# A function with two callers rather than inline code, so `--build-age` below
+# can drive exactly what the deploy snapshot runs instead of a copy of it.
+compute_build_age() {
+  local sha="$1" behind="?" built="?"
+  if [ "$sha" != "?" ] && [ -n "$sha" ] && git -C "$REPO_ROOT" cat-file -e "${sha}^{commit}" 2>/dev/null; then
+    behind=$(git -C "$REPO_ROOT" rev-list --count "${sha}..HEAD" 2>/dev/null || echo "?")
+    built=$(git -C "$REPO_ROOT" log -1 --format=%cs "$sha" 2>/dev/null || echo "?")
+  fi
+  printf '%s %s\n' "$behind" "$built"
+}
+
 JSON=0
 CHECK=0
 QUIET=0
 declare -a TARGETS=()
 while [ $# -gt 0 ]; do
   case "$1" in
+    # Print "<commits-behind> <built-date>" for a sha and exit. No network, no
+    # SSH — exists so the build-age assertion can be tested against the real
+    # implementation rather than a regex over this file.
+    --build-age) compute_build_age "${2:-?}"; exit 0 ;;
     --json)  JSON=1; shift ;;
     --check) CHECK=1; shift ;;
     --quiet) QUIET=1; shift ;;
     prod)    TARGETS+=("prod"); shift ;;
     staging) TARGETS+=("staging"); shift ;;
-    *)       echo "usage: $0 [--json] [--check] [--quiet] [staging|prod]" >&2; exit 2 ;;
+    *)       echo "usage: $0 [--json] [--check] [--quiet] [--build-age <sha>] [staging|prod]" >&2; exit 2 ;;
   esac
 done
 
@@ -60,6 +89,13 @@ for ENV in "${TARGETS[@]}"; do
   VERSION=$(curl -fsS "$PUBLIC_URL/version" 2>/dev/null || echo "{}")
   GIT_SHA=$(echo "$VERSION" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("git_sha","?"))' 2>/dev/null || echo "?")
   STARTED=$(echo "$VERSION" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("started_at","?"))' 2>/dev/null || echo "?")
+
+  # How far the RUNNING build is behind this checkout. The SHA was already
+  # printed and never judged, which is how prod ran a 34-day-old build for
+  # 982 commits without anyone noticing — a datum nobody reads is not a
+  # signal. Local git only; adds no network or SSH beyond the /version curl
+  # above.
+  read -r BEHIND BUILT <<<"$(compute_build_age "$GIT_SHA")"
 
   # Compute uptime in human-friendly format. Surfaces "did my restart
   # take?" (uptime < 30s after env-wire) + "is the process leaky?"
@@ -103,6 +139,7 @@ except Exception:
 
   if [ "$JSON" -eq 0 ] && [ "$QUIET" -eq 0 ]; then
     echo "  /version           : git_sha=$GIT_SHA uptime=$UPTIME (since $STARTED)"
+    echo "  build age          : $BEHIND commits behind HEAD (built $BUILT)"
     echo "  .last-good-sha     : $LAST_GOOD"
     echo "  activation flags   : $FLAGS"
     echo "  migrations         : $MIGRATION_DRIFT"
@@ -112,6 +149,26 @@ except Exception:
   if [ "$CHECK" -eq 1 ] && [[ "$MIGRATION_DRIFT" == DRIFT* ]]; then
     echo "  [check] FAIL — $ENV migration drift: $MIGRATION_DRIFT" >&2
     CHECK_FAIL=1
+  fi
+
+  # --check assertion: the running build is not far behind this checkout.
+  #
+  # The threshold is a POLICY choice, not a measurement — a deploy that lands
+  # while someone is mid-review is legitimately a few commits behind. What is
+  # not legitimate is a month of merged fixes that never shipped, which is the
+  # state this assertion was written after finding.
+  #
+  # An UNKNOWN sha fails too. "I cannot tell you what is running" is not a
+  # green readiness check; if this is a shallow clone, `git fetch --unshallow`
+  # is the fix rather than a suppression.
+  if [ "$CHECK" -eq 1 ]; then
+    if [ "$BEHIND" = "?" ]; then
+      echo "  [check] FAIL — $ENV running sha $GIT_SHA is unknown to this checkout; cannot judge build age" >&2
+      CHECK_FAIL=1
+    elif [ "$BEHIND" -gt "$MAX_BEHIND" ]; then
+      echo "  [check] FAIL — $ENV is $BEHIND commits behind HEAD (built $BUILT, max $MAX_BEHIND)" >&2
+      CHECK_FAIL=1
+    fi
   fi
 
   # --check assertion: every monitored flag is "true". Catches a
@@ -137,7 +194,7 @@ print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))
 ')
     if [ "$FIRST" -eq 0 ]; then printf ','; fi
     FIRST=0
-    printf '{"env":"%s","host":"%s","git_sha":"%s","started_at":"%s","uptime":"%s","last_good_sha":"%s","migrations":"%s","recent_deploys":%s}' "$ENV" "$HOST" "$GIT_SHA" "$STARTED" "$UPTIME" "$LAST_GOOD" "$MIGRATION_DRIFT" "$HISTORY"
+    printf '{"env":"%s","host":"%s","git_sha":"%s","started_at":"%s","uptime":"%s","commits_behind_head":"%s","built_on":"%s","last_good_sha":"%s","migrations":"%s","recent_deploys":%s}' "$ENV" "$HOST" "$GIT_SHA" "$STARTED" "$UPTIME" "$BEHIND" "$BUILT" "$LAST_GOOD" "$MIGRATION_DRIFT" "$HISTORY"
   fi
 done
 
