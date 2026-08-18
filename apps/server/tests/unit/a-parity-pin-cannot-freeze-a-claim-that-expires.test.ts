@@ -68,6 +68,12 @@ const HAND_MAINTAINED_COUNT =
  * MEASURED 2026-08-17 with a CORRECT extractor. May only fall; raising either is
  * the bug this file is about.
  *
+ * Ratcheted 92 → 91 by V-819, which retired the DR checklist pin's frozen module
+ * count. That correction landed in its own commit WITHOUT re-running this file,
+ * and the tight arm below caught it in the next full suite — which is the arm
+ * working exactly as designed, and also a reminder that it only works if the
+ * suite gets run. Re-measure here after ANY pin edit that touches a numeral.
+ *
  * Ratcheted 93 → 92 by V-813, which retired the rate-limits pin's frozen bucket
  * count. That file carried the shape TWICE: a `toMatch` freezing the stale count
  * in the page's own comment, and a title naming how many buckets the free tier
@@ -88,7 +94,7 @@ const HAND_MAINTAINED_COUNT =
  * that were both broken — the comparison measured nothing and agreed with itself.
  * The fixture case below is what actually caught it.
  */
-const CEILINGS = { futureTense: 77, handMaintainedCount: 92 } as const;
+const CEILINGS = { futureTense: 77, handMaintainedCount: 91 } as const;
 
 function parityPinFiles(): string[] {
   return readdirSync(UNIT_DIR)
