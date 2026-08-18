@@ -36313,3 +36313,51 @@ patching nothing.
 
 Mutation: the not-wired claim restored → both sentinels fire. Restores byte-identical. `it(`
 counts unchanged at 17 and 15.
+
+## V-839 — a payment rail documented as returning 501; it returns nothing at all (2026-08-18)
+
+Second finding from the unpinned-source scan. `lib/config.ts`, on the NowPayments crypto rail:
+"When `apiKey` + `ipnSecret` are unset, the `/v1/billing/crypto/*` route stubs return **501 Not
+Implemented**; the code is wired but inactive until … the credentials [are SSH-written]."
+
+Wrong three ways, and the third is the one that matters.
+
+1. **There are no stubs.** `bootstrap.ts` constructs `cryptoOrdersService` only inside
+   `if (config.nowpayments?.ipnSecret !== undefined && …length > 0)`, and `lib/app.ts`
+   registers the crypto routes only `if (deps.cryptoOrdersService !== undefined)`. Unset
+   credentials mean the routes are never registered.
+2. **There is no 501.** `grep 'status: 501'` across `lib/errors.ts` returns nothing; the server
+   has no such class. An unregistered route is a bare 404.
+3. **The path glob is wrong** — `crypto/*` where every real path is `crypto-*`
+   (`crypto-checkout`, `crypto-orders`, `crypto-orders/:id/cancel`, …). The documented glob
+   matches none of them.
+
+**The interesting part is that the sibling rail implements exactly the posture this comment
+describes.** `registerBillingDisabledRoutes` exists so an unconfigured Stripe deployment
+answers a typed `FeatureUnavailable` 503 rather than a bare 404, and its own comment spells out
+why: the caller must get "the right error instead of a 401 (which would suggest they need to
+fix their token, not contact support about a server-side billing gap)". Crypto has no
+equivalent registrar. So an unconfigured deployment hands customers precisely the response the
+sibling subsystem was built to avoid — and the config comment reads as though that had been
+handled.
+
+I have not added the missing registrar. Doing so changes what a live deployment returns on a
+payment path, which is a product call, and the honest first step is that the comment now
+describes what actually happens.
+
+Frozen in two pins — `config-lib-cross-source-invariant` (header, title and three assertions)
+and `lib-config-content-parity` (one multi-line regex). Six assertion edits in total, each
+found by running the pin rather than by reading: the corrected prose re-wrapped, so assertions
+matching a phrase on one line stopped matching when it moved across a line break. That is the
+same mechanism that hid three pins from a literal grep in V-817, seen from the other side.
+
+Mutation: the 501-stub claim restored → the sentinel fires. Restores byte-identical. `it(`
+counts unchanged at 24 and 23.
+
+**Also checked and NOT findings**, recorded so they are not re-derived: `drivers/index.ts`
+saying the production WebKit driver "lands when Agent 1's WebKit Phase 2 closes" is accurate —
+`drivers/webkit.ts` is an 81-line stub whose every method throws `DriverNotIntegratedError`.
+`routes/account-me.ts`'s "Null = MFA not wired" is a conditional on an optional dependency, not
+a status claim. `drivers/playwright.ts` naming `'state'` among unwired capture kinds when the
+enum says `dom_snapshot` is a real slip, but that driver is dev/E2E-only by its own factory
+comment, so it is trivia rather than a finding.

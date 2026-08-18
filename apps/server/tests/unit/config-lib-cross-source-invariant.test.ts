@@ -38,9 +38,11 @@
 //   disabled)'.
 //
 //   V-487 nowpayments framing — 'When apiKey + ipnSecret are unset,
-//   the /v1/billing/crypto/* route stubs return 501 Not Implemented;
-//   the code is wired but inactive until the founder creates the
-//   NowPayments account and SSH-writes the credentials. This lets
+//   the /v1/billing/crypto-* routes are not registered at all (V-839:
+//   this line said they were stubs returning 501; there is no 501 in
+//   this server and an unregistered route is a bare 404);
+//   the code is wired but inactive until the account is created and
+//   the credentials are SSH-written. This lets
 //   launch-day flip the rail on without redeploying'.
 //
 //   V-113 slow-query log framing — 'Slow-query log threshold. When
@@ -185,15 +187,20 @@ describe('W966 config lib cross-source invariant', () => {
     expect(p).toMatch(/\.refine\(\(v\) => Buffer\.from\(v, 'base64'\)\.length === 32/);
   });
 
-  it("CRITICAL V-487 nowpayments framing — 'V-487 — NowPayments crypto-rail scaffold. Conditional, opt-in sub-processor (Estonia EEA-internal per the V-308a legal scaffolding). When apiKey + ipnSecret are unset, the /v1/billing/crypto/* route stubs return 501 Not Implemented; the code is wired but inactive until the founder creates the NowPayments account and SSH-writes the credentials. This lets launch-day flip the rail on without redeploying'. The opt-in + 501-when-unset design lets V-487 ship dark.", () => {
+  it('CRITICAL V-487 nowpayments framing — the opt-in sub-processor scaffold, the Estonia EEA-internal V-308a anchor, and the launch-day-flip-without-redeploy property. The opt-in design lets V-487 ship dark. V-839 corrected the mechanism this case quoted: unset credentials mean the routes are never registered, not that stubs answer 501.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/config.ts'));
     expect(p).toMatch(/V-487 — NowPayments crypto-rail scaffold\. Conditional, opt-in/);
     expect(p).toMatch(/sub-processor \(Estonia EEA-internal per the V-308a legal/);
-    expect(p).toMatch(/scaffolding\)\. When `apiKey` \+ `ipnSecret` are unset, the/);
-    expect(p).toMatch(/`\/v1\/billing\/crypto\/\*` route stubs return 501 Not Implemented;/);
-    expect(p).toMatch(/the code is wired but inactive until the founder creates the/);
-    expect(p).toMatch(/NowPayments account and SSH-writes the credentials\. This lets/);
-    expect(p).toMatch(/launch-day flip the rail on without redeploying\./);
+    expect(p).toMatch(/scaffolding\)\. When `ipnSecret` is unset, `cryptoOrdersService` is/);
+    expect(p).toMatch(
+      /`\/v1\/billing\/crypto-\*` routes are NOT\s*\n?\s*\*\s*REGISTERED and a request gets a bare 404\./,
+    );
+    // V-839 SENTINEL — no 501 exists in this server; the routes are absent,
+    // not stubbed, and the paths use a hyphen.
+    expect(p, 'there are no 501 crypto stubs').not.toMatch(/route stubs return 501/);
+    expect(p).toMatch(/inactive until the account is created and the credentials are/);
+    expect(p).toMatch(/SSH-written\. This lets launch-day flip the rail on without/);
+    expect(p).toMatch(/launch-day flip the rail on without\s*\n?\s*\*\s*redeploying\./);
   });
 
   // ─── V-531.B LiveKit SFU framing ─────────────────────────────

@@ -120,10 +120,10 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
 
   it('V-487 NowPayments scaffold: 501-stub until apiKey + ipnSecret set (launch-day flip)', () => {
     expect(body).toMatch(
-      /V-487 — NowPayments crypto-rail scaffold\. Conditional, opt-in\s*\n?\s*\*\s*sub-processor \(Estonia EEA-internal per the V-308a legal\s*\n?\s*\*\s*scaffolding\)\. When `apiKey` \+ `ipnSecret` are unset, the\s*\n?\s*\*\s*`\/v1\/billing\/crypto\/\*` route stubs return 501 Not Implemented/,
+      /V-487 — NowPayments crypto-rail scaffold\. Conditional, opt-in\s*\n?\s*\*\s*sub-processor \(Estonia EEA-internal per the V-308a legal\s*\n?\s*\*\s*scaffolding\)\. When `ipnSecret` is unset, `cryptoOrdersService` is\s*\n?\s*\*\s*never constructed/,
     );
     expect(body).toMatch(
-      /the code is wired but inactive until the founder creates the\s*\n?\s*\*\s*NowPayments account and SSH-writes the credentials\. This lets\s*\n?\s*\*\s*launch-day flip the rail on without redeploying/,
+      /inactive until the account is created and the credentials are\s*\n?\s*\*\s*SSH-written\. This lets launch-day flip the rail on without\s*\n?\s*\*\s*redeploying/,
     );
   });
 

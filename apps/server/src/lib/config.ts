@@ -345,11 +345,23 @@ const ConfigSchema = z.object({
   /**
    * V-487 — NowPayments crypto-rail scaffold. Conditional, opt-in
    * sub-processor (Estonia EEA-internal per the V-308a legal
-   * scaffolding). When `apiKey` + `ipnSecret` are unset, the
-   * `/v1/billing/crypto/*` route stubs return 501 Not Implemented;
-   * the code is wired but inactive until the founder creates the
-   * NowPayments account and SSH-writes the credentials. This lets
-   * launch-day flip the rail on without redeploying.
+   * scaffolding). When `ipnSecret` is unset, `cryptoOrdersService` is
+   * never constructed, so the `/v1/billing/crypto-*` routes are NOT
+   * REGISTERED and a request gets a bare 404. The code is wired but
+   * inactive until the account is created and the credentials are
+   * SSH-written. This lets launch-day flip the rail on without
+   * redeploying.
+   *
+   * V-839 — this said the routes were stubs returning 501 Not
+   * Implemented. There is no 501 anywhere in this server, the routes
+   * are absent rather than stubbed, and the glob was `crypto/*` where
+   * the paths are `crypto-*`. Worth knowing rather than tidying: the
+   * sibling rail DOES have the posture this described —
+   * `registerBillingDisabledRoutes` serves a typed FeatureUnavailable
+   * 503, and its own comment explains that a bare 404/401 misleads the
+   * caller into thinking their token is wrong. Crypto has no
+   * equivalent, so an unconfigured deployment gives customers exactly
+   * the response that registrar exists to avoid.
    *
    * `apiKey` — issued in the NowPayments dashboard; gates outbound
    * calls to api.nowpayments.io.
