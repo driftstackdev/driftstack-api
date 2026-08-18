@@ -17,10 +17,12 @@
 //   * Status-page badge rendering (public) if a new status arrives
 //     that has no colour-map entry.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
+import { IncidentSeveritySchema, IncidentStatusSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -33,6 +35,59 @@ const INCIDENT_SEVERITIES = ['minor', 'major', 'outage'] as const;
 const INCIDENT_STATUSES = ['investigating', 'identified', 'monitoring', 'resolved'] as const;
 
 describe('W851 incident enum cross-source invariant', () => {
+  // ─── every status-site page carrying its own maps ────────────
+  //
+  // The per-page cases below name history.astro and index.astro. index.astro
+  // was ADDED later, and this file's own comment records why: "The existing
+  // checks above only covered history.astro, leaving index.astro's maps
+  // unguarded." That omission then recurred — incident.astro, the per-incident
+  // detail page a customer opens from a status update, carries a third copy of
+  // both maps and was covered by none of it.
+  //
+  // Listing the pages is what keeps failing, so this discovers them. A fourth
+  // page that copies the maps is covered the day it appears, and the values
+  // come from the schemas rather than the restated arrays above, so a fifth
+  // status cannot be added to the enum and missed here.
+  it('CRITICAL every status-site page with its own badge maps covers the full vocabulary', () => {
+    const pagesDir = resolve(REPO_ROOT, 'apps/status-site/src/pages');
+    const pages = readdirSync(pagesDir)
+      .filter((f) => f.endsWith('.astro'))
+      .map((f) => ({ file: f, src: read(resolve(pagesDir, f)) }))
+      .filter((p) => /const (STATUS|SEVERITY)_BADGE = \{/.test(p.src));
+
+    // Anti-vacuity: three pages carry these maps today. A discovery that found
+    // none would assert nothing, and this file exists because the population
+    // keeps growing without the checks following.
+    expect(
+      pages.map((p) => p.file).sort(),
+      'the set of status-site pages defining badge maps changed',
+    ).toEqual(['history.astro', 'incident.astro', 'index.astro']);
+
+    const gaps: string[] = [];
+    for (const { file, src } of pages) {
+      for (const [name, values] of [
+        ['STATUS_BADGE', IncidentStatusSchema.options],
+        ['SEVERITY_BADGE', IncidentSeveritySchema.options],
+      ] as const) {
+        const block = new RegExp(`const ${name} = \\{([\\s\\S]*?)\\n\\s*\\};`).exec(src);
+        if (block === null) {
+          gaps.push(`${file}: ${name} map not found`);
+          continue;
+        }
+        for (const v of values) {
+          if (!new RegExp(`\\n\\s*${v}:`).test(block[1] ?? '')) {
+            gaps.push(`${file}: ${name} has no entry for '${v}'`);
+          }
+        }
+      }
+    }
+    expect(
+      gaps,
+      'a status-site page renders incident badges from a map missing an enum value. During an ' +
+        'incident that page shows a blank badge for the state the customer came to read',
+    ).toEqual([]);
+  });
+
   // ─── api-types canonical source ──────────────────────────────
 
   it("CRITICAL packages/api-types/src/incidents.ts declares IncidentSeveritySchema = z.enum(['minor', 'major', 'outage']) — the canonical 3-value severity enum. Drift would cascade through every consumer.", () => {
