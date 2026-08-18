@@ -34943,3 +34943,33 @@ Mutation-proved: deleting `billing.payment_failed` from the doc reds the derived
 kind named. 31 pins over the architecture and lifecycle surface green.
 
 Tenth batch of the re-verified plan.
+
+## V-806 — architecture.md named two drivers where there are three, and metered on a dropped column (2026-08-18)
+
+Two independent false claims in the same file, one from the sweep and one found beside it.
+
+**"Two implementations: `mock` … and `webkit`."** There are three exported driver classes —
+`MockDriver`, `PlaywrightDriver`, `WebKitDriver` — and `drivers/index.ts` has a branch for each. The
+Playwright driver has been the third since V-333b, imported lazily so a production build does not pull
+in the devDependency. The same paragraph also said the factory "returns `mock` when `DRIVER=mock` …
+and `webkit` otherwise", which omits the middle branch entirely.
+
+**"hours metering only on the trial pack via `accounts.trial_pack_credit_cents` decrement."** That
+column was dropped by `migrations/0065_retire_trial_pack_free_tier.sql` and is absent from
+`schema.ts`. The doc described a meter that cannot run. This one was not in the report — I recognised
+the column name from V-798, where the same retirement made a Postmark row unsendable, and checked it
+while I was in the file.
+
+Both corrected, with the driver factory's three branches spelled out and metering stated as
+concurrent-only throughout.
+
+Worth noting what the earlier V-805 guard would and would not have caught: it derives the _lifecycle
+kind list_ from source, so it cannot see either of these. A count of drivers and a citation of a
+column are two more hand-maintained facts in the same document — the V-794 shape, and the reason the
+ratchet is a ratchet rather than a fix.
+
+Four occurrences moved: two prose passages, two pin regexes, plus both `it()` title fragments.
+Per-occurrence negatives ban the two-driver claim and any mention of the dropped column.
+Mutation-proved: reinstating either reds its sentinel. 31 pins green, `it(` count unchanged at 9.
+
+Eleventh batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.

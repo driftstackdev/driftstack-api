@@ -51,7 +51,7 @@ describe('W548.A /docs/architecture.md content parity', () => {
     expect(body).toMatch(/Prior baseline was Phase-1 minimal and significantly out of date\./);
   });
 
-  it("6-layer + Drivers + DB + Middleware + Lib + Schemas framing pinned: '## Layers' + '**Routes** (`apps/server/src/routes/`) — Fastify handlers, one file per resource.' + '**Services** (`apps/server/src/services/`) — Business logic + orchestration.' + '**Drivers** (`apps/server/src/drivers/`) — Abstraction over the WebKit substrate. Two implementations: `mock` (in-memory, deterministic, fast-forwardable latency) and `webkit` (real fork, scaffolded but not yet integrated — throws `DriverNotIntegratedError` until the fork hands off).' + '**DB layer** (`apps/server/src/db/`) — Drizzle ORM.' + '**Middleware** (`apps/server/src/middleware/`) — `request-id`, `auth` (API key extraction → AccountContext), `rate-limit` (Redis token bucket per account+bucket), `error-handler` (RFC 7807 problem+json formatter).' + '**Lib** (`apps/server/src/lib/`) — Cross-cutting utilities' + '**Schemas** (`apps/server/src/schemas/`) — Server-internal Zod shapes that aren't part of the public contract. Public-contract schemas live in `packages/api-types/`.' — pinned so the 6-layer separation + mock-vs-webkit-DriverNotIntegratedError + RFC-7807 problem+json + server-internal-vs-public-api-types commitment survives", () => {
+  it("6-layer + Drivers + DB + Middleware + Lib + Schemas framing pinned: '## Layers' + '**Routes** (`apps/server/src/routes/`) — Fastify handlers, one file per resource.' + '**Services** (`apps/server/src/services/`) — Business logic + orchestration.' + '**Drivers** — three implementations: mock, playwright (V-333b), webkit (V-806 corrected the count)' + '**DB layer** (`apps/server/src/db/`) — Drizzle ORM.' + '**Middleware** (`apps/server/src/middleware/`) — `request-id`, `auth` (API key extraction → AccountContext), `rate-limit` (Redis token bucket per account+bucket), `error-handler` (RFC 7807 problem+json formatter).' + '**Lib** (`apps/server/src/lib/`) — Cross-cutting utilities' + '**Schemas** (`apps/server/src/schemas/`) — Server-internal Zod shapes that aren't part of the public contract. Public-contract schemas live in `packages/api-types/`.' — pinned so the 6-layer separation + mock-vs-webkit-DriverNotIntegratedError + RFC-7807 problem+json + server-internal-vs-public-api-types commitment survives", () => {
     expect(body).toMatch(/## Layers/);
     expect(body).toMatch(
       /- \*\*Routes\*\* \(`apps\/server\/src\/routes\/`\) — Fastify handlers, one file per resource\./,
@@ -62,9 +62,14 @@ describe('W548.A /docs/architecture.md content parity', () => {
     expect(body).toMatch(
       /- \*\*Drivers\*\* \(`apps\/server\/src\/drivers\/`\) — Abstraction over the WebKit substrate\./,
     );
+    // V-806 — there are THREE drivers: mock, playwright (V-333b, lazily
+    // imported so prod builds skip the devDependency) and webkit. The factory
+    // has a branch for each; the doc claimed two and named only mock/webkit.
     expect(body).toMatch(
-      /Two implementations: `mock` \(in-memory, deterministic, fast-forwardable latency\) and `webkit`/,
+      /Three implementations: `mock` \(in-memory, deterministic, fast-forwardable latency\), `playwright`/,
     );
+    expect(body).toMatch(/dev and E2E only, imported lazily/);
+    expect(body, 'the two-driver claim must not return').not.toMatch(/Two implementations: `mock`/);
     expect(body).toMatch(
       /\(real fork, scaffolded but not yet integrated — throws `DriverNotIntegratedError` until the fork hands off\)\./,
     );
@@ -192,7 +197,7 @@ describe('W548.A /docs/architecture.md content parity', () => {
     expect(body).not.toMatch(/First registered handler: `trial_pack\.expired`/);
   });
 
-  it("Driver interface + ADR-004 tier model + D-NNN cross-reference framing pinned: '## Driver abstraction' + 'interface Driver {' + 'createSession(spec: SessionSpec): Promise<DriverSession>;' + 'navigate(sessionId: string, url: string, opts?: NavigateOpts)' + 'interact(sessionId: string, action: InteractionAction)' + 'capture(sessionId: string, kind: CaptureKind)' + 'destroy(sessionId: string): Promise<void>;' + '## Tier model (ADR-004)' + 'Two ladders (Manual + API), concurrent-only metering on paid tiers, hours metering only on the trial pack via `accounts.trial_pack_credit_cents` decrement.' + '`TIER_CONCURRENT_SESSION_LIMITS`, `PROFILES_PER_TIER`' + '**D-019 / ADR-004** — Two-ladder pricing + concurrent-only metering.' + '**D-027 / ADR-002** — Stripe-only payment rail at launch.' + '**ADR-003** — Paid trial pack ($2.99 / 14 days / $0.18-per-hour decrement) replaces a free tier.' + '**D-028** — Web sessions are opaque sha256-hashed tokens (not JWT).' + '**D-030** — Inbound Stripe webhook idempotency via `processed_stripe_events` PK.' + '**ADR-001** — Hetzner for control-plane hosting.' + 'Long-form ADRs live under `docs/adr/`. Short D-NNN entries with autonomy levels live in `docs/decisions.md`.' — pinned so the Driver-7-method-interface + ADR-004 two-ladder + ADR-002 Stripe-only + ADR-003 trial-pack-$2.99/14d/$0.18/h + D-028 opaque-sha256 + D-030 processed_stripe_events-PK + ADR-001 Hetzner + ADR-vs-D-NNN naming commitment survives", () => {
+  it("Driver interface + ADR-004 tier model + D-NNN cross-reference framing pinned: '## Driver abstraction' + 'interface Driver {' + 'createSession(spec: SessionSpec): Promise<DriverSession>;' + 'navigate(sessionId: string, url: string, opts?: NavigateOpts)' + 'interact(sessionId: string, action: InteractionAction)' + 'capture(sessionId: string, kind: CaptureKind)' + 'destroy(sessionId: string): Promise<void>;' + '## Tier model (ADR-004)' + 'Two ladders (Manual + API), concurrent-only metering throughout (V-806 retired the trial-pack credit-column meter, dropped by migration 0065).' + '`TIER_CONCURRENT_SESSION_LIMITS`, `PROFILES_PER_TIER`' + '**D-019 / ADR-004** — Two-ladder pricing + concurrent-only metering.' + '**D-027 / ADR-002** — Stripe-only payment rail at launch.' + '**ADR-003** — Paid trial pack ($2.99 / 14 days / $0.18-per-hour decrement) replaces a free tier.' + '**D-028** — Web sessions are opaque sha256-hashed tokens (not JWT).' + '**D-030** — Inbound Stripe webhook idempotency via `processed_stripe_events` PK.' + '**ADR-001** — Hetzner for control-plane hosting.' + 'Long-form ADRs live under `docs/adr/`. Short D-NNN entries with autonomy levels live in `docs/decisions.md`.' — pinned so the Driver-7-method-interface + ADR-004 two-ladder + ADR-002 Stripe-only + ADR-003 trial-pack-$2.99/14d/$0.18/h + D-028 opaque-sha256 + D-030 processed_stripe_events-PK + ADR-001 Hetzner + ADR-vs-D-NNN naming commitment survives", () => {
     expect(body).toMatch(/## Driver abstraction/);
     expect(body).toMatch(/interface Driver \{/);
     expect(body).toMatch(/createSession\(spec: SessionSpec\): Promise<DriverSession>;/);
@@ -202,9 +207,10 @@ describe('W548.A /docs/architecture.md content parity', () => {
     expect(body).toMatch(/destroy\(sessionId: string\): Promise<void>;/);
     expect(body).toMatch(/## Tier model \(ADR-004\)/);
     expect(body).toMatch(/Two ladders \(Manual \+ API\), concurrent-only metering on paid tiers,/);
-    expect(body).toMatch(
-      /hours metering only on the trial pack via `accounts\.trial_pack_credit_cents` decrement\./,
-    );
+    // V-806 — accounts.trial_pack_credit_cents was dropped by migration 0065
+    // and is absent from schema.ts, so this documented a meter that cannot run.
+    expect(body).toMatch(/concurrent-only metering throughout\./);
+    expect(body, 'the dropped-column meter must not return').not.toMatch(/trial_pack_credit_cents/);
     expect(body).toMatch(/`TIER_CONCURRENT_SESSION_LIMITS`, `PROFILES_PER_TIER`/);
     expect(body).toMatch(
       /\*\*D-019 \/ ADR-004\*\* — Two-ladder pricing \+ concurrent-only metering\./,

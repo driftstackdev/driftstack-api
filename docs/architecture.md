@@ -77,7 +77,7 @@
 
 - **Routes** (`apps/server/src/routes/`) — Fastify handlers, one file per resource. Pure HTTP I/O: parse + validate via Zod from `@driftstack/api-types`, call service, format response. Public id format `<prefix>_<uuid>` (`acc_`, `key_`, `ses_`, `prof_`) is parsed/emitted at this boundary; service + DB use raw UUIDs.
 - **Services** (`apps/server/src/services/`) — Business logic + orchestration. Repo-driven: each service depends on a `Repo` interface so tests substitute in-memory implementations and production wires Drizzle. No Fastify / no HTTP imports.
-- **Drivers** (`apps/server/src/drivers/`) — Abstraction over the WebKit substrate. Two implementations: `mock` (in-memory, deterministic, fast-forwardable latency) and `webkit` (real fork, scaffolded but not yet integrated — throws `DriverNotIntegratedError` until the fork hands off).
+- **Drivers** (`apps/server/src/drivers/`) — Abstraction over the WebKit substrate. Three implementations: `mock` (in-memory, deterministic, fast-forwardable latency), `playwright` (V-333b, dev and E2E only, imported lazily so production builds do not pull in the devDependency), and `webkit` (real fork, scaffolded but not yet integrated — throws `DriverNotIntegratedError` until the fork hands off).
 - **DB layer** (`apps/server/src/db/`) — Drizzle ORM. `schema.ts` is the single TS source of truth; SQL migrations under `migrations/` apply via Drizzle's journal-driven migrator. In-memory test repos in `tests/integration/_helpers/` shadow the Drizzle implementations one-for-one.
 - **Middleware** (`apps/server/src/middleware/`) — `request-id`, `auth` (API key extraction → AccountContext), `rate-limit` (Redis token bucket per account+bucket), `error-handler` (RFC 7807 problem+json formatter).
 - **Lib** (`apps/server/src/lib/`) — Cross-cutting utilities: `config`, `logger` (Pino), `errors` (ApiError taxonomy), `api-keys` (scrypt + base32), `auth-tokens` (V-079 tokens + password hashing), `stripe-signing` (V-080 HMAC verification, no SDK dep), `stripe-api` (V-088 hand-rolled Stripe HTTP client), `webhook-signing` (outbound signature emission), `r2`, `sentry`, `redis-rate-limit-store` / `memory-rate-limit-store`.
@@ -242,11 +242,11 @@ interface Driver {
 }
 ```
 
-`apps/server/src/drivers/index.ts` factory returns `mock` when `DRIVER=mock` (default in dev / staging / pre-fork-integration production) and `webkit` otherwise. The `webkit` implementation throws `DriverNotIntegratedError` until the WebKit fork's Phase 2 closes. Driver-interface changes are coordinated explicitly with the WebKit fork (separate repo, see AGENTS.md WebKit driver boundary section).
+`apps/server/src/drivers/index.ts` factory returns `mock` when `DRIVER=mock` (default in dev / staging / pre-fork-integration production), `playwright` when `DRIVER=playwright`, and `webkit` otherwise. V-806 — this said there were two implementations and that the factory chose between mock and webkit; the Playwright driver has been the third branch since V-333b. The `webkit` implementation throws `DriverNotIntegratedError` until the WebKit fork's Phase 2 closes. Driver-interface changes are coordinated explicitly with the WebKit fork (separate repo, see AGENTS.md WebKit driver boundary section).
 
 ## Tier model (ADR-004)
 
-Two ladders (Manual + API), concurrent-only metering on paid tiers, hours metering only on the trial pack via `accounts.trial_pack_credit_cents` decrement. See `packages/api-types/src/common.ts` for the locked tier list + per-tier limits and `apps/server/src/services/sessions.ts` for the enforcement constants (`TIER_CONCURRENT_SESSION_LIMITS`, `PROFILES_PER_TIER`).
+Two ladders (Manual + API), concurrent-only metering on paid tiers, concurrent-only metering throughout. V-806 — this used to add that hours were metered on the trial pack by decrementing an `accounts` credit column; that column was dropped by `migrations/0065_retire_trial_pack_free_tier.sql` and is absent from `schema.ts`, so the sentence described a meter that no longer exists. See `packages/api-types/src/common.ts` for the locked tier list + per-tier limits and `apps/server/src/services/sessions.ts` for the enforcement constants (`TIER_CONCURRENT_SESSION_LIMITS`, `PROFILES_PER_TIER`).
 
 ## Decisions (cross-reference)
 
