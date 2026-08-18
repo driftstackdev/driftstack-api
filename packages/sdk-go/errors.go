@@ -160,7 +160,9 @@ type ConcurrencyLimitError struct {
 func (e *ConcurrencyLimitError) Is(target error) bool { return target == ErrConcurrencyLimit }
 
 // QuotaExceededError — 429 because a per-period usage quota is
-// exhausted. Current/Limit/RecordType describe which quota.
+// exhausted. Current/Limit/RecordType describe which quota. RecordType
+// carries the resource whose cap was reached ("profile" today); the server
+// spells that field `resource` on the wire (V-815).
 type QuotaExceededError struct {
 	apiError
 	Current    int

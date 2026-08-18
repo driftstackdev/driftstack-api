@@ -151,7 +151,7 @@ describe('W817 cross-SDK error class hierarchy parity', () => {
     // Construction-time read from problem-json extensions.
     expect(block).toMatch(/this\.current = ext\.current/);
     expect(block).toMatch(/this\.limit = ext\.limit/);
-    expect(block).toMatch(/this\.recordType = ext\.record_type/);
+    expect(block).toMatch(/this\.recordType = ext\.resource \?\? ext\.record_type/);
   });
 
   // ─── Go errors.As / errors.Is helpers ─────────────────────────

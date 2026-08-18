@@ -119,7 +119,7 @@ describe('W797 cross-SDK error-handling examples parity', () => {
   it('CRITICAL Python typed-payload accessors pinned — current_sessions / limit on ConcurrencyLimitError + record_type / current / limit on QuotaExceededError + message on ValidationError + retry_after_seconds on RateLimitError. Field names use snake_case per Python convention; drift to camelCase would break consumers.', () => {
     const p = read(PY);
     expect(p).toMatch(/\(\{e\.current_sessions\}\/\{e\.limit\}\)/);
-    expect(p).toMatch(/\{e\.record_type\} exhausted \(\{e\.current\}\/\{e\.limit\}\)/);
+    expect(p).toMatch(/\{e\.record_type\} quota exhausted \(\{e\.current\}\/\{e\.limit\}\)/);
     expect(p).toMatch(/\{e\.message\}/);
     expect(p).toMatch(/e\.retry_after_seconds/);
   });

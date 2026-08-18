@@ -35357,3 +35357,66 @@ Ratchet: EXPECTED_TEST_FILES 2883 → 2884, \_ALL 3046 → 3047 (one file, mine)
 expose `record_type` / `recordType` / `RecordType` for that problem type. The server has
 never sent `record_type` — it exists only as a DB column and in a hand-written Go SDK test
 fixture. Next entry.
+
+## V-815 — all three SDKs read a problem-body key the server has never sent (2026-08-18)
+
+Found while verifying V-814, not in the sweep report.
+
+Every SDK exposes a capped-resource accessor on the tier-limit error — TS `err.recordType`,
+Python `e.record_type`, Go `qe.RecordType` — and every one read it from
+`problem["record_type"]`. **No server throw site has ever sent that key.** All twelve
+`new TierLimitError(...)` sites send `{ current, limit, resource, tier }`, and `resource`
+is the one carrying `"profile"`. `record_type` exists in this repo as a `usage_records`
+COLUMN name and in a hand-written Go SDK test fixture — which is exactly why the Go SDK's
+own tests passed: the fixture supplies the key production does not.
+
+So the accessor was empty on every tier-limit error the API can produce, in all three
+languages, and it was empty in customer-facing copy: `packages/sdk-python/examples/
+error_handling.py` printed `monthly quota for {e.record_type} exhausted`, and
+`apps/docs/src/pages/sdk/error-handling.md` shows the same shape in two languages. A
+content-parity pin froze the field name under the title "Drift to a different field name
+would break SDK consumer error-handling logic" — true, and blind to the fact that the name
+had never matched the wire. Both sides agreed with each other. Neither matched the producer.
+
+**Verified both directions before touching anything.** Exactly one problem type maps to the
+quota class in each SDK (`tier-limit`), so there is no second producer for which the key
+might have been right; and `record_type` appears nowhere in `apps/server/src` outside the DB
+layer.
+
+Fixed by reading `resource` first and keeping `record_type` as a declared fallback. **The
+public field names do not change** — `record_type` ships in 0.1.x of all three SDKs, and
+renaming a published accessor over a spelling breaks consumers for no functional gain. The
+Python example's wording was wrong for a second reason and is corrected too: the only
+producer of this error is a profile COUNT cap, which no month resets.
+
+New guard `an-sdk-may-not-read-a-key-the-server-never-sends.test.ts` reads the wire keys off
+the server's throw sites and compares each SDK's builder against them. A content pin cannot
+do this — it compares an SDK against its own text, so a reader that invents a key stays
+invisible however many pins are added. Four arms: the wire shape is asserted exactly; every
+SDK must read `resource`; no SDK may read a key the server does not send unless it is a
+declared legacy fallback; and any fallback the server STARTS sending must come off the list,
+so the allowlist cannot outlive its reason.
+
+One note on the extractor, because I got it wrong twice in V-814 and wrote the fix into this
+one: a key-matching regex must use a LOOKAHEAD for its delimiter. Consuming the comma makes
+alternating keys in a shorthand object literal vanish, and the resulting undercount looks
+exactly like a real finding.
+
+Mutations: TS reverted to reading `record_type` only → the `resource` arm names typescript;
+Go pointed at an invented `used_count` → the unknown-key arm names it; the server made to
+send `record_type` → both the wire-shape arm and the stale-allowlist arm fire. Restores
+byte-identical.
+
+**A FIFTH pin was missed by my own enumeration, and the full run found it.**
+`sdk-error-handling-examples-cross-sdk-parity.test.ts` froze the Python example's accessor
+line too. It WAS in my grep output — and I lost it to a `head -30` on the enumeration. That is
+the same defect as a missed grep with a more embarrassing cause: truncating the list you are
+using to decide completeness makes the truncation invisible, because what you see looks like a
+complete answer. Enumerations do not get piped through `head`.
+
+Ratchet: \_ALL 3047 → 3049 across two commits; EXPECTED_TEST_FILES left at 2885. A peer's
+commit landed between V-814 and this one and raised BOTH pins for a `.test.tsx` file — but
+`countTestFiles()` globs `.test.ts` only, so their node-project bump was one ahead of the
+population and my file is what made it correct. My scripted bump asserted the old value and
+refused rather than double-counting, which is the only reason this was noticed; raising it
+blind would have put the exact-match arm one over instead of one under.

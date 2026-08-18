@@ -41,7 +41,11 @@ def main() -> int:
             print(f"hit the concurrent-session ceiling ({e.current_sessions}/{e.limit})")
             return 3
         except QuotaExceededError as e:
-            print(f"monthly quota for {e.record_type} exhausted ({e.current}/{e.limit})")
+            # V-815 — `record_type` carries the capped resource ("profile").
+            # It read empty until the SDK was pointed at the key the server
+            # actually sends, and "monthly" was wrong besides: the only producer
+            # of this error is a profile COUNT cap, which no month resets.
+            print(f"{e.record_type} quota exhausted ({e.current}/{e.limit})")
             return 4
         except ValidationError as e:
             print(f"request was malformed: {e.message}")

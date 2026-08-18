@@ -66,7 +66,7 @@ describe('W585.C packages/sdk-python/src/driftstack/http.py content parity', () 
     );
   });
 
-  it('_error_from_response_data: routes via PROBLEM_TYPE_TO_ERROR + decodes per-subclass fields (retry_after_seconds from header or problem.retry_after_seconds; timeout_ms; pending_acceptances list with document_key+current_version filter; current_sessions; current/limit/record_type)', () => {
+  it('_error_from_response_data: routes via PROBLEM_TYPE_TO_ERROR + decodes per-subclass fields (retry_after_seconds from header or problem.retry_after_seconds; timeout_ms; pending_acceptances list with document_key+current_version filter; current_sessions; current/limit/record_type — V-815 changed the source key for the last of these from record_type, which the server never sent, to resource, which it always has)', () => {
     expect(body).toMatch(/^def _error_from_response_data\(/m);
     expect(body).toMatch(/Falls back to :class:`TransportError` when the body isn't a proper/);
     expect(body).toMatch(/problem document — that surfaces as a server contract violation,/);
@@ -76,7 +76,7 @@ describe('W585.C packages/sdk-python/src/driftstack/http.py content parity', () 
       /if error_cls is RateLimitError:\s*\n\s*return RateLimitError\(\s*\n\s*detail,\s*\n\s*retry_after_seconds=retry_after_seconds,/,
     );
     expect(body).toMatch(
-      /if error_cls is QuotaExceededError:\s*\n\s*return QuotaExceededError\(\s*\n\s*detail,\s*\n\s*current=_int_or_none\(problem\.get\("current"\)\),\s*\n\s*limit=_int_or_none\(problem\.get\("limit"\)\),\s*\n\s*record_type=str\(problem\["record_type"\]\) if problem\.get\("record_type"\) else None,/,
+      /if error_cls is QuotaExceededError:\s*\n\s*return QuotaExceededError\(\s*\n\s*detail,\s*\n\s*current=_int_or_none\(problem\.get\("current"\)\),\s*\n\s*limit=_int_or_none\(problem\.get\("limit"\)\),/,
     );
     expect(body).toMatch(
       /if error_cls is ConcurrencyLimitError:\s*\n\s*return ConcurrencyLimitError\(\s*\n\s*detail,\s*\n\s*current_sessions=_int_or_none\(problem\.get\("current_sessions"\)\),/,

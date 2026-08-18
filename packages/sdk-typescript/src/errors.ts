@@ -194,6 +194,10 @@ export class TierLimitError extends DriftstackError {
    * the bucket state so the SDK consumer can render a precise "you've
    * used X of Y" message without a follow-up GET.
    *
+   * `recordType` carries the RESOURCE whose cap was reached — "profile"
+   * for every producer today. The server calls this field `resource`; the
+   * accessor keeps its published name (see V-815 below).
+   *
    * Cross-SDK parity: Python exposes `err.current` + `err.limit` +
    * `err.record_type` on QuotaExceededError; Go exposes `err.Current`
    * + `err.Limit` + `err.RecordType` on QuotaExceededError. TS keeps
@@ -207,10 +211,23 @@ export class TierLimitError extends DriftstackError {
   constructor(p: Problem) {
     super(toOpts('tier_limit', p));
     this.name = 'TierLimitError';
-    const ext = p as { current?: number; limit?: number; record_type?: string };
+    // V-815 — the server sends `resource` on the tier-limit problem
+    // (`{ current, limit, resource, tier }`). `record_type` has NEVER been on
+    // the wire: it exists as a `usage_records` column name and in a
+    // hand-written Go SDK test fixture, and reading it here left
+    // `err.recordType` undefined on every tier-limit error the API can
+    // produce. The old key stays as a fallback so a future producer that does
+    // send it still works; the PROPERTY keeps its name because it ships in
+    // 0.1.x and renaming it would break consumers for a spelling.
+    const ext = p as {
+      current?: number;
+      limit?: number;
+      resource?: string;
+      record_type?: string;
+    };
     this.current = ext.current;
     this.limit = ext.limit;
-    this.recordType = ext.record_type;
+    this.recordType = ext.resource ?? ext.record_type;
   }
 }
 

@@ -99,7 +99,11 @@ describe('W594.A packages/sdk-go/error_mapping.go content parity', () => {
     expect(body).toMatch(/return &ConcurrencyLimitError\{/);
     expect(body).toMatch(/CurrentSessions: intFromProblem\(problem, "current_sessions"\),/);
     expect(body).toMatch(/Limit:\s+intFromProblem\(problem, "limit"\),/);
-    expect(body).toMatch(/rt, _ := problem\["record_type"\]\.\(string\)/);
+    expect(body).toMatch(/rt, _ := problem\["resource"\]\.\(string\)/);
+    // V-815 — the retired key stays readable as a fallback, never as the primary.
+    expect(body, 'the wire key the server actually sends must be read FIRST').toMatch(
+      /problem\["resource"\]\.\(string\)\s*\n\s*if rt == "" \{\s*\n\s*rt, _ = problem\["record_type"\]/,
+    );
     expect(body).toMatch(/RecordType: rt,/);
     expect(body).toMatch(/TimeoutMs: intFromProblem\(problem, "timeout_ms"\),/);
     expect(body).toMatch(

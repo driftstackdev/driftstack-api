@@ -206,7 +206,13 @@ func buildConcurrencyLimit(base apiError, problem map[string]any, _ string) erro
 }
 
 func buildQuotaExceeded(base apiError, problem map[string]any, _ string) error {
-	rt, _ := problem["record_type"].(string)
+	// V-815 — the server sends `resource` on the tier-limit problem;
+	// `record_type` was never on the wire, so RecordType was always "".
+	// The old key stays as a fallback; the FIELD keeps its published name.
+	rt, _ := problem["resource"].(string)
+	if rt == "" {
+		rt, _ = problem["record_type"].(string)
+	}
 	return &QuotaExceededError{
 		apiError:   base,
 		Current:    intFromProblem(problem, "current"),

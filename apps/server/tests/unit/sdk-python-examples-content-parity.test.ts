@@ -70,9 +70,7 @@ describe('W620 sdk-python/examples content parity', () => {
       /hit the concurrent-session ceiling \(\{e\.current_sessions\}\/\{e\.limit\}\)/,
     );
     expect(body).toMatch(/except QuotaExceededError as e:/);
-    expect(body).toMatch(
-      /monthly quota for \{e\.record_type\} exhausted \(\{e\.current\}\/\{e\.limit\}\)/,
-    );
+    expect(body).toMatch(/\{e\.record_type\} quota exhausted \(\{e\.current\}\/\{e\.limit\}\)/);
     expect(body).toMatch(/except ValidationError as e:/);
     expect(body).toMatch(/except DriftstackError as e:/);
     expect(body).toMatch(/for attempt in range\(5\):/);
