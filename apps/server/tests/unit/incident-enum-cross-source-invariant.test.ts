@@ -48,43 +48,71 @@ describe('W851 incident enum cross-source invariant', () => {
   // page that copies the maps is covered the day it appears, and the values
   // come from the schemas rather than the restated arrays above, so a fifth
   // status cannot be added to the enum and missed here.
-  it('CRITICAL every status-site page with its own badge maps covers the full vocabulary', () => {
-    const pagesDir = resolve(REPO_ROOT, 'apps/status-site/src/pages');
-    const pages = readdirSync(pagesDir)
-      .filter((f) => f.endsWith('.astro'))
-      .map((f) => ({ file: f, src: read(resolve(pagesDir, f)) }))
-      .filter((p) => /const (STATUS|SEVERITY)_BADGE = \{/.test(p.src));
-
-    // Anti-vacuity: three pages carry these maps today. A discovery that found
-    // none would assert nothing, and this file exists because the population
-    // keeps growing without the checks following.
-    expect(
-      pages.map((p) => p.file).sort(),
-      'the set of status-site pages defining badge maps changed',
-    ).toEqual(['history.astro', 'incident.astro', 'index.astro']);
-
-    const gaps: string[] = [];
-    for (const { file, src } of pages) {
-      for (const [name, values] of [
-        ['STATUS_BADGE', IncidentStatusSchema.options],
-        ['SEVERITY_BADGE', IncidentSeveritySchema.options],
-      ] as const) {
-        const block = new RegExp(`const ${name} = \\{([\\s\\S]*?)\\n\\s*\\};`).exec(src);
-        if (block === null) {
-          gaps.push(`${file}: ${name} map not found`);
-          continue;
-        }
-        for (const v of values) {
-          if (!new RegExp(`\\n\\s*${v}:`).test(block[1] ?? '')) {
-            gaps.push(`${file}: ${name} has no entry for '${v}'`);
+  it('CRITICAL every page with its own incident badge maps covers the full vocabulary', () => {
+    // Scoped to the INCIDENT vocabularies by matching the keys, not the map
+    // NAME: admin-panel also has STATUS_BADGE maps keyed on AccountStatus
+    // (accounts.astro) and SessionStatus (sessions.astro), which are different
+    // vocabularies that must not be judged against these.
+    const APP_ROOTS = [
+      'apps/status-site/src',
+      'apps/admin-panel/src',
+      'apps/customer-dashboard/src',
+    ];
+    const found: { file: string; map: string; keys: Set<string>; vocab: readonly string[] }[] = [];
+    const walkFiles = (dir: string, out: string[] = []): string[] => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const full = resolve(dir, e.name);
+        if (e.isDirectory()) walkFiles(full, out);
+        else if (/\.(astro|ts|tsx)$/.test(e.name)) out.push(full);
+      }
+      return out;
+    };
+    for (const root of APP_ROOTS) {
+      for (const file of walkFiles(resolve(REPO_ROOT, root))) {
+        const src = read(file);
+        for (const m of src.matchAll(
+          /const (STATUS_BADGE|SEVERITY_BADGE) = \{([\s\S]*?)\n\s*\};/g,
+        )) {
+          const keys = new Set(
+            [...(m[2] ?? '').matchAll(/^\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?\s*:/gm)].map(
+              (k) => k[1] ?? '',
+            ),
+          );
+          const vocab =
+            m[1] === 'STATUS_BADGE' ? IncidentStatusSchema.options : IncidentSeveritySchema.options;
+          // Only judge maps that are plainly this vocabulary's.
+          if ([...keys].every((k) => (vocab as readonly string[]).includes(k))) {
+            found.push({ file: file.slice(REPO_ROOT.length + 1), map: m[1] ?? '', keys, vocab });
           }
         }
       }
     }
+
+    // Anti-vacuity, and the record of how far this spread. Three status-site
+    // pages plus two admin-panel ones each keep their own copies — the previous
+    // version of this case scanned status-site only, so the two the STAFF use
+    // while handling the incident were unguarded.
+    expect(
+      [...new Set(found.map((f) => f.file))].sort(),
+      'the set of files carrying incident badge maps changed',
+    ).toEqual([
+      'apps/admin-panel/src/pages/incidents/index.astro',
+      'apps/admin-panel/src/pages/shells/incident-detail.astro',
+      'apps/status-site/src/pages/history.astro',
+      'apps/status-site/src/pages/incident.astro',
+      'apps/status-site/src/pages/index.astro',
+    ]);
+
+    const gaps = found
+      .flatMap(({ file, map, keys, vocab }) =>
+        vocab.filter((v) => !keys.has(v)).map((v) => `${file}: ${map} has no entry for '${v}'`),
+      )
+      .sort();
     expect(
       gaps,
-      'a status-site page renders incident badges from a map missing an enum value. During an ' +
-        'incident that page shows a blank badge for the state the customer came to read',
+      'a page renders incident badges from a map missing an enum value. Several of these lookups ' +
+        'have no fallback — SEVERITY_BADGE[inc.severity] straight into the class list — so a miss ' +
+        'renders undefined on the page someone opened to find out what is happening',
     ).toEqual([]);
   });
 
