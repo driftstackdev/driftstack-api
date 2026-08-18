@@ -207,12 +207,18 @@ load their own DSN at build time via Astro's `import.meta.env`.
 
 Wire `deploy-status --quiet --check` into cron for an out-of-band
 alert if a server restart loses an activation flag (rare but the
-exact class of regression the 4-flag check exists to catch):
+exact class of regression the 4-flag check exists to catch), or if
+the running build drifts far behind HEAD (not rare — prod sat 982
+commits behind for a month before anyone noticed, because nothing
+judged the SHA the snapshot had been printing all along):
 
 ```cron
-# Every 5 minutes, exit non-zero if any of sentry/email/livekit/
-# oauthClient is :false on either prod or staging. Pipe to your
-# alert channel of choice.
+# Every 5 minutes, exit non-zero on any of the 4 --check refusals:
+# an activation flag off, migration drift, the running build more
+# than DEPLOY_MAX_BEHIND commits behind HEAD, or a running SHA this
+# checkout cannot resolve. Pipe to your alert channel of choice.
+# NOTE: this is a RECOMMENDATION, not a wiring — nothing in the repo
+# invokes --check on a schedule today.
 */5 * * * * cd /opt/driftstack-api && bash scripts/deploy-status.sh --quiet --check || curl -s -X POST $SLACK_WEBHOOK -d '{"text":"deploy-status --check FAILED"}'
 ```
 

@@ -135,6 +135,45 @@ describe('deploy-bridge runbook content parity', () => {
     expect(docHasPostCondition).toBe(codeHasPostCondition);
   });
 
+  it('runbook states how many refusals --check can emit, derived from the script. Written after adding a third and fourth condition to --check and leaving the runbook describing two — the drift was invisible because the existing arms pin the FLAG LIST, which that change did not touch.', () => {
+    // Count the distinct `[check] FAIL` emissions rather than the assertion
+    // blocks: one block can refuse for more than one reason (the build-age block
+    // refuses separately for "unknown sha" and "too far behind"), and it is the
+    // reasons an operator has to recognise, not the ifs.
+    const refusals = (status.match(/\[check\] FAIL/g) ?? []).length;
+    expect(refusals, 'the --check refusals vanished from deploy-status.sh').toBeGreaterThanOrEqual(
+      4,
+    );
+
+    // EVERY occurrence, not the first. The runbook states the number twice — the
+    // TL;DR line and the prose below it — and a first-match regex passed happily
+    // while the second said something else, which is the same one-of-N hole the
+    // guard is meant to close.
+    const claimed = [...runbook.matchAll(/(\d+)\s*\n?\s*--check refusals/g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(
+      claimed.length,
+      'the runbook no longer states how many refusals --check emits',
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      claimed.filter((n) => n !== refusals),
+      `deploy-status.sh emits ${String(refusals)} --check refusals; the runbook claims ${JSON.stringify(claimed)}`,
+    ).toEqual([]);
+  });
+
+  it('runbook names the build-age refusals specifically, including the override. A count alone would let a condition be swapped for another without notice, and the threshold being overridable is the part an operator mid release train needs to find.', () => {
+    expect(status, 'the build-age threshold stopped being overridable').toMatch(
+      /DEPLOY_MAX_BEHIND:-\d+/,
+    );
+    expect(runbook, 'the runbook does not name the build-age override').toContain(
+      'DEPLOY_MAX_BEHIND',
+    );
+    expect(runbook, 'the runbook does not describe the unknown-sha refusal').toMatch(
+      /unknown to this checkout/,
+    );
+  });
+
   it('runbook names the canonical activation flags monitored by --check', () => {
     // deploy-status.sh --check iterates over these four flags. If a
     // flag is added/removed there, the runbook list must follow.

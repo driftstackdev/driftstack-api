@@ -8,23 +8,37 @@ toolchain that bridges the docker-compose-vs-systemd mismatch (see
 
 ```sh
 bash scripts/deploy-status.sh                # read-only snapshot of both servers
-bash scripts/deploy-status.sh --check        # exit non-zero if activation flag off OR migration drift
+bash scripts/deploy-status.sh --check        # exit non-zero on any of its 4 --check refusals
 bash scripts/deploy-bridge.sh staging        # deploy origin/main to staging
 bash scripts/revert-bridge.sh --dry-run prod # preview revert target + recent history
 bash scripts/revert-bridge.sh --to-sha <sha> prod  # operator override: revert to an explicit SHA
 ```
 
 `deploy-status.sh` is read-only and always safe. `--check` is the
-shape to wire into cron / monitoring (`|| alert`). It enforces two
-invariants: every activation flag (`sentry`/`email`/`livekit`/
-`oauthClient`) is `true` AND the on-disk `_journal.json` entry count
-matches `drizzle.__drizzle_migrations` row count (catches the drizzle
-silent-skip class — see "Migration drift" below).
+shape to wire into cron / monitoring (`|| alert`). It emits **4
+--check refusals**:
+
+1. an activation flag (`sentry`/`email`/`livekit`/`oauthClient`) is
+   not `true` on some target;
+2. the on-disk `_journal.json` entry count does not match the
+   `drizzle.__drizzle_migrations` row count (catches the drizzle
+   silent-skip class — see "Migration drift" below);
+3. the running build is more than `DEPLOY_MAX_BEHIND` commits behind
+   this checkout (default 100, overridable so a release train can
+   raise it deliberately rather than train operators to ignore a red);
+4. the running SHA is unknown to this checkout, so build age cannot be
+   judged at all — a shallow clone answering "0 commits behind" would
+   be the healthiest-looking output in the file while knowing nothing.
+
+Refusals 3 and 4 exist because the snapshot printed the running SHA
+for months without judging it, and production sat 982 commits behind
+HEAD unnoticed until a customer incident surfaced it.
 
 `--json` is supported on both `deploy-status.sh` and
 `scripts/post-deploy-verify.mjs` for structured tooling output. The
 `deploy-status.sh --json` row includes `"migrations":"N/N OK"` or
-`"DRIFT expected=N actual=M"`.
+`"DRIFT expected=N actual=M"`, plus `"commits_behind_head"` and
+`"built_on"` (both `"?"` when the running SHA is unknown here).
 
 ## When to use
 
