@@ -35051,3 +35051,23 @@ the stub-only framing and the 8.13d promise. Mutation-proved: reinstating either
 pins over the executor and pair-mode-sweep surface green; `it(` counts unchanged (13 and 11).
 
 Thirteenth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-808a — the ratchet forced its own ceiling down, which is the whole point (2026-08-18)
+
+V-808 retired the future-tense promises in `services-agent-executor-content-parity` and
+`services-agent-pair-mode-heartbeat-sweep-content-parity`. Both files left the offender set, the count
+fell 79 → 78, and V-794's fourth arm — `expect(offenders(FUTURE_TENSE).length).toBe(CEILINGS.futureTense)`
+— went red.
+
+That arm exists for exactly this. A ceiling written as `toBeLessThanOrEqual` alone would have silently
+absorbed the improvement and left one slot of slack for the next stale promise to occupy unnoticed.
+Requiring equality means retiring an offender is not optional bookkeeping: the suite refuses to be
+green until the ceiling records the new floor.
+
+Ceiling lowered to 78, with the provenance in the constant's doc comment so the next person can see
+which change bought the slot and does not read the number as arbitrary. `handMaintainedCount` stays at
+93 — neither retired claim matched that shape.
+
+Two down from the measured 89 at the start of the arc. This should have ridden along in V-808 itself;
+the ratchet caught the omission one command later, which is the correct failure mode for a guard whose
+job is to notice.

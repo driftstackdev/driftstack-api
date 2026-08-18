@@ -59,12 +59,17 @@ const HAND_MAINTAINED_COUNT =
  * MEASURED 2026-08-17 with a CORRECT extractor. May only fall; raising either is
  * the bug this file is about.
  *
+ * Ratcheted 79 → 78 by V-808, which retired the future-tense promises in the
+ * agent-executor and pair-mode-heartbeat-sweep headers. Both of those files left
+ * the offender set, and the tight arm below is what forced this line to move in
+ * the same breath rather than leaving slack behind.
+ *
  * The first values here were 89 / 94, taken with the `.not.toMatch` lookbehind
  * broken. I then "verified" the fix made no difference by comparing two variants
  * that were both broken — the comparison measured nothing and agreed with itself.
  * The fixture case below is what actually caught it.
  */
-const CEILINGS = { futureTense: 79, handMaintainedCount: 93 } as const;
+const CEILINGS = { futureTense: 78, handMaintainedCount: 93 } as const;
 
 function parityPinFiles(): string[] {
   return readdirSync(UNIT_DIR)
