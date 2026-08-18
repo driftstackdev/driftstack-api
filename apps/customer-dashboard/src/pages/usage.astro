@@ -464,10 +464,19 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
         if (chartLegend && buckets.length > 1) {
           chartLegend.classList.remove('hidden');
           chartLegend.classList.add('flex');
+          // Bucket dates are `^\d{4}-\d{2}-\d{2}$` server-side, so escaping
+          // changes nothing today. It is here because the markup guard cannot
+          // see these: the value reaches the page through a local, and the
+          // guard's declaration map is not scope-aware enough to resolve one
+          // safely. Found by measurement, not by the guard.
           const first = buckets[0] && buckets[0].date;
           const last = buckets[buckets.length - 1] && buckets[buckets.length - 1].date;
           chartLegend.innerHTML =
-            '<span>' + (first || '—') + '</span><span>' + (last || '—') + '</span>';
+            '<span>' +
+            escapeHtml(first || '—') +
+            '</span><span>' +
+            escapeHtml(last || '—') +
+            '</span>';
         } else if (chartLegend) {
           chartLegend.classList.add('hidden');
           chartLegend.classList.remove('flex');

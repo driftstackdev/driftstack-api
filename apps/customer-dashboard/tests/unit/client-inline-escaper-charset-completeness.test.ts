@@ -19,6 +19,27 @@
 // that produces `&amp;`) across both client apps and asserts it also
 // produces the other four entities. A future incomplete copy fails the
 // pre-push gate instead of shipping silently.
+//
+// 2026-08-17 — status-site was missing, and it is the PUBLIC one. It
+// hand-duplicates the same escaper three times (index / history /
+// incident), all complete, and none was covered here. It is the app
+// where an incomplete copy would be reachable without signing in, so it
+// is the last root that should have been left out. Added, with a
+// per-root assertion below: a global count floor cannot notice a root
+// being dropped, because the remaining ~24 still clear it.
+//
+// The other two surfaces were checked and deliberately NOT added:
+//
+//   gui-client     React, which escapes by default. Its one innerHTML
+//                  (the fatal-error overlay in main.tsx) uses a complete
+//                  5-char escaper. Adding the root would also scan zero
+//                  files — both candidates are `.tsx` and the walk takes
+//                  `.astro`/`.ts` — so it would report coverage it does
+//                  not have, which is worse than the honest gap.
+//   marketing-site its one escaper is `escapeXml` in the sub-processor
+//                  RSS feed, which emits `&apos;` — the XML name for the
+//                  same character. Requiring `&#39;` there would be
+//                  wrong, not stricter.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,9 +50,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
 const CLIENT_SRC_DIRS = [
-  resolve(REPO_ROOT, 'apps/customer-dashboard/src'),
-  resolve(REPO_ROOT, 'apps/admin-panel/src'),
-];
+  'apps/customer-dashboard/src',
+  'apps/admin-panel/src',
+  'apps/status-site/src',
+].map((d) => resolve(REPO_ROOT, d));
 
 // The five HTML-special characters and their canonical entity encodings.
 // A complete escaper for both text AND attribute contexts must cover all
@@ -74,10 +96,28 @@ describe('client inline-escaper charset completeness (XSS drift guard)', () => {
     definesHtmlEscaper(readFileSync(f, 'utf8')),
   );
 
-  it('finds the inline HTML escapers across both client apps (glob sanity)', () => {
-    // The 2026-06-03 sweep counted ~26. A floor of 20 catches a broken
-    // glob / mass-refactor without being brittle to small page churn.
+  it('finds the inline HTML escapers across every covered app (glob sanity)', () => {
+    // The 2026-06-03 sweep counted ~26; status-site adds 3.
     expect(escaperFiles.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it('CRITICAL the covered set is exactly the apps that hand-roll an escaper. Asserting only that each LISTED root contributes is vacuous the moment a root is deleted — the check iterates the list, so an empty list passes it, and a mutation removing status-site survived that arm. The set itself has to be the assertion.', () => {
+    expect([...CLIENT_SRC_DIRS].map((d) => rel(d)).sort(), 'covered app roots').toEqual([
+      'apps/admin-panel/src',
+      'apps/customer-dashboard/src',
+      'apps/status-site/src',
+    ]);
+  });
+
+  it('CRITICAL every covered app root actually contributes escapers. The count floor above cannot notice a root going missing — status-site has 3 copies against ~24 elsewhere, so dropping it leaves the floor comfortably cleared and the public site silently unscanned. That is exactly how it came to be absent for two months.', () => {
+    const empty = CLIENT_SRC_DIRS.filter(
+      (dir) => !escaperFiles.some((f) => f.startsWith(`${dir}/`)),
+    ).map((d) => rel(d));
+    expect(
+      empty,
+      'a root in CLIENT_SRC_DIRS matched no escaper. Either it moved, or it never had one and is ' +
+        'contributing nothing but the appearance of coverage:',
+    ).toEqual([]);
   });
 
   it('every inline HTML escaper covers the complete & < > " \' charset', () => {
