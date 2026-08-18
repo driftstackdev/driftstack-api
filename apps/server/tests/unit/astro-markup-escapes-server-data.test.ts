@@ -179,6 +179,66 @@ const PARAMETERS_WRITTEN_RAW = [
   'apps/customer-dashboard/src/pages/team.astro: emptyState(iconPath)',
 ];
 
+/**
+ * Every argument a page passes at `fn`'s `param` position, described by node
+ * kind. The roster above rests on "all its call sites pass a page-local
+ * literal", and that sentence was hand-verified once and then trusted — the
+ * same shape of claim that turned out wrong twice in other rosters this week.
+ * It is checkable, so it is checked.
+ */
+function argumentsAtParameter(rel: string, fn: string, param: string): ts.Node[] {
+  const src = readFileSync(resolve(REPO, rel), 'utf8');
+  const out: ts.Node[] = [];
+  for (const body of scriptBodies(src)) {
+    const sf = ts.createSourceFile('page.ts', body, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    let index = -1;
+    const findDecl = (n: ts.Node): void => {
+      const fnNode: LocalFunction | undefined =
+        ts.isFunctionDeclaration(n) && n.name?.text === fn
+          ? n
+          : ts.isVariableDeclaration(n) &&
+              ts.isIdentifier(n.name) &&
+              n.name.text === fn &&
+              n.initializer &&
+              (ts.isArrowFunction(n.initializer) || ts.isFunctionExpression(n.initializer))
+            ? n.initializer
+            : undefined;
+      if (fnNode) {
+        fnNode.parameters.forEach((p, i) => {
+          if (ts.isIdentifier(p.name) && p.name.text === param) index = i;
+        });
+      }
+      ts.forEachChild(n, findDecl);
+    };
+    findDecl(sf);
+    if (index < 0) continue;
+    const findCalls = (n: ts.Node): void => {
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === fn) {
+        const a = n.arguments[index];
+        if (a) out.push(a);
+      }
+      ts.forEachChild(n, findCalls);
+    };
+    findCalls(sf);
+  }
+  return out;
+}
+
+/** A literal, or a `?:` / `||` whose every branch is one. */
+function isLiteralThroughout(n: ts.Node): boolean {
+  if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) return true;
+  if (ts.isParenthesizedExpression(n)) return isLiteralThroughout(n.expression);
+  if (ts.isConditionalExpression(n))
+    return isLiteralThroughout(n.whenTrue) && isLiteralThroughout(n.whenFalse);
+  if (
+    ts.isBinaryExpression(n) &&
+    (n.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+      n.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+  )
+    return isLiteralThroughout(n.left) && isLiteralThroughout(n.right);
+  return false;
+}
+
 function astroFiles(): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
@@ -645,6 +705,57 @@ describe('server data reaching browser-parsed markup is escaped', () => {
         'customer-supplied data, escape it in the helper — the call sites are the wrong place, ' +
         'because the next caller will not know:',
     ).toEqual(PARAMETERS_WRITTEN_RAW);
+  });
+
+  it('CRITICAL the roster\'s own safety argument holds: every call site of a raw-parameter helper passes a literal. The entries above are exempt because "all its call sites pass page-local literals" — a sentence I verified by reading once. Two rosters elsewhere this week had a hand-written reason that the code contradicted, so this one is derived. A future call site handing one of these helpers a customer value is a live XSS with an exemption already written for it.', () => {
+    const offenders: string[] = [];
+    for (const entry of PARAMETERS_WRITTEN_RAW) {
+      const m = /^(.+): (\w+)\((\w+)\)$/.exec(entry);
+      expect(m, `unparseable roster entry: ${entry}`).not.toBeNull();
+      const [, rel, fn, param] = m!;
+      const args = argumentsAtParameter(rel ?? '', fn ?? '', param ?? '');
+      if (args.length === 0) {
+        offenders.push(`${entry} — no call sites found; the exemption describes nothing`);
+        continue;
+      }
+      for (const a of args) {
+        if (!isLiteralThroughout(a)) offenders.push(`${entry} ← ${a.getText().slice(0, 70)}`);
+      }
+    }
+    expect(
+      offenders.sort(),
+      'a helper that writes this parameter straight into markup is called with something other ' +
+        'than a literal. Escape it inside the helper — the call sites are the wrong place, ' +
+        'because the next caller will not know:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL isLiteralThroughout actually rejects a data branch. The arm above is only as good as this predicate, and the corpus cannot prove it: every conditional a roster helper is called with today has literal branches on BOTH sides, so a predicate that waved conditionals through unconditionally passed the whole suite. Exercised directly, because the mutation that broke it survived otherwise.', () => {
+    const parse = (expr: string): ts.Node => {
+      const sf = ts.createSourceFile(
+        'x.ts',
+        `const v = ${expr};`,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TS,
+      );
+      const decl = sf.statements[0] as ts.VariableStatement;
+      return decl.declarationList.declarations[0]!.initializer!;
+    };
+    expect(isLiteralThroughout(parse("'a plain literal'")), 'a literal is literal').toBe(true);
+    expect(
+      isLiteralThroughout(parse("cond ? 'one' : 'two'")),
+      'a conditional with two literal branches is literal throughout',
+    ).toBe(true);
+    expect(
+      isLiteralThroughout(parse("cond ? err.message : 'two'")),
+      'a conditional with a DATA branch is not',
+    ).toBe(false);
+    expect(
+      isLiteralThroughout(parse("data.name || 'fallback'")),
+      'a `||` whose left side is data is not',
+    ).toBe(false);
+    expect(isLiteralThroughout(parse('data.name')), 'a bare data access is not').toBe(false);
   });
 
   it('CRITICAL no server-supplied value is written into markup unescaped. The status page is unauthenticated and its incident feed is operator-authored; the dashboard renders customer-authored key names into HTML attributes. Deleting either escape today fails nothing.', () => {
