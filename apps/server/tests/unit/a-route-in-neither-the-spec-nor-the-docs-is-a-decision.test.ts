@@ -83,12 +83,15 @@ const UNDOCUMENTED_ROUTES = new Map<string, string>([
   ['GET /v1/auth/oauth-client/callback', 'm2m — the redirect target a browser lands on'],
   ['GET /v1/internal/atlas-priority/event/:p', 'm2m — internal capture orchestration'],
   ['GET /v1/internal/atlas-priority/queue', 'm2m — internal capture orchestration'],
-  ['GET /v1/mac-nodes', 'm2m — fleet registration, node-authenticated'],
-  ['POST /v1/agent-sessions/:p/transport-report', 'm2m — box to control plane telemetry'],
+  ['GET /v1/mac-nodes', 'staff — driftstack_internal_admin, like every /v1/admin surface'],
+  [
+    'POST /v1/agent-sessions/:p/transport-report',
+    'CUSTOMER — I called this box-to-control-plane telemetry when this roster landed and that was wrong: its preHandler is controlKeyOrAccountAuth, which falls through to requireAuth + read:sessions, so an ordinary customer key reaches it',
+  ],
   ['POST /v1/internal/atlas-priority/event-status', 'm2m — internal capture orchestration'],
   ['POST /v1/internal/atlas-priority/probe-signature', 'm2m — internal capture orchestration'],
-  ['POST /v1/mac-nodes', 'm2m — fleet registration, node-authenticated'],
-  ['POST /v1/mac-nodes/:p/control', 'm2m — fleet control, node-authenticated'],
+  ['POST /v1/mac-nodes', 'staff — driftstack_internal_admin'],
+  ['POST /v1/mac-nodes/:p/control', 'staff — driftstack_internal_admin, not a node credential'],
   [
     'POST /v1/sessions/:p/gui-input',
     'CUSTOMER — the only endpoint the gui_control scope reaches, and nothing restricts who may request that scope',
@@ -148,6 +151,56 @@ function inDocs(): Set<string> {
   return out;
 }
 
+/**
+ * The auth an endpoint's REGISTRATION names, strongest wins.
+ *
+ * `staff` is `driftstack_internal_admin`; `internal` is the shared-secret
+ * preHandler the atlas-priority routes use; `customer` is anything that reaches
+ * `requireAuth` or a non-staff scope — including `controlKeyOrAccountAuth`,
+ * which falls THROUGH to `requireAuth` + `read:sessions` when no control key is
+ * presented. That fall-through is what made a hand label wrong: the helper reads
+ * as a machine credential and is a customer path with one.
+ *
+ * `none` covers the probes and the two provider webhook receivers, which
+ * authenticate by signature inside the handler rather than at registration.
+ */
+function authClass(win: string): 'staff' | 'internal' | 'customer' | 'none' {
+  if (/requireScope\('driftstack_internal_admin'\)/.test(win)) return 'staff';
+  if (/requireInternalAuth/.test(win)) return 'internal';
+  if (
+    /requireScope\('(?!driftstack_internal_admin)[a-z_:]+'\)|app\.requireAuth\b|controlKeyOrAccountAuth|requireAuthEventSource/.test(
+      win,
+    )
+  )
+    return 'customer';
+  return 'none';
+}
+
+/** Undocumented routes an ordinary customer credential reaches. */
+function customerReachable(): string[] {
+  const out = new Set<string>();
+  const undocumented = new Set(writtenDownNowhere());
+  const files = [
+    ...readdirSync(resolve(SERVER, 'routes'))
+      .filter((f) => f.endsWith('.ts'))
+      .map((f) => resolve(SERVER, 'routes', f)),
+    resolve(SERVER, 'lib', 'app.ts'),
+  ];
+  for (const file of files) {
+    const src = codeLines(file);
+    for (const m of src.matchAll(
+      /\bapp\.(get|post|put|patch|delete)(?:<[^>]*>)?\(\s*[\r\n]?\s*'([^']+)'/g,
+    )) {
+      const ep = `${(m[1] ?? '').toUpperCase()} ${norm(m[2] ?? '')}`;
+      if (!undocumented.has(ep)) continue;
+      // A route can be registered twice — the real one and a disabled `reject`
+      // stub. Strongest classification wins, so the stub cannot mask it.
+      if (authClass(src.slice(m.index ?? 0, (m.index ?? 0) + 700)) === 'customer') out.add(ep);
+    }
+  }
+  return [...out].sort();
+}
+
 const writtenDownNowhere = (): string[] => {
   const spec = inSpec();
   const docs = inDocs();
@@ -175,15 +228,18 @@ describe('a route in neither the spec nor the docs is a decision, not an oversig
     expect(stale, 'recorded route(s) that are now in the spec or the docs:').toEqual([]);
   });
 
-  it('CRITICAL the customer-reachable set is still exactly these two. Fifteen infrastructure and machine-to-machine entries are the boring part of this roster; these two are the ones a paying customer can call and cannot look up. A third arriving is the signal, and it would otherwise be one more line among seventeen.', () => {
-    const customerFacing = [...UNDOCUMENTED_ROUTES.entries()]
+  it('CRITICAL the CUSTOMER label is DERIVED from the auth the registration names, not asserted by hand. It was asserted by hand for one day and one of the labels was wrong: POST /v1/agent-sessions/{id}/transport-report was recorded as box-to-control-plane telemetry, and its preHandler is controlKeyOrAccountAuth, which falls through to requireAuth + read:sessions. An ordinary customer key reaches it. A hand-written classification in a roster about undocumented surfaces is the same failure as an undocumented surface: a claim nobody checked.', () => {
+    const derived = customerReachable();
+    const claimed = [...UNDOCUMENTED_ROUTES.entries()]
       .filter(([, why]) => why.startsWith('CUSTOMER'))
       .map(([ep]) => ep)
       .sort();
-    expect(customerFacing, 'undocumented routes an ordinary customer key reaches:').toEqual([
+    expect(derived, 'undocumented routes whose registration names a customer auth path:').toEqual([
       'GET /v1/agent-sessions/:p/gui-control-key',
+      'POST /v1/agent-sessions/:p/transport-report',
       'POST /v1/sessions/:p/gui-input',
     ]);
+    expect(claimed, 'the recorded reasons must agree with what the code does').toEqual(derived);
   });
 
   it('CRITICAL gui_control still reaches exactly one endpoint, and it is the one recorded above. The roster entry claims that scope has a single undocumented endpoint; if a second appears, the entry stops being the whole truth and the customer-facing gap doubles without this file noticing.', () => {
