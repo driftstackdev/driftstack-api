@@ -122,7 +122,10 @@ describe('W558.C /docs/architecture/team-roles-taxonomy.md content parity', () =
     // V-822 — the correction must carry the mechanism, not just the verdict:
     // writes on another account need admin, reads do not.
     expect(body).toMatch(/\*\*Writes on another account require the `admin` role\*\*/);
-    expect(body).toMatch(/\*\*reads are role-agnostic\*\*/);
+    expect(body).toMatch(/\*\*Reads are role-agnostic with one exception\*\*/);
+    // V-831 — the exception is the point: GET /v1/agent-sessions requires
+    // admin. V-822 asserted the flat rule, generalised from account-audit.ts.
+    expect(body).toMatch(/`GET \/v1\/agent-sessions`\s*\n?>?\s*requires `admin` on the team/);
     // SENTINEL — the retired split. Thirteen route modules resolve team
     // membership; an engineer reading the old sentence writes a scope check,
     // skips the role check, and ships a hole.

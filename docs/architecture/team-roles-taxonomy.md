@@ -144,9 +144,14 @@ layer. They overlap in some places + diverge in others.
 > What actually happens: a request carrying `X-Driftstack-Account` is
 > resolved by `resolveEffectiveAccount()` against the caller's
 > memberships. **Writes on another account require the `admin` role**
-> (`effectiveAccountIdForWrite()` throws `ForbiddenError` for a member);
-> **reads are role-agnostic** — a member can read the owner's audit log,
-> usage and profiles. Thirteen route modules do this today: account-audit,
+> (`effectiveAccountIdForWrite()` throws `ForbiddenError` for a member).
+> **Reads are role-agnostic with one exception** — a member can read the
+> owner's audit log, usage and profiles, but `GET /v1/agent-sessions`
+> requires `admin` on the team, deliberately: agent sessions carry
+> transcripts and live control state, so collection reads were not widened
+> to read-only members. (V-831 corrected this paragraph — V-822 wrote
+> "reads are role-agnostic" flat, generalised from one module.)
+> Thirteen route modules do this today: account-audit,
 > account-me, admin, agent-sessions, agent-sessions-livekit-token,
 > agent-sessions-transport-report, billing, email-preferences,
 > profile-snapshots, profiles, recipes, sessions, webhooks.

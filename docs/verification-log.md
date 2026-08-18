@@ -36010,3 +36010,45 @@ names, and it reported six granular scopes as "enforced but never declared". Eve
 six is in the enum. That is the third crude extractor this session to produce a plausible wrong
 answer — after the TierLimitError key scan (twice) and the admin-route brace-match. Strip
 comments before parsing a literal; the pattern is now consistent enough to be a rule.
+
+## V-831 — my own V-822 correction over-claimed, from a sample of one (2026-08-18)
+
+Self-audit of this arc, applying to my own entries the standard the report was held to.
+
+V-822 corrected the team-roles docs, which had said team roles gate the dashboard only. The
+replacement I wrote states the rule as: "**Writes on another account require the `admin`
+role**; **reads are role-agnostic** — a member can read the owner's audit log, usage and
+profiles." That went into `docs/architecture/team-roles-taxonomy.md`, into `docs/decisions.md`
+— the locked-decisions register — into the V-822 entry, and into its commit message.
+
+**The read half is wrong.** `GET /v1/agent-sessions` requires `admin` on the team, and does so
+on purpose. Its comment says so: "Agent sessions contain transcripts + live control state, so
+retain the established admin-only boundary here rather than widening collection reads to
+ordinary read-only team members."
+
+So the one read that is NOT role-agnostic is the one carrying transcripts — the most sensitive
+read in the system, and precisely the one a reader of my sentence would have assumed was open
+to any member.
+
+**How I got it wrong.** I verified the read direction against `account-audit.ts`, saw it
+resolve the effective account without checking role, and generalised from that single module
+to a rule about thirteen. I never enumerated the role checks. Mapping all thirteen takes one
+script: eleven of the thirteen checks sit in write paths or in write-gating helpers
+(`effectiveAccountIdForWrite`, `effectiveAccountIdForKeyWrite`,
+`effectiveAccountIdForLiveOperation`), one is the `callerCanAccessAgentSession` predicate from
+V-812, and exactly one is a GET handler.
+
+This is the same error, in the same arc, as the one the arc exists to fix: a confident sentence
+in an authoritative document, generalised past its evidence, with a guard that then froze it.
+The pin I added in V-822 asserted the flat claim, so the suite went green over it — a
+correction that produced a new false claim and pinned it, which is what V-794 warns about and
+what my own memory rule about the corrective instrument says to expect.
+
+Corrected in all three places, and the pin now asserts the exception by name rather than the
+rule in general.
+
+The rest of the arc's load-bearing figures re-derive correctly: V-813's rate-limit values
+(360 burst / 5,400 per minute solo, 600 / 9,000 API Builder), V-819's DR figures (60 route
+modules, 208 distinct `/v1` paths), and V-822's count of thirteen membership-resolving modules.
+
+Mutation: the flat claim restored → the corrected assertion fires. Restores byte-identical.
