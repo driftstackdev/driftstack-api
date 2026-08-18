@@ -161,7 +161,16 @@ describe('W400.C apps/server/src/services/legal.ts content parity', () => {
     );
     // content_hash_changed: same version, different hash
     expect(body).toMatch(
-      /\/\/ Same version string but content hash differs — patch-level\s*\n?\s*\/\/ edit landed without a version bump\. The catalog policy is to\s*\n?\s*\/\/ surface this as a content_hash_changed reason; the route\s*\n?\s*\/\/ layer can decide whether to gate on it\./,
+      /\/\/ Same version string but content hash differs — patch-level\s*\n?\s*\/\/ edit landed without a version bump\. The catalog policy is to\s*\n?\s*\/\/ surface this as a content_hash_changed reason\./,
+    );
+    // V-821 — the comment must state that this reason GATES, because it does:
+    // api-keys.ts create() throws on `pending.length > 0` with no filter on
+    // reason, so a content-only edit blocks minting account-wide.
+    expect(body).toMatch(/blocks API-key minting for EVERY account/);
+    // SENTINEL — the retired discretion claim must not return. No route layer
+    // decides anything here; both callers treat every reason identically.
+    expect(body, 'no route layer exercises this discretion').not.toMatch(
+      /layer can decide whether to gate on it/,
     );
     expect(body).toMatch(
       /if \(accepted\.contentHash !== entry\.contentHash\) \{[\s\S]+?reason: 'content_hash_changed',\s*\n?\s*lastAcceptedVersion: accepted\.version,/,

@@ -187,8 +187,18 @@ export class LegalService {
       if (accepted.contentHash !== entry.contentHash) {
         // Same version string but content hash differs — patch-level
         // edit landed without a version bump. The catalog policy is to
-        // surface this as a content_hash_changed reason; the route
-        // layer can decide whether to gate on it.
+        // surface this as a content_hash_changed reason.
+        //
+        // V-821 — this used to end "the route layer can decide whether to
+        // gate on it", describing a discretion nothing exercises. There are
+        // exactly two callers of required(): routes/legal.ts lists the
+        // result, and services/api-keys.ts create() gates on
+        // `pending.length > 0` with NO filter on reason. So this reason is
+        // load-bearing, not advisory: a typo fix in a legal document, with
+        // no version bump at all, blocks API-key minting for EVERY account
+        // until each one re-accepts. If that is not wanted, the filter goes
+        // in api-keys.ts — but it has to be written, because saying the
+        // route layer decides does not make any route decide.
         out.push({
           documentKey: entry.documentKey,
           currentVersion: entry.version,

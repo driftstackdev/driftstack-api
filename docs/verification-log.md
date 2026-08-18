@@ -35557,3 +35557,44 @@ Mutations: the audit call stripped from `POST /v1/admin/accounts/:id/suspend` �
 arm names it; one admin GET made to look audited → the gap arm fires. Restores byte-identical.
 
 Ratchet: EXPECTED_TEST_FILES 2885 → 2886, \_ALL 3049 → 3050 (one file, mine).
+
+## V-821 — a typo fix in a legal document blocks API-key minting account-wide (2026-08-18)
+
+Action 12. `services/legal.ts required()` returns one entry per document an account owes
+re-acceptance on, tagged `never_accepted`, `version_outdated`, or `content_hash_changed`.
+That last one fires when the version string is UNCHANGED and only the bytes differ.
+
+The comment on it ended: "the catalog policy is to surface this as a content_hash_changed
+reason; **the route layer can decide whether to gate on it.**"
+
+No route layer decides anything. There are exactly two callers of `required()`:
+`routes/legal.ts` lists the result for display, and `services/api-keys.ts create()` gates on
+`pending.length > 0` and throws `LegalAcceptanceRequiredError`. **Neither filters by reason.**
+So a typo fix in a legal document — no version bump, no substantive change — blocks API-key
+creation for every account until each one re-accepts.
+
+Saying the route layer decides does not make any route decide. Corrected to state what the
+reason actually does and where the filter would go if it is not wanted.
+
+**Whether content-only edits should block is a legal/product decision** and is not taken here.
+There is a real argument either way: a re-worded liability clause with no version bump is
+exactly the case you want to force re-acceptance on, and a fixed typo is exactly the case you
+do not. What was wrong was the code claiming somebody else had already made that call.
+
+New guard `a-new-legal-reason-silently-blocks-key-minting.test.ts` pins the reason SET. A
+fourth reason joins the minting blocklist automatically and silently, because the consumer
+treats the array as a boolean — so adding one now fails here and forces a deliberate decision
+in `api-keys.ts`. A third arm asserts the gate still does not discriminate, because that is
+what makes the reason-set arm mean anything; if a filter ever appears, the arm stops being a
+blocking-set arm and both need rewriting rather than quietly weakening.
+
+The reason-scan strips comments before matching. The retraction I just wrote names all three
+reasons in prose directly above the emitting code, so an un-stripped scan would have read the
+correction as three extra emissions — the same shape as V-783's `status_subscriber.purged`,
+where the only occurrence outside the declaration was a comment asserting the write happens.
+
+Mutations: a fourth reason added → the set arm names it; a reason filter added to the gate →
+the discrimination arm fires; the retired discretion claim restored → the pin's sentinel
+fires. Restores byte-identical.
+
+Ratchet: EXPECTED_TEST_FILES 2886 → 2887, \_ALL 3050 → 3051 (one file, mine).
