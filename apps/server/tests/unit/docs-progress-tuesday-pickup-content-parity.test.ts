@@ -151,9 +151,14 @@ describe('W571.C /docs/progress/tuesday-pickup.md content parity', () => {
     expect(body).toMatch(/~50% saturated; expect this to land mid-Tuesday session\./);
     expect(body).toMatch(/## Items NOT to pick up without founder direction/);
     expect(body).toMatch(
-      /- \*\*V-413\*\* — Tier-3 IP\/UA leak in account-audit payloads \(security/,
+      /~~\*\*V-413\*\* — Tier-3 IP\/UA leak in account-audit payloads \(security/,
     );
-    expect(body).toMatch(/architecture; founder verdict pending\)\./);
+    expect(body).toMatch(/architecture; verdict pending\)\.~~ \*\*SHIPPED\*\*/);
+    // V-827 SENTINEL — the gate must not read as open again. The scrub is in
+    // routes/account-audit.ts; nothing is waiting on a decision.
+    expect(body, 'no verdict is pending on the audit-privacy scrub').not.toMatch(
+      /architecture; founder verdict pending\)\.\s*$/m,
+    );
     expect(body).toMatch(
       /- \*\*Account deletion retention\*\* \(touches legal retention periods\)\./,
     );
@@ -164,7 +169,19 @@ describe('W571.C /docs/progress/tuesday-pickup.md content parity', () => {
       /- \*\*Live Stripe keys\*\* \+ \*\*Stripe webhook secret\*\* \(touches commercial/,
     );
     expect(body).toMatch(/activation; gated on BV KvK closure ~2026-05-21\)\./);
-    expect(body).toMatch(/- \*\*NowPayments \/ crypto rail\*\* — ADR-002 deferred; provider not/);
+    expect(body).toMatch(/~~\*\*NowPayments \/ crypto rail\*\* — ADR-002 deferred; provider not/);
+
+    // V-827 — the banner and both SHIPPED markers are what stop this snapshot
+    // being read as current state. The struck-through text stays pinned: it is
+    // the record of what the gate said, and deleting it would lose why anyone
+    // avoided these subsystems.
+    expect(body).toMatch(/⚠ SUPERSEDED — this is a snapshot of 2026-05-09, not current state\./);
+    expect(body, 'the audit-privacy scrub shipped').toMatch(
+      /\*\*SHIPPED\*\* — `routes\/account-audit\.ts`/,
+    );
+    expect(body, 'the crypto rail shipped').toMatch(
+      /\*\*SHIPPED\*\* — five `\/v1\/billing\/crypto-\*` routes are registered/,
+    );
     expect(body).toMatch(/chosen\./);
     expect(body).toMatch(/- \*\*LiveKit\*\* — Agent 1 territory\./);
     expect(body).toMatch(/- \*\*Organic growth \/ paid acquisition \/ launch comms\*\* — out of/);

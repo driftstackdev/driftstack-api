@@ -92,6 +92,12 @@ describe('W550.C /docs/adr/ADR-004-pricing-restructure-two-ladder.md content par
   it("V-073 enforcement implications framing pinned: 'Postgres `account_tier` enum drops `'free' | 'starter' | 'solo' | 'builder' | 'scale' | 'enterprise'` and becomes `'trial_pack' | 'solo_manual' | 'team_manual' | 'agency_manual' | 'api_starter' | 'api_builder' | 'api_scale' | 'enterprise'`.' + '`TIER_CONCURRENT_SESSION_LIMITS` becomes the only tier-limit metric on paid tiers.' + '`TIER_QUOTAS.session_minute` removed. Trial-pack `trial_pack_credit_cents` decrement at $0.18/hr stays per ADR-003' + the `PROFILES_PER_TIER` enforcement bullet and the concurrency-cap bullet — pinned so the account_tier-old-vs-new-enum + TIER_CONCURRENT_SESSION_LIMITS-only + TIER_QUOTAS.session_minute-removed + PROFILES_PER_TIER-map commitments survive. V-814 REWROTE this title: it used to quote both cap bullets verbatim, including a payment-required status and a body identifier the server has never emitted, so the pin's own title was a second copy of the false claim", () => {
     expect(body).toMatch(/Postgres `account_tier` enum drops `'free' \| 'starter' \| 'solo' \|/);
     expect(body).toMatch(/'builder' \| 'scale' \| 'enterprise'` and becomes `'trial_pack' \|/);
+    // V-827 — the enum bullet is kept as the accepted decision; what must be
+    // present is the note recording that migration 0065 retired trial_pack.
+    expect(body).toMatch(
+      /Implementation note \(V-827\) — the first enum member is no longer `trial_pack`\./,
+    );
+    expect(body).toMatch(/0065_retire_trial_pack_free_tier\.sql/);
     expect(body).toMatch(/'solo_manual' \| 'team_manual' \| 'agency_manual' \| 'api_starter' \|/);
     expect(body).toMatch(/'api_builder' \| 'api_scale' \| 'enterprise'`\./);
     expect(body).toMatch(

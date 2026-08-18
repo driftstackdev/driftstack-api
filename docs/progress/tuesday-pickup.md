@@ -1,5 +1,12 @@
 # Tuesday pickup queue
 
+> **⚠ SUPERSEDED — this is a snapshot of 2026-05-09, not current state.**
+> V-827 checked the "do NOT pick up" list below against the repo and found
+> two of its entries describe work that has since SHIPPED. A stale gate is
+> not harmless: it tells the next engineer to leave a subsystem alone that is
+> already built, which is a tax paid every time somebody reads the list.
+> Both are corrected inline. Treat every other line here as of its date.
+
 **Last updated:** 2026-05-09 (paused per founder cost-discipline)
 **Resume condition:** founder explicit reactivation Tuesday (weekly
 token reset).
@@ -136,14 +143,19 @@ Per memory rule #12: when V-294 catalog saturates, consult
 
 ## Items NOT to pick up without founder direction
 
-- **V-413** — Tier-3 IP/UA leak in account-audit payloads (security
-  architecture; founder verdict pending).
+- ~~**V-413** — Tier-3 IP/UA leak in account-audit payloads (security
+  architecture; verdict pending).~~ **SHIPPED** — `routes/account-audit.ts`
+  scrubs actor privacy fields (`issued_from_ip`, `source_ip`, `user_agent`,
+  `issued_user_agent`) via `scrubActorPrivacy()` and nulls `user_agent` on
+  the redacted read path. No verdict is pending (V-827).
 - **Account deletion retention** (touches legal retention periods).
 - **Per-tier feature gating** + **pricing details** (touches pricing).
 - **Live Stripe keys** + **Stripe webhook secret** (touches commercial
   activation; gated on BV KvK closure ~2026-05-21).
-- **NowPayments / crypto rail** — ADR-002 deferred; provider not
-  chosen.
+- ~~**NowPayments / crypto rail** — ADR-002 deferred; provider not
+  chosen.~~ **SHIPPED** — five `/v1/billing/crypto-*` routes are registered
+  (checkout, quote, orders, order detail, cancel), with `crypto_orders` and
+  `crypto_entitlements` tables behind them (V-827).
 - **LiveKit** — Agent 1 territory.
 - **Organic growth / paid acquisition / launch comms** — out of
   Agent 2 scope.

@@ -67,6 +67,21 @@ Hardware requirements (M4 Mini 16GB / Mac Studio M4 Max / Mac Studio Ultra+Mac P
 Concrete enforcement implications (handled in V-073 — V-072 slot was skipped during renumbering):
 
 - Postgres `account_tier` enum drops `'free' | 'starter' | 'solo' | 'builder' | 'scale' | 'enterprise'` and becomes `'trial_pack' | 'solo_manual' | 'team_manual' | 'agency_manual' | 'api_starter' | 'api_builder' | 'api_scale' | 'enterprise'`. Pre-launch — no production customers — so the migration drops + recreates rather than preserving values.
+
+> **Implementation note (V-827) — the first enum member is no longer `trial_pack`.**
+> Migration `0065_retire_trial_pack_free_tier.sql` retired the trial pack and the
+> shipped enum is `['free', 'solo_manual', 'team_manual', 'agency_manual',
+'api_starter', 'api_builder', 'api_scale', 'enterprise']` — `trial_pack` became
+> `free`, and no `accounts.trial_pack_*` column survives. That also retires the
+> `trial_pack_credit_cents` decrement described two bullets down, and the
+> "trial-pack mechanics survive intact" line in this ADR's header.
+>
+> As with the V-814 note below, the bullet above is left as the decision that was
+> accepted; this records what the implementation did instead. An ADR is a record
+> of a decision, not a description of the running system, and this one is cited as
+> a spec by other documents — which is exactly why it needs the difference stated
+> rather than edited away.
+
 - `TIER_CONCURRENT_SESSION_LIMITS` becomes the only tier-limit metric on paid tiers.
 - `TIER_QUOTAS.session_minute` removed. Trial-pack `trial_pack_credit_cents` decrement at $0.18/hr stays per ADR-003 (the only place hours metering survives).
 - New `PROFILES_PER_TIER` map enforces profile count at the `/v1/profiles` creation endpoint. Exceeding profile cap → 429 with the `https://errors.driftstack.dev/tier-limit` problem type. **This diverges from what this ADR originally decided — see the implementation note below.**

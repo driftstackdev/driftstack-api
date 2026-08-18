@@ -35845,3 +35845,44 @@ restating them at all.
 Mutations: the R2-deferred clause restored, and the mock-data clause restored → each fires its
 sentinel. The vitest title carries no assertion of its own and needs no sentinel; removing the
 figures is the fix. Restores byte-identical.
+
+## V-827 — two dated snapshots read as current state (2026-08-18)
+
+Action 37's remaining items. Both are documents that were true when written and are read as
+though they still are.
+
+**1. `docs/progress/tuesday-pickup.md` gates two shipped subsystems.** Under the heading
+"Items NOT to pick up without direction":
+
+- "**V-413** — Tier-3 IP/UA leak in account-audit payloads (security architecture; verdict
+  pending)." The scrub SHIPPED. `routes/account-audit.ts` defines `scrubActorPrivacy()` over
+  an explicit roster (`issued_from_ip`, `source_ip`, `user_agent`, `issued_user_agent`) and
+  nulls `user_agent` on the redacted read path. Nothing is waiting on a decision.
+- "**NowPayments / crypto rail** — ADR-002 deferred; provider not chosen." Five
+  `/v1/billing/crypto-*` routes are registered — checkout, quote, orders, order detail,
+  cancel — with `crypto_orders` and `crypto_entitlements` behind them.
+
+**A stale gate is not a harmless stale doc.** These two entries tell the next engineer to
+leave alone two subsystems that are already built. That cost is paid on every read, silently,
+and it is the opposite of the usual documentation failure: not "this says something exists
+that does not", but "this says do not build something that is finished".
+
+The report recommended dating the file and deleting its pin. I dated it and kept the pin. The
+struck-through text stays, because it records what the gate said and why anyone avoided those
+subsystems; deleting the pin would also drop the one thing that now makes the correction
+survive.
+
+**2. ADR-004's enum bullet names a tier that no longer exists.** It says `account_tier`
+"becomes `'trial_pack' | 'solo_manual' | …`". Migration `0065_retire_trial_pack_free_tier.sql`
+retired the trial pack; the shipped enum starts `'free'`, and no `accounts.trial_pack_*`
+column survives. That also retires the `trial_pack_credit_cents` decrement two bullets down
+and the header's "trial-pack mechanics survive intact".
+
+Same remedy as V-814 in the same file, and for the same reason: the bullet stays as the
+decision that was accepted, with a dated note recording what the implementation did instead.
+An ADR is a record of a decision, not a description of the running system — and this one is
+cited as a spec by other documents, which is exactly why the difference has to be stated
+rather than edited away. `docs/adr/README.md` says the same.
+
+Mutations: the V-413 gate reopened → the sentinel fires; the ADR note's marker removed → its
+assertion fires. Restores byte-identical. `it(` counts unchanged at 4 and 6.
