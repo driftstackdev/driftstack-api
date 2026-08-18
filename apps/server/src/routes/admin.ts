@@ -2,7 +2,6 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 type AccountReq = NonNullable<FastifyRequest['account']>;
-import type { AccountTier } from '@driftstack/api-types';
 import { CreateApiKeyRequestSchema, UsageSeriesQuerySchema } from '@driftstack/api-types';
 import type { AccountAuthRepo, ApiKeyRow } from '../services/auth.js';
 import type { ApiKeysService } from '../services/api-keys.js';
@@ -10,6 +9,7 @@ import type { UsageService, UsageSummary } from '../services/usage.js';
 import { BadRequestError, ForbiddenError } from '../lib/errors.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
+import type { EffectiveOwner } from '../lib/effective-account-header.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -86,7 +86,10 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       if (!ctx) throw new Error('account context missing after requireAuth');
       const body = CreateApiKeyRequestSchema.parse(request.body ?? {});
       const eff = effectiveAccountIdForKeyWrite(request, ctx);
-      let createOpts: { effectiveAccountId?: string; effectiveTier?: AccountTier } = {};
+      // Typed as the PAIR, not two optionals: the values here are always set
+      // together, and declaring them independently is what let the pairing be
+      // a convention rather than a rule.
+      let createOpts: EffectiveOwner = {};
       if (eff !== undefined) {
         const owner = await authRepo.getAccount(eff);
         if (!owner) throw new ForbiddenError('Owner account no longer exists.');
@@ -162,11 +165,7 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       const id = uuidFromPrefixedId(request.params.id, 'key');
       const body = request.body ?? {};
       const eff = effectiveAccountIdForKeyWrite(request, ctx);
-      let rotateOpts: {
-        name?: string;
-        effectiveAccountId?: string;
-        effectiveTier?: AccountTier;
-      } = {};
+      let rotateOpts: EffectiveOwner & { name?: string } = {};
       if (typeof body.name === 'string') {
         // V-296 — the optional rename must honor the same bound the create
         // path enforces (CreateApiKeyRequestSchema: name min(1).max(120)).

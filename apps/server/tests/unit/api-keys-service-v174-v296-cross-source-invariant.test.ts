@@ -211,7 +211,15 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
 
   it('CRITICAL imports AccountTier + ApiKeyScope types from @driftstack/api-types — single-source-of-truth for tier + scope vocabularies.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
-    expect(p).toMatch(/import type \{ AccountTier, ApiKeyScope \} from '@driftstack\/api-types';/);
+    // AccountTier left this import when the effective-owner PAIR became one
+    // type: the tier now arrives inside `EffectiveOwner` rather than as a
+    // second loose optional, so the file no longer names it directly. The
+    // vocabulary claim this arm makes is about ApiKeyScope; the tier one is
+    // made where the tier now lives.
+    expect(p).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
+    expect(p).toMatch(
+      /import type \{ EffectiveOwner \} from '\.\.\/lib\/effective-account-header\.js';/,
+    );
   });
 
   // ─── AuthCache import (for revoke cache-invalidation) ────────

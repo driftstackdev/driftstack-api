@@ -47,6 +47,7 @@ import {
   SessionDestroyedError,
 } from '../lib/errors.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
+import type { EffectiveOwner } from '../lib/effective-account-header.js';
 import {
   classifySessionFailure,
   projectSessionEventMetadata,
@@ -437,9 +438,7 @@ export class SessionsService {
   async create(
     ctx: AccountContext,
     body: CreateSessionRequest,
-    opts: {
-      effectiveAccountId?: string;
-      effectiveTier?: AccountTier;
+    opts: EffectiveOwner & {
       /** Internal: the route resolved this value from an existing owned profile row. */
       inheritedProfileArchetype?: boolean;
       /**

@@ -31,6 +31,8 @@
 
 import type { FastifyRequest } from 'fastify';
 
+import type { AccountTier } from '@driftstack/api-types';
+
 export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
 
 /**
@@ -48,3 +50,29 @@ export function readEffectiveAccountHeader(request: FastifyRequest): string | un
   const trimmed = value.trim();
   return trimmed.length === 0 ? undefined : trimmed;
 }
+
+/**
+ * The team-owner pair: BOTH fields, or NEITHER. Never one.
+ *
+ * Three service methods gate a resource on a tier while owning it on an
+ * account — `SessionsService.create`, `ApiKeysService.create` and
+ * `.rotate` — and each resolves the two independently:
+ *
+ *     const accountId = opts.effectiveAccountId ?? ctx.account.id;
+ *     const tier      = opts.effectiveTier      ?? ctx.account.tier;
+ *
+ * Passing the id without the tier therefore creates the resource on the
+ * OWNER's account and gates it by the CALLER's tier. Both comments beside
+ * those lines already say the tier must be the owner's — "a member acting
+ * for an api_starter owner mints ds_live_… keys; member's own tier doesn't
+ * matter" — and all four call sites pass both today. Nothing enforced it:
+ * two independent optional fields make the mismatch a well-typed call.
+ *
+ * As a union, `{ effectiveAccountId }` alone stops compiling, so the
+ * mistake cannot be written rather than merely being absent so far. It
+ * intersects cleanly with each method's other options, because an
+ * intersection distributes over a union.
+ */
+export type EffectiveOwner =
+  | { effectiveAccountId: string; effectiveTier: AccountTier }
+  | { effectiveAccountId?: undefined; effectiveTier?: undefined };

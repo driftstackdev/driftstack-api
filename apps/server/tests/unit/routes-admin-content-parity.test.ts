@@ -172,7 +172,13 @@ describe('W420.A apps/server/src/routes/admin.ts content parity', () => {
 
   it('imports: FastifyInstance/FastifyRequest + AccountTier + CreateApiKey/UsageSeries schemas + AccountAuthRepo/ApiKeyRow + ApiKeysService + UsageService/Summary + BadRequestError/ForbiddenError + resolveEffectiveAccount', () => {
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
-    expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
+    // AccountTier is no longer imported here: the two locals that named it were
+    // the loose `{ effectiveAccountId?; effectiveTier? }` pair, and they are one
+    // type now. The tier still travels — inside EffectiveOwner.
+    expect(body).not.toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
+    expect(body).toMatch(
+      /import type \{ EffectiveOwner \} from '\.\.\/lib\/effective-account-header\.js';/,
+    );
     expect(body).toMatch(
       /import \{ CreateApiKeyRequestSchema, UsageSeriesQuerySchema \} from '@driftstack\/api-types';/,
     );

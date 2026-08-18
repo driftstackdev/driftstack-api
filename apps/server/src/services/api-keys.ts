@@ -15,7 +15,7 @@
 // scope retains compat-alias semantics during migration via
 // requireScope() — existing 'admin'-scoped keys keep working.
 
-import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
+import type { ApiKeyScope } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import type { ApiKeyRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
@@ -26,6 +26,7 @@ import {
   keyPrefixFromPlaintext,
 } from '../lib/api-keys.js';
 import { BadRequestError, ForbiddenError, LegalAcceptanceRequiredError } from '../lib/errors.js';
+import type { EffectiveOwner } from '../lib/effective-account-header.js';
 import {
   NotFoundError,
   hasScope,
@@ -266,7 +267,7 @@ export class ApiKeysService {
   async create(
     ctx: AccountContext,
     input: CreateApiKeyServiceInput,
-    opts: { effectiveAccountId?: string; effectiveTier?: AccountTier } = {},
+    opts: EffectiveOwner = {},
   ): Promise<CreatedApiKey> {
     throwIfMissingScope(ctx, 'account_owner');
     assertNotDeviceKey(ctx, 'mint API keys');
@@ -412,11 +413,9 @@ export class ApiKeysService {
   async rotate(
     ctx: AccountContext,
     keyId: string,
-    opts: {
+    opts: EffectiveOwner & {
       gracePeriodMs?: number;
       name?: string;
-      effectiveAccountId?: string;
-      effectiveTier?: AccountTier;
     } = {},
   ): Promise<{
     newRow: ApiKeyRow;
