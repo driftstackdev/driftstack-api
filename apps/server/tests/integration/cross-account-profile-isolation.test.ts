@@ -89,6 +89,20 @@ const PROFILE_ROUTES: ReadonlyArray<{
     // Filled per-test by payloadFor — see the note there.
     payload: { recipient_account_id: 'filled-per-test' },
   },
+  // Added 2026-08-18. `POST /v1/profiles/:id/snapshots` was the last registered
+  // `/v1/profiles/:id…` route with no cross-account arm ANYWHERE, and it is a
+  // WRITE against the parent: it captures the profile's state under the caller's
+  // account. `cross-account-snapshot-isolation` looks like it covers this and
+  // does not — it calls this route only as account A's own fixture setup, and its
+  // `it.each` table probes `/v1/profile-snapshots/:id`, a different boundary.
+  // A route used as setup in one file and tabled in none is the easiest kind to
+  // believe is covered.
+  //
+  // Confirmed reachable before being trusted, the same way `/launch` and
+  // `/transfer` were: account A's own capture answers 201 in this fixture (see
+  // the reachability arm below), so B's 404 is the ownership refusal rather than
+  // an unwired route or a rejected payload.
+  { method: 'POST', suffix: '/snapshots', payload: { label: 'captured-by-b' } },
 ];
 
 /**
@@ -257,5 +271,116 @@ describe('routes whose foreign-reference contract is not 404 are still safe', ()
       res.json<{ data?: unknown[] }>().data ?? [],
       'no snapshot may cross an account boundary',
     ).toEqual([]);
+  });
+});
+
+// ─── the table is no longer allowed to drift ────────────────────────────────
+//
+// This file's own history is the argument. The table was written by reading
+// `routes/profiles.ts`, so it missed `/launch` (registered in `routes/sessions.ts`)
+// and `/transfer`; those were added on 2026-08-15 by enumerating the app's routes
+// BY HAND and diffing. `POST /snapshots` was still missing after that pass, and
+// stayed missing for three days, because a hand diff is a thing you do once.
+//
+// A route added to any of these files fails nothing here — every existing arm
+// still passes — so the omission is invisible until somebody re-derives the list.
+// This arm reads the routes Fastify actually registered, so it cannot be fooled
+// by which FILE a route lives in, which is the specific way `/launch` hid.
+describe('every id-taking profile route has a cross-account arm', () => {
+  /** Parse `printRoutes` into "VERB /full/path". */
+  function registeredOps(tree: string): Set<string> {
+    const out = new Set<string>();
+    const stack: string[] = [];
+    for (const raw of tree.split('\n')) {
+      if (raw.trim() === '') continue;
+      const markerAt = raw.search(/[├└]/);
+      const depth = markerAt < 0 ? 0 : Math.floor(markerAt / 4);
+      const body = markerAt < 0 ? raw.trim() : raw.slice(markerAt + 4).trim();
+      const m = /^(\S*?)\s*(?:\(([A-Z, ]+)\))?$/.exec(body);
+      if (m === null) continue;
+      stack.length = depth;
+      stack[depth] = m[1] ?? '';
+      if (m[2] === undefined) continue;
+      const full =
+        stack
+          .slice(0, depth + 1)
+          .join('')
+          .replace(/\/$/, '') || '/';
+      for (const method of m[2].split(',')) {
+        const verb = method.trim();
+        if (verb === 'HEAD' || verb === 'OPTIONS') continue;
+        out.add(`${verb} ${full}`);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Routes whose cross-account arm is a BESPOKE `it()` in this file rather than a
+   * row in the table, because each asserts something the shared arm cannot.
+   *
+   * They are listed rather than inferred on purpose: "covered elsewhere in this
+   * file" and "not covered" are indistinguishable to a census that only reads the
+   * table, and that ambiguity is the whole failure being closed here. Each entry
+   * names the arm, so deleting the arm and leaving the entry is a lie somebody
+   * can see.
+   */
+  const COVERED_BY_BESPOKE_ARM = new Map<string, string>([
+    [
+      'DELETE /v1/profiles/:id',
+      "the shared arm asserts a 404; delete answers 204 by idempotent-delete semantics, so its arm asserts the owner's profile SURVIVED instead — a status assertion would have passed while the profile was destroyed",
+    ],
+    [
+      'GET /v1/profiles/:id/snapshots',
+      'asserts the 404 AND that the body carries no rows — this route used to answer 200 with an empty page, so the row assertion is the older half of the guarantee and still has to hold',
+    ],
+  ]);
+
+  it('CRITICAL a new /v1/profiles/:id route must be in the table or named as covered by a bespoke arm. Otherwise its ownership check ships untested — which is how /launch, /transfer and POST /snapshots each came to have none, on the resource holding a customer’s saved browser identity.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const registered = [...registeredOps(fx.app.printRoutes({ commonPrefix: false }))].filter(
+      (op) => /^[A-Z]+ \/v1\/profiles\/:id(\/|$)/.test(op),
+    );
+    expect(
+      registered.length,
+      'the route census parsed as empty — the parser, not the app',
+    ).toBeGreaterThan(5);
+
+    const covered = new Set(
+      PROFILE_ROUTES.map((r) => `${r.method} /v1/profiles/:id${r.suffix.split('?')[0] ?? ''}`),
+    );
+    const missing = registered.filter((op) => !covered.has(op) && !COVERED_BY_BESPOKE_ARM.has(op));
+
+    expect(
+      missing,
+      `these :id routes have no cross-account arm:\n  ${missing.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
+  it('the bespoke-arm list cannot rot — every route named there must still be registered', async () => {
+    // An entry for a renamed or deleted route silently shrinks the census: it
+    // excuses an op nobody serves while the real successor goes uncounted.
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const registered = registeredOps(fx.app.printRoutes({ commonPrefix: false }));
+    const gone = [...COVERED_BY_BESPOKE_ARM.keys()].filter((op) => !registered.has(op));
+    expect(
+      gone,
+      `named as covered by a bespoke arm but not registered:\n  ${gone.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
+  it("CRITICAL account A's OWN snapshot capture succeeds, so B's 404 above is the ownership refusal and not an unwired route or a rejected payload. An isolation arm on a route that refuses everyone asserts nothing — the transport-report route in the agent-session suite passed for exactly that reason while ownership was disabled entirely.", async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const profileId = await createProfileForAccountA(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profileId}/snapshots`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { label: 'captured-by-a' },
+    });
+    expect(
+      res.statusCode,
+      `the owner's own capture must succeed, else the isolation arm is vacuous: ${res.body.slice(0, 200)}`,
+    ).toBe(201);
   });
 });
