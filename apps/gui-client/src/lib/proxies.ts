@@ -818,9 +818,11 @@ export interface ProxyExitProbeResult {
 }
 
 /** Exit-geo probe: native Rust fetches /v1/egress/echo THROUGH the proxy
- *  (design doc build-order 2). Returns null when the native command isn't
- *  built yet OR the echo endpoint isn't live on the server (pre-deploy) —
- *  callers render an honest 'geo unavailable' state, never a guess. */
+ *  (design doc build-order 2). The catch is deliberately bare, so null means
+ *  the invoke failed for ANY reason. Both dependencies this contract used to
+ *  name as the cause shipped on 2026-06-12 (V-857); in the packaged app a null
+ *  therefore means the echo round-trip did not complete through the proxy.
+ *  Callers must render that, and must not attribute it to a pending release. */
 export async function probeProxyExit(input: {
   host: string;
   port: number;

@@ -134,8 +134,10 @@ export function ProxiesView(): JSX.Element {
   // changed) or removed, so a slow probe that started against the OLD endpoint
   // discards its result instead of re-advertising stale reachability/geo.
   const testEpochRef = useRef(0);
-  // E-2 exit-geo: per-proxy echo result (null entry = probed but
-  // unavailable — native command or server endpoint not live yet).
+  // E-2 exit-geo: per-proxy echo result. A null entry means the probe ran and
+  // returned nothing. Both dependencies this note once blamed shipped on
+  // 2026-06-12 (V-857), so a null now means this proxy did not complete the
+  // echo round-trip — a real fault on the customer's side, not pending work.
   const [exitResults, setExitResults] = useState<Record<string, ProxyExitProbeResult | null>>({});
   const [testResults, setTestResults] = useState<Record<string, ProxyTestResult>>({});
   // Epoch-ms timestamp of each proxy's last probe (from the cache `at` field), so
@@ -348,8 +350,8 @@ export function ProxiesView(): JSX.Element {
       // Night-arc B: persist so profile cards can render egress
       // capability (UDP badge) without re-probing. Best-effort.
       void saveProbeResult(p.id, result, probedAt).catch(() => undefined);
-      // E-2: exit-geo through the proxy (graceful null pre-deploy /
-      // pre-native-command — renders 'geo unavailable').
+      // E-2: exit-geo through the proxy. A null result is a genuine probe
+      // failure (V-857) rather than a missing dependency, and the card says so.
       if (result.reachable && result.auth_ok) {
         const exit = await probeProxyExit({
           host: p.host,
@@ -779,8 +781,8 @@ function ProxyCard({
   testing: boolean;
   testingAll: boolean;
   result: ProxyTestResult | undefined;
-  // undefined = exit-geo never recorded for this proxy; null = probed but
-  // unavailable (server endpoint / native command not live yet).
+  // undefined = exit-geo never recorded for this proxy; null = probed, and the
+  // echo round-trip did not complete through this proxy (V-857).
   exit: ProxyExitProbeResult | null | undefined;
   /** Epoch-ms of the last probe (undefined = never tested). Drives the
    *  "tested <relative>" staleness line so a green pill isn't read as fresh. */
@@ -914,7 +916,7 @@ function ProxyCard({
                   {exit.country !== null && ` · ${exit.country}`}
                 </>
               ) : (
-                'exit geo unavailable (server update pending)'
+                'exit geo unavailable — the probe did not complete'
               )}
             </span>
           )}

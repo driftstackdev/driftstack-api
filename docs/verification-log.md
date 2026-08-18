@@ -37007,3 +37007,49 @@ disambiguation note under the second entry naming both subjects and which test f
 That is the smallest change that makes a citation resolvable, and it leaves the record intact.
 
 Neither heading is pinned, so the note costs nothing in guard churn.
+
+## V-857 — the GUI told customers to wait for a server update that had already shipped
+
+**Customer-facing.** `ProxiesView`'s proxy card rendered a line attributing missing exit-geo to a
+pending server update. Both dependencies it blamed were live: the native `proxy_exit_probe`
+command is registered in the Tauri handler block and implemented in `src-tauri/src/lib.rs`, and
+`GET /v1/egress/echo` is registered in `apps/server/src/routes/egress-echo.ts`. Both landed on
+2026-06-12 in `13a5e4bbc` ("E-2 complete") — the same day the JS half went in, in a commit whose
+own message says it lights up once the native side lands. It did. The wording was never revisited,
+and stood for two months.
+
+**Why it mattered more than a stale comment.** The line renders in exactly one state: the proxy is
+reachable AND authenticated, but the exit probe returned null. That is the case where a customer's
+proxy completed a SOCKS5 handshake and then failed to carry a round-trip — a real, customer-fixable
+fault, and the state where a useful diagnostic mattered most. It was labelled as our pending work,
+so the reader's correct response was to wait for a release that was already out.
+
+**Five sites, one claim.** `ProxiesView.tsx` at the state declaration, the probe call site, the prop
+contract and the rendered string, plus the `probeProxyExit` contract in `lib/proxies.ts`. The
+regex that found this arc's earlier stale promises caught only two of the five — the call site says
+"pre-deploy / pre-native-command" and the rendered string says "server update pending", neither of
+which matches a future-tense pattern. Enumerating with a claim-shaped grep rather than a
+tense-shaped one is what found the other three.
+
+**Nothing pinned the wording**, which is why it survived — but not for want of tests, and my first
+draft of this entry said "no test referenced this surface at all", which is false. I had grepped
+`apps/gui-client/src` for `*.test.tsx`; gui-client tests live in `apps/gui-client/tests/`, a tree
+that grep never touched. Fifteen files there exercise this view, two of them (`proxies-view-test-
+all-vpn-and-stale-exit`, `profiles-view-stale-exit-geo`) about exit-geo specifically. They assert
+WHEN the line renders and gate it on probe health; none asserts what it says. A surface can be
+well covered behaviourally and still carry an untrue sentence — the same gap V-843 found on the
+crypto docs page. This is the fourth time this arc that a claim lived in a tree the obvious grep
+missed.
+
+**Fix.** Honest wording on the card — the line now describes the probe outcome rather than a release
+— and the four comments rewritten to say what a null actually means. New guard
+`the-gui-does-not-blame-a-shipped-server-for-a-failed-probe.test.ts` derives both dependencies from
+their own sources rather than restating that they exist, so it can contradict its author: removing
+the native command or the route fails the liveness arms, at which point the blunt new wording is
+wrong in the other direction and whoever removed it has to decide what the card should say.
+Mutation-proved on all four load-bearing arms; all four sources restored byte-identical.
+
+**Note on `probeProxyExit`'s bare `catch`.** It returns null on any invoke failure, including
+`invoke` being absent outside Tauri. In the packaged app that cannot happen, so the two causes the
+old text named are genuinely impossible there — but the new wording deliberately names no
+mechanism, because the catch cannot distinguish one.
