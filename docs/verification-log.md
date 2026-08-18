@@ -34810,3 +34810,39 @@ Zero pin edits: the ~30 assertions over this file all still pass because the cha
 additive, which is why this batch was worth landing before the ones that move pins.
 
 Seventh batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-802 — the customer audit-log's Actor column disagreed with the code in three rows (2026-08-18)
+
+`apps/docs/src/pages/api/audit-log.md` documents 46 audit actions and, for each, who the actor is:
+`customer`, `system` or `staff`. That column answers the question an incident review or a compliance
+export starts from — did a person on my team do this, or did Driftstack?
+
+Three rows were wrong, and only one of them was in the audit report; the other two came from checking
+**every** row against source rather than the one I was handed:
+
+- **`session.created`** — documented `system`. `services/sessions.ts` emits
+  `actorType: 'customer' as const` with `actorAccountId: ctx.account.id` and
+  `actorKeyId: ctx.apiKey.id`, and the comment beside it says why that matters: on a team-scoped
+  create the row lands on the OWNER's log while the actor stays the member, so it reads "Member X
+  created session Y on team owner Z". Labelling it `system` erases precisely that attribution.
+- **`account.email_verified`** — documented `system`; `auth-flows.ts` emits `customer`.
+- **`session.destroyed`** — documented `system`; both occur — `customer` for an explicit DELETE,
+  `system` for the V-782 auto-destroy. Now "customer or system".
+
+**The parity pin over that page passed the whole time**, because it froze the surrounding prose and
+never the actor cells. A 46-row table maintained by hand is the shape V-794 ratchets against, and the
+answer there is the same as here: derive it.
+
+`the-audit-log-actor-column-is-derived-not-remembered.test.ts` resolves each action's `actorType`
+from the emitting object literal — brace-matched, so a literal assembled as a named const is found
+too, which is what `session.created` does — and compares against the table. 24 of the 46 resolve
+directly; four more reach `record()` through `emitAuditBestEffort`, which takes `action` as a
+parameter, and are listed as hand-checked with the reason. A third case fails if any listed action
+becomes resolvable, so the list cannot outlive its justification.
+
+Mutation-proved both directions: reverting `session.created` to `system` reds the comparison, and
+mislabelling `api_key.minted` as `staff` reds it with the exact pair.
+
+Eighth batch of the re-verified plan. `EXPECTED_TEST_FILES` 2865 → 2866 for this one new file. A
+peer has a second new test file staged but uncommitted, so the on-disk count is 2867 until their
+bump lands; that +1 is theirs to make, not mine to absorb.
