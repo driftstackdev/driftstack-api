@@ -172,7 +172,13 @@ describe('W804 V-528 extraction scripts content parity', () => {
     const p = read(SCRUB);
     expect(p).toMatch(/# V-656 — V-528 Step 5: V-205 historical scrub via git-filter-repo\./);
     expect(p).toMatch(
-      /Run ONLY AFTER V-528 Steps 3 \+ 4 \(repo flipped private\)\. Force-pushes\s*\n# rewritten history\. Public-visible blast radius is zero post-Step-4\./,
+      /Run ONLY AFTER V-528 Steps 3 \+ 4 \(repo flipped private\)\. Rewrites\s*\n# history LOCALLY and prints the two force-push commands to run\s*\n# afterwards — it does NOT push\./,
+    );
+    // V-817 SENTINEL — the script rewrites locally and PRINTS the push
+    // commands. Claiming it pushes invites the operator to tick the runbook
+    // step off with the violator commits still live on the remote.
+    expect(p, 'the script must not claim it pushes').not.toMatch(
+      /private\)\. Force-pushes\s*\n# rewritten history/,
     );
   });
 

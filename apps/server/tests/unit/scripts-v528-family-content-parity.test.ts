@@ -42,10 +42,16 @@ describe('W611 scripts V-528 V-656 family content parity', () => {
     const body = read(P('v528-scrub-violators.sh'));
     expect(body).toMatch(/^# V-656 — V-528 Step 5: V-205 historical scrub via git-filter-repo\.$/m);
     expect(body).toMatch(
-      /^# Run ONLY AFTER V-528 Steps 3 \+ 4 \(repo flipped private\)\. Force-pushes$/m,
+      /^# Run ONLY AFTER V-528 Steps 3 \+ 4 \(repo flipped private\)\. Rewrites$/m,
     );
+    // V-817 SENTINEL — the retired claim must not return. The script does
+    // not push; saying it does invites the operator to skip the push.
+    expect(body, 'the script must not claim it pushes').not.toMatch(
+      /Force-pushes\s*\n# rewritten history/,
+    );
+    expect(body).toMatch(/^# history LOCALLY and prints the two force-push commands to run$/m);
     expect(body).toMatch(
-      /^# rewritten history\. Public-visible blast radius is zero post-Step-4\.$/m,
+      /^# afterwards — it does NOT push\. Public-visible blast radius is zero$/m,
     );
     expect(body).toMatch(
       /^#\s+- 63a20c1 "Handoff: Postmark approval requested \+ seamless-handoff bootstrap"$/m,

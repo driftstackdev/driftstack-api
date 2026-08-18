@@ -35420,3 +35420,33 @@ commit landed between V-814 and this one and raised BOTH pins for a `.test.tsx` 
 population and my file is what made it correct. My scripted bump asserted the old value and
 refused rather than double-counting, which is the only reason this was noticed; raising it
 blind would have put the exact-match arm one over instead of one under.
+
+## V-817 — the scrub script says it force-pushes; it does not push at all (2026-08-18)
+
+Action 13. `scripts/v528-scrub-violators.sh`'s header opened "Run ONLY AFTER V-528 Steps 3 + 4
+(repo flipped private). **Force-pushes rewritten history.**" It does not push. It rewrites
+history LOCALLY via `git filter-repo` and then `printf`s the two push commands for a human to
+run afterwards. The only `--force` in the file is `git filter-repo --force`, which is
+filter-repo's own flag for running on a non-fresh clone.
+
+**The dangerous reading is the reverse of the usual one.** Normally an over-claiming comment
+makes someone think a thing is safer than it is. Here it makes the operator think the scrub
+has already PUBLISHED — so they tick Step 5 off the privatization runbook and the two
+violator commits stay live on the remote, which is the entire point of the exercise. The
+script prints the commands; nothing makes anyone run them.
+
+Three pins froze the sentence, and my first literal grep for it found **none** of them,
+because all three write the regex with the line break inside it
+(`Force-pushes\s*\n# rewritten history`). Grepping for prose that a pin has split across a
+regex newline finds nothing and looks like a clean result. Enumerated properly by running the
+pins against the corrected source and reading what went red.
+
+Corrected the header to say what the script does, with sentinels in two of the three pins
+banning the retired sentence. Mutation: the false header restored → both sentinels fire.
+Restores byte-identical.
+
+Also fixed in the same commit: my scripted edit inserted `expect(p, …)` into a file whose
+variable is `body`, which vitest reported as `ReferenceError: p is not defined` — a loud
+failure, and worth contrasting with the silent one this session keeps producing. A stray `);`
+makes vitest report "no tests" and stay green; a wrong identifier inside a registered case
+fails properly. The `it(` count check caught neither, because the count was right both times.

@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 # V-656 — V-528 Step 5: V-205 historical scrub via git-filter-repo.
 #
-# Run ONLY AFTER V-528 Steps 3 + 4 (repo flipped private). Force-pushes
-# rewritten history. Public-visible blast radius is zero post-Step-4.
+# Run ONLY AFTER V-528 Steps 3 + 4 (repo flipped private). Rewrites
+# history LOCALLY and prints the two force-push commands to run
+# afterwards — it does NOT push. Public-visible blast radius is zero
+# post-Step-4.
+#
+# V-817 — the line above read "Force-pushes rewritten history". The only
+# --force here is git-filter-repo's own flag for running on a non-fresh
+# clone. Reading it as "the script publishes the scrub" is the dangerous
+# direction: the operator ticks the runbook step off and the violator
+# commits stay live on the remote.
 #
 # Two violator commits remain in history:
 #   - 63a20c1 "Handoff: Postmark approval requested + seamless-handoff bootstrap"
