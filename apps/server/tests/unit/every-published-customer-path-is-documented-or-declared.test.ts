@@ -58,9 +58,6 @@ const UNDOCUMENTED_BY_DESIGN: Record<string, string> = {
     'sign-in-with-Google/GitHub step consumed by the dashboard SPA, not by customer code. ' +
     'api/oauth.md documents Driftstack as an OAuth PROVIDER; the CLIENT flow has no page.',
   '/v1/auth/oauth-client/confirm-merge': 'same SPA-internal client flow as oauth-client/start',
-  '/v1/account/me/oauth-links':
-    'reads the identities linked to the account. Takes a `read` scope, so unlike its two ' +
-    'siblings a customer with a key CAN call it — the strongest candidate of the eight for a page.',
 };
 
 function normalise(p: string): string {

@@ -136,6 +136,36 @@ sessions with `revokeWebSession(id)` / `revoke_web_session(id)` /
 `RevokeWebSession(ctx, id)`. Revoke every other session in one
 call with `revokeAllOtherWebSessions()` / equivalent.
 
+## Linked sign-in identities
+
+`GET /v1/account/me/oauth-links`
+
+Lists the sign-in-with-Google/GitHub identities linked to the calling
+account. Requires broad `read`. There is no SDK wrapper for this endpoint
+yet — call it over HTTP.
+
+Pass `?active_only=true` to omit links that were revoked upstream at the
+identity provider.
+
+```json
+{
+  "data": [
+    {
+      "id": "ol_a1b2c3d4-...",
+      "provider": "google",
+      "provider_email": "you@example.com",
+      "linked_at": "2026-05-12T09:14:22.000Z",
+      "last_login_at": "2026-08-17T21:03:11.000Z",
+      "last_revoked_at": null
+    }
+  ]
+}
+```
+
+A non-null `last_revoked_at` means the provider link was revoked on the
+provider's side; sign in with a password or re-link to restore it.
+Removing a link from the Driftstack side is not exposed yet.
+
 ## Effective rate limits
 
 Read the calling account's effective per-bucket rate-limit config

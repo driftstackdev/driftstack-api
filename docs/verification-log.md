@@ -36763,3 +36763,39 @@ been doing unpaid work telling me so.
 Rebuilt admin-panel with the same `PUBLIC_API_BASE_URL` default `pretest` uses — a bare
 `npm run build --workspace` fails without it, which is itself a small argument for using the
 scripted path rather than reconstructing it by hand.
+
+## V-850 — documenting the endpoint I had deferred, and doing the four jobs it implies (2026-08-18)
+
+V-847 listed six published customer paths with no documentation and declined to write any of
+them, calling it an audience question. That was right for five and wrong for one, and I said so
+in the same entry without acting on it: `GET /v1/account/me/oauth-links` "takes a `read` scope,
+so unlike its two siblings a customer with a key CAN call it".
+
+There is no audience question about an endpoint a customer can call. It is in the published
+spec, it takes broad `read`, and it answers "which sign-in identities are attached to my
+account" — which the dashboard's own security page asks. Documented on `api/account.md` with
+its real shape (`id`, `provider`, `provider_email`, `linked_at`, `last_login_at`,
+`last_revoked_at`), the `?active_only=true` filter, and two things a caller needs that are not
+obvious from the schema: a non-null `last_revoked_at` means the provider revoked it upstream,
+and there is no Driftstack-side unlink yet. Noted that no SDK wraps it, because none does.
+
+The two SPA-internal OAuth-client steps stay listed. That distinction is the whole content of
+the audience question, and V-847 collapsed it by treating all three as one deferral.
+
+**V-846 and V-847 taught that a doc section has downstream obligations; this time I did them
+first rather than being told.** Four, not one: the nav child (page order, method-declaring so
+the integrity guard derives it), the endpoint census in the docs workspace (135 → 136), the
+child-anchor census in the SERVER workspace (143 → 144), and the docs rebuild. Plus a fifth
+that only exists because of yesterday's work — removing the path from
+`UNDOCUMENTED_BY_DESIGN`, since V-847's anti-blindfold arm fails on an exemption for something
+now documented.
+
+One thing worth recording from the nav file: the entry I inserted next to carries a comment
+saying a previous section shipped "without a nav child [so] the section was unreachable from
+the sidebar and the endpoint-children integrity guard failed". Someone hit exactly what V-846
+hit, wrote it down at the site, and it still did not stop me — I found it only because my first
+insertion anchor failed to match around their comment. A note at the scene of the last
+occurrence is not a mechanism either; the guard is.
+
+Mutation: the new section deleted → the coverage arm names `/v1/account/me/oauth-links`, which
+it could not have done before the exemption came off. Restores byte-identical.
