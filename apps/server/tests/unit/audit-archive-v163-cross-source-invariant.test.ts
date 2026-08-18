@@ -4,22 +4,26 @@
 //
 //   V-163 anchor — 'AuditArchiveService per ADR-006'.
 //
-//   Sweep semantics — 'rows older than 90 days from the four audit-
-//   shaped Postgres tables into Cloudflare R2 as gzip-compressed
-//   JSON Lines, partitioned by YYYY/MM/. After successful upload +
-//   checksum, DELETEs the archived rows. Records each sweep in
+//   Sweep semantics — 'rows older than 90 days from FIVE Postgres
+//   tables into Cloudflare R2 as gzip-compressed JSON Lines,
+//   partitioned by YYYY/MM/. After successful upload + checksum,
+//   DELETEs the archived rows. Records each sweep in
 //   audit_archive_runs'.
 //
 //   HOT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000 (= 90 days).
 //
-//   DEFAULT_BATCH_SIZE = 10_000 — keeps memory bounded on large
-//   windows.
+//   DEFAULT_BATCH_SIZE = 10_000, declared without a reader. This
+//   header used to repeat the constant's own claim that it "keeps
+//   memory bounded on large windows"; no code path reads it, so the
+//   arm below pins the value and the absence together.
 //
-//   AUDIT_TABLES (4-entry tuple):
+//   AUDIT_TABLES (5-entry tuple; this header said 4 until 2026-08-17,
+//   two waves after W438 added the fifth):
 //     - admin_audit_log         (timestamp column).
 //     - processed_stripe_events (received_at column).
 //     - legal_acceptances       (accepted_at column).
 //     - webhook_deliveries      (created_at column).
+//     - session_events          (created_at column).
 //
 //   R2 object key shape per ADR-006 §2:
 //     <prefix>/<table_name>/YYYY/MM/<table_name>_YYYY-MM.jsonl.gz.
@@ -99,14 +103,36 @@ describe('W932 V-163 audit-archive cross-source invariant', () => {
 
   // ─── DEFAULT_BATCH_SIZE = 10_000 ─────────────────────────────
 
-  it("CRITICAL DEFAULT_BATCH_SIZE = 10_000 — 'keeps memory bounded on large windows'. The 10k batch size is the memory ceiling per sweep tick.", () => {
+  it('CRITICAL DEFAULT_BATCH_SIZE = 10_000, and it is DECLARED WITHOUT A READER. This pin used to assert the sentence "keeps memory bounded on large windows" and this description used to call it "the memory ceiling per sweep tick". Neither was true: archiveTable reads every archivable row with no bound and holds the result set, a projected copy, a JSONL string and a gzip buffer. Two pins froze a claim the code never made — so the pin now records the value AND the fact that nothing reads it.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
-    expect(p).toMatch(/Default upload-batch size — keeps memory bounded on large windows/);
+    expect(p).toMatch(/DECLARED WITHOUT A READER/);
     expect(p).toMatch(/export const DEFAULT_BATCH_SIZE = 10_000;/);
     expect(DEFAULT_BATCH_SIZE).toBe(10_000);
   });
 
-  // ─── AUDIT_TABLES 4-entry tuple ──────────────────────────────
+  it('CRITICAL the batch size has a reader, or it says it has none. Two states are honest — a constant with a reader, or a constant that admits it has none. The state to fail is the third: no reader and no notice, which is what shipped and what two pins then froze in place. Wiring it must therefore delete the notice, and deleting the notice must wire it.', () => {
+    const src = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    // References OUTSIDE the declaration itself and outside its doc comment.
+    const readers = src
+      .split('\n')
+      .filter((l) => l.includes('DEFAULT_BATCH_SIZE'))
+      .filter((l) => !/^\s*(\*|\/\/)/.test(l))
+      .filter((l) => !/export const DEFAULT_BATCH_SIZE/.test(l));
+    const admitsNoReader = /DECLARED WITHOUT A READER/.test(src);
+    // EXCLUSIVE, not `||`. The first version of this arm was an OR, which the
+    // description above already contradicted — it says wiring the constant must
+    // delete the notice. An OR passes the state where a reader exists AND the
+    // notice still claims there is none, which is the stale comment this whole
+    // change is about, and the mutation that added a reader duly SURVIVED.
+    expect(
+      readers.length > 0 !== admitsNoReader,
+      readers.length > 0
+        ? 'DEFAULT_BATCH_SIZE now has a reader, so remove the DECLARED WITHOUT A READER notice and say what it bounds'
+        : 'DEFAULT_BATCH_SIZE has no reader and no notice — that is a memory bound that exists only in a comment',
+    ).toBe(true);
+  });
+
+  // ─── AUDIT_TABLES 5-entry tuple ──────────────────────────────
 
   it('CRITICAL AUDIT_TABLES is 5-entry as-const tuple — admin_audit_log/timestamp + processed_stripe_events/received_at + legal_acceptances/accepted_at + webhook_deliveries/created_at + session_events/created_at (W438). The table set + timestamp-column-name pairs are what window queries gate on.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));

@@ -66,9 +66,11 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     expect(body).toMatch(
       /\/\*\* 90 days in milliseconds — the hot-retention threshold\. \*\/\s*\n?\s*export const HOT_RETENTION_MS = 90 \* 24 \* 60 \* 60 \* 1000;/,
     );
-    expect(body).toMatch(
-      /\/\*\* Default upload-batch size — keeps memory bounded on large windows\. \*\/\s*\n?\s*export const DEFAULT_BATCH_SIZE = 10_000;/,
-    );
+    // Was pinned as "Default upload-batch size — keeps memory bounded on large
+    // windows". Nothing reads the constant, so that sentence bounded nothing;
+    // pinning the VALUE and the no-reader notice is the claim that is true.
+    expect(body).toMatch(/DECLARED WITHOUT A READER/);
+    expect(body).toMatch(/export const DEFAULT_BATCH_SIZE = 10_000;/);
     expect(body).toMatch(/export const MAX_ARCHIVED_WEBHOOK_BODY_BYTES = 64 \* 1024;/);
   });
 

@@ -32,7 +32,8 @@
 //   cost-nightly       listAllAccountIds  every active account, per nightly
 //                                         tick. Grows with the business.
 //   audit-archive      selectArchivableRows  every row older than the cutoff,
-//                                         across four audit tables. The service
+//                                         across the five tables in AUDIT_TABLES.
+//                                         The service
 //                                         defines DEFAULT_BATCH_SIZE = 10_000
 //                                         and documents it as "keeps memory
 //                                         bounded on large windows" — but the

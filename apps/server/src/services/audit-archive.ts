@@ -34,7 +34,24 @@ const gzipAsync = promisify(gzipCb);
 /** 90 days in milliseconds — the hot-retention threshold. */
 export const HOT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
-/** Default upload-batch size — keeps memory bounded on large windows. */
+/**
+ * Intended upload-batch size. DECLARED WITHOUT A READER — no code path
+ * references this constant.
+ *
+ * It used to say "keeps memory bounded on large windows", and two tests pinned
+ * that sentence. It was never true: `archiveTable` calls `selectArchivableRows`
+ * with no bound and holds the entire result set, then a projected copy, then one
+ * JSONL string, then a gzip buffer. There is no ceiling anywhere in that path,
+ * and the only reason it has not been felt is that this service has never been
+ * scheduled — so its first run would be against the whole backlog.
+ *
+ * Kept rather than deleted because it records the intended design, and wiring it
+ * is a real change: the read has to become a keyset walk, and one R2 object per
+ * window becomes N, which the ledger's single `r2ObjectKey` does not model.
+ * `the batch size has a reader, or it says it has none` below fails if this
+ * constant gains a reader while the notice remains, and fails if the notice goes
+ * while the constant still has none.
+ */
 export const DEFAULT_BATCH_SIZE = 10_000;
 
 /** Maximum legacy durable webhook body inspected during archive projection. */

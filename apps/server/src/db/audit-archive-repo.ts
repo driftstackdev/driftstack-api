@@ -1,9 +1,10 @@
 // V-172 — Drizzle-backed ArchiveTableRepo + ArchiveLedgerRepo for the
-// V-163 AuditArchiveService. The four audit-shaped tables
+// V-163 AuditArchiveService. The FIVE tables named by AUDIT_TABLES
 // (admin_audit_log / processed_stripe_events / legal_acceptances /
-// webhook_deliveries) each have a different primary-timestamp column
-// (per AUDIT_TABLES); this repo dispatches to the right table + column
-// per `tableName` argument.
+// webhook_deliveries / session_events) each have a different
+// primary-timestamp column; this repo dispatches to the right table +
+// column per `tableName` argument. This header said "four" until
+// 2026-08-17 — session_events was added by W438 and the count was not.
 //
 // Lifecycle: monthly cron-driven service (deployment-time scheduler;
 // not in this commit) calls AuditArchiveService.archiveAll(), which
@@ -11,6 +12,9 @@
 // Each archiveTable() call:
 //   1. selectArchivableRows() — SELECT rows older than 90 days from
 //      this repo, sha256 + gzip + R2 upload happens in service code.
+//      ⚠️ UNBOUNDED: no limit, and the caller holds the whole result
+//      set plus a projected copy, a JSONL string and a gzip buffer.
+//      See DEFAULT_BATCH_SIZE in services/audit-archive.ts.
 //   2. insertRun() — record in audit_archive_runs ledger.
 //   3. deleteRowsById() — DELETE archived rows from Postgres.
 //   4. markDeletedFromPostgres() — flip the ledger row's flag.

@@ -6,11 +6,12 @@
 //   V-172 anchor — 'V-172 — Drizzle-backed ArchiveTableRepo +
 //   ArchiveLedgerRepo for the V-163 AuditArchiveService'.
 //
-//   4-table framing — 'The four audit-shaped tables
-//   (admin_audit_log / processed_stripe_events / legal_acceptances /
-//   webhook_deliveries) each have a different primary-timestamp
-//   column (per AUDIT_TABLES); this repo dispatches to the right
-//   table + column per tableName argument'.
+//   Table dispatch — DERIVED from AUDIT_TABLES rather than pinned as
+//   prose. The prose said "The four audit-shaped tables" and had been
+//   wrong since W438 added session_events; a verbatim pin cannot tell
+//   a correction from a regression, so it kept the stale count
+//   mandatory. The arm now asserts the repo branches on exactly the
+//   declared set, in both the select and the delete switch.
 //
 //   Lifecycle 4-step framing — '1. selectArchivableRows() — SELECT
 //   rows older than 90 days from this repo, sha256 + gzip + R2
@@ -22,7 +23,8 @@
 //   DrizzleArchiveTableRepo 2-method surface — selectArchivableRows
 //     + deleteRowsById.
 //
-//   4-branch dispatch per ArchiveTableName:
+//   Per-ArchiveTableName dispatch (the arms below name four of the
+//   five explicitly; session_events is covered by the derived check):
 //     - admin_audit_log: lt(timestamp) + orderBy(timestamp, id).
 //     - processed_stripe_events: lt(receivedAt) + orderBy
 //       (receivedAt, eventId) + project event_id → id.
@@ -46,6 +48,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { AUDIT_TABLES } from '../../src/services/audit-archive.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
@@ -62,13 +66,24 @@ describe('W996 db/audit-archive-repo V-163 + V-172 cross-source invariant', () =
     expect(p).toMatch(/V-163 AuditArchiveService\./);
   });
 
-  it("CRITICAL 4-table framing — 'The four audit-shaped tables (admin_audit_log / processed_stripe_events / legal_acceptances / webhook_deliveries) each have a different primary-timestamp column (per AUDIT_TABLES); this repo dispatches to the right table + column per tableName argument'. The 4-table inventory is the ADR-006 archive scope.", () => {
+  it('CRITICAL the repo dispatches for exactly the tables AUDIT_TABLES names, in BOTH directions. This replaces a verbatim pin on the sentence "The four audit-shaped tables (admin_audit_log / processed_stripe_events / legal_acceptances / webhook_deliveries)", which had been wrong since W438 added session_events — five in the code, four in the pin, and the pin made the stale number mandatory. Derived from AUDIT_TABLES now, so a sixth table added to the service without a repo branch fails here instead of throwing on the tick nobody has scheduled yet.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/audit-archive-repo.ts'));
-    expect(p).toMatch(/The four audit-shaped tables/);
-    expect(p).toMatch(/\(admin_audit_log \/ processed_stripe_events \/ legal_acceptances \//);
-    expect(p).toMatch(/webhook_deliveries\) each have a different primary-timestamp column/);
-    expect(p).toMatch(/\(per AUDIT_TABLES\); this repo dispatches to the right table \+ column/);
-    expect(p).toMatch(/per `tableName` argument\./);
+    const declared = AUDIT_TABLES.map((t) => t.tableName).sort();
+    // The select dispatch and the delete dispatch are separate switches, and a
+    // table present in one and missing from the other archives rows it then
+    // cannot remove — the ledger would record a run that freed nothing.
+    const cases = [...p.matchAll(/case '([a-z_]+)':/g)].map((m) => m[1] ?? '');
+    for (const name of declared) {
+      expect(
+        cases.filter((c) => c === name).length,
+        `${name} is in AUDIT_TABLES but does not have both a select and a delete branch`,
+      ).toBeGreaterThanOrEqual(2);
+    }
+    expect(
+      [...new Set(cases)].sort(),
+      'the repo branches on a table AUDIT_TABLES does not name',
+    ).toEqual(declared);
+    expect(p).toMatch(/this repo dispatches to the right table \+/);
   });
 
   // ─── Lifecycle 4-step framing ────────────────────────────────

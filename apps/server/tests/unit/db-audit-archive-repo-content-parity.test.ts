@@ -40,10 +40,18 @@ function read(p: string): string {
 describe('W448.A apps/server/src/db/audit-archive-repo.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-172 + V-163 framing pinned: 'Drizzle-backed ArchiveTableRepo + ArchiveLedgerRepo for the V-163 AuditArchiveService.' + 4-audit-table dispatch rationale", () => {
+  it("V-172 + V-163 framing pinned: 'Drizzle-backed ArchiveTableRepo + ArchiveLedgerRepo for the V-163 AuditArchiveService.' + the AUDIT_TABLES dispatch rationale", () => {
+    // The table COUNT is deliberately not pinned here any more. This block used
+    // to require the paragraph verbatim, including the words "The four
+    // audit-shaped tables" — and session_events had been the fifth since W438.
+    // A verbatim pin cannot tell a correction from a regression, so it kept the
+    // stale number mandatory. The count now lives in an assertion that derives
+    // it from AUDIT_TABLES; see the cross-source invariant file.
     expect(body).toMatch(
-      /\/\/ V-172 — Drizzle-backed ArchiveTableRepo \+ ArchiveLedgerRepo for the\s*\n?\s*\/\/ V-163 AuditArchiveService\. The four audit-shaped tables\s*\n?\s*\/\/ \(admin_audit_log \/ processed_stripe_events \/ legal_acceptances \/\s*\n?\s*\/\/ webhook_deliveries\) each have a different primary-timestamp column\s*\n?\s*\/\/ \(per AUDIT_TABLES\); this repo dispatches to the right table \+ column\s*\n?\s*\/\/ per `tableName` argument\./,
+      /\/\/ V-172 — Drizzle-backed ArchiveTableRepo \+ ArchiveLedgerRepo for the\s*\n?\s*\/\/ V-163 AuditArchiveService\./,
     );
+    expect(body).toMatch(/this repo dispatches to the right table \+/);
+    expect(body).toMatch(/per `tableName` argument\./);
   });
 
   it('lifecycle framing pinned: 4-step archiveTable cycle (selectArchivableRows → insertRun → deleteRowsById → markDeletedFromPostgres)', () => {
