@@ -6,8 +6,10 @@
 //   Server emits 3 values (server-of-truth):
 //     1. operational — all probes ok.
 //     2. degraded    — at least one probe failed.
-//     3. major_outage — reserved for future incidents; not
-//                       currently reachable from probes.
+//     3. major_outage — never produced by a probe (runComponentCheck
+//                       returns only the first two), but DOES reach
+//                       the overall verdict when an open incident of
+//                       outage severity is present.
 //
 //   Client-side StatusBadge.astro handles 4 (server 3 + 'unknown'):
 //     - 'unknown' is the client-fallback when fetch fails / times
@@ -57,9 +59,30 @@ describe('W866 V-474 ComponentStatus cross-source invariant', () => {
     expect(p).toMatch(/return 'operational';/);
   });
 
-  it("CRITICAL server-side comment pins the 'major_outage isn't reachable from readiness probes today' framing. The future-reserved status documentation is what tells maintainers it's intentionally unused.", () => {
+  // V-796 — this arm used to pin the sentence "'major_outage' isn't reachable from
+  // the readiness probes today … reserved for future incidents service", describing
+  // the value as intentionally unused. Half of that was true and half had been
+  // false for as long as the incidents service has been wired: `hasOpenOutage` sets
+  // the OVERALL status to 'major_outage' on every request. StatusBadge renders that
+  // value, so a maintainer who trusted "intentionally unused" would have concluded
+  // the client's `case 'major_outage':` was dead code and been free to delete it.
+  //
+  // The surviving half is about COMPONENTS, and it is derived here rather than read
+  // out of a comment: runComponentCheck's own returns are the evidence.
+  it('CRITICAL no probe can produce major_outage, while the overall verdict still can — derived from runComponentCheck, because a comment saying "intentionally unused" would invite deleting the client branch that renders it', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status.ts'));
-    expect(p).toMatch(/'major_outage' isn't reachable from the readiness probes today/);
+    const check = p.slice(
+      p.indexOf('async function runComponentCheck'),
+      p.indexOf('function aggregateOverall'),
+    );
+    expect(check.length, 'runComponentCheck is gone or was reordered').toBeGreaterThan(0);
+    expect([...check.matchAll(/status: '(\w+)'/g)].map((m) => m[1]).sort()).toEqual([
+      'degraded',
+      'operational',
+    ]);
+    expect(p, 'the overall escalation is what makes the value live').toContain(
+      "if (hasOpenOutage) overallStatus = 'major_outage';",
+    );
   });
 
   // ─── Marketing-site StatusBadge.astro switch ─────────────────

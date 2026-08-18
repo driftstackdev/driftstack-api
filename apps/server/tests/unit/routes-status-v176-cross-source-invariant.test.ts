@@ -7,7 +7,7 @@
 //   Distinction framing — 'Distinct from /ready (which is the k8s /
 //   liveness probe consumed by orchestration infrastructure). /v1/
 //   status is the CUSTOMER-FACING status surface — what the public
-//   status page (marketing-site /status, future) consumes'.
+//   status page (apps/status-site, deployed to Cloudflare) consumes'.
 //
 //   Constants — CACHE_MAX_AGE_SEC 30 + COMPONENT_TIMEOUT_MS 1500.
 //
@@ -20,14 +20,16 @@
 //   aggregateOverall framing — 'any major_outage → major_outage; any
 //   degraded → degraded; else operational'.
 //
-//   Major-outage-reserved framing — 'major_outage isn't reachable
-//   from the readiness probes today (single-failure → degraded);
-//   reserved for future incidents service to mark wide-blast-radius
-//   outages'.
+//   Major-outage reachability — DERIVED, not read out of a comment:
+//   runComponentCheck returns only 'operational' | 'degraded', so no
+//   component can be 'major_outage'; the OVERALL verdict reaches it
+//   through `hasOpenOutage`. V-796 replaced the old "reserved for
+//   future incidents service" sentence, which had been false since
+//   that service was wired.
 //
 //   No-auth + 30s-cache framing — 'No auth required — status pages
-//   are public. Caching: caller (Cloudflare Pages, future) caches
-//   the response for ~30s. Response includes Cache-Control: public,
+//   are public. Caching: the caller (Cloudflare Pages) caches the
+//   response for ~30s. Response includes Cache-Control: public,
 //   max-age=30'.
 //
 //   Response shape — { overall_status (aggregateOverall(components)
@@ -54,8 +56,8 @@ describe('W1033 routes/status V-176 cross-source invariant', () => {
     expect(p).toMatch(/V-176 — public-facing status endpoint\./);
     expect(p).toMatch(/Distinct from \/ready \(which is the k8s \/ liveness probe consumed by/);
     expect(p).toMatch(/orchestration infrastructure\)\. \/v1\/status is the CUSTOMER-FACING/);
-    expect(p).toMatch(/status surface — what the public status page \(marketing-site/);
-    expect(p).toMatch(/\/status, future\) consumes\./);
+    expect(p).toMatch(/status surface — what the public status page \(apps\/status-site,/);
+    expect(p).toMatch(/deployed to Cloudflare\) consumes\./);
   });
 
   it('CRITICAL constants — CACHE_MAX_AGE_SEC 30 + COMPONENT_TIMEOUT_MS 1500.', () => {
@@ -93,18 +95,35 @@ describe('W1033 routes/status V-176 cross-source invariant', () => {
     expect(p).toMatch(/return 'operational';/);
   });
 
-  it("CRITICAL major-outage-reserved framing — 'major_outage isn't reachable from the readiness probes today (single-failure → degraded); reserved for future incidents service to mark wide-blast-radius outages'.", () => {
+  // V-796 — the superseded version of this arm pinned "'major_outage' isn't
+  // reachable from the readiness probes today … reserved for future incidents
+  // service". The clause about COMPONENTS is true; the clause about the future is
+  // not, and has not been since publicFeed() was wired — the arm two below pins
+  // `if (hasOpenOutage) overallStatus = 'major_outage';`, so this guard asserted a
+  // claim and its refutation in the same run and passed on both. A parity pin
+  // records what the text said, never whether it was true.
+  it('CRITICAL major_outage is unreachable from components and reachable overall — derived from runComponentCheck rather than taken from the sentence describing it', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status.ts'));
-    expect(p).toMatch(/'major_outage' isn't reachable from the readiness probes today/);
-    expect(p).toMatch(/\(single-failure → 'degraded'\); reserved for future incidents/);
-    expect(p).toMatch(/service to mark wide-blast-radius outages\./);
+    const check = p.slice(
+      p.indexOf('async function runComponentCheck'),
+      p.indexOf('function aggregateOverall'),
+    );
+    expect(check.length, 'runComponentCheck is gone or was reordered').toBeGreaterThan(0);
+    expect([...check.matchAll(/status: '(\w+)'/g)].map((m) => m[1]).sort()).toEqual([
+      'degraded',
+      'operational',
+    ]);
+    expect(p).toMatch(/No readiness check can produce 'major_outage'/);
+    expect(p).toContain("if (hasOpenOutage) overallStatus = 'major_outage';");
   });
 
-  it("CRITICAL no-auth + 30s-cache framing — 'No auth required — status pages are public. Caching: caller (Cloudflare Pages, future) caches the response for ~30s. Response includes Cache-Control: public, max-age=30'.", () => {
+  it("CRITICAL no-auth + 30s-cache framing — 'No auth required — status pages are public. Caching: the caller (Cloudflare Pages) caches the response for ~30s. Response includes Cache-Control: public, max-age=30'.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status.ts'));
     expect(p).toMatch(/\/\/ No auth required — status pages are public\./);
-    expect(p).toMatch(/\/\/ Caching: caller \(Cloudflare Pages, future\) caches the response for/);
-    expect(p).toMatch(/\/\/ ~30s\. Response includes Cache-Control: public, max-age=30\./);
+    expect(p).toMatch(
+      /\/\/ Caching: the caller \(Cloudflare Pages\) caches the response for ~30s\./,
+    );
+    expect(p).toMatch(/\/\/ Response includes Cache-Control: public, max-age=30\./);
     expect(p).toMatch(
       /reply\.header\('cache-control', `public, max-age=\$\{CACHE_MAX_AGE_SEC\.toString\(\)\}`\);/,
     );

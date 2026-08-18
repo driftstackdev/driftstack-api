@@ -6,22 +6,22 @@
 //
 //   • V-176 framing pinned: /v1/status customer-facing status surface
 //     distinct from /ready (k8s/orchestration liveness).
-//   • Response shape framing pinned: overall_status +
-//     components[{name, status, last_checked_at}] + recent_incidents
-//     placeholder; overall_status: 'operational' | 'degraded' |
-//     'major_outage'.
+//   • Response shape: every field of StatusResponse must appear in the
+//     header's documented shape block — DERIVED from the interface, so a
+//     new field cannot be added without being written down. It was: the
+//     header documented three fields for a five-field body.
 //   • Aggregation rules pinned: any major_outage → major_outage;
-//     any degraded → degraded; else operational; major_outage NOT
-//     reachable from readiness probes today (reserved for future
-//     incidents service to mark wide-blast-radius outages).
+//     any degraded → degraded; else operational. No COMPONENT can be
+//     major_outage (derived from runComponentCheck's two returns);
+//     the OVERALL verdict reaches it through hasOpenOutage.
 //   • Per-component derivation: ReadinessCheck.fn() ok → operational;
 //     failed (throw or timeout) → degraded.
 //   • Timeout: COMPONENT_TIMEOUT_MS = 1500 default; Promise.race
 //     against per-check `timeoutMs` override.
 //   • Auth posture: no auth (status pages public).
-//   • Cache framing pinned: caller (Cloudflare Pages, future) caches
-//     ~30s; CACHE_MAX_AGE_SEC = 30; Cache-Control: public, max-age=30
-//     header set on every response.
+//   • Cache framing pinned: the caller (Cloudflare Pages) caches ~30s;
+//     CACHE_MAX_AGE_SEC = 30; Cache-Control: public, max-age=30 header
+//     set on every response.
 //   • recent_incidents: readonly PublicIncidentSummary[]; populated
 //     from optional incidentsService (last 5 public incidents from
 //     30d window). Empty array when the service is undefined (fresh
@@ -37,6 +37,15 @@
 //     clear, false alarm" — when it means incident storage is unavailable.
 //     Backwards, and precisely when it costs the most. The method name was
 //     stale too: list() became publicFeed().
+//   • V-796 — the same failure again, and this file held BOTH halves of it.
+//     The header called recent_incidents a "placeholder; future: incidents
+//     service" and major_outage "reserved for future incidents service",
+//     while the handler arm below pinned publicFeed(), open_incidents and
+//     `if (hasOpenOutage) overallStatus = 'major_outage';`. A claim and its
+//     refutation, asserted green in the same run, because a parity pin
+//     records what the text SAID and never whether it was true. Anything
+//     still checkable is now derived: the response-shape arm reads
+//     StatusResponse, and the aggregation arm reads runComponentCheck.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -57,24 +66,72 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
   it('V-176 framing pinned: customer-facing /v1/status distinct from /ready (k8s liveness orchestration probe)', () => {
     expect(body).toMatch(/V-176 — public-facing status endpoint\./);
     expect(body).toMatch(
-      /Distinct from \/ready \(which is the k8s \/ liveness probe consumed by\s*\n?\s*\/\/\s*orchestration infrastructure\)\. \/v1\/status is the CUSTOMER-FACING\s*\n?\s*\/\/\s*status surface — what the public status page \(marketing-site\s*\n?\s*\/\/\s*\/status, future\) consumes\./,
+      /Distinct from \/ready \(which is the k8s \/ liveness probe consumed by\s*\n?\s*\/\/\s*orchestration infrastructure\)\. \/v1\/status is the CUSTOMER-FACING\s*\n?\s*\/\/\s*status surface — what the public status page \(apps\/status-site,\s*\n?\s*\/\/\s*deployed to Cloudflare\) consumes\./,
     );
   });
 
-  it('Aggregation rules pinned: major_outage > degraded > operational; major_outage NOT reachable from readiness probes today', () => {
+  // V-796 — this arm used to pin "'major_outage' … reserved for future incidents
+  // service", while the handler arm below pinned
+  // `if (hasOpenOutage) overallStatus = 'major_outage';`. Both passed. A parity pin
+  // records what the text SAID, never whether it was true, so the guard asserted a
+  // claim and its own refutation in the same run and stayed green for both.
+  //
+  // The half that is still true is narrower and worth stating exactly: no COMPONENT
+  // can be 'major_outage', because runComponentCheck only ever returns two values —
+  // so aggregateOverall's first branch is unreachable from components alone, while
+  // the OVERALL verdict reaches 'major_outage' through an open outage incident.
+  // That is derived from runComponentCheck's returns rather than taken from prose.
+  it('Aggregation rules: major_outage > degraded > operational, and NO component can be major_outage — derived from runComponentCheck, not from the comment claiming it', () => {
     expect(body).toMatch(
       /Overall: any 'major_outage' → 'major_outage'; any 'degraded' →\s*\n?\s*\/\/\s*'degraded'; else 'operational'\./,
     );
-    expect(body).toMatch(
-      /'major_outage' isn't reachable from the readiness probes today\s*\n?\s*\/\/\s*\(single-failure → 'degraded'\); reserved for future incidents\s*\n?\s*\/\/\s*service to mark wide-blast-radius outages\./,
+    const check = body.slice(
+      body.indexOf('async function runComponentCheck'),
+      body.indexOf('function aggregateOverall'),
     );
+    expect(check.length, 'runComponentCheck is gone or was reordered').toBeGreaterThan(0);
+    const produced = [...check.matchAll(/status: '(\w+)'/g)].map((m) => m[1]).sort();
+    expect(produced, 'a readiness check now yields a status this header does not describe').toEqual(
+      ['degraded', 'operational'],
+    );
+    expect(
+      body,
+      'the header must say the component branch is unreachable rather than "reserved for future"',
+    ).toMatch(
+      /No readiness check can produce 'major_outage': runComponentCheck\s*\n?\s*\/\/\s*returns only 'operational' or 'degraded'/,
+    );
+    expect(
+      body,
+      'and must say the OVERALL verdict still reaches it, or the reader concludes the value is dead',
+    ).toMatch(/an open incident of outage severity\s*\n?\s*\/\/\s*sets 'major_outage' directly/);
   });
 
   it('No-auth posture + Cloudflare ~30s cache framing pinned with public, max-age=30 header', () => {
     expect(body).toMatch(/No auth required — status pages are public\./);
     expect(body).toMatch(
-      /Caching: caller \(Cloudflare Pages, future\) caches the response for\s*\n?\s*\/\/\s*~30s\. Response includes Cache-Control: public, max-age=30\./,
+      /Caching: the caller \(Cloudflare Pages\) caches the response for ~30s\.\s*\n?\s*\/\/\s*Response includes Cache-Control: public, max-age=30\./,
     );
+  });
+
+  // The header documents the wire shape, and it documented three fields for a body
+  // that has five — open_incidents and incident_data_complete were added and never
+  // written down. An integrator reads the shape block, not the interface. So this
+  // DERIVES the field list from StatusResponse and requires each one to appear in
+  // the documented shape, instead of pinning a paragraph that can be outlived by
+  // the type beside it.
+  it('every StatusResponse field is documented in the header shape block — derived from the interface, so a new field cannot be added silently', () => {
+    const iface = body.slice(body.indexOf('interface StatusResponse {'));
+    const fields = [...iface.slice(0, iface.indexOf('\n}')).matchAll(/^\s*(\w+):/gm)].map(
+      (m) => m[1] as string,
+    );
+    expect(fields.length, 'StatusResponse parsed as empty').toBeGreaterThan(3);
+    const shape = body.slice(
+      body.indexOf('// Response shape:'),
+      body.indexOf('// Component check'),
+    );
+    for (const f of fields) {
+      expect(shape, `${f} is in the response but not in the documented shape`).toContain(f);
+    }
   });
 
   it('Constants: CACHE_MAX_AGE_SEC=30 + COMPONENT_TIMEOUT_MS=1500', () => {

@@ -2,8 +2,8 @@
 //
 // Distinct from /ready (which is the k8s / liveness probe consumed by
 // orchestration infrastructure). /v1/status is the CUSTOMER-FACING
-// status surface — what the public status page (marketing-site
-// /status, future) consumes.
+// status surface — what the public status page (apps/status-site,
+// deployed to Cloudflare) consumes.
 //
 // Response shape:
 //   {
@@ -11,7 +11,11 @@
 //     components: [
 //       { name, status, last_checked_at }
 //     ],
-//     recent_incidents: []  // placeholder; future: incidents service
+//     recent_incidents: [
+//       { id, title, severity, status, started_at, resolved_at }
+//     ],
+//     open_incidents: number | null,
+//     incident_data_complete: boolean
 //   }
 //
 // Component check derivation:
@@ -19,14 +23,37 @@
 //     existing timeout. ok → 'operational'; failed → 'degraded'.
 //   - Overall: any 'major_outage' → 'major_outage'; any 'degraded' →
 //     'degraded'; else 'operational'.
-//   - 'major_outage' isn't reachable from the readiness probes today
-//     (single-failure → 'degraded'); reserved for future incidents
-//     service to mark wide-blast-radius outages.
+//   - No readiness check can produce 'major_outage': runComponentCheck
+//     returns only 'operational' or 'degraded', so aggregateOverall's
+//     first branch is unreachable from components alone. The OVERALL
+//     verdict still reaches it — an open incident of outage severity
+//     sets 'major_outage' directly, which is the wide-blast-radius
+//     signal a per-component probe cannot express.
+//
+// V-796 — incidents are LIVE here, and this header used to say they were
+// not. It described recent_incidents as "placeholder; future: incidents
+// service" and 'major_outage' as "reserved for future incidents service",
+// long after publicFeed() was wired and the hasOpenOutage escalation was
+// emitting exactly that value. This file's own drift guard pinned BOTH the
+// "future" sentence and the `if (hasOpenOutage) overallStatus =
+// 'major_outage';` line that refutes it — a claim and its contradiction
+// asserted green in the same run, because a parity pin records what the
+// text said, never whether it was true. It also documented a three-field
+// response for a body that has five.
+//
+// recent_incidents is the newest RECENT_INCIDENTS_LIMIT public incidents
+// inside RECENT_INCIDENTS_WINDOW_MS; open_incidents is the exact all-time
+// open count.
+//
+// Absence fails CLOSED. No incidentsService, or a publicFeed() throw, sets
+// incident_data_complete=false, nulls open_incidents, and escalates an
+// otherwise-operational verdict to 'degraded'. An empty incident list is
+// never an all-clear on its own.
 //
 // No auth required — status pages are public.
 //
-// Caching: caller (Cloudflare Pages, future) caches the response for
-// ~30s. Response includes Cache-Control: public, max-age=30.
+// Caching: the caller (Cloudflare Pages) caches the response for ~30s.
+// Response includes Cache-Control: public, max-age=30.
 
 import type { FastifyInstance } from 'fastify';
 import type { ReadinessCheck } from '../lib/app.js';
