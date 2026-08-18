@@ -68,6 +68,11 @@ const HAND_MAINTAINED_COUNT =
  * MEASURED 2026-08-17 with a CORRECT extractor. May only fall; raising either is
  * the bug this file is about.
  *
+ * Ratcheted 76 → 75 (futureTense) by V-841, which retired the byok-rotation pin's
+ * frozen "deferred to a follow-up" wiring claim. Measured in the same breath as
+ * the pin edit rather than discovered by the next full run — the first time in
+ * three that this ceiling moved without the arm having to catch it.
+ *
  * Ratcheted 77 → 76 (futureTense) by V-838, which retired the usage-series pin's
  * frozen "writers not wired" claim. Caught by the tight arm in the next full
  * run, exactly as the V-819 note below predicted it would be — and for the same
@@ -101,7 +106,7 @@ const HAND_MAINTAINED_COUNT =
  * that were both broken — the comparison measured nothing and agreed with itself.
  * The fixture case below is what actually caught it.
  */
-const CEILINGS = { futureTense: 76, handMaintainedCount: 91 } as const;
+const CEILINGS = { futureTense: 75, handMaintainedCount: 91 } as const;
 
 function parityPinFiles(): string[] {
   return readdirSync(UNIT_DIR)
