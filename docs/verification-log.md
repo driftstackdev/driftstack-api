@@ -36724,3 +36724,42 @@ under test. Confirmed by reading both counts. The valid proofs mutate the page r
 removing a scope fails the containment arm, adding one the enum lacks fails the length arm with
 "expected 19, got 20" where the 19 is derived. This is the second time in this sweep that a
 mutation silently failed to apply and the green looked like evidence.
+
+## V-849 — the staleness risk I went looking for does not exist, and why I kept tripping it (2026-08-18)
+
+V-848 pointed my new derivation at `ApiKeyScopeSchema.options`, which resolves through
+`@driftstack/api-types` — whose `package.json` sets `main: dist/index.js`. **383 test files
+import that package.** If `dist` could drift from `src`, all of them would be asserting against
+a previous build, which is the failure `dist-reading-suites-have-fresh-artifacts` exists to
+prevent for the Astro apps — at a far larger scale, and that gate only walks `apps/*/dist`.
+
+So I measured it, and the answer is that the gap is not there.
+
+**`pretest` builds every workspace before the suite runs**:
+`npm run build --workspaces --if-present`, with `PUBLIC_API_BASE_URL` defaulted. `npm test`
+therefore cannot execute against a stale package build. No guard is needed because the entry
+point already closes it, and adding an mtime gate over `packages/*/dist` would fire on every
+uncommitted source edit during normal work — a guard that cries constantly is one people learn
+to ignore.
+
+**The mtime scan said three packages were stale, and that was me.** `api-types`,
+`sdk-typescript` and `behavioural-simulation` all showed src newer than dist. All three are
+byte-identical to HEAD — `git status` is clean for them — because a mutation proof rewrites a
+file and restores it, which preserves content and not mtime. The semantic check agrees: the
+built enum and the source enum both carry 19 scopes. There is no drift; there was only my own
+tooling leaving fingerprints.
+
+**And that explains the two failures in this run.** `admin-cost-page` and the freshness gate
+both failed on admin-panel dist being older than admin-panel source — because V-848's valid
+mutation edited `apps/admin-panel/src/pages/api-keys.astro` and restored it. Same fingerprint,
+one workspace over.
+
+**The process lesson is mine, not the repo's.** I have been running `npx vitest run`, which
+skips `pretest` and so skips the build. The project's own command is `npm test`, and every time
+an artifact-freshness gate has fired at me this session — docs twice, admin-panel now — it was
+catching exactly that. The gates are correct and I was using the wrong entry point; they have
+been doing unpaid work telling me so.
+
+Rebuilt admin-panel with the same `PUBLIC_API_BASE_URL` default `pretest` uses — a bare
+`npm run build --workspace` fails without it, which is itself a small argument for using the
+scripted path rather than reconstructing it by hand.
