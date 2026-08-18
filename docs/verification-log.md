@@ -36934,3 +36934,38 @@ Two checks that do prove it:
 So the arc's guards are collected, run, and counted. Nothing to fix — recorded because "I ran
 it myself and it passed" is the weakest possible evidence that a check is live, and I had been
 relying on it eleven times over.
+
+## V-855 — the blind-spot disclosure understated the blind spot by half (2026-08-18)
+
+`scripts/verify-suite.mjs` carries the note explaining why a green local run is not a complete
+one: integration files gate themselves on `DATABASE_URL`, so a checkout without Postgres
+reports the same "passed" line as a full run. The note existed because, in its own words, "the
+one thing this file exists to prevent is a partial run reading as a complete one."
+
+It said **56 files** gate themselves, and quantified the gap as **264 tests** — 26,802 without
+Postgres against 27,066 with it. The run that turned this up reports **109 skipped files and
+532 skipped tests** out of 3056 / 30,412.
+
+So a disclosure whose whole job is to stop a reader under-reading the suite was itself
+under-reporting by roughly half, on a tree grown by a third since the measurement. That is
+worse than giving no number: a reader takes a stated figure as current and concludes the hidden
+set is small.
+
+Fixed by removing the snapshot rather than refreshing it. `judge()` already returns
+`skippedFiles`, parsed off the actual summary line, so the size is reported at runtime and the
+prose does not need to carry one. The pin's `it()` title carried the same figures and is
+rewritten the same way — V-826's lesson, applied without having to be caught by it this time.
+
+**The skip surface itself is healthy, which is why this was the only finding in it.** 142 skip
+sites across 118 files, and **zero are unconditional**: 96 gate on `DATABASE_URL`, 6 on a
+`RUN_DB_TESTS` flag, 4 on `REDIS_URL`, 4 on an npmrc probe, and 2 on `hasEgressImpl` — the
+marketing-egress guard designed to retire itself once egress shipped, which it has. No test is
+skipped for a reason that has expired, which was the V-841 shape I went looking for.
+
+**I broke my own restore discipline and caught it in the same breath.** The mutation proof
+restored `verify-suite.mjs` from the snapshot taken BEFORE the fix, which reverted the fix
+rather than the mutation — the shasum comparison printed NO, I checked which version was on
+disk, and re-applied. The rule I have been following all arc is to snapshot the WORKING state
+after editing and restore from that; here I reached for the pristine pre-edit copy instead. The
+byte-comparison is what made it visible, which is the only reason it is a footnote rather than
+a silently reverted commit.

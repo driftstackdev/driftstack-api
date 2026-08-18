@@ -121,7 +121,7 @@ describe('the suite verifier refuses to call an under-run green', () => {
     );
   });
 
-  it('CRITICAL a run that SKIPPED files reports how many, because "2576 passed" reads identically whether 63 files ran or not. Both fixtures below are real output from the same tree minutes apart: without DATABASE_URL, 56 files gate themselves off and 2642 files / 26,802 tests run; with it pointed at the local Postgres, 2645 files / 27,066 tests run. The 264-test difference is the real-database guards on keyset SQL, concurrency and idempotency — legitimate to skip on a machine with no Postgres, and the reason the verdict stays ok, but not something a reader should have to infer.', () => {
+  it('CRITICAL a run that SKIPPED files reports how many, because a passed-count reads identically whether the gated files ran or not. The fixtures below are real output from one tree minutes apart, with and without DATABASE_URL; the difference is the real-database guards on keyset SQL, concurrency and idempotency — legitimate to skip on a machine with no Postgres, and the reason the verdict stays ok, but not something a reader should have to infer. V-855 removed the measured sizes from this title: they were taken on a tree two thirds the current one and had drifted to roughly half the real figure, which is a worse disclosure than none. The count is read off the summary at runtime.', () => {
     const withoutPostgres =
       ' Test Files  2576 passed | 63 skipped (2642)\n      Tests  26802 passed | 252 skipped (27059)\n';
     const withPostgres =

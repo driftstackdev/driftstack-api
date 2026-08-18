@@ -126,14 +126,22 @@ export function judge({ output, exitCode, expectedFiles = EXPECTED_TEST_FILES })
     }
   }
 
-  // Files vitest COLLECTED but did not execute. Legitimate — 56 files gate
-  // themselves on `!process.env.CI && !process.env.DATABASE_URL` so a checkout
-  // without Postgres still runs — but invisible in a way that matters: the
-  // summary reports "2571 passed" either way, and a reader takes that as the
-  // whole suite. Measured: with DATABASE_URL pointing at the local Postgres,
-  // the same tree runs 2645 files and 27,066 tests instead of 2642 and 26,802.
-  // That is 264 tests, and they are the ones locking the shipped keyset SQL,
-  // concurrency semantics and idempotency uniqueness against a real database.
+  // Files vitest COLLECTED but did not execute. Legitimate — they gate
+  // themselves on `!process.env.CI && !process.env.DATABASE_URL` (and a few on
+  // REDIS_URL) so a checkout without Postgres still runs — but invisible in a
+  // way that matters: the summary reports the same "passed" count either way,
+  // and a reader takes that as the whole suite. The hidden tests are the ones
+  // locking the shipped keyset SQL, concurrency semantics and idempotency
+  // uniqueness against a real database.
+  //
+  // V-855 — this paragraph used to carry a measured snapshot: 56 gated files,
+  // and a 264-test difference between 26,802 and 27,066. Those numbers are
+  // from a tree roughly two thirds this size; the run that found them stale
+  // reports 109 skipped files and 532 skipped tests. A disclosure of a blind
+  // spot that understates it by half is worse than one that gives no number,
+  // because the reader takes the figure as current. The size is REPORTED at
+  // runtime below — `skippedFiles` comes off the actual summary line — so the
+  // prose no longer needs a snapshot and cannot go stale again.
   //
   // NOT a problem — refusing a green on a machine with no Postgres would make
   // this tool unusable there — but it is reported, because the one thing this
