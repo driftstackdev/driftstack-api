@@ -952,35 +952,39 @@ export async function createProductionDeps(
     });
   };
   const incidentsRepo = new DrizzleIncidentsRepo(dbHandle);
-  const incidentsService = new IncidentsService(incidentsRepo, {
-    onPublicCreated: async (incident, update) => {
-      // V-295e — bus emit is sync + in-process; doesn't need awaiting.
-      incidentEventBus.publishCreated(incident, update);
-      publishIncidentNotification(incident);
-      await Promise.all([
-        incidentNotifications.notifyCreated(incident, update),
-        incidentBroadcast.notifyCreated(incident, update),
-      ]);
+  const incidentsService = new IncidentsService(
+    incidentsRepo,
+    {
+      onPublicCreated: async (incident, update) => {
+        // V-295e — bus emit is sync + in-process; doesn't need awaiting.
+        incidentEventBus.publishCreated(incident, update);
+        publishIncidentNotification(incident);
+        await Promise.all([
+          incidentNotifications.notifyCreated(incident, update),
+          incidentBroadcast.notifyCreated(incident, update),
+        ]);
+      },
+      onPublicResolved: async (incident, update) => {
+        incidentEventBus.publishResolved(incident, update);
+        publishIncidentNotification(incident);
+        await Promise.all([
+          incidentNotifications.notifyResolved(incident, update),
+          incidentBroadcast.notifyResolved(incident, update),
+        ]);
+      },
+      // V-545.B Phase 2 — per-update fan-out. notifyUpdated enforces
+      // the throttle internally so a long-running incident can't spam
+      // subscribers. Broadcast surface unchanged (Slack/generic webhooks
+      // don't have the per-recipient throttle semantics email does).
+      // S45 — the SSE frame is NOT throttled: it's a live in-memory
+      // stream (no inbox to spam), and the dashboard wants every update.
+      onPublicUpdated: async (incident, update) => {
+        publishIncidentNotification(incident);
+        await incidentNotifications.notifyUpdated(incident, update);
+      },
     },
-    onPublicResolved: async (incident, update) => {
-      incidentEventBus.publishResolved(incident, update);
-      publishIncidentNotification(incident);
-      await Promise.all([
-        incidentNotifications.notifyResolved(incident, update),
-        incidentBroadcast.notifyResolved(incident, update),
-      ]);
-    },
-    // V-545.B Phase 2 — per-update fan-out. notifyUpdated enforces
-    // the throttle internally so a long-running incident can't spam
-    // subscribers. Broadcast surface unchanged (Slack/generic webhooks
-    // don't have the per-recipient throttle semantics email does).
-    // S45 — the SSE frame is NOT throttled: it's a live in-memory
-    // stream (no inbox to spam), and the dashboard wants every update.
-    onPublicUpdated: async (incident, update) => {
-      publishIncidentNotification(incident);
-      await incidentNotifications.notifyUpdated(incident, update);
-    },
-  });
+    logger,
+  );
 
   // V-295b — health-probe poller. The default probe target is this
   // server's own /health endpoint via env-configured PUBLIC_API_BASE_URL

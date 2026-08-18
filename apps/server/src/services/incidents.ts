@@ -161,10 +161,19 @@ export interface IncidentsRepo {
 /**
  * V-295c3-followup — lifecycle callbacks.
  *
- * Both fire AFTER the incident write commits successfully. Callbacks
- * are awaited; a throw is logged + swallowed by the IncidentsService
- * (we never want a notification failure to roll back an incident
- * write — the incident IS the source of truth, the email is best-effort).
+ * All fire AFTER the incident write commits successfully, and are dispatched
+ * FIRE-AND-FORGET (`void …`) rather than awaited: per W427, blocking an admin
+ * create on an outbound Slack/webhook fan-out costs up to ~5s on a down channel
+ * and buys no error signal. A throw is caught and swallowed so a notification
+ * failure can never roll back an incident write — the incident IS the source of
+ * truth and the notification is best-effort — but it IS reported through the
+ * optional logger, at error level.
+ *
+ * V-807 — this block used to state the opposite on both counts, that callbacks
+ * were awaited and that a throw was recorded. The implementation twenty lines
+ * below has always used `void`, and all four catch handlers were empty, so a
+ * status-page notification could fail to reach every subscriber with no trace
+ * anywhere. The logger below is what makes the second half true.
  */
 export interface IncidentsLifecycle {
   onPublicCreated?: (incident: IncidentRow, initialUpdate: IncidentUpdateRow) => Promise<void>;
@@ -180,14 +189,44 @@ export interface IncidentsLifecycle {
   onPublicUpdated?: (incident: IncidentRow, update: IncidentUpdateRow) => Promise<void>;
 }
 
+/** Minimal logger seam — matches the optional-logger shape used by the sweepers. */
+export interface IncidentsLogger {
+  error?: (obj: Record<string, unknown>, msg: string) => void;
+}
+
 export class IncidentsService {
   private readonly lifecycle: IncidentsLifecycle;
+  private readonly logger: IncidentsLogger | undefined;
 
   constructor(
     private readonly repo: IncidentsRepo,
     lifecycle: IncidentsLifecycle = {},
+    logger?: IncidentsLogger,
   ) {
     this.lifecycle = lifecycle;
+    this.logger = logger;
+  }
+
+  /**
+   * V-807 — report a swallowed notification failure. Swallowing is correct (the
+   * incident write must stand) but silence was not: a fan-out that never reached
+   * a single subscriber left nothing behind to find.
+   */
+  private reportNotificationFailure(hook: string, incidentId: string, err: unknown): void {
+    try {
+      this.logger?.error?.(
+        {
+          component: 'incidents',
+          event: 'incident_notification_failed',
+          hook,
+          incident_id: incidentId,
+          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+        },
+        'incident notification fan-out failed — the incident write stands, subscribers may not have been told',
+      );
+    } catch {
+      // Reporting is best-effort; it must not resurrect the failure it describes.
+    }
   }
 
   async create(
@@ -202,8 +241,9 @@ export class IncidentsService {
       // Slack/webhook fan-out (AbortController-bounded but up to ~5s on a slow/
       // down channel). The fan-out is already error-isolated; awaiting it gave
       // no error-signal benefit and delayed prompt status-page incident creation.
-      void this.lifecycle.onPublicCreated(result.incident, result.update).catch(() => {
-        // Notification failures must never roll back the incident write.
+      void this.lifecycle.onPublicCreated(result.incident, result.update).catch((err: unknown) => {
+        // Never rolls back the incident write — but no longer silent.
+        this.reportNotificationFailure('onPublicCreated', result.incident.id, err);
       });
     }
     return { incident: result.incident, update: result.update };
@@ -222,8 +262,9 @@ export class IncidentsService {
       throw new ConflictError('Incident id was already used with a different create request.');
     }
     if (result.outcome === 'created' && result.incident.public && this.lifecycle.onPublicCreated) {
-      void this.lifecycle.onPublicCreated(result.incident, result.update).catch(() => {
-        // Notification failures must never roll back the incident write.
+      void this.lifecycle.onPublicCreated(result.incident, result.update).catch((err: unknown) => {
+        // Never rolls back the incident write — but no longer silent.
+        this.reportNotificationFailure('onPublicCreated', result.incident.id, err);
       });
     }
     return {
@@ -271,8 +312,9 @@ export class IncidentsService {
         if (incident && incident.public) {
           // W427 — fire-and-forget (see onPublicCreated): don't block addUpdate
           // on the outbound fan-out.
-          void this.lifecycle.onPublicUpdated(incident, update).catch(() => {
-            // Notification failures must never roll back addUpdate.
+          void this.lifecycle.onPublicUpdated(incident, update).catch((err: unknown) => {
+            // Never rolls back the write — but no longer silent.
+            this.reportNotificationFailure('onPublicUpdated', incident.id, err);
           });
         }
       } catch {
@@ -289,8 +331,9 @@ export class IncidentsService {
     if (result.incident.public && this.lifecycle.onPublicResolved) {
       // W427 — fire-and-forget (see onPublicCreated): don't block the admin
       // resolve on the outbound fan-out.
-      void this.lifecycle.onPublicResolved(result.incident, result.update).catch(() => {
-        // Notification failures must never roll back the resolve write.
+      void this.lifecycle.onPublicResolved(result.incident, result.update).catch((err: unknown) => {
+        // Never rolls back the write — but no longer silent.
+        this.reportNotificationFailure('onPublicResolved', result.incident.id, err);
       });
     }
     return result;

@@ -206,13 +206,18 @@ describe('W947 V-295a incidents cross-source invariant', () => {
 
   // ─── V-295c3-followup IncidentsLifecycle framing ─────────────
 
-  it("CRITICAL V-295c3-followup IncidentsLifecycle framing — 'Both fire AFTER the incident write commits successfully. Callbacks are awaited; a throw is logged + swallowed by the IncidentsService (we never want a notification failure to roll back an incident write — the incident IS the source of truth, the email is best-effort)'. The commit-then-fire + swallow-throw contract makes lifecycle hooks safe.", () => {
+  it('CRITICAL V-295c3-followup IncidentsLifecycle framing — V-807 corrected both halves: callbacks are dispatched FIRE-AND-FORGET, never awaited, and all four catch handlers were empty rather than logging, so a fan-out that reached no subscriber left no trace. Commit-then-fire and swallow-throw are real; the swallow is now reported through an optional logger.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incidents.ts'));
     expect(p).toMatch(/V-295c3-followup — lifecycle callbacks\./);
-    expect(p).toMatch(/Both fire AFTER the incident write commits successfully\. Callbacks/);
-    expect(p).toMatch(/are awaited; a throw is logged \+ swallowed by the IncidentsService/);
-    expect(p).toMatch(/\(we never want a notification failure to roll back an incident/);
-    expect(p).toMatch(/write — the incident IS the source of truth, the email is best-effort\)\./);
+    expect(p).toMatch(/All fire AFTER the incident write commits successfully, and are dispatched/);
+    expect(p).toMatch(/FIRE-AND-FORGET \(`void …`\) rather than awaited/);
+    expect(p).toMatch(
+      /the incident IS the source of\s*\n?\s*\*\s*truth and the notification is best-effort/,
+    );
+    expect(p).toMatch(/but it IS reported through the/);
+    // V-807 — both halves of the retired sentence, banned per-occurrence.
+    expect(p).not.toMatch(/are awaited; a throw is logged/);
+    expect(p).not.toMatch(/we never want a notification failure to roll back an incident/);
   });
 
   // ─── 2 optional lifecycle hooks ──────────────────────────────

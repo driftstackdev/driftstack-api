@@ -132,7 +132,23 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
 
   it('V-295c3-followup IncidentsLifecycle: onPublicCreated + onPublicResolved + V-545.B onPublicUpdated; throw logged+swallowed (never roll back)', () => {
     expect(body).toMatch(
-      /V-295c3-followup — lifecycle callbacks\.\s*\n?\s*\*\s*\n?\s*\*\s*Both fire AFTER the incident write commits successfully\. Callbacks\s*\n?\s*\*\s*are awaited; a throw is logged \+ swallowed by the IncidentsService\s*\n?\s*\*\s*\(we never want a notification failure to roll back an incident\s*\n?\s*\*\s*write — the incident IS the source of truth, the email is best-effort\)\./,
+      /All fire AFTER the incident write commits successfully, and are dispatched\s*\n?\s*\*\s*FIRE-AND-FORGET \(`void …`\) rather than awaited/,
+    );
+    // V-807 — both halves of the old sentence were false, and contradicted by the
+    // implementation twenty lines below: `void this.lifecycle.on*()` is
+    // fire-and-forget, and all four catch handlers were empty, so a fan-out that
+    // reached nobody left no trace. The doc now matches, and the logger makes the
+    // reported half true rather than aspirational.
+    expect(body).toMatch(
+      /but it IS reported through the\s*\n?\s*\*\s*optional logger, at error level\./,
+    );
+    expect(body).toMatch(/private reportNotificationFailure\(/);
+    expect(body).toMatch(/event: 'incident_notification_failed',/);
+    expect(body, 'the awaited-and-logged claim must not return').not.toMatch(
+      /are awaited; a throw is logged/,
+    );
+    expect(body, 'no catch handler may be silent again').not.toMatch(
+      /\.catch\(\(\) => \{\s*\n?\s*\/\/ Notification failures must never roll back/,
     );
     expect(body).toMatch(/export interface IncidentsLifecycle \{/);
     expect(body).toMatch(
@@ -170,7 +186,14 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
 
   it('resolve: fire onPublicResolved only when public; catch-swallow', () => {
     expect(body).toMatch(
-      /async resolve\(\s*\n?\s*input: ResolveIncidentInput,\s*\n?\s*\): Promise<\{ incident: IncidentRow; update: IncidentUpdateRow \}> \{\s*\n?\s*const result = await this\.repo\.resolve\(input\);\s*\n?\s*if \(result\.incident\.public && this\.lifecycle\.onPublicResolved\) \{[\s\S]*?void this\.lifecycle\.onPublicResolved\(result\.incident, result\.update\)\.catch\(\(\) => \{\s*\n?\s*\/\/ Notification failures must never roll back the resolve write\./,
+      /async resolve\(\s*\n?\s*input: ResolveIncidentInput,\s*\n?\s*\): Promise<\{ incident: IncidentRow; update: IncidentUpdateRow \}> \{\s*\n?\s*const result = await this\.repo\.resolve\(input\);/,
+    );
+    // V-807 — the resolve hook's catch now reports instead of swallowing silently.
+    expect(body).toMatch(
+      /void this\.lifecycle\.onPublicResolved\(result\.incident, result\.update\)\.catch\(\(err: unknown\) => \{/,
+    );
+    expect(body).toMatch(
+      /this\.reportNotificationFailure\('onPublicResolved', result\.incident\.id, err\);/,
     );
   });
 

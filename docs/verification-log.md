@@ -34973,3 +34973,46 @@ Per-occurrence negatives ban the two-driver claim and any mention of the dropped
 Mutation-proved: reinstating either reds its sentinel. 31 pins green, `it(` count unchanged at 9.
 
 Eleventh batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-807 — incident notifications documented as awaited and logged; they were fire-and-forget and silent (2026-08-18)
+
+The `IncidentsLifecycle` interface doc in `services/incidents.ts` said:
+
+> Both fire AFTER the incident write commits successfully. Callbacks **are awaited**; a throw is
+> **logged** + swallowed by the IncidentsService.
+
+Both halves were false, and the contradiction sat twenty lines below in the same file.
+
+**Not awaited.** All four dispatches are `void this.lifecycle.on*(…)`, and W427's comment beside the
+first one explains the reasoning properly: blocking an admin create on an outbound Slack/webhook
+fan-out costs up to ~5s on a down channel and buys no error signal. Fire-and-forget is the right
+call; the doc simply described the opposite of it.
+
+**Not logged.** All four `.catch()` handlers were empty — a comment saying notification failures must
+never roll back the write, and nothing else. So a status-page fan-out could fail to reach **every
+subscriber** of an incident and leave no trace anywhere: no log line, no metric, no audit row. During
+an outage that is the notification you most need to know did not go out.
+
+Swallowing is correct and stays. Silence was the defect, so this closes it rather than only correcting
+the prose: `IncidentsService` now takes an optional logger — the same `logger?.error?.()` seam the
+sweepers use — and `reportNotificationFailure(hook, incidentId, err)` emits
+`event: 'incident_notification_failed'` with the hook name and incident id from all four sites.
+`bootstrap.ts` passes the logger, and the reporter is itself wrapped so a logging failure cannot
+resurrect the error it describes. Zero empty catch handlers remain in the file.
+
+**Two pin files froze the sentence.** `services-incidents-content-parity` was the obvious one;
+`incidents-v295a-cross-source-invariant` held it across five separate assertions plus its `it()`
+title, and only the 27-file surface sweep surfaced it. Fourth time this session a claim lived in a
+file the first grep did not name.
+
+A sentinel now bans the retired sentence and, separately, bans any
+`.catch(() => { // Notification failures must never roll back` shape — so the silence cannot come
+back even if the prose stays right. Mutation-proved: restoring one empty catch reds that sentinel.
+
+27 pins over the incidents surface green, `it(` counts unchanged (15 and 17), `tsc` clean on both src
+and tests.
+
+Twelfth batch of the re-verified plan. Report verdict corrected: it framed this as "claims callbacks
+are awaited and failures logged; neither is true", which is right about the doc but implies the
+fire-and-forget is a defect. It is not — W427 chose it deliberately and said why. The defect was the
+doc plus the silence.
