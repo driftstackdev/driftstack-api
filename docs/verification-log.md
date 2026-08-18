@@ -35016,3 +35016,38 @@ Twelfth batch of the re-verified plan. Report verdict corrected: it framed this 
 are awaited and failures logged; neither is true", which is right about the doc but implies the
 fire-and-forget is a defect. It is not — W427 chose it deliberately and said why. The defect was the
 doc plus the silence.
+
+## V-808 — two service headers still promising work that had already shipped (2026-08-18)
+
+Both are the future-tense-promise shape V-794 ratchets: true when written, false the moment the work
+lands, and the pin then holds the stale version in place.
+
+**`services/agent-executor.ts`** — "This slice ships the deterministic stub variant … The real
+harness-wired executor (AI-B2.b follow-up) **replaces the stub** with a SessionsService dispatch."
+That file exports **both** `StubAgentExecutor` and `RealAgentExecutor`, and
+`agent-executor-control-plane.ts` exports a third, `ControlPlaneAgentExecutor`. The promised follow-up
+had already landed in the same file the header sits in. Corrected to describe all three, and to say
+what the stub actually is now — a production-capable no-fleet fallback and the integration-test
+substrate, not a placeholder.
+
+**`services/agent-pair-mode-heartbeat-sweep.ts`** — "this service exposes `tickOnce(now)` for a
+**future** scheduled-jobs entry. Sub-slice 8.13d **will wire** bootstrap to fire this every 5s."
+`bootstrap.ts` constructs the sweep and drives it from a 5s `setInterval`
+(`PAIR_MODE_HEARTBEAT_SWEEP_INTERVAL_MS = 5_000`), cleared on teardown. Wired since that slice landed.
+The correction also records _why_ it is a timer rather than a durable chain, because that distinction
+now matters: V-784 moved the day-cadence sweeps onto `scheduled_jobs` precisely because a 24h
+`setInterval` never reaches its first tick on a sub-daily deploy cadence, and a 5s interval reaches it
+immediately. Leaving this one on a timer was deliberate — the auto-handback is interactive and needs
+sub-minute latency.
+
+**One half of the report's action 31 is REFUTED and I have not "fixed" it.** It claimed the header was
+wrong about halting on first failure. It is not: `RealAgentExecutor` does
+`if (result.kind === 'failure') return { results, ok: false };`, and halts _before_ dispatching an
+unapproved consequential action per W443/W445. That behaviour is real, so the pin now asserts it
+against the code rather than only in prose — the claim was true and is now checked.
+
+Four occurrences moved across two pin files, both `it()` titles included. Per-occurrence negatives ban
+the stub-only framing and the 8.13d promise. Mutation-proved: reinstating either reds its sentinel. 15
+pins over the executor and pair-mode-sweep surface green; `it(` counts unchanged (13 and 11).
+
+Thirteenth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.

@@ -29,10 +29,17 @@ describe('services/agent-executor content parity', () => {
     );
   });
 
-  it("Stub-then-real framing pinned: 'This slice ships the deterministic stub variant — every intent returns a synthetic success result. The real harness-wired executor (AI-B2.b follow-up) replaces the stub with a SessionsService dispatch + capture aggregator; the interface surface here is stable so the dashboard + agent-decomposer integration tests can pin against it now.' — pinned so the deterministic-stub-for-now + AI-B2.b SessionsService-real-follow-up + stable-interface contract all stay documented", () => {
-    expect(body).toMatch(
-      /\/\/ This slice ships the deterministic stub variant — every intent\s*\n?\s*\/\/ returns a synthetic success result\. The real harness-wired\s*\n?\s*\/\/ executor \(AI-B2\.b follow-up\) replaces the stub with a SessionsService\s*\n?\s*\/\/ dispatch \+ capture aggregator; the interface surface here is\s*\n?\s*\/\/ stable so the dashboard \+ agent-decomposer integration tests can\s*\n?\s*\/\/ pin against it now\./,
+  it("V-808 corrected the stub-then-real framing: BOTH StubAgentExecutor and RealAgentExecutor are exported from this file, and ControlPlaneAgentExecutor is a third, so the promised follow-up had already landed. The halt-on-first-failure behaviour the header describes is real and is now asserted against the code. Old text pinned against it now.' — pinned so the deterministic-stub-for-now + AI-B2.b SessionsService-real-follow-up + stable-interface contract all stay documented", () => {
+    expect(body).toMatch(/\/\/ Two executors live here and BOTH are shipped: `StubAgentExecutor`/);
+    expect(body).toMatch(/\/\/ `RealAgentExecutor`, which dispatches against the in-process/);
+    // V-808 — RealAgentExecutor is exported from this same file, so the
+    // "a later follow-up replaces the stub" promise had already been kept.
+    expect(body, 'the stub-only framing must not return').not.toMatch(
+      /This slice ships the deterministic stub variant/,
     );
+    // The halt-on-first-failure claim was TRUE and is kept, now derived from the
+    // code rather than only asserted in prose.
+    expect(body).toMatch(/if \(result\.kind === 'failure'\) return \{ results, ok: false \};/);
   });
 
   it("Why-not-HTTP-fetch framing pinned: 'the agent layer runs in the same process as the routes; round-tripping through HTTP would double the latency budget + lose typed-error context. AI-B2.b dispatches against the in-process SessionsService instead.' — pinned so the same-process + double-latency-bad + lose-typed-errors rationale + AI-B2.b-uses-in-process-SessionsService dispatch contract stay documented", () => {

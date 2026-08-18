@@ -34,10 +34,17 @@ describe('services/agent-pair-mode-heartbeat-sweep content parity', () => {
     );
   });
 
-  it("Scheduling framing pinned: 'this service exposes tickOnce(now) for a future scheduled-jobs entry. Sub-slice 8.13d will wire bootstrap to fire this every 5s alongside the other rotation-reminder jobs.' — pinned so the 8.13d bootstrap-wires-cron cross-reference + the 5s cadence + the rotation-reminder-jobs-cohort placement stay documented", () => {
+  it('Scheduling framing, corrected by V-808: the sweep has been WIRED since 8.13d landed — bootstrap constructs it and drives tickOnce from a 5s setInterval. The 5s cadence and the reason for a timer rather than a durable chain (interactive auto-handback needs sub-minute latency, and a 5s interval reaches its first tick immediately, unlike the 24h timers V-784 moved) are what stay pinned', () => {
     expect(body).toMatch(
-      /\/\/ Scheduling: this service exposes `tickOnce\(now\)` for a future\s*\n?\s*\/\/ scheduled-jobs entry\. Sub-slice 8\.13d will wire bootstrap to fire\s*\n?\s*\/\/ this every 5s alongside the other rotation-reminder jobs\./,
+      /\/\/ Scheduling: WIRED\. `bootstrap\.ts` constructs this service and drives/,
     );
+    expect(body).toMatch(/PAIR_MODE_HEARTBEAT_SWEEP_INTERVAL_MS = 5_000/);
+    expect(body, 'the 5s cadence and its reason are the load-bearing part').toMatch(
+      /needs sub-minute latency/,
+    );
+    // V-808 — wired since 8.13d landed; the future-tense promise is retired.
+    expect(body).not.toMatch(/for a future\s*\n?\s*\/\/ scheduled-jobs entry/);
+    expect(body).not.toMatch(/Sub-slice 8\.13d will wire bootstrap/);
   });
 
   it("PairModeHeartbeatSweepDeps 5-field shape pinned: tracker + sessions + accountAudit (optional) + ttlMs (optional override) + maxPerTick (default 100). + 'Cap on sessions handled per tick so a flood of stale sessions doesn't block the scheduler. Default 100.' — pinned so the maxPerTick-protects-scheduler rationale + the 100-default + accountAudit-optional contract stay documented (drift to making accountAudit required would force every dev environment to wire up the audit service)", () => {

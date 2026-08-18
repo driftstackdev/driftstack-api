@@ -8,9 +8,18 @@
 // touches zero sessions; under heavy use it touches one per stale
 // pair-mode session.
 //
-// Scheduling: this service exposes `tickOnce(now)` for a future
-// scheduled-jobs entry. Sub-slice 8.13d will wire bootstrap to fire
-// this every 5s alongside the other rotation-reminder jobs.
+// Scheduling: WIRED. `bootstrap.ts` constructs this service and drives
+// `tickOnce(now)` from a 5s `setInterval`
+// (`PAIR_MODE_HEARTBEAT_SWEEP_INTERVAL_MS = 5_000`), cleared on teardown.
+// A timer rather than a scheduled_jobs chain on purpose: the customer-visible
+// behaviour is an interactive auto-handback, so it needs sub-minute latency,
+// and V-784's move of the DAY-cadence sweeps onto durable chains deliberately
+// left this one alone — a 5s interval reaches its first tick immediately, which
+// is the property that made the 24h timers unsafe.
+//
+// V-808 — this used to say the tick existed for a future scheduled-jobs entry
+// and that sub-slice 8.13d would wire it. It has been wired since that slice
+// landed.
 
 import type { AgentSessionsRepo } from './agent-sessions.js';
 import type { AccountAuditService } from './account-audit.js';

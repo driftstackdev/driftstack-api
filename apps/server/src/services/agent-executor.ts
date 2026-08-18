@@ -4,12 +4,21 @@
 // turn (decompose → execute → append transcript → debit tokens →
 // repeat) without hand-wiring the dispatch.
 //
-// This slice ships the deterministic stub variant — every intent
-// returns a synthetic success result. The real harness-wired
-// executor (AI-B2.b follow-up) replaces the stub with a SessionsService
-// dispatch + capture aggregator; the interface surface here is
-// stable so the dashboard + agent-decomposer integration tests can
-// pin against it now.
+// Two executors live here and BOTH are shipped: `StubAgentExecutor`
+// (every intent returns a synthetic success — a production-capable
+// no-fleet fallback and the integration-test substrate) and
+// `RealAgentExecutor`, which dispatches against the in-process
+// SessionsService. `ControlPlaneAgentExecutor` in
+// agent-executor-control-plane.ts is a third.
+//
+// Both real executors halt on the first failing intent —
+// `if (result.kind === 'failure') return { results, ok: false }` — and
+// halt BEFORE dispatching an unapproved consequential action (W443/W445).
+//
+// V-808 — this header used to say the slice shipped only the stub and
+// that a later follow-up would replace it. RealAgentExecutor is exported
+// from this same file, so the promise had already been kept and the
+// header was describing a state of the world that no longer existed.
 //
 // Why not call the HTTP routes directly via fetch: the agent layer
 // runs in the same process as the routes; round-tripping through
