@@ -35506,3 +35506,54 @@ SENTINEL quotes, the RETRACTION paraphrases. Naming the rule has never been what
 which is luck, not care.
 
 Mutation: both figures reinstated → the sentinels fire. Restores byte-identical.
+
+## V-820 — "every admin endpoint writes the audit row" covers the mutations only (2026-08-18)
+
+Action 7. `docs/decisions.md` D-025 read: "**Audit-write before response.** Every admin
+endpoint writes the audit row inside the same handler that performs the action. Failure to
+audit fails the request — there is no 'audit best-effort' path."
+
+Measured against `apps/server/src/routes/admin*.ts`, brace-matching each registration:
+
+• **30 mutating `/v1/admin/*` routes — 30 audited.** The invariant holds where it is stated.
+• **31 admin GET routes — 0 audited.** None of them.
+
+Sixteen of those reads expose customer data: `GET /v1/admin/api-keys` lists every customer's
+keys, and `/v1/admin/accounts`, `/v1/admin/accounts/:id`, `/v1/admin/accounts/:id/usage`,
+`/v1/admin/cost/accounts/:id`, `/v1/admin/usage/accounts/:id` and the crypto-order endpoints
+expose per-account detail. **A staff member reading a customer's record leaves no trace.**
+
+The sentence is not quite a lie — "that performs the action" can be read as scoping it to
+mutations — but "Every admin endpoint" plus "there is no best-effort path" is what a
+compliance reader takes away, and it is the read that matters. Corrected to state both halves,
+with the read gap named as a gap. **Whether to audit reads is a product decision**, not a
+documentation fix: a row per list call on hot dashboard endpoints is a real cost against a
+real control, so it is flagged, not taken.
+
+New guard `every-admin-mutation-writes-an-audit-row.test.ts`. Its sibling
+`every-declared-admin-audit-action-is-reachable.test.ts` guards the action ENUM, and its
+header records that two modules once "had zero audit wiring despite this file's header
+invariant", found "by hand, once, and fixed once. Nothing stopped the next one." This is the
+thing that stops the next one — it checks the ROUTES, not the vocabulary. Neither direction
+implies the other: a route can audit with an unemittable action, and an emittable action can
+have no route that writes it.
+
+The reads arm is deliberately NOT a ratchet. Reads are unaudited by omission, so pinning the
+count would fail on every new read endpoint and train people to bump it unthinkingly. It
+asserts the state the decisions.md clause now describes — all of them unaudited, not some —
+so if anyone audits one read the clause becomes wrong again and this fails.
+
+**The measurement was wrong twice before it was right, and both readings were plausible.**
+The first extractor brace-matched from the wrong offset and reported **0 of 69 audited**,
+which is a spectacular finding and completely false; it only fell over because it contradicted
+a file-level `grep -c` I had run minutes earlier. The second returned 0 routes because the
+path match was anchored at the `(` instead of after it. The third was right but counted
+`/v1/status/*` and `/v1/api-keys` as admin routes because they are registered in `admin*.ts`,
+which is how "36 GETs" got into the first draft of this entry and the guard header before the
+`/v1/admin/` filter corrected it to 31. Every one of those numbers would have read fine in a
+commit message.
+
+Mutations: the audit call stripped from `POST /v1/admin/accounts/:id/suspend` → the mutation
+arm names it; one admin GET made to look audited → the gap arm fires. Restores byte-identical.
+
+Ratchet: EXPECTED_TEST_FILES 2885 → 2886, \_ALL 3049 → 3050 (one file, mine).
