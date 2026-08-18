@@ -35970,3 +35970,43 @@ V-820's mutations-only (blind to unaudited reads), V-825's gui-input-only (blind
 surface that violates L-001). In each case the direction that was easy to check got checked
 and the other one was assumed. That is the most reusable finding here, and it is not in the
 report.
+
+## V-830 — the one-directional-guard pattern does not generalise (negative result) (2026-08-18)
+
+V-829 called "three guards watching one side of their own invariant" the most reusable finding
+of the sweep. I went looking for more. **There are not more, and this records how I looked so
+nobody spends the afternoon again.**
+
+**The scan had no signal.** A regex for `X.filter(v => !Y.has(v))` with no reverse in the same
+file flagged **34 of 34** files containing a subset check. A heuristic that flags everything
+measures nothing — the same failure as V-814's status-near-a-class-name proximity scan, which
+found 40+ "violations" that were almost all `V-485`-shaped noise. Two crude scans, two
+confident-looking outputs, no finding in either.
+
+So I judged the highest-value candidates individually instead.
+
+- **`emitted-metrics-are-registered-invariant`** covers emits ⊆ registered. The meaningful
+  reverse is a metric registered but never emitted — a series that can never fire, which per
+  V-784 reads as healthy rather than absent. Measured: 22 `METRIC_NAMES` keys, 22 registered,
+  **0 never emitted**. Clean.
+- **`dead-scopes-are-labelled-on-customer-surfaces`** covers declared ⊆ enforced. Already
+  handles the reverse, and does it better than my scan did: it derives the enforced set from
+  BOTH `requireScope` and `throwIfMissingScope`, which is why my count of 8 dead scopes
+  disagreed with its allowlist. Mine was the wrong number.
+- **`docs-catalogue-completeness-invariant`** opens by describing itself as "the converse of
+  `docs-public-surface-resolves`" — the repo already ships that pair on purpose, one guard per
+  direction, with the relationship stated in the header.
+
+**Corrected claim.** V-829 said the pattern was the sweep's most reusable finding. The three
+instances (V-813, V-820, V-825) are real and each cost a genuine defect, but they are three
+instances, not a class. The repo's normal practice is to pair guards or cover the reverse
+elsewhere, and in the two places I checked it was doing exactly that. Overstating a pattern
+from three samples is the same error as trusting a report's 88-96% self-confirmation rate,
+which is what this whole arc exists to correct.
+
+**A measurement mistake worth keeping.** My first scope extractor read the enum literal without
+stripping comments first, so `declared` contained two comment fragments as if they were scope
+names, and it reported six granular scopes as "enforced but never declared". Every one of those
+six is in the enum. That is the third crude extractor this session to produce a plausible wrong
+answer — after the TierLimitError key scan (twice) and the admin-route brace-match. Strip
+comments before parsing a literal; the pattern is now consistent enough to be a rule.
