@@ -5323,21 +5323,29 @@ export function SimulatorWindow(): JSX.Element {
         heartbeatClientId: clientIdRef.current,
       })
         .then((s) => {
-          // Drop a result that resolved after an in-place session swap.
-          if (
-            cancelled ||
-            reqSessionId !== sessionIdRef.current ||
-            reqControlEpoch !== controlReadGenerationRef.current
-          )
-            return;
           // One-way: only LATCH terminal — never clear it (a non-terminal read after a
           // real end can't happen for the same id, and we must not let a stale/racing
           // poll un-end a closed session). A fresh session swap resets sessionEnded.
-          if (s.terminal) {
+          //
+          // Deliberately AHEAD of the epoch guard below, and this is the whole point.
+          // `controlReadGenerationRef` is bumped by five call sites — including THIS
+          // tick — so on a control plane slower than the 5s interval, every in-flight
+          // response is invalidated by the next tick and the terminal verdict is
+          // dropped. Measured before changing it: two overlapping ticks, the first
+          // answering status='closed', left sessionEnded null; the same verdict
+          // arriving before the next tick latched it. So session-end detection failed
+          // exactly when the control plane was slow — the "GUI shows reconnecting
+          // forever against a session that's gone" failure this poll exists to prevent.
+          //
+          // Safe to hoist because terminal is ONE-WAY and keyed to this session id: no
+          // later read can contradict it, so there is nothing for the epoch to protect
+          // against. The epoch exists to stop a stale snapshot overwriting a freshly
+          // confirmed MODE, which is why `mode`/`modeConfirmed` stay behind it — an
+          // ending session's mode is not worth clobbering an in-flight mutation for,
+          // and the lifecycle fields are what the terminal state is made of.
+          if (!cancelled && reqSessionId === sessionIdRef.current && s.terminal) {
             updateManualInputControl({
               sessionId: reqSessionId,
-              mode: s.mode,
-              modeConfirmed: true,
               lifecycleStatus: s.status,
               lifecycleConfirmed: true,
               lifecycleTerminal: s.terminal,
@@ -5346,6 +5354,13 @@ export function SimulatorWindow(): JSX.Element {
             setSessionEnded({ reason: s.errorEvent?.code ?? s.closedReason });
             return;
           }
+          // Drop a result that resolved after an in-place session swap.
+          if (
+            cancelled ||
+            reqSessionId !== sessionIdRef.current ||
+            reqControlEpoch !== controlReadGenerationRef.current
+          )
+            return;
           // Finding #11 — this same 5s round-trip already carries the live pair state
           // (s.pairKind), but it was thrown away. In pair mode the AGENT autonomously
           // grabs/releases driving control server-side; without this the GUI keeps
