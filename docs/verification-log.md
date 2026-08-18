@@ -36052,3 +36052,40 @@ The rest of the arc's load-bearing figures re-derive correctly: V-813's rate-lim
 modules, 208 distinct `/v1` paths), and V-822's count of thirteen membership-resolving modules.
 
 Mutation: the flat claim restored → the corrected assertion fires. Restores byte-identical.
+
+## V-832 — the rest of the self-audit: two claims re-checked, both hold (2026-08-18)
+
+Completing the pass V-831 started. Having found one over-claim of my own, I went after the
+others of the same shape — statements I made about a whole population after checking one member
+of it.
+
+**V-814: "SDK users are unaffected — all three dispatch on the problem-type URI and classify
+`tier_limit` as non-retryable."** At the time I read TypeScript's `isRetryable` and wrote the
+sentence about three SDKs. That is exactly the move that produced V-831's error. Checked now:
+
+- TypeScript — `isRetryable` switches on `err.kind`; `TierLimitError` is constructed with
+  `kind: 'tier_limit'`, which falls to `default: return false`.
+- Go — `IsRetryable` returns true for `TransportError`, `InternalError`, `RateLimitError`, then
+  `return false`. `QuotaExceededError` is not among them.
+- Python — `RetryConfig.retryable_errors` defaults to
+  `(TransportError, RateLimitError, InternalError)`, and `with_retry`'s second handler catches
+  `DriftstackError` and re-raises immediately.
+
+The claim holds in all three. It was luck rather than method, and it does not become method
+retroactively — but the finding it supported (flag the 402/429 divergence rather than change a
+live status code) rests on solid ground.
+
+**V-820: "sixteen of those reads expose customer data."** Re-derived: 31 `/v1/admin/*` GET
+routes, 0 audited, 16 whose paths are customer-scoped (`accounts`, `api-keys`, `cost`, `usage`,
+`crypto-orders`). Both numbers reproduce.
+
+**What the self-audit found overall.** Forty-nine entries, V-782 through V-831. One materially
+wrong claim, corrected in V-831; every other load-bearing figure re-derives — the rate-limit
+values, the DR checklist's module and path counts, the count of membership-resolving modules,
+the admin-audit split, and the SDK retry classification above.
+
+One wrong claim in forty-nine is not a licence to relax. It was in a locked-decisions register,
+it was about an authorization boundary, and it was pinned by a guard I wrote in the same commit
+— so the suite went green over it and would have kept doing so. The rate that matters is not
+how often I am wrong but whether anything except a deliberate re-check would ever have caught
+it, and here nothing would have.
