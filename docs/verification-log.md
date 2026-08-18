@@ -32638,6 +32638,16 @@ so the next iteration — or a peer — implements the correct version rather th
 
 ## V-759 — privacy-policy §9 retention windows, implemented as anonymisation (2026-08-12)
 
+> **Disambiguation (V-856).** The number V-759 is used TWICE in this log, on unrelated
+> findings: the entry above it retracts V-748 ("both disclosed deletions are structurally
+> impossible"), and this one implements the §9 windows as anonymisation. Both are bare
+> `V-759`, unlike V-278.A / V-466.go / V-359-sdk which are deliberately suffixed. At least
+> five test files cite "V-759" and land on whichever a reader finds first —
+> `privacy-retention-window-matches-the-sweeper` and `audit-archive-is-not-scheduled` mean
+> THIS entry; `retention-sweeps-are-unconditional-invariant` and
+> `the-retention-audit-does-not-outlive-its-findings` mean the retraction above.
+> Neither is renumbered: the log is append-only and the citations already point at both.
+
 Implements the design recorded under V-758's correction
 (`docs/internal/2026-08-12-retention-anonymisation-design.md`). §9 disclosed two windows that
 nothing enforced — revoked API-key records "retained 90 days for audit then deleted", and
@@ -36969,3 +36979,31 @@ disk, and re-applied. The rule I have been following all arc is to snapshot the 
 after editing and restore from that; here I reached for the pristine pre-edit copy instead. The
 byte-comparison is what made it visible, which is the only reason it is a footnote rather than
 a silently reverted commit.
+
+## V-856 — two unrelated findings share the number V-759 (2026-08-18)
+
+An integrity check on this log rather than on the product. Parsing every `## V-NNN` heading:
+800 entries, 783 distinct numbers, and this arc (V-782 → V-855, 73 entries) has exactly one
+gap — V-816, which V-822 already records as reserved and renumbered.
+
+Nine numbers appear more than once. Seven are not collisions once read rather than counted:
+**V-278.A / .G**, **V-466.go**, **V-359-sdk** are deliberately suffixed, and **V-219 family**
+labels itself. My first pass counted all of them as duplicates because `V-(\d+)\b` stops at the
+digits and the suffix falls outside the match — the seventh extractor artifact in this arc, and
+the reason the "nine duplicates" figure was never the answer.
+
+**Two are real.** **V-535** is used for "README sanitization (first pass)" and "README
+sanitization pass-2" — one topic, two waves, low harm. **V-759** is used for two unrelated
+findings: a retraction of V-748 ("both disclosed deletions are structurally impossible") and the
+implementation of the §9 retention windows as anonymisation. That one matters because it is
+cited: `privacy-retention-window-matches-the-sweeper` and `audit-archive-is-not-scheduled` mean
+the implementation, while `retention-sweeps-are-unconditional-invariant` and
+`the-retention-audit-does-not-outlive-its-findings` mean the retraction. A reader following
+"V-759" from any of them lands on whichever heading they reach first.
+
+**Not renumbered.** The log is append-only and the citations already point at both, so changing
+either heading would break references that are currently ambiguous but not wrong. Added a
+disambiguation note under the second entry naming both subjects and which test files mean which.
+That is the smallest change that makes a citation resolvable, and it leaves the record intact.
+
+Neither heading is pinned, so the note costs nothing in guard churn.
