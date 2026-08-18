@@ -34788,3 +34788,25 @@ Mutation-proved: reinstating the never-fires claim reds the sentinel. 66 pins ov
 CLI-authorize surface green, `it(` count unchanged at 6.
 
 Fifth batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.
+
+## V-801 — a GUI-client audit snapshot read as a live to-do list (2026-08-18)
+
+`docs/gui-client/audit-current-state.md` is a point-in-time audit whose every finding is phrased
+"Current: …". Its gap lists and P0/P1/P2 tables enumerate work as outstanding. All of it has shipped.
+
+Verified in the tree rather than assumed — each of the six the document still lists as missing exists
+today: `src-tauri/rust-toolchain.toml` (the hard toolchain pin), `src/lib/settings.ts` with keychain
+storage so nothing secret lands in `settings.json`, the create-profile modal in `ProfilesView.tsx`,
+tier and concurrent-cap display with button gating in `SessionsView.tsx`, crash-only Sentry in
+`src/lib/telemetry.ts`, `FirstRunWizard.tsx`, and `tauri-plugin-updater` in `tauri.conf.json`.
+
+**Fixed with a banner rather than a rewrite, deliberately.** The obvious move — editing each
+"Current:" line to today's truth — would destroy the only thing the document still is. Its value is
+the snapshot: what an audit found on a specific date, which is what makes the P0/P1/P2 triage
+readable at all. Rewriting the findings in place would leave a document that is neither a current
+state nor a record. The banner says the dates are the point and the lists are history.
+
+Zero pin edits: the ~30 assertions over this file all still pass because the change is purely
+additive, which is why this batch was worth landing before the ones that move pins.
+
+Seventh batch of the re-verified plan. `EXPECTED_TEST_FILES` unchanged.

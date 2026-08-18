@@ -2,6 +2,21 @@
 
 **V-236 — PHASE 1 of GUI client launch arc per founder direction 2026-05-06.**
 
+> **HISTORICAL SNAPSHOT — "Current:" below means current _as of the date in the
+> line above_, not today.** V-801 verified that everything this document lists as
+> outstanding has since shipped, each confirmed to exist in the tree rather than
+> assumed: the hard toolchain pin (`src-tauri/rust-toolchain.toml`), OS-keychain
+> API-key storage (`src/lib/settings.ts`), the create-profile modal
+> (`src/views/ProfilesView.tsx`), tier and concurrent-cap display with button
+> gating (`src/views/SessionsView.tsx`), crash-only Sentry telemetry
+> (`src/lib/telemetry.ts`), the first-run wizard (`src/views/FirstRunWizard.tsx`),
+> and `tauri-plugin-updater` in `src-tauri/tauri.conf.json`.
+>
+> Read the gap lists and the P0/P1/P2 tables below as a record of what the audit
+> found on that date, not as a to-do list. The document is kept intact rather than
+> line-edited because its value now is the snapshot; rewriting the "Current:"
+> lines in place would destroy the only thing it still is.
+
 Walks `apps/gui-client/` systematically. For each of the 13 audit dimensions: current state, gap vs file 128 spec, recommended priority for closure (P0 launch-blocking / P1 launch-recommended / P2 post-launch / T2-T3-surface for items needing founder ack).
 
 The headline finding: **the GUI client is more complete than the launch checklist suggested.** Sessions / profiles (read + delete) / proxies / recordings / connectivity / settings all wire to live Driftstack API endpoints. Auth chain is live; brand consistency is locked. The remaining launch-blockers are narrow + concrete.
