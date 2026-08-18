@@ -117,7 +117,7 @@ describe('W541.A /.github/workflows/ci.yml content parity', () => {
     expect(body).toMatch(/retention-days: 7/);
   });
 
-  it("Python SDK V-103 7-resource-accessor smoke-test framing pinned: 'Python SDK (lint + tests)' + 'python-version: \\'3.10\\'' + 'ruff check' + 'ruff format --check' + 'mypy src' + 'pytest -v' + 'pip install build + python -m build' + 'python -m venv /tmp/smoke + pip install dist/driftstack-*.whl' + V-103 imports 'from driftstack import Driftstack, AsyncDriftstack, verify_webhook_signature' + 'from driftstack import DriftstackError, RateLimitError, AuthError' + 'from driftstack._generated.models import Session, ApiKey, WebhookEndpoint' + Original-4-resources (sessions + api_keys + usage + webhooks) + V-103-additions (profiles + billing + auth) + async parity check across all 7 accessors + 'wheel smoke ok — all 7 resource accessors wired' — pinned so the V-103 7-resource-accessor + Python-3.10 + ruff + mypy + pytest + wheel-build-+-venv-smoke + async-parity-check commitment survives (drift to dropping any of the 7 accessors would catch a regression in the generated SDK shape)", () => {
+  it("Python SDK wheel smoke-test framing pinned (accessor list DERIVED, not hand-listed): 'Python SDK (lint + tests)' + 'python-version: \\'3.10\\'' + 'ruff check' + 'ruff format --check' + 'mypy src' + 'pytest -v' + 'pip install build + python -m build' + 'python -m venv /tmp/smoke + pip install dist/driftstack-*.whl' + V-103 imports 'from driftstack import Driftstack, AsyncDriftstack, verify_webhook_signature' + 'from driftstack import DriftstackError, RateLimitError, AuthError' + 'from driftstack._generated.models import Session, ApiKey, WebhookEndpoint' + Original-4-resources (sessions + api_keys + usage + webhooks) + V-103-additions (profiles + billing + auth) + async parity check across all 7 accessors + 'wheel smoke ok — all 7 resource accessors wired' — pinned so the V-103 7-resource-accessor + Python-3.10 + ruff + mypy + pytest + wheel-build-+-venv-smoke + async-parity-check commitment survives (drift to dropping any of the 7 accessors would catch a regression in the generated SDK shape)", () => {
     expect(body).toMatch(/name: Python SDK \(lint \+ tests\)/);
     expect(body).toMatch(/python-version: '3\.10'/);
     expect(body).toMatch(/run: ruff check \./);
@@ -138,17 +138,13 @@ describe('W541.A /.github/workflows/ci.yml content parity', () => {
     expect(body).toMatch(
       /from driftstack\._generated\.models import Session, ApiKey, WebhookEndpoint/,
     );
-    expect(body).toMatch(/# Original 4 resources/);
-    expect(body).toMatch(/assert hasattr\(client, 'sessions'\)/);
-    expect(body).toMatch(/assert hasattr\(client, 'api_keys'\)/);
-    expect(body).toMatch(/assert hasattr\(client, 'usage'\)/);
-    expect(body).toMatch(/assert hasattr\(client, 'webhooks'\)/);
-    expect(body).toMatch(/# V-103 additions/);
-    expect(body).toMatch(/assert hasattr\(client, 'profiles'\)/);
-    expect(body).toMatch(/assert hasattr\(client, 'billing'\)/);
-    expect(body).toMatch(/assert hasattr\(client, 'auth'\)/);
-    expect(body).toMatch(/# Async parity/);
-    expect(body).toMatch(/print\('wheel smoke ok — all 7 resource accessors wired'\)/);
+    // Was three hand-listed accessors plus the "all 7" print. The smoke test now
+    // derives the full set from the source, so pinning names and a count would
+    // re-freeze the subset this replaced.
+    expect(body, 'the wheel smoke test no longer derives its accessor list').toMatch(
+      /source-declared accessors/,
+    );
+    expect(body, 'both client flavours must still be asserted').toMatch(/async client is missing/);
   });
 
   it("Go SDK + V-165 bench-regression advisory framing pinned: 'Go SDK (vet + tests + examples build)' + 'go-version: \\'1.22\\'' + 'cache: false # no go.sum yet — zero non-stdlib runtime deps' + 'go vet ./...' + 'go test -v ./...' + 'go build ./examples/...' + V-165 bench-regression comment 'continue-on-error: true because: docs/benchmarks/{auth-path,rate-limit,webhook-signature}.md note that bench results on shared runners are noisy; a hard gate would produce false failures.' + 'First-run bootstrap mode (no baseline) exits 2; advisory swallows that' + 'Flipping to a hard gate is a separate founder decision' + 'Threshold: 50% slowdown vs the checked-in CI baseline at docs/benchmarks/baseline.ci.json. Override via the PERF_REGRESSION_THRESHOLD env var.' + 'continue-on-error: true' + 'needs: build-test' + 'npm run bench:json' + 'npm run bench:check-regression' — pinned so the Go-1.22 + zero-non-stdlib-runtime-deps + V-165 advisory-mode-rationale + 50%-threshold + founder-decision-to-flip-to-hard-gate commitment survives", () => {

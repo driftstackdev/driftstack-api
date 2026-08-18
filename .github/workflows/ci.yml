@@ -263,26 +263,28 @@ jobs:
           # silently stopped matching after the package was renamed away
           # from `driftstack`; pip received the literal pattern and exited 1.
           /tmp/smoke/bin/pip install dist/driftstack_sdk-*.whl
+          # The expectation comes from the CHECKED-OUT SOURCE, not a hand-listed
+          # subset. This previously asserted seven accessors and printed "all 7
+          # resource accessors wired" while the client exposed nineteen — so a
+          # packaging error dropping crypto_orders, mfa, team, audit_log or
+          # agent_sessions shipped a green wheel. Catching that is what a wheel
+          # smoke test is for, and the count in the message made it read complete.
+          EXPECTED=$(python3 -c "import re;print(' '.join(sorted(set(re.findall(r'self[.]([a-z_]+)\\s*=\\s*\\w+Resource[(]', open('packages/sdk-python/src/driftstack/client.py').read())))))")
+          echo "source-declared accessors: $EXPECTED"
           /tmp/smoke/bin/python -c "
+          import sys
           from driftstack import Driftstack, AsyncDriftstack, verify_webhook_signature
           from driftstack import DriftstackError, RateLimitError, AuthError
           from driftstack._generated.models import Session, ApiKey, WebhookEndpoint
+          expected = sys.argv[1].split()
+          assert len(expected) >= 15, 'source scan found only %d accessors' % len(expected)
           client = Driftstack(api_key='ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-          # Original 4 resources
-          assert hasattr(client, 'sessions')
-          assert hasattr(client, 'api_keys')
-          assert hasattr(client, 'usage')
-          assert hasattr(client, 'webhooks')
-          # V-103 additions
-          assert hasattr(client, 'profiles')
-          assert hasattr(client, 'billing')
-          assert hasattr(client, 'auth')
-          # Async parity
           aclient = AsyncDriftstack(api_key='ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-          for accessor in ['sessions', 'api_keys', 'usage', 'webhooks', 'profiles', 'billing', 'auth']:
-              assert hasattr(aclient, accessor), accessor
-          print('wheel smoke ok — all 7 resource accessors wired')
-          "
+          for accessor in expected:
+              assert hasattr(client, accessor), 'sync client is missing %s' % accessor
+              assert hasattr(aclient, accessor), 'async client is missing %s' % accessor
+          print('wheel smoke ok — all %d source-declared resource accessors wired, sync and async' % len(expected))
+          " "$EXPECTED"
 
   go-sdk:
     name: Go SDK (vet + tests + examples build)

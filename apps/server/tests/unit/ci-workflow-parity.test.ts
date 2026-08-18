@@ -177,23 +177,26 @@ describe('W723 GitHub Actions ci.yml workflow parity', () => {
     expect(c).toMatch(/run: pytest -v/);
   });
 
-  it('CRITICAL Python wheel smoke-test verifies 7-resource accessor wiring on Driftstack + AsyncDriftstack. The 7 resources are sessions/api_keys/usage/webhooks/profiles/billing/auth — drift to dropping a resource from the smoke-test would let SDK regen mis-wire silently.', () => {
+  it('CRITICAL the Python wheel smoke-test derives its accessor list from source and checks both clients. A hand-written subset is what this replaced: it asserted 7 while the client exposed 19, so a packaging error dropping crypto_orders, mfa, team, audit_log or agent_sessions shipped green', () => {
     const c = read(CI);
 
-    const resources = ['sessions', 'api_keys', 'usage', 'webhooks', 'profiles', 'billing', 'auth'];
-
-    // hasattr(client, 'sessions') etc. on Driftstack sync.
-    for (const r of resources) {
-      expect(c, `Python smoke check hasattr(${r})`).toMatch(
-        new RegExp(`hasattr\\(client, '${r}'\\)`),
-      );
-    }
-
-    // AsyncDriftstack loop covers same 7 accessors.
-    expect(c).toMatch(
-      /for accessor in \['sessions', 'api_keys', 'usage', 'webhooks', 'profiles', 'billing', 'auth'\]/,
+    // The smoke test now derives its expectation from the checked-out source
+    // instead of a hand-listed subset. It used to assert seven accessors and
+    // print "all 7 resource accessors wired" while the client exposed nineteen,
+    // so a packaging error dropping crypto_orders, mfa, team, audit_log or
+    // agent_sessions produced a green wheel. These pins held that subset in
+    // place, which is why the count is no longer pinned at all — what matters is
+    // that the expectation is DERIVED and that both clients are checked.
+    expect(c, 'the accessor list is hand-written again').toMatch(
+      /EXPECTED=\$\(python3 -c .*Resource/,
     );
-    expect(c).toMatch(/all 7 resource accessors wired/);
+    expect(c, 'the derived list is not asserted against the sync client').toMatch(
+      /sync client is missing/,
+    );
+    expect(c, 'the async client is no longer checked').toMatch(/async client is missing/);
+    expect(c, 'the source scan has no floor, so an empty extraction would pass').toMatch(
+      /len\(expected\) >= 15/,
+    );
   });
 
   it("CRITICAL Python wheel smoke-test verifies error-class imports — DriftstackError + RateLimitError + AuthError. Drift to dropping would let an SDK regen ship a wheel that doesn't expose the canonical error roster (W707).", () => {
