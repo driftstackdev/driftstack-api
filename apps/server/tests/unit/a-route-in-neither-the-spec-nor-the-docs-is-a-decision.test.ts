@@ -165,7 +165,13 @@ function inDocs(): Set<string> {
  * authenticate by signature inside the handler rather than at registration.
  */
 function authClass(win: string): 'staff' | 'internal' | 'customer' | 'none' {
-  if (/requireScope\('driftstack_internal_admin'\)/.test(win)) return 'staff';
+  // `requireOwner` is STRICTER than the staff scope — one configured email, and
+  // it fails closed when none is set — but it is a distinct guard that names no
+  // scope, so a classifier looking only for scopes would call an owner-gated
+  // route unauthenticated. None is undocumented today; the /v1/admin/owner
+  // surfaces are all in the spec. Recognised anyway, because the miss would run
+  // in the under-reporting direction.
+  if (/requireScope\('driftstack_internal_admin'\)|app\.requireOwner\b/.test(win)) return 'staff';
   if (/requireInternalAuth/.test(win)) return 'internal';
   if (
     /requireScope\('(?!driftstack_internal_admin)[a-z_:]+'\)|app\.requireAuth\b|controlKeyOrAccountAuth|requireAuthEventSource/.test(

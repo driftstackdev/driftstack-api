@@ -81,10 +81,13 @@ const CASCADE_ONLY_TABLES = new Map<string, string>([
     'billing_email_sends',
     'PER-EVENT — one row per billing email; also the (event, kind) dedup key',
   ],
-  ['crypto_entitlements', 'entity — per account'],
+  [
+    'crypto_entitlements',
+    'PER-EVENT — one row per crypto ORDER (unique on order_id), not one per account. I recorded it as per-account when this roster landed; the schema says otherwise, and a customer who buys fifty times has fifty rows',
+  ],
   [
     'incident_update_notifications',
-    'PER-EVENT — one row per (subscriber × incident update); the product of two growing things',
+    'PER-EVENT — one row per (subscriber, incident), UPSERTED. I recorded it as per incident UPDATE; the unique key is (subscriber_id, incident_id) and markSent upserts, which is the whole point of a throttle table. It still grows with subscribers, but the update dimension does not multiply and incidents are staff-created',
   ],
   ['incident_updates', 'entity — per incident, and incidents are staff-created'],
   ['oauth_clients', 'entity — registered by staff'],
@@ -99,6 +102,63 @@ const CASCADE_ONLY_TABLES = new Map<string, string>([
   ['web_sessions', 'PER-EVENT — one row per browser login; revoked by UPDATE'],
   ['webhook_endpoints', 'entity — per account, capped by the endpoint limit'],
 ]);
+
+/**
+ * The uniqueness key each table actually declares, read from the schema.
+ *
+ * The reasons above are prose I wrote by reading, and two of them were wrong for
+ * a day: `crypto_entitlements` was recorded as one row per ACCOUNT when its
+ * unique index is on `order_id` (one per purchase), and
+ * `incident_update_notifications` as one row per incident UPDATE when its key is
+ * `(subscriber_id, incident_id)` and `markSent` upserts. Both errors were
+ * visible in the schema the whole time; nothing put the schema next to the
+ * sentence.
+ *
+ * This does. A recorded key that stops matching the schema fails, so the fact
+ * the prose is reasoning FROM cannot drift out from under it. It cannot check
+ * the prose itself — but neither of those two mistakes survives having the real
+ * key sitting beside the claim.
+ */
+const UNIQUENESS_KEY = new Map<string, string>([
+  ['account_audit_log', '(pk only)'],
+  ['account_oauth_links', 'provider,providerSub'],
+  ['api_keys', 'keyPrefix'],
+  ['billing_email_sends', '(pk only)'],
+  ['crypto_entitlements', 'orderId'],
+  ['incident_update_notifications', 'subscriberId,incidentId'],
+  ['incident_updates', '(pk only)'],
+  ['oauth_clients', '(pk only)'],
+  ['oauth_pending_links', 'tokenHash'],
+  ['rate_limit_buckets', '(pk only)'],
+  ['sessions', '(pk only)'],
+  ['subscriptions', 'stripeSubscriptionId'],
+  ['usage_records', '(pk only)'],
+  ['web_sessions', 'tokenHash'],
+  ['webhook_endpoints', '(pk only)'],
+]);
+
+/** `uniqueIndex(...).on(t.a, t.b)` columns per table, or `(pk only)`. */
+function declaredUniquenessKeys(): Map<string, string> {
+  const schema = readFileSync(resolve(DB, 'schema.ts'), 'utf8');
+  const out = new Map<string, string>();
+  for (const m of schema.matchAll(/export const (\w+) = pgTable\(\s*\n?\s*'([a-z_]+)'/g)) {
+    const start = m.index ?? 0;
+    const next = schema.indexOf('export const', start + 10);
+    const body = schema.slice(start, next === -1 ? schema.length : next);
+    const keys: string[] = [];
+    for (const u of body.matchAll(/uniqueIndex\([^)]*\)\s*\.on\(([^)]*)\)/g)) {
+      keys.push(
+        (u[1] ?? '')
+          .split(',')
+          .map((x) => x.trim().replace('t.', ''))
+          .filter((x) => x.length > 0)
+          .join(','),
+      );
+    }
+    out.set(m[2] ?? '', keys.length > 0 ? keys.join(';') : '(pk only)');
+  }
+  return out;
+}
 
 interface Table {
   readonly sql: string;
@@ -237,7 +297,25 @@ describe('a cascade from a row nobody deletes is not a retention policy', () => 
     ).toBe(true);
   });
 
-  it('CRITICAL the per-event set is still exactly these seven. The entity-bounded majority is the boring part of the roster; this is the list that says whether the situation is getting worse, and an eighth would otherwise arrive as one more line in a table of fifteen.', () => {
+  it('CRITICAL every recorded table still declares the uniqueness key its reason reasons from. The reasons are prose; the key is a fact. Two reasons were wrong for a day — crypto_entitlements recorded as one row per ACCOUNT against a unique index on order_id, and incident_update_notifications as one row per incident UPDATE against a key of (subscriber_id, incident_id) with an upserting writer. Both were visible in the schema; nothing put the schema beside the sentence.', () => {
+    const declared = declaredUniquenessKeys();
+    const drifted: string[] = [];
+    for (const [table, key] of UNIQUENESS_KEY) {
+      const actual = declared.get(table);
+      if (actual !== key)
+        drifted.push(`${table}: recorded ${key}, schema says ${actual ?? '<table gone>'}`);
+    }
+    expect(drifted.sort(), 'recorded uniqueness key(s) that no longer match the schema:').toEqual(
+      [],
+    );
+    // And the two rosters must cover the same tables, or one of them is stale.
+    expect(
+      [...UNIQUENESS_KEY.keys()].sort(),
+      'the key roster must cover exactly the cascade roster',
+    ).toEqual([...CASCADE_ONLY_TABLES.keys()].sort());
+  });
+
+  it('CRITICAL the per-event set is still exactly these eight. The entity-bounded majority is the boring part of the roster; this is the list that says whether the situation is getting worse, and an eighth would otherwise arrive as one more line in a table of fifteen.', () => {
     const perEvent = [...CASCADE_ONLY_TABLES.entries()]
       .filter(([, why]) => why.startsWith('PER-EVENT'))
       .map(([t]) => t)
@@ -245,6 +323,7 @@ describe('a cascade from a row nobody deletes is not a retention policy', () => 
     expect(perEvent, 'tables that append a row per event and are never removed:').toEqual([
       'account_audit_log',
       'billing_email_sends',
+      'crypto_entitlements',
       'incident_update_notifications',
       'oauth_pending_links',
       'sessions',
