@@ -14,7 +14,11 @@
 //     src/**/*.ts.
 //   • Coverage exclude: db/ (V-086 e2e only) + index.ts bootstrap +
 //     dump-openapi.ts CLI.
-//   • V-107 thresholds: 80/80/80/75 (lines/statements/functions/branches).
+//   • V-107 thresholds: 85/83/84/75 (lines/statements/functions/
+//     branches). V-803 — this bullet said 80/80/80/75 while the
+//     assertion below already required the ratcheted values. Read
+//     them off vitest.config.ts; the assertion is authoritative and
+//     a number restated in prose is the shape that goes stale.
 //   • V-120 benchmark glob separation (`npm run bench` only).
 
 import { existsSync, readFileSync } from 'node:fs';

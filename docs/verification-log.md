@@ -34846,3 +34846,33 @@ mislabelling `api_key.minted` as `staff` reds it with the exact pair.
 Eighth batch of the re-verified plan. `EXPECTED_TEST_FILES` 2865 → 2866 for this one new file. A
 peer has a second new test file staged but uncommitted, so the on-disk count is 2867 until their
 bump lands; that +1 is theirs to make, not mine to absorb.
+
+## V-803 — three pin files whose own prose contradicted their own assertions (2026-08-18)
+
+A content-parity pin has two halves: a header comment summarising what the file guards, and the
+assertions. Nothing compares them, so a file can argue with itself and stay green. Three did.
+
+- **`services-account-lifecycle-content-parity`** — its header said "V-327 handleRenewalReminder:
+  **NO dedup** by stripeEventId (Stripe redelivers only on handler failure; duplicate email costs
+  less than dedup-table machinery)". Dedup exists: `claimBillingEmail` appears four times in
+  `services/account-lifecycle.ts` plus the repo, backed by `migrations/0099_billing_email_dedup.sql`.
+  The file's own `it()` block has asserted the claim-before-send behaviour since C6 landed — header
+  and assertion in direct opposition, both green.
+- **`workspace-vitest-config-content-parity`** — header said coverage thresholds are 80/80/80/75.
+  `vitest.config.ts` has **85/83/84/75**, and the assertion below already required the ratcheted
+  values. A number restated in prose beside the assertion that checks it is pure liability.
+- **`marketing-site-data-pricing-content-parity`** — an `it()` title called Team "the Manual ladder's
+  **only** AI-agent tier". `agency_manual` carries `aiAgent: true` and `llmBilling: 'byok_only'` too.
+  Worse, the block is scoped to `team_manual` by `tierBlockIn`, so it **cannot** see another tier and
+  could never have checked exclusivity — the claim was unfalsifiable where it was written.
+
+Zero source edits and zero assertion changes: every correction is to prose that was already wrong
+about code the same file tests. That is what made this batch cheap and worth doing in one commit.
+
+The pattern is the same one V-794 ratchets and V-802 replaced with derivation — a hand-maintained
+restatement drifts from the thing it restates. Here the drift had nowhere to hide: the contradicting
+evidence was in the same file, a few lines down.
+
+`it(` counts unchanged in all three (verified against HEAD). `EXPECTED_TEST_FILES` unchanged.
+
+Ninth batch of the re-verified plan.

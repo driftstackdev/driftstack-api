@@ -62,7 +62,7 @@ describe('marketing-site data/pricing content parity', () => {
     expect(tierBlockIn(body, 'team_manual')).toMatch(/highlight: true,/);
   });
 
-  it("Team aiAgent + llmBilling='byok_only' pinned: Manual ladder's only AI-agent tier requires BYOK (per ADR-004 founder Tier 3 spec). Drift to enabling AI on Solo would break the ladder differentiation; drift to bundled-LLM at this tier would create a billing-rail mismatch with the server-side tier configuration", () => {
+  it("Team aiAgent + llmBilling='byok_only' pinned: the entry AI-agent tier on the Manual ladder — Agency carries aiAgent: true + llmBilling: 'byok_only' too, so this is NOT an exclusivity claim, and could not be one: the block is scoped to team_manual by tierBlockIn and cannot see another tier. V-803 retracted the word 'only'. Team requires BYOK (per ADR-004 founder Tier 3 spec). Drift to enabling AI on Solo would break the ladder differentiation; drift to bundled-LLM at this tier would create a billing-rail mismatch with the server-side tier configuration", () => {
     expect(tierBlockIn(body, 'team_manual')).toMatch(
       /aiAgent: true,[\s\S]*?llmBilling: 'byok_only',/,
     );

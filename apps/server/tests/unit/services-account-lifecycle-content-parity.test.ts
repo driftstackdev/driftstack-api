@@ -27,9 +27,15 @@
 //     dedup (mirror pattern of failed.first).
 //   • V-202b handleTierChanged: short-circuit on fromTier===toTier;
 //     system actor in audit (trigger is Stripe webhook).
-//   • V-327 handleRenewalReminder: NO dedup by stripeEventId (Stripe
-//     redelivers only on handler failure; duplicate email costs less
-//     than dedup-table machinery).
+//   • V-327 handleRenewalReminder: C6 claim-before-send dedup on
+//     (stripeEventId, kind) via repo.claimBillingEmail, backed by
+//     migration 0099_billing_email_dedup.sql. Claimed after the opt-out
+//     and account checks, immediately before the send.
+//     V-803 — this bullet used to assert the opposite, that no dedup by
+//     event id existed because a duplicate email was cheaper than the
+//     machinery. The it() block below has contradicted it since C6
+//     landed: the file argued with itself and both halves were green,
+//     because nothing compares a pin's prose to its own assertions.
 //   • formatCents: Stripe zero-decimal currencies set (16 codes) +
 //     USD/EUR/GBP symbols + ISO 4217 fallback.
 //   • docsBaseUrl trailing-slash stripped at construction.
