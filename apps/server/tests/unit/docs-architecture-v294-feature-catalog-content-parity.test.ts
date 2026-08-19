@@ -241,7 +241,18 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
 
   it("Status-page Surface 6 + Surface 8 SDK + Surface 9 infra framing pinned: '### Surface 6 — Status page (NEW; `apps/status-page`)' + '| Top-level overall status            | DEFERRED | V-295' + '| Auto-polling (Hetzner cron + R2)    | DEFERRED | V-295 | 8       | DPA Annex 3 (cron worker)' + '| SLA reporting / uptime calculations | DEFERRED | V-295 | 6       | ToS (SLA clause)' + '### Surface 8 — SDKs (`packages/sdk-typescript`, `packages/sdk-python`, `packages/sdk-go`)' + '| TypeScript SDK published (npm)             | SHIPPED' + '| Python SDK alpha + first PyPI tag          | DEFERRED | V-335' + '| Go SDK alpha + first git tag               | DEFERRED | V-336' + '| Webhook signature verifier (Go)            | DEFERRED | V-337' + '### Surface 9 — Infrastructure + ops (`apps/server` + `infra/`)' + '| Hetzner deploy automation                | SHIPPED  | V-278' + '| 5 CF Pages deploy workflows              | SHIPPED  | V-258-V-260 + V-295' + '| GDPR DSAR support endpoint               | DEFERRED | V-360' — pinned so the Surface-6-NEW-apps/status-page + V-295-Hetzner-cron-R2-DPA-row + SLA-ToS-clause + Surface-8-3-SDK + TS-SHIPPED-Python-V-335-Go-V-336 + Surface-9-Hetzner-V-278 + 5-CF-Pages-V-258-V-260+V-295 + V-360-DSAR-endpoint commitment survives", () => {
     expect(body).toMatch(/### Surface 6 — Status page \(NEW; `apps\/status-page`\)/);
-    expect(body).toMatch(/\| Top-level overall status\s+\| DEFERRED \| V-295/);
+    // V-873 — seven rows in this catalog described shipped work as DEFERRED and
+    // this pin froze one of them. The status site ships index / history /
+    // incident / subscribe pages, three incident-and-subscriber tables back
+    // /v1/admin/incidents and /v1/admin/status-subscribers, and index.astro
+    // renders per-component state. Negative on the stale cell, positive on the
+    // corrected one.
+    expect(body, 'the DEFERRED status-page row is gone').not.toMatch(
+      /\| Top-level overall status\s+\| DEFERRED \| V-295/,
+    );
+    expect(body, 'and reads as shipped').toMatch(
+      /\| Top-level overall status\s+\| SHIPPED \(V-873\) \| V-295/,
+    );
     expect(body).toMatch(
       /\| Auto-polling \(Hetzner cron \+ R2\)\s+\| DEFERRED \| V-295 \| 8\s+\| DPA Annex 3 \(cron worker\)/,
     );

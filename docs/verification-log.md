@@ -37700,3 +37700,45 @@ basis must be positive and may not claim entries the log does not contain.
 Proved four ways: removing the note while stale fails; removing it AFTER moving the basis forward
 **passes**, which is the self-lifting property; a basis citing unwritten entries fails; and the
 queue's missing-roll-up warning is required. Both documents restored byte-identical.
+
+## V-873 — acting on V-872's own finding: seven catalog rows corrected (2026-08-18)
+
+**The guard said the catalog was stale; this checks some of it.** V-872 established that
+`v294-feature-catalog.md` classifies against the verification log at V-293 while the log is at
+V-871. Rather than leave that as a warning, I re-verified the rows that can rot into falsehood:
+**59 non-SHIPPED rows** (47 DEFERRED, 12 IN-FLIGHT). A SHIPPED row going stale is rarer and less
+costly; a DEFERRED row that shipped tells a reader there is work to do.
+
+**Seven verified stale and corrected**, each against source rather than against another document:
+
+- **Five status-page rows** — top-level status, per-component status, incident history, manual
+  incident posting, email subscription. `apps/status-site/src/pages/` ships `index`, `history`,
+  `incident`, `subscribe` and `404`; three tables (`incidents`, `incidentUpdates`,
+  `statusSubscribers`) back `/v1/admin/incidents` and `/v1/admin/status-subscribers`; and
+  `index.astro` renders `components` / `affected_components`, which is the per-component row
+  specifically.
+- **`/billing portal redirect`** — `GET /v1/account/me/billing-portal` is registered at
+  `billing.ts:149` and answers 302 with a `Location` header. Verified during V-860 for an unrelated
+  claim, which is how it was on my list at all.
+- **`Idempotency keys (24h dedup)`** — and this is the one I expected to leave alone. Internal
+  webhook dedup exists in four services, which is NOT the same feature, so I checked for a
+  customer-facing header before claiming anything. It is there: `lib/idempotency-key.ts`,
+  `readIdempotencyKey` used by the agent-session routes, and customer documentation at
+  `/docs/idempotency-keys`. Caution was warranted; the answer still came out shipped.
+
+**The basis line is deliberately NOT moved.** Advancing `V-001 → V-293` to V-871 would assert that
+all 119 rows were re-verified. Seven were. Moving it would retire V-872's staleness note on the
+strength of a claim I did not earn — the precise failure this arc has been correcting in other
+people's documents, and it would be worse coming from the entry that fixed them. The note stands,
+and the mutation proof confirms it is still required.
+
+**One row pinned, six not**, which is again why the pin was not the protection: the single frozen
+row was the only one anything would have noticed changing. Fixed together with a negative on the
+stale cell and a positive on the corrected one.
+
+Mutation-proved two ways: reverting the pinned row fails the parity guard, and removing the
+staleness note still fails V-872's guard because the basis is unchanged — so correcting rows did
+not accidentally satisfy the freshness requirement. Catalog restored byte-identical.
+
+**Remaining: 52 unverified non-SHIPPED rows.** Named rather than implied, so the next pass knows
+where it starts.
