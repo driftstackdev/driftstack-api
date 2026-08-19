@@ -38438,3 +38438,36 @@ third mutation was redundant with the first and invalid by construction.
 (mutations were no-ops), then "the enum direction is unguarded" (the reader consumes dist). A
 mutation proof needs its own verification: confirm the edit landed, and confirm the code under test
 actually reads what you edited.
+
+## V-894 — the built-package hazard is real for mutation proofs and NOT for the guards (2026-08-18)
+
+**Measured the blast radius of V-893's second trap.** 148 test files import `@driftstack/api-types`
+(the built package) without also reading its source; 94 read source only; 26 do both. Eight of the
+148 are named "cross-source invariant", which is where a stale build would matter most.
+
+**The guards are fine.** `pretest` runs `npm run build --workspaces --if-present`, so every
+`npm test` rebuilds the package before vitest sees it. Verified empirically rather than trusted:
+`dist/accounts.js` carries **46** audit actions and `src/accounts.ts` defines **46**, with nothing on
+either side the other lacks. The built artifact is current, so those 148 tests assert against
+today's types.
+
+**The hazard is confined to targeted runs — which is exactly what mutation proofs use.** `npx vitest
+run <file>` skips `pretest`. So editing `packages/api-types/src` and re-running a single test proves
+nothing about any assertion that reads the built package, which is what V-893's third mutation ran
+into and V-848 recorded a session earlier. The correct method is to mutate the DOC side (whose file
+the test reads directly), or rebuild before re-running.
+
+**Recorded plainly: this turn produced four bad measurements before it produced one good one.** A
+naive action count of 52 that included commented lines; `dist/index.js` read as the artifact when it
+is a barrel and `dist/accounts.js` holds the symbol; a `[^;]{0,220}` capture that truncated before
+reaching the enum values and reported zero; and, in V-893, three mutations targeting an action that
+does not exist. Each was caught before it became a claim, but the pattern is the finding: **I was
+chasing a hazard that largely does not exist, and every step toward it produced a measurement that
+looked alarming and was wrong.**
+
+The one sentence worth keeping: a guard reading the built package is sound under the suite that
+builds it, and unsound under the targeted run that does not. That distinction is about how I VERIFY,
+not about whether the code is correct — and four wrong measurements in a row is a strong hint to
+stop and check the premise, which is what finally produced the 46=46 answer.
+
+No source change.
