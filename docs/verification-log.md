@@ -38640,3 +38640,41 @@ failure engineered out for the fourth time.
 
 **23 of 59 non-SHIPPED rows verified; 36 remain.** The basis line still reads V-293 and still must:
 23 checked is not 119 re-verified, and V-873's reasoning for not moving it holds unchanged.
+
+## V-900 — surfaces 11 and 12 are accurate; the surface instrument finds its floor (2026-08-18)
+
+**Six rows across Compliance + security and Business operations, and every one is correct.** After
+V-899 corrected an entire product layer, this is the counter-case: two surfaces where the catalog
+has kept up.
+
+- **AUP enforcement (real)** — DEFERRED, and rightly. `AUP_REFUSAL_PATTERNS` exists and both
+  decomposers pre-filter on it, which looks like shipped enforcement. Its own comment settles it:
+  "subset for the deterministic impl; AI-B1.b will use the Anthropic content-policy + a fuller
+  corpus", with the full corpus deliberately held outside the repo because legal owns the wording.
+  The row's word is "real", and a keyword subset is not that.
+- **GDPR DSAR support** — DEFERRED, re-confirmed. V-881 already searched for erasure,
+  subject-access, personal-data and account-export and found nothing.
+- **Transparent retention policies** — IN-FLIGHT, and precisely right. The scrub sweeper is wired
+  and running and privacy-policy §9 documents the windows, but V-865 established the audit archive
+  that would bound `session_events` has never run. Documented and partially enforced is exactly what
+  IN-FLIGHT means.
+- **VAT handling + MOSS** — DEFERRED. No VAT logic in the Stripe provider, and the action queue
+  independently lists Stripe Tax + EU VAT as outstanding.
+- **Dunning UI** — DEFERRED. `billing.astro` carries `past_due` and `unpaid` STATUS BADGES, which
+  is not a dunning flow: no retry schedule, recovery prompts or grace handling. Rendering a state is
+  not managing it, and this was the row most likely to produce a false correction.
+- **Subscription management** — IN-FLIGHT, consistent with V-878 leaving the plan-picker row alone
+  for the same reason: the pieces ship, the boundary of "managed" is a product judgement.
+
+**Worth recording from the AUP file, as a counterpoint.** Its comment notes an audit fix of
+2026-07-01: the refusal corpus had been hand-copied into both decomposers and is now exported from
+one and imported by the other, because "two independently-maintained-but-supposed-to-be-identical
+arrays" is a known trap. That is the fix-one-copy problem — which this arc has now found six times
+in documentation — solved properly in production code.
+
+**Where the instrument stands.** 29 of 59 non-SHIPPED rows verified across six surfaces: 12
+corrected, 17 confirmed accurate. The corrections cluster (status page, AI agent layer); the
+accurate rows cluster too, and surfaces 11 and 12 are simply maintained. Basis line unchanged at
+V-293.
+
+No source change.
