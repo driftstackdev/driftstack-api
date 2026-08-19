@@ -38541,3 +38541,34 @@ documentation gap until the reason is read. Two of two flagged discrepancies her
 false positives, and both took one file-read to dissolve.
 
 No source change.
+
+## V-897 — the function keeping two non-contract enum values off the wire had no test (2026-08-18)
+
+**Acting on V-896 rather than filing it.** That entry established why
+`quota.warning_80pct` and `quota.exceeded` are undocumented — never emitted, retained for migration
+compatibility, and per `webhooks-repo.ts` "must be removed whenever a persisted endpoint is
+materialized". `sanitizePersistedWebhookEvents` is that removal, and nothing exercised it.
+
+**The boundary this protects is not the one already guarded.**
+`subscribable-webhook-enum-stability` covers the SUBSCRIBABLE list, so a customer cannot select
+these when creating an endpoint. This is about rows that already exist: an endpoint persisted
+before the values went silent still carries them in its `events` column, and this filter is the only
+thing between that row and a customer response. Two apparent hits in the suite turned out to be a
+comment listing event names and an unrelated `quota_exceeded` outcome string.
+
+**Behavioural, not textual.** A pin on the filter's source line would pass if somebody rewrote the
+function to return its input unchanged. Calling it with a silent value cannot. Five arms: a mixed
+row drops the silent values and keeps order; each silent value is dropped INDIVIDUALLY (a
+hand-rolled check for one that forgot the other would pass a both-present test); a row of only
+silent values materializes empty rather than throwing; an unrecognised value still fails closed
+through the schema, because dropping unknowns would silently discard a real event type after a bad
+migration; and an ordinary subscription passes through untouched, so the function cannot satisfy
+everything by returning `[]`.
+
+**Mutation-proved three ways, each a plausible regression rather than a synthetic edit.** Removing
+the filter fails three arms. Dropping ONE value from the set fails three — which is the arm that
+exists for it. Replacing the schema parse with a cast fails the fail-closed arm alone, confirming
+the arms are independent rather than all keying off the same behaviour.
+
+This is the first guard this session written for a defect that has NOT happened. The contract is
+documented, the code honours it, and the only gap was that nothing would notice if it stopped.
