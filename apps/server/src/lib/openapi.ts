@@ -3443,14 +3443,25 @@ function buildRegistry(): OpenAPIRegistry {
   const MfaDisableRequestOpenApi = z.object({
     confirm: z.literal('disable-mfa'),
   });
-  const MfaChallengeRequestOpenApi = z.object({
-    challenge_token: z.string(),
-    code: z
-      .string()
-      .regex(/^\d{6}$/)
-      .optional(),
-    recovery_code: z.string().optional(),
-  });
+  // V-926 — the published body carries the either-or rule the route enforces.
+  // `MfaChallengeRequestSchema` refines "code OR recovery_code must be provided",
+  // and per V-924 a refine is a runtime predicate JSON Schema cannot express — so
+  // the document described an empty-code body as valid on an endpoint that
+  // answers 400 for it. A union renders as `anyOf`, which does survive. The
+  // min(1) bounds mirror the real schema, which the flat mirror also dropped.
+  const MfaCodeOpenApi = z.string().regex(/^\d{6}$/);
+  const MfaChallengeRequestOpenApi = z.union([
+    z.object({
+      challenge_token: z.string().min(1),
+      code: MfaCodeOpenApi,
+      recovery_code: z.string().min(1).optional(),
+    }),
+    z.object({
+      challenge_token: z.string().min(1),
+      code: MfaCodeOpenApi.optional(),
+      recovery_code: z.string().min(1),
+    }),
+  ]);
   const MfaChallengeResponseOpenApi = z.object({
     session: z.object({
       token: z.string(),
@@ -3459,13 +3470,13 @@ function buildRegistry(): OpenAPIRegistry {
     }),
     via: z.enum(['totp', 'recovery']),
   });
-  const MfaStepUpRequestOpenApi = z.object({
-    code: z
-      .string()
-      .regex(/^\d{6}$/)
-      .optional(),
-    recovery_code: z.string().optional(),
-  });
+  // V-926 — same either-or rule as the challenge body above, and the same reason
+  // for a union. This one published NO `required` at all, so the spec described
+  // `{}` as a valid step-up request against a route that always refuses it.
+  const MfaStepUpRequestOpenApi = z.union([
+    z.object({ code: MfaCodeOpenApi, recovery_code: z.string().min(1).optional() }),
+    z.object({ code: MfaCodeOpenApi.optional(), recovery_code: z.string().min(1) }),
+  ]);
   const MfaStepUpResponseOpenApi = z.object({
     via: z.enum(['totp', 'recovery']),
     mfa_satisfied_at: z.string(),

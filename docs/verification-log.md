@@ -39641,3 +39641,44 @@ exists. Same structure, opposite answer, and the difference is measurable rather
 taste — which is the only reason I am comfortable leaving one and having changed the other.
 
 No source change. The class is closed at one instance pair, both fixed in V-924.
+
+## V-926 — the published MFA bodies described requests the routes always refuse (2026-08-19)
+
+**Continuing V-924's vein: the document versus the server.** `POST /v1/auth/mfa/step-up` published a
+request body with **no `required` array at all** — so a customer generating a client from the OpenAPI
+document would read every field as optional and `{}` as a legal request. The route validates with
+`MfaStepUpRequestSchema`, which refines "either `code` or `recovery_code` must be provided", and
+answers 400 for exactly that body. `POST /v1/auth/mfa/challenge` had the same gap, and both also
+dropped the `min(1)` bounds the real schemas carry.
+
+**A different mechanism from V-924, same consequence.** There the constraint was lost in conversion.
+Here the request bodies in `openapi.ts` are hand-written MIRRORS of the real schemas — separate
+objects that simply never had the rule. Even had they carried the refine it would not have survived,
+which is why the fix is a `z.union` rendering as `anyOf` with one `required` set per branch, a form
+JSON Schema keeps. The published bodies now read
+`anyOf: [{required:[challenge_token, code]}, {required:[challenge_token, recovery_code]}]` and
+`anyOf: [{required:[code]}, {required:[recovery_code]}]`.
+
+**Measured the surface before picking a target.** 71 request schemas are published; 38 are the object
+the route actually parses with, and **33 are spec-only mirrors** — of which 21 have no test naming
+them at all. Only 7 mirrors have a name-matching api-types schema, so most cannot be compared
+mechanically. That is the honest scope: this entry fixes the two that are both comparable AND
+divergent, and the other 19 unguarded solo mirrors remain an open surface.
+
+**Scope stated in the guard, because a narrow check that reads broad is the failure this arc keeps
+finding.** It compares the REQUIRED-KEY dimension only — whether the document would admit a body by
+key presence, versus whether the schema accepts it. Not a JSON Schema validator; the sample bodies are
+format-valid on purpose so any disagreement is about presence. ajv is in the tree only as a
+transitive dependency of eslint, so depending on it would have made the guard fail for an unrelated
+reason.
+
+**Proofs, and one of them was contaminated the first time.** Restoring the flat step-up body into the
+spec fails the guard by name. Dropping the refine from the real schema reports
+`route=accepts document=refuses`, so divergence is caught in BOTH directions.
+
+The contamination is worth recording: my scratchpad snapshot of `openapi.json` was taken BEFORE the
+fix, so restoring from it after the first mutation silently reverted the regenerated spec — and the
+second proof then ran against a stale document and reported a disagreement that was an artifact of my
+own restore, not of the mutation. The mutation-restore rule says restore byte-identical from a
+snapshot; it does not say the snapshot must be of the FIXED state, and for a generated artifact that
+distinction is the whole thing. Re-run cleanly against a post-fix snapshot, both proofs hold.

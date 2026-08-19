@@ -24780,20 +24780,44 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "challenge_token": {
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "challenge_token": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "code": {
+                        "type": "string",
+                        "pattern": "^\\d{6}$"
+                      },
+                      "recovery_code": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["challenge_token", "code"]
                   },
-                  "code": {
-                    "type": "string",
-                    "pattern": "^\\d{6}$"
-                  },
-                  "recovery_code": {
-                    "type": "string"
+                  {
+                    "type": "object",
+                    "properties": {
+                      "challenge_token": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "code": {
+                        "type": "string",
+                        "pattern": "^\\d{6}$"
+                      },
+                      "recovery_code": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["challenge_token", "recovery_code"]
                   }
-                },
-                "required": ["challenge_token"]
+                ]
               }
             }
           }
@@ -24931,16 +24955,36 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "code": {
-                    "type": "string",
-                    "pattern": "^\\d{6}$"
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "pattern": "^\\d{6}$"
+                      },
+                      "recovery_code": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["code"]
                   },
-                  "recovery_code": {
-                    "type": "string"
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "pattern": "^\\d{6}$"
+                      },
+                      "recovery_code": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["recovery_code"]
                   }
-                }
+                ]
               }
             }
           }
