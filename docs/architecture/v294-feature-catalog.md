@@ -297,23 +297,23 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 ### Surface 3 — GUI client (`apps/gui-client`)
 
-| Feature                                 | Status          | Slice         | Tier-1h | Legal updates         |
-| --------------------------------------- | --------------- | ------------- | ------- | --------------------- |
-| First-run wizard                        | SHIPPED         | V-244 + V-261 | —       | —                     |
-| Browser-OAuth flow                      | SHIPPED         | V-268         | —       | —                     |
-| Tauri custom URL scheme `driftstack://` | DEFERRED        | V-305         | 8       | privacy (deep-link)   |
-| Empty states across 4 list views        | SHIPPED         | V-275-V-277   | —       | —                     |
-| Sentry crash-only telemetry             | SHIPPED         | V-242         | —       | —                     |
-| OS keychain for API key                 | SHIPPED         | V-241         | —       | —                     |
-| Tauri Updater wired                     | SHIPPED         | V-243         | —       | —                     |
-| macOS code signing                      | PENDING FOUNDER | n/a           | n/a     | —                     |
-| Windows code signing                    | PENDING FOUNDER | n/a           | n/a     | —                     |
-| Linux package signing                   | DEFERRED        | post-launch   | 4       | —                     |
-| Live session WebRTC stream (LiveKit)    | UNDISCOVERED    | V-306         | 16      | privacy + DPA Annex 3 |
-| Touch / click input forwarding          | UNDISCOVERED    | V-307         | 8       | —                     |
-| Keyboard input forwarding               | UNDISCOVERED    | V-307         | 4       | —                     |
-| Address bar + nav controls              | UNDISCOVERED    | V-308         | 4       | —                     |
-| Mobile device control on iOS/Android    | OUT-OF-SCOPE    | year-2        | n/a     | —                     |
+| Feature                                 | Status                                       | Slice         | Tier-1h | Legal updates         |
+| --------------------------------------- | -------------------------------------------- | ------------- | ------- | --------------------- |
+| First-run wizard                        | SHIPPED                                      | V-244 + V-261 | —       | —                     |
+| Browser-OAuth flow                      | SHIPPED                                      | V-268         | —       | —                     |
+| Tauri custom URL scheme `driftstack://` | BUILT (V-328), per-OS bundle run outstanding | V-305         | 8       | privacy (deep-link)   |
+| Empty states across 4 list views        | SHIPPED                                      | V-275-V-277   | —       | —                     |
+| Sentry crash-only telemetry             | SHIPPED                                      | V-242         | —       | —                     |
+| OS keychain for API key                 | SHIPPED                                      | V-241         | —       | —                     |
+| Tauri Updater wired                     | SHIPPED                                      | V-243         | —       | —                     |
+| macOS code signing                      | PENDING FOUNDER                              | n/a           | n/a     | —                     |
+| Windows code signing                    | PENDING FOUNDER                              | n/a           | n/a     | —                     |
+| Linux package signing                   | DEFERRED                                     | post-launch   | 4       | —                     |
+| Live session WebRTC stream (LiveKit)    | UNDISCOVERED                                 | V-306         | 16      | privacy + DPA Annex 3 |
+| Touch / click input forwarding          | UNDISCOVERED                                 | V-307         | 8       | —                     |
+| Keyboard input forwarding               | UNDISCOVERED                                 | V-307         | 4       | —                     |
+| Address bar + nav controls              | UNDISCOVERED                                 | V-308         | 4       | —                     |
+| Mobile device control on iOS/Android    | OUT-OF-SCOPE                                 | year-2        | n/a     | —                     |
 
 ### Surface 4 — Marketing site (`apps/marketing-site`)
 

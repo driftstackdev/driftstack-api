@@ -37502,3 +37502,45 @@ Runbook restored byte-identical.
 two were real (V-866, this) and one — `recapture/runs/*` — was accurate and left alone. The other
 71 offenders are overwhelmingly pins on documents that legitimately record deferrals, which is not
 this defect. Recorded so the set is not re-swept wholesale.
+
+## V-868 — a shipped feature listed as DEFERRED on the launch checklist, in four places (2026-08-18)
+
+**Same instrument as V-866/V-867, aimed at the launch-decision document.** The V-794 offender set
+includes `docs-launch-pre-launch-checklist`, and my own recorded lesson says to read that file's
+roll-up date before trusting a row. Two rows already carried 2026-08-10 corrections and the page
+carries a staleness banner, so the known-stale entries were handled. The rest were not.
+
+**"Tauri custom URL scheme" is listed as deferred post-launch. It shipped as V-328.**
+`tauri-plugin-deep-link = "2.0"` is a dependency, `tauri.conf.json` registers
+`"schemes": ["driftstack"]`, `lib/deep-link.ts` and `lib/app-deep-link-listener.ts` exist, and
+`App.tsx` installs an always-on listener. I first noticed it incidentally: `deepLinkUnlistenRef`
+appeared in `browser-sign-in.ts` while verifying an unrelated claim in V-860.
+
+**Stated precisely, because neither "deferred" nor "shipped" is the whole answer.**
+`docs/founder-actions/v328-tauri-deep-link-test.md` says it exactly: the code is on `main`, and the
+native bundle path needs an actual run on each OS before release. So the outstanding work is a
+per-OS validation run, not implementation. "DEFERRED" tells a launch triager there is code to
+write — the same cost V-866 found in the GUI audit's stale P0, on the document that decides
+whether to launch.
+
+**Four sites, two documents, none pinned.** `pre-launch-checklist.md` twice (the status table and
+the deferred list) and `v294-feature-catalog.md` twice (its status table and the V-305
+priority-order line). Three corrected to "BUILT, validation outstanding" with the real remaining
+work named. The fourth is deliberately untouched: the priority-order entry records what was
+_planned_ in a historical sequencing list, and rewriting a record of a past plan to match today
+would be a different kind of falsification.
+
+**Guard — derived, because a pin could not have helped here.** Being unpinned is why this drifted:
+a pin on any one of the four would have frozen that copy and left the other three free to rot.
+`a-shipped-feature-may-not-be-listed-as-deferred` reads the plugin dependency, the registered
+scheme and the App.tsx listener, and fails if any readiness document calls the feature deferred
+while all three hold. Struck-through corrections are exempt — quoting an old status to retract it
+is the fix, not a repeat of the defect, and without that exemption the guard would fire on the very
+edit that closes the finding.
+
+The liveness arm is asserted first and separately, so it cannot outlive its own premise: drop the
+plugin and that arm fails before the docs arm does, and "deferred" becomes sayable again.
+
+Mutation-proved three ways — restoring DEFERRED in each document independently (proving one clean
+document cannot mask the other) and downgrading the plugin to prove the liveness arm fails first.
+All three sources restored byte-identical.
