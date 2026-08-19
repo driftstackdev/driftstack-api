@@ -40372,3 +40372,21 @@ Removing the 639 alias declarations fails the rate-limit arm.
 **The spec diff is 11 103 lines and mechanical** — 847 X-Request-Id blocks plus 639 alias blocks, with
 removals confined to structural reflow, checked by classifying every changed line rather than eyeballing
 the total. Generated Python models unaffected: response headers are not model classes.
+
+**V-942 addendum — the pin collision I should have predicted.** The commit above went in with a red
+suite: `lib-openapi-content-parity` freezes the exact SOURCE SHAPE of each `errors4xx` status entry, and
+adding a header turned 400 and 403 into multi-line entries and merged the 401/429 header objects. I
+enumerated pins on header NAMES and on the endpoints, and never on the structure I was editing.
+
+The pin's own comment records a peer hitting this identical collision: "SPLIT. The chain ran 400 and 401
+as consecutive one-line entries, so declaring the RFC 7235 challenge on the 401 — which makes that entry
+multi-line — broke a pin about the Problem $ref." They split the pin and left the note. I then broke the
+split version the same way, which makes this the third time a header addition has broken this family.
+
+Each status is now pinned to its own shape, the header composition is asserted separately rather than
+being load-bearing for a claim about the Problem `$ref`, and a per-occurrence negative refuses a return
+to the headerless one-liner. Proof: reverting the 400 to its old form fails the arm by name.
+
+The lesson is narrower than "enumerate pins": enumerate pins on the SHAPE OF THE CODE being changed, not
+only on the identifiers in it. A pin that freezes formatting breaks on any edit that reflows the thing it
+froze, and grepping for what a change is ABOUT will not find it.

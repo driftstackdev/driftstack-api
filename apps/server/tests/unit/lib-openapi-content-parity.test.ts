@@ -135,11 +135,27 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     // multi-line — broke a pin about the Problem $ref. Each status is pinned on
     // its own, and the 401's headers get their own assertion rather than being
     // load-bearing for a claim about $ref shape.
+    // V-942 — the SPLIT above was made for this exact reason and it happened
+    // again: declaring X-Request-Id on the shared error set turned 400 and 403
+    // into multi-line entries and merged the 401/429 header objects. Third time
+    // this pin family has broken on a header being added, so each status is now
+    // pinned to its OWN shape and the header composition is asserted separately
+    // rather than being load-bearing for a claim about the Problem $ref.
+    expect(body).toMatch(/const errors4xx = \{/);
     expect(body).toMatch(
-      /const errors4xx = \{\s*\n?\s*400: \{ description: 'Validation failed\.', content: problemContent \},/,
+      /400: \{\s*\n?\s*description: 'Validation failed\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: requestIdHeader,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /401: \{\s*\n?\s*description: 'Authentication failed\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: unauthorizedHeaders,\s*\n?\s*\},/,
+      /403: \{\s*\n?\s*description: 'Caller not permitted\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: requestIdHeader,\s*\n?\s*\},/,
+    );
+    expect(body).toMatch(
+      /401: \{\s*\n?\s*description: 'Authentication failed\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: \{ \.\.\.unauthorizedHeaders, \.\.\.requestIdHeader \},\s*\n?\s*\},/,
+    );
+    // Per-occurrence negative: a status entry that carries no headers at all is
+    // the state this replaced, and it would mean the correlation id support asks
+    // for is undeclared again on that status.
+    expect(body, 'no error status may go back to a headerless one-liner').not.toMatch(
+      /400: \{ description: 'Validation failed\.', content: problemContent \},/,
     );
   });
 
@@ -148,9 +164,17 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     expect(body).toMatch(/'Retry-After': \{/);
     expect(body).toMatch(/const unauthorizedHeaders = \{/);
     expect(body).toMatch(/'WWW-Authenticate': \{/);
+    // V-942 — the 429 now merges the shared request-id header with its own set.
     expect(body).toMatch(
-      /429: \{\s*\n?\s*description: 'Rate limit or concurrency limit hit\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: rateLimitHeaders,\s*\n?\s*\},/,
+      /429: \{\s*\n?\s*description: 'Rate limit or concurrency limit hit\.',\s*\n?\s*content: problemContent,\s*\n?\s*headers: \{ \.\.\.rateLimitHeaders, \.\.\.requestIdHeader \},\s*\n?\s*\},/,
     );
+    // V-942 — the legacy X-RateLimit-* aliases are declared, not just described
+    // inside the Bucket header's prose.
+    expect(body).toMatch(/'X-RateLimit-Limit': \{/);
+    expect(body).toMatch(/'X-RateLimit-Remaining': \{/);
+    expect(body).toMatch(/'X-RateLimit-Reset': \{/);
+    expect(body).toMatch(/const requestIdHeader = \{/);
+    expect(body).toMatch(/'X-Request-Id': \{/);
   });
 
   it('auth security array shorthand for routes: [{ BearerAuth: [] }]', () => {
