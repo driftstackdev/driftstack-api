@@ -43309,3 +43309,30 @@ been closing all session.
 
 Mutation: the planted leak → RED (was green); control → 7 passed. No ratchet change, no new file.
 `it(` count unchanged (7). Full suite after V-1012: 2983 passed | 113 skipped (3096), 30067 tests.
+
+## V-1014 — the other stripper shape truncates URLs, and blinds nothing (measured negative)
+
+The nine guards using `replace(/\/\/[^\n]*/g, '')` are clean for the runaway of V-1012/V-1013, but
+that shape has its own failure: it strips from any `//` to end of line, including the one inside
+`'https://…'`. Measured over the same 506-file corpus, it destroys 285 URL string literals across 45
+files, and on 65 of those lines a real token follows the URL — `openapi.ts` loses the `description`
+beside each server URL, `billing.ts` loses the comment naming each allowed dev origin.
+
+Whether that blinds a guard is a separate question from whether it destroys text, so the three whose
+inputs actually contain those lines were swapped onto the correct scanner and re-run:
+`the-crypto-api-doc-lists-every-customer-crypto-route` 4/4 both ways,
+`the-team-role-read-write-split-is-derived-not-described` 5/5 both ways, and
+`routes-session-proxy-content-parity` 14/14 both ways. No verdict moves. Nothing to fix.
+
+The middle result was nearly filed as a finding. A blanket swap of that third file reported 8 of 14
+arms failing, which reads exactly like a guard that had been blind. It was my swap: the file has
+three `readFileSync` sites, and the one at line 19 feeds content-parity pins that freeze the route's
+HEADER COMMENTS on purpose. Stripping comments from those reads deletes the very text they exist to
+pin. Swapping only the caller-walk — the site that actually wanted comments gone — is 14/14.
+
+Worth stating as a rule, because it cuts against the last three entries: comment-stripping is not
+globally correct. A gate that asks "is this claim still in the code" wants prose. A gate that asks
+"does this code do X" does not. Two reads in one file can legitimately want opposite treatment, and
+`routes-session-proxy-content-parity` is the file that proves it.
+
+Full suite after V-1013: 2983 passed | 113 skipped (3096), 30067 tests.
