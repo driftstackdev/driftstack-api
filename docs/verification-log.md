@@ -41870,3 +41870,39 @@ had been writing about instruments that measure the wrong thing.
 **The correction to my own routine:** `tsc -p apps/server/tsconfig.json` is not sufficient before a commit
 that adds or edits a test file, because that project excludes them. The suite's own guard is the check that
 counts, and it is cheap to run directly on the one file — which is now what I do.
+
+## V-983 — closing measurement: the arc's claims, checked against a fresh run
+
+**Both gates green, and the closures verified rather than assumed.** `npm run typecheck` across every
+workspace — the check that actually blocks CI, and the one V-982 showed my per-project `tsc` does not stand
+in for — exits **0 with zero errors**. The suite is 2 980 files / 30 043 tests green.
+
+**All nine closures from V-979 and V-981 execute their targets**: handback 3 hits, resume 2, clone 4,
+and the six admin lists 2 each (incidents also carries V-966's 4 on its public-feed sibling).
+
+**The population reconciles a second time.** 292 → **283**, delta exactly the nine sites closed. Per class:
+`BadRequestError` 22 → 18 (V-981's four `List…QuerySchema` refusals), `ValidationError` 11 → 6 (V-979's
+three bodies plus V-981's incidents and status-subscribers). `NotFoundError` unchanged at 17,
+`ForbiddenError` at 9, `FeatureUnavailableError` at 8 — right, because V-965 and V-974 triaged those classes
+as residual and added no arms to them.
+
+**Where the vein ends, stated so the next reader does not re-derive it.** Of the 283:
+
+- **191 plain `Error`** — split by V-980 into 125 unreachable-by-construction and 66 reachable only under
+  corruption, a stalled boot migration, or a repo contract violation, and correctly fatal there.
+- **34** across `NotFoundError`, `ForbiddenError` and `FeatureUnavailableError` — the residual classes:
+  wiring guards, vanished-row races, owner-vanished checks behind a SQL filter one layer up.
+- **10 `DriverNotIntegratedError`** — the WebKit driver stubs, which exist to be unimplemented.
+- **~48 typed remainder**, now dominated by defensive post-conditions and second-layer checks; V-974's
+  caveat governs them, since a cold branch here may be a layer proven by a mutation ledger rather than an
+  untested one.
+
+**Two verification instruments were wrong before their results were trusted**, which is the honest summary
+of the whole arc: V-978's verifier searched forward from a message and measured a statement 17 lines away;
+this one anchors on the parse call and takes the next throw. Every figure above is the second of two
+independent counts agreeing — which, after five self-inflicted errors this session, is the only standard
+that has held up.
+
+**Still open and still the owner's:** whether to report unknown fields on the two anonymous routes that
+silently drop one (signup `name`, cli-authorize/initiate `client_label`), and whether the four admin
+account-lifecycle routes should report a mistyped `reason` rather than writing a reasonless audit row.
