@@ -40258,3 +40258,38 @@ raised floors fail, and the same loss with the old floors passes with all three 
 verified as already tight. The value here is not the ten edits — it is that the other 53 are now known
 rather than assumed, and V-936 through V-939 have turned "the floors are probably fine" into a number
 per floor.
+
+## V-940 — the response-contract surface measured clean, and the 204 half of it ratcheted (2026-08-19)
+
+**A whole surface measured rather than assumed, and it holds up.** Three sub-surfaces, all clean:
+
+- **Error content types.** All **1073** 4xx/5xx responses with a declared body declare
+  `application/problem+json` — exactly what `middleware/error-handler.ts` sets on every error. Not one
+  drifted to `application/json`. RFC 7807 compliance is uniform.
+- **Non-JSON success responses.** Every one declares the right type: `text/plain` for `receipt.txt`,
+  `application/pdf` for `receipt.pdf`, `text/csv` for the admin CSV export,
+  `application/json,text/csv` for the format-switched audit-log export, and
+  `application/json,application/octet-stream` for a download's bytes.
+- **Contentless success responses.** All 20 are `204`, not a `200` that forgot its body.
+
+**Then the reality side, which nothing had checked.** The document promising a 204 is only half a
+contract; 18 of the 20 handlers visibly send one, and the remaining two needed reading rather than
+scanning.
+
+**Those two were my scanner's fault, again in a new disguise.** `DELETE /v1/account/mfa` and
+`POST /v1/account/mfa/disable` share one `disableHandler` **defined above both registrations**, so a
+scan that reads FORWARD from a registration never sees the `reply.code(204)`. My first pass reported
+both as defects. That is the third distinct false-positive mechanism this arc has produced from
+scoping: V-934's substring containment, V-934's per-file scoping of service-built responses, and now
+forward-only windows against a shared handler hoisted above its routes.
+
+**Ratcheted, with its weakness stated.** The new guard resolves each declared 204 to the FILE that
+registers it and asserts that file sends a 204 — it does NOT attribute the 204 to a specific handler,
+because the MFA pair makes that unresolvable without real parsing. Pretending otherwise is precisely
+how the false positive gets re-invented, so the header says so and the scope note explains why it is
+deliberate rather than lazy.
+
+**Three proofs, one per arm.** Flipping a route's `code(204)` to `code(200)` fails the reality arm by
+name. Drifting one error response to `application/json` fails the problem+json arm. Deleting a 204 from
+the document fails the pinned count — pinned at exactly 20 rather than floored, because a 204
+disappearing from the contract is itself the change worth noticing.
