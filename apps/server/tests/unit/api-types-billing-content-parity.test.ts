@@ -53,9 +53,11 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
     );
   });
 
-  it("imports: z + AccountTierSchema + Iso8601Schema from './common.js'", () => {
+  it("imports: z + AccountTierSchema + Iso8601Schema + PURCHASABLE_TIERS from './common.js' (V-924 — the shared purchasable-tier tuple backs the checkout enum)", () => {
     expect(body).toMatch(/import \{ z \} from 'zod';/);
-    expect(body).toMatch(/import \{ AccountTierSchema, Iso8601Schema \} from '\.\/common\.js';/);
+    expect(body).toMatch(
+      /import \{ AccountTierSchema, Iso8601Schema, PURCHASABLE_TIERS \} from '\.\/common\.js';/,
+    );
   });
 
   it("BillingPeriod enum: 'monthly' | 'annual'", () => {
@@ -63,12 +65,18 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
     expect(body).toMatch(/export type BillingPeriod = z\.infer<typeof BillingPeriodSchema>;/);
   });
 
-  it('CreateCheckoutSessionRequest: tier refine REJECTS free + enterprise (self-serve paid tier only); billing_period + optional success/cancel URLs with {CHECKOUT_SESSION_ID} server-side substitution comment', () => {
+  it('CreateCheckoutSessionRequest: tier is the PURCHASABLE_TIERS enum, which REJECTS free + enterprise (self-serve paid tier only) — V-924: an enum rather than a refine, so the exclusion survives into the published OpenAPI document; billing_period + optional success/cancel URLs with {CHECKOUT_SESSION_ID} server-side substitution comment', () => {
     expect(body).toMatch(
-      /\/\*\* Target tier\. Must be a self-serve paid tier \(not 'free' or 'enterprise'\)\. \*\//,
+      /\* Target tier\. Must be a self-serve paid tier \(not 'free' or 'enterprise'\)\./,
     );
     expect(body).toMatch(
-      /tier: AccountTierSchema\.refine\(\s*\n?\s*\(t\) => t !== 'free' && t !== 'enterprise',\s*\n?\s*'tier must be a self-serve paid tier \(free and enterprise excluded\)',\s*\n?\s*\),/,
+      /tier: z\.enum\(PURCHASABLE_TIERS, \{\s*\n?\s*message: 'tier must be a self-serve paid tier \(free and enterprise excluded\)',\s*\n?\s*\}\),/,
+    );
+    // Per-occurrence negative. A refine is a runtime predicate that JSON Schema
+    // cannot represent, so the generated spec published all eight tiers and
+    // advertised two that the route answers with 400.
+    expect(body, 'the refine form must not return').not.toMatch(
+      /tier: AccountTierSchema\.refine\(/,
     );
     expect(body).toMatch(/billing_period: BillingPeriodSchema,/);
     expect(body).toMatch(

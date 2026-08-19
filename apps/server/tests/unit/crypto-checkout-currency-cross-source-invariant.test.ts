@@ -29,11 +29,18 @@ const PRICE_CENTS_MAX = 1_000_000;
 describe('W902 CryptoCheckout currency + price-cents cross-source invariant', () => {
   // ─── CreateCryptoCheckoutRequest 3-field bounds ──────────────
 
-  it('CRITICAL packages/api-types/src/crypto-orders.ts CreateCryptoCheckoutRequestSchema has 3 fields — product (string with SKU describe) + price_cents (positive int max 1M) + price_currency (3-letter ISO regex).', () => {
+  it('CRITICAL packages/api-types/src/crypto-orders.ts CreateCryptoCheckoutRequestSchema has 3 fields — product (V-924: the self-serve paid tier enum, free and enterprise refined out) + price_cents (positive int max 1M) + price_currency (3-letter ISO regex).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
-    expect(p).toMatch(
-      /CreateCryptoCheckoutRequestSchema = z\.object\(\{\s*\n\s*product: z\.string\(\)\.describe\('SKU; one of the paid tier ids \(the free tier is not purchasable\)\.'\),\s*\n\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),/,
+    expect(p).toMatch(/CreateCryptoCheckoutRequestSchema = z\.object\(\{/);
+    expect(p, 'product is the purchasable-tier enum').toMatch(
+      /product: z\s*\n\s*\.enum\(PURCHASABLE_TIERS, \{/,
     );
+    // Per-occurrence negative: an unconstrained product field would put the
+    // published contract back out of step with the enum the route enforces.
+    expect(p, 'the bare-string form must not return').not.toMatch(
+      /product: z\.string\(\)\.describe\(/,
+    );
+    expect(p).toMatch(/price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),/);
   });
 
   it("CRITICAL price_currency uses length(3) + regex /^[A-Z]{3}$/ + error message 'price_currency must be a 3-letter uppercase ISO code'. The 3-letter ISO 4217 regex is what NowPayments accepts.", () => {
@@ -71,10 +78,15 @@ describe('W902 CryptoCheckout currency + price-cents cross-source invariant', ()
 
   // ─── product SKU describe ────────────────────────────────────
 
-  it("CRITICAL product field describe pins 'SKU; one of the paid tier ids (the free tier is not purchasable).' The describe documents what valid product strings look like — drift to a different describe would leave SDK consumers without guidance.", () => {
+  it("CRITICAL product field describe pins 'SKU; one of the self-serve paid tier ids (free and enterprise are not purchasable).' The describe is what reaches SDK consumers through the OpenAPI document, so it has to name BOTH exclusions — V-924: the previous text named only the free tier while the route refuses enterprise as well, so a customer reading the spec could send it and get a 400 the description did not predict.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
     expect(p).toMatch(
-      /product: z\.string\(\)\.describe\('SKU; one of the paid tier ids \(the free tier is not purchasable\)\.'\)/,
+      /\.describe\(\s*\n?\s*'SKU; one of the self-serve paid tier ids \(free and enterprise are not purchasable\)\.',?\s*\n?\s*\)/,
+    );
+    // Per-occurrence negative. Paraphrased above rather than quoted so this
+    // assertion cannot be satisfied by the sentence that retracts it.
+    expect(p, 'the single-exclusion wording must not return').not.toMatch(
+      /describe\('SKU; one of the paid tier ids/,
     );
   });
 

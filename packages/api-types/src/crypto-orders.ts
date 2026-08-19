@@ -11,6 +11,7 @@
 // order's pay window but does NOT refund a settled payment.
 
 import { z } from 'zod';
+import { PURCHASABLE_TIERS } from './common.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Status + events
@@ -44,7 +45,28 @@ export type CryptoOrderEvent = z.infer<typeof CryptoOrderEventSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 export const CreateCryptoCheckoutRequestSchema = z.object({
-  product: z.string().describe('SKU; one of the paid tier ids (the free tier is not purchasable).'),
+  /**
+   * Target tier. Must be a self-serve paid tier (not 'free' or 'enterprise') —
+   * the same set as `CreateCheckoutSessionRequestSchema.tier` in ./billing.ts,
+   * which is the Stripe sibling of this endpoint.
+   *
+   * V-924: this was `z.string()` with the constraint stated only in prose, so
+   * the published OpenAPI schema advertised no valid-value list at all while the
+   * route enforced `z.enum(SUPPORTED_PRODUCTS)`. The prose also named only the
+   * free tier as excluded, though enterprise is rejected too — a customer
+   * reading the spec could reasonably send it and get an unpredicted 400.
+   *
+   * Spelled as an enum rather than a refine for the reason recorded on
+   * PURCHASABLE_TIERS: a refine does not survive into JSON Schema, so it would
+   * have published all eight tiers including the two that 400.
+   */
+  product: z
+    .enum(PURCHASABLE_TIERS, {
+      message: 'product must be a self-serve paid tier (free and enterprise excluded)',
+    })
+    .describe(
+      'SKU; one of the self-serve paid tier ids (free and enterprise are not purchasable).',
+    ),
   price_cents: z.number().int().positive().max(1_000_000),
   price_currency: z
     .string()

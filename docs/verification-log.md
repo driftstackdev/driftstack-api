@@ -39561,3 +39561,53 @@ about, which is the V-922 lesson applied at build time instead of one entry late
 **Proofs.** Restoring the pre-V-921 mTLS gate is caught by name with `code=0, comment=4`. Adding a new
 gate over an unresolvable root fails the discovery arm. No source change outside tests; the finding is
 that the class has no third member, which is only worth stating because it was measured.
+
+## V-924 — a live billing endpoint published two tier values it answers 400 for (2026-08-19)
+
+**Real customer-facing defect, on the Stripe checkout.** `POST /v1/billing/checkout-session`
+validates with `CreateCheckoutSessionRequestSchema`, whose `tier` was
+`AccountTierSchema.refine((t) => t !== 'free' && t !== 'enterprise', …)`. A refine is a runtime
+predicate and JSON Schema cannot express it, so the generated OpenAPI document emitted the FULL
+eight-tier enum. The published contract — the one customers generate clients from, and the one
+committed at `packages/sdk-python/openapi.json` — advertised `free` and `enterprise` as valid tiers
+on an endpoint that returns 400 for both. Verified from both ends: `routes/billing.ts:95` parses with
+that schema, and a direct `safeParse` rejects both values.
+
+**How I got there, which is worth recording because the first lead was a dead end.** I started on
+documented request bodies — only three docs pages carry a `curl -d`, and all four bodies validate,
+including the `team_manual` at 24900 that matches the server price map exactly. What that surfaced
+instead was that `crypto-checkout` had TWO schemas: the route's own local `z.enum(SUPPORTED_PRODUCTS)`
+and a published `CreateCryptoCheckoutRequestSchema` that typed the same field as a bare `z.string()`,
+with the constraint written only in a `.describe()` — and that describe named only the free tier while
+the route also refuses enterprise.
+
+**And the fix I first wrote would have made it worse.** I mirrored the Stripe sibling's `.refine()`,
+regenerated the spec, and read the diff: the crypto field now published all eight tiers explicitly.
+Going from "no enum" to "an enum that lists two invalid values" is a downgrade. That diff is the only
+reason I looked at the Stripe endpoint at all, and found the same defect already shipped there.
+
+**Fix:** `PURCHASABLE_TIERS` in api-types/common.ts — an explicit six-tier tuple, with
+`z.enum(PURCHASABLE_TIERS, { message })` on both checkout fields. Same accepted set, same rejection
+messages (checked: the messages were only ever asserted in source-text pins, never as a response
+body), and the exclusion now survives into JSON Schema. Both published enums are now exactly the six
+purchasable tiers. Spec regenerated; the raw generator output is expanded JSON while the committed
+file is prettier-formatted, so formatting first reduced a 6902-line diff to 10 insertions.
+
+**FIVE pin occurrences, and the enumeration only found them by widening the pattern.** Searching the
+schema NAME found two. Searching the frozen describe TEXT found a third that names neither the schema
+nor the type — the same "lived in a file the obvious grep missed" case the batch rules warn about. The
+Stripe side added a fourth (the refine shape) and a fifth (the `billing.ts` import line, which broke
+because the file now imports one more symbol). All five updated in this commit with per-occurrence
+negatives, each paraphrasing the old wording rather than quoting it so the negative cannot be
+satisfied by the sentence retracting it. Prettier then wrapped the new `.describe(` argument onto its
+own line and broke one regex — the multiline-formatting trap, fixed by tolerating the break.
+
+**Guarded** by `the-purchasable-product-set-is-one-set`, which recomputes what pins cannot: the
+server's priced-tier map equals the published purchasable set, the explicit tuple equals
+AccountTierSchema minus the two exclusions, both rails accept the same set behaviourally, and — the
+arm that would have caught this — the COMMITTED spec advertises exactly those six for both endpoints.
+
+**Proofs.** Re-inserting `free` into the published enum (the original defect, exactly) fails the spec
+arm. Dropping a tier from the tuple fails three arms. Nine arms, zero server behaviour change: the
+API accepted and rejected precisely the same values before and after. Only the contract changed, from
+wrong to right.

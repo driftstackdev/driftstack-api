@@ -25979,14 +25979,12 @@
                   "tier": {
                     "type": "string",
                     "enum": [
-                      "free",
                       "solo_manual",
                       "team_manual",
                       "agency_manual",
                       "api_starter",
                       "api_builder",
-                      "api_scale",
-                      "enterprise"
+                      "api_scale"
                     ]
                   },
                   "billing_period": {
@@ -32088,7 +32086,15 @@
                 "properties": {
                   "product": {
                     "type": "string",
-                    "description": "SKU; one of the paid tier ids (the free tier is not purchasable)."
+                    "enum": [
+                      "solo_manual",
+                      "team_manual",
+                      "agency_manual",
+                      "api_starter",
+                      "api_builder",
+                      "api_scale"
+                    ],
+                    "description": "SKU; one of the self-serve paid tier ids (free and enterprise are not purchasable)."
                   },
                   "price_cents": {
                     "type": "integer",

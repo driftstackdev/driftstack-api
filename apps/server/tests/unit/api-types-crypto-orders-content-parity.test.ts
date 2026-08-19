@@ -57,8 +57,9 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
     );
   });
 
-  it("imports z from 'zod' only", () => {
+  it("imports z from 'zod' plus the shared PURCHASABLE_TIERS tuple from ./common.js (V-924 — the product enum is the same set the Stripe checkout accepts, so it is declared once)", () => {
     expect(body).toMatch(/^import \{ z \} from 'zod';/m);
+    expect(body).toMatch(/^import \{ PURCHASABLE_TIERS \} from '\.\/common\.js';/m);
   });
 
   it('CryptoOrderStatus enum: 6 values (pending|confirming|paid|failed|partial|cancelled) in exact order', () => {
@@ -79,9 +80,29 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
     );
   });
 
-  it('CreateCryptoCheckoutRequest: product (SKU: paid tier ids; free not purchasable) + price_cents int positive max 1M + price_currency 3-letter uppercase ISO regex /^[A-Z]{3}$/', () => {
+  it('CreateCryptoCheckoutRequest: product is the shared PURCHASABLE_TIERS enum (V-924 — free and enterprise excluded, the same set as the Stripe sibling in billing.ts) + price_cents int positive max 1M + price_currency 3-letter uppercase ISO regex /^[A-Z]{3}$/', () => {
+    expect(body).toMatch(/export const CreateCryptoCheckoutRequestSchema = z\.object\(\{/);
+    expect(body, 'product is constrained to the purchasable-tier enum, not a bare string').toMatch(
+      /product: z\s*\n?\s*\.enum\(PURCHASABLE_TIERS, \{\s*\n?\s*message: 'product must be a self-serve paid tier \(free and enterprise excluded\)',\s*\n?\s*\}\)\s*\n?\s*\.describe\(/,
+    );
+    // A refine would not reach the published spec: JSON Schema cannot express a
+    // predicate, so the generated document would list all eight tiers.
+    expect(body, 'the predicate form must not be used here either').not.toMatch(
+      /product: AccountTierSchema\.refine\(/,
+    );
+    // Per-occurrence negative. V-924: the published schema typed this field as an
+    // unconstrained string while the server enforced an enum, so the OpenAPI
+    // document advertised no valid-value list. The describe also named only the
+    // free tier as excluded when enterprise is refused too.
+    expect(body, 'the unconstrained form must not return').not.toMatch(
+      /product: z\.string\(\)\.describe\(/,
+    );
+    expect(body, 'and it must still name both exclusions').toMatch(
+      /free and enterprise are not purchasable/,
+    );
+    expect(body).toMatch(/price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),/);
     expect(body).toMatch(
-      /export const CreateCryptoCheckoutRequestSchema = z\.object\(\{\s*\n?\s*product: z\.string\(\)\.describe\('SKU; one of the paid tier ids \(the free tier is not purchasable\)\.'\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),\s*\n?\s*price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\),\s*\n?\s*\}\);/,
+      /price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\),\s*\n?\s*\}\);/,
     );
   });
 

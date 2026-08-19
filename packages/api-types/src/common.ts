@@ -120,6 +120,35 @@ export const AccountTierSchema = z.enum([
 export type AccountTier = z.infer<typeof AccountTierSchema>;
 
 /**
+ * The tiers a customer can buy through a self-serve checkout: every
+ * AccountTier except `free` (perpetual, nothing to purchase) and `enterprise`
+ * (negotiated, paid by bank wire).
+ *
+ * V-924 — spelled as an explicit tuple rather than derived with `.refine()`.
+ * Both checkout request schemas used `AccountTierSchema.refine(t => t !== 'free'
+ * && t !== 'enterprise')`, which is a runtime predicate that JSON Schema cannot
+ * express: the generated OpenAPI document emitted the FULL eight-tier enum, so
+ * the published contract for `POST /v1/billing/checkout-session` advertised
+ * `free` and `enterprise` as valid tiers while the route returned 400 for both.
+ * An enum of exactly the accepted values is what reaches the spec intact.
+ *
+ * `the-purchasable-product-set-is-one-set` asserts this tuple stays equal to
+ * AccountTierSchema minus those two, and equal to the server's priced-tier map,
+ * so the explicit spelling cannot drift from either.
+ */
+export const PURCHASABLE_TIERS = [
+  'solo_manual',
+  'team_manual',
+  'agency_manual',
+  'api_starter',
+  'api_builder',
+  'api_scale',
+] as const;
+
+export const PurchasableTierSchema = z.enum(PURCHASABLE_TIERS);
+export type PurchasableTier = z.infer<typeof PurchasableTierSchema>;
+
+/**
  * Profile-count limits per tier — single source of truth for
  * marketing-site, customer-dashboard, and server-side enforcement.
  * Numeric tiers expose the concrete cap; `'custom'` means
