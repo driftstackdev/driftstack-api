@@ -132,6 +132,18 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
     expect(body).toMatch(
       /\| V-278\.L\s+\| Split shared Upstash database into separate prod \+ staging Upstash databases \(separate URLs\)\./,
     );
+
+    // V-870 — the rows above are a point-in-time record and stay verbatim; two
+    // of them have since expired and the banner says which. Only the DURABLE
+    // half of that banner is pinned: the checkpoint framing cannot go stale,
+    // whereas pinning the expiry list would freeze a claim that dies as each
+    // item is resolved — the V-865 mistake V-794 caught.
+    expect(body, 'the document identifies itself as a checkpoint').toMatch(
+      /⚠ V-870 — this is a CHECKPOINT, and parts of it have expired\./,
+    );
+    expect(body, 'and says why its tables are not edited to match today').toMatch(
+      /a\s*\n?>?\s*point-in-time record that gets edited to match today stops being a record/,
+    );
     expect(body).toMatch(
       /\| F-003\s+\| OAuth \(Google \/ GitHub\) signup \+ signin flow\. Tier-1; ~6h after founder unblock\./,
     );

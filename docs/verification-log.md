@@ -37590,3 +37590,40 @@ error is unknown without pricing both.
 text would break the pins or, worse, leave them matching my note instead of the decision. Mutating
 the pinned decision sentence itself still fails the pin, so it binds the decision and not the
 preamble.
+
+## V-870 — a three-month-old checkpoint being read as current state (2026-08-18)
+
+**Refines V-869 first.** That entry leaned on `docs/progress/v278-final-state.md` to establish what
+production runs on, and did not say the document is a **checkpoint dated 2026-05-09** at HEAD
+`632a5f2`. Its "6/6 HTTP 200, Rule L empirical proof" is proof from May. V-869's conclusion stands —
+the rows were marked CONTRADICTED rather than DONE precisely because confirmation is operational —
+but the entry should have named the date. My own recorded rule says to read a readiness document's
+roll-up date before trusting a row; I applied it to the checklist and not to the document I was
+checking the checklist against.
+
+**Then the same instrument, applied to that document's own lists.** Three months on:
+
+- **F-003 OAuth is built.** Listed as deferred at "~6h after unblock" and as blocked on registering
+  OAuth apps. `routes/auth-oauth-client.ts` ships start / callback / confirm-merge,
+  `oauth-client-providers.ts` carries Google and GitHub, and `oauth_client` is an activation flag.
+  The ESTIMATE expired. The credential dependency is a different question and the note does not
+  claim it is satisfied — an activation flag exists precisely because code can ship before secrets.
+- **NowPayments was chosen.** The blocked row reads "no provider chosen yet";
+  `lib/nowpayments-signing.ts` verifies IPN signatures and eight customer-facing crypto routes ship.
+- **V-278.L still stands, and I nearly said otherwise.** `scripts/v278l-upstash-split-cutover.sh`
+  exists, which looked like evidence the split had happened. Its own header says prod and staging
+  share one Redis instance today. **The presence of a cutover script is not evidence of a cutover** —
+  the third candidate of three, and the one that would have been a confident wrong finding.
+
+**Why a banner rather than edited rows.** This is a point-in-time record, and a record edited to
+match today stops being a record. Same reasoning that left V-868's priority-order entry alone. The
+tables and their pins are untouched; the banner names what expired and sits where a reader meets it
+before the stale rows.
+
+**Only the durable half of the banner is pinned** — the checkpoint framing and the reason the tables
+are not rewritten. Pinning the expiry list would freeze a claim that dies as each item resolves,
+which is exactly the mistake V-794 caught me making in V-865.
+
+Mutation-proved three ways: stripping the checkpoint marker fails, removing the not-edited rationale
+fails, and mutating a preserved historical row still fails — so the old pins bind the record and the
+new ones bind the banner, without either capturing the other. Document restored byte-identical.

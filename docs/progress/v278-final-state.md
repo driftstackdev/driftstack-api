@@ -1,5 +1,27 @@
 # V-278 final state — control plane v1.0 LIVE
 
+> **⚠ V-870 — this is a CHECKPOINT, and parts of it have expired.**
+>
+> Everything below describes state as of the checkpoint date. It is read as
+> current — V-869 used its sub-processor map to establish what production runs
+> on — so the items that have since changed are named here rather than left for
+> a reader to trip over. The tables themselves are NOT rewritten: a
+> point-in-time record that gets edited to match today stops being a record.
+>
+> - **F-003 OAuth is built.** Listed below as deferred at "~6h" and as blocked on
+>   registering OAuth apps. `apps/server/src/routes/auth-oauth-client.ts` ships
+>   the start / callback / confirm-merge flow, `oauth-client-providers.ts` carries
+>   Google and GitHub, and `oauth_client` is one of the activation flags. The
+>   ESTIMATE is what expired. The credential dependency is a separate question
+>   and this note does not claim it is satisfied.
+> - **NowPayments was chosen.** The blocked row says "no provider chosen yet".
+>   `apps/server/src/lib/nowpayments-signing.ts` verifies IPN signatures, and the
+>   crypto rail ships eight customer-facing routes.
+> - **V-278.L still stands.** `scripts/v278l-upstash-split-cutover.sh` exists, but
+>   its own header says prod and staging share one Redis instance today — the
+>   script is written, not necessarily run. Checked and left alone deliberately,
+>   because the presence of a cutover script is not evidence of a cutover.
+
 **Checkpoint date:** 2026-05-09
 **HEAD at checkpoint:** `632a5f2`
 **TLS posture:** Cloudflare Full (strict), TLS 1.3 customer-edge ↔ Cloudflare ↔ origin
