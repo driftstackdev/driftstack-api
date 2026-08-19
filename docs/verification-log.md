@@ -43683,3 +43683,46 @@ scope from `driftstack_internal_admin` to `read` → RED. Both restored byte-ide
 
 `it(` count 5 → 6 on the one file touched. No new file, no ratchet change. `apps/server/tests/unit`
 green: 1934 files, 20232 passed.
+
+## V-1023 — the customer half of the gating axis, and four scans to get one number
+
+V-1022 derived whether every `/v1/admin` route is gated. This is the bigger half: 246 live
+registrations, 212 carrying one of the six auth mechanisms this server actually has, 34 public on
+purpose. Nothing was ungated. The guard is the deliverable, not the negative — an ungated route is
+the one defect class where the absence of a test IS the vulnerability, because the route does not
+fail, it answers, and it reads whatever account context the caller supplied.
+
+**Three wrong answers before the right one, each of which looked like a finding.**
+
+Requiring the path on the same line as `app.get(` undercounted every route carrying a type
+parameter — it reported a three-route file as two.
+
+Treating any `preHandler` as authentication made all twelve `auth.ts` routes read as gated, because
+they carry rate-limit gates.
+
+Capturing trailing context per match advanced the regex past registrations inside its own window,
+shrinking `admin-webhooks.ts` from 5 routes to 4.
+
+And the worst one: not excluding the `…DisabledRoutes` registrars reported **85 ungated routes,
+including the BYOK API-key read/write/delete surface**. Those registrars exist so an unconfigured
+feature answers with a deployment-state signal instead of a bare 404, and they re-register the same
+paths — so half the "ungated" set was a fallback that returns FeatureUnavailableError to everyone.
+Reporting that scan would have been a confident, alarming, wrong security finding.
+
+The mechanism list is enumerated from `app.decorate` and from the preHandler helpers the routes
+actually use, rather than guessed. That is the only reason it contains `controlKeyOrAccountAuth`, the
+per-session factory behind fourteen agent-session control routes, and `requireAuthEventSource`, which
+gates the SSE notifications route. Both read as ungated under every guessed regex I wrote.
+
+Two groups are public at the ROUTING layer and authenticated inside the handler, which the list says
+per group rather than blurring: the OAuth endpoints check `client_secret` from the request body per
+RFC 6749/7662, and both webhook receivers verify an HMAC signature over the raw body. `GET
+/v1/fleet/events` is listed with its reason too — it authenticates at the websocket upgrade in an
+inline preHandler that the options slice stops before, so it is a named exception rather than an
+undetected hole.
+
+Mutation: removing the gate from a customer recipes route → RED; gating a listed-public route without
+delisting it → RED; renaming a listed route out of existence → RED on the stale-entry arm. Control
+3/3, sources restored byte-identical.
+
+Ratchets 2932→2933 and 3098→3099. `apps/server/tests/unit` green: 1935 files, 20235 passed.
