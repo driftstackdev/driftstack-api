@@ -38331,3 +38331,39 @@ V-887 defect looks like an isolated case rather than the tip of a pattern, and s
 more than a fourth confirmation would be.
 
 No source change.
+
+## V-891 — three more overlapping topics clear; one near-claim retracted before it was made (2026-08-18)
+
+**Sessions — clean.** Both pages cite all five `sessionStatus` values (`creating`, `ready`, `busy`,
+`destroyed`, `errored`), none fabricated, none missing.
+
+**Audit-log — clean, and exactly so.** The reference page tabulates **46** customer audit event
+types; `AccountAuditActionSchema` in `packages/api-types/src/accounts.ts` defines **46**. Zero
+documented-but-nonexistent, zero defined-but-undocumented. A complete bidirectional match on a
+customer-facing event catalogue, which is rarer than the clean subsets found so far.
+
+**Cost-monitoring — clean, after I nearly reported it wrong.** The page says bundled LLM has a
+"10-cent-per-turn value" that acts as a monthly budget guardrail. My first searches for a per-turn
+cost constant came back empty, and the actual guardrail is
+`accounts.bundled_llm_monthly_cap_usd_cents`, default **2000** — $20/month. That looked like a
+garbled rendering of a monthly cap into a per-turn rate, which would have been a real defect on a
+billing page. It is not: chasing the CONCEPT rather than the naming guess —
+`cost_basis = 'bundled_flat_per_turn'` → `POSTED_BUNDLED_COST_CENTS = 10` — found the figure. Both
+numbers are real and the sentence is defensible: a flat 10-cent per-turn posting draws down a
+monthly cap.
+
+That is the V-880 lesson paying out in the other direction for the first time. Every previous
+application caught me having made a false NEGATIVE from a narrow search; here it stopped a false
+POSITIVE, and the tell was the same — a number that looked wrong by an implausible margin.
+
+**And a loose end from V-869 closes.** Neither cost page publishes a per-minute compute rate; the
+reference says only "Driftstack's internal fleet-cost rate". So the CCX13-versus-CPX32 basis
+question does not reach any customer-facing surface, and whatever is decided about the machine class
+carries no documentation consequence.
+
+**Profiles is NOT cleared.** My comparison used a snake_case token regex that returned 16 tokens
+from the reference page and 0 from the marketing page, which measures the two files' formatting
+rather than their content. Recording it as unverified instead of inferring from a bad instrument —
+six of seven topics cleared, profiles outstanding.
+
+No source change.
