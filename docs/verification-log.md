@@ -44110,3 +44110,37 @@ somewhere" needs a map of which workflow or script sets each flag, plus an allow
 cases — a gate whose upkeep exceeds what it protects, and V-1032 is the precedent for not building
 that. The audit is the deliverable; it is recorded so the next person does not have to redo it to
 learn the answer is no.
+
+## V-1035 — ran the coverage that never runs locally, and fixed the figure describing it
+
+The largest untouched body of coverage in this sweep was the DB-gated suites: ~99 files that skip on
+any machine without `DATABASE_URL`, which is every local run. My own notes record that specs behind
+that gate rot invisibly, so I stopped inferring and executed them.
+
+Created a disposable database, applied all 114 migrations, pointed `REDIS_URL` at a spare index, and
+ran `apps/server/tests/integration`: **357 files, 3258 tests, zero skipped, all passing.** Nothing
+behind the gate has decayed. That is the answer to the question a local green actually raises, and it
+could not be reached by reading anything.
+
+**The gate's own disclosure had drifted.** `verify-suite.mjs` carries a careful paragraph warning a
+reader not to quote a stale skip count as a db-layer figure — and inside it, "95 test files gate on
+`DATABASE_URL`" against a real 99. The runtime skip figure was already derived and correct; the
+SHARES beside it were remembered. A disclosure whose own numbers drift teaches the opposite of what
+it says.
+
+Corrected to the measured 99 / 11 / 4 with 17 more under other conditions, and the V-1035 run
+recorded there, because "these skip locally" and "these were executed and are green" are different
+statements and only the second answers the reader's question.
+
+Then derived it, in the guard whose subject is this gate naming its blind spot: the shares are
+recomputed from the tree and compared against the numbers in the gate's prose. Mutation: reverting
+the share to 95 → RED; adding one more `DATABASE_URL`-gated test file → RED, because the stated share
+must move with the tree. The probe file was removed and the tree confirmed clean.
+
+Two things I did NOT do. I did not raise the runtime figure to a pinned number — it is parsed from
+the summary line and already cannot go stale. And I did not add a guard asserting the integration
+suite stays green, because that would require a database in every run; the run is recorded here
+instead, with the exact command shape that reproduces it.
+
+`it(` count 5 → 6 on the one test file. No new file, no ratchet change. `apps/server/tests/unit`
+green: 1935 files, 20242 passed.

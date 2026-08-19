@@ -141,4 +141,43 @@ describe('a gate that does not name its blind spot reads as total', () => {
         'should be retired along with the paragraph above',
     ).toMatch(/'apps\/server\/src\/db\/\*\*'/);
   });
+
+  it('CRITICAL the skip shares the gate quotes are derived, not remembered. V-1035 found them reading 95 files gated on DATABASE_URL against a real 99, inside the very paragraph that warns a reader against quoting a stale skip count. A disclosure whose own numbers drift teaches the opposite of what it says.', () => {
+    const gate = read('scripts/verify-suite.mjs');
+
+    const counted = { db: new Set<string>(), runDb: new Set<string>(), redis: new Set<string>() };
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(resolve(REPO_ROOT, dir), { withFileTypes: true })) {
+        const rel = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) {
+          if (entry.name !== 'node_modules' && entry.name !== 'dist') walk(rel);
+        } else if (/\.(test|spec)\.ts$/.test(entry.name)) {
+          const src = read(rel);
+          for (const m of src.matchAll(
+            /\b(?:describe|it|test)\.skipIf\(([^)]*(?:\([^)]*\))?[^)]*)\)/g,
+          )) {
+            const cond = m[1] ?? '';
+            if (cond.includes('DATABASE_URL')) counted.db.add(rel);
+            else if (cond.includes('RUN_DB_TESTS')) counted.runDb.add(rel);
+            else if (cond.includes('REDIS_URL')) counted.redis.add(rel);
+          }
+        }
+      }
+    };
+    walk('apps');
+
+    expect(counted.db.size, 'files gating on DATABASE_URL').toBeGreaterThanOrEqual(90);
+    for (const [label, re, actual] of [
+      ['DATABASE_URL', /(\d+) test files gate on/, counted.db.size],
+      ['RUN_DB_TESTS', /(\d+) on `RUN_DB_TESTS`/, counted.runDb.size],
+      ['REDIS_URL', /(\d+) on `REDIS_URL`/, counted.redis.size],
+    ] as const) {
+      const stated = re.exec(gate);
+      expect(stated, `the gate no longer states a ${label} share`).not.toBeNull();
+      expect(
+        Number(stated?.[1] ?? -1),
+        `the gate says ${String(stated?.[1])} files gate on ${label}; there are ${actual}`,
+      ).toBe(actual);
+    }
+  });
 });

@@ -70,11 +70,20 @@ export const EXPECTED_TEST_FILES_ALL = 3099;
  * coverage. The real blind spot is narrower and different — the layer runs, and
  * nothing reports which parts of it ran.
  *
- * Locally those files skip for want of `DATABASE_URL`. They are MOST of the ~109
- * skipped files in a local green, not all of them: 95 test files gate on
- * `DATABASE_URL`, about 11 on `RUN_DB_TESTS` and 4 on `REDIS_URL`. V-917 already
- * enumerated the skip mechanisms and found every one of them env-gated with zero
- * unconditional skips — read that before quoting a skip count as a db-layer figure.
+ * Locally those files skip for want of `DATABASE_URL`. They are MOST of the
+ * skipped files in a local green, not all of them: 99 test files gate on
+ * `DATABASE_URL`, 11 on `RUN_DB_TESTS` and 4 on `REDIS_URL`, with 17 more carrying
+ * some other condition. V-917 enumerated the skip mechanisms and V-1034 re-audited
+ * all 19 of them against where each can be true, finding zero unconditional skips
+ * and one deliberate inversion (`.npmrc`, gitignored, so its assertions run for an
+ * operator and skip on CI) — read those before quoting a skip count as a db-layer
+ * figure. The live figure is reported at runtime below; these are the shares.
+ *
+ * V-1035 — and the skipped set is real coverage rather than rot, which is the
+ * question a local green actually raises. Run against a disposable migrated
+ * Postgres and a spare Redis index, `apps/server/tests/integration` executes 357
+ * files and 3258 tests with ZERO skipped, all passing. Nothing in there has
+ * decayed behind the gate.
  *
  * Keyed by the job id in `.github/workflows/ci.yml`. A new job there must be
  * added here or the ci-jobs census fails — the point being that "not run by this
