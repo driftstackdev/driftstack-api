@@ -167,4 +167,43 @@ describe('V-1007 admin audit coverage is derived, not asserted', () => {
       /rotate-secret/,
     );
   });
+
+  it('CRITICAL every /v1/admin registration is gated, by the internal-admin scope or by the stricter owner guard. V-1007 derived the AUDIT axis and left this one described nowhere: an admin route that forgets its gate is reachable by any authenticated customer key, and the audit row it writes would record them doing it. Measured at 68 registrations — 61 scope-gated, 7 owner-gated in admin-owner.ts, which holds the platform secrets read/write/reveal/delete surface.', () => {
+    // Its own scan: the module-level REGISTRATION matcher only sees /v1/admin
+    // paths, so its per-route segment can span an intervening customer route and
+    // borrow that route's gate. This one slices between ANY two registrations.
+    const ANY_ROUTE =
+      /app\.(get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*['"`](\/v1\/[^'"`]*)['"`]/g;
+    const GATE = /requireScope\(\s*'driftstack_internal_admin'|app\.requireOwner/;
+
+    const ungated: string[] = [];
+    let seen = 0;
+    for (const file of readdirSync(ROUTES).filter((f) => f.endsWith('.ts'))) {
+      const src = readFileSync(resolve(ROUTES, file), 'utf8');
+      const ms = [...src.matchAll(ANY_ROUTE)];
+      for (const [i, m] of ms.entries()) {
+        const path = m[2] ?? '';
+        if (!path.startsWith('/v1/admin/')) continue;
+        seen += 1;
+        const start = m.index + m[0].length;
+        const end = i + 1 < ms.length ? (ms[i + 1]?.index ?? src.length) : src.length;
+        const segment = src.slice(start, end);
+        // Options only: stop at the handler so a gate mentioned in the body does
+        // not count as one applied to the route.
+        const handlerAt = segment.search(/async\s*\(|\(\s*(?:request|req)\b/);
+        const options = handlerAt > 0 ? segment.slice(0, handlerAt) : segment;
+        if (!GATE.test(options)) ungated.push(`${(m[1] ?? '').toUpperCase()} ${path}  (${file})`);
+      }
+    }
+
+    expect(seen, '/v1/admin registrations scanned').toBeGreaterThanOrEqual(60);
+    expect(GATE.test("{ preHandler: [requireScope('driftstack_internal_admin')] }")).toBe(true);
+    expect(GATE.test("{ preHandler: [app.requireOwner, app.rateLimit('global')] }")).toBe(true);
+    expect(GATE.test("{ preHandler: [app.rateLimit('global')] }")).toBe(false);
+
+    expect(
+      ungated.sort(),
+      'these /v1/admin routes carry neither the internal-admin scope nor the owner guard:',
+    ).toEqual([]);
+  });
 });

@@ -43635,3 +43635,51 @@ promise holds end to end.
 
 `it(` counts unchanged (17, 13, 14, 12). No new file, no ratchet change. `apps/server/tests/unit`
 green: 1934 files, 20231 passed.
+
+## V-1022 — the admin SCOPE axis was derived nowhere, and three scanners before one was right
+
+V-1021 found a pin freezing a security PROPERTY that had gone false, so I swept the same shape: which
+route files make a blanket auth claim in their header, and does the code still support it. Five of the
+60 route files do. All five are TRUE. The value of this entry is not the negative — it is what it took
+to establish it.
+
+**Three scanners, three different wrong answers.**
+
+First: matched registrations with the path required on the same line as `app.get(`. It reported
+`status-subscribe.ts` claiming "All three routes" while registering 2. The claim was right; two of
+its registrations put the path on the line after a type parameter. This is the same `\s*`-before-
+the-quote lesson the canonical route matcher already carries, re-learned by ignoring it.
+
+Second: fixed that, then widened the auth detector to include `preHandler` and captured 600
+characters of trailing context per match. Both changes broke it. `preHandler` catches rate-limit
+gates, so all 12 `auth.ts` routes read as authenticated; and a trailing capture advances the regex
+past any registration inside its window, so `admin-webhooks.ts` dropped from 5 routes to 4.
+
+Third: slice options BETWEEN consecutive matches, stop at the handler, and match authentication
+specifically rather than any preHandler. Counts finally correct — admin-webhooks 5, auth 12,
+status-subscribe 3 — and the two remaining flags are the scanner's limits, not defects: `auth.ts`'s
+counterexample is `mfa/step-up`, which V-1021's corrected sentence explicitly excepts, and
+`fleet-events.ts` authenticates inside an inline `preHandler` whose body sits past the slice.
+
+Every intermediate answer looked like a finding. Reporting the first one would have produced a
+confident, wrong claim that a status-page route roster was stale.
+
+**What the sweep did surface is a missing axis.** V-1007 derived whether each `/v1/admin` route
+AUDITS. Nothing derived whether it is GATED. Measured: 68 admin registrations — 61 carry
+`requireScope('driftstack_internal_admin')`, and 7 carry `app.requireOwner`, which is stricter. Those
+7 are all in `admin-owner.ts`, and they are the platform-secrets surface: read, write, reveal and
+delete. Zero ungated, so this is a negative today — but an admin route that forgets its gate is
+reachable by any authenticated customer key, and the audit row it writes would faithfully record the
+customer doing it.
+
+So the axis is now derived, in V-1007's own file. The arm runs its OWN scan rather than reusing the
+module-level parser: that matcher only sees `/v1/admin` paths, so its per-route segment can span an
+intervening customer route and borrow that route's gate — good enough for the audit heuristic it
+documents, too loose to decide a security question. It also stops at the handler, so a gate mentioned
+in a body does not count as one applied to the route.
+
+Mutation: dropping `requireOwner` from the secrets-reveal route → RED; downgrading one admin route's
+scope from `driftstack_internal_admin` to `read` → RED. Both restored byte-identical. Control 6/6.
+
+`it(` count 5 → 6 on the one file touched. No new file, no ratchet change. `apps/server/tests/unit`
+green: 1934 files, 20232 passed.
