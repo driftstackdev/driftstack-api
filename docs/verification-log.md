@@ -44249,3 +44249,36 @@ helper does not expose; it is `cleanup()`.
 
 Full e2e: 201 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. The spec lives under
 `tests/e2e/**`, which `vitest.node.config.ts` excludes, so no suite ratchet moves.
+
+## V-1039 — a read-scoped key, against every mutating route the build serves
+
+V-1024 derives gate STRENGTH from source: no mutating route may be satisfied by a read-only scope.
+That is a claim about which literal sits inside a `requireScope(...)` call. V-1039 mints a key holding
+ONLY `read` and drives it at every such route.
+
+This one cannot be fooled the way V-1038 was. There, the answer turned out to depend on the rate
+limiter refusing anonymous callers, so route-level auth could be deleted with nothing opening. Here
+the caller holds a VALID key: auth passes, the rate limiter is satisfied, and the only layer left that
+can refuse is the scope check. Whatever comes back is the scope gate's own answer.
+
+Result: every mutating route this build serves refuses the read key with 403. Routes the build does
+not serve are counted and skipped — same accounting as V-1038 — and the exercised count carries a
+floor so the arm cannot shrink to nothing.
+
+Mutation: neutralising `requireScope` in `middleware/auth.ts` so it enforces nothing → RED. That is
+the failure this file exists for, and nothing else in the suite catches it behaviourally.
+
+**The second mutation failed to prove what I wanted, and the honest answer is in the file.** Removing
+the one deliberate exception — `POST /v1/billing/crypto-checkout/quote`, read-scoped on purpose
+because it is a stateless price preview — changed no result. The reason is that this build does not
+serve that route, so the entry is INERT here. It stays, because it is correct about the source and a
+build that does serve the route would otherwise report a false counterexample; but its doc comment now
+says it is an exception not presently exercised, rather than one demonstrated to be needed. An
+untested carve-out described as though it were load-bearing is the shape this sweep keeps finding.
+
+I also botched the restore: the `cp` ran from `apps/server` with a repo-relative path, failed, and
+left the spec sitting mutated. The next run passing is what surfaced it. Restore paths are absolute
+from here on, and the state was verified by grep rather than assumed from the exit code.
+
+Full e2e: 203 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 30 → 31 in
+both files that state it, which V-1036's derived arm requires.
