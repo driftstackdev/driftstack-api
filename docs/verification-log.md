@@ -39611,3 +39611,33 @@ arm that would have caught this — the COMMITTED spec advertises exactly those 
 arm. Dropping a tier from the tuple fails three arms. Nine arms, zero server behaviour change: the
 API accepted and rejected precisely the same values before and after. Only the contract changed, from
 wrong to right.
+
+## V-925 — the enum-subtracting refine has no other instances, and one near-miss that should stay as it is (2026-08-19)
+
+**Bounding V-924's class.** A `.refine()` that SUBTRACTS from an enum is invisible to JSON Schema, so
+the published document advertises the unsubtracted set. That cost the two checkout endpoints a
+contract listing values they answer 400 for. Twenty refines exist across api-types — how many are the
+same shape?
+
+**None.** Reading all of them rather than pattern-matching: the rest constrain things JSON Schema
+genuinely cannot express, so no published enum is owed. A serialized byte cap on an arbitrary record
+(`SessionMetadataSchema`, 8192 bytes), two "at least one field must be provided" cross-field rules
+(`UpdateAccountMeRequest`, `UpdateWebhookRequest`), a port-range check already covered by the regex
+beside it (`egress` endpoint), uniqueness constraints on arrays, either-or field presence on the MFA
+schemas, and an IANA timezone predicate. A refine is the correct tool for every one; the defect was
+never refines, it was using one where an enum was available.
+
+**The near-miss, and why it stays.** `SelectableArchetypeIdSchema` refines a pattern-constrained
+string with `isSelectableArchetypeId`, which tests membership in a STATIC set derived from
+`ARCHETYPE_REGISTRY` — so structurally it is the V-924 shape, and the spec publishes only
+`pattern: ^[a-z0-9_]+$` with min/max length across 12 fields.
+
+Measured before judging, which decided it: **81 of 82 registry entries are selectable**, and the
+registry grows with every device/OS/Safari combination added. Publishing an 81-value enum that churns
+on each addition is a worse contract than a pattern plus the pointer the error message already gives
+("must be a selectable id returned by GET /v1/archetypes"). Compare the tier case: 6 fixed values,
+changing rarely, where the two exclusions are policy rather than data, and no discovery endpoint
+exists. Same structure, opposite answer, and the difference is measurable rather than a matter of
+taste — which is the only reason I am comfortable leaving one and having changed the other.
+
+No source change. The class is closed at one instance pair, both fixed in V-924.
