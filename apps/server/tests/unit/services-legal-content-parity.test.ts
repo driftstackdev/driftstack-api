@@ -59,10 +59,16 @@ describe('W400.C apps/server/src/services/legal.ts content parity', () => {
     );
   });
 
-  it('Re-acceptance rules pinned: minor/major bump stale; patch bump opt-in via catalog config', () => {
+  it('V-1008 Re-acceptance rules pinned: ANY version-string change makes prior acceptances stale — whole-string inequality, no semver, no per-document opt-out. The old wording exempted patch bumps and credited a catalog setting that does not exist, which is what would convince someone a typo fix was safe.', () => {
     expect(body).toMatch(
-      /Re-acceptance on version bump: minor \/ major version bumps render\s*\n?\s*\/\/\s*prior acceptances stale\. The check is "does the latest acceptance\s*\n?\s*\/\/\s*for \(account, doc\) match the currently-published version\?" — if not,\s*\n?\s*\/\/\s*the account is required to re-accept\. Patch bumps are not enforced\s*\n?\s*\/\/\s*as re-acceptance triggers in this service; the catalog config\s*\n?\s*\/\/\s*chooses whether to ship a patch as a re-acceptance event\./,
+      /Re-acceptance on version bump: ANY change to a document's version\s*\n?\s*\/\/ string renders prior acceptances stale\./,
     );
+    // The retracted claims, paraphrased in the negative so neither can return:
+    // patch bumps ARE enforced, and no catalog setting selects that behaviour.
+    expect(body).not.toMatch(/[Pp]atch bumps are not enforced/);
+    expect(body).not.toMatch(/catalog config\s*\n?\s*\/\/\s*chooses/);
+    // And the reason the wording matters, kept pinned:
+    expect(body).toMatch(/required\(\)` is the API-key issuance/);
   });
 
   it('RequiredAcceptance: 5 fields with 3-reason union (never_accepted / version_outdated / content_hash_changed) + lastAcceptedVersion nullable', () => {

@@ -238,4 +238,44 @@ describe('V-553.B-9 LegalService.required', () => {
     const required = await svc.required('acc_1');
     expect(required).toEqual([]);
   });
+
+  it('V-1008 CRITICAL a PATCH bump is enforced exactly like a major one — 0.1.0 → 0.1.1 makes every prior acceptance stale. The service comment used to say patch bumps were exempt and that a per-document catalog setting chose that behaviour; neither was true, and the arm above only ever bumped 1.0.0 → 2.0.0, so the specific claim was never tested. required() gates API-key minting, so this is the difference between a typo fix in the ToS and a fleet-wide minting outage.', async () => {
+    const catalog = makeCatalog([{ key: 'tos', version: '0.1.1' }]);
+    const acceptedAtPatchBefore: LegalAcceptanceRecord = {
+      id: 'acc_old',
+      accountId: 'acc_1',
+      documentKey: 'tos',
+      version: '0.1.0',
+      contentHash: 'whatever',
+      acceptedFromIp: null,
+      acceptedUserAgent: null,
+      acceptedAt: new Date('2026-01-01Z'),
+    };
+    const { repo } = makeRepo([acceptedAtPatchBefore]);
+    const svc = new LegalService(catalog, repo);
+
+    const required = await svc.required('acc_1');
+    expect(
+      required,
+      'a patch-level version bump must make the prior acceptance stale — the comparison is a ' +
+        'whole-string inequality and there is no semver anywhere in this service',
+    ).toHaveLength(1);
+    expect(required[0]?.reason).toBe('version_outdated');
+    expect(required[0]?.lastAcceptedVersion).toBe('0.1.0');
+    expect(required[0]?.currentVersion).toBe('0.1.1');
+
+    // Positive control: an account current on the patch version is NOT required to
+    // re-accept, so the arm above cannot pass against a required() that returns a
+    // row for everyone.
+    const entry = catalog.get('tos');
+    const current: LegalAcceptanceRecord = {
+      ...acceptedAtPatchBefore,
+      id: 'acc_current',
+      accountId: 'acc_2',
+      version: '0.1.1',
+      contentHash: entry?.contentHash ?? '',
+    };
+    const { repo: repo2 } = makeRepo([current]);
+    expect(await new LegalService(catalog, repo2).required('acc_2')).toEqual([]);
+  });
 });

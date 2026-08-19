@@ -21,12 +21,38 @@
 //   account's most recent acceptance per document and returns the
 //   list of documents the account needs to accept (or re-accept).
 //
-// Re-acceptance on version bump: minor / major version bumps render
-// prior acceptances stale. The check is "does the latest acceptance
-// for (account, doc) match the currently-published version?" — if not,
-// the account is required to re-accept. Patch bumps are not enforced
-// as re-acceptance triggers in this service; the catalog config
-// chooses whether to ship a patch as a re-acceptance event.
+// Re-acceptance on version bump: ANY change to a document's version
+// string renders prior acceptances stale. The check is "does the latest
+// acceptance for (account, doc) match the currently-published version?"
+// — if not, the account is required to re-accept.
+//
+// V-1008 — this paragraph used to exempt patch-level bumps from
+// triggering re-acceptance, and to attribute that choice to a per-document
+// setting in the catalog. Both halves were false, and the second described
+// a mechanism that has never existed:
+//
+//   • The comparison below is `accepted.version !== entry.version` — a
+//     whole-string inequality. No semver parsing exists anywhere in this
+//     service or in legal-catalog.ts, which captures the version as an
+//     opaque token. 0.1.0 → 0.1.1 is simply a different string.
+//   • There is no catalog config to choose with. `DocSource` carries
+//     documentKey, title and filePath; `LegalDocumentEntry` has no
+//     re-acceptance flag.
+//
+// The consequence is not academic. `required()` is the API-key issuance
+// gate — `services/api-keys.ts` throws LegalAcceptanceRequiredError on
+// any non-empty result — so editing a legal document's version to fix a
+// typo blocks key minting for EVERY account until each re-accepts. The
+// old comment is exactly what would convince the person making that edit
+// it was safe.
+//
+// A content edit WITHOUT a version bump is also surfaced, as
+// `content_hash_changed`, and is enforced the same way: `routes/legal.ts`
+// returns every row unfiltered.
+//
+// Whether fleet-wide re-acceptance on a patch bump is the intended
+// behaviour is an open decision, not something this comment should keep
+// answering in the negative.
 
 import type { LegalDocumentCatalog, LegalDocumentEntry } from './legal-catalog.js';
 

@@ -116,14 +116,16 @@ describe('W945 V-047 LegalService cross-source invariant', () => {
 
   // ─── Re-acceptance on version-bump framing ───────────────────
 
-  it('CRITICAL re-acceptance framing — \'Re-acceptance on version bump: minor / major version bumps render prior acceptances stale. The check is "does the latest acceptance for (account, doc) match the currently-published version?" — if not, the account is required to re-accept. Patch bumps are not enforced as re-acceptance triggers in this service; the catalog config chooses whether to ship a patch as a re-acceptance event\'. The minor/major-required + patch-optional split is the version-bump policy.', () => {
+  it('V-1008 CRITICAL re-acceptance framing — ANY change to the version string makes prior acceptances stale, by whole-string inequality with no semver and no per-document opt-out. This arm used to pin a minor/major-required + patch-optional split as "the version-bump policy"; there is no such split, and the setting it credited for one has never existed. required() gates API-key minting, so a typo fix in a legal document blocks every account until it re-accepts.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/legal.ts'));
-    expect(p).toMatch(/Re-acceptance on version bump: minor \/ major version bumps render/);
-    expect(p).toMatch(/prior acceptances stale\. The check is "does the latest acceptance/);
-    expect(p).toMatch(/for \(account, doc\) match the currently-published version\?" — if not,/);
-    expect(p).toMatch(/the account is required to re-accept\. Patch bumps are not enforced/);
-    expect(p).toMatch(/as re-acceptance triggers in this service; the catalog config/);
-    expect(p).toMatch(/chooses whether to ship a patch as a re-acceptance event\./);
+    expect(p).toMatch(/Re-acceptance on version bump: ANY change to a document's version/);
+    expect(p).toMatch(/string renders prior acceptances stale\./);
+    expect(p).toMatch(/for \(account, doc\) match the currently-published version\?"/);
+    // The retracted claims, paraphrased in the negative.
+    expect(p).not.toMatch(/[Pp]atch bumps are not enforced/);
+    expect(p).not.toMatch(/catalog config\s*\n?\s*\/\/\s*chooses/);
+    // The behaviour the wording now has to keep describing.
+    expect(p).toMatch(/whole-string inequality/);
   });
 
   // ─── RequiredAcceptance 5-field shape ────────────────────────

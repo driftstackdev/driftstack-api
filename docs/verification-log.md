@@ -43015,3 +43015,43 @@ inside any route block, which is V-995's lesson again: assert WHERE the edit lan
 
 `it(` counts unchanged at 16 and 19 on the two pins; the new file has 5.
 `EXPECTED_TEST_FILES` 2927 → 2928, `_ALL` 3093 → 3094. `npm run typecheck` exit 0.
+
+## V-1008 — the comment that would have made a ToS typo fix look safe (2026-08-19)
+
+Sweep action 12, the last of the four `⚠ DECISION REQUIRED` items, and the one where the false comment
+sat directly on top of a live foot-gun. `services/legal.ts` said patch-level bumps were exempt from
+triggering re-acceptance, and attributed that choice to a per-document setting in the catalog.
+
+**Both halves false, and the second describes a mechanism that has never existed.** The comparison is
+`accepted.version !== entry.version` — a whole-string inequality. No semver parsing exists in the
+service or in `legal-catalog.ts`, which captures the version as an opaque token. And there is nothing
+to configure: `DocSource` carries `documentKey`, `title`, `filePath`; `LegalDocumentEntry` has no
+re-acceptance flag.
+
+**What that costs.** `required()` is the API-key issuance gate — `services/api-keys.ts` throws
+`LegalAcceptanceRequiredError` on any non-empty result. So editing a legal document's version from
+`0.1.0` to `0.1.1` to fix a typo blocks key minting for **every account** until each re-accepts. The
+comment is precisely what would convince the person making that edit it was safe.
+
+**The claim had never been tested, which is how it survived.** `legal-service.test.ts` already covered
+a version bump — `1.0.0 → 2.0.0`, a MAJOR one — and content drift at the same version. The patch case
+the comment specifically exempted was the one case with no arm. Added here, with a positive control so
+it cannot pass against a `required()` that returns a row for everyone, and mutation-proved by making
+the comparison major/minor-only — implementing what the old comment claimed — which reds it by name.
+
+Corrected in all three places in one commit: the source and both pin files, each with the retraction
+paraphrased and pinned in the negative. Reinstating the retracted sentence reds both pins.
+
+**A rule-4 violation, caught by my own check before it shipped.** The first correction QUOTED the
+retracted claim verbatim inside the new comment ("this paragraph used to add that …"). That is the
+collision the standing instruction names — retraction paraphrases, sentinel quotes — and it left all
+three retracted phrases still greppable in the file, which would have made the negative pins
+unsatisfiable. Rewritten to paraphrase; a post-edit grep for each phrase now returns nothing.
+
+**Still open, and the reason this was decision-flagged:** is fleet-wide re-acceptance on a patch bump
+the intended behaviour? The comment no longer answers that in the negative on the code's behalf. If it
+is not intended, this is a real bug whose documented mitigation never existed — and the arm added here
+is what will fail the day someone implements the exemption, which is the right way round.
+
+`it(` 10 → 11 on the service test, unchanged at 13 and 19 on the two pins. `npm run typecheck` exit 0.
+No new file, so no ratchet change.
