@@ -38301,3 +38301,33 @@ sessions.
 
 No source change. Three pages verified, two of my own inferences discarded before they became
 claims.
+
+## V-890 — api-keys clears on all three checks (2026-08-18)
+
+**Third of the seven overlapping topics.** Same three-way method: the two pages against each other,
+and both against the implementation.
+
+- **Key prefixes** — `ds_live_` / `ds_test_` on both pages, matching the tier-derived env switch in
+  `api-keys.ts`.
+- **Rotation grace period** — the reference page says "grace boundary (24h from the rotate call)"
+  and returns `grace_period_ends_at`. The route passes no grace option, so the value comes from the
+  service default: `opts.gracePeriodMs ?? 24 * 60 * 60 * 1000`. Correct. Worth chasing to the
+  default rather than stopping at the parameter — `gracePeriodMs` is configurable, so the type
+  signature alone proves nothing about what production does.
+- **Scope table** — the marketing page states its table is pinned to the `api_key_scope` Postgres
+  enum and that the enum carries more values than it shows. Verified: **16 listed, 19 in the enum,
+  zero fabricated.** A documented subset that says it is a subset, which is the honest shape and
+  the opposite of V-824's spec listing paths the docs denied.
+
+**One omission, judged not worth changing.** The marketing page's header comment and meta
+description say it covers rotation, but the body mentions rotation only inside scope descriptions —
+the flow and the 24h grace are not there. The reference page documents both correctly and is the
+authoritative surface. Changing a marketing page because its meta tag over-promises relative to its
+body would be padding, and the customer-visible facts are right everywhere they appear.
+
+**Three of seven cleared** (rate-limits V-888, pagination V-889, api-keys here); four remain:
+audit-log, cost-monitoring, profiles, sessions. Three consecutive clears is itself a result — the
+V-887 defect looks like an isolated case rather than the tip of a pattern, and saying so is worth
+more than a fourth confirmation would be.
+
+No source change.
