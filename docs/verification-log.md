@@ -40034,3 +40034,55 @@ narrowed on an assumption (handlers build their own responses) that the codebase
 **No source change.** The surface is closed: request bodies, post-parse handler validation, query
 parameters and now responses have each been swept, with the divergences fixed in V-924 through V-933
 and this one measured clean.
+
+## V-935 — the scope-disclosure guard checked 53 of 97 operations; 44 customer routes disclosed nothing (2026-08-19)
+
+**The largest live gap this arc has found.** `openapi-scope-disclosure-invariant` (A2, 2026-07-31) is a
+careful guard with an unambiguous mandate in its own header: "every customer-facing route that
+ENFORCES a scope must DISCLOSE it in its OpenAPI operation", with the expected scope read from
+`app.requireScope(…)` so "the docs can never define their own truth". It was examining **53 of 97**
+such operations.
+
+**Cause: a key-format mismatch, read as an exemption.** Route sources spell path parameters `:id`;
+OpenAPI spells them `{id}`. The guard keyed both sides as `` `${method} ${path}` `` and looked up
+`documented.get(key)` — which never matched for a templated route. The next line is
+`if (block === undefined) continue; // no published operation — nothing to disclose`, so every miss was
+read as "this route isn't published" rather than "I can't find it". 44 operations were exempted that
+way, and they are the most-trafficked customer surface: every session verb (navigate / interact / wait
+/ capture / extract / search / login / destroy), every profile verb, the crypto receipts, proxy
+management, team member removal.
+
+**A least-privilege customer minting a key had nothing to read for any of them.** That is precisely the
+harm the guard's header describes — "if the spec is SILENT, they cannot know" — and it was silent
+across 45% of the surface it was built to cover.
+
+**Fixed on both sides.** All 44 operations now disclose, using the file's established phrasings, and
+the guard normalises `:id` → `{id}` before lookup. A new coverage arm counts the operations it actually
+reaches, so a future key-format change fails loudly instead of shrinking the checked set — the failure
+mode that hid this one.
+
+**Disclosures derived, not copied.** I read `scopesSatisfy` in `lib/errors-helpers.ts` rather than
+trusting the existing wording: `read:X` is satisfied by `read` or `account_owner`, `write:X` by `write`
+or `account_owner`, `admin:X` by `admin` or `account_owner`, and a bare `read`/`write` by
+`account_owner`. Each summary states its own scope's actual acceptance set.
+
+**Two mistakes of mine on the way, both caught before commit.**
+
+My first skip test was `/\(requires \`/`— a backtick immediately after "requires ". The file also uses
+"(requires broad`read`…)", where it does not, so 17 summaries that ALREADY disclosed got a second
+statement appended. Found by re-checking with a looser pattern, reverted from snapshot, and redone with
+a test that accepts any`(requires … \`scope\`)` phrasing. My duplicate detector had shared the same
+blind spot, so it had reported zero.
+
+And I ran the apply script twice in one command while inspecting its output, which would have
+double-applied on top of its own edits. Restored and ran once, deterministically.
+
+**Also measured and clean:** the inverse direction — an operation naming a granular scope its route
+does NOT enforce, which would send a customer to mint authority they do not need. Zero instances.
+
+**Proofs.** Stripping the disclosure from a TEMPLATED route is now caught by name
+(`delete /v1/sessions/:id enforces write:sessions`) — impossible before the normalisation. Reverting the
+normalisation fails the coverage arm with the exact figures: "expected 53 to be greater than 90".
+
+**No ratchet change** — the guard is an existing file, not one I added. Generated Python models
+unaffected: summaries are operation metadata, so regenerating gave a timestamp-only diff.

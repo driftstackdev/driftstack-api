@@ -473,7 +473,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/navigate',
     operationId: 'navigateSession',
-    summary: 'Navigate to a URL within a session',
+    summary:
+      'Navigate to a URL within a session (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -502,7 +503,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/interact',
     operationId: 'interactSession',
-    summary: 'Send an interaction (tap / type / scroll / press) to the session',
+    summary:
+      'Send an interaction (tap / type / scroll / press) to the session (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -531,7 +533,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/wait',
     operationId: 'waitSession',
-    summary: 'Wait for a session-side condition (selector, url, time)',
+    summary:
+      'Wait for a session-side condition (selector, url, time) (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -564,7 +567,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/sessions/{id}',
     operationId: 'getSession',
-    summary: 'Get a session by id (includes harness-reported egress_capabilities)',
+    summary:
+      'Get a session by id (includes harness-reported egress_capabilities) (requires `read:sessions`, broad `read`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -585,7 +589,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/sessions/{id}/state',
     operationId: 'getSessionState',
-    summary: 'Snapshot current session state (URL, title, cookies, localStorage)',
+    summary:
+      'Snapshot current session state (URL, title, cookies, localStorage) (requires `read:sessions`, broad `read`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -614,7 +619,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/capture',
     operationId: 'captureSession',
-    summary: 'Capture a screenshot, DOM snapshot, or PDF of the session',
+    summary:
+      'Capture a screenshot, DOM snapshot, or PDF of the session (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -653,7 +659,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/extract',
     operationId: 'extractSession',
-    summary: 'Read structured data from the page (a batch of named extractions)',
+    summary:
+      'Read structured data from the page (a batch of named extractions) (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -692,7 +699,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/search',
     operationId: 'searchSession',
-    summary: 'Search a page (real direct-driver capability required)',
+    summary:
+      'Search a page (real direct-driver capability required) (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -731,7 +739,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/login',
     operationId: 'loginSession',
-    summary: 'Credential login (real direct-driver capability required)',
+    summary:
+      'Credential login (real direct-driver capability required) (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -775,7 +784,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'delete',
     path: '/v1/sessions/{id}',
     operationId: 'destroySession',
-    summary: 'Destroy a session',
+    summary: 'Destroy a session (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -1135,7 +1144,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/team/members/{id}',
-    summary: 'Remove a team member',
+    summary: 'Remove a team member (requires `account_owner`)',
     tags: ['team'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -1977,7 +1986,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'put',
     path: '/v1/account/me/proxies/{id}',
-    summary: 'Update a customer proxy (account_owner; omit password to keep it)',
+    summary:
+      'Update a customer proxy (account_owner; omit password to keep it) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -1995,7 +2005,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/account/me/proxies/{id}',
-    summary: 'Delete a customer proxy (account_owner)',
+    summary: 'Delete a customer proxy (account_owner) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -2013,7 +2023,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/me/proxies/{id}/test',
-    summary: 'Test reachability of a customer proxy (account_owner)',
+    summary: 'Test reachability of a customer proxy (account_owner) (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -3922,7 +3932,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions/{id}/proxy',
-    summary: 'Set the customer-configurable proxy for a session',
+    summary:
+      'Set the customer-configurable proxy for a session (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['egress'],
     security: auth,
     request: {
@@ -3955,7 +3966,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/sessions/{id}/proxy',
-    summary: "Read a session's current proxy config (type + safeguards only — no secret material)",
+    summary:
+      "Read a session's current proxy config (type + safeguards only — no secret material) (requires `read:sessions`, broad `read`, or `account_owner`)",
     tags: ['egress'],
     security: auth,
     responses: {
@@ -4352,7 +4364,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/resume',
-    summary: 'Resume an agent session the harness auto-paused on a detected bot-challenge',
+    summary:
+      'Resume an agent session the harness auto-paused on a detected bot-challenge (requires `write` or `account_owner`)',
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -4748,7 +4761,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/agent-sessions/{id}/downloads/content',
-    summary: "Fetch one downloaded file's bytes by basename",
+    summary:
+      "Fetch one downloaded file's bytes by basename (requires `read:sessions`, broad `read`, or `account_owner`)",
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -4828,7 +4842,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/livekit-token',
-    summary: 'Mint a per-Mac LiveKit JWT for the agent session room (LK.3)',
+    summary:
+      'Mint a per-Mac LiveKit JWT for the agent session room (LK.3) (requires `write` or `account_owner`)',
     tags: ['agent-chat'],
     security: auth,
     responses: {
@@ -4879,7 +4894,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/agent-sessions/{id}/recipe-suggestion',
-    summary: "Suggest a recipe label/description for an agent session's intent_log",
+    summary:
+      "Suggest a recipe label/description for an agent session's intent_log (requires `read` or `account_owner`)",
     tags: ['agent-chat'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -5000,7 +5016,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/recipes/{id}',
-    summary: 'Fetch a saved recipe with its public intent_log',
+    summary: 'Fetch a saved recipe with its public intent_log (requires `read` or `account_owner`)',
     tags: ['agent-chat'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -5028,7 +5044,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/recipes/{id}',
-    summary: 'Delete a saved recipe',
+    summary: 'Delete a saved recipe (requires `write` or `account_owner`)',
     tags: ['agent-chat'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -5221,7 +5237,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing/crypto-orders/{order_id}',
-    summary: 'Read a single crypto order owned by the calling account',
+    summary:
+      'Read a single crypto order owned by the calling account (requires `read:billing`, broad `read`, or `account_owner`)',
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
@@ -5239,7 +5256,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'patch',
     path: '/v1/billing/crypto-orders/{order_id}',
-    summary: 'Update the customer-facing free-text note on an order',
+    summary:
+      'Update the customer-facing free-text note on an order (requires `admin:billing`, broad `admin`, or `account_owner`)',
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
@@ -5258,7 +5276,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing/crypto-orders/{order_id}/receipt',
-    summary: 'Read the JSON receipt for an order owned by the calling account',
+    summary:
+      'Read the JSON receipt for an order owned by the calling account (requires `read:billing`, broad `read`, or `account_owner`)',
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
@@ -5276,7 +5295,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing/crypto-orders/{order_id}/receipt.txt',
-    summary: 'Same receipt rendered as text/plain for curl/wget pipelines',
+    summary:
+      'Same receipt rendered as text/plain for curl/wget pipelines (requires `read:billing`, broad `read`, or `account_owner`)',
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
@@ -5298,7 +5318,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing/crypto-orders/{order_id}/receipt.pdf',
-    summary: 'PDF rendering of the receipt with Content-Disposition: attachment',
+    summary:
+      'PDF rendering of the receipt with Content-Disposition: attachment (requires `read:billing`, broad `read`, or `account_owner`)',
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
@@ -5320,7 +5341,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/billing/crypto-orders/{order_id}/cancel',
-    summary: 'Cancel a pending crypto order (self-service abandonment)',
+    summary:
+      'Cancel a pending crypto order (self-service abandonment) (requires `admin:billing`, broad `admin`, or `account_owner`)',
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
@@ -5906,7 +5928,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/account/web-sessions/{id}',
-    summary: 'Revoke a specific dashboard sign-in by id',
+    summary: 'Revoke a specific dashboard sign-in by id (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -6587,7 +6609,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/profiles/{id}',
     operationId: 'getProfile',
-    summary: 'Get a single profile',
+    summary: 'Get a single profile (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -6615,7 +6637,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/profiles/{id}/launch',
     operationId: 'launchProfile',
-    summary: 'Launch a session from a saved profile (one-shot profile verb)',
+    summary:
+      'Launch a session from a saved profile (one-shot profile verb) (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: {
@@ -6638,7 +6661,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'patch',
     path: '/v1/profiles/{id}',
     operationId: 'updateProfile',
-    summary: 'Partial update of a profile (name / description)',
+    summary:
+      'Partial update of a profile (name / description) (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: {
@@ -6665,7 +6689,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'delete',
     path: '/v1/profiles/{id}',
     operationId: 'deleteProfile',
-    summary: 'Delete a profile (storage state wiped; idempotent)',
+    summary:
+      'Delete a profile (storage state wiped; idempotent) (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -6695,7 +6720,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/profiles/{id}/clone',
     operationId: 'cloneProfile',
-    summary: 'Duplicate an existing profile metadata row with an auto-derived "(copy)" name',
+    summary:
+      'Duplicate an existing profile metadata row with an auto-derived "(copy)" name (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: {
@@ -6747,7 +6773,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/profiles/{id}/restore',
     operationId: 'restoreProfile',
-    summary: 'Restore a trashed profile (clears deleted_at; returns it to the live list)',
+    summary:
+      'Restore a trashed profile (clears deleted_at; returns it to the live list) (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -6771,7 +6798,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'delete',
     path: '/v1/profiles/{id}/purge',
     operationId: 'purgeProfile',
-    summary: 'Permanently delete a trashed profile, freeing its tier-cap slot (irreversible)',
+    summary:
+      'Permanently delete a trashed profile, freeing its tier-cap slot (irreversible) (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -6790,7 +6818,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/profiles/{id}/export',
     operationId: 'exportProfile',
-    summary: 'Export a profile as a versioned JSON envelope (metadata-only)',
+    summary:
+      'Export a profile as a versioned JSON envelope (metadata-only) (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -6848,7 +6877,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/profiles/{id}/transfer',
     operationId: 'transferProfile',
-    summary: 'Transfer profile ownership to another Driftstack account by id',
+    summary:
+      'Transfer profile ownership to another Driftstack account by id (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles'],
     security: auth,
     request: {
@@ -6884,7 +6914,7 @@ function buildRegistry(): OpenAPIRegistry {
     path: '/v1/profiles/{id}/trim',
     operationId: 'trimProfile',
     summary:
-      "Trim a profile's re-fetchable caches to reclaim storage (cookies / localStorage / IndexedDB / tabs are kept)",
+      "Trim a profile's re-fetchable caches to reclaim storage (cookies / localStorage / IndexedDB / tabs are kept) (requires `write:profiles`, broad `write`, or `account_owner`)",
     tags: ['profiles'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -6943,7 +6973,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/profiles/{id}/snapshots',
     operationId: 'captureSnapshot',
-    summary: 'Capture an immutable point-in-time snapshot of the profile',
+    summary:
+      'Capture an immutable point-in-time snapshot of the profile (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['profiles', 'snapshots'],
     security: auth,
     request: {
@@ -6979,7 +7010,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/profiles/{id}/snapshots',
     operationId: 'listProfileSnapshots',
-    summary: "List a profile's snapshots, newest-first",
+    summary:
+      "List a profile's snapshots, newest-first (requires `read:profiles`, broad `read`, or `account_owner`)",
     tags: ['profiles', 'snapshots'],
     security: auth,
     request: {
@@ -7016,7 +7048,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/profile-snapshots/{id}',
     operationId: 'getSnapshot',
-    summary: 'Single snapshot by id',
+    summary: 'Single snapshot by id (requires `read:profiles`, broad `read`, or `account_owner`)',
     tags: ['snapshots'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
@@ -7036,7 +7068,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/profile-snapshots/{id}/restore',
     operationId: 'restoreSnapshot',
-    summary: 'Create a new profile from a snapshot (tier-cap + name-conflict checked)',
+    summary:
+      'Create a new profile from a snapshot (tier-cap + name-conflict checked) (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['snapshots', 'profiles'],
     security: auth,
     request: {
@@ -7070,7 +7103,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'delete',
     path: '/v1/profile-snapshots/{id}',
     operationId: 'deleteSnapshot',
-    summary: 'Hard-delete a snapshot',
+    summary:
+      'Hard-delete a snapshot (requires `write:profiles`, broad `write`, or `account_owner`)',
     tags: ['snapshots'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },

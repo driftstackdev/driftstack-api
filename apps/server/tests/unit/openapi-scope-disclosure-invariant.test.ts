@@ -88,6 +88,25 @@ function documentedOperations(): Map<RouteKey, string> {
   return out;
 }
 
+/**
+ * V-935 — route sources spell path params `:id`; OpenAPI spells them `{id}`. A
+ * direct `documented.get(key)` therefore MISSED every templated route, and the
+ * `if (block === undefined) continue` below read that miss as "no published
+ * operation — nothing to disclose". 44 customer-facing operations were exempted
+ * that way: every session verb, every profile verb, the crypto receipts. The
+ * guard examined 53 of 97 and its header claimed all of them.
+ */
+function operationFor(
+  documented: Map<RouteKey, string>,
+  method: string,
+  path: string,
+): string | undefined {
+  return (
+    documented.get(`${method} ${path}`) ??
+    documented.get(`${method} ${path.replace(/:([A-Za-z_]+)/g, '{$1}')}`)
+  );
+}
+
 describe('OpenAPI discloses the scope every customer-facing route enforces', () => {
   const enforced = enforcedScopes();
   const documented = documentedOperations();
@@ -97,13 +116,25 @@ describe('OpenAPI discloses the scope every customer-facing route enforces', () 
     expect(documented.size).toBeGreaterThan(150);
   });
 
+  it('CRITICAL the arms below actually REACH the customer surface. Each one skips a route whose key finds no published operation, so a key-format change silently shrinks the checked set instead of failing — which is exactly how 44 operations went unexamined until V-935. This counts what is reached.', () => {
+    let reached = 0;
+    for (const [key] of enforced) {
+      const [method, path] = key.split(' ');
+      if (path!.startsWith('/v1/admin')) continue;
+      if (operationFor(documented, method!, path!) !== undefined) reached += 1;
+    }
+    expect(reached, 'customer-facing enforced operations examined by this guard').toBeGreaterThan(
+      90,
+    );
+  });
+
   it('CRITICAL every customer-facing route that enforces a scope names that exact scope in its OpenAPI operation. Silence leaves a least-privilege customer guessing; a wrong name makes them mint the wrong key. The expected scope is read from `app.requireScope(...)` in the route source, so the docs can never define their own truth.', () => {
     const undisclosed: string[] = [];
 
     for (const [key, scopes] of [...enforced].sort()) {
       const [, path] = key.split(' ');
       if (path!.startsWith('/v1/admin')) continue;
-      const block = documented.get(key);
+      const block = operationFor(documented, key.split(' ')[0]!, path!);
       if (block === undefined) continue; // no published operation — nothing to disclose
       const discloses = scopes.some((scope) => new RegExp(`\`${scope}\``).test(block));
       if (!discloses) undisclosed.push(`${key}  enforces ${scopes.join(' + ')}`);
@@ -122,9 +153,10 @@ describe('OpenAPI discloses the scope every customer-facing route enforces', () 
     for (const [key, scopes] of [...enforced].sort()) {
       const [, path] = key.split(' ');
       if (path!.startsWith('/v1/admin')) continue;
-      const block = documented.get(key);
+      const block = operationFor(documented, key.split(' ')[0]!, path!);
       if (block === undefined) continue;
-      const summary = /summary: ('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/.exec(block)?.[1] ?? '';
+      const summary =
+        /summary:\s*\n?\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/.exec(block)?.[1] ?? '';
       const named = [...summary.matchAll(granular)].map((m) => m[0].replaceAll('`', ''));
       const wrong = named.filter((n) => !scopes.includes(n));
       if (wrong.length > 0) {
