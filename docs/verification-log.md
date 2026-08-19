@@ -43726,3 +43726,36 @@ delisting it → RED; renaming a listed route out of existence → RED on the st
 3/3, sources restored byte-identical.
 
 Ratchets 2932→2933 and 3098→3099. `apps/server/tests/unit` green: 1935 files, 20235 passed.
+
+## V-1024 — gate STRENGTH, the axis after gate presence
+
+V-1022 and V-1023 derived whether a route is gated. Neither asks whether the gate is strong enough,
+and that failure mode is invisible to both: the route has a preHandler, it has a scope, every arm
+stays green, and a key issued for reporting can change state.
+
+Measured across the 246 live registrations. Of the 52 routes carrying a granular scope, exactly one
+mutating route is satisfied by a read-only scope: `POST /v1/billing/crypto-checkout/quote`, gated by
+`read:billing`. Verified against source rather than assumed — it is a stateless price preview, its own
+header says the response involves no DB write, and minting an order is a different endpoint. It is
+POST because it takes a body. Requiring a write scope there would hand every price-checking
+integration the ability to open orders, so the read scope is the correct call and it is listed with
+that reason.
+
+Also checked and clean: whether a granular scope matches the resource its path touches. Eight look
+mismatched and all eight are right once the domain is read — `/v1/profile-snapshots` takes
+`read:profiles` because a snapshot IS a profile, `POST /v1/profiles/:id/launch` takes `write:sessions`
+because launching mints a session rather than editing the profile, and `/v1/account/me/organization`
+takes the profile scopes because it is the folder/tag organization FOR profiles, stored on the account
+row. No guard added for that axis: the alias table it would need is a restatement of intent, which is
+the kind of gate that gets tuned until it stops complaining.
+
+The strength arm also pins its own exception both ways — the listed route must still exist, and must
+still be read-scoped — so the list cannot rot into a silent pre-approval for whatever next lands on
+that path.
+
+Mutation: downgrading a mutating recipes route from `write` to `read` → RED; giving the listed
+exception a write scope → RED telling you to delist it; renaming the listed route out of existence →
+RED on the stale-entry check. Control 4/4, sources restored byte-identical.
+
+`it(` count 3 → 4 on the one file touched. No new file, no ratchet change. `apps/server/tests/unit`
+green: 1935 files, 20236 passed.

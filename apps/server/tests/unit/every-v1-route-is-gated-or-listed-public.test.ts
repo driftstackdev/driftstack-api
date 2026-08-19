@@ -117,10 +117,27 @@ const PUBLIC_ROUTES: ReadonlySet<string> = new Set([
   'GET /v1/fleet/events',
 ]);
 
+/**
+ * Mutating routes whose only scope is read-only, with the reason.
+ *
+ * `POST` does not imply a write. The quote route computes a price preview from
+ * the authoritative pricing table and its own header states the response is
+ * stateless with no DB write — minting an order is a different endpoint. It is
+ * POST because it takes a body, so requiring a write scope would hand every
+ * price-checking integration the ability to open orders.
+ */
+const READ_SCOPED_MUTATIONS: ReadonlySet<string> = new Set([
+  'POST /v1/billing/crypto-checkout/quote',
+]);
+
+const READ_ONLY = (scope: string): boolean => scope === 'read' || scope.startsWith('read:');
+
 interface Registration {
   readonly key: string;
   readonly file: string;
   readonly gated: boolean;
+  /** Scope literals the route's options require, in order. */
+  readonly scopes: readonly string[];
 }
 
 /** Live registrations only — the `…DisabledRoutes` fallbacks re-register the same paths. */
@@ -153,6 +170,7 @@ function liveRegistrations(): Registration[] {
         key: `${(m[1] ?? '').toUpperCase()} ${m[2] ?? ''}`,
         file,
         gated: AUTH_MECHANISM.test(options),
+        scopes: [...options.matchAll(/requireScope\(\s*'([^']+)'/g)].map((x) => x[1] as string),
       });
     }
   }
@@ -201,5 +219,37 @@ describe('V-1023 every live /v1 route is gated or listed public', () => {
       'these now carry an auth mechanism — good, but delete them from PUBLIC_ROUTES so the list ' +
         'keeps meaning "answers anonymously":',
     ).toEqual([]);
+  });
+
+  it("CRITICAL no mutating route is satisfied by a read-only scope alone. A POST, PUT, PATCH or DELETE that accepts `read` lets a key issued for reporting change state — the gate is present, so V-1023's other arms stay green, and only the STRENGTH of it is wrong. One route is listed, and it is a stateless price preview whose own header says it writes nothing.", () => {
+    const weak = routes
+      .filter(
+        (r) =>
+          /^(POST|PUT|PATCH|DELETE) /.test(r.key) &&
+          r.scopes.length > 0 &&
+          r.scopes.every(READ_ONLY) &&
+          !READ_SCOPED_MUTATIONS.has(r.key),
+      )
+      .map((r) => `${r.key}  requires ${r.scopes.join(' + ')}  (${r.file})`)
+      .sort();
+    expect(
+      weak,
+      'these mutating routes accept a read-only scope — require a write/admin scope, or list them ' +
+        'with the reason they change nothing:',
+    ).toEqual([]);
+
+    // The listed exception must still exist and still be read-scoped.
+    const live = new Map(routes.map((r) => [r.key, r] as const));
+    for (const key of READ_SCOPED_MUTATIONS) {
+      const r = live.get(key);
+      expect(
+        r,
+        `${key} is listed as a read-scoped mutation but is no longer registered`,
+      ).toBeDefined();
+      expect(
+        r?.scopes.every(READ_ONLY),
+        `${key} now requires a write scope — delete it from READ_SCOPED_MUTATIONS`,
+      ).toBe(true);
+    }
   });
 });
