@@ -44687,3 +44687,31 @@ difference is whether the bytes moved.
 
 `it(` count 6 → 7. No new file, no ratchet change. `apps/server/tests/unit` green: 1936 files,
 20250 passed.
+
+## V-1051 — the email catalogue is complete, and now cannot stop being
+
+V-1050 fixed one catalogue row describing mail nothing could send. Two sweeps followed.
+
+**Is any other email unsendable?** Of the 19 `send*` methods on the email service, 18 have a caller
+outside `email.ts` (the nineteenth is the generic `sendEmail` primitive they all go through), and
+exactly one — `sendWebhookSecretForceRotated` — has all of its callers inside a service nothing
+constructs. That is the one V-1050 already corrected. No others.
+
+**Is any sendable email undocumented?** This is the mirror failure and the worse one: mail arriving
+from a vendor with no published explanation of what triggered it, which for a security advisory means
+the customer cannot tell whether it is genuine. Both sides carry the same string — every `TEMPLATES`
+entry has a `subject`, and every catalogue row is that subject as its bolded title — so the
+comparison is exact rather than approximate. 20 templates, 20 rows, corresponding one to one.
+
+The two sides differ only in conventions they do not share: templates send `Driftstack — <subject>`
+or `[Driftstack Status] <subject>`, and use a typographic apostrophe where the table uses a straight
+one. Folding exactly those two things is what makes the sets equal. A normaliser is where this kind
+of comparison usually goes wrong, so an arm asserts it does NOT collapse distinct subjects —
+`Incident posted` and `Incident update` must stay different, and the 20 normalised subjects must stay
+20 — because one that erased real differences would make the file agree with anything.
+
+Mutation: a new template with no row → RED; renaming a template's subject so a row is orphaned → RED
+in both directions at once.
+
+`it(` count 3 in a new file. Ratchets 2934→2935 and 3100→3101. `apps/server/tests/unit` green:
+1937 files, 20253 passed.
