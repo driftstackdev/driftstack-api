@@ -36,7 +36,9 @@ describe('W249.D marketing-site id-prefix sweep', () => {
   // clean forever while checking nothing. Measured, not hypothetical: pointing
   // the extension filter at a non-existent suffix left this file GREEN.
   it('CRITICAL the scan found real pages, so a clean result means checked rather than not looked.', () => {
-    expect(pages.length, 'marketing-site pages scanned').toBeGreaterThan(5);
+    // V-939 — floor raised to just under the measured 68; it stood at 5, so this
+    // scan could have lost 93% of its corpus and still called itself non-vacuous.
+    expect(pages.length, 'marketing-site pages scanned').toBeGreaterThan(60);
   });
 
   it('no doc references a raw (unprefixed) session_id placeholder', () => {

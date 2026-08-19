@@ -164,14 +164,18 @@ describe('drizzle-orm Date-param-in-raw-sql structural drift guard', () => {
   // filter at a non-existent suffix left this file GREEN.
   it('CRITICAL the scan found real server sources AND real raw-sql blocks. Files alone is not enough: if SQL_TEMPLATE_BLOCK stopped matching, every file would be read and no interpolation examined, which reads identically to having none.', () => {
     const files = listTsFiles(SERVER_SRC);
-    expect(files.length, 'server .ts files scanned').toBeGreaterThan(50);
+    // V-939 — floor raised to just under the measured 338; it stood at 50, so this
+    // scan could have lost 85% of its corpus and still called itself non-vacuous.
+    expect(files.length, 'server .ts files scanned').toBeGreaterThan(300);
     let blocks = 0;
     for (const file of files) {
       SQL_TEMPLATE_BLOCK.lastIndex = 0;
       const source = readFileSync(file, 'utf8');
       while (SQL_TEMPLATE_BLOCK.exec(source) !== null) blocks += 1;
     }
-    expect(blocks, 'raw sql`` template blocks found').toBeGreaterThan(5);
+    // V-939 — floor raised to just under the measured 235; it stood at 5, so this
+    // scan could have lost 98% of its corpus and still called itself non-vacuous.
+    expect(blocks, 'raw sql`` template blocks found').toBeGreaterThan(200);
   });
 
   it('every raw `sql`` ` template interpolation in apps/server/src is allow-listed or non-Date', () => {

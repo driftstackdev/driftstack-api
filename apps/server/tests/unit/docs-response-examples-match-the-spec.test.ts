@@ -274,7 +274,9 @@ function scanRaw(): Set<string> {
 describe('customer doc response examples match the published contract', () => {
   it('CRITICAL the scan still resolves refs and still finds examples to compare. The assertion below reports an ABSENCE, so a matcher that stopped matching anything would satisfy it having compared nothing.', () => {
     const { matched, labelled } = scan();
-    expect(Object.keys(spec.paths ?? {}).length, 'spec paths loaded').toBeGreaterThan(20);
+    // V-939 — floor raised to just under the measured 196; it stood at 20, so this
+    // scan could have lost 90% of its corpus and still called itself non-vacuous.
+    expect(Object.keys(spec.paths ?? {}).length, 'spec paths loaded').toBeGreaterThan(175);
     // V-936 — floors raised from 10/9 to just under the measured 44/31. The old
     // numbers were set when the matcher saw only the backticked marker spelling
     // and were never revisited, so coverage could have fallen from 31 comparisons

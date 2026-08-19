@@ -52,7 +52,9 @@ function enqueueSites(eventType: string): string[] {
 
 describe('every webhook event has somewhere that fires it', () => {
   it('CRITICAL the scanner reads real sources and can tell a live event from an invented one', () => {
-    expect(SOURCES.length, 'no server sources found — the scan is broken').toBeGreaterThan(50);
+    // V-939 — floor raised to just under the measured 338; it stood at 50, so this
+    // scan could have lost 85% of its corpus and still called itself non-vacuous.
+    expect(SOURCES.length, 'no server sources found — the scan is broken').toBeGreaterThan(300);
     expect(
       SubscribableWebhookEventTypeSchema.options.length,
       'the subscribable enum is empty',

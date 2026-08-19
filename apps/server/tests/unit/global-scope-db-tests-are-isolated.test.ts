@@ -122,7 +122,9 @@ describe('global-scope database tests run against their own database', () => {
 
   it('CRITICAL the scan sees real integration files, so "no offenders" means checked rather than not looked.', () => {
     const files = realPostgresFiles();
-    expect(files.length, 'real-Postgres integration files').toBeGreaterThan(30);
+    // V-939 — floor raised to just under the measured 168; it stood at 30, so this
+    // scan could have lost 82% of its corpus and still called itself non-vacuous.
+    expect(files.length, 'real-Postgres integration files').toBeGreaterThan(150);
     expect(
       files.filter((f) => readFileSync(f, 'utf8').includes('ensureIsolatedDatabase')).length,
       'files already isolated',

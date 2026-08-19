@@ -85,7 +85,9 @@ describe('W210 internal-link drift guard', () => {
   // filter at a non-existent suffix left this file GREEN.
   it('CRITICAL the walk found real pages, so a clean result means checked rather than not looked.', () => {
     const files = walk(PAGES_DIR);
-    expect(files.length, 'marketing-site pages walked').toBeGreaterThan(5);
+    // V-939 — floor raised to just under the measured 68; it stood at 5, so this
+    // scan could have lost 93% of its corpus and still called itself non-vacuous.
+    expect(files.length, 'marketing-site pages walked').toBeGreaterThan(60);
   });
 
   it('every internal /href in a marketing-site doc resolves to a real page', () => {

@@ -43,7 +43,9 @@ describe('W248.D marketing-site tier-cap drift sweep', () => {
   // clean forever while checking nothing. Measured, not hypothetical: pointing
   // the extension filter at a non-existent suffix left this file GREEN.
   it('CRITICAL the scan found real pages, so a clean result means checked rather than not looked.', () => {
-    expect(pages.length, 'marketing-site .astro pages scanned').toBeGreaterThan(5);
+    // V-939 — floor raised to just under the measured 61; it stood at 5, so this
+    // scan could have lost 92% of its corpus and still called itself non-vacuous.
+    expect(pages.length, 'marketing-site .astro pages scanned').toBeGreaterThan(55);
   });
 
   it('no page asserts a concurrent count above the live cap for any tier', () => {

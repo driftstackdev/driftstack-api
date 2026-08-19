@@ -73,7 +73,9 @@ describe('no compiled binary is tracked in git', () => {
   it('CRITICAL the file list and the detector both work. The assertion below is "none of these is an executable", and an empty list has none of anything — a `git ls-files` that returned nothing, or a detector that never matched, would report the tree clean having examined it or nothing at all.', () => {
     const tracked = trackedFiles();
     // MEASURED: ~4,000 tracked paths.
-    expect(tracked.length, 'files git tracks').toBeGreaterThan(500);
+    // V-939 — floor raised to just under the measured 4885; it stood at 500, so this
+    // scan could have lost 90% of its corpus and still called itself non-vacuous.
+    expect(tracked.length, 'files git tracks').toBeGreaterThan(4000);
 
     // The detector has to actually fire on something known to be executable.
     // `node` itself is one, and is present wherever this suite runs.

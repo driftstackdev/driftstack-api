@@ -40214,3 +40214,47 @@ Python replacement.
 **No source change, no new file, no ratchet bump.** Combined with V-937, six floors have now been
 measured against their corpora and five moved; the two tight ones are recorded as verified rather than
 unchecked.
+
+## V-939 — 63 non-vacuity floors probed systematically; ten were 5x–47x slack (2026-08-19)
+
+**The probe from V-938, run across the class.** Rewriting an assertion to `.toBe(-1)` makes the guard
+report its own number in the failure message, so no helper is replicated and no `find`-vs-`readdir`
+mistake is possible. 63 corpus-style floors were probed this way, each file restored after; the tree was
+clean at the end.
+
+**Worst offenders, all counts of scanned units:**
+
+| slack | floor | actual | guard / metric                                                   |
+| ----- | ----- | ------ | ---------------------------------------------------------------- |
+| 47.0x | 5     | 235    | `drizzle-date-param…` raw sql`` template blocks                  |
+| 13.6x | 5     | 68     | `docs-internal-links-parity` marketing pages walked              |
+| 13.6x | 5     | 68     | `marketing-prefix-id-sweep` pages scanned                        |
+| 12.2x | 5     | 61     | `marketing-status-event-types-sweep` .astro pages                |
+| 12.2x | 5     | 61     | `marketing-tier-caps-sweep` .astro pages                         |
+| 9.8x  | 20    | 196    | `docs-response-examples…` spec paths loaded                      |
+| 9.8x  | 500   | 4885   | `no-compiled-binary-is-tracked-in-git` files git tracks          |
+| 6.8x  | 50    | 338    | `drizzle-date-param…` server .ts files                           |
+| 6.8x  | 50    | 338    | `every-webhook-event-has-somewhere-that-fires-it` server sources |
+| 5.6x  | 30    | 168    | `global-scope-db-tests-are-isolated` real-Postgres files         |
+
+All ten raised to just under measured. A floor of 5 against 235 blocks is the extreme: that scan could
+have lost 98% of what it examines and still called itself non-vacuous.
+
+**What was deliberately NOT raised, stated as a judgement rather than a finding.** The three largest
+slack figures are BYTE counts — an "operator documentation corpus" floor of 50 000 against 107 398 201,
+a "consumer corpus" floor of 100 000 against 4 740 202, and "bytes of production source scanned" at
+500 000 against 4 332 655. Those read as "did we load anything substantial at all" rather than as
+coverage of an enumerable set, and a byte total moves with ordinary prose edits in a way a file count
+does not. Tightening them would buy little and cost false reds. Also left alone: everything under 3x,
+where a floor is already doing its job and squeezing it further only invites noise.
+
+**Isolated proof, on the third attempt.** The first mutation never applied — my pattern looked for a
+`walk(` expression that file does not use, and the run reported three passes that proved nothing, which
+I caught by checking the diff rather than the exit code. The second removed 94% of the corpus and was
+caught by the OLD floor too, so it isolated nothing. The third removes 56% (338 files to 150): the
+raised floors fail, and the same loss with the old floors passes with all three arms green.
+
+**Not raised blindly, and the count is the point.** 63 measured, 10 moved, 3 refused on judgement, 50
+verified as already tight. The value here is not the ten edits — it is that the other 53 are now known
+rather than assumed, and V-936 through V-939 have turned "the floors are probably fine" into a number
+per floor.
