@@ -39468,3 +39468,54 @@ missed a real regression in a real package today (V-919's wait barriers, and onl
 sequence arms cover the same ground). The rest were guards reporting coverage they had stopped
 providing, on pages that were correct anyway. The value is not defects caught — it is that eleven
 green arms were not evidence of anything, and now the suite can tell the difference.
+
+## V-922 — auditing the ratchet I shipped one entry ago: its parser was reading 91% of the corpus (2026-08-19)
+
+**Turning the instrument on itself.** V-921 committed a guard claiming that no arm in `apps/` or
+`packages/` hides all its assertions behind a conditional. It has two structural holes I had not
+measured: it `continue`s on arms with ZERO `expect(` calls, and it only understands `if` blocks — an
+arm whose every assertion sits in a loop over an empty collection is invisible to it. Both are the
+same defect class, and V-919's `waitSteps` came from exactly such a `.filter()`.
+
+**Hole A — zero-expect arms: 11, and all 11 are legitimate.** Seven in
+`simulator-window-sizing.test.ts` delegate to a local `expectExactFit` helper holding four
+assertions; `private-response-cache-cors` uses `expectAllowedPrivateStream` /
+`expectDisallowedPrivateStream`; the BYOK CAS arm uses `expectBlockedCasPreservesSuccessor`; and
+`mock-codec-wrapper`'s "stop() is idempotent" calls `stop()` twice with no assertion because the
+absence of a throw IS the assertion. Not ratcheted: a rule whose every current hit is a false
+positive can only ship with an exclusion list, and an exclusion list over a scanner is where a real
+miss hides (V-903, V-908).
+
+**Hole B — loop vacuity: 704 hits, abandoned as noise.** Most loops iterate array literals declared
+in the same arm, where emptiness is impossible. Same precedent, same decision.
+
+**The loop scanner also produced a FALSE CONFIRMATION, which is the more useful half of this.** Its
+first version "found" V-919's `waitSteps` arm — and for the wrong reason. It treated `.filter(` as a
+loop, then took the next `{`, which was the unrelated `if` block further down. It agreed with a known
+answer while measuring something else. Only calibrating against a case whose mechanism I already knew
+exposed that; a scanner that reproduces the expected result is not thereby correct.
+
+**The real finding: V-921's own parser mis-delimits 8.6% of arms.** It stripped comments by regex and
+then counted raw braces. Measured against a literal-aware pass over the same corpus: **2350 of 27413
+arm bodies disagree** on where the body ends. A regex literal like `/\$\{[^}]+\}/`, or a string
+containing a brace, unbalances the count — some bodies end early, some late, and some find no closing
+brace at all. This is also why hole A first read 33 rather than 11: 22 were parser artifacts.
+
+**The verdict did not change, which I checked rather than hoped.** Re-running V-921's exact rule with
+the literal-aware parser finds **0** offenders repo-wide, the same as before, and it still finds 4/4
+of the pre-fix instances in the calibration fixture. So the guard was right — but it was right about
+91% of the arms while claiming all of them, and nothing in it would have said so.
+
+**Fix:** a `codeMask` pass marks every character as code or not (comment, string, template literal
+including `${…}` interpolation, regex literal with character-class awareness), brace matching consults
+it, and arm bodies are returned with non-code blanked so `expect(` inside a string can never count.
+Pinned by a new arm that parses a fixture containing braces inside both a regex literal and a string.
+
+**Proofs.** Making `matchBrace` ignore the mask — the naive behaviour — fails the parser arm.
+Reverting the `recipe-library` wait arm to its branching form is still detected by name, so the new
+parser did not buy correctness at the cost of detection.
+
+**No product defect in this entry.** It found no new hidden arms and changed no source outside a
+test. What it did was make a guard's claim true, and record the size of the gap between what it
+asserted and what it read — which is the same failure this arc has been chasing in other people's
+guards, found in mine one entry after I shipped it.
