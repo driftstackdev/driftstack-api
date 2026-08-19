@@ -38748,3 +38748,36 @@ vacuous rather than failing.
 Mutation-proved on each side independently: changing ONLY the server key fails, changing ONLY the
 frontend URL fails, and inverting the branch order fails. That the two single-sided mutations each
 fail is the whole point — it is the case neither existing pin could catch.
+
+## V-903 — no frontend fetches an endpoint the server does not serve (2026-08-18)
+
+**The V-902 class, measured.** That entry found two workspace-separated literals that had to agree
+with nothing checking. The largest instance of that class is the frontends fetching API paths: a
+dashboard or GUI page calling a route the server never registered is a page that 404s in production
+while every test passes. Compared all `/v1/...` references across customer-dashboard, admin-panel,
+status-site and gui-client against the routes the server registers.
+
+**88 distinct paths referenced, all of them served.** No broken cross-workspace call.
+
+**Thirteen apparent misses, every one an artifact, and the instrument was the problem.** My first
+route extractor required the path literal immediately after `app.get(` and found **123** routes. The
+robust form — match `app.<verb>`, then take the first quoted string inside the following parens —
+finds **209**. It had missed 86 routes, and every "missing endpoint" it produced was a route that
+exists. This is the third time that narrow pattern has under-counted: V-861 hit it on admin GETs
+(22 against a real 35) and V-889 hit its cousin reading a module rather than a route.
+
+The remaining two resolved on reading rather than measurement. `/v1/sessions/stream` appears **only
+in a comment** in `session-events.ts` describing sister-tooling work — a planned endpoint, never
+fetched. `/v1/team/` was a prefix captured out of `apiBaseUrl + '/v1/team/members'`; both that and
+`/v1/team/invites` are registered.
+
+**No guard added, and the reason is this turn itself.** The invariant is worth having, but every
+signal it produced was noise from template literals, comment prose and trailing slashes. A guard
+over that extractor would need a curated exclusion list, and an exclusion list maintained against a
+noisy scanner becomes a place where a real miss hides — the blindfold shape V-802 names. Building it
+on the instrument that just produced thirteen false positives would be the wrong lesson to draw from
+having caught them.
+
+**Recorded so the comparison is not re-run**, and with the extractor note attached: for route
+enumeration in this repo, match the verb and then scan forward for the literal. The tight pattern
+silently loses 40% of the routes.
