@@ -42556,3 +42556,48 @@ A raw `Date` bind into postgres.js failed the first run ("must be of type string
 same trap `ci.yml` records these suites carrying since birth. Timestamps are SQL intervals here.
 
 `npm run typecheck` exit 0. `EXPECTED_TEST_FILES` 2926 → 2927, `_ALL` 3092 → 3093.
+
+## V-998 — a correction to V-996's actor, and why some cold functions are cold (2026-08-19)
+
+**The correction.** V-996 described the rate-limit-override `clear` consequence as "one customer
+clearing their own override deletes every account's override for that bucket". The blast radius is
+right and the predicate really is the only bound, but the actor is wrong:
+`services/rate-limit-overrides.ts:119` has exactly ONE route caller — `routes/admin-accounts.ts:396`
+— so this is an operator clearing a NAMED account's override, not customer self-service. Corrected in
+the test file's header and its arm title, paraphrased. If anything the staff framing is worse to
+discover late: an operator action that quietly reconfigures every OTHER account leaves nobody looking
+at the accounts it touched.
+
+I found this by auditing my own recent claims rather than by anything failing — the same rule the
+standing instruction applies to the sweep report, turned inward. The other four consequences from
+V-994 to V-997 were re-verified at the same time and hold: `MfaService.disable` reaches
+`deleteForAccount`; `routes/profile-snapshots.ts:254` reaches `snapshotsRepo.delete`;
+`routes/account-web-sessions.ts:154` reaches `listActiveWebSessionsForAccount` and maps the rows
+straight out; `services/profiles.ts:627` returns `listTrashed` unchanged.
+
+**And a refinement of the cold-list framing that matters for anyone mining it further.** V-993
+reported 81 of 730 `src/db` functions never executed, and V-994 to V-997 treated that list as a queue
+of coverage gaps. It is not uniformly that. **Some entries are cold because nothing can reach them**,
+and at least one group is cold BY DESIGN:
+
+- `api-keys-repo.findApiKey(id, accountId)` and `setExpiresAt` are declared in the repo and in the
+  service interface and called from nowhere in `apps/server/src` — the only other occurrences are
+  in `dist/`.
+- `findApiKeyUnscoped` is also caller-free, and that is **deliberate and guarded**:
+  `unscoped-finders-admin-only-sweep` exists to assert the `*Unscoped` by-id finders "must have no
+  callers", because a call from any route or service would be a customer-reachable IDOR. Its
+  discrimination is careful — it matches `\.findXUnscoped\(` so the definition and the interface
+  declaration do not count as calls.
+
+So "cold" spans three different things: untested-but-live (what V-994 to V-997 fixed), unreachable,
+and deliberately caller-free under a guard that says so. Reading a cold entry as a coverage gap
+without checking which one it is would produce a test for code nothing calls — and, in the
+`*Unscoped` case, a test whose very existence contradicts the invariant a sibling guard enforces.
+
+`npm run typecheck` exit 0. No ratchet change — no file added.
+
+**One process note.** The correction above briefly broke its own file: an unescaped apostrophe in
+`account's` closed the single-quoted arm title, and vitest reported **"no tests"** rather than a
+failure — the exact hazard the standing rule names. The `it(` count check passed (2, matching HEAD)
+because the count was never wrong; the file simply stopped parsing. The count check catches a stray
+`);`, not every way a file can fail to collect, so the run itself is the check that matters.

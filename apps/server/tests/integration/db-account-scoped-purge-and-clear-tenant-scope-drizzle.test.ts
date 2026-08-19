@@ -13,10 +13,17 @@
 // The second is the one that matters most on this list. `clear` identifies its row by
 // (account, bucket) rather than by id, so the account predicate is not protecting one
 // customer's row from another — it is the only thing bounding the statement at all.
-// Without it, one customer clearing their own override deletes **every** account's
-// override for that bucket, silently returning true. Every affected customer silently
-// reverts to their tier default, which is the shape V-994 found in MFA: a mass delete
-// wearing a single-tenant signature.
+// Without it, clearing ONE account's override deletes **every** account's override for
+// that bucket, silently returning true, and every affected customer reverts to their
+// tier default. That is the shape V-994 found in MFA: a mass delete wearing a
+// single-tenant signature.
+//
+// V-998 — the actor is STAFF, not a customer. `services/rate-limit-overrides.ts:119` has
+// exactly one route caller, `routes/admin-accounts.ts:396`, so this is an operator
+// clearing a named account's override. The blast radius is unchanged and the predicate
+// is still the only bound; what is wrong in an earlier draft of this header is who
+// pulls the trigger. A staff action that quietly reconfigures every OTHER account is
+// arguably worse to discover late, because nobody is looking at the accounts it hit.
 //
 // What existed before this file:
 //   • `purgeTrashed` appears in the test corpus only as a FAKE
@@ -139,7 +146,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(gone?.n, "the owner's trashed profile is gone").toBe(0);
     });
 
-    it('CRITICAL clear removes only the asking account\'s override for that bucket. This one is not keyed by id: without the account predicate the statement is "delete every override for this bucket", so one customer clearing their own limit would silently revert every other customer on that bucket to their tier default and still return true.', async () => {
+    it('CRITICAL clear removes only the asking account\'s override for that bucket. This one is not keyed by id: without the account predicate the statement is "delete every override for this bucket", so an operator clearing ONE account\'s limit would silently revert every other account on that bucket to its tier default and still return true.', async () => {
       if (unusable('rate-limit overrides')) return;
       const sql = client as ReturnType<typeof postgres>;
       const db = drizzle(sql) as unknown as ReturnType<typeof drizzle<typeof schema>>;
