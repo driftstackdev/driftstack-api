@@ -48,7 +48,7 @@ const MALFORMED = [
   ['a non-numeric limit', 'limit=abc'],
 ] as const;
 
-const STAFF_SCOPES = ['read', 'write', 'admin', 'driftstack_internal_admin'];
+const STAFF_SCOPES = ['read', 'write', 'admin', 'driftstack_internal_admin'] as const;
 
 describe('V-981 an admin list refuses a malformed page request', () => {
   let fx: TestAppFixture;
@@ -57,7 +57,7 @@ describe('V-981 an admin list refuses a malformed page request', () => {
   });
 
   it('CRITICAL every admin list refuses each malformed page parameter. All six refusals were executed by no test, so a change to any one of these schemas — a widened cap, a dropped bound, a parse removed — would have landed with nothing to notice it.', async () => {
-    fx = await buildTestApp({ scopes: STAFF_SCOPES });
+    fx = await buildTestApp({ scopes: [...STAFF_SCOPES] });
     const headers = { authorization: `Bearer ${fx.plaintext}` };
 
     const admitted: string[] = [];
@@ -75,7 +75,7 @@ describe('V-981 an admin list refuses a malformed page request', () => {
   });
 
   it('CRITICAL every admin list still serves a WELL-FORMED page request. Without this the arm above is satisfied by a route that refuses everything — including one broken by an unrelated change, which would then read as a passing validation test.', async () => {
-    fx = await buildTestApp({ scopes: STAFF_SCOPES });
+    fx = await buildTestApp({ scopes: [...STAFF_SCOPES] });
     const headers = { authorization: `Bearer ${fx.plaintext}` };
 
     const refused: string[] = [];

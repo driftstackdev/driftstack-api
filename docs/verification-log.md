@@ -41851,3 +41851,22 @@ constant.
 
 **Both halves asserted:** a malformed page request is refused on all six, and a well-formed one is still
 served on all six — without which the first arm is satisfied by a route that refuses everything.
+
+## V-982 — the typecheck I ran was not the one that matters
+
+**V-981 went in with a type error.** `npx tsc -p apps/server/tsconfig.json --noEmit` — the check I have run
+before every commit this session — passed, and the suite then failed on
+`the-server-source-type-checks`, which type-checks the **tests** as well. That project is a different
+tsconfig, so my pre-commit check never saw the file I had just written.
+
+The error was ordinary: `const STAFF_SCOPES = ['read', …]` infers `string[]`, and `buildTestApp` wants the
+scope literal union. Fixed with `as const` and a spread at each use.
+
+**What is worth recording is which check caught it.** That guard's own header says it exists because
+"I committed server source that fails `tsc`. The full suite was green" — and it names the tests-project gap
+as the reason it was widened. It caught exactly the case it was widened for, from me, three commits after I
+had been writing about instruments that measure the wrong thing.
+
+**The correction to my own routine:** `tsc -p apps/server/tsconfig.json` is not sufficient before a commit
+that adds or edits a test file, because that project excludes them. The suite's own guard is the check that
+counts, and it is cheap to run directly on the one file — which is now what I do.
