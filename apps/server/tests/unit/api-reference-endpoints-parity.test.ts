@@ -9,11 +9,17 @@
 // `magic-link/consume`). Customers reading the doc to script raw
 // HTTP calls would hit 404s.
 //
-// This guard parses the doc's `<li>METHOD /v1/...</li>` entries and
-// asserts each one appears as a string literal in some
-// `apps/server/src/routes/*.ts` file. The check is intentionally
-// loose: substring match against the route literal, so we tolerate
-// Fastify type-parameter sugar like `app.post<{...}>('/v1/...', …)`.
+// Two checks, because until V-1027 this header described only the second and
+// the file implemented only the first:
+//
+//   1. Absolute `https://api.driftstack.dev/v1/...` URLs — the curl samples,
+//      six of them — matched loosely against the route literals, so Fastify
+//      type-parameter sugar like `app.post<{...}>('/v1/...', …)` is tolerated.
+//   2. The bare `METHOD /v1/path` entries on api-reference.astro, 88 of them,
+//      matched against actual registrations by verb AND path. That is the shape
+//      both bugs above had. Its sibling `api-reference-surface-doc-parity` checks
+//      a hand-picked roster of about ten, so roughly seventy-eight customer-facing
+//      listings were verified by nothing until V-1027.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -203,7 +209,11 @@ describe('W207 api-reference doc → server routes parity', () => {
     while ((m = URL_RE.exec(API_QUICKSTART)) !== null) {
       docPaths.add(m[1] as string);
     }
-    expect(docPaths.size, 'should find at least one /v1 URL').toBeGreaterThan(0);
+    expect(
+      docPaths.size,
+      'absolute-URL examples found on the page — a drop means the extractor stopped seeing the ' +
+        'curl samples, not that the page lost them',
+    ).toBeGreaterThanOrEqual(6);
 
     const missing: string[] = [];
     for (const path of docPaths) {
@@ -220,6 +230,42 @@ describe('W207 api-reference doc → server routes parity', () => {
       missing,
       `Quickstart references /v1 endpoint(s) the server doesn't register. ` +
         `Missing:\n${missing.map((p) => `  ${p}`).join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('CRITICAL every bare `METHOD /v1/path` entry on the page resolves to a registration. The header of this file has always said it parses those entries; until V-1027 it did not — the only matcher here takes absolute `https://api.driftstack.dev/...` URLs, which is six curl samples. The marketing api-reference page lists 88 endpoints that way, and the two bugs this guard was written for (a documented `/v1/billing/checkout` whose route is `checkout-session`, and a `/v1/auth/magic-link` that only exists as `/request` and `/consume`) are exactly that shape: a customer scripting raw HTTP from the listing gets a 404.', () => {
+    const ENTRY_RE = /\b(GET|POST|PUT|PATCH|DELETE) (\/v1\/[A-Za-z0-9/_{}:-]+)/g;
+    const entries = new Set<string>();
+    for (const m of API_REF.matchAll(ENTRY_RE)) {
+      entries.add(`${m[1] as string} ${m[2] as string}`);
+    }
+    expect(
+      entries.size,
+      'bare METHOD /v1/... entries on the page — a collapse here would make the arm below vacuous',
+    ).toBeGreaterThanOrEqual(80);
+
+    const REGISTRATION =
+      /app\.(get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*['"`](\/v1\/[^'"`]*)['"`]/g;
+    const shape = (p: string): string => p.replace(/\{[^}]+\}|:\w+/g, '{}').replace(/\/+$/, '');
+    const registered = new Set<string>();
+    for (const file of readdirSync(ROUTES_DIR).filter((f) => f.endsWith('.ts'))) {
+      const src = readFileSync(join(ROUTES_DIR, file), 'utf8');
+      for (const m of src.matchAll(REGISTRATION)) {
+        registered.add(`${(m[1] as string).toUpperCase()} ${shape(m[2] as string)}`);
+      }
+    }
+    expect(registered.size, 'route registrations found').toBeGreaterThanOrEqual(200);
+
+    const unmatched = [...entries]
+      .filter((e) => {
+        const [verb, path] = e.split(' ') as [string, string];
+        return !registered.has(`${verb} ${shape(path)}`);
+      })
+      .sort();
+    expect(
+      unmatched,
+      'these endpoints are listed on the public API reference but no route registers them — a ' +
+        'customer scripting from this page would get a 404:',
     ).toEqual([]);
   });
 });

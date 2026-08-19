@@ -43841,3 +43841,43 @@ the same commit the SDK gains endpoints.
 
 `it(` counts unchanged (3, 2, 3). No new file, no ratchet change to the suite gate.
 `apps/server/tests/unit` green: 1935 files, 20236 passed.
+
+## V-1027 — a guard whose header described a check it did not perform, and 78 unverified listings
+
+`api-reference-endpoints-parity` says in its own header that it "parses the doc's
+`<li>METHOD /v1/...</li>` entries and asserts each one appears" in a route file. It did not. Its only
+matcher takes absolute `https://api.driftstack.dev/v1/...` URLs — six curl samples — and the bare
+`METHOD /v1/path` entries it describes were matched by nothing.
+
+The marketing api-reference page lists 88 endpoints that way. Its sibling
+`api-reference-surface-doc-parity` checks a hand-picked roster of about ten, chosen "from the
+customer-facing core". So roughly seventy-eight customer-facing endpoint listings were verified by
+nothing — and the two bugs this guard was written for are exactly that shape: a documented
+`/v1/billing/checkout` whose real route is `checkout-session`, and a `/v1/auth/magic-link` that exists
+only as `/request` and `/consume`. A customer scripting raw HTTP from the listing gets a 404.
+
+All 88 currently resolve, so there is no live defect. The arm the header always promised now exists,
+matching by verb AND path, with its own floor so a collapsed extractor cannot make it vacuous.
+
+**Two corrections to my own reading along the way.** The constant named `API_QUICKSTART` does not read
+the api-reference page at all — the original quickstart page was deleted and the guard was repointed
+at `docs/quickstart-curl.md`, so my first version of the arm asserted 80+ entries against a curl
+tutorial that has 2. And the header's opening line still describes this file as a guard "between the
+customer-facing /api-reference page and the actual Fastify route registrations", which is true of the
+page it reads at line 33 but not of the constant the checks below use. Both files are now named
+explicitly per check.
+
+**A self-inflicted red worth recording.** The unit tree came back 1 failed after the mutation round:
+`dist-reading-suites-have-fresh-artifacts` reported the marketing site's built artifact as older than
+its source. Mutating `api-reference.astro` and restoring it byte-identical restores the CONTENT but
+not the mtime, and that guard compares timestamps for apps. The artifact was not stale — the bytes
+that were built are the bytes on disk — so the honest repair was to correct the timestamp rather than
+rebuild or repin. Worth knowing before mutation-testing any app source: `cmp` reporting identical is
+not the same as the tree being unchanged.
+
+Mutation: documenting `/v1/billing/checkout` for `checkout-session` → RED (the historical bug);
+changing a listed verb to one the path does not register → RED; capping the entry extractor at 3 →
+RED on the floor. Control 5/5, page restored byte-identical.
+
+`it(` count 4 → 5. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
+20237 passed.
