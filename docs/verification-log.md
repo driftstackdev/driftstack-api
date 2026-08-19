@@ -43155,3 +43155,46 @@ string to search for. The class has to be caught per-instance, which is what V-1
 does for scripts. That is worth knowing before someone tries to build the sweep.
 
 `it(` counts unchanged at 14 and 13. `npm run typecheck` exit 0.
+
+## V-1011 — my own red, and the latent instrument defect it surfaced (2026-08-19)
+
+The full suite after V-1010 came back **4 files, 5 tests failed**. Attributed before investigating,
+per the standing rule: the tree was clean apart from a peer's untracked pnpm files, so it was mine.
+Three distinct causes, and only one of them was a mistake in the ordinary sense.
+
+**1. The published spec snapshot went stale.** I changed a response description in `lib/openapi.ts`
+and did not regenerate `packages/sdk-python/openapi.json`, which is the codegen input for the Python
+SDK and the file 31 spec-reading guards consult. `sdk-python-openapi-snapshot-sync` and
+`integration/openapi.test.ts` both caught it, which is the pair working as designed.
+
+Worth recording for whoever regenerates next: `npm run sdk:python:dump-spec` alone produces a **6903
+insertion / 1683 deletion** diff, because the generator emits expanded arrays while the committed file
+is prettier-formatted. Running prettier over the result collapses it to the **single line** that
+actually changed. A 6900-line diff would have buried one description change and swept a formatting
+churn into an unrelated commit.
+
+**2. V-794's future-tense ratchet went 75 → 76, correctly.** My replacement wording for the team
+comment said the integration "it deferred has since SHIPPED" — and `deferred` is one of the trigger
+words that guard exists to keep out of frozen prose. The word was past-tense and historical here, but
+the ratchet cannot tell, its ceiling may only fall, and the right response to a guard you tripped is
+not to raise its ceiling. Reworded in the source and both pins.
+
+**3. A comment turned an existing guard red, which is a defect in the guard.**
+`server-resolve-effective-account-parity` discovers which routes resolve an effective account by
+testing `/resolveEffectiveAccount/` against the whole file — comments included. My V-1010 comment in
+`routes/team.ts` explains where act-as resolution lives and names the function, so `team.ts` was
+classified as a caller and then failed the arm requiring callers to import the shared header parser.
+
+That is `a-source-gate-may-not-be-satisfied-by-a-comment` (V-923) in its other direction. V-923 asks
+whether a comment can SATISFY a gate; this is a comment TRIGGERING one. Same root cause — a text
+match over source that cannot tell code from prose — and the same fix this arc has now applied five
+times. Discovery strips comments before matching, and the mutation proof is direct: restore the
+pre-V-1011 matcher and `team.ts` is flagged by name.
+
+The alternative was to reword my comment so it did not name the function. That hides a live defect —
+the next engineer to mention `resolveEffectiveAccount` in a route comment would hit the same red with
+no explanation — and it would have made the guard's coverage depend on nobody discussing the code it
+guards.
+
+`it(` counts unchanged (14, 13, 18). `npm run typecheck` exit 0. All four originally-failing files
+pass. No new file, so no ratchet change.

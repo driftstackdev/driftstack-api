@@ -78,10 +78,10 @@ describe('W1050 routes/team V-298c + V-326c cross-source invariant', () => {
 
   // ─── Route-only-not-yet-auth-path framing ────────────────────
 
-  it("V-1010 CRITICAL act-as framing — the auth-path integration V-298c deferred has SHIPPED, and what remains true is that membership grants nothing IMPLICITLY. This arm used to pin the opposite as 'the migration-window framing that prevents premature reliance on the membership for auth': it asserted the auth path did not honor membership and that a membership granted no permissions on the owner's resources at all. resolveEffectiveAccount returns the owner's account id with the member's role for any X-Driftstack-Account naming a team they belong to, which V-795 and V-812 both document as designed.", () => {
+  it("V-1010 CRITICAL act-as framing — the auth-path integration V-298c left for a later slice is now LIVE, and what remains true is that membership grants nothing IMPLICITLY. This arm used to pin the opposite as 'the migration-window framing that prevents premature reliance on the membership for auth': it asserted the auth path did not honor membership and that a membership granted no permissions on the owner's resources at all. resolveEffectiveAccount returns the owner's account id with the member's role for any X-Driftstack-Account naming a team they belong to, which V-795 and V-812 both document as designed.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/team.ts'));
-    expect(p).toMatch(/the auth-path integration it deferred/);
-    expect(p).toMatch(/has since SHIPPED\./);
+    expect(p).toMatch(/the auth-path integration it left for/);
+    expect(p).toMatch(/a later slice is now LIVE\./);
     expect(p).toMatch(/membership grants nothing IMPLICITLY/);
     // The retracted claims, paraphrased in the negative.
     expect(p).not.toMatch(/doesn't yet honor team/);

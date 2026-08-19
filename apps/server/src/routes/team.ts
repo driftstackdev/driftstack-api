@@ -7,8 +7,8 @@
 //   GET    /v1/team/owners               — list teams caller joined (read)
 //   DELETE /v1/team/members/:id          — remove member (account_owner)
 //
-// V-298c registered these routes; the auth-path integration it deferred
-// has since SHIPPED. `resolveEffectiveAccount` (services/auth.ts) reads
+// V-298c registered these routes; the auth-path integration it left for
+// a later slice is now LIVE. `resolveEffectiveAccount` (services/auth.ts) reads
 // `X-Driftstack-Account`: naming an owner you hold a membership on
 // returns that owner's account id with your role, and the participating
 // routes then scope to the owner rather than to you.

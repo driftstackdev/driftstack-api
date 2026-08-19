@@ -42,7 +42,7 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
       /\/\/\s*POST\s+\/v1\/team\/invites\s+— owner invites email \(account_owner\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/invites\s+— list pending \(read; owner-scoped by query\)\s*\n?\s*\/\/\s*POST\s+\/v1\/team\/invites\/accept\s+— invitee accepts \(account_owner\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/members\s+— list confirmed \(read; owner-scoped by query\)\s*\n?\s*\/\/\s*GET\s+\/v1\/team\/owners\s+— list teams caller joined \(read\)\s*\n?\s*\/\/\s*DELETE \/v1\/team\/members\/:id\s+— remove member \(account_owner\)/,
     );
     expect(body).toMatch(
-      /V-298c registered these routes; the auth-path integration it deferred\s*\n?\s*\/\/ has since SHIPPED\./,
+      /V-298c registered these routes; the auth-path integration it left for\s*\n?\s*\/\/ a later slice is now LIVE\./,
     );
     // The retracted claims, paraphrased in the negative. The stronger one — that
     // membership grants no permissions at all — was false: an admin member acts on

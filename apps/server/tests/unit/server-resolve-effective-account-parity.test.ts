@@ -35,12 +35,27 @@ const AUTH = resolve(REPO_ROOT, 'apps/server/src/services/auth.ts');
  * — so a rename removed a route from the check with no failure. Discovery
  * cannot silently shrink: if the convention changes the floor arm fails.
  */
+/**
+ * Source with comments stripped.
+ *
+ * V-1011 — discovery used to match `resolveEffectiveAccount` anywhere in the file,
+ * so a route that merely NAMED the function in a comment was classified as calling
+ * it and then failed the import arm below. That is the shape
+ * `a-source-gate-may-not-be-satisfied-by-a-comment` exists for, in its other
+ * direction: a comment cannot satisfy a gate, and it must not trigger one either.
+ * Found when a comment in `routes/team.ts` explaining where the act-as resolution
+ * lives turned this file red.
+ */
+function codeOnly(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
 const RESOLVE_CONSUMERS: readonly string[] = readdirSync(
   resolve(REPO_ROOT, 'apps/server/src/routes'),
 )
   .filter((f) => f.endsWith('.ts'))
   .filter((f) =>
-    /resolveEffectiveAccount/.test(read(resolve(REPO_ROOT, 'apps/server/src/routes', f))),
+    /resolveEffectiveAccount/.test(codeOnly(read(resolve(REPO_ROOT, 'apps/server/src/routes', f)))),
   )
   .map((f) => `apps/server/src/routes/${f}`)
   .sort();
