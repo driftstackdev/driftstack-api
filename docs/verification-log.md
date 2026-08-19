@@ -42076,3 +42076,52 @@ skips. Both hold.
 `npm run typecheck` exit 0. Full suite at V-985 before this batch: 2981 files passed, 109 skipped
 (3090), 30049 tests passed, 540 skipped, exit 0 — the file count matching `EXPECTED_TEST_FILES_ALL`
 exactly.
+
+## V-987 — two SDK path guards asserted registration and checked presence (2026-08-19)
+
+`sdk-typescript-server-path-parity` and `sdk-python-server-path-parity` both open with the same
+claim: every SDK path literal "must correspond to a server-side route registration", to catch "an SDK
+method pointing at a stale path after a server-side rename". Both built their server-side set from
+**any quoted `/v1/…` literal anywhere under `apps/server/src`**.
+
+That set is not registrations. It includes `lib/openapi.ts`, where a path is a spec DECLARATION; it
+includes middleware policy rosters like `device-key-deny.ts`; and it includes paths named inside
+error messages. A route can be renamed, deleted or never built while its path still appears in all
+three.
+
+**Proved by mutation rather than argued.** Renaming the real registration
+`app.get('/v1/archetypes'` to `/v1/archetype-catalog` left **both files green**, because
+`lib/openapi.ts` still carried `path: '/v1/archetypes'`. That is precisely the scenario both headers
+say they catch. After the change the same mutation reds both, naming `/v1/archetypes` — the same
+input, the opposite verdict.
+
+Measured before changing anything: **214 quoted `/v1` literals under `apps/server/src` against 209
+real registrations**, and all 100 TypeScript SDK paths map to registrations. So the hole was latent,
+not live — no SDK is currently pointing anywhere wrong — which is the right moment to close it rather
+than the wrong one.
+
+The matcher is anchored on `app.<verb>(`, allowing an optional type argument and a path on the
+following line. Both forms are load-bearing: `routes/webhooks.ts` registers
+`/v1/webhook-deliveries/:deliveryId/replay` as `app.post<{ Params: { deliveryId: string } }>(` with
+the path on the next line, and all three SDKs call it. A matcher that missed that form would have
+turned this tightening into a false failure. 209 registrations found, that one included.
+
+Each file gains a fixture arm distinguishing a registration from a declaration, a policy row and a
+path in prose — fixtures rather than repo state, because the repo is currently consistent and that is
+exactly when the distinction is invisible.
+
+**Two things I checked and did NOT act on.**
+
+`sdk-go` has no server-path guard at all, unlike its siblings. Measured: all 56 distinct Go path
+literals resolve, so nothing is broken. I did not build the third guard, because the Go SDK composes
+paths by concatenation — `"/v1/webhook-deliveries/" + url.PathEscape(id) + "/replay"` — so the
+literals are prefixes rather than paths. A guard over prefixes would assert something much weaker
+than its siblings while looking like a peer of them, and this batch is about a guard whose name
+promised more than it checked.
+
+`/v1/webhook-deliveries` first appeared as a Go path with no registration. It is registered; the
+apparent miss was my own extraction seeing only the concatenated prefix. Verified before it was
+written down anywhere.
+
+`it(` counts 1 → 2 and 2 → 3. `npm run typecheck` exit 0. Full suite before this batch: 2981 files
+passed, 109 skipped (3090), 30050 tests passed, exit 0.

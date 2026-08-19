@@ -44,6 +44,25 @@ function safeStat(p: string): boolean {
   }
 }
 
+/**
+ * Paths the server actually REGISTERS, normalised for comparison.
+ *
+ * V-987 — this used to be every quoted `/v1/…` literal anywhere under
+ * `apps/server/src`, which counts a `lib/openapi.ts` declaration, a middleware
+ * policy row and an error message as if each were an endpoint. Anchoring on the
+ * `app.<verb>(` call is what makes the file's own claim — that an SDK path
+ * "resolves to a server route" — true rather than approximately true.
+ */
+function registeredPaths(blob: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of blob.matchAll(
+    /app\.(?:get|post|put|patch|delete)\s*(?:<[^(]*>)?\s*\(\s*['"`](\/v1\/[^'"`]*)['"`]/g,
+  )) {
+    out.add((m[1] ?? '').replace(/:[a-zA-Z_]+/g, ':p').replace(/\/$/, ''));
+  }
+  return out;
+}
+
 describe('W250.A SDK-python ↔ server path parity', () => {
   // The directory check used to early-return `it.skip('python SDK not present')`.
   // The Python SDK is not an optional dependency — it is 21 git-tracked files in
@@ -86,14 +105,31 @@ describe('W250.A SDK-python ↔ server path parity', () => {
     }
     expect(sdkPaths.size).toBeGreaterThan(10);
 
-    const serverPaths = new Set<string>();
-    for (const m of serverBlob.matchAll(/['"](\/v1\/[A-Za-z0-9:_./-]+)['"]/g)) {
-      const raw = m[1]!;
-      const normalized = raw.replace(/:[a-zA-Z_]+/g, ':p').replace(/\/$/, '');
-      serverPaths.add(normalized);
-    }
+    const serverPaths = registeredPaths(serverBlob);
 
     const missing = [...sdkPaths].filter((p) => !serverPaths.has(p));
-    expect(missing).toEqual([]);
+    expect(
+      missing,
+      'these SDK paths are not REGISTERED by any route — a path that merely appears in ' +
+        'lib/openapi.ts or a policy roster is a declaration, not an endpoint:',
+    ).toEqual([]);
+  });
+
+  it('V-987 CRITICAL the server side is route REGISTRATIONS, not every /v1 string in the source tree. The TypeScript sibling carried the same weakness and the same header claim; renaming a real registration left both green, because lib/openapi.ts still declared the old path. Fixtures rather than repo state, since the repo is currently consistent — which is when the distinction is invisible.', () => {
+    expect(registeredPaths("app.get('/v1/thing', handler);").has('/v1/thing')).toBe(true);
+    expect(
+      registeredPaths("app.post<{ Params: { id: string } }>(\n  '/v1/thing/:id/act',").has(
+        '/v1/thing/:p/act',
+      ),
+      'a registration whose path follows a type argument on the next line',
+    ).toBe(true);
+    expect(
+      registeredPaths("  { method: 'GET', path: '/v1/declared-only' },").size,
+      'an OpenAPI declaration is not a registration',
+    ).toBe(0);
+    expect(
+      registeredPaths("  'POST:/v1/policy-listed/:id/replay',").size,
+      'a middleware policy row is not a registration',
+    ).toBe(0);
   });
 });
