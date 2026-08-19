@@ -17,8 +17,24 @@
 //     union may double-count until cleanup completes. Acceptable
 //     edge case for monthly cadence.
 //
-// Cron / external scheduler invokes archiveAll(now) on the 1st of
-// each month at 02:00 UTC. The service does NOT manage scheduling.
+// V-1006 — SCHEDULING IS THE DESIGN, NOT THE STATE. ADR-006 designs a
+// monthly cron to call this on the 1st at 02:00 UTC, and the sentence
+// here used to assert that as though it happens. It does not: nothing
+// constructs AuditArchiveService, `archiveAll()` below takes NO
+// arguments (so "archiveAll(now)" never described a real call either),
+// and `audit_archive_runs` has ZERO rows. `tick-services-are-wired`
+// lists this service in NOT_WIRED_PENDING_DECISION for exactly that
+// reason, and `db/audit-archive-repo.ts` carries the honest qualifier
+// this file omitted — two files knew while this one claimed otherwise.
+//
+// The consequence is not a doc nit: the five tables ADR-006 covers have
+// NO retention bound today, and the privacy policy's "session metadata
+// 90 days operational" line has this unrun sweep as its sole enforcer.
+// Whether to wire it or amend that policy is D-7, an open decision.
+//
+// The service remains stateless about time by design: it does not
+// manage scheduling, and a caller supplies the clock through the
+// constructor.
 
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';

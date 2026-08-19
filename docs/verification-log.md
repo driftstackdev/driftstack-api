@@ -42913,3 +42913,52 @@ re-applying only part of the correction left the file half-corrected and the pin
 the ORIGINAL, not the fixed version — re-apply the whole edit, not the line the mutation touched.
 
 `it(` 13 → 14. `npm run typecheck` exit 0. No new file, so no ratchet change.
+
+## V-1006 — three files knew the archiver had never run; the one an engineer opens first did not (2026-08-19)
+
+Sweep action 5, the engineering half. `services/audit-archive.ts` asserted, in the present tense:
+
+> Cron / external scheduler invokes archiveAll(now) on the 1st of each month at 02:00 UTC.
+
+**False on every clause.** Nothing constructs `AuditArchiveService`. `archiveAll()` takes **no
+arguments**, so `archiveAll(now)` never described a real call even in principle. And
+`audit_archive_runs` has zero rows.
+
+**Two other files already recorded the truth.** `tick-services-are-wired-invariant` lists the service
+in `NOT_WIRED_PENDING_DECISION` with "it has never run, so those tables have no retention bound and
+the privacy-policy line about session metadata being 90-day operational has no enforcer", and
+`db/audit-archive-repo.ts` carries the honest qualifier this file omitted. ADR-006 is honest too — "is
+**designed to** run" — so the design document, the invariant and the repo were right and the service
+was wrong. The service is the file an engineer opens to answer "does retention run?", which is what
+makes it the expensive one to get wrong: the five tables ADR-006 covers have no retention bound today
+and the privacy policy's 90-day session-metadata line has this unrun sweep as its sole enforcer.
+
+**The enumeration found a pin the sweep report did not name.** The report cited one pin file and one
+regex. A whitespace-normalising pass over `apps/server/{src,tests}`, `docs` and the marketing site
+found the claim frozen in **two** test files — `services-audit-archive-content-parity` AND
+`audit-archive-v163-cross-source-invariant`, whose CRITICAL arm pinned the sentence verbatim and
+justified it as "the external-scheduler design is what keeps the service stateless about time". Both
+moved here, with the retraction paraphrased and pinned in the negative in each. The property that arm
+was really defending — the service schedules nothing and takes its clock from the constructor — is
+kept and still pinned.
+
+**And the guard the sweep proposed, built where it belongs.** Item 5 asked: if a service is listed as
+deliberately unwired, its own source must not claim a schedule in the present tense. Added to the file
+that owns `NOT_WIRED_PENDING_DECISION`, so the two sources agree by construction rather than by
+coincidence, and generalised past this one service — it scans every listed service for four
+present-tense shapes. Mutation-proved both ways: reinstating the retracted sentence reds all three
+files, and adding "The sweeper runs monthly on the 1st." to a DIFFERENT unwired service
+(`webhook-secret-force-rotation`) reds the new arm by name.
+
+**Untouched, and still D-7:** wire the archiver or amend the privacy policy. The sweep is explicit
+that the doc fix alone "converts a hidden compliance gap into a documented one, which is better but
+not sufficient" — so the privacy policy is not edited here.
+
+**Two process slips, both mine, both caught.** The first pin edit left an unterminated regex and
+vitest reported **"no tests"** rather than a failure, with the `it(` count still matching HEAD at 17 —
+the second time this turn that the count check passed while the file did not parse. And restoring the
+service with `git checkout -- apps/server/src/services/` reverted my own correction, which is exactly
+why the standing rule says to restore from a scratchpad snapshot. The snapshot now holds the
+CORRECTED version, not the original, so a restore returns to the fix.
+
+`it(` 4 → 5 on the invariant, unchanged at 17 on both pins. `npm run typecheck` exit 0.

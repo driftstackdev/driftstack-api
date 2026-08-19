@@ -49,8 +49,15 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     expect(body).toMatch(/session_events action log/);
     expect(body).toMatch(/Lines, partitioned by YYYY\/MM\/\./);
     expect(body).toMatch(
-      /Cron \/ external scheduler invokes archiveAll\(now\) on the 1st of\s*\n?\s*\/\/\s*each month at 02:00 UTC\. The service does NOT manage scheduling\./,
+      /ADR-006 designs a\s*\n?\s*\/\/ monthly cron to call this on the 1st at 02:00 UTC/,
     );
+    // V-1006 — the retracted wording, paraphrased in the negative: the file may
+    // not assert the cron AS HAPPENING. It does not run; `tick-services-are-wired`
+    // lists the service in NOT_WIRED_PENDING_DECISION and `audit_archive_runs` is
+    // empty. A present-tense claim here is what lets an engineer confirm
+    // "retention runs monthly" and move on.
+    expect(body).not.toMatch(/Cron \/ external scheduler invokes archiveAll/);
+    expect(body).toMatch(/it does not\s*\n?\s*\/\/ manage scheduling/);
   });
 
   it('Failure modes per ADR §3: R2-upload-fail → DELETE skipped + deletedFromPostgres=false + next-run retry; DELETE-fail → R2 overwrite idempotently', () => {

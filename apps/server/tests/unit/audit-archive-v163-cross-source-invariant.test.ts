@@ -171,10 +171,16 @@ describe('W932 V-163 audit-archive cross-source invariant', () => {
 
   // ─── Cron cadence framing ────────────────────────────────────
 
-  it("CRITICAL cron cadence framing — 'Cron / external scheduler invokes archiveAll(now) on the 1st of each month at 02:00 UTC. The service does NOT manage scheduling'. The external-scheduler design is what keeps the service stateless about time.", () => {
+  it("V-1006 CRITICAL cron cadence framed as ADR-006's DESIGN, not as something that happens. This arm used to pin 'Cron / external scheduler invokes archiveAll(now) on the 1st of each month at 02:00 UTC' — present tense, and false on every clause: nothing constructs the service, archiveAll() takes no arguments so archiveAll(now) never described a real call, and audit_archive_runs has zero rows. The stateless-about-time property it was really protecting is kept, and pinned, on its own.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
-    expect(p).toMatch(/Cron \/ external scheduler invokes archiveAll\(now\) on the 1st of/);
-    expect(p).toMatch(/each month at 02:00 UTC\. The service does NOT manage scheduling/);
+    expect(p).toMatch(
+      /ADR-006 designs a\s*\n?\s*\/\/ monthly cron to call this on the 1st at 02:00 UTC/,
+    );
+    // The retracted wording, paraphrased in the negative so it cannot return.
+    expect(p).not.toMatch(/Cron \/ external scheduler invokes archiveAll/);
+    // What the old arm was actually defending: the service takes its clock from
+    // the constructor and schedules nothing itself.
+    expect(p).toMatch(/it does not\s*\n?\s*\/\/ manage scheduling/);
   });
 
   // ─── archiveObjectKey ADR-006 §2 shape ───────────────────────

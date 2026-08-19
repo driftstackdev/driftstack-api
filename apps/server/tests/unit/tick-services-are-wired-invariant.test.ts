@@ -163,4 +163,27 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
       'WebhookSecretForceRotationService',
     ]);
   });
+
+  it("V-1006 CRITICAL a service listed here as deliberately unwired may not describe its schedule in the PRESENT TENSE in its own source. This file and `db/audit-archive-repo.ts` both recorded that AuditArchiveService has never run, while `services/audit-archive.ts` said a cron 'invokes archiveAll(now) on the 1st of each month' — three files, two right. A reader who opens the service to check whether retention runs finds the one that lies, and the privacy policy's 90-day session-metadata line has that unrun sweep as its sole enforcer. This makes the two agree instead of hoping they do.", () => {
+    const PRESENT_TENSE = [
+      /Cron \/ external scheduler invokes/,
+      /\bis invoked (?:by|on)\b/,
+      /\bruns (?:monthly|nightly|daily|on the 1st)\b/,
+      /\bis scheduled to run\b/,
+    ];
+    const offenders: string[] = [];
+    for (const name of Object.keys(NOT_WIRED_PENDING_DECISION)) {
+      const svc = services.find((s) => s.name === name);
+      if (svc === undefined) continue;
+      const src = readFileSync(resolve(SERVICES, svc.file), 'utf8');
+      for (const re of PRESENT_TENSE) {
+        if (re.test(src)) offenders.push(`${name} (${svc.file}) matches ${String(re)}`);
+      }
+    }
+    expect(
+      offenders,
+      'these services are listed above as deliberately NOT wired, yet their own source describes a ' +
+        'schedule as if it happens — the file a reader opens first is the one that misleads:',
+    ).toEqual([]);
+  });
 });
