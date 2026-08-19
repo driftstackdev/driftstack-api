@@ -39182,3 +39182,42 @@ entries ago. The prior-art habit caught it this time — I looked before acting 
 way the repository's documents did. The entries I have been correcting all session had a common
 shape — a status that was true when written and never revisited — and my own hand-off list had it
 too.
+
+## V-916 — three guard pairs whose filenames are word-permutations; one duplicates, one overlaps, one does not (2026-08-19)
+
+**The V-905 shape, looked for deliberately.** I created a duplicate guard whose filename differed
+from the incumbent by two words. That suggests a detector: test filenames whose word SETS collide
+while their order differs. Across 1907 unit tests it returns **three** pairs, and one command finds
+them.
+
+**Reading all three rather than trusting the detector — which mattered, because they classify
+differently.**
+
+- **`cross-sdk-retry-policy-parity` / `sdk-retry-policy-cross-sdk-parity` — genuine duplication.**
+  Both read the same three SDK retry files and both assert: canonical paths exist, exponential
+  backoff with full jitter, Retry-After honouring, the same transient retry set, the unified
+  200ms/10_000ms defaults, and BackoffMultiplier 2.0 for Python and Go. Roughly seven arms in
+  common. Each also holds unique ones — the first has non-positive-Retry-After-as-no-hint, the
+  maxDelay cap and the export surface; the second has the 3-retry default, the TS rng/sleep test
+  hooks, the disable toggle and the Go loop specifics.
+- **`cross-sdk-webhook-signature-parity` / `sdk-webhook-signature-cross-sdk-parity` — heavy
+  overlap, but a real split underneath.** Both pin the header format, the HMAC formula, the
+  300-second tolerance and the V-359 `headerPrev` fallback. The second then goes per-language —
+  Go's stdlib choice, the TS Web Crypto isomorphism, the 0.1.0→0.1.1 async migration note, the
+  Python internal dataclass — while the first stays cross-cutting (constant-time comparison,
+  lowercase hex, export surface). Two guards that grew apart into different jobs under names that
+  suggest one.
+- **`negative-auth-cache` / `auth-negative-cache` — NOT duplicates, and the detector's false
+  positive.** One tests the cache structure: TTL, bounded size, injectable clock. The other tests
+  that `authenticate()` CONSULTS it, proven with a counting fake repo. Different layers, correct as
+  two files, named so they look like one thing twice.
+
+**Not consolidated, deliberately.** Merging 25 arms across four files I did not write risks dropping
+coverage, and none of the six is wrong. The hard part of a consolidation is knowing which arms are
+shared and which are load-bearing in only one file, and that is what this entry records. The merge
+itself is mechanical once someone decides to do it.
+
+**Worth noting what produced this.** The detector exists because I made the mistake first. V-906
+deleted my duplicate and V-907 built the prior-art habit that would have prevented it; this is the
+same lesson pointed at the repository instead of at me, and it found two real instances the habit
+would not have — because both pairs predate anyone thinking to look.
