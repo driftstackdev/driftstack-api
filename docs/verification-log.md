@@ -41240,3 +41240,35 @@ defensive-invariant class, `if (!ctx) throw new Error('account context missing a
 kind, unreachable by construction and correctly so. The typed remainder is 109, headed by `BadRequestError`
 (24), `NotFoundError` (17) and `ValidationError` (15). Those are the candidate list for the next slice, on
 §5h's own terms: each needs reading before it is called a defect.
+
+## V-963 — first slice off V-962's list: a refusal whose removal the whole MFA suite would miss
+
+**Working the candidate list the coverage intersection produced**, on §5h's terms — each site read before it
+is called anything. The instrument earns its keep immediately: unlike grep, "this line is executed by no
+test" is a fact about the whole suite, so it cannot be answered wrongly by a test living in a file I did not
+think to open. That has been my failure mode twice this session.
+
+**`services/mfa.ts:178` — the already-enrolled refusal on VERIFY.** `completeEnrollment` refuses a caller
+whose `enrolledAt` is already set, with "MFA is already enrolled. Disable + re-enroll if you need a fresh
+secret." Coverage: **0 hits**. Its sibling one method up — the same refusal on ENROLL, line 154 — has 2, and
+is covered by `account-mfa.test.ts` and pinned in the docs parity guard. The endpoints are different and only
+one of them was exercised.
+
+**It is not a security gate, and that is what makes it interesting.** The authoritative refusal is the
+conditional write itself: `completeEnrollmentIfPending` carries `isNull(accountMfa.enrolledAt)` in its
+`WHERE`, returns false, and the service raises a _different_ ConflictError at line 207 — which coverage
+shows executed twice. So removing the guard does not let a second enrolment through. It changes what the
+customer is told: instead of "MFA is already enrolled. Disable + re-enroll", they get "MFA enrollment changed
+while the code was being verified. **Retry** with the latest enrollment" — advice that cannot succeed for
+someone whose only problem is that they are already enrolled.
+
+**Paired proof, and the second half is the point.** Deleting the guard fails the new arm, which reports the
+caller receiving the concurrent-modification message. Against the suite **as it stands at HEAD** the same
+deletion is invisible: `account-mfa.test.ts` 16 passed, and the MFA-touching set — step-up, challenge, the
+challenge store — 38 passed across 3 files. A control removed, a customer-facing message quietly degraded,
+and nothing red.
+
+**Same shape as V-961, from the other direction.** There, a pin was satisfied by an occurrence elsewhere in
+the file. Here, a refusal is masked by a neighbouring path that tests already exercise for a different
+reason. Both are the failure that a covered-looking file hides: the suite touches the code, so the code
+looks guarded.

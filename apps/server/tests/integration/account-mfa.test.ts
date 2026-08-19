@@ -260,6 +260,41 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
     expect(verify.statusCode).toBe(400);
   });
 
+  it('CRITICAL a SECOND verify on an already-enrolled account is refused with the actionable message, not the retry-forever one. Coverage says no test executes services/mfa.ts:178 while its fallback at :207 is executed twice, so deleting the guard drops this caller onto an already-exercised path and the suite stays green — the caller is then told "enrollment changed … Retry", advice that can never succeed for someone who is simply already enrolled. The sibling arm below covers the ENROLL endpoint; this is the VERIFY one.', async () => {
+    const headers = await buildInteractiveFixture();
+    const enroll = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/mfa/enroll',
+      headers,
+    });
+    const secret = base32Decode(enroll.json<EnrollStartResponse>().secret_base32);
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/mfa/verify',
+      headers: { ...headers, 'content-type': 'application/json' },
+      payload: { code: computeTotpCode(secret, Math.floor(Date.now() / 1000)) },
+    });
+    expect(first.statusCode, 'the first verify completes enrollment').toBe(200);
+
+    // Same account, still enrolled, verifying again with a fresh valid code.
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/mfa/verify',
+      headers: { ...headers, 'content-type': 'application/json' },
+      payload: { code: computeTotpCode(secret, Math.floor(Date.now() / 1000)) },
+    });
+    expect(second.statusCode, 'a second verify is a conflict, not a fresh enrollment').toBe(409);
+    const detail = second.json<{ detail: string }>().detail;
+    expect(detail, 'the refusal tells the customer what to do about it').toContain(
+      'MFA is already enrolled',
+    );
+    expect(
+      detail,
+      'and it is NOT the concurrent-modification message, which would tell someone who is simply ' +
+        'already enrolled to retry something that cannot succeed',
+    ).not.toContain('Retry with the latest enrollment');
+  });
+
   it('409 enroll on already-enrolled account refuses; disable + re-enroll works', async () => {
     const headers = await buildInteractiveFixture();
     // Initial enroll + verify
