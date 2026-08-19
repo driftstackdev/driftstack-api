@@ -38923,3 +38923,30 @@ query.** Recorded in that form because "check prior art" has now failed twice as
 should stop being written as one.
 
 No source change. Seven guards audited, zero duplicates, one rule made usable.
+
+## V-908 — a vacuity detector that does not work, recorded and abandoned (2026-08-19)
+
+**Tried:** this session repeatedly found guards asserting less than they claimed — V-820's title
+promising count-detection its arms did not do, V-886's pin elevating a nonexistent commitment into a
+contract, V-902's two independent pins of one literal. A detector for the general shape would be
+worth having, so I scored every unit test on the ratio of weak matchers (`toBeDefined`,
+`not.toBeNull`, `toBeGreaterThan(0)`) to strong ones.
+
+**It does not work, and the top hit shows why.** `profile-in-use-guard.test.ts` scored worst. It is
+one of the better test files in the repo: twelve behavioural cases separating terminal from
+non-terminal session states, cross-account isolation, the un-gated no-profile path, reconnect
+semantics, and the exact `active_session_id` extension on the thrown error. Its `not.toBeNull()`
+calls are PRECONDITIONS — confirming a session exists before testing what the guard does with it —
+each followed by a strong assertion.
+
+**A matcher cannot distinguish a weak assertion from a legitimate setup check**, and setup checks
+cluster in exactly the thorough behavioural suites the detector should rank highest. The ratio also
+exceeded 1.0 on several files because `not.toBeNull` matches both patterns, so the ranking was
+partly counting artifact on top of being conceptually wrong.
+
+**Abandoned rather than refined**, on V-903's precedent: building on an instrument whose top signal
+is a false positive produces a curated exclusion list, and an exclusion list over a noisy scanner is
+where a real miss hides. The three real instances found this session were each caught by READING a
+guard whose claim looked larger than its arms — which is not a thing a matcher census can see.
+
+No source change. One instrument tried, measured, and discarded.
