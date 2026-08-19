@@ -32350,8 +32350,9 @@
         "parameters": [
           {
             "schema": {
-              "type": "string",
-              "pattern": "^\\d+$",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
               "description": "Page size (1-100). Defaults to server-side 50."
             },
             "required": false,
@@ -33724,7 +33725,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
             },
             "required": false,
             "name": "limit",
@@ -35335,11 +35338,13 @@
         "parameters": [
           {
             "schema": {
-              "type": "string",
-              "description": "Defaults to 7; max 90."
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 90,
+              "description": "Defaults to 7."
             },
             "required": false,
-            "description": "Defaults to 7; max 90.",
+            "description": "Defaults to 7.",
             "name": "days",
             "in": "query"
           }
@@ -35774,7 +35779,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
             },
             "required": false,
             "name": "limit",

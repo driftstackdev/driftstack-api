@@ -39949,3 +39949,46 @@ prose would have accepted it.
 **The pairing is the point.** A documented requirement with no code behind it is fiction (V-929's
 `stripe_refund_id`). Code with no documentation behind it is a surprise (this entry). V-931 was the
 case of reading one side and concluding about the other; every arm here reads both.
+
+## V-933 — four page-size parameters published with no type and no bounds (2026-08-19)
+
+**A gap in an existing guard family, found by reading it first.** The
+`openapi-*-shadow-caps-cross-source-invariant` guards already state the principle exactly: "Shadow
+drift means generated SDKs ship request-shape validators without the caps the route enforces." They
+cover `account_id`, `search`, `payment_id`, `cursor` and `order_id`. They do NOT cover `limit` or
+`days` — and could not have, because those caps are not in a route schema at all.
+
+**The reason is V-932's class, now in query parameters.** Each route declares the parameter as a
+numeric string and enforces the range in the handler:
+
+```
+const n = Number.parseInt(query.limit, 10);
+if (!Number.isInteger(n) || n < 1 || n > 200) throw new BadRequestError(…)
+```
+
+So the shadow copied the route schema faithfully and the caps stayed behind it. Measured across the
+whole document: **19 paginated endpoints publish `type: integer` with minimum/maximum; 4 — every
+crypto-orders endpoint — published `type: string`**, and two of those with no pattern, no bounds and
+no description whatsoever. A generated client had nothing to validate and no way to know the field
+was numeric.
+
+**Verified caps, which differ per endpoint** and are read from each handler's own rejection message:
+billing list 1–100, admin list 1–200, CSV export 1–1000, daily breakdown 1–90 (default 7). Four
+distinct numbers, so no single shared expectation could have covered them — that is asserted in the
+guard, because an arm comparing one repeated constant proves much less than it appears to.
+
+**Fixed on the document side only.** The routes still accept a numeric string off the wire, which is
+what HTTP delivers; `type: integer` is how OpenAPI declares a numeric parameter and is what the 19
+siblings already use. Both existing shadow-caps guards still pass — checked, since they read
+`openapi.ts` source and I was editing it.
+
+**Both ends guarded**, comparing the published bound against the handler's rejection message rather
+than against a number I typed twice: check only the document and it keeps passing when a route widens;
+check only the route and it keeps passing when the document forgets again.
+
+**Three proofs.** Reverting one parameter to a bare string reports all three losses by name (type,
+minimum, maximum). Widening a published maximum past the enforced one fails with both numbers.
+Removing a route's rejection message fails the route arm.
+
+**Generated Python models unaffected** — query parameters are operation parameters, not model classes,
+so regenerating produced a timestamp-only diff, restored rather than committed.

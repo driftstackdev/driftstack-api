@@ -5172,9 +5172,15 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       query: z.object({
-        limit: z
-          .string()
-          .regex(/^\d+$/)
+        // V-933 — published as a bounded integer, matching the 19 other paginated
+        // endpoints in this file. The route accepts a numeric STRING off the wire and
+        // enforces the range AFTER parsing, so neither bound reached the document:
+        //   if (!Number.isInteger(n) || n < 1 || n > 100) throw …
+        limit: z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(100)
           .optional()
           .describe('Page size (1-100). Defaults to server-side 50.'),
         // V-666.BR — single-value status filter; mirrors admin list.
@@ -5359,7 +5365,11 @@ function buildRegistry(): OpenAPIRegistry {
           .optional(),
         search: z.string().min(1).max(200).optional(),
         payment_id: z.string().min(1).max(128).optional().describe('Exact-match reverse lookup.'),
-        limit: z.string().optional(),
+        // V-933 — published as a bounded integer, matching the 19 other paginated
+        // endpoints in this file. The route accepts a numeric STRING off the wire and
+        // enforces the range AFTER parsing, so neither bound reached the document:
+        //   if (!Number.isInteger(n) || n < 1 || n > 200) throw …
+        limit: z.coerce.number().int().min(1).max(200).optional(),
         cursor: z.string().min(1).max(512).optional().describe('Opaque cursor from a prior page.'),
         created_after: z
           .string()
@@ -5597,7 +5607,11 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       query: z.object({
-        days: z.string().optional().describe('Defaults to 7; max 90.'),
+        // V-933 — published as a bounded integer, matching the 19 other paginated
+        // endpoints in this file. The route accepts a numeric STRING off the wire and
+        // enforces the range AFTER parsing, so neither bound reached the document:
+        //   if (!Number.isInteger(n) || n < 1 || n > 90) throw …
+        days: z.coerce.number().int().min(1).max(90).optional().describe('Defaults to 7.'),
       }),
     },
     responses: {
@@ -5655,7 +5669,11 @@ function buildRegistry(): OpenAPIRegistry {
           .enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'])
           .optional(),
         search: z.string().min(1).max(200).optional(),
-        limit: z.string().optional(),
+        // V-933 — published as a bounded integer, matching the 19 other paginated
+        // endpoints in this file. The route accepts a numeric STRING off the wire and
+        // enforces the range AFTER parsing, so neither bound reached the document:
+        //   if (!Number.isInteger(n) || n < 1 || n > 1000) throw …
+        limit: z.coerce.number().int().min(1).max(1000).optional(),
         created_after: z.string().datetime().optional(),
         created_before: z.string().datetime().optional(),
       }),
