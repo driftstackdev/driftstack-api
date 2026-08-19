@@ -1,7 +1,27 @@
 // Admin audit logging.
 //
-// Every /v1/admin/* endpoint writes one row here before returning its
-// response. The repo exposes `insert(...)` and a paginated `list(...)`
+// Every MUTATING /v1/admin/* endpoint writes one row here before
+// returning its response, with three exceptions. Reads do not.
+//
+// V-1007 — the sentence here used to say "every /v1/admin/* endpoint",
+// which is what a DPO or a SOC2 auditor would cite to assert that staff
+// access to customer data is traceable. Measured across the 68 admin
+// registrations: 33 mutating, 35 GET, and ZERO of the GETs audit —
+// including `GET /v1/admin/crypto-orders.csv`, which exports up to 1000
+// rows of account_id, payment_id and customer notes. Six admin route
+// files already said so in their own comments ("Read-only; no audit row
+// written for the read"); this header was the one that did not.
+//
+// The three mutating exceptions are the admin OAuth-client routes —
+// POST /v1/admin/oauth/clients, DELETE …/:id and POST …/:id/rotate-secret
+// — which grant, revoke and re-key third-party access to customer
+// accounts and write no audit row. `admin_audit_action` has no value for
+// them, so auditing those is a migration, which this file notes below is
+// deliberately the cost of a new admin action. Whether to pay it is open.
+//
+// `tick-services-are-wired`-style enforcement for this lives in
+// `admin-audit-route-coverage-invariant`: the allowlist there is the
+// checkable form of this paragraph, so the two cannot drift. The repo exposes `insert(...)` and a paginated `list(...)`
 // only — no UPDATE or DELETE method. The "append-only" invariant is
 // enforced by code, not the DB (D-025).
 //

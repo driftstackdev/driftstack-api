@@ -5,9 +5,11 @@
 //   D-025 anchor — 'append-only invariant is enforced by code, not
 //   the DB' (no UPDATE / DELETE methods on the repo).
 //
-//   Every /v1/admin/* endpoint writes one row before returning.
+//   Every MUTATING /v1/admin/* endpoint writes one row before returning;
+//   reads write none, and three OAuth-client mutations are excepted (V-1007).
 //
-//   AdminAuditAction (14-value closed Postgres enum):
+//   AdminAuditAction (closed Postgres enum; 33 values as of V-1007 —
+//   the '14-value' this header carried was stale by nineteen):
 //     - account.tier_changed
 //     - account.suspended / account.unsuspended
 //     - webhook_delivery.replayed / webhook_delivery.requeued
@@ -61,13 +63,13 @@ function read(p: string): string {
 describe('W936 D-025 admin-audit cross-source invariant', () => {
   // ─── Header intro + D-025 anchor ─────────────────────────────
 
-  it("CRITICAL apps/server/src/services/admin-audit.ts header intro pins 'Admin audit logging' + 'Every /v1/admin/* endpoint writes one row here before returning its response. The repo exposes insert(...) and a paginated list(...) only — no UPDATE or DELETE method'. The append-only contract is the central design.", () => {
+  it("V-1007 CRITICAL admin-audit.ts header intro pins 'Admin audit logging' + the MUTATING-only rule + 'The repo exposes insert(...) and a paginated list(...) only — no UPDATE or DELETE method'. The append-only contract is the central design; the every-endpoint claim it used to pin was false for all 35 admin GETs.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-audit.ts'));
     expect(p).toMatch(/Admin audit logging/);
-    expect(p).toMatch(/Every \/v1\/admin\/\* endpoint writes one row here before returning its/);
-    expect(p).toMatch(
-      /response\. The repo exposes `insert\(\.\.\.\)` and a paginated `list\(\.\.\.\)`/,
-    );
+    expect(p).toMatch(/Every MUTATING \/v1\/admin\/\* endpoint writes one row here before/);
+    // The retracted claim, paraphrased in the negative.
+    expect(p).not.toMatch(/Every \/v1\/admin\/\* endpoint writes one row here before returning/);
+    expect(p).toMatch(/The repo exposes `insert\(\.\.\.\)` and a paginated `list\(\.\.\.\)`/);
     expect(p).toMatch(/only — no UPDATE or DELETE method\. The "append-only" invariant is/);
     expect(p).toMatch(/enforced by code, not the DB \(D-025\)/);
   });

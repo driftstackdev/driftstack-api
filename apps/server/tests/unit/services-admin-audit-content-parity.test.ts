@@ -1,5 +1,5 @@
 // W399.B — drift guard for apps/server/src/services/admin-audit.ts.
-// Admin audit log: every /v1/admin/* endpoint writes one row here
+// Admin audit log: every MUTATING /v1/admin/* endpoint writes one row
 // BEFORE returning its response. Append-only invariant enforced by
 // code, not DB (D-025). The AdminAuditAction closed Postgres enum is
 // the load-bearing artefact; drift here either silently loses an
@@ -38,10 +38,15 @@ function read(p: string): string {
 describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => {
   const body = read(LIB);
 
-  it('Module framing: every /v1/admin/* endpoint writes one row before response; append-only', () => {
+  it('V-1007 Module framing: every MUTATING /v1/admin/* endpoint writes one row before response, reads do not, three OAuth-client mutations excepted; append-only', () => {
     expect(body).toMatch(
-      /Every \/v1\/admin\/\* endpoint writes one row here before returning its\s*\n?\s*\/\/\s*response\. The repo exposes `insert\(\.\.\.\)` and a paginated `list\(\.\.\.\)`\s*\n?\s*\/\/\s*only — no UPDATE or DELETE method\. The "append-only" invariant is\s*\n?\s*\/\/\s*enforced by code, not the DB \(D-025\)\./,
+      /Every MUTATING \/v1\/admin\/\* endpoint writes one row here before\s*\n?\s*\/\/ returning its response, with three exceptions\. Reads do not\./,
     );
+    // V-1007 — the retracted claim, paraphrased in the negative. "every
+    // endpoint" is what an auditor would cite for staff-access traceability,
+    // and 35 of 68 admin registrations are GETs that write nothing.
+    expect(body).not.toMatch(/Every \/v1\/admin\/\* endpoint writes one row here before returning/);
+    expect(body).toMatch(/The repo exposes `insert\(\.\.\.\)` and a paginated `list\(\.\.\.\)`/);
   });
 
   it('Closed-enum framing: new admin endpoint = migration (action-filtered query index)', () => {

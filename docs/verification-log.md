@@ -42962,3 +42962,55 @@ why the standing rule says to restore from a scratchpad snapshot. The snapshot n
 CORRECTED version, not the original, so a restore returns to the fix.
 
 `it(` 4 → 5 on the invariant, unchanged at 17 on both pins. `npm run typecheck` exit 0.
+
+## V-1007 — "every admin endpoint writes an audit row" was false in two directions (2026-08-19)
+
+Sweep action 7, the engineering half. `services/admin-audit.ts` opened with:
+
+> Every /v1/admin/\* endpoint writes one row here before returning its response.
+
+That sentence is what a DPO or a SOC2 auditor cites to assert staff access to customer data is
+traceable. Measured across **68 admin registrations — 33 mutating, 35 GET**:
+
+- **Zero of the 35 GETs audit.** Including `GET /v1/admin/crypto-orders.csv`, a bulk export of up to
+  1000 rows of `account_id`, `payment_id` and customer notes. Six admin route files already said so in
+  their own comments ("Read-only; no audit row written for the read"); the header was the one place
+  claiming otherwise, and two pins froze it there.
+- **Three of the 33 mutations audit nothing** — and this the sweep did not report. The admin
+  OAuth-client routes (`POST /v1/admin/oauth/clients`, `DELETE …/:id`,
+  `POST …/:id/rotate-secret`) grant, revoke and re-key third-party access to customer accounts and
+  record none of it. The service layer does not audit them either. `admin_audit_action` has no value
+  for any of them, so fixing that is a migration — which `admin-audit.ts` itself calls the deliberate
+  cost of a new admin action, so it is a decision and is recorded as one.
+
+**Two instrument corrections on the way to that number, both caught by reading source.** A first pass
+reported FIVE unaudited mutations; two were false, because `withAudit\(` cannot match
+`withAuditOverrideClear(` — the detector had to widen to `withAudit\w*\(`. And the occurrence
+enumeration initially found only one pin file, because I searched capital "Every" while
+`services-admin-audit-content-parity` line 2 says lowercase "every". Case sensitivity, after
+line-wrapping bit three times.
+
+Corrected in all four places in one commit — the source header, and three spots in the content-parity
+pin (header comment, `it(` title, regex) plus the d025 invariant — with the retraction paraphrased and
+pinned in the negative in both test files. The d025 header also called `AdminAuditAction` a "14-value
+closed Postgres enum"; it holds **33**. Stale by nineteen, fixed alongside.
+
+**And the guard the sweep called "the best structural guard available in this set", built.** The
+sentence is now derived: `admin-audit-route-coverage-invariant` enumerates every `/v1/admin`
+registration, slices each handler block, and asserts every mutation audits or sits on
+`UNAUDITED_MUTATIONS` — with a staleness arm so an entry cannot outlive its route, an arm pinning that
+no GET audits, and an arm tying the header's wording to what the file measures. Per-ROUTE rather than
+per-file on purpose: `admin-accounts.ts` alone holds fourteen registrations, and a file-level grep
+would call every one audited because a neighbour is.
+
+The decision the sweep asked for — read-audit for the endpoints returning customer PII, "at minimum
+the CSV export" — is now a one-line edit to `UNAUDITED_READS` rather than a prose rewrite. It stays
+open, and so does whether to pay the migration for the three OAuth-client mutations.
+
+Mutation-proved: neutralising the audit call inside `POST /v1/admin/accounts/:id/tier` reds the
+coverage arm by name, and reinstating the retracted header sentence reds the wording arm. The first
+mutation attempt neutralised the file's FIRST `withAudit` occurrence and stayed green — it was not
+inside any route block, which is V-995's lesson again: assert WHERE the edit landed, not that it did.
+
+`it(` counts unchanged at 16 and 19 on the two pins; the new file has 5.
+`EXPECTED_TEST_FILES` 2927 → 2928, `_ALL` 3093 → 3094. `npm run typecheck` exit 0.
