@@ -43370,3 +43370,46 @@ the fix was gone. Snapshot the CORRECTED file, not the original. This is the sam
 a new disguise, and it has now cost me twice.
 
 `it(` counts unchanged (13, 8, 6, 16).
+
+## V-1016 — the three server comments V-1010 deferred, and one guard instead of nine
+
+Completes V-1015. `lib/app.ts:256`, `lib/openapi.ts:1035` and `lib/bootstrap.ts:882` were held back
+by V-1010 because each put a TRUE qualifier next to the false framing — "membership grants no
+implicit permissions" is correct, while "auth path integration is V-298d" and "the auth path itself
+does NOT yet honor team membership" are not. Deferring the whole comment to protect the true half
+left the false half shipped for two more waves.
+
+The SDK guards had already settled the wording and nobody carried it back to the server. The three
+SDK team resource files are pinned to state the contract — membership IS honored, send
+`X-Driftstack-Account: acc_<owner-uuid>`, bounded by membership role and required scope, absent
+header acts on your own account — and `cross-sdk-team-rbac-parity` FORBIDS the phrase "grants no
+implicit permissions" there as a superseded caveat. The server files still carried that exact
+superseded phrasing. Two layers, opposite rules, both green.
+
+All three now state the shipped contract. `bootstrap.ts` names the mechanism (`services/auth.ts`
+loads memberships; `resolveEffectiveAccount` maps the header to owner account and role) since that
+is the comment an engineer editing the wiring reads.
+
+**A guard for the class, not a negative per file.** Nine files in three waves carried one sentence,
+every one had a content-parity pin, and every pin was green — a pin asserts what its own file says,
+and none of them asks whether the claim is true anywhere else.
+`the-team-auth-path-is-not-described-as-pending.test.ts` asks it once across seven shipped source
+trees, and deliberately reads RAW source: the thing being policed IS a comment, which is V-1014's
+distinction applied in the direction that needs prose. Scope excludes tests, because the per-
+occurrence negatives and this file itself quote the retracted sentence.
+
+Mutation, four ways: reintroducing the anchor in server source → RED; in an SDK client → RED;
+breaking `ctx.teams.find(` in `auth.ts` → RED on the arm that pins the underlying fact, so if the
+integration is ever unshipped this fails pointing at the code instead of becoming a rule against
+writing something true; pointing a source root at a path that does not exist → RED on the
+scan-reached arm.
+
+**Found while enumerating: V-1010 damaged a header and I committed it.** The first paragraph of
+`routes-team-content-parity.test.ts` had the corrected clause spliced in FRONT of the old one rather
+than replacing it, so it asserted both that the integration had shipped and that a future slice
+would wire it. The arms were correct throughout; only the prose was self-contradicting. Repaired
+here. Retractions replace, they do not prepend — which is the same failure mode as V-1009's header,
+now with me as the author.
+
+`it(` count unchanged on the repaired file (13). Ratchets 2930→2931 and 3096→3097 for the guard.
+`apps/server/tests/unit` green: 1933 files, 20224 tests.

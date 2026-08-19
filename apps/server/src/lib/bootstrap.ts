@@ -880,9 +880,11 @@ export async function createProductionDeps(
   });
 
   // V-298b/c — Team RBAC v1 service. Routes wired in app.ts. The auth
-  // path itself does NOT yet honor team membership (V-298d) — invites
-  // can be sent + accepted, but membership grants no implicit
-  // permissions on the owner's resources until V-298d.
+  // path DOES honor team membership: services/auth.ts loads memberships on
+  // every authenticated path and resolveEffectiveAccount maps
+  // X-Driftstack-Account to the owner account and the member's role.
+  // Nothing is granted implicitly — absent that header a caller acts on
+  // their own account.
   // V-057.E — sourced from `config.dashboardOrigin`, which is driven
   // by `DASHBOARD_ORIGIN` and prod-guarded against localhost. The
   // legacy `PUBLIC_DASHBOARD_URL` env var was redundant once

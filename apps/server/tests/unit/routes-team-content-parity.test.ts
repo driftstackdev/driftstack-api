@@ -1,17 +1,22 @@
 // W437.C — drift guard for apps/server/src/routes/team.ts.
 // V-298c Team RBAC v1 — 5 invite/member endpoints + V-326c teams-I-
-// am-on. Drift here either drops the V-298c "route-only" framing
-// (membership doesn't grant permissions until V-298d) or silently
+// am-on. Drift here either drops the framing this file pins or silently
 // extends the role enum past 'member|admin' (Q1 verdict locked the
 // two-role model for v1).
 //
 //   • V-298c 5 endpoints: invites POST/GET + invites/accept + members
 //     GET + members/:id DELETE.
-//   • V-298c framing pinned: routes registered; the auth-path integration
-//     has shipped, and membership grants nothing IMPLICITLY (V-1010)
-//     team membership (V-298d wires it); members can be invited +
-//     accept but the resulting membership doesn't grant permissions
-//     on the owner's resources until V-298d.
+//   • Framing pinned: routes registered, the auth-path integration has
+//     shipped, and membership grants nothing IMPLICITLY — a member acts
+//     on the owner's account only by sending X-Driftstack-Account, and
+//     absent that header acts on their own.
+//
+//     V-1015 — this paragraph described the integration as future work
+//     until V-1010 corrected it, and that correction spliced the new
+//     clause in front of the old one instead of replacing it, leaving a
+//     paragraph that asserted both. The arms below were right the whole
+//     time; only the prose was wrong. Retractions replace, they do not
+//     prepend.
 //   • role enum: 'member' | 'admin' (Q1 two-role model).
 //   • Public-id prefixes: mem_<uuid> + inv_<uuid> + acc_<uuid>.
 //   • V-326c GET /v1/team/owners: read straight from ctx.teams (no DB

@@ -1033,9 +1033,10 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // ── Team RBAC (V-298) ──────────────────────────────────────────────────
-  // Auth path integration is V-298d — until then, accepted members can
-  // sign in but the membership grants no implicit permissions on the
-  // owner's resources. Routes work; permissions are next-slice.
+  // Team membership IS honored on the auth path: a member sends
+  // X-Driftstack-Account: acc_<owner-uuid> to act on the owner's account,
+  // bounded by membership role and required scope. Nothing is granted
+  // implicitly — absent that header a caller acts on their own account.
 
   const TeamMemberSchema = z
     .object({

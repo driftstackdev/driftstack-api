@@ -254,9 +254,10 @@ export interface AppDeps {
   /** V-295e — rolling 30d SLA reporter for /v1/status/sla. */
   slaReportingService?: SlaReportingService;
   /** V-298b/c — Team RBAC v1. When omitted, /v1/team/* routes are not
-   *  registered. Auth path integration (member acts as owner per role)
-   *  is V-298d; until then the routes function but the membership grants
-   *  no implicit permissions on the owner's resources. */
+   *  registered. Team membership IS honored on the auth path: a member acts
+   *  on the owner's account by sending X-Driftstack-Account, bounded by
+   *  membership role and required scope. Nothing is granted implicitly —
+   *  absent that header a caller acts on their own account. */
   teamMembersService?: TeamMembersService;
   rateLimitOverridesService: RateLimitOverridesService;
   legalService: LegalService;
