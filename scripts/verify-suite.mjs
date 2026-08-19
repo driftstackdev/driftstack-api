@@ -55,10 +55,15 @@ export const EXPECTED_TEST_FILES_ALL = 3099;
  * The CI jobs this gate does NOT run, with how to run each locally.
  *
  * Measured 2026-08-18 and RE-RUN 2026-08-19, all green, none of it by this gate:
- * 199 Playwright tests over 29 spec files (enumerated, not executed — they need
- * browsers and a live server), 365 passing Python tests with 4 skipped that want
- * a live base URL and key, and 236 Go tests from an uncached run. The Python
- * figure read 362 until the re-run; the other two were exact.
+ * 199 Playwright tests over 29 spec files, 365 passing Python tests with 4 skipped
+ * that want a live base URL and key, and 236 Go tests from an uncached run. The
+ * Python figure read 362 until the re-run; the other two were exact.
+ *
+ * V-1037 — all three were EXECUTED, including Playwright, which V-1036 claimed
+ * needed browsers and a live server. It needs neither: the config declares no
+ * webServer and no browser project, and each spec boots the app in-process via
+ * `tests/e2e/helpers/server.ts`. Given a migrated throwaway database and a spare
+ * Redis index the whole suite runs in about 45 seconds, all 199 green.
  *
  * V-992 — this used to add that those 29 spec files were the only tests touching
  * `apps/server/src/db/**` against a real Postgres, and therefore that this gate

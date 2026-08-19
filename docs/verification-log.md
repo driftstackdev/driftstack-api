@@ -44178,3 +44178,35 @@ category is honestly labelled as a snapshot.
 
 `it(` count 6 → 7 on the one test file. No new file, no ratchet change. `apps/server/tests/unit`
 green: 1935 files, 20243 passed.
+
+## V-1037 — ran the last excluded job, and retracted a claim I had made one commit earlier
+
+V-1036 executed the Go and Python suites and recorded that Playwright could only be ENUMERATED,
+"because it needs browsers and a live server". That was wrong, and it was mine, written a commit ago.
+
+The config declares no `webServer` and no browser project — these are HTTP tests using Playwright's
+request fixtures — and every spec starts the app in-process through `tests/e2e/helpers/server.ts`.
+Given a throwaway migrated database and a spare Redis index, the whole suite runs in 43 seconds:
+**199 passed, 0 failed.** No browser was downloaded and nothing external was listening.
+
+I asserted the constraint from the shape of the thing (a Playwright suite, therefore browsers) rather
+than reading the twenty-line config that says otherwise. The same reasoning had been available and
+unexamined all session: my own notes already recorded that this repo's e2e is runnable without Docker
+and that its specs rot invisibly BECAUSE nobody runs them. V-1036 repeated the assumption that keeps
+them unrun.
+
+Both files corrected. The claim now standing — that the suite needs neither browsers nor an external
+server — is not left as prose: an arm pins the two config facts it rests on and asserts every spec
+either starts its own server or makes no requests. So if a `webServer` is added, or a browser project,
+or a spec starts depending on something already listening, the sentence fails instead of quietly
+becoming false again.
+
+Mutation: a `webServer` in the config → RED; a browser project → RED; a spec that calls `request.get`
+without starting a server → RED. Config restored byte-identical, probe removed.
+
+All four jobs `verify-suite` excludes have now been executed or accounted for: Playwright 199 green,
+Python 365 green with 4 live-server skips, Go 236 green uncached, and bench, which is a benchmark
+rather than a correctness gate.
+
+`it(` count 7 → 8. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
+20244 passed.

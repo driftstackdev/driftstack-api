@@ -11,8 +11,10 @@
 // 2026-08-18 and re-run 2026-08-19, all green and none of it by this gate: 199
 // Playwright tests over 29 spec files, 365 passing Python tests (4 skipped, each
 // wanting a live server), and 236 Go tests. V-1036 executed the Go and Python
-// suites rather than citing them; Playwright was enumerated, since it needs
-// browsers and a running server.
+// suites rather than citing them and said Playwright could only be enumerated.
+// V-1037 ran it: no browsers and no external server are involved, because the
+// config declares neither a webServer nor a browser project and every spec starts
+// the app in-process. All 199 pass against a throwaway database.
 //
 // V-992 — the paragraph that stood here said the 29 e2e spec files were the only
 // tests exercising `apps/server/src/db/**` against a real Postgres, and concluded
@@ -202,5 +204,34 @@ describe('a gate that does not name its blind spot reads as total', () => {
         `${rel} says ${String(stated?.[1])} Playwright spec files; the tree has ${specs.length}`,
       ).toBe(specs.length);
     }
+  });
+
+  it('CRITICAL the reason the e2e suite needs no browser and no external server is pinned. V-1036 claimed it needed both and V-1037 disproved that by running it, so the claim now in this file rests on two facts about the config — no webServer, no browser project — and on the specs starting the app themselves. If any of those changes, the sentence above stops being true and this fails rather than the next person re-deriving it the hard way.', () => {
+    const config = read('apps/server/playwright.config.ts');
+    expect(config, 'the playwright config declares a webServer now').not.toMatch(/webServer\s*:/);
+    expect(config, 'the playwright config declares browser projects now').not.toMatch(
+      /projects\s*:|browserName\s*:/,
+    );
+
+    const helper = read('apps/server/tests/e2e/helpers/server.ts');
+    expect(helper, 'the e2e helper no longer starts a server in-process').toMatch(
+      /export async function startTestServer|export function startTestServer/,
+    );
+
+    const specs = readdirSync(resolve(REPO_ROOT, 'apps/server/tests/e2e'), {
+      recursive: true,
+      encoding: 'utf8',
+    }).filter((f) => typeof f === 'string' && f.endsWith('.spec.ts'));
+    const external = specs.filter((rel) => {
+      const src = read(`apps/server/tests/e2e/${rel}`);
+      return (
+        /startTestServer/.test(src) === false && /request\.(get|post|put|patch|delete)\(/.test(src)
+      );
+    });
+    expect(
+      external.sort(),
+      'these specs make requests without starting a server, so they depend on something already ' +
+        'listening — the suite is no longer self-contained:',
+    ).toEqual([]);
   });
 });
