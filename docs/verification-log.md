@@ -42511,3 +42511,48 @@ mtime hazard recorded earlier, in its file-addition form: do not add or edit tes
 is in flight, because the failure looks like someone else's.
 
 `npm run typecheck` exit 0. `EXPECTED_TEST_FILES` 2925 → 2926, `_ALL` 3091 → 3092.
+
+## V-997 — the read half: two account-scoped lists proven only against their own doubles (2026-08-19)
+
+`db-repo-account-scoped-reads-boundary` (2026-08-07) is the ownership sweep's second pass and covers
+three reads. These two are the same shape, were not in it, and sit on V-993's cold list:
+
+`auth-flows-repo.listActiveWebSessionsForAccount(accountId, now)`
+`profiles-repo.listTrashed({ accountId })`
+
+**Neither has a second line.** `routes/account-web-sessions.ts` calls the service with
+`ctx.account.id` and maps the rows straight into the response — verified by reading the handler, not
+assumed — so `eq(webSessions.accountId, …)` is the only thing between one customer and every
+customer's active sign-ins: device string, issuing IP, last-used time, one row per live session.
+`listTrashed` is the same pass-through for the recycle-bin listing.
+
+**Both rules are already implemented a second time, by hand, in the doubles the integration tests
+wire.** `_helpers/in-memory-auth-flows-repo.ts` filters with `if (row.accountId !== accountId)
+continue;` and `auth-flows.test.ts` imports it; `_helpers/in-memory-profiles-repo.ts` does the
+equivalent for `listTrashed`. So the rule is proven against a re-implementation of itself while the
+shipped SQL never runs — the third time this arc has found that exact arrangement.
+
+The sibling predicates in the same WHERE are pinned alongside the account one, because a boundary
+test that proves only tenancy leaves them free to drift: `isNull(revokedAt)` and `expiresAt > now`
+decide whether a revoked or expired sign-in is still advertised as active, and `deletedAt` decides
+whether a LIVE profile shows up in the recycle bin. Each arm also asserts the list EXACTLY rather
+than by containment, so a quietly-growing result set fails.
+
+Three mutations, each red by name: the web-session account predicate, the revoked filter, and
+`listTrashed`'s account predicate. The first needed function-scoped targeting — that predicate
+appears four times in `auth-flows-repo.ts` — and the mutation asserts the sliced body contains
+`.from(webSessions)` before editing.
+
+**One measured NON-finding, recorded so the next reader does not chase it.**
+`sessions-repo.listActiveByAccount` is also cold and also account-scoped, and it feeds
+`destroyAllForAccount` on the account-suspension path — which reads like the widest blast radius on
+the list. It is not: `destroySessionSerialized` scopes its own statement to
+`and(eq(sessions.id), eq(sessions.accountId))`, so an unscoped list would enumerate other accounts'
+sessions and then fail to destroy any of them. The predicate there is defence-in-depth with a real
+second line behind it, which is precisely the distinction the 2026-08-07 sweep drew for its own
+three, and it is why this file guards two reads rather than three.
+
+A raw `Date` bind into postgres.js failed the first run ("must be of type string or Buffer") — the
+same trap `ci.yml` records these suites carrying since birth. Timestamps are SQL intervals here.
+
+`npm run typecheck` exit 0. `EXPECTED_TEST_FILES` 2926 → 2927, `_ALL` 3092 → 3093.
