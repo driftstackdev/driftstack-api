@@ -162,7 +162,8 @@ function offenders(pattern: RegExp): string[] {
 describe('V-794 a parity pin may not freeze a claim that expires', () => {
   it('CRITICAL the scan reads real pins and really extracts frozen text. Both ceilings are upper bounds, so a scan that found nothing would satisfy them and report a clean ratchet over an empty set — the failure mode this family of guards keeps producing.', () => {
     const files = parityPinFiles();
-    expect(files.length, 'content-parity pin files found').toBeGreaterThan(500);
+    // V-938 — raised from 500 to just under the measured 869.
+    expect(files.length, 'content-parity pin files found').toBeGreaterThan(800);
 
     const extracted = files.filter((f) => frozenText(readFileSync(f, 'utf8')).length > 0).length;
     expect(extracted, 'files from which frozen text was extracted').toBeGreaterThan(500);

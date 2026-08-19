@@ -166,7 +166,8 @@ describe('operator docs reference HTTP paths the server registers (V-756)', () =
     const registered = registeredPaths();
     // Vacuity guard: if the route-literal extraction breaks, every doc path looks
     // unknown OR the set empties and comparisons go meaningless.
-    expect(registered.size, 'routes extracted from apps/server/src').toBeGreaterThan(150);
+    // V-938 — raised from 150 to just under the measured 213.
+    expect(registered.size, 'routes extracted from apps/server/src').toBeGreaterThan(190);
     expect(registered.has('/version')).toBe(true);
     expect(registered.has('/v1/version')).toBe(false);
 

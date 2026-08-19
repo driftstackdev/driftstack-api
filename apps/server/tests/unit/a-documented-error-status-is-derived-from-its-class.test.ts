@@ -112,7 +112,11 @@ describe('V-814 the documented profile-cap status is derived from its class', ()
     expect(statuses.size, 'ApiError subclasses carrying a literal status').toBeGreaterThan(15);
     expect(statuses.get('TierLimitError'), 'the class the profile cap actually throws').toBe(429);
     expect(statuses.get('ConcurrencyLimitError'), 'the cap ADR-004 contrasted it with').toBe(429);
-    expect(codeFiles().length, 'emitted-code files scanned').toBeGreaterThan(100);
+    // V-938 — raised from 100 to just under the measured 3134 (apps/server/src
+    // plus every package). At 100 this walk could have lost 97% of its corpus
+    // and still reported a green, which makes the arm's own non-vacuity claim
+    // the least reliable thing in the file.
+    expect(codeFiles().length, 'emitted-code files scanned').toBeGreaterThan(2800);
   });
 
   it('CRITICAL the two caps ADR-004 distinguished return the SAME status, so any prose drawing a status contrast between them is wrong by construction. The ADR reasoned that payment-required was right for the profile cap and rate-limit semantics right for the concurrency cap; both classes pass 429 to super, and have since before the ADR was written.', () => {

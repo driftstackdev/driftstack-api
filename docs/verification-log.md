@@ -40170,3 +40170,47 @@ recorded as the weaker of the two claims rather than presented alongside the fir
 
 **No source change, no new file, no ratchet bump.** Three numbers moved, and the reason each moved is
 now written where the number lives.
+
+## V-938 — the harder half of the floor sweep, measured by making each guard report its own number (2026-08-19)
+
+**V-937 covered floors whose actual value a shell command can compute. This covers the ones it cannot** —
+route counts, extracted-expression counts, pin-file counts — where the number comes from the guard's own
+helper.
+
+**Method, chosen because of V-937's own near-miss.** There I nearly compared a guard's flat `readdirSync`
+against a recursive `find`. Replicating a helper is exactly where that error lives, so instead each
+assertion was temporarily rewritten to `.toBe(-1)` and the guard run: the failure message reports the
+real value ("expected 252 to be -1"). The number then comes from the guard's own computation, not from
+my approximation of it.
+
+**Measured:**
+
+| guard                                                    | metric                                 | floor | actual | slack             |
+| -------------------------------------------------------- | -------------------------------------- | ----- | ------ | ----------------- |
+| `a-documented-error-status-is-derived-from-its-class`    | code files (server src + all packages) | 100   | 3134   | **31.3x**         |
+| `a-parity-pin-cannot-freeze-a-claim-that-expires`        | content-parity pin files               | 500   | 869    | 1.7x              |
+| `deployment-docs-env-names-resolve`                      | routes extracted                       | 150   | 213    | 1.4x              |
+| `a-route-in-neither-the-spec-nor-the-docs-is-a-decision` | registered routes                      | 240   | 252    | 1.0x — left alone |
+| `astro-markup-escapes-server-data`                       | markup expressions                     | 140   | 155    | 1.1x — left alone |
+
+**The 31x one is the finding.** Its `CODE_ROOTS` is `['apps/server/src', 'packages']` — 3134 files — and
+the floor stood at 100. The walk could have lost 97% of its corpus and the arm would still have declared
+itself non-vacuous, which makes the guard's own claim about itself the least reliable statement in the
+file.
+
+**Raised to 2800, 800 and 190.** Two were left alone: a floor already inside 10% of actual is doing its
+job, and tightening it further only invites a false red on ordinary churn.
+
+**Isolated proof for the big one.** Shrinking `codeFiles()` to 500 entries — an 84% corpus loss — fails
+the raised floor ("expected 500 to be greater than 2800"). With the OLD floor of 100 the same loss passes
+with all four arms green. The other two raises are tightenings without an isolated proof, and are
+recorded as such rather than bundled into the claim.
+
+**One probe failed and is worth noting**: the perl substitution for the deployment guard choked on the
+`/` inside its assertion message (`'routes extracted from apps/server/src'`), which produced no number
+rather than a wrong one — a loud failure, so it cost a retry instead of a bad figure. Re-run through a
+Python replacement.
+
+**No source change, no new file, no ratchet bump.** Combined with V-937, six floors have now been
+measured against their corpora and five moved; the two tight ones are recorded as verified rather than
+unchecked.
