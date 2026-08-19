@@ -31,14 +31,28 @@
 // good documentation as written, so the docs are not reshaped to suit a parser.
 // Coverage stays where attribution is sound.
 //
-// READ THE COVERAGE BEFORE TRUSTING A GREEN HERE. Only examples introduced by
-// the literal `Response (\`NNN\`):` marker can be tied to an endpoint, and only
-// 4 of the 26 API doc pages use that marker at all — 9 examples in total. So
-// this checks a real invariant on a SMALL slice, and a page that documents its
-// responses some other way is invisible to it. That is a limitation to fix by
-// adopting the marker, not by loosening the matcher: a fuzzy "find the nearest
-// json block" version of this reported 59 mismatches, and every single one was
-// a request body compared against a response schema or an unresolved $ref.
+// READ THE COVERAGE BEFORE TRUSTING A GREEN HERE. Only examples introduced by a
+// `Response (NNN):` marker can be tied to an endpoint, so a page that documents
+// its responses some other way is invisible to this guard. That is a limitation
+// to fix by adopting the marker, not by loosening the matcher: a fuzzy "find the
+// nearest json block" version of this reported 59 mismatches, and every single
+// one was a request body compared against a response schema or an unresolved
+// $ref.
+//
+// V-936 — the numbers in this paragraph were stale and understated the guard by
+// roughly 4x. They described the era when the regex required the status in
+// backticks; accepting the bare spelling too (see the comment on the pattern
+// below) widened the corpus, and nobody revisited the figure. MEASURED today:
+//
+//   44  labelled response examples in the docs tree
+//   31  compared against a resolved response schema
+//    9  skipped because the endpoint key finds no schema — all colon-style
+//       templated paths or the mfa.md/login attribution case described above
+//    4  skipped as unparseable, and correctly so: they are illustrative
+//       pseudo-JSON carrying `/* same shape as the list entry */`, a `//`
+//       comment, or `...` inside `recovery_codes`. Those are good documentation
+//       devices, not defects — do not "fix" them into strict JSON to raise a
+//       count.
 //
 // Direction is deliberate: a doc key the spec does not define is a defect (the
 // docs promise a field the API never sends). The reverse — a spec field absent
@@ -261,10 +275,13 @@ describe('customer doc response examples match the published contract', () => {
   it('CRITICAL the scan still resolves refs and still finds examples to compare. The assertion below reports an ABSENCE, so a matcher that stopped matching anything would satisfy it having compared nothing.', () => {
     const { matched, labelled } = scan();
     expect(Object.keys(spec.paths ?? {}).length, 'spec paths loaded').toBeGreaterThan(20);
-    expect(labelled, 'labelled response examples found in the docs').toBeGreaterThanOrEqual(10);
-    // 9 of the 10 labelled examples tie to a spec schema today. Pinned so the
-    // coverage cannot quietly fall to zero and keep reporting success.
-    expect(matched, 'examples actually compared against a schema').toBeGreaterThanOrEqual(9);
+    // V-936 — floors raised from 10/9 to just under the measured 44/31. The old
+    // numbers were set when the matcher saw only the backticked marker spelling
+    // and were never revisited, so coverage could have fallen from 31 comparisons
+    // to 9 and still reported success — the exact "quietly fall" failure the
+    // floor exists to prevent, four fifths of the way to happening.
+    expect(labelled, 'labelled response examples found in the docs').toBeGreaterThanOrEqual(40);
+    expect(matched, 'examples actually compared against a schema').toBeGreaterThanOrEqual(28);
 
     // Ref resolution is what makes the comparison meaningful; without it a
     // $ref'd schema yields no properties and every key looks undocumented.

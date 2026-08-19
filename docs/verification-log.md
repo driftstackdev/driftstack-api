@@ -40086,3 +40086,44 @@ normalisation fails the coverage arm with the exact figures: "expected 53 to be 
 
 **No ratchet change** — the guard is an existing file, not one I added. Generated Python models
 unaffected: summaries are operation metadata, so regenerating gave a timestamp-only diff.
+
+## V-936 — a guard's stated coverage, and its floor, understated it by 4x (2026-08-19)
+
+**Looked for V-935's shape elsewhere, and prior art closed the obvious lead.** V-935 was a guard
+silently under-covering because two key spaces disagreed (`:id` vs `{id}`). 30 test files skip on a
+lookup miss, so the class could recur — and the best candidate,
+`docs-response-examples-match-the-spec`, turned out to have a header that **already** measured this
+exact limit ("101 of the 129 templated endpoint references in docs use colon style"), **already tried**
+the normalisation I would have written, found it produced two attribution false positives, tried three
+attribution rules, and stopped: "a matcher tuned until it stops complaining is one nobody can trust."
+That avenue is closed, and by a better argument than I would have made.
+
+**But its coverage figures were stale, and the ratchet with them.** The header said "only 4 of the 26
+API doc pages use that marker at all — 9 examples in total", and the arm pinned
+`labelled >= 10, matched >= 9` with the comment "9 of the 10 labelled examples tie to a spec schema
+today". Those describe the era when the regex required the status in BACKTICKS. A later change — its
+own comment records it — widened the pattern to accept the bare `Response (200):`, which the corpus
+uses 27 times against 10 backticked. Nobody revisited the numbers.
+
+**Measured today: 44 labelled, 31 compared.** So the floor sat at roughly a quarter of actual
+coverage: comparisons could have fallen from 31 to 9 and the guard would still have reported success.
+That is precisely the "coverage cannot quietly fall to zero" failure its own comment claims to
+prevent, four fifths of the way to happening.
+
+**The proof is the pair.** Reverting the matcher to backticked-only — a 77% coverage loss — fails the
+raised floors ("expected 10 to be greater than or equal to 40"). The SAME loss with the OLD floors
+passes, all three arms green. The floors were not untidy; they were unable to detect the regression
+they existed for.
+
+**Fixed:** floors raised to 40/28, just under measured, and the header now carries the real breakdown —
+44 labelled, 31 compared, 9 skipped for no schema (all colon-style or the documented attribution case),
+4 skipped as unparseable.
+
+**Those 4 are correctly skipped and now say so.** They are illustrative pseudo-JSON carrying
+`/* same shape as the list entry */`, a `//` comment, and `...` inside `recovery_codes` — good
+documentation devices. The note exists so a future reader chasing the count does not rewrite them into
+strict JSON to make a number go up.
+
+**Nothing else changed.** No source fix, no new file, no ratchet bump: the defect was a measurement
+that had drifted from what the code reads, which is the same class as V-922 and found the same way —
+by measuring rather than believing the comment.
