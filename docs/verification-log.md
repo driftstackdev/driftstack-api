@@ -44575,3 +44575,37 @@ Sources restored byte-identical.
 
 `it(` count 14 → 15. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
 20245 passed.
+
+## V-1048 — one published route can never succeed, and now a second one cannot arrive quietly
+
+V-1047 fixed the prose on `POST /v1/sessions/:id/proxy`: published in the OpenAPI document with a 200,
+handler throwing `FeatureUnavailableError` unconditionally. The obvious next question is how many
+others are in that state. Measuring it took three passes, and the two wrong answers are the finding.
+
+A scan for `FeatureUnavailableError` in a live registrar returns **21**. Nearly all throw
+CONDITIONALLY, when a dependency is missing, which is correct behaviour and not this question.
+
+Requiring the handler to return `never` narrows it to **7** — and six are wrong. `GET /v1/billing`
+and `DELETE /v1/recipes/:id` have ordinary handlers returning data; the `never` belonged to the
+`…DisabledRoutes` stub further down the same file. Per-route segments ran from one registration to
+the NEXT, so the last live route in a file swallows the disabled registrar beneath it. This is the
+segment-overrun V-1025 hit, in a new file.
+
+Bounding each segment at the enclosing `export function` as well gives **1**: the proxy POST
+V-1047 already handled. Nothing else in the surface is permanently unavailable.
+
+I checked two of the seven by hand before believing any of them, which is what surfaced the overrun.
+Reporting the second pass would have claimed six ordinary endpoints — including the billing read the
+dashboard depends on — are permanently broken.
+
+The negative is worth locking in, so the guard lists the one known case with its reason and fails on a
+second. Its first arm asserts the instrument rather than the result: it re-runs the walk and requires
+that `GET /v1/billing` is NOT reported, which is exactly the false positive the boundary rule
+prevents. A guard whose measurement can silently regress by seven-to-one deserves to check its own
+measurement.
+
+Mutation: making `/v1/archetypes` throw unconditionally → RED on the unlisted arm; emptying the list
+while the proxy route still throws → RED. Both restored byte-identical.
+
+Ratchets 2933→2934 and 3099→3100 for the file added. `apps/server/tests/unit` green: 1936 files,
+20248 passed.
