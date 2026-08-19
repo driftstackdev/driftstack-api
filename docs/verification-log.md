@@ -38715,3 +38715,36 @@ it closed.
 
 Mutation-proved both ways: reverting the row fails, and re-padding the whole column does not — the
 V-874 hardening holding on its fifth application.
+
+## V-902 — the status page's outage fallback depended on two files agreeing, with nothing checking
+
+**Chased from V-901.** Bootstrap warns "status-snapshot writer disabled … Status page will fail open
+when API is unreachable" when R2 is unconfigured. That is a claim about behaviour during an outage —
+the one moment a status page matters — so it was worth following.
+
+**The path is real and correct.** The server writes `STATUS_SNAPSHOT_KEY` to R2 on the 60s probe
+poller. `index.astro` tries the live API first, and on rejection loads `R2_FALLBACK_URL`, throwing
+`status-feed-unavailable` only if both fail. It also tracks `source` as `live` or `snapshot` so the
+page can say which it is showing. Good design, correctly ordered.
+
+**And both halves were already pinned, which is exactly what made the gap invisible.**
+`status-snapshot-r2-fallback-cross-source-invariant` pins the server constant.
+`status-site-layout-and-pages-content-parity` pins the frontend URL including its default. Two
+independent pins of the same literal — so changing the server key and updating its own pin leaves
+the frontend pin passing against the stale path. **Each half internally consistent; the system
+broken.** This is the two-arrays-supposed-to-be-identical trap that V-900 found
+`agent-decomposer-deterministic` had solved by exporting one array and importing it. The frontend
+cannot do that: an Astro page in another workspace cannot import a server service.
+
+**Failure mode is the worst available.** The live API is healthy in every environment where anyone
+would look, so a broken fallback is invisible in dev, in CI and in production monitoring. It
+surfaces only during the outage it exists to report, when the page 404s its own data.
+
+**Guard: the frontend's fallback URL must end in the key the server writes**, plus an order arm
+(live before snapshot — reading the snapshot first would serve up-to-60s-stale data on every normal
+request), plus a parse-sanity arm because a suffix comparison against an unparsed empty string is
+vacuous rather than failing.
+
+Mutation-proved on each side independently: changing ONLY the server key fails, changing ONLY the
+frontend URL fails, and inverting the branch order fails. That the two single-sided mutations each
+fail is the whole point — it is the case neither existing pin could catch.
