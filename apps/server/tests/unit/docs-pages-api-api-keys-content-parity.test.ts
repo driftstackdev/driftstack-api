@@ -253,4 +253,15 @@ describe('W762 docs /api/api-keys content parity', () => {
       ),
     ).toBe(true);
   });
+
+  it('V-914 CRITICAL the revoke section states when revocation takes effect. It said nothing until now, while auth-cache.ts claimed customers had been documented a 30s worst case (V-886) — a commitment no page carried. The behaviour is a per-key version gate checked on every cache read, so the honest answer is the next request, and a customer who has just leaked a key needs it.', () => {
+    const page = read(PAGE);
+    expect(page).toMatch(/\*\*When it takes effect\.\*\*/);
+    expect(page).toMatch(/stops authenticating on the next\s*\n?request that presents it/);
+    expect(
+      page,
+      'and the in-flight caveat, so "next request" is not read as "all requests"',
+    ).toMatch(/Requests already in flight when you\s*\n?revoke may finish/);
+    expect(page, 'plus the fail-closed note').toMatch(/never delayed by a cache failure/);
+  });
 });

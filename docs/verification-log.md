@@ -39114,3 +39114,37 @@ Two routes to the same answer is worth more than the correction was on its own.
 **So V-879's conclusion stands, now tested rather than asserted.** The remaining rows turn on what
 their author counted as done, the priority list answers a different question, and the door is closed
 properly instead of left ajar. Recorded so it is not re-opened a third time.
+
+## V-914 — publishing the revocation contract, and a vacuous guard the mutation proof caught (2026-08-19)
+
+**P2-002 closed, and it was mine after all.** I had been treating it as a customer-facing commitment
+belonging to whoever owns the public contract. Re-reading it: V-886 established the behaviour from
+source — a revocation INCRs a per-key version counter, `get()` compares it on every read, and a
+Redis error degrades to the authoritative scrypt path. Writing that down is documenting verified
+behaviour, not inventing policy. And the codebase already believed a commitment existed: the
+auth-cache header claimed customers had been told a 30s worst case, which V-886 found no page
+carried.
+
+**`api/api-keys.md` now says when revocation takes effect** — on the next request presenting the
+key, with two qualifications that stop it over-promising: requests already in flight may finish, and
+a cache failure yields a slower request rather than a longer-lived key. "Immediate" would have been
+the wrong word.
+
+**Guarded across the workspace boundary**, the V-902 shape: the promise lives in `apps/docs`, the
+mechanism in `apps/server`, and nothing tied them. Removing the version gate leaves every other test
+green, because a cache is correct for every key that was never revoked.
+
+**The mutation proof caught my guard asserting nothing.** Its first version matched the bare
+expression `currentKeyVersion !== entry.keyVersion` — which also appears in that file's own header
+prose, prose I wrote in V-886. Deleting the comparison from the CODE left the guard passing. Fixed
+by stripping comments before matching and requiring the whole statement, then re-proved two ways:
+deleting the line fails, and commenting it out fails.
+
+**That is the vacuity class V-908 tried and failed to detect statically**, found here by the cheapest
+possible means — mutating the thing the guard claims to protect. A matcher census cannot see it; a
+mutation can, every time. The lesson is not that V-908's instrument needed refining but that it was
+solving a problem the existing discipline already solves.
+
+**One further slip, loud rather than silent:** the parity-pin block I appended referenced `body`,
+which is not in scope in that file — it reads `PAGE` through a helper. `ReferenceError` on the first
+run. That is the failure mode rule 5 contrasts with the stray `);` that reports "no tests" instead.

@@ -165,6 +165,17 @@ Idempotent. Revoking an already-revoked key returns the same `204 No
 Content` response. Revoked keys cannot be reactivated; mint a fresh
 key instead.
 
+**When it takes effect.** A revoked key stops authenticating on the next
+request that presents it — there is no propagation delay to wait out. The
+server keys its credential cache on a per-key version counter that revocation
+increments, and every cache read compares it, so an entry written before the
+revocation is rejected rather than served. Requests already in flight when you
+revoke may finish; anything arriving afterwards is refused.
+
+If the cache is unavailable the server falls back to the authoritative
+credential check, so revocation is never delayed by a cache failure — the
+failure mode is a slower request, not a longer-lived key.
+
 ## Scopes
 
 | Scope                       | Capability                                                                                                                                                                                                                                                              |
