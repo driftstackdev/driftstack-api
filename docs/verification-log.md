@@ -44468,3 +44468,39 @@ receives `tier` but the three mutations above suggest the capacity reaching the 
 elsewhere), and mutate THAT. Without it there is no honest version of this test.
 
 No code change. Suite untouched: 2986 passed | 113 skipped (3099).
+
+## V-1045 — V-1044 deleted a sound test; the mutations had missed, not the assertions
+
+V-1044 wrote a spec asserting that the published per-tier capacity is the one the limiter applies,
+could not break it with three mutations, concluded it detected nothing, and deleted it. That
+conclusion was wrong, and the deletion with it.
+
+`middleware/rate-limit.ts` builds a `consumeInput` in THREE places. V-1044 mutated two:
+
+the `tier` fallback inside the effective-owner helper — a TEST SEAM, reached only when
+`resolvedTier === undefined`, which the comment right above it says the real plugin never leaves
+unset. Dead code for this scenario.
+
+the effective-owner `consumeInput`, which serves the acting-as-owner path, not a plain request.
+
+The third is the `app.rateLimit` DECORATOR, which builds its own input, and that is what an ordinary
+authenticated route uses. Forcing the tier there moves the observed capacity from 6,000 to 60 and reds
+seven of the nine arms. The test was sound the whole time.
+
+**What separated the two readings.** "The mutation did not fire" means either the assertion is weak or
+the mutation missed, and V-1044 took the first without ruling out the second. What ruled it out here
+was replacing the header emission itself with a sentinel — `reply.header('x-ratelimit-limit',
+'424242')` — and watching 424242 arrive. That proves the file is live and edits reach the runtime,
+which turns "nothing changed" from evidence about the test into evidence about the mutation site. It
+cost one probe, and V-1044 should have run it before deleting anything.
+
+The restored file records its own limit, measured: editing a tier's capacity in
+`TIER_RATE_LIMIT_DEFAULTS` moves BOTH sides and every arm stays green. That is the division of labour
+rather than a hole — `published-rate-limit-table-matches-the-code` owns docs-versus-constant, this
+file owns constant-versus-applied, and neither alone covers the path from a published number to a
+customer's bucket.
+
+Mutation: the decorator ignoring the tier → 7 of 9 arms RED; the published constant edited → green,
+by design and stated in the header.
+
+Full e2e: 220 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 34 → 35.
