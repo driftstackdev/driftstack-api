@@ -28,7 +28,7 @@ describe('X-Driftstack-Account team-RBAC header end-to-end', () => {
     expect(res.statusCode).toBeLessThan(500);
   });
 
-  it('X-Driftstack-Account pointing at a non-member account → 403 or 404 (caller is not a team member)', async () => {
+  it('CRITICAL X-Driftstack-Account pointing at a non-member account → 403. V-1043: this asserted only `statusCode < 500`, with no lower bound, so a 200 satisfied it — the arm written to prove the header fails closed would have passed a server that granted the impersonation. Its sibling above carries both bounds; this one lost the lower half. `resolveEffectiveAccount` refuses a non-membership with ForbiddenError, so the exact answer is assertable.', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     // We don't seed a team-member relationship, so any
     // X-Driftstack-Account header that's not the caller's own
@@ -41,7 +41,10 @@ describe('X-Driftstack-Account team-RBAC header end-to-end', () => {
         'x-driftstack-account': 'acc_00000000-0000-4000-8000-000000000002',
       },
     });
-    expect(res.statusCode).toBeLessThan(500);
+    expect(res.statusCode, 'acting as an account you are not a member of').toBe(403);
+    expect(res.json<{ type?: string }>().type, 'the RFC 7807 type for a refusal').toBe(
+      'https://errors.driftstack.dev/forbidden',
+    );
   });
 
   it('X-Driftstack-Account with malformed acc_-prefixed UUID → 4xx (NOT 500)', async () => {

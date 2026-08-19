@@ -44389,3 +44389,38 @@ is what proves the promised problem-type URI is load-bearing rather than decorat
 mutation would have "proved" a spec that checks nothing.
 
 Full e2e: 211 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 33 → 34.
+
+## V-1043 — the impersonation test that would have passed a server granting the impersonation
+
+V-1042 found an assertion weaker than its title on a legal promise, so I swept for that shape: arms
+whose title names a status while the assertion accepts a range. Fourteen matched, and most are honest
+— a title reading "→ 4xx (NOT 500)" backed by a range check is exactly right for a crash guard.
+
+One was not. `team-rbac-x-driftstack-account-end-to-end` has an arm titled "X-Driftstack-Account
+pointing at a non-member account → 403 or 404 (caller is not a team member)", whose own comment says
+the header "must fail-closed". Its only assertion:
+
+    expect(res.statusCode).toBeLessThan(500);
+
+No lower bound. A **200 satisfies it**. The sibling arm directly above, for a non-existent account,
+carries both bounds — this one lost the lower half, and with it the entire property. It is the same
+header this session corrected across nine files: the one that decides which account a request acts
+on.
+
+The server is correct. `resolveEffectiveAccount` refuses a non-membership with `ForbiddenError`, and
+the arm now asserts 403 plus the RFC 7807 type rather than "not a crash".
+
+**The first mutation proved nothing, and noticing that mattered more than the fix.** Replacing the
+membership check with `if (false)` made the request 500, because the code then dereferences an
+undefined membership — so BOTH the old and new assertions failed, and the comparison said nothing. A
+crash is not an impersonation. The realistic bug GRANTS: substituting a fabricated admin membership
+for the missing one returns a clean 200. Under that:
+
+    old assertion  → the non-member arm PASSED (only its sibling caught it)
+    new assertion  → the non-member arm FAILED
+
+That is the isolated comparison the change rests on, and the first mutation would have let me claim
+it without earning it.
+
+`it(` count unchanged (4). No new file, no ratchet change. Integration tree with a real database: 357
+files, 3258 tests, all passing. `apps/server/tests/unit` green: 1935 files, 20244 passed.
