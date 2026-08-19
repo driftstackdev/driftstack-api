@@ -163,6 +163,51 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     if (fx) await fx.cleanup();
   });
 
+  it('CRITICAL a malformed handback or resume body is refused. Coverage showed both refusals executed by no test while their handlers are otherwise exercised. Neither degrades gracefully without the parse: the handler reads `parsed.data` immediately after, so removing the check turns a 400 into a TypeError-500 on a route a customer drives.', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { token_budget: 50_000, mode: 'pair' },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    const id = created.json<{ id: string }>().id;
+
+    // client_id is `z.string().min(1).max(128).optional()` — an empty string and
+    // a non-string both fail, an absent one does not.
+    for (const [label, payload] of [
+      ['an empty client_id', { client_id: '' }],
+      ['an over-long client_id', { client_id: 'x'.repeat(129) }],
+      ['a non-string client_id', { client_id: 42 }],
+    ] as const) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${id}/handback`,
+        headers: { ...auth, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(res.statusCode, `handback rejects ${label}`).toBe(400);
+    }
+
+    // ResumeSessionRequestSchema is `.strict()`, so an unknown key is refused
+    // outright rather than stripped — the property V-976/V-977 turned into an
+    // exemption, asserted here through the route that relies on it.
+    for (const [label, payload] of [
+      ['an empty challenge_id', { challenge_id: '' }],
+      ['an unknown key', { challenge_id: 'abc', mistyped: 1 }],
+    ] as const) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${id}/resume`,
+        headers: { ...auth, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(res.statusCode, `resume rejects ${label}`).toBe(400);
+    }
+  });
+
   it('403 when the key lacks write scope (read-only key)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['read'] });
     const res = await fx.app.inject({

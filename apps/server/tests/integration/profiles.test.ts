@@ -523,6 +523,43 @@ describe('DELETE /v1/profiles/:id', () => {
     expect(ok.statusCode, 'a valid limit is accepted').toBe(200);
   });
 
+  it('CRITICAL a malformed clone body is refused. `name` is ProfileNameSchema.optional() — trimmed, 1..120 — so an empty or over-long name fails while an absent one is the ordinary auto-derived-name path. Coverage showed this refusal executed by no test.', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'source' },
+    });
+    const id = created.json<ProfileResponse>().id;
+
+    for (const [label, payload] of [
+      ['an empty name', { name: '' }],
+      ['a whitespace-only name', { name: '   ' }],
+      ['an over-long name', { name: 'x'.repeat(121) }],
+      ['a non-string name', { name: 7 }],
+    ] as const) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/profiles/${id}/clone`,
+        headers: { ...auth, 'content-type': 'application/json' },
+        payload,
+      });
+      expect(res.statusCode, `clone rejects ${label}`).toBe(400);
+    }
+
+    // The absent-name path still works, so the arm refuses malformed input
+    // rather than the endpoint.
+    const ok = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${id}/clone`,
+      headers: { ...auth, 'content-type': 'application/json' },
+      payload: {},
+    });
+    expect(ok.statusCode, 'an absent name auto-derives a copy name').toBe(200);
+  });
+
   it('204 deletes the profile; subsequent GET returns 404', async () => {
     fx = await buildTestApp();
     const create = await fx.app.inject({

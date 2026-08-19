@@ -41757,3 +41757,29 @@ counts agreeing is a much stronger statement than either alone.
 **Remaining: 292, of which 191 are plain `Error`** — the defensive-invariant class V-962 separated out.
 The typed remainder is 101, and V-974's caveat still governs how it should be read: a cold branch may be a
 second layer proven by a mutation ledger rather than an untested one.
+
+## V-979 — the customer-facing remainder of the cold-validation class
+
+**Three body validations on routes a customer drives, none executed by any test**: `POST /:id/handback`,
+`POST /:id/resume` and `POST /profiles/:id/clone`. Same shape as V-966 and V-975, and the last of this class
+that is customer-facing — what remains after these is admin query validation.
+
+**Proved separately, and the degradations are not the same**, which is the argument for having all three
+rather than one representative:
+
+- **clone** — deleting the refusal gives **500**, not 400. `parsed.data` is undefined and the handler
+  dereferences it.
+- **resume** — **500**, same mechanism.
+- **handback** — **409**. The empty `client_id` flows past the missing parse into the pair-mode state check,
+  which refuses it for an unrelated reason with an unrelated message. Not a crash, but the customer is told
+  their session is in the wrong state when the truth is that their field was empty.
+
+**Each schema's own bounds decide what is malformed, so the arms assert the real boundary rather than a
+guessed one.** `client_id` is `z.string().min(1).max(128).optional()` — empty, over-long and non-string all
+fail while absent does not. `name` is `ProfileNameSchema.optional()`, `.trim().min(1).max(120)`, so a
+whitespace-only name fails after trimming. `ResumeSessionRequestSchema` is `.strict()`, so the unknown-key
+case is asserted through the route that depends on the property V-976 and V-977 spent two entries getting
+right.
+
+**Each arm keeps a positive case** — an absent clone name still auto-derives and answers 200 — so it refuses
+malformed input rather than the endpoint.
