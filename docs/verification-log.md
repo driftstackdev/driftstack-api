@@ -41508,3 +41508,25 @@ vanishing, which a widened regex alone would not achieve.
 guard names it, `account-scoped table(s) with no foreign key and no stated reason: ['leaky_audit']`. The
 guard as it stands at HEAD passes **4 of 4** on the identical schema. Narrowing the discovery regex back
 fails the new equality at `expected 49 to be 52`.
+
+## V-971 — closing V-969's stated remainder: two untested copies of a three-copy rule
+
+**Recorded last entry as a remainder rather than a finding; closed here because the risk is divergence, not
+absence.** `created_before must be strictly greater than created_after` exists three times: the customer
+list route (`billing-crypto-orders.ts:156`, **1 hit**), the admin list (`admin-crypto-orders.ts:240`, **0**)
+and the admin CSV export (`:307`, **0**). The rule was proven once; two copies of it were carried untested.
+
+**Both admin copies now have arms, and each is proved on its own.** Changing the export's `<=` to `<` — the
+likeliest divergence, and the one that keeps an inverted window refused while quietly admitting an empty
+one — fails the new arm by name and leaves the file **29 of 29 green** at HEAD. Deleting the list copy
+outright fails the arm separately. Two mutations, two distinct failures, so neither copy is riding on the
+other's assertion.
+
+**The empty-window case is asserted deliberately.** Equal bounds are the boundary a copy-paste divergence
+lands on: `created_after == created_before` is refused today by `<=`, and a `<` would return an empty page
+instead — which is exactly the silent-empty-result the customer route's comment says the rule was added to
+stop masking ("the empty result was previously silent, which masked common bugs — swapped args, missing tz
+suffix").
+
+**No source change.** All three copies agree today; what was missing was any test that would notice if they
+stopped.

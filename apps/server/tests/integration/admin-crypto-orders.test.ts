@@ -84,6 +84,32 @@ describe('V-666.D GET /v1/admin/crypto-orders — auth + list', () => {
     expect(res.statusCode).toBe(403);
   });
 
+  it('CRITICAL an inverted created_after/created_before window is refused on BOTH admin routes. The rule exists in three copies — the customer list route, the admin list and the admin CSV export — and only the customer one was executed by any test, so a divergence in either admin copy (a `<` for a `<=`, or the operands the wrong way round) would have been invisible. Without the refusal the window silently returns nothing, which is what the customer-route comment says it was added to stop masking.', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    const headers = { authorization: `Bearer ${fx.plaintext}` };
+    const inverted =
+      'created_after=2026-02-01T00:00:00.000Z&created_before=2026-01-01T00:00:00.000Z';
+    const equal = 'created_after=2026-01-01T00:00:00.000Z&created_before=2026-01-01T00:00:00.000Z';
+
+    for (const [label, path] of [
+      ['the admin list', '/v1/admin/crypto-orders'],
+      ['the admin CSV export', '/v1/admin/crypto-orders.csv'],
+    ] as const) {
+      const res = await fx.app.inject({ method: 'GET', url: `${path}?${inverted}`, headers });
+      expect(res.statusCode, `${label} refuses an inverted window`).toBe(400);
+      expect(JSON.stringify(res.json()), `${label} says which bound is wrong`).toContain(
+        'created_before must be strictly greater than created_after',
+      );
+
+      // `<=`, not `<`: an empty window is refused too, which is the boundary a
+      // divergence between the three copies would most plausibly land on.
+      const eq = await fx.app.inject({ method: 'GET', url: `${path}?${equal}`, headers });
+      expect(eq.statusCode, `${label} refuses an empty window as well`).toBe(400);
+    }
+  });
+
   it('200 + ordered newest-first when called by an internal-admin key', async () => {
     fx = await buildTestApp({
       scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
