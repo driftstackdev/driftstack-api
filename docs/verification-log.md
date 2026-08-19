@@ -38890,3 +38890,36 @@ commit, against one corrected comment. The prior-art grep would have taken one c
 second time this rule has been broken after being written down, and the lesson is not "check
 harder" — it is that a filename search for the invariant, not the defect, is the cheap step: I was
 looking for undocumented env vars and never asked whether anyone had already looked.
+
+## V-907 — self-audit after V-906: no other duplicates, and the prior-art rule made concrete (2026-08-18)
+
+**V-906 retracted a finding and deleted a guard that duplicated existing work. The obvious next
+question is whether the other seven guards added this session did the same.** They did not.
+
+For each, I took the files it reads and asked which OTHER tests read the same subject. Two overlaps,
+both benign. `the-status-page-outage-fallback-is-one-path` shares `index.astro` with
+`status-site-layout-and-pages-content-parity`, which pins the URL literal — a different invariant
+from "the frontend URL ends in the key the server writes", and the distinction V-902 was written to
+exploit. `a-verification-log-number-resolves-to-one-finding` shares the log with my own V-872 guard,
+which reads it for the latest entry number and asserts nothing about uniqueness. **V-905 was a lapse,
+not a pattern.**
+
+**And the rule that would have caught it, refined until it actually works.** "Grep prior art first"
+is what I had written down and broken twice, because as stated it is unusable: the subject noun is
+too coarse. `grep webhook` returns **103** test files, `grep status` returns 48, `grep env` returns 13. Nobody reads 103 filenames before writing a test, which is precisely why the rule kept losing to
+the temptation to just start.
+
+The version that works is to grep the **invariant phrase**, not the subject:
+
+- `env-var` → **2** files, one of them `every-env-var-the-server-reads-is-documented` — V-905 dead
+  on arrival
+- `is-documented` → 2 files, the general shape of "X is documented" guards
+- `fallback` → 3 files, including the R2 snapshot guard V-902 needed to know about
+- `admin-surface|internal-admin` → 1
+
+Two to three results is a readable answer; 103 is a reason to skip the step. **A rule that is
+expensive to follow is a rule that gets broken, and the fix was not more discipline but a cheaper
+query.** Recorded in that form because "check prior art" has now failed twice as an instruction and
+should stop being written as one.
+
+No source change. Seven guards audited, zero duplicates, one rule made usable.
