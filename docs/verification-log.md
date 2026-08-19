@@ -41824,3 +41824,30 @@ when they do_. Anyone sizing the remaining risk from V-962's table should use th
 **Method note.** The classifier that produced the table is a pattern match, and its "OTHER" bucket is
 exactly where a pattern match stops being evidence — so every one of the 66 was read, and the three that
 looked like a customer-visible 500 were traced to their catch and their coverage before being cleared.
+
+## V-981 — six admin list routes whose page-query refusal no test executed
+
+**The last actionable group off V-962's list.** Every admin list parses a `List…QuerySchema` and refuses a
+bad page request; coverage at HEAD shows **all six refusals at 0 hits** while the handlers around them are
+exercised by their own suites — the sixth appearance of the shape where a file reads as covered because the
+surrounding code runs.
+
+**One table-driven guard rather than six arms in six files**, since the routes agree on the property under
+test: each floors `limit` at 1 and coerces it from a string. Deleting the refusal in `admin-accounts`,
+`admin-sessions` or `admin-status-subscribers` each fails the arm, so no route rides on another's assertion.
+
+**The derivation arm earned its place before the file was ever committed.** I wrote the table with four
+routes from the BadRequestError candidates. The arm that derives the list from route sources found **six** —
+`/v1/admin/incidents` and `/v1/admin/status-subscribers` parse a page query too, from schemas I had not
+looked at. A hand-written table of four would have shipped covering two-thirds of the surface it claims.
+
+**And the two extras were not interchangeable, which changed the probes.** Four routes share
+`limit: min(1).max(100)` with a 512-char `cursor`; `/v1/admin/incidents` matches; but
+`/v1/admin/status-subscribers` caps at **200** and declares no `cursor` at all. The original table asserted
+`limit=101` is refused — true on five routes, **false on the sixth**, where 101 is a legitimate request.
+Pinning it would have frozen a bound that route does not have. The shared probes are now only the two every
+schema refuses, a zero and a non-number, with the cap deliberately absent and the reason stated at the
+constant.
+
+**Both halves asserted:** a malformed page request is refused on all six, and a well-formed one is still
+served on all six — without which the first arm is satisfied by a route that refuses everything.
