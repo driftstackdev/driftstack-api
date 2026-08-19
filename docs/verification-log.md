@@ -42861,3 +42861,55 @@ under another name** (here). Reading a coverage zero as a gap without asking whi
 wrong more often than right.
 
 No code change.
+
+## V-1005 — a pinned four-layer security claim with no implementation (2026-08-19)
+
+Sweep action 25 is marked `⚠ DECISION REQUIRED` — implement the session-proxy route or delete it — but
+its comment half is engineering, and half of THAT was already done. Commit `d7a5c103b` (2026-08-18)
+corrected the 503 story at the top of the file: "the 503 a customer sees is NOT a
+deployment-configuration state… an operator who reads the comments below as written goes hunting
+through env vars for a backend that is already there."
+
+**The correction reached the header and not the block below it, which is the pinned one.** Forty lines
+down, the SECURITY comment still read:
+
+> The service layer is responsible for: storing on tmpfs only for the session lifetime · AES-256-GCM
+> at-rest envelope · hashing the config for the audit log (never raw) · zeroing on session-end. This
+> route layer ONLY validates the shape + dispatches to the service.
+
+**None of the four exists.** `services/proxy-backends/` holds one file, and grepping it for `tmpfs`,
+`aes-256-gcm`, any hashing, or any zeroing returns nothing on all four. And the route does not
+dispatch: `_service` is destructured and never called — which the file's own header now says, two
+paragraphs above a block claiming the opposite. The header and the block contradicted each other
+inside one file.
+
+**I nearly missed it, in the way this arc keeps documenting.** A line-oriented grep for
+`dispatches to the service` returned NOTHING, because the phrase wraps: `dispatches to the` ends one
+comment line and `service` begins the next. I only found it because the pin's own regex spells the
+wrap out — `dispatches to the\s*\n?\s*\/\/ service` — and the suite was green, which meant the text had
+to still be there. Third time a line-wrapped claim has hidden from the obvious grep; the
+whitespace-normalising pass is the instrument that works.
+
+Corrected to state the four as a REQUIREMENT for the unwired edge rather than a description of what
+runs, with the retraction paraphrased and both retracted claims pinned in the negative. The
+do-not-echo-body contract stays on its own merits: nothing reaches a backend today, but a
+`ValidationError` quoting the body would put a SOCKS5 password or a WireGuard private key into a
+client response and every log aggregator behind it.
+
+**And the guard the sweep asked for and nobody built.** Item 5 of that finding proposed asserting the
+four mechanisms each have a grep-able implementation. Built here as a two-branch arm: while none is
+implemented the block must read as a requirement; the moment one lands, the arm fails and names it, so
+the requirement framing is narrowed rather than left to rot. A pin over prose cannot tell a shipped
+protection from a promised one — that is exactly how this claim outlived its implementation — so the
+wording is now tied to the code. Mutation-proved both ways: reinstating "is responsible for" reds it,
+and adding a tmpfs marker to `proxy-backends/` reds the other branch by name.
+
+**Still the owner's, and untouched:** whether ~100 lines of route that can only return 400/503/404
+should be implemented or deleted. Correcting its comments is explicitly the least valuable of the
+three options in the sweep's own words; it is the one that does not need a decision.
+
+One process slip, self-inflicted and caught by the suite: restoring the route from a snapshot and then
+re-applying only part of the correction left the file half-corrected and the pin red. The snapshot is
+the ORIGINAL, not the fixed version — re-apply the whole edit, not the line the mutation touched.
+
+`it(` 13 → 14. `npm run typecheck` exit 0. No new file, so no ratchet change.

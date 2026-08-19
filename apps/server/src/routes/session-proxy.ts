@@ -34,13 +34,26 @@
 //
 // SECURITY: proxy configs carry customer secrets (SOCKS5 password,
 // OpenVPN .ovpn including embedded private keys, WireGuard private
-// key). The service layer is responsible for:
+// key). When the service edge is wired, the service layer MUST provide:
 //   - Storing on tmpfs only for the session lifetime
 //   - AES-256-GCM at-rest envelope
 //   - Hashing the config for the audit log (never raw)
 //   - Zeroing on session-end
-// This route layer ONLY validates the shape + dispatches to the
-// service; do NOT echo body fields in error responses.
+//
+// V-1005 — those four are a REQUIREMENT, not a description. None of them
+// exists in `services/proxy-backends/` today: grep that directory for
+// tmpfs, aes-256-gcm, a hash of the config, or any zeroing and it returns
+// nothing. The paragraph used to read "the service layer is responsible
+// for", which an implementer reasonably takes as already done. It is the
+// same correction commit d7a5c103b made at the top of this file about the
+// 503 — that one reached the header and not this block, which is pinned.
+//
+// This route layer ONLY validates the shape and then throws; it does not
+// dispatch to the service (`_service` is destructured and never called —
+// see the header). Do NOT echo body fields in error responses: nothing
+// reaches a backend today, but a ValidationError that quoted the body
+// would put a SOCKS5 password or a WireGuard private key into a client
+// response and every log aggregator behind it.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ProxyConfigSchema, SessionEgressConfigSchema } from '@driftstack/api-types';

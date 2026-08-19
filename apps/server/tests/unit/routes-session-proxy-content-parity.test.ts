@@ -113,10 +113,16 @@ describe('routes/session-proxy content parity', () => {
     );
   });
 
-  it("SECURITY framing pinned: 'proxy configs carry customer secrets (SOCKS5 password, OpenVPN .ovpn including embedded private keys, WireGuard private key). The service layer is responsible for: Storing on tmpfs only for the session lifetime + AES-256-GCM at-rest envelope + Hashing the config for the audit log (never raw) + Zeroing on session-end. This route layer ONLY validates the shape + dispatches to the service; do NOT echo body fields in error responses.' — pinned so the 4-layer-protection roster + route-layer-do-not-echo-body contract all stay documented (drift to letting body fields flow into ValidationError detail would leak SOCKS5 passwords / OpenVPN .ovpn / WireGuard private keys into client error responses + likely log aggregators)", () => {
+  it("V-1005 CRITICAL the 4-layer secret protection is pinned as a REQUIREMENT for the unwired service edge, not as a description of what runs. The block used to say the service layer 'is responsible for' tmpfs, an AES-256-GCM envelope, hashing for the audit log and zeroing — and none of the four exists in services/proxy-backends/. That reads to an implementer as already done, which is how a pinned security claim outlives its implementation. The do-not-echo-body contract stays pinned on its own merits: nothing reaches a backend today, but a ValidationError quoting the body would put a SOCKS5 password or WireGuard private key into a client response and its log aggregators.", () => {
     expect(body).toMatch(
-      /\/\/ SECURITY: proxy configs carry customer secrets \(SOCKS5 password,\s*\n?\s*\/\/ OpenVPN \.ovpn including embedded private keys, WireGuard private\s*\n?\s*\/\/ key\)\. The service layer is responsible for:\s*\n?\s*\/\/\s+- Storing on tmpfs only for the session lifetime\s*\n?\s*\/\/\s+- AES-256-GCM at-rest envelope\s*\n?\s*\/\/\s+- Hashing the config for the audit log \(never raw\)\s*\n?\s*\/\/\s+- Zeroing on session-end\s*\n?\s*\/\/ This route layer ONLY validates the shape \+ dispatches to the\s*\n?\s*\/\/ service; do NOT echo body fields in error responses\./,
+      /\/\/ SECURITY: proxy configs carry customer secrets \(SOCKS5 password,\s*\n?\s*\/\/ OpenVPN \.ovpn including embedded private keys, WireGuard private\s*\n?\s*\/\/ key\)\. When the service edge is wired, the service layer MUST provide:\s*\n?\s*\/\/\s+- Storing on tmpfs only for the session lifetime\s*\n?\s*\/\/\s+- AES-256-GCM at-rest envelope\s*\n?\s*\/\/\s+- Hashing the config for the audit log \(never raw\)\s*\n?\s*\/\/\s+- Zeroing on session-end/,
     );
+    // The retracted wording, paraphrased in the negative so it cannot return:
+    // the block must not present those four as something the service layer
+    // already does, nor claim this route dispatches anywhere.
+    expect(body).not.toMatch(/The service layer is responsible for:/);
+    expect(body).not.toMatch(/dispatches to the\s*\n?\s*\/\/ service/);
+    expect(body).toMatch(/Do NOT echo body fields in error responses/);
   });
 
   it("Body-session_id-must-match-URL-id BadRequestError framing pinned: 'Body session_id must match the URL :id (cross-cutting body/URL mismatch).' + parsed.data.session_id !== id branch. Drift to dropping this check would let body+URL diverge and create audit-log mismatches between the URL'd session id and the proxy applied", () => {
@@ -155,5 +161,40 @@ describe('routes/session-proxy content parity', () => {
       /\/\/ Re-export the ProxyConfigSchema for testability — consumers that\s*\n?\s*\/\/ want to validate a proxy body without the SessionEgressConfig\s*\n?\s*\/\/ envelope can use this directly\. Marked here rather than in egress\.ts\s*\n?\s*\/\/ because the schema's location is API-package, not route-package\./,
     );
     expect(body).toMatch(/export \{ ProxyConfigSchema \};/);
+  });
+
+  it('V-1005 CRITICAL each of the four secret-protection mechanisms is EITHER implemented in services/proxy-backends/ OR still written as a requirement. This is the check the sweep asked for and nobody built: the block names tmpfs, an AES-256-GCM envelope, audit-log hashing and zeroing, and that directory holds one file with none of them. A pin over prose cannot tell a shipped protection from a promised one, which is how the claim outlived its implementation for months — so the wording is tied to the code here. When a mechanism lands, this arm goes green on the other branch and the MUST-provide framing can become a description again.', () => {
+    const backendsDir = resolve(REPO_ROOT, 'apps/server/src/services/proxy-backends');
+    const backendSrc = readdirSync(backendsDir)
+      .filter((f) => f.endsWith('.ts'))
+      .map((f) => readFileSync(resolve(backendsDir, f), 'utf8'))
+      .join('\n');
+    expect(
+      backendSrc.length,
+      'the proxy-backends directory read as empty — the walk, not the code',
+    ).toBeGreaterThan(200);
+
+    const mechanisms: ReadonlyArray<readonly [string, RegExp]> = [
+      ['tmpfs storage', /tmpfs/i],
+      ['AES-256-GCM envelope', /aes-256-gcm/i],
+      ['audit-log hashing', /createHash|sha256/i],
+      ['zeroing on session-end', /\.fill\(0\)|zeroiz|zeroing/i],
+    ];
+    const implemented = mechanisms.filter(([, re]) => re.test(backendSrc)).map(([n]) => n);
+
+    if (implemented.length === 0) {
+      // Nothing is implemented, so the comment must not describe them as current.
+      expect(body, 'no mechanism is implemented, so the block must read as a requirement').toMatch(
+        /the service layer MUST provide/,
+      );
+      expect(body).not.toMatch(/The service layer is responsible for:/);
+    } else {
+      // Something landed — say so rather than leaving the requirement framing to rot.
+      expect(
+        implemented,
+        'a mechanism is now implemented in proxy-backends/; update the SECURITY block to describe ' +
+          'what ships and narrow the MUST-provide list to what is still outstanding',
+      ).toEqual([]);
+    }
   });
 });
