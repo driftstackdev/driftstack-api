@@ -254,10 +254,10 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
       /\| Top-level overall status\s+\| SHIPPED \(V-873\) \| V-295/,
     );
     expect(body).toMatch(
-      /\| Auto-polling \(Hetzner cron \+ R2\)\s+\| DEFERRED \| V-295 \| 8\s+\| DPA Annex 3 \(cron worker\)/,
+      /\| Auto-polling \(Hetzner cron \+ R2\)\s+\| DEFERRED\s+\| V-295 \| 8\s+\| DPA Annex 3 \(cron worker\)/,
     );
     expect(body).toMatch(
-      /\| SLA reporting \/ uptime calculations \| DEFERRED \| V-295 \| 6\s+\| ToS \(SLA clause\)/,
+      /\| SLA reporting \/ uptime calculations \| DEFERRED\s+\| V-295 \| 6\s+\| ToS \(SLA clause\)/,
     );
     expect(body).toMatch(
       /### Surface 8 — SDKs \(`packages\/sdk-typescript`, `packages\/sdk-python`, `packages\/sdk-go`\)/,

@@ -37742,3 +37742,27 @@ not accidentally satisfy the freshness requirement. Catalog restored byte-identi
 
 **Remaining: 52 unverified non-SHIPPED rows.** Named rather than implied, so the next pass knows
 where it starts.
+
+**V-874 addendum to V-873 — editing one table cell broke pins on rows I never touched.** The full
+suite went red after V-873. Tree clean, so mine. The failing assertion was on `Auto-polling
+(Hetzner cron + R2)`, a row I did not edit.
+
+**Cause: markdown table realignment.** `SHIPPED (V-873)` is wider than `DEFERRED`, so prettier
+re-padded the whole status column on commit. Two pins encoded that column's padding as a literal
+single space — `\| DEFERRED \| V-295` — and no longer matched. The rows were unchanged in every way
+a reader would care about; only their whitespace moved.
+
+This is the third typography-dependent pin this arc: V-867 was line wrapping, V-871 was a full stop
+versus a comma, and this is column padding. The common error is a pin encoding PRESENTATION as
+though it were content. Fixed by making the two assertions tolerant of the padding (`\s+`) while
+still binding the status and the row's content.
+
+**And a mistake of my own worth recording.** My first fix was a blanket regex over every status cell
+in the pin file. It corrupted the escaping — emitting `\\|` inside the regex literals — and the
+substitution counter reporting **0 replacements** was the tell that it had not done what I read it
+as doing. Restored the file to its committed state and made a precise two-assertion edit instead. A
+sweeping regex over test files is how a pin file silently stops asserting, which is the failure mode
+rule 5 exists for.
+
+Proved three ways: a real status change still fails, a real content change in the same row still
+fails, and pure re-padding now passes — which is the whole point of the change.
