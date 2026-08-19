@@ -37953,3 +37953,37 @@ whole arc has been correcting in other people's documents.
 **What would actually move this forward** is not another pass: it is deciding what "complete" means
 for the partial rows, and splitting the multi-implementation cells so each can carry its own status.
 Both are product calls. Recorded here so the next reader starts from that rather than from row 1.
+
+## V-880 — correcting V-875 and V-879: both SDK rows are uniform, and my measurement was the problem
+
+**V-875 left `Idempotency-key support` and `Streaming responses` uncorrected on the grounds that
+coverage was uneven across the three SDKs. V-879 then built on that, calling multi-implementation
+cells something source verification could not settle. Both were wrong, and for the same reason.**
+
+**Idempotency ships in all three.** Go's `client.go` handles `Idempotency-Key` with retry-safety and
+explicit blank-key semantics ("an empty or whitespace-only Idempotency-Key as ABSENT — it stores no
+dedup"); Python documents the same case-insensitive non-blank rule in `http.py`; TypeScript carries
+it through `http.ts` and `retry.ts`. My V-875 search reported Go as absent because it lacked include
+patterns for `*.go`, so the language I was asking about was the one the search could not see.
+
+**Streaming ships in all three too.** TypeScript and Python set `accept: text/event-stream`
+directly. Go does not — `agent_sessions.go` calls `r.client.doEventStream(ctx, req)`, and the header
+lives inside that helper in `client.go`. Searching for the literal string found the Go SDK's _test_
+file and concluded the implementation was missing, when the implementation had simply factored the
+string out.
+
+**The error, named precisely.** I searched for a STRING where the question was about a CAPABILITY.
+V-878 recorded the same mistake one shape earlier — checking for a page file when the row described
+a capability — and I repeated it a day later against a helper function instead of a filename. An
+abstraction is exactly what makes a literal-string search fail, and a well-factored SDK is the most
+likely place to hit it.
+
+**What this retracts.** V-875's "coverage is partial" for these two rows is withdrawn. V-879's
+second category — rows whose single cell spans several implementations and therefore cannot be
+settled from source — is withdrawn with it: these two cells were settleable, and what stopped me was
+a bad measurement rather than a real ambiguity. V-879's FIRST category stands unchanged: rows
+referenced as "partial" or "mock-only" still turn on what their author counted as done, and that is
+still not a grep.
+
+Both rows corrected with width-preserving cells so the table does not reflow. Staleness note still
+required after the edit, basis line still V-293. **20 of 59 verified; 39 remain.**

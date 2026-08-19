@@ -420,8 +420,8 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 | Webhook signature verifier (TS)            | SHIPPED  | V-NNN | —       | —             |
 | Webhook signature verifier (Python)        | SHIPPED  | V-NNN | —       | —             |
 | Webhook signature verifier (Go)            | SHIPPED  | V-337 | —       | —             |
-| Streaming responses                        | DEFERRED | V-338 | 8       | —             |
-| Idempotency-key support                    | DEFERRED | V-339 | 4       | —             |
+| Streaming responses                        | SHIPPED  | V-338 | —       | —             |
+| Idempotency-key support                    | SHIPPED  | V-339 | —       | —             |
 | Scope-based permission helpers             | DEFERRED | V-340 | 4       | —             |
 | Behavioral preset selectors                | DEFERRED | V-341 | 4       | —             |
 | SOCKS5 / WireGuard / OpenVPN proxy helpers | DEFERRED | V-342 | 6       | privacy       |
