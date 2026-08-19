@@ -48,10 +48,17 @@ describe('V-532.C buildAddToCartRecipe — no variant', () => {
       cartConfirmationSelector: '.mini-cart-drawer',
     });
     const waitSteps = recipe.steps.filter((s) => s.kind === 'wait');
+    // Asserted, not assumed. This was `if (lastWait?.kind === 'wait')`, so with
+    // NO wait steps at all the optional chain went undefined, the branch was
+    // skipped and the arm passed — proven by deleting the wait from both
+    // emitters in navigation.ts, after which this test still went green. The
+    // barrier is what the arm is named for and what the source calls essential:
+    // without it the recipe races between the tap and the next selector.
+    expect(waitSteps.length, 'the recipe emits wait barriers').toBeGreaterThan(0);
     const lastWait = waitSteps[waitSteps.length - 1];
-    if (lastWait?.kind === 'wait') {
-      expect(lastWait.value).toBe('.mini-cart-drawer');
-    }
+    expect(lastWait?.kind, 'the last wait step is a wait').toBe('wait');
+    if (lastWait?.kind !== 'wait') throw new Error('unreachable — asserted above');
+    expect(lastWait.value).toBe('.mini-cart-drawer');
   });
 });
 

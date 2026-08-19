@@ -39329,3 +39329,51 @@ but its gate is LIVE, because `incident.*` genuinely is not subscribable, so the
 The rest are loop-conditionals in `behavioural-simulation`, `recipe-library`, a dashboard landmark
 check and an mTLS gate. Triaged in the next entry rather than assumed guilty: the detector finds a
 shape that CAN be vacuous, and whether it is depends on whether the condition ever holds.
+
+## V-919 — two guards named for the wait barrier that passed with every wait barrier deleted (2026-08-19)
+
+**Triaging V-918's remaining ten.** The detector finds a shape that CAN be vacuous; whether it IS
+depends on whether the condition can go false without something else failing first. Reading each one
+rather than assuming, which mattered — the ten split three ways.
+
+**Genuinely vacuous, and the strongest finding of this arc.** `recipe-library` builds recipes whose
+wait steps are load-bearing; `navigation.ts` says so directly — "the wait barrier is essential for
+any tap that triggers async page state — without it the recipe races between tap and the next step's
+selector becoming present". Two arms are named for that barrier:
+
+- `checkout.test.ts` — "post-tap wait targets the cart-confirmation selector"
+- `forms.test.ts` — "first wait barrier targets the first field selector"
+
+I deleted the wait step from BOTH emitters in `navigation.ts`, so the library produced no wait
+barriers anywhere, and **both arms passed.** The first because `waitSteps[length - 1]` on an empty
+array is `undefined` and `lastWait?.kind === 'wait'` is then false; the second because
+`recipe.steps[1]` was no longer a wait, so its branch was skipped. Each arm is blind to precisely the
+regression its title claims to catch.
+
+**Bounded honestly: the invariant is not unprotected.** Seven sibling arms in the same two files DO
+fail under that mutation — the explicit sequence assertions ("produces navigate + wait + tap + wait +
+capture sequence") catch it. So this is not an unguarded package; it is two arms that advertise
+specific coverage they do not provide, and would be the only thing standing there if the sequence
+arms were ever loosened.
+
+**Fixed** by asserting the precondition instead of branching on it: the recipe emits wait barriers,
+and the step at the named position IS a wait. Re-applying the same mutation now fails both.
+
+**A false positive, and I nearly wrote it up as a third instance.** `forms.test.ts` — "preserves
+field order in the type-step sequence" — wraps its comparison in `if (step.kind === 'type')` where
+`step` comes from `.filter((s) => s.kind === 'type')`. Every element satisfies the condition by
+construction, and an out-of-range index throws a TypeError on `step.kind` rather than skipping. So it
+cannot be vacuous, and the targeted mutation confirms it: with `typeInto` emitting a non-type step,
+the arm fails BOTH before and after my change. I kept the change — it replaces a TypeError with a
+readable assertion and additionally catches surplus type steps, which neither version did — but it
+fixes strictness, not vacuity, and calling it a third instance would have been wrong.
+
+**The wait-removal mutation was also the wrong instrument for that arm**, which is worth recording
+separately: it passed there because deleting wait steps does not change type steps, so passing was
+CORRECT rather than vacuous. A mutation that does not perturb what an arm measures proves nothing
+about it, and reading "passed" as "vacuous" across a batch of arms is how a proof becomes decoration.
+
+**Still open from the ten:** an mTLS gate on the security page whose condition is satisfied by two
+comments and an OpenAPI description string, `incident-policy` whose identical shape is currently LIVE
+because `incident.*` really is not subscribable, a dashboard hamburger check, an SDK async-parity
+allowlist that duplicates its own source list, and two seeded-generator loops. Next.

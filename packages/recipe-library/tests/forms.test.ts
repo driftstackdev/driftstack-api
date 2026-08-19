@@ -97,12 +97,17 @@ describe('V-532.B buildFillFormRecipe', () => {
       successSelector: '.ok',
     });
     const typeSteps = recipe.steps.filter((s) => s.kind === 'type');
+    // One type step per field, asserted before the loop. Previously the body was
+    // wrapped in `if (step.kind === 'type')`, so a step of any other kind — or a
+    // shifted sequence — skipped the comparison and the arm passed having
+    // checked nothing.
+    expect(typeSteps.length, 'one type step per field').toBe(fields.length);
     for (let i = 0; i < fields.length; i += 1) {
       const step = typeSteps[i];
-      if (step.kind === 'type') {
-        expect(step.selector).toBe(fields[i].selector);
-        expect(step.text).toBe(fields[i].value);
-      }
+      expect(step?.kind, `type step ${String(i)} exists`).toBe('type');
+      if (step?.kind !== 'type') throw new Error('unreachable — asserted above');
+      expect(step.selector).toBe(fields[i].selector);
+      expect(step.text).toBe(fields[i].value);
     }
   });
 
@@ -132,9 +137,11 @@ describe('V-532.B buildFillFormRecipe', () => {
       successSelector: '.ok',
     });
     const firstWait = recipe.steps[1];
-    if (firstWait.kind === 'wait') {
-      expect(firstWait.value).toBe('.first-input');
-    }
+    // Asserted, not assumed: `if (firstWait.kind === 'wait')` passed whenever
+    // step 1 was anything else, which is exactly the regression this arm names.
+    expect(firstWait?.kind, 'step 1 is the first wait barrier').toBe('wait');
+    if (firstWait?.kind !== 'wait') throw new Error('unreachable — asserted above');
+    expect(firstWait.value).toBe('.first-input');
   });
 });
 
