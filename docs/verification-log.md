@@ -41626,3 +41626,32 @@ class; and two self-documented type-narrowing defensives in `status-subscribers.
 **19 of the 109 typed candidates retired with reasons.** Recorded rather than left looking unexamined, and
 because the TierLimitError case is the one that would most plausibly have been reported as a finding by
 someone reading the coverage output without opening the test file beside it.
+
+## V-975 — two customer list routes whose pagination validation never ran
+
+**Same shape as V-966, found the same way and nearly missed by my own shortcut.** `GET /v1/profiles` and
+`GET /v1/recipes` each parse `PaginationQuerySchema` and refuse on failure. Both refusals: **0 hits**. The
+`if` guarding each runs **18** and **9** times, so the handlers are heavily exercised and the files read as
+covered while the only check on a caller-supplied `limit` never fires.
+
+**The near-miss is worth recording.** A quick script I wrote to cross-check reported both as covered — 18 and
+9 hits — because it matched the statement STARTING on that line without a column check, and
+`if (!parsed.success) throw new ValidationError(…)` puts both statements on one line. It measured the `if`,
+not the `throw`. That is precisely the mapping error V-962 identified and rejected, reintroduced by me three
+entries later in a throwaway. Only cross-checking against the column-precise tool caught it; had I trusted
+the newer script I would have dropped two real candidates as covered.
+
+**Reachable by any authenticated caller.** `limit` is `z.coerce.number().int().min(1).max(100).default(50)`,
+so `?limit=0`, `?limit=999` and `?limit=abc` each fail the parse, as does an empty `cursor` against
+`.min(1)`. Four malformed queries are asserted per route, plus a well-formed one so the arm proves the parse
+refuses bad input rather than everything.
+
+**Paired proof, per route.** Deleting the refusal in `profiles.ts` fails the new arm and leaves
+`profiles.test.ts` **48 of 48** green; deleting it in `recipes.ts` fails its arm and leaves
+`recipes-routes.test.ts` **25 of 25** green. Each route proved on its own mutation, so neither arm rides on
+the other.
+
+**One detail the fixture forced, and it is a real property of the route.** The recipes arm needs
+`buildTestApp({ enableAgentRuntime: true })`: with the subsystem gated off the request answers 503 from the
+disabled-variant stub before any query is parsed. The bare fixture would have made the arm assert 400 against
+a route that never runs its parse — green for the wrong reason.

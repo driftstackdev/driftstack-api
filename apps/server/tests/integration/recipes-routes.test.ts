@@ -32,6 +32,31 @@ describe('AI-B4 POST /v1/recipes — wired', () => {
     return res.json<{ id: string }>().id;
   }
 
+  it('CRITICAL a malformed pagination query is refused rather than silently coerced. Coverage showed this refusal executed by no test while the `if` guarding it ran 9 times — the surrounding handler is heavily exercised, so the file reads as covered while the only check on a caller-supplied `limit` never fires. `limit` is bounded 1..100 with a default of 50, so a zero, an over-cap value or a non-number each fail the parse.', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    for (const [label, qs] of [
+      ['a limit below the floor', '?limit=0'],
+      ['a limit past the cap', '?limit=999'],
+      ['a non-numeric limit', '?limit=abc'],
+      ['an empty cursor', '?cursor='],
+    ] as const) {
+      const res = await fx.app.inject({
+        method: 'GET',
+        url: `/v1/recipes${qs}`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+      });
+      expect(res.statusCode, `${label} is refused`).toBe(400);
+    }
+    // And a well-formed query is still served, so the arm refuses malformed input
+    // rather than everything.
+    const ok = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/recipes?limit=5',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(ok.statusCode, 'a valid limit is accepted').toBe(200);
+  });
+
   it('happy path: snapshots a fresh agent-session into a recipe, returns intent_count=0 + 201', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const agentSessionId = await createAgentSession();
