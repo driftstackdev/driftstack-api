@@ -11,9 +11,9 @@
 //     wins (driven by accounts.avatar_source enum).
 //
 // This file defines the REPO interfaces + the SERVICE interface. The
-// Drizzle implementation lands in db/oauth-links-repo.ts (next slice);
-// the service implementation lands in services/oauth-client-service.ts
-// (slice after).
+// Drizzle implementation is in db/oauth-links-repo.ts and the service
+// implementation is in services/oauth-client-service.ts. Both shipped;
+// this header described them as later slices until V-1017.
 
 import type { OAuthClientProvider } from '../lib/oauth-client-providers.js';
 

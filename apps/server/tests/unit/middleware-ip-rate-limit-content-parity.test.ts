@@ -207,4 +207,14 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
   it('file exists at canonical path', () => {
     expect(existsSync(MW)).toBe(true);
   });
+
+  it('CRITICAL the oauthProvider bucket is not described as dormant. It was documented as inert pending a Drizzle OAuthStore that bootstrap.ts already constructs, while routes/oauth.ts applies this very bucket per-route — so the comment invited someone tuning limits to drop a brute-force and token-oracle limiter that is carrying live traffic.', () => {
+    expect(body, 'the oauthProvider bucket disappeared').toMatch(/oauthProvider: \{ capacity: 60/);
+    // V-1017 — the retracted wording called the provider dormant pending a store.
+    expect(body, 'the dormant-provider framing is back').not.toMatch(/provider is dormant/i);
+    const routes = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'), 'utf8');
+    expect(routes, 'routes/oauth.ts no longer applies the oauthProvider bucket').toMatch(
+      /AUTH_IP_LIMITS\.oauthProvider/,
+    );
+  });
 });

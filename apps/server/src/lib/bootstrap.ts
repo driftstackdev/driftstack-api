@@ -2088,13 +2088,13 @@ export async function createProductionDeps(
     'https://api.driftstack.dev/v1/webhooks/nowpayments';
 
   // V-541.G — CostMonitoringService wired against the production
-  // defaults from `cost-defaults.ts`. The aggregator is a stub
-  // returning null until V-541.H wires a real usage_records →
-  // UsageInputs aggregator (this would join sessions, usage_records,
-  // and Postmark / OpenAI cost lines). Until then, the admin and
-  // customer cost routes register but always return "no usage in
-  // cycle" — better than 404-routes-missing because the dashboard
-  // can render an empty breakdown rather than a broken nav link.
+  // defaults from `cost-defaults.ts`. V-541.H then replaced the stub
+  // aggregator with a real one over the V-073 usage_records ledger — see
+  // the paragraph below, which describes what actually ships — so the
+  // admin and customer cost routes return measured usage rather than an
+  // empty cycle. The superseded "always returns no usage" wording lived
+  // here for one release because the V-541.H note was ADDED below it
+  // instead of replacing it.
   //
   // Tier resolution leans on the billing repo's getAccount → tier
   // field; this is the same source the existing billingService

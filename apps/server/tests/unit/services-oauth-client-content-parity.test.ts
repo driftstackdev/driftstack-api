@@ -39,9 +39,13 @@ describe('services/oauth-client content parity', () => {
     );
   });
 
-  it("3-slice landing-plan framing pinned: 'This file defines the REPO interfaces + the SERVICE interface. The Drizzle implementation lands in db/oauth-links-repo.ts (next slice); the service implementation lands in services/oauth-client-service.ts (slice after).' — pinned so the interface-vs-impl-split + the db/oauth-links-repo.ts + oauth-client-service.ts file references all stay documented", () => {
+  it('landing-plan framing pinned: both implementations SHIPPED. This header described db/oauth-links-repo.ts and services/oauth-client-service.ts as later slices long after both existed, so a reader planning work would have believed the persistence layer was still to be written. The negative keeps that wording from coming back.', () => {
     expect(body).toMatch(
-      /\/\/ This file defines the REPO interfaces \+ the SERVICE interface\. The\s*\n?\s*\/\/ Drizzle implementation lands in db\/oauth-links-repo\.ts \(next slice\);\s*\n?\s*\/\/ the service implementation lands in services\/oauth-client-service\.ts\s*\n?\s*\/\/ \(slice after\)\./,
+      /\/\/ This file defines the REPO interfaces \+ the SERVICE interface\. The\s*\n?\s*\/\/ Drizzle implementation is in db\/oauth-links-repo\.ts and the service\s*\n?\s*\/\/ implementation is in services\/oauth-client-service\.ts\. Both shipped;/,
+    );
+    // V-1017 — the retracted framing named each file as a future slice.
+    expect(body, 'the deferred landing-plan wording is back').not.toMatch(
+      /\(next slice\)|\(slice after\)/,
     );
   });
 

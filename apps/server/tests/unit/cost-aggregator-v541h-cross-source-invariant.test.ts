@@ -176,4 +176,19 @@ describe('W925 V-541.H cost-aggregator cross-source invariant', () => {
       ),
     ).toBe(true);
   });
+
+  it("CRITICAL bootstrap.ts does not still describe the aggregator as a stub. V-541.H's note was ADDED below the V-541.G paragraph rather than replacing it, so for one release the file said both that the aggregator returns null and that it reads the real ledger — and the routes it claimed 'always return no usage in cycle' were returning measured usage. Two adjacent paragraphs, opposite claims, and this invariant green throughout.", () => {
+    const boot = read(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'));
+    expect(boot, 'the real aggregator is no longer wired').toMatch(
+      /aggregator: new UsageAggregatorFromUsageRepo\(/,
+    );
+    // V-1017 — the retracted paragraph called it a stub returning null.
+    expect(boot, 'bootstrap.ts calls the aggregator a stub again').not.toMatch(
+      /aggregator is a stub\s*\n?\s*\/\/\s*returning null/,
+    );
+    expect(
+      boot,
+      'bootstrap.ts says the cost routes always return an empty cycle again',
+    ).not.toMatch(/always return "no usage in\s*\n?\s*\/\/\s*cycle"/);
+  });
 });

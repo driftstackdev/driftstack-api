@@ -238,9 +238,10 @@ export const AUTH_IP_LIMITS = {
   // throttling while staying generous for a legitimate client server
   // (token/introspect/revoke are CLIENT-SERVER-called → one source IP
   // per client; per-client_id keying is the future enhancement for a
-  // high-volume client). The provider is dormant until V-667.C wires a
-  // Drizzle OAuthStore; this gate ships WITH the routes so the
-  // protection is present the moment the store is wired.
+  // high-volume client). This limit is LIVE, not a gate waiting on a
+  // store: DrizzleOAuthStore is constructed in bootstrap.ts and
+  // routes/oauth.ts applies this bucket per-route. Treating it as inert
+  // is how a real brute-force limit gets tuned away.
   oauthProvider: { capacity: 60, refillPerSecond: 60 / 60 },
   // W484 — the 4 remaining unauth token routes (surfaced §4.12; gated on the
   // TRUST_PROXY fix so per-IP keys on the real client IP — live since W424).

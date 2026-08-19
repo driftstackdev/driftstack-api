@@ -43413,3 +43413,49 @@ now with me as the author.
 
 `it(` count unchanged on the repaired file (13). Ratchets 2930→2931 and 3096→3097 for the guard.
 `apps/server/tests/unit` green: 1933 files, 20224 tests.
+
+## V-1017 — three more shipped-but-documented-as-pending claims, found by generalizing V-1016
+
+V-1016 closed one sentence that outlived its slice. The obvious question is how many others do, so I
+swept shipped source for deferred-promise shapes — "is V-NNN", "until V-NNN", "not yet", "next
+slice", "will be wired", TODO. 53 raw hits, most of them legitimate: `V-541.I/J/K` meters really are
+unbuilt, and the Go SDK's "ReplayDelivery is V-307" names the slice that ADDED it, not one that
+will. The `webhooks.astro` "counts coming soon" hit is a retraction record saying that framing is
+obsolete — the pattern matching its own correction, which is the collision this sweep keeps hitting.
+
+Three were real, and all three had a green guard sitting next to them:
+
+`lib/bootstrap.ts:2090` — "The aggregator is a stub returning null until V-541.H wires a real
+usage_records → UsageInputs aggregator … the admin and customer cost routes register but always
+return 'no usage in cycle'". Directly BELOW it sits the V-541.H paragraph describing the real
+aggregator, and the code wires `UsageAggregatorFromUsageRepo`. Two adjacent paragraphs asserting
+opposite things, because V-541.H's note was added under the old one instead of replacing it.
+`cost-aggregator-v541h-cross-source-invariant` pins the real aggregator and stayed green.
+
+`middleware/ip-rate-limit.ts:241` — "The provider is dormant until V-667.C wires a Drizzle
+OAuthStore; this gate ships WITH the routes so the protection is present the moment the store is
+wired." `DrizzleOAuthStore` is constructed at `bootstrap.ts:454`, and `routes/oauth.ts` applies
+`AUTH_IP_LIMITS.oauthProvider` per-route. The bucket is carrying live traffic. This is the one
+with teeth: the comment invites whoever next tunes limits to drop a brute-force and token-oracle
+limiter on the grounds that it protects nothing.
+
+`services/oauth-client.ts:14` — names `db/oauth-links-repo.ts` as "(next slice)" and
+`services/oauth-client-service.ts` as "(slice after)". Both files exist.
+
+Each correction carries a per-occurrence negative in an existing guard rather than a new file:
+the cost one into `cost-aggregator-v541h-cross-source-invariant`, the limiter one into
+`middleware-ip-rate-limit-content-parity` (which also now asserts `routes/oauth.ts` still applies
+the bucket, so the claim stays derived), and the OAuth one into its own content-parity pin.
+Mutation: restoring each retracted paragraph reds its arm; unwiring the real aggregator reds the
+positive. Control 37/37.
+
+**V-794 caught me.** The unit tree came back 2 red: `a-parity-pin-cannot-freeze-a-claim-that-expires`
+counts pin files whose frozen text contains a future-tense promise, ceiling 75, may only fall — and
+my new arm made it 76. Not the assertion: `frozenText` reads `it()` TITLES too, and my title said the
+negative keeps "the deferred wording" from coming back. The word alone was enough. The guard cannot
+tell a description of a retraction from the promise itself, which is the same limitation V-923 is
+about, so the honest fix was to reword my title rather than widen the matcher or raise a ceiling that
+is documented as one-way. Rewritten, and back to 75.
+
+`it(` counts +1 on the two files gaining an arm (16, 21), unchanged on the third (11). No new files,
+no ratchet change. `apps/server/tests/unit` green: 20226 passed.
