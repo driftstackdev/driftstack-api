@@ -41162,3 +41162,41 @@ the route-local `StartBodySchema`, and removing the `refineCovers` entry that ex
 should have been file-scoped, an array-vs-string `toContain`, and a symbol-name scan that could not see
 coverage through a caller. The pattern is consistent: every one asserted at the level of names or fixtures
 where the property lives at the level of behaviour. The mutation caught all four; nothing else would have.
+
+## V-961 — four admin routes drop the audit reason for suspending or deleting an account
+
+**V-960's criterion, pointed at the exemptions instead of the anonymous surface.** A schema can only drop a
+field in silence if it has a field it will do without. Measured across the 23 body-parsing schemas on the
+exempt surfaces — `admin-*`, the two staff files, `status-subscribe`: **8 cannot drop anything, 15 can.**
+
+**The one whose stated reason was already known to be wrong turns out to be right anyway.**
+`status-subscribe` is exempted on the disclosure argument V-951 measured and found unsound — the shapes are
+published, so echoing a key back tells a prober nothing. Its `SubscribeBodySchema` has no optional field, so
+nothing can be dropped and the exemption holds on a reason nobody had written down. Correct conclusion,
+wrong premise; the right premise is now the one under test.
+
+**The `admin-*` reason does not cover what four of these routes actually drop.** It reads: "a mistyped field
+there is a mis-typed admin action, not a customer's resource silently configured as something they did not
+ask for." That is about who is inconvenienced. What `ChangeTier`, `Suspend`, `Unsuspend` and the GDPR
+Article 17 `Delete` schemas drop is `reason: z.string().max(500).optional()`, documented in api-types as
+"recorded in the audit row" — and each route writes `{ ...(body.reason ? { reason: body.reason } : {}) }`,
+verified at all four sites. So a mistyped `resaon` completes a tier change, a suspension or an account
+deletion, writes an audit row carrying **no reason**, and answers 200. The operator is inconvenienced, which
+is the rationale's point. The audit trail is left incomplete, which is not.
+
+**Reachable by a real caller, checked rather than assumed.** The admin panel prompts for a reason and sends
+it only `if (reason.trim())`, so an operator who dismisses the prompt produces the same reasonless row —
+while the panel's own account page tells them "All actions audit-logged with admin id + reason."
+
+**Behaviour unchanged; the exemption stops being inherited.** The droppable set is pinned, so an admin schema
+that gains an optional field joins a list somebody has to look at rather than sliding under a blanket
+written for a different concern. Four proofs fire: a new optional field on a listed-as-safe admin schema, an
+audit reason becoming required, `status-subscribe` gaining an optional field, and the audit omission
+changing at a single site.
+
+**That last proof is the one worth recording.** The arm first asserted the omission expression appeared in
+`admin-accounts.ts` — which the file satisfies from an unrelated route, so replacing it at all four sites
+that matter left the arm **green**. That is §5h of the readiness assessment exactly: a text pin matching more
+than once asserts the block exists somewhere, not that it still guards the site it was written for.
+Rewritten to slice each `withAudit(request, '<action>', …)` call and assert within it; mutating one site now
+fails by name. **Fifth instrument failure of this session, and again only the mutation found it.**
