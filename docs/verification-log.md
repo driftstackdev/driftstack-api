@@ -44609,3 +44609,41 @@ while the proxy route still throws → RED. Both restored byte-identical.
 
 Ratchets 2933→2934 and 3099→3100 for the file added. `apps/server/tests/unit` green: 1936 files,
 20248 passed.
+
+## V-1049 — the audit-archiver decision cuts both ways, and only one way was written down
+
+Two verifications first. The segment-overrun that produced V-1048's false 7 does NOT affect the guards
+I shipped in V-1022 and V-1023: re-running their classification with and without a function bound
+gives the same 212 gated / 34 open, because their options slice already stops at the handler marker
+before it can cross into a disabled registrar. Checked rather than assumed, since three of my own
+scans had the bug.
+
+Then the standing D-7 decision, framed in the sweep as "wire the audit archiver or amend the privacy
+policy". Rule 1 applies to decision framings too, and this one is only half right.
+
+`tick-services-are-wired-invariant` already records the unwired cost: the policy says session
+metadata is "90 days operational" and nothing enforces it, so those five tables have no retention
+bound. True.
+
+The other direction was written down nowhere. The same policy tells data subjects, under GDPR
+Article 20, that the self-service export "contains the calling account's full audit history" and that
+"older entries [are] available via paginated read". The archiver DELETEs rows past 90 days after
+uploading them to R2 — and nothing outside the archiver reads that archive. `auditArchive` /
+`audit_archive` appear only in `schema.ts`, `audit-archive-repo.ts`, the migrations and the archiver
+service itself; neither `db/account-audit-repo.ts` nor `services/account-audit.ts` mentions them.
+
+So wiring the archiver AS IT STANDS would make a GDPR portability statement false. Unwired breaks the
+retention line; wired breaks the portability line. The decision is which of the two to fix, and both
+halves are now in the entry rather than one.
+
+The arm pins the dependency rather than the state: if `AuditArchiveService` is ever constructed, the
+audit read path must reference the archive. Today the service is unwired and the arm asserts THAT
+too, so the branch cannot be skipped by the service quietly appearing. Mutation: constructing it in
+bootstrap without touching the read path → RED; the read path referencing the archive while the
+service stays unwired → RED, because the recorded state has moved.
+
+Note for whoever takes the decision: the fix that satisfies both lines is a read-path union, not a
+choice between them.
+
+`it(` count 5 → 6. No new file, no ratchet change. `apps/server/tests/unit` green: 1936 files,
+20249 passed.

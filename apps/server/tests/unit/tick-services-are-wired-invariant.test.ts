@@ -49,7 +49,15 @@ const NOT_WIRED_PENDING_DECISION: Record<string, string> = {
     'rows — it has never run, so those tables have no retention bound and the ' +
     'privacy-policy line about session metadata being 90-day operational has no ' +
     'mechanism behind it. Turning it on deletes production rows after an R2 upload, ' +
-    'which is a data-movement decision rather than a wiring fix.',
+    'which is a data-movement decision rather than a wiring fix. V-1049 — and the ' +
+    'decision cuts BOTH ways: the policy also tells data subjects, under GDPR ' +
+    'Article 20, that the audit-log export carries their full audit history with ' +
+    'older entries available via paginated read. No read path unions the archive ' +
+    '(only the archiver own repo, the schema and the migrations reference it), so ' +
+    'wiring this as it stands moves rows past 90 days into R2 where nothing serves ' +
+    'them. Unwired breaks the retention line; wired breaks the portability line ' +
+    'unless the read path learns to union the archive first. The arm below pins that ' +
+    'dependency.',
   DurableWebhookDeliveryService:
     'The V-173 FORWARD path for webhook delivery. Its own header describes replacing ' +
     'the live service as "a separate future V-NNN once V-173 has soak time", so being ' +
@@ -185,5 +193,36 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
       'these services are listed above as deliberately NOT wired, yet their own source describes a ' +
         'schedule as if it happens — the file a reader opens first is the one that misleads:',
     ).toEqual([]);
+  });
+
+  it('CRITICAL if the audit archiver is ever wired, the audit READ path must union the archive. The privacy policy tells data subjects their audit-log export carries their FULL history and that older entries remain available via paginated read (GDPR Article 20). The archiver DELETEs rows past 90 days after uploading them to R2, and today nothing outside the archiver reads that archive — so turning it on silently makes the portability statement false. This is not a reason to leave it off; it is a reason for the two changes to land together.', () => {
+    const readRel = (rel: string): string => readFileSync(resolve(SRC, rel), 'utf8');
+    const bootstrap = readRel('lib/bootstrap.ts');
+    const app = readRel('lib/app.ts');
+    const wired =
+      /new AuditArchiveService\(/.test(bootstrap) || /new AuditArchiveService\(/.test(app);
+
+    const readPaths = ['db/account-audit-repo.ts', 'services/account-audit.ts']
+      .map((rel) => readRel(rel))
+      .join('\n');
+    const unionsArchive = /auditArchive|audit_archive/.test(readPaths);
+
+    if (!wired) {
+      // The state this file records. Asserted rather than assumed, so the branch
+      // below cannot be skipped by the service quietly appearing.
+      expect(
+        unionsArchive,
+        'the audit read path now references the archive — good, and the entry above plus this arm ' +
+          'should be rewritten to match',
+      ).toBe(false);
+      return;
+    }
+
+    expect(
+      unionsArchive,
+      'AuditArchiveService is wired but no audit read path unions the archive, so entries older ' +
+        'than 90 days are deleted from Postgres and served by nothing — the privacy policy still ' +
+        'promises the export carries the full audit history',
+    ).toBe(true);
   });
 });
