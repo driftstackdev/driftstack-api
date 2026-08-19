@@ -44859,3 +44859,43 @@ deleting the plain-Error gap fails session-egress's; deleting the PROBLEM_TYPES 
 fails socks5's. 4/4, restored byte-identical from a snapshot of the corrected files.
 
 `it(` counts unchanged, 11 and 14, matching HEAD.
+
+## V-1055 — is SocksProxyBackend the only service nobody calls?
+
+V-1054 left an obvious question unasked: it found one constructed-but-uncalled service
+by accident, while chasing a problem-type URI. Whether there were others was a
+different question, and cheap to answer.
+
+MEASURED: bootstrap performs 105 `const x = new Y(` constructions. For each, taking
+the class's own file, its public method names, and asking whether `.name(` appears in
+any other server source file — exactly one class has no caller for any method:
+`SocksProxyBackend`, the one already known. So the answer is no, and the negative is
+worth as much as a finding would have been: the wiring is otherwise complete, and the
+single gap is a recorded planning-133 decision rather than a pattern.
+
+A constructed-but-uncalled service is worth guarding because it reads as shipped from
+every angle that is cheap to check. It is in bootstrap, its own unit tests pass, it
+type-checks against its interface, its dependencies resolve. Nothing about it looks
+pending — which is precisely how two comments came to describe a customer-facing 4xx
+that no request could reach.
+
+The detector is deliberately crude: a text search for `.name(`. That is stated in the
+file rather than hidden, and the first arm self-tests both directions against
+`WebhooksService` as a known-called control. The failure it guards against is coarse —
+not "is this reachable on every path" but "did anyone wire this at all" — so crude is
+the right register.
+
+One design point came out of the mutations. Making `session-proxy.ts` actually call
+`applyToSession` turned the detector's output empty, which failed the instrument arm
+with "the detector reported nothing at all" — a misleading message for what is good
+news. That arm now names both readings, because a green suite should not be the thing
+that tells someone their fix looks like a break. Retiring the file is the correct
+response to an empty set, and the message says so.
+
+Mutations: emptying the list fails the unlisted arm; adding a wired service to the
+list fails the stale arm; wiring the real service in `routes/session-proxy.ts` fails
+the stale arm and the instrument arm together. Restored byte-identical.
+
+`it(` count 3 in a new file. Ratchets 2936→2937 and 3102→3103.
+
+Full suite before this entry: 2989 passed | 113 skipped (3102 files), 30102 tests.
