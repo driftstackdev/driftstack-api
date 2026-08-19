@@ -41335,3 +41335,33 @@ detection that took me three attempts and was wrong twice in ways that looked li
 built on it would be a false-red machine, which is the V-954 judgement applied to a different heuristic:
 the check is only worth having if it is more reliable than the thing it watches. This one would not be.
 Recorded so the next reader knows the mechanism was checked and found complete, rather than not looked at.
+
+## V-966 — the public status feed's only input validation was executed by no test
+
+**Found by ranking V-962's list for the V-963 shape**: an uncovered throw with a COVERED throw beside it, so
+its removal falls onto an already-exercised path and the file reads as guarded. 77 candidates ranked that
+way; the tightest pair is two lines apart in `admin-incidents.ts`.
+
+**`GET /v1/status/incidents` — public, no auth, consumed by the status page.** Line 441 is
+`if (!parsed.success) throw new ValidationError(parsed.error.flatten())`, **0 hits**. Line 443, the
+cursor/state rejection immediately below it, is covered. So the handler looks exercised while the only thing
+validating a stranger's input does not run.
+
+**Reachable by anyone.** `ListIncidentsQuerySchema` closes `window` to `z.enum(['30d','90d'])`, bounds
+`limit` to 1–100 and requires `since` to be ISO-8601. `?window=bogus`, `?limit=999`, `?limit=0` and
+`?since=not-a-date` each fail the parse. This endpoint takes no credential, so the query string is the only
+thing an anonymous caller controls, and it was the one input nothing tested.
+
+**Removing the parse does not degrade to a 400 — it degrades to a 500.** The proof reports
+`expected 500 to be 400`: without the refusal, `parsed.data` is undefined and the handler throws a
+TypeError downstream. So the guard is not stylistic; it is what stands between a malformed query string and
+an unhandled error on a public endpoint.
+
+**Paired proof.** With the new arms the deletion fails by name. Against `admin-incidents.test.ts` **as it
+stands at HEAD** the same deletion is invisible: 26 passed. Four malformed queries are asserted, plus a
+well-formed one, so the arm proves the parse refuses malformed input rather than everything.
+
+**Third find of this shape, and the pattern is now explicit.** V-961: a pin satisfied by an occurrence
+elsewhere in the file. V-963: a refusal masked by a neighbouring covered path. This: the same, on an
+anonymous surface. In each case the file is touched by tests, so nothing looks wrong — which is exactly what
+a coverage intersection sees and a text search cannot.

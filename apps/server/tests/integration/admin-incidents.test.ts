@@ -428,6 +428,32 @@ describe('POST /v1/admin/incidents/:id/resolve', () => {
 });
 
 describe('GET /v1/status/incidents (public, no-auth)', () => {
+  it('CRITICAL a malformed query on the PUBLIC feed is refused as a validation failure. Coverage showed this refusal executed by no test while the cursor/state rejection two lines below it is executed — so the handler reads as exercised, and removing the parse would drop an anonymous caller onto whatever the unvalidated values do next. This endpoint takes no credential, so its query string is the only thing a stranger controls.', async () => {
+    fx = await buildTestApp();
+    for (const [label, qs] of [
+      ['a window outside the closed enum', '?window=bogus'],
+      ['a limit past the bound', '?limit=999'],
+      ['a limit below the floor', '?limit=0'],
+      ['a non-timestamp since', '?since=not-a-date'],
+    ] as const) {
+      const res = await fx.app.inject({ method: 'GET', url: `/v1/status/incidents${qs}` });
+      expect(res.statusCode, `${label} is refused`).toBe(400);
+      expect(
+        res.json<{ type: string }>().type,
+        `${label} is a validation failure, not the cursor/state rejection that happens to be covered`,
+      ).toContain('validation-failed');
+    }
+  });
+
+  it('CRITICAL a well-formed query is still served, so the arm above is refusing malformed input rather than everything. Without this a parse that rejected every query would satisfy it.', async () => {
+    fx = await buildTestApp();
+    const ok = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/status/incidents?window=90d&limit=5',
+    });
+    expect(ok.statusCode, 'a valid window and limit are accepted').toBe(200);
+  });
+
   it('returns only public=true incidents', async () => {
     fx = await buildTestApp();
     await fx.app.inject({
