@@ -41048,3 +41048,45 @@ identifiers left 18, and **all 18 are sound** — 16 are `toContain` on an ARRAY
 not substring; `routes-admin-owner-content-parity` scans a file containing only the bare token, the longer
 symbol living elsewhere in my over-broad corpus; and the `gui-client` one is already pinned exactly by a
 structural regex two lines above it. Zero real instances. Both mistakes were mine, not the repo's.
+
+## V-958 — a cross-account arm that asserted survival and threw the status away
+
+**Method: test a documented customer claim rather than pin its text.** `api/profiles.md` says DELETE
+"returns `204 No Content`, and is idempotent — re-deleting an already-trashed profile (or an id that was
+never yours) also returns `204`". The service comment goes further: the no-op "never leaks whether the id
+exists for another account". Verified against source — the handler returns 204 unconditionally and
+`service.delete` returns early when the scoped repo delete matches nothing — then measured through the real
+routes: foreign-live DELETE **204**, foreign-unknown DELETE **204**, owner's GET afterwards **200**. The
+claim is true and the isolation holds.
+
+**Then I nearly committed a duplicate, and the way I nearly did it is the lesson.** Searching for coverage I
+grepped `method: 'DELETE'` scoped to `profiles*.test.ts`. `cross-account-profile-isolation.test.ts` does not
+match that filename, and it has carried a foreign-DELETE arm all along. That is rule (2)'s failure mode
+exactly — one grep, scoped to the obvious file — and it is the second re-derivation in two turns. The arm
+was written, mutation-proved, and reverted unused before commit.
+
+**The real gap was the half that arm discards.** It injects the foreign DELETE and never looks at the
+response:
+
+- it asserts the owner's profile **survives** — the security-critical half, fully covered;
+- it asserts **nothing about the status**, so a change making DELETE answer 404 for a foreign id keeps it
+  green while turning the endpoint into an existence oracle: the caller learns the id is real, just not
+  theirs.
+
+**Its own neighbour states the standard it misses.** The snapshot arm twenty lines below reads: "a foreign
+id is indistinguishable from one that was never created. **Both halves are asserted**: the status, and the
+absence of any row in the body." The DELETE arm asserted one half of the same property.
+
+**Strengthened in place rather than duplicated**, adding the foreign-unknown comparison so the two statuses
+must be equal — which is what indistinguishability actually means, and is stronger than pinning 204 twice.
+
+**Paired proof.** Making `service.delete` throw `NotFoundError` when nothing matched: the arm **as it stands
+at HEAD passes, 25 of 25**; strengthened, it fails by name (`a live profile owned by someone else: expected
+404 to be 204`). Separately, removing the `accountId` check from the repo's delete fails the survival
+assertion, so both halves are now load-bearing.
+
+**One mutation did not apply, again.** My first attempt at the cross-account mutation used an
+optional-chained method that does not exist, so `?? await this.repo.delete(args)` fell through to the
+original behaviour and the suite went green — the third silent no-op this session. Re-run against the real
+`accountId` check in the in-memory repo, it fires. Every mutation script in this arc now asserts its own
+edit applied; that assertion is what caught this.
