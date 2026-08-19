@@ -37802,3 +37802,31 @@ the identical change was what broke the suite one commit ago.
 
 **Running total: 11 of 59 non-SHIPPED rows verified** (7 in V-873, 4 here), 8 corrected, 3 confirmed
 accurate. 48 remain. The basis line still reads V-293 and still must, for the same reason as V-873.
+
+## V-876 — the catalog's staleness is CLUSTERED, not diffuse (2026-08-18)
+
+**Third pass: three rows checked, none stale.** `/usage historical trends + cost projections` has no
+implementation in `usage.astro`. `Profile cleanup operations` and `Profile state cleanup UI` both
+cite V-314, and the catalog's own priority list defines V-314 as "clear cache / reset to fresh" —
+resetting a profile's browser state. No such route or control exists, so both rows are correct.
+
+**The near-miss is the point.** `ProfilesView` carries an L4b recycle bin with a Trash view, and
+`profiles.ts` ships `GET /v1/profiles/trash` and `POST /v1/profiles/:id/restore`, with
+`registerProfileTrashPurgeJob` wired in bootstrap. That is a lot of profile-cleanup machinery, and
+it is NOT the feature these rows describe. Trash/restore/purge deletes and recovers profiles;
+V-314 resets a profile's state in place. The parenthetical in the priority list is what settled
+it. This is the fourth time in three passes that adjacent-but-different machinery nearly produced a
+false correction — after crypto receipts vs invoice history, webhook dedup vs customer idempotency,
+and a cutover script vs a cutover.
+
+**What three passes actually show.** 14 of 59 non-SHIPPED rows verified: 8 corrected, 6 confirmed
+accurate. But the corrections are not spread evenly — five of the eight were status-page rows that
+all went stale together, because that entire surface shipped as one arc (V-295). The rest were
+single features whose implementation landed under a different V-number than the row cites.
+
+So the catalog is not uniformly rotten, and row-by-row grinding is the wrong instrument for what
+remains. **A whole surface shipping is what makes rows stale in batches** — the next pass should ask
+"did this surface ship?" per surface heading, not "is this row true?" per row. Recorded here so the
+45 remaining rows are approached that way rather than one at a time.
+
+No source change: every row checked this pass is accurate, and saying so is the finding.
