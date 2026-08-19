@@ -124,7 +124,7 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
     expect(p).toMatch(/against an in-memory provider without touching real Stripe/);
   });
 
-  it('CRITICAL BillingProvider has 3 methods — ensureCustomer + createSubscriptionCheckout + createPortalSession (createTrialPackCheckout removed 2026-05-27).', () => {
+  it('CRITICAL BillingProvider has 5 methods, and this arm pins 3 of them — ensureCustomer + createSubscriptionCheckout + createPortalSession (createTrialPackCheckout removed 2026-05-27). The two it does not pin are pauseSubscriptionCollection and resumeSubscriptionCollection, added by V-758 to make the acceptable-use policy true where it says suspension pauses billing.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
     expect(p).toMatch(/export interface BillingProvider \{/);
     expect(p).toMatch(
@@ -186,7 +186,7 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
 
   // ─── BillingRepo 3-method interface ──────────────────────────
 
-  it('CRITICAL BillingRepo has 3 methods — getAccount + setStripeCustomerId + findCurrentSubscription. The 3-method repo is the storage seam.', () => {
+  it('CRITICAL BillingRepo has 5 methods, and this arm pins 3 of them — getAccount + setStripeCustomerId + findCurrentSubscription. The seam also carries findCollectingSubscription and findActiveSubscription.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
     expect(p).toMatch(/export interface BillingRepo \{/);
     expect(p).toMatch(/getAccount\(accountId: string\): Promise<BillingAccountSnapshot \| null>;/);

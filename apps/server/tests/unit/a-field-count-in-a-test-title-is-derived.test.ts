@@ -29,6 +29,13 @@
 // omitted the field carrying the amount a customer has to pay. A schema composed
 // with `.extend()` or `.merge()` would be counted from its literal half only, so
 // an arm below asserts none of the covered claims is built that way.
+//
+// V-1020 added the method half. `X has N methods` titles are counted the same
+// way, and the property counter's blindness to `foo(args): ret` is now an
+// asserted precondition rather than a silent undercount: `ProfilesRepo` was
+// documented with 8 methods and has 18, and `BillingProvider` with 3 and has 5 —
+// the two it omitted being the ones that make the acceptable-use policy true
+// where it says suspending an account pauses its billing.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -154,19 +161,49 @@ function memberNames(body: string): string[] {
     .map((m) => m[1] as string);
 }
 
+/**
+ * Method members of an interface body — `foo(args): ret`, which `memberNames`
+ * cannot see because it keys on the `name:` shape.
+ *
+ * V-1020: leaving this out made the field counter silently undercount any
+ * interface carrying a method, and made `X has N methods` titles uncheckable.
+ * `ProfilesRepo` was documented with 8 methods and has 18.
+ */
+function methodNames(body: string): string[] {
+  const code = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const members: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of code) {
+    if ('{(['.includes(ch)) depth += 1;
+    if ('})]'.includes(ch)) depth -= 1;
+    if (ch === ';' && depth === 0) {
+      members.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  members.push(cur);
+  return members
+    .map((m) => /^\s*(?:readonly\s+)?([A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\(/.exec(m))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => m[1] as string);
+}
+
 interface Claim {
   readonly iface: string;
   readonly claimed: number;
   readonly testFile: string;
   /** Source file the arm reads, when it names one. */
   readonly readsPath: string | null;
+  /** Whether the title counts properties or methods. */
+  readonly kind: 'fields' | 'methods';
 }
 
 function claims(): Claim[] {
   const dir = resolve(HERE);
   const out: Claim[] = [];
   const RE =
-    /\bit\(\s*['"`](?:CRITICAL\s+)?([A-Z]\w*) has (?:EXACTLY )?(\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) fields/g;
+    /\bit\(\s*['"`](?:CRITICAL\s+)?([A-Z]\w*) has (?:EXACTLY )?(\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) (fields|methods)/g;
   for (const f of readdirSync(dir).filter((x) => x.endsWith('.test.ts'))) {
     const src = readFileSync(join(dir, f), 'utf8');
     const arms = [...src.matchAll(RE)];
@@ -183,16 +220,20 @@ function claims(): Claim[] {
         claimed: /^\d+$/.test(raw) ? Number(raw) : (WORDS[raw] as number),
         testFile: f,
         readsPath: path === null ? null : (path[1] as string),
+        kind: (m[3] as string) === 'methods' ? 'methods' : 'fields',
       });
     }
   }
   return out;
 }
 
-/** Field count of a declaration, whether it is an interface or a z.object schema. */
-function countIn(src: string, name: string): number | null {
+/** Member count of a declaration — properties or methods — or a z.object's keys. */
+function countIn(src: string, name: string, kind: 'fields' | 'methods'): number | null {
   const iface = interfaceBody(src, name);
-  if (iface !== null) return memberNames(iface).length;
+  if (iface !== null) {
+    return kind === 'methods' ? methodNames(iface).length : memberNames(iface).length;
+  }
+  if (kind === 'methods') return null;
   const zod = zodObjectBody(src, name);
   if (zod !== null) return zodKeys(zod).length;
   return null;
@@ -206,14 +247,14 @@ function resolveCount(
   if (claim.readsPath !== null) {
     const hit = sources.find(([p]) => p.endsWith(claim.readsPath as string));
     if (hit !== undefined) {
-      const c = countIn(hit[1], claim.iface);
+      const c = countIn(hit[1], claim.iface, claim.kind);
       if (c !== null) return { count: c, ambiguous: false };
     }
   }
-  const hits = sources.filter(([, s]) => countIn(s, claim.iface) !== null);
+  const hits = sources.filter(([, s]) => countIn(s, claim.iface, claim.kind) !== null);
   if (hits.length === 0) return null;
   return {
-    count: countIn(hits[0]?.[1] as string, claim.iface) as number,
+    count: countIn(hits[0]?.[1] as string, claim.iface, claim.kind) as number,
     ambiguous: hits.length > 1,
   };
 }
@@ -245,7 +286,7 @@ describe('V-1018 a field count in a test title is derived', () => {
       if (r === null) missing.push(`${claim.iface} (${claim.testFile})`);
       else if (r.ambiguous) {
         const where = sources
-          .filter(([, s]) => countIn(s, claim.iface) !== null)
+          .filter(([, s]) => countIn(s, claim.iface, claim.kind) !== null)
           .map(([p]) => p.slice(REPO_ROOT.length + 1))
           .join(', ');
         ambiguous.push(`${claim.iface} (${claim.testFile}): ${where}`);
@@ -306,6 +347,28 @@ describe('V-1018 a field count in a test title is derived', () => {
     expect(
       composed,
       'these schemas are composed with .extend()/.merge(), so a literal-body count understates them:',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL a title that counts FIELDS names an interface that has no methods. The property counter keys on the `name:` shape and cannot see `foo(args): ret`, so a fields-claim about an interface carrying methods would be counted against half its members and agree with a number that was already wrong. No claim in the corpus is in that state today; this fails the moment one is, rather than quietly undercounting it.', () => {
+    const mixed: string[] = [];
+    for (const claim of all.filter((c) => c.kind === 'fields')) {
+      const hit = sources.find(([p]) =>
+        claim.readsPath === null ? false : p.endsWith(claim.readsPath),
+      );
+      const src = hit?.[1] ?? sources.find(([, s]) => interfaceBody(s, claim.iface) !== null)?.[1];
+      if (src === undefined) continue;
+      const body = interfaceBody(src, claim.iface);
+      if (body === null) continue;
+      const methods = methodNames(body);
+      if (methods.length > 0) {
+        mixed.push(`${claim.testFile}: ${claim.iface} has methods (${methods.join(', ')})`);
+      }
+    }
+    expect(
+      mixed.sort(),
+      'these interfaces mix properties and methods, so a "has N fields" title counts only half of ' +
+        'them — split the claim, or teach this guard which half the title means:',
     ).toEqual([]);
   });
 });

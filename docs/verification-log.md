@@ -43546,3 +43546,48 @@ three uncorrected schema titles. Nothing regressed. Do not start a background su
 tree; the result describes neither the old state nor the new one.
 
 `it(` counts unchanged (11, 11, 10). No new file, no ratchet change.
+
+## V-1020 — the method half, and a blind spot in my own counter
+
+Two things came out of extending V-1018/V-1019 sideways.
+
+**The enum vein is a measured negative, and the measurement is what matters.** `z.enum`/`pgEnum`
+value counts resolve for only 9 of 39 `N values` titles, and all 9 agree with source. That is NOT
+"enum counts are fine" — it is 9 checked and 30 unresolved, and reporting the zero without the
+denominator would be the vacuity this sweep exists to catch. Left uncovered deliberately; the parser
+work to reach the other 30 has no evidence behind it yet.
+
+**My own counter was blind to methods.** `memberNames` keys on the `name:` shape, so a TypeScript
+method signature `foo(args): ret` is invisible to it. I checked the fifteen interfaces V-1018
+corrected before assuming anything: none contains a method, so those numbers stand. But the hole was
+real, and it made the whole `X has N methods` population uncheckable. With a method counter:
+
+`ProfilesRepo` said 8, has 18
+`BillingProvider` said 3, has 5
+`BillingRepo` said 3, has 5
+
+`ProfilesRepo`'s ten unlisted methods are the recycle bin (`restore`, `purgeTrashed`,
+`purgeTrashedBefore`, `listTrashed`), the storage accounting (`recordSave`) and the sealed-store key
+path (`getWrappedDek`). `BillingProvider`'s two are `pauseSubscriptionCollection` and
+`resumeSubscriptionCollection` — added by V-758 for exactly one reason, which its own doc comment
+states: the acceptable-use policy promises suspension pauses billing, and before those existed the
+promise was untrue. `acceptable-use-policy.md:197` still makes that promise. Someone auditing it
+against this invariant would have read a 3-method provider boundary with no pause capability in it.
+
+The guard now counts methods, and the blindness is an asserted precondition rather than a silent
+undercount: a new arm fails if any `has N fields` title names an interface that carries methods,
+since the property counter would then be counting half its members and agreeing with a number that
+was already wrong. Nothing is in that state today; it fails the moment something is.
+
+**The instrument needed the same scrutiny as the finding.** My first method scan reported ONE
+mismatch. It missed `BillingRepo`, which sits eight lines from the one it did find, because the
+resolver preferred a path hint that pointed elsewhere. I only noticed because I hand-checked the
+sibling claim while verifying the first. A detector that finds one real defect looks exactly like a
+detector that finds all of them — the count of what it examined is the part to check, which is why
+the rerun reports 9 titles and 0 unresolved before it reports 3 mismatches.
+
+Mutation: adding a 6th method to `BillingProvider` → RED; reverting the `ProfilesRepo` number → RED;
+giving a fields-claim interface a method → RED on the new mixed-member arm. Control 5/5.
+
+`it(` counts unchanged (18, 19). No new file, no ratchet change. `apps/server/tests/unit` green:
+1934 files, 20231 passed.
