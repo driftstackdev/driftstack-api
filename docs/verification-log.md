@@ -44504,3 +44504,37 @@ Mutation: the decorator ignoring the tier → 7 of 9 arms RED; the published con
 by design and stated in the header.
 
 Full e2e: 220 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 34 → 35.
+
+## V-1046 — which side of the "two writers must agree" invariant the team path sits on
+
+V-1045 established that `middleware/rate-limit.ts` resolves capacity at three sites. That raised the
+question the file itself already answers for one case: what happens when two identities touch one
+account's traffic.
+
+The note there documents a real, destructive bug. The store key is `rl:<accountId>:<bucketKey>` with
+no tier in it, the Lua persists `math.min(capacity, …)`, and a control key charging a conservative
+`free` floor collapsed a paying `api_scale` owner's 6,000-token bucket to about 59 — for as long as
+the desktop Simulator kept polling. The invariant it leaves behind: two writers sharing one key MUST
+agree on its capacity.
+
+The team acting-as path is the other place two identities meet, so I measured it rather than reasoning
+about it. A `solo_manual` member acting as an `api_scale` owner is charged **120** — their own tier —
+and the Redis key written is `rl:<memberId>:global`. Not the owner's. No shared key, no truncation
+available. Coherent and safe.
+
+That is a negative, and the guard is the deliverable. The dangerous configuration is not "member
+capacity" or "owner key" on their own — either is defensible — it is the PAIR: owner's key charged at
+the member's capacity, which is precisely the shape that destroyed a customer's bucket once. So the
+file pins both halves together: the applied capacity is the member's, AND the owner's key is not
+written. Mutation: routing team traffic onto the owner's key while keeping the member's capacity reds
+it.
+
+Two notes on how this was reached. The probe answered a question the header alone could not — the
+capacity header shows what was applied, not which bucket was charged, and only reading the Redis
+keyspace distinguishes "member spends their own budget" from "member truncates the owner's". And I
+nearly shipped a stray arm titled "a member acting as the owner is charged their own bucket" whose
+body only checked that an empty invite token is refused. It was scaffolding I forgot to delete, and a
+title claiming more than its body is the exact defect this sweep has spent the session removing from
+other people's files.
+
+Full e2e: 222 passed. `apps/server/tests/unit` green: 1935 files, 20244 passed. Spec count 35 → 36.
