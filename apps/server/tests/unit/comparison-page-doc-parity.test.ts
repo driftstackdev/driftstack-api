@@ -33,15 +33,30 @@ function serverSourceMatches(re: RegExp): boolean {
 describe('W246.C /comparison doc parity', () => {
   const doc = read();
 
-  it('does not claim BYO SOCKS5 / WireGuard / OpenVPN while no egress impl exists', () => {
-    const hasEgressImpl = serverSourceMatches(/customerEgress|egress_config|proxyUrl|SOCKS5/i);
-    if (!hasEgressImpl) {
+  // V-917: the CONCRETE wire, per V-540.E. This file previously matched
+  // /customerEgress|egress_config|proxyUrl|SOCKS5/i, which flips on any server
+  // file that merely mentions SOCKS5 — including webhook-target-guard.ts,
+  // which blocks proxy schemes as SSRF targets and has nothing to do with
+  // customer egress. V-540.E tightened this in two of the five files that
+  // compute the gate; this was one of the three it missed.
+  const hasEgressImpl =
+    serverSourceMatches(/sessionEgressService:\s*sessionEgressService/) &&
+    serverSourceMatches(/implements SessionEgressService\b/);
+
+  it('CRITICAL the egress gate was computed and has RETIRED. Stated out loud because it is invisible otherwise: the arm below used to be an `if (!hasEgressImpl)` body inside a passing test, so once egress shipped it asserted nothing while still reporting as a pass. A conditional skip shows up in the skip count; a silent no-op is indistinguishable from a real check.', () => {
+    expect(typeof hasEgressImpl, 'the gate is derived from source, not assumed').toBe('boolean');
+    expect(hasEgressImpl, 'egress is wired, so the claim gate has retired').toBe(true);
+  });
+
+  it.skipIf(hasEgressImpl)(
+    'does not claim BYO SOCKS5 / WireGuard / OpenVPN while no egress impl exists',
+    () => {
       // Forbid the shipped-feature framing.
       expect(doc).not.toMatch(/BYO SOCKS5 \/ WireGuard \/ OpenVPN/);
       // Comparison cell should flag as roadmap.
       expect(doc).toMatch(/Roadmap — see \/trust\/security-overview/);
-    }
-  });
+    },
+  );
 
   it('keeps the Apple WebKit engine differentiator', () => {
     expect(doc).toMatch(/Apple WebKit/);

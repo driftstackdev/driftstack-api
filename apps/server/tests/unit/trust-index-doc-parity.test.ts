@@ -34,18 +34,22 @@ function serverSourceMatches(re: RegExp): boolean {
 describe('W245.D trust/index doc parity', () => {
   const doc = read();
 
-  it('does not claim customer-controlled egress while no impl exists', () => {
-    // V-540.E (2026-05-16): gate requires the CONCRETE wire — the
-    // interface-alone scaffolding (E1) is NOT a gate trip.
-    const hasEgressImpl =
-      serverSourceMatches(/sessionEgressService:\s*sessionEgressService/) &&
-      serverSourceMatches(/implements SessionEgressService\b/);
-    if (!hasEgressImpl) {
-      // Must not assert as a current pillar.
-      expect(doc).not.toMatch(/customer-controlled egress/i);
-      // And should flag it as roadmap.
-      expect(doc).toMatch(/Customer-configurable\s+egress is on the roadmap/i);
-    }
+  // V-540.E (2026-05-16): gate requires the CONCRETE wire — the
+  // interface-alone scaffolding (E1) is NOT a gate trip.
+  const hasEgressImpl =
+    serverSourceMatches(/sessionEgressService:\s*sessionEgressService/) &&
+    serverSourceMatches(/implements SessionEgressService\b/);
+
+  it('CRITICAL the egress gate was computed and has RETIRED. This file had the correct gate but still branched on it inside the test body, so once egress shipped the arm below asserted nothing while reporting as a pass. V-540.E fixed the definition here and left the shape.', () => {
+    expect(typeof hasEgressImpl, 'the gate is derived from source, not assumed').toBe('boolean');
+    expect(hasEgressImpl, 'egress is wired, so the claim gate has retired').toBe(true);
+  });
+
+  it.skipIf(hasEgressImpl)('does not claim customer-controlled egress while no impl exists', () => {
+    // Must not assert as a current pillar.
+    expect(doc).not.toMatch(/customer-controlled egress/i);
+    // And should flag it as roadmap.
+    expect(doc).toMatch(/Customer-configurable\s+egress is on the roadmap/i);
   });
 
   it('links every trust hub destination at its canonical trailing-slash route', () => {

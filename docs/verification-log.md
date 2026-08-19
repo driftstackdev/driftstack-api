@@ -39221,3 +39221,67 @@ itself is mechanical once someone decides to do it.
 deleted my duplicate and V-907 built the prior-art habit that would have prevented it; this is the
 same lesson pointed at the repository instead of at me, and it found two real instances the habit
 would not have — because both pairs predate anyone thinking to look.
+
+## V-917 — a gate tightening that reached two of five files, and three guards that passed having asserted nothing (2026-08-19)
+
+**Where this came from.** The suite reports 109 skipped files out of 3064 and nobody had ever listed
+them. A guard that does not run is not guarding, so I enumerated the skip mechanisms — and that part
+came back clean. There are ZERO unconditional skips (`no-permanently-skipped-tests` is real and
+working); all 109 are env-gated, CI sets `DATABASE_URL` and `REDIS_URL`, and `ci.yml` migrates the
+schema first with a comment recording the exact vacuous-pass defect that made migration necessary in
+June. The `.npmrc` gate is deliberately operator-side. Prior art here is deep and it held.
+
+What the enumeration turned up instead was five files that each independently decide
+**"has customer egress shipped?"** — a decision that gates what the marketing and trust pages are
+allowed to claim.
+
+**The finding.** V-540.E (2026-05-16) tightened that gate to require the CONCRETE wire: the
+SessionEgressService bootstrapped into AppDeps AND a backend class implementing it. Its stated
+reason is that interface-alone scaffolding must not count as shipped. **It reached two of the five
+files.** Three kept the original form, which is true if any file under `apps/server/src` so much as
+mentions SOCKS5. Twenty-one of the 338 do, and one of them is `lib/webhook-target-guard.ts` — it
+blocks proxy schemes as SSRF targets and has nothing to do with customer egress. Three guards over
+customer-facing claims retired on a substring in an unrelated file, which is the exact case V-540.E
+ruled out.
+
+**Both forms evaluate true today**, because egress really did ship, and I verified that directly
+rather than assuming it: the strict pair matches `lib/bootstrap.ts` plus
+`services/proxy-backends/socks5.ts` and `services/session-egress.ts`. The four gated docs have
+correctly moved on — `/comparison` now advertises bring-your-own SOCKS5/OpenVPN/WireGuard and no
+longer carries the roadmap cell. So there is no customer-facing defect and no live divergence to
+point at. That is the argument for pinning it rather than shrugging: the window where the loose gate
+was true and the strict one was not has already closed, silently, and nothing recorded that it
+happened.
+
+**The second defect, which is the one with teeth.** All four doc-parity guards wrote
+`if (!hasEgressImpl) { ...assertions... }` INSIDE the test body. Once the gate retired, those four
+arms asserted nothing and kept reporting as passes. `marketing-egress-claim-sweep` hit this exact
+problem and fixed it for itself — converting to `it.skipIf` and adding a loud arm stating the gate
+had retired, with a comment explaining that a silent no-op is indistinguishable in the summary from
+a real check. That fix was applied to one file of five. Note `trust-index-doc-parity` had the
+CORRECT gate and the WRONG shape: V-540.E fixed the definition there and left the vacuity, so the
+two defects are independent and neither implies the other.
+
+**Fix.** All four now use the canonical strict pair and `it.skipIf(hasEgressImpl)`, each with a
+CRITICAL arm asserting the gate was derived and has retired. Plus a derived guard,
+`the-egress-claim-gate-has-one-definition`, over the whole class: every gate must require the
+concrete wire, none may use the replaced form, and none may branch on the gate inside a test body.
+Derived rather than pinned, so the sixth file somebody adds is covered — a pin on the three would
+just freeze today's text.
+
+**Mutation proofs, and two of them landed on me.** Reverting one file to its previous state kills
+the three substantive arms. Breaking the scan so it finds nothing fails ONLY arm 1, which is the
+point of arm 1 — the other three report absences and would all pass vacuously.
+
+The two failed proofs are worth recording. I first asserted the guard excludes itself from its own
+scan; removing the exclusion changed nothing, because this file never writes the gate assignment and
+is dropped by the content filter before the name check applies. I replaced that with
+`self.includes(REJECTED)` — which passed under mutation too, because it is a tautology: the literal
+defining REJECTED is itself in the file, so it holds for any value. There is no truthful assertion
+available about that exclusion, so the arm is gone and a comment says why. Claiming coverage of it
+would have been precisely the vacuity this guard exists to catch, committed inside the guard.
+
+**The shape, again.** V-916 recorded a fix that reached some occurrences and not others; this is the
+same, one layer down — a correct decision, applied twice, in a codebase with five copies of the
+thing it corrected. The lesson is not about egress. It is that "fix the gate" needs an enumeration
+step, and the cheap way to get one permanently is to derive the rule instead of editing the sites.
