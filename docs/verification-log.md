@@ -38950,3 +38950,36 @@ where a real miss hides. The three real instances found this session were each c
 guard whose claim looked larger than its arms — which is not a thing a matcher census can see.
 
 No source change. One instrument tried, measured, and discarded.
+
+## V-909 — spot-audit of the arc's earliest work, with the instruments it did not have (2026-08-19)
+
+**Why.** V-858, V-880 and V-906 each corrected work from LATER in this session. The earliest batches
+(V-782→V-828) were done before the arc learned its route extractor loses 40% of routes, that a
+helper defeats a literal search, and to grep prior art by invariant phrase. Nothing had re-checked
+them, so they were the least-audited work in the sweep rather than the most-settled.
+
+**Two highest-tier batches re-verified against source. Both hold, and both landed BETTER than the
+plan prescribed.**
+
+- **B1 / action 17** — the `account_owner` bullet that denied cross-account reach. The prescribed
+  replacement is not in the file; the applied one (V-795) is, with different wording. It goes
+  further than the draft: where the plan ended with "exact `/v1/account/me` is one of the routes
+  that stays self-only", the shipped text adds "though other routes in that same file do resolve an
+  effective account". **That clause caught me mid-audit** — I found `resolveEffectiveAccount` at
+  `account-me.ts:393` and had a live false-claim before noticing line 393 is
+  `/v1/account/me/organization`, a different route, exactly as the comment says. The correction
+  anticipated the misreading a checker would make.
+- **B3 / action 6** — the phantom R2 sweeper and "stored privately". Both gone from the customer
+  page, which now says the avatar sits in a **public-readable bucket** — blunter than the draft's
+  "derivable" and a clearer statement of exposure. The plan's boundary held too: it warned that
+  "a fixer sweeping every 'sweeper' mention will red these" because `routes/account-me.ts` honestly
+  says a FUTURE sweeper. That line is still there, untouched.
+
+**What the spot-check establishes, and what it does not.** Two of twenty-six batches, chosen as the
+highest-tier and most security-adjacent, both clean. That is evidence the early work was done
+carefully, not proof the other twenty-four are. I am recording it as a sample rather than a clearance.
+
+**The transferable observation** is about the plan's drafts: in both cases the applied wording
+diverged from the prescribed text and was more accurate. Grepping for a plan's proposed literal to
+confirm a batch shipped therefore reports a false miss — which is what my first two greps here did,
+and would have been a third wrong finding had I stopped at the count.
