@@ -43759,3 +43759,43 @@ RED on the stale-entry check. Control 4/4, sources restored byte-identical.
 
 `it(` count 3 → 4 on the one file touched. No new file, no ratchet change. `apps/server/tests/unit`
 green: 1935 files, 20236 passed.
+
+## V-1025 — the route-layer tenancy axis (measured negative, and a near-miss worth writing down)
+
+The axis after gate presence (V-1022/1023) and gate strength (V-1024) is tenancy: a route that takes
+an `:id` and looks it up without scoping to the caller's account is an IDOR, and it fails nothing —
+it answers, with another customer's resource.
+
+Measured over the 72 parameterised customer routes (admin and internal excluded, disabled registrars
+excluded). Four handlers never mention an account. All four are correct:
+
+`GET /v1/status/incidents/:id` — the public status site; there is no account involved.
+
+`POST /v1/sessions/:id/proxy` and its GET sibling — authenticated stubs that throw
+`FeatureUnavailableError` before touching anything. This is the route the sweep already lists as an
+owner decision (implement or delete); it is not a tenancy hole in either state.
+
+`POST /v1/agent-sessions/:id/message` — enforces ownership with
+`if (!callerCanAccessAgentSession(ctx, pre.accountId))`.
+
+**The near-miss.** For most of this investigation the message route looked like a real IDOR: a
+`write`-scoped POST taking a session id, whose 6836-character handler segment contained no ownership
+check, no account reference and no session load. Two separate slicing errors produced that. The route
+path appears earlier in the file as a `route:` label inside a reporting helper, so an index-based
+lookup lands there rather than on the registration; and the segment cut at what the scan took to be
+the next registration, which fell before the ownership check. The check is roughly a hundred lines
+into a handler that delegates to `prepareAgentMessage`.
+
+What stopped it being filed was the handler's own comment — "Resolve exact session ownership and the
+owner budget" — which contradicted the measurement and was worth believing enough to look again. A
+reported IDOR on a live agent-session endpoint is not a cheap mistake to make.
+
+No guard added. A tenancy gate would have to understand delegation — the ownership check sits behind
+a helper here, inside a service call elsewhere — and a check that cannot see through one level of
+indirection produces false reds until somebody tunes it into uselessness. The three axes that ARE
+derivable (presence, strength, admin scope) are guarded; this one is measured and recorded instead.
+
+That is four instrument errors across V-1022 through V-1025, every one of which first presented as a
+security finding: a three-route file read as two, rate limiting read as authentication, 85 ungated
+routes that were a disabled-feature fallback, and now an IDOR that was a truncated slice. The
+measurement is the cheap part; establishing that the measurement is of the right thing is the work.
