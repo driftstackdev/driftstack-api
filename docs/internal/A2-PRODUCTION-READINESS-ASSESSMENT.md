@@ -2174,6 +2174,28 @@ per-line. **These are test-FILE counts, not site coverage**: a file may drive on
 of thirteen throw sites. Separating covered sites from uncovered ones needs the
 per-line coverage intersection, not grep, and is not done here.
 
+> **Done 2026-08-19 (V-962).** The per-line intersection this paragraph asks for was
+> run: `coverage-final.json` at HEAD, intersected with every `throw new …(` site by
+> matching the statement that begins at the throw's own line AND column. **300 of the
+> 1,069 in-scope sites have never executed.** The instrument was validated before the
+> figure was trusted, because three plausible rules disagree: taking the minimum hit
+> count over every statement spanning the line gives 300, taking the statement that
+> starts at the line gives 300, and taking the "narrowest" statement gives 148 — the
+> last is wrong, because an `if (x) throw …` puts both statements on one line with
+> equal spans and the tie-break silently picks the enclosing `if`. The column-precise
+> rule identifies a statement at 1,068 of 1,069 sites.
+>
+> **The security slice is unchanged.** Nine sites carry an unexecuted `ForbiddenError`
+> and all nine are the residual classes 5f verified: eight owner-vanished null checks
+> and one `authRepo === undefined` wiring guard. Three are instances 5f did not list —
+> `admin.ts:95`, `profiles.ts:166`, and the wiring guard now at `agent-sessions.ts:4066`
+> — each read individually rather than assumed to inherit the reasoning. 5f's
+> conclusion holds at HEAD: no customer-reachable security refusal is unexecuted.
+>
+> The bulk of the 300 is `Error` (191), which is the defensive-invariant class —
+> `if (!ctx) throw new Error('account context missing after requireAuth')` and its
+> kind, unreachable by construction. The typed remainder is 109.
+
 | error              | throw sites in `src` | test files executing it |
 | ------------------ | -------------------- | ----------------------- |
 | `ValidationError`  | 85                   | 2                       |
@@ -2387,8 +2409,18 @@ now unexecuted.**
 _The wider picture from the same data, which had never been taken:_ **1,175
 `throw new …Error(` sites under `apps/server/src`, of which 202 have never
 executed**, plus 105 outside the coverage scope entirely (`src/db/**` is
-excluded — item 5e). Security classes are the healthiest slice of that by some
-margin; the bulk is `Error` (78 cold of 430) and `BadRequestError` (31 of 121).
+excluded — item 5e).
+
+> **Corrected 2026-08-19 (V-962).** That sentence double-counts, and the figure it
+> produces is the one a later re-measure would compare against. Measured at HEAD:
+> `apps/server/src` holds **1,069** `throw new …(` sites excluding `src/db/**`, and
+> **1,175** including it — so 1,175 is the TOTAL, and the ~105 db sites named as
+> "plus … outside the coverage scope" are already inside it, not additional. The
+> in-scope population the coverage percentages describe is **1,069**. Anyone
+> re-measuring against 1,175-as-in-scope would find a population that had apparently
+> shrunk by a hundred sites with nothing having changed — which is the arithmetic-
+> rather-than-measurement failure this whole item exists to prevent. Security classes are the healthiest slice of that by some
+> margin; the bulk is `Error` (78 cold of 430) and `BadRequestError` (31 of 121).
 
 **The 13 that remain are not one population.** Six are the owner-vanished
 residuals enumerated above and verified unreachable — `admin.ts` ×2,

@@ -41200,3 +41200,43 @@ that matter left the arm **green**. That is §5h of the readiness assessment exa
 than once asserts the block exists somewhere, not that it still guards the site it was written for.
 Rewritten to slice each `withAudit(request, '<action>', …)` call and assert within it; mutating one site now
 fails by name. **Fifth instrument failure of this session, and again only the mutation found it.**
+
+## V-962 — the per-line intersection §5h asked for, and a double-counted baseline
+
+**§5h ends by naming the work it did not do**: "Separating covered sites from uncovered ones needs the
+per-line coverage intersection, not grep, and is not done here." That intersection is now run, and running
+it turned up an arithmetic error in the baseline §5f leaves behind.
+
+**The baseline double-counts.** §5f reports "**1,175** `throw new …Error(` sites under `apps/server/src`, of
+which 202 have never executed, **plus 105 outside the coverage scope entirely** (`src/db/**` is excluded)".
+Measured at HEAD: `apps/server/src` holds **1,069** throw sites excluding `src/db/**` and **1,175** including
+it. So 1,175 is the total, and the ~105 db sites presented as additional are already inside it. The in-scope
+population the coverage percentages describe is 1,069. Anyone re-measuring against 1,175-as-in-scope would
+find a population apparently a hundred sites smaller with nothing having changed — the
+arithmetic-rather-than-measurement failure that item exists to prevent. Corrected in place, paraphrased.
+
+**The intersection: 300 of the 1,069 in-scope sites have never executed.** `coverage-final.json` generated
+at HEAD over the full suite (30,011 passing), intersected with every `throw new …(` by matching the
+statement that begins at the throw's own line **and column**.
+
+**The instrument was validated before the number was trusted, and one plausible rule is wrong.** Three ways
+to map a throw to its statement disagree: minimum hit count across every statement spanning the line gives
+300, the statement starting on that line gives 300, and the "narrowest" statement gives **148**. The last is
+the wrong one — `if (x) throw new E()` puts both statements on a single line with equal spans, so the
+tie-break silently picks the enclosing `if`, which ran. Had I reported the first number I computed, I would
+have published 148 and called the gap half its real size. The column-precise rule resolves a statement at
+1,068 of 1,069 sites.
+
+**The security slice is unchanged, verified rather than inherited.** Nine sites carry an unexecuted
+`ForbiddenError`. All nine are the residual classes §5f verified unreachable — eight owner-vanished null
+checks behind `findTeamMemberships`, which filters owner status in SQL one layer up, and one
+`authRepo === undefined` wiring guard. **Three are instances §5f never listed** (`admin.ts:95`,
+`profiles.ts:166`, and the wiring guard now at `agent-sessions.ts:4066`, moved from `:3916`), so each was
+read individually instead of being assumed to inherit the reasoning. §5f's conclusion holds at HEAD: no
+customer-reachable security refusal is unexecuted.
+
+**What the 300 actually is, so it is not quoted as a defect count.** 191 are plain `Error` — the
+defensive-invariant class, `if (!ctx) throw new Error('account context missing after requireAuth')` and its
+kind, unreachable by construction and correctly so. The typed remainder is 109, headed by `BadRequestError`
+(24), `NotFoundError` (17) and `ValidationError` (15). Those are the candidate list for the next slice, on
+§5h's own terms: each needs reading before it is called a defect.
