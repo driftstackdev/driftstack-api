@@ -88,6 +88,30 @@ describe('W863 AccountAuditAction cross-source invariant', () => {
     }
   });
 
+  // ─── Public API-reference event table (V-893) ────────────────
+
+  it('V-893 CRITICAL apps/docs/src/pages/api/audit-log.md documents every AccountAuditAction, and invents none. The dashboard label map and filter dropdown were already tied to the enum; the PUBLIC reference table was not, so a new action could ship with a dashboard label and no customer documentation — or the table could outlive an action that was removed. Verified by hand at 46/46 in V-891; this arm is what keeps it there.', () => {
+    const doc = read(resolve(REPO_ROOT, 'apps/docs/src/pages/api/audit-log.md'));
+    const documented = new Set(
+      [...doc.matchAll(/^\| `([a-z_]+\.[a-z_.]+)`/gm)].map((m) => m[1] as string),
+    );
+    // Both directions. A one-way subset check would pass a table that had
+    // quietly grown a row for an action the server never emits, which is the
+    // shape V-824 found in the OpenAPI spec.
+    const undocumented = ACCOUNT_AUDIT_ACTIONS.filter((a) => !documented.has(a));
+    expect(undocumented, 'enum actions with no row in the public reference table:').toEqual([]);
+
+    const invented = [...documented].filter(
+      (d) => !(ACCOUNT_AUDIT_ACTIONS as readonly string[]).includes(d),
+    );
+    expect(invented, 'rows in the reference table for actions the enum does not define:').toEqual(
+      [],
+    );
+
+    // Guards the guard: an empty parse would satisfy both arms above.
+    expect(documented.size, 'documented action rows parsed').toBeGreaterThan(40);
+  });
+
   // ─── Customer-dashboard FILTER_OPTIONS dropdown ──────────────
 
   it("CRITICAL apps/customer-dashboard/src/pages/audit-log.astro FILTER_OPTIONS dropdown has a filter for every AccountAuditAction enum value + 'All events' (empty string). Drift to missing a filter would silently hide that action category from the dashboard filter.", () => {

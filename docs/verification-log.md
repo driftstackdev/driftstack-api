@@ -38401,3 +38401,40 @@ Where the two surfaces are maintained separately they are, on this evidence, mai
 one failure was a page that had no counterpart keeping it honest.
 
 No source change.
+
+## V-893 — making V-891's audit-log check permanent, and two mutation-proof traps (2026-08-18)
+
+**The seven topics cleared in V-888–V-892 were point-in-time.** They will rot exactly like the
+claims they checked unless something recomputes them. `account-audit-action-cross-source-invariant`
+already ties `AccountAuditActionSchema` to the customer-dashboard's `ACTION_LABEL` map and its
+filter dropdown — but **not** to the public reference table. So a new action could ship with a
+dashboard label and no customer documentation, or the table could outlive an action that was
+removed. That is precisely the 46/46 match V-891 verified by hand.
+
+**Added as a bidirectional arm.** Both `undocumented` (enum action with no row) and `invented` (row
+with no enum action) are asserted, plus a parse-sanity check — a one-way subset would pass a table
+that had quietly grown a row for an action the server never emits, which is the shape V-824 found in
+the OpenAPI spec.
+
+**Two mutation-proof traps, both mine, both instructive.**
+
+_First:_ all three mutations passed, which reads as a guard asserting nothing. They had targeted
+`api_key.created` — an action that does not exist. Every mutation was a no-op against a string that
+was never there, so the guard was never challenged. `grep -c` on the target showed 0, which is the
+check that should precede any mutation proof, not follow a confusing result.
+
+_Second, and the more interesting one:_ re-run against a real action, deleting a documented row
+fails and inventing one fails — but ADDING an action to the enum still passes. That is not a gap.
+`ACCOUNT_AUDIT_ACTIONS` is `AccountAuditActionSchema.options`, imported from the BUILT package, so
+editing `packages/api-types/src/accounts.ts` does not change what the test sees without a rebuild.
+V-848 recorded this exact trap — a scope added to api-types/src while the reading test consumed
+`dist` — and I walked into it again a session later.
+
+Both directions are nonetheless proven: deleting a documented row for a live action fails the
+`undocumented` arm, which IS the enum→doc direction; inventing a row fails the `invented` arm. The
+third mutation was redundant with the first and invalid by construction.
+
+**Recorded because the near-conclusion was wrong twice in one proof** — first "the guard is weak"
+(mutations were no-ops), then "the enum direction is unguarded" (the reader consumes dist). A
+mutation proof needs its own verification: confirm the edit landed, and confirm the code under test
+actually reads what you edited.
