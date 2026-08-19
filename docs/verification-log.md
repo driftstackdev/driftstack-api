@@ -37914,3 +37914,42 @@ Reading one clause and stopping is what produced the suspicion — the sentence 
 full stop that is not the end of the thought. Retracted here rather than left standing, because a
 "noted for later" that is wrong costs the next reader the same investigation I just ran, and this
 log is cited from source files that outlive the session.
+
+## V-879 — the catalog instrument reaches its limit (2026-08-18)
+
+**Surface 1, and a null.** Two of its four open rows were already settled (profile cleanup in V-876,
+SOCKS5 in V-875). The other two are checked and neither warrants a change:
+
+- **Profile-to-session binding.** `sessions.ts` validates `profile_id` on create, 404s a
+  cross-account id, bumps `last_used_at`, and `POST /v1/profiles/:id/launch` exists. Real binding.
+  But the row's reference column reads "partial" rather than a V-number, so the question is not
+  whether binding exists — it plainly does — but whether what exists is what "complete" meant to
+  whoever wrote the row. Source cannot answer that.
+- **Intent result logging (full execution history).** Marked "mock-only". `MockDriver` is still a
+  live branch in `drivers/index.ts`, and real execution history depends on the WebKit driver, which
+  the launch checklist independently records as pending on Agent 1. Accurate.
+
+**Where five passes leave this.** 18 of 59 non-SHIPPED rows verified: **9 corrected, 9 confirmed
+accurate or left as ambiguous**. The nine corrections were not evenly spread — five were status-page
+rows that went stale together when that surface shipped as one arc, and the others were single
+features that landed under a different V-number than their row cites (incident management under
+V-338 against a row citing V-318; the Go verifier; the deep-link scheme under V-328).
+
+**The instrument is now hitting its limit, and that is worth saying plainly rather than continuing
+to grind.** The rows that remain divide into two kinds neither of which source verification can
+settle:
+
+1. **Rows whose reference is "partial" or "mock-only"** — the capability exists and the question is
+   what the author counted as done. That is product knowledge, not a grep.
+2. **Rows spanning several implementations in one cell** — "Idempotency-key support" and "Streaming
+   responses" cover three SDKs with uneven coverage (V-875), "/billing plan picker + payment
+   methods" names two capabilities delivered by different mechanisms (V-878). A single status cell
+   cannot be true or false about them.
+
+The mechanically checkable rows have largely been checked. Continuing row-by-row would produce
+confident-looking edits on exactly the rows where confidence is unearned — which is the failure this
+whole arc has been correcting in other people's documents.
+
+**What would actually move this forward** is not another pass: it is deciding what "complete" means
+for the partial rows, and splitting the multi-implementation cells so each can carry its own status.
+Both are product calls. Recorded here so the next reader starts from that rather than from row 1.
