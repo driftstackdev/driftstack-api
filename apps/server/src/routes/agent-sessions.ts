@@ -2842,6 +2842,16 @@ export function registerAgentSessionsRoutes(
       await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       const parsed = SetCookiesBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-949 — attributed to its own registration with a pattern that can see a
+      // type-argument declaration (V-948); the caller is identified by
+      // controlKeyOrAccountAuth('write') before this point.
+      reportUnknownRequestFields({
+        body: req.body ?? {},
+        knownKeys: knownRequestKeys(SetCookiesBodySchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/agent-sessions/:id/cookies/set',
+      });
       // Control plane not wired (stateless deploy / no fleet registry).
       if (fleetControlRegistry === undefined) {
         return {
@@ -2934,6 +2944,16 @@ export function registerAgentSessionsRoutes(
       await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       const parsed = NavigateHistoryBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-949 — attributed to its own registration with a pattern that can see a
+      // type-argument declaration (V-948); the caller is identified by
+      // controlKeyOrAccountAuth('write') before this point.
+      reportUnknownRequestFields({
+        body: req.body ?? {},
+        knownKeys: knownRequestKeys(NavigateHistoryBodySchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/agent-sessions/:id/history',
+      });
       // Control plane not wired (stateless deploy / no fleet registry).
       if (fleetControlRegistry === undefined) {
         return {
@@ -3077,6 +3097,16 @@ export function registerAgentSessionsRoutes(
       await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       const parsed = UploadFileBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // V-949 — attributed to its own registration with a pattern that can see a
+      // type-argument declaration (V-948); the caller is identified by
+      // controlKeyOrAccountAuth('write') before this point.
+      reportUnknownRequestFields({
+        body: req.body ?? {},
+        knownKeys: knownRequestKeys(UploadFileBodySchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/agent-sessions/:id/files',
+      });
       // Founder safeguard + hardening: reject when this upload would push the
       // account past its CONCURRENT in-flight upload BYTE cap (512 MB) OR its
       // concurrent-upload COUNT cap — a discriminated error so the GUI shows the
@@ -4228,6 +4258,16 @@ export function registerAgentSessionsRoutes(
       async (req, reply) => {
         const parsed = HandbackBodySchema.safeParse(req.body ?? {});
         if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+        // V-949 — attributed to its own registration with a pattern that can see a
+        // type-argument declaration (V-948); the caller is identified by
+        // controlKeyOrAccountAuth('write') before this point.
+        reportUnknownRequestFields({
+          body: req.body ?? {},
+          knownKeys: knownRequestKeys(HandbackBodySchema),
+          reply,
+          logger: req.log,
+          route: 'POST /v1/agent-sessions/:id/handback',
+        });
         if (req.guiControlKeyAuthorized === true && parsed.data.client_id === undefined) {
           throw new ValidationError({
             formErrors: [],

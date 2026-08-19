@@ -110,11 +110,6 @@ const EXEMPT_SCHEMA_NAMES = EXEMPT_SCHEMAS.map(([name]) => name);
  * route means deleting its key in the same commit.
  */
 const KNOWN_UNREPORTED: ReadonlySet<string> = new Set([
-  'agent-sessions.ts (HandbackBodySchema)',
-  'agent-sessions.ts (NavigateHistoryBodySchema)',
-  'agent-sessions.ts (RunTurnRequestSchema)',
-  'agent-sessions.ts (SetCookiesBodySchema)',
-  'agent-sessions.ts (UploadFileBodySchema)',
   'auth-cli.ts (CliAuthorizeExchangeRequestSchema)',
   'auth-cli.ts (CliAuthorizeInitiateRequestSchema)',
   'auth-oauth-client.ts (ConfirmMergeBodySchema)',
@@ -131,6 +126,31 @@ const KNOWN_UNREPORTED: ReadonlySet<string> = new Set([
   'auth.ts (SignupRequestSchema)',
   'auth.ts (VerifyEmailRequestSchema)',
   'session-proxy.ts (SessionEgressConfigSchema)',
+]);
+
+/**
+ * V-949 — schemas parsed at SEVERAL points for one logical request, where the
+ * report is made once at the route entry.
+ *
+ * `RunTurnRequestSchema` is parsed three times on `POST /:id/message` — in
+ * `prepareAgentMessage`, `handleAgentMessage`, and `executeAgentMessage` — and the
+ * route reports at entry, with a comment saying why: "reporting at each of those
+ * would tag the same request up to three times and needs a reply threaded through
+ * internals for nothing". The line-based scan below sees three parses with no
+ * report inside their windows, so it had all three sitting in KNOWN_UNREPORTED as
+ * an unfixed defect. **The route was already correct**, and following the backlog
+ * would have added a fourth report to a route that reports.
+ *
+ * This is a different claim from the backlog's, so it lives in a different list:
+ * KNOWN_UNREPORTED means "this request is NOT reported", and that was false here.
+ *
+ * The exemption is derived, not asserted. An entry is only honoured while the file
+ * really does report that schema somewhere, and only while the schema really is
+ * parsed more than once — so a single-parse route cannot hide here, and if the
+ * route's own report is deleted the sites fall straight back into the main arm.
+ */
+const REPORTED_AT_ROUTE_ENTRY: ReadonlySet<string> = new Set([
+  'agent-sessions.ts (RunTurnRequestSchema)',
 ]);
 
 /** Site key as it appears in KNOWN_UNREPORTED — file and schema, no line. */
@@ -225,6 +245,7 @@ describe('customer-facing writes report the fields they ignored', () => {
     const missing = sites
       .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMA_NAMES.includes(s.schema))
       .filter((s) => !KNOWN_UNREPORTED.has(backlogKey(s)))
+      .filter((s) => !REPORTED_AT_ROUTE_ENTRY.has(backlogKey(s)))
       .map((s) => `${s.file}:${String(s.line)} (${s.schema})`);
     expect(
       missing,
@@ -248,10 +269,17 @@ describe('customer-facing writes report the fields they ignored', () => {
     // being wired, because reading them showed they were never customer surfaces:
     // three mac-nodes routes and two internal atlas-priority routes are staff-only,
     // so they moved to the file exemption and its staff-gate arm.
-    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(21);
+    //
+    // V-949 — 21 to 16. Four session writes wired (cookies/set, history, files,
+    // handback — all controlKeyOrAccountAuth('write')), attributed correctly only
+    // after V-948 fixed the pattern that could not see their type-argument
+    // registrations. The fifth, RunTurnRequestSchema, was never a defect at all:
+    // see REPORTED_AT_ROUTE_ENTRY above.
+    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(16);
     const live = new Set(
       sites
         .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMA_NAMES.includes(s.schema))
+        .filter((s) => !REPORTED_AT_ROUTE_ENTRY.has(backlogKey(s)))
         .map(backlogKey),
     );
     const stale = [...KNOWN_UNREPORTED].filter((k) => !live.has(k)).sort();
@@ -302,6 +330,35 @@ describe('customer-facing writes report the fields they ignored', () => {
       sites.filter((s) => s.reports && s.reportedSchema === null).map((s) => s.file),
       'a report was found with no readable knownKeys expression, so the arm above cannot check it',
     ).toEqual([]);
+  });
+
+  it('CRITICAL a route-entry-report exemption is DERIVED, never asserted. Two conditions, both read from the source: the file really does report that schema somewhere, and the schema really is parsed more than once. Without them this list is a way to declare any unreported route fixed — and the entry it holds today was itself the correction of a backlog claim that turned out to be false, so the list gets the scrutiny the claim did not.', () => {
+    const KNOWN_KEYS_ANY =
+      /knownKeys:\s*(?:Object\.keys\((\w+Schema)\.shape\)|knownRequestKeys\((\w+Schema)\))/g;
+    expect(REPORTED_AT_ROUTE_ENTRY.size, 'entries — kept small and each one read').toBe(1);
+    for (const key of REPORTED_AT_ROUTE_ENTRY) {
+      const parts = /^(.+) \((\w+)\)$/.exec(key);
+      expect(parts, `${key} is in "file (Schema)" form`).not.toBeNull();
+      const file = parts![1]!;
+      const schema = parts![2]!;
+
+      const src = readFileSync(join(ROUTES_DIR, file), 'utf8');
+      const reported = new Set(
+        [...src.matchAll(KNOWN_KEYS_ANY)].map((m) => m[1] ?? m[2]).filter((n) => n !== undefined),
+      );
+      expect(
+        reported.has(schema),
+        `${file} must actually report ${schema} somewhere — the exemption says the route reports at ` +
+          'entry, so if that report is gone the parses are unreported again and belong in the backlog',
+      ).toBe(true);
+
+      const parseCount = sites.filter((s) => s.file === file && s.schema === schema).length;
+      expect(
+        parseCount,
+        `${schema} must really be parsed more than once in ${file} — a single-parse route has no ` +
+          'reason to report anywhere but next to its parse, and must not hide here',
+      ).toBeGreaterThan(1);
+    }
   });
 
   it('CRITICAL every registration in a file exempted for being STAFF-ONLY is actually gated. That is the whole justification for skipping the reporter there, and unlike the admin- prefix it is invisible in the filename — an ungated customer route added to one of these files would inherit an exemption it does not qualify for.', () => {

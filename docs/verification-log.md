@@ -40655,3 +40655,41 @@ generalisable half. Both files happen to use only the plain shape today, so a bl
 perfectly healthy right up to the commit that adds the other one — which is how this survived. A further
 arm floors the type-argument population under `src/routes` at 60, so "that shape is rare here" stays
 falsifiable; stripping the counter to a form that matches nothing fails it at 0.
+
+## V-949 — four session writes wired, and one backlog entry that described a defect that was not there
+
+**With V-948's pattern the five remaining `agent-sessions.ts` sites attribute cleanly.** Four are one route
+each, all `controlKeyOrAccountAuth('write') + rateLimit`: `POST /:id/cookies/set`, `POST /:id/history`,
+`POST /:id/files`, `POST /:id/handback`. The caller is identified before the parse on both paths — an
+account Bearer, or the per-session `gui_control_key` the separate simulator app holds — so each now reports
+next to its parse. All four handlers already took `reply`; handback sits one nesting level deeper, inside
+the pair-mode block, which a fixed-indent edit would have silently missed.
+
+**The fifth was not a defect.** `RunTurnRequestSchema` is parsed three times for one request — in
+`prepareAgentMessage`, `handleAgentMessage` and `executeAgentMessage` — and none of those parses has a
+report inside the guard's 16-line window, so all three landed in the backlog. `POST /:id/message`
+**already reports**, once at the route entry, with a comment stating the reason: "reporting at each of
+those would tag the same request up to three times and needs a reply threaded through internals for
+nothing". Following the backlog would have added a fourth report to a route that was already right.
+
+**So the backlog was conflating two different claims.** "This parse has no nearby report" is not "this
+request is unreported". The entry moved to a separate list, `REPORTED_AT_ROUTE_ENTRY`, because it asserts
+something else entirely.
+
+**Checked the other twenty for the same false positive: exactly one.** Every other backlog schema is parsed
+once and reported nowhere in its file, so the rest of the list means what it says.
+
+**The new list is derived, not asserted — and that mattered.** V-948 had just caught a docstring promising a
+protection its code did not implement, so the same standard applies here. An entry is honoured only while
+the file really does report that schema, and only while the schema really is parsed more than once. Both
+conditions are proved separately, which took three attempts: the first mutation was caught by the size pin
+before the loop ran, the second by the reports-somewhere condition, and only the third — an entry that IS
+reported in its file but parsed once — isolated the parse-count condition. **A mutation caught by the wrong
+arm is not a proof of the arm you meant to test.**
+
+**Two more proofs.** Deleting the route-entry report makes the exemption fail on its own premise, by name.
+Un-wiring handback fails the main coverage arm. All restores byte-identical.
+
+**Ceiling 21 → 16.** What remains is the `auth.ts` cluster of 11 plus `auth-cli.ts` initiate/exchange,
+`auth-oauth-client.ts` start/confirm-merge, and `session-proxy.ts` — every one of them an anonymous or
+near-anonymous surface, which is the judgement this sweep has consistently refused to make mechanically.
