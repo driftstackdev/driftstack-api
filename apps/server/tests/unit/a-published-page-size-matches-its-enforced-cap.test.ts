@@ -14,8 +14,15 @@
 //
 // So the shadow copied the schema faithfully and the caps stayed behind. The
 // four crypto endpoints published `type: string` — two of them with no pattern,
-// no bounds and no description whatsoever — while the other 19 paginated
-// endpoints in the same document publish `type: integer` with minimum/maximum.
+// no bounds and no description whatsoever — while the rest of the paginated
+// endpoints in the same document published `type: integer` with minimum/maximum.
+//
+// V-1030: all four are fixed, and the document now publishes 22 paginated
+// parameters, every one an integer with bounds. The named four below stay,
+// because they also pin the published maximum against the cap the handler
+// actually enforces. An arm at the end derives the weaker property — integer,
+// minimum, maximum — across all 22, since the eighteen this file never named
+// were correct but pinned by nothing.
 //
 // Fixed on the document side only. The routes still accept a numeric string off
 // the wire, which is what HTTP delivers; `type: integer` is how OpenAPI declares
@@ -120,5 +127,39 @@ describe('V-933 a published page size matches its enforced cap', () => {
 
   it('CRITICAL the caps are genuinely different per endpoint, so the arm above is comparing real numbers rather than one repeated constant. A list caps at 100, the admin list at 200, the CSV export at 1000 and the daily breakdown at 90 — four distinct values, which is what makes a single shared expectation impossible.', () => {
     expect(new Set(CAPS.map((c) => c.max)).size, 'distinct enforced caps').toBe(4);
+  });
+
+  it('CRITICAL every published paginated parameter is an integer with bounds, not just the four this file names. The four crypto endpoints were fixed; the other eighteen were correct all along and pinned by nothing, so a regression to the exact shape this guard exists for — `type: string`, no minimum, no maximum — would only be caught on four of twenty-two.', () => {
+    const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as SpecShape;
+    const offenders: string[] = [];
+    let seen = 0;
+    for (const [path, ops] of Object.entries(spec.paths)) {
+      for (const [verb, op] of Object.entries(ops)) {
+        for (const param of op.parameters ?? []) {
+          if (!['limit', 'days', 'page_size', 'per_page'].includes(param.name ?? '')) continue;
+          seen += 1;
+          const schema = param.schema ?? {};
+          if (
+            schema.type !== 'integer' ||
+            schema.minimum === undefined ||
+            schema.maximum === undefined
+          ) {
+            offenders.push(
+              `${verb.toUpperCase()} ${path} ${param.name}: type=${String(schema.type)} min=${String(schema.minimum)} max=${String(schema.maximum)}`,
+            );
+          }
+        }
+      }
+    }
+    expect(
+      seen,
+      'paginated parameters found in the published spec — 22 at V-1030; a collapse here makes the ' +
+        'check below vacuous',
+    ).toBeGreaterThanOrEqual(20);
+    expect(
+      offenders.sort(),
+      'these published paginated parameters are not integers with minimum and maximum, so a ' +
+        'generated SDK ships a validator without the cap the route enforces:',
+    ).toEqual([]);
   });
 });

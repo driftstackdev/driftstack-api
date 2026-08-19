@@ -43947,3 +43947,35 @@ path → RED on verb parity, and GREEN under the pre-V-1029 roster, which is the
 
 `it(` count 10 → 11. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
 20238 passed.
+
+## V-1030 — a guard that fixed four endpoints and left the other eighteen unpinned
+
+Continuing the V-1029 sweep for rosters smaller than a derivable population. Two candidates checked
+and cleared first: the disabled-stub registrar roster holds 7 (file, function) pairs and there are
+exactly 7 `…DisabledRoutes` functions, and the page-size guard's four-endpoint roster is deliberate —
+its header explains those four were the broken ones.
+
+But the same header states, as background, that "the other 19 paginated endpoints in the same
+document publish `type: integer` with minimum/maximum". Nothing derives that. Measured against the
+published spec: 22 paginated parameters, every one an integer with bounds. So the four are fixed and
+the claim is roughly right — and eighteen endpoints that were correct all along are pinned by nothing.
+
+The regression this guard exists to catch is a paginated parameter published as `type: string` with
+no bounds, which makes a generated SDK ship a validator without the cap the route enforces. That
+regression on any of the eighteen was invisible. Proof rather than assertion: setting `GET /v1/sessions`
+`limit` to `type: string` — a core customer endpoint, not one of the named four — reds the new arm and
+passes 3/3 under the pre-V-1030 file.
+
+The named four stay as they are, because they pin something stronger: the published maximum against
+the cap the handler actually enforces. The new arm derives the weaker property across all 22, which
+is the one that can be checked without reading every handler.
+
+Header corrected too: it now records that all four were fixed and that the document publishes 22
+paginated parameters, rather than leaving a reader with the pre-fix picture.
+
+Mutation: an unnamed endpoint regressed to `type: string` → RED, green under the old file; the
+paginated-parameter floor at 20 against a measured 22 so a collapsed scan cannot pass vacuously.
+Spec restored byte-identical.
+
+`it(` count 3 → 4. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
+20239 passed.
