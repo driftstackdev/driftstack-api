@@ -44715,3 +44715,55 @@ in both directions at once.
 
 `it(` count 3 in a new file. Ratchets 2934→2935 and 3100→3101. `apps/server/tests/unit` green:
 1937 files, 20253 passed.
+
+## V-1052 — the third leg of the webhook-event catalogue: does anything emit it?
+
+V-1051 closed the email catalogue in both directions. Webhook events are the other
+subscribable surface and carry a sharper version of the same failure: a customer does
+not merely read about an event, they write a handler for it and wait. A type that is
+in the enum, in the docs, and in the subscribe dropdown but that nothing sends is a
+handler that never fires, and nothing about it looks broken from outside.
+
+Checked prior art before investigating, per the standing rule. `docs-api-webhook-
+events-content-parity` already derives from `WebhookEventTypeSchema.options` and
+asserts each type appears in the customer reference, so enum-versus-docs is owned. The
+uncovered leg was enum-versus-emitter.
+
+RESULT, a negative: 9 declared types, all 9 emittable. Eight go through
+`WebhooksService.enqueueEvent(accountId, eventType, data)` — `session.completed`,
+`session.failed`, `session.egress_capability_changed` (services/sessions.ts),
+`api_key.revoked` (services/api-keys.ts), `crypto.order.paid`, `crypto.order.failed`
+(services/crypto-orders.ts), `session.challenge_detected` (services/challenge-relay.ts)
+and `session.profile_save_failed` (services/profile-save-failed-relay.ts).
+
+`test.ping` has no `enqueueEvent` site, which the first scan reported as an orphan.
+It is not one: `sendTestEvent` (services/webhooks.ts:786) builds the delivery directly
+and sends it to ONE endpoint, bypassing subscription — the OpenAPI summary for
+`POST /v1/webhooks/{id}/test` says exactly that. A check that only knew about
+`enqueueEvent` would report the one event a customer can trigger on demand as the one
+that never fires, so the scan accepts either shape.
+
+TWO METHOD ERRORS, both caught by proving rather than by reading.
+
+First, the snapshot. `packages/api-types/src/webhooks.ts` and
+`apps/server/src/services/webhooks.ts` share a basename, and copying both into one
+scratchpad directory left one snapshot holding the other file's contents; the restore
+then wrote the service into the types package (978 insertions). Caught by `git status`
+immediately after the mutation round rather than at commit time. The types file held no
+uncommitted work so HEAD was the correct source to restore from. Snapshot filenames now
+carry the directory, not just the basename.
+
+Second, and the one worth keeping: `type:` without a boundary also matches
+`event_type:` and `eventType:`, and `sendTestEvent` contains all three spellings within
+forty lines. The first version of the last arm SURVIVED a mutation that removed the
+`test.ping` payload construction outright, because it matched the audit-row
+`event_type:` underneath. Same shape as the keyword-regex-on-a-dotted-path finding: a
+pattern that looks specific matches a superset, and the mutation is what reveals it.
+Both patterns are boundary-anchored now, and the trap is recorded in the file so the
+next edit does not re-loosen them.
+
+Mutations, after anchoring: declaring a tenth type with no emitter fails the orphan arm;
+swapping the `test.ping` payload type fails two arms; renaming `sendTestEvent` fails the
+third. Restored byte-identical from the corrected snapshot.
+
+`it(` count 3 in a new file. Ratchets 2935→2936 and 3101→3102.
