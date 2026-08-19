@@ -40964,3 +40964,41 @@ TypeScript either. Neither isolates the thing being tested, which by this arc's 
 is a proof of it. The isolating mutation keeps the extra real and points only its `canonical` at a
 nonexistent method: **1 failed, the new arm alone**, reporting `usage.current claims to be sugar over
 noSuchMethod, which TypeScript and Python and Go do not expose`.
+
+## V-956 — an allowlist that excused nothing, and a guard with no positive arm
+
+**Found by sweeping the class V-955 came from**, mechanically this time: exemption-style constants that are
+never named inside any `it()` body — applied, but never validated. 77 such lists exist across the suite; 12
+are never referenced inside a test. Most of those are benign (directory-walk skips, test fixtures, a regex).
+Four were real exemption lists. Three held up. One did not.
+
+**`email-templates-url-literals-guard` allowlisted two substrings that could never have mattered.**
+`driftstack.dev/docs` and `driftstack.dev/legal`, justified in the file's own header as "separate origins
+not driven by DASHBOARD_ORIGIN". Neither string occurs anywhere in `services/email.ts` — and neither could
+have been load-bearing if it did, because the allowlist is only consulted for lines that already contain
+`app.driftstack.dev` or `localhost:5173`. Removed, behaviour-preserving by measurement rather than by
+argument, and replaced with an arm that refuses any future entry which does not excuse a line carrying a
+trigger. An exemption that excuses nothing is not harmless: it reads as considered, and it is the seam a
+broader entry slips in through — `driftstack.dev` in place of `driftstack.dev/docs` would have disabled the
+guard entirely and looked like a tidy-up.
+
+**The other half was missing rather than dead.** Both of the guard's arms report an ABSENCE — an empty
+offender list — so a wrong path, an emptied file or a rewritten module passes exactly like a clean one. Its
+sibling `bootstrap-url-literals-guard` has a positive arm for precisely this (`reads config.dashboardOrigin
+at least once`); this one had none. It now asserts what the module's header actually promises: that
+customer-facing URLs arrive through template variables.
+
+**Four mutations. The third failed, and the failure is the useful part.** Hardcoding a dashboard URL into a
+real template line fires the original arm. Re-adding `driftstack.dev/docs` fires the dead-entry arm.
+Emptying the source fires the vacuity arm at 0 characters against 10 000. But renaming `v.portalUrl` **passed** —
+`SOURCE.toContain('v.portalUrl')` is satisfied by `v.portalUrlRenamed`, so the check could not see the exact
+drift it was written for. **That is the second time this session I wrote a substring test that looked right
+and was too weak**; V-953's first matcher accepted a class with no fields for the same reason. Tightened to
+the interpolation form `${v.portalUrl}`, the rename fails it — six occurrences renamed, arm red.
+
+**Also verified clean, recorded so the sweep is not re-run:** `openapi-route-coverage`'s
+`INTENTIONALLY_UNPUBLISHED_OPERATIONS` is pinned as an exact set; `no-raw-sql-injection-surface`'s
+`ALLOWLIST` is empty and so can hide nothing; `unscoped-finders-admin-only-sweep`'s single `ALLOWED_CALLER`
+has an arm proving that caller opts in explicitly; `docs-public-surface-resolves` enforces its "each entry
+must say whose API it is" rule at line 293; and `bootstrap-url-literals-guard`'s two allowlist entries are
+both still load-bearing in the file it scans.
