@@ -52,6 +52,68 @@ const EXEMPT_SCHEMAS: ReadonlyArray<readonly [string, unknown]> = [
 ];
 const EXEMPT_SCHEMA_NAMES = EXEMPT_SCHEMAS.map(([name]) => name);
 
+/**
+ * V-945 — sites the widened PARSE_RE made visible, recorded as a FALLING ceiling
+ * rather than triaged in one pass.
+ *
+ * These were never checked: the pattern above matched `request.body` only, so
+ * roughly half the route surface — the half that names the Fastify argument `req`
+ * — was invisible. None of these schemas is `.strict()`, so a mistyped field is
+ * stripped and the request answered as success, which is exactly the silent drop
+ * this file exists to surface.
+ *
+ * They are NOT wired here on purpose. Each needs a per-route decision this sweep
+ * cannot make mechanically: several are ANONYMOUS surfaces, where the module's own
+ * `status-subscribe` exemption reasons that echoing a caller's keys back discloses
+ * schema shape on exactly the surface that attracts probing. Deciding which of
+ * these are that case, and which simply want the reporter, is route-by-route work
+ * — an automated attempt at that classification misread an authed session route as
+ * anonymous, so the classification is not offered here as if it were reliable.
+ *
+ * Keyed by file and schema rather than by line, so an edit above a site does not
+ * invalidate the entry. The COUNT is pinned below and may only fall: wiring a
+ * route means deleting its key in the same commit.
+ */
+const KNOWN_UNREPORTED: ReadonlySet<string> = new Set([
+  'agent-sessions-transport-report.ts (transportReportBodySchema)',
+  'agent-sessions.ts (CreateAgentSessionRequestSchema)',
+  'agent-sessions.ts (HandbackBodySchema)',
+  'agent-sessions.ts (NavigateHistoryBodySchema)',
+  'agent-sessions.ts (ResumeSessionRequestSchema)',
+  'agent-sessions.ts (RunTurnRequestSchema)',
+  'agent-sessions.ts (SetCookiesBodySchema)',
+  'agent-sessions.ts (UploadFileBodySchema)',
+  'auth-cli.ts (CliAuthorizeBindRequestSchema)',
+  'auth-cli.ts (CliAuthorizeExchangeRequestSchema)',
+  'auth-cli.ts (CliAuthorizeInitiateRequestSchema)',
+  'auth-oauth-client.ts (ConfirmMergeBodySchema)',
+  'auth-oauth-client.ts (StartBodySchema)',
+  'auth.ts (LoginRequestSchema)',
+  'auth.ts (LogoutRequestSchema)',
+  'auth.ts (MagicLinkConsumeRequestSchema)',
+  'auth.ts (MagicLinkRequestSchema)',
+  'auth.ts (MfaChallengeRequestSchema)',
+  'auth.ts (MfaStepUpRequestSchema)',
+  'auth.ts (PasswordResetConfirmRequestSchema)',
+  'auth.ts (PasswordResetRequestSchema)',
+  'auth.ts (RefreshSessionRequestSchema)',
+  'auth.ts (ResendVerificationRequestSchema)',
+  'auth.ts (SignupRequestSchema)',
+  'auth.ts (VerifyEmailRequestSchema)',
+  'billing-crypto-quote.ts (QuoteSchema)',
+  'billing-crypto.ts (CreateCryptoCheckoutSchema)',
+  'internal-atlas-priority.ts (eventStatusBodySchema)',
+  'internal-atlas-priority.ts (probeSignatureBodySchema)',
+  'mac-nodes-register.ts (ControlNodeBodySchema)',
+  'mac-nodes-register.ts (RegisterBodySchema)',
+  'mac-nodes-register.ts (RegisterNodeBodySchema)',
+  'profiles.ts (CloneProfileRequestSchema)',
+  'session-proxy.ts (SessionEgressConfigSchema)',
+]);
+
+/** Site key as it appears in KNOWN_UNREPORTED — file and schema, no line. */
+const backlogKey = (site: Site): string => `${site.file} (${site.schema})`;
+
 const isExempt = (file: string): boolean =>
   EXEMPT_PREFIXES.some((p) => file.startsWith(p)) || EXEMPT_FILES.includes(file as never);
 
@@ -66,7 +128,15 @@ const isExempt = (file: string): boolean =>
  * session surface, the exact routes the mechanism had just been wired into. The
  * population floor below is what surfaced that.
  */
-const PARSE_RE = /(\w+Schema)\.(?:safeParse|parse)\(\s*(?:request\.body|raw[A-Za-z]*Body)/;
+// V-945 — `req.body` as well as `request.body`. The comment above records an
+// earlier draft of this pattern silently excluding the whole session surface,
+// and the population floor was added to catch that. It could not catch this
+// variant: the routes name the Fastify argument `req` in roughly half the
+// codebase, so the scan saw 40 of 84 body-parse sites and 40 clears a floor of
+// 30. A floor detects a regex matching NOTHING; it cannot detect one matching
+// half the population.
+const PARSE_RE =
+  /(\w+Schema)\.(?:safeParse|parse)\(\s*(?:req\.body|request\.body|raw[A-Za-z]*Body)/;
 
 /**
  * Lines after the parse within which the report must appear. The report sits
@@ -116,8 +186,12 @@ describe('customer-facing writes report the fields they ignored', () => {
     // Without this the regex could drift to match nothing and every assertion
     // below would pass over an empty list — a guard reporting all clear because
     // it read nothing at all.
+    // V-945 — raised from 30 to just under the 84 the widened pattern sees. At 30
+    // a scan seeing only the `request.body` half (40) cleared the floor, which is
+    // why the floor could not catch this: it detects a regex matching NOTHING, not
+    // one matching half the population.
     expect(sites.length, 'no body-parsing route sites were found at all').toBeGreaterThanOrEqual(
-      30,
+      75,
     );
     expect(
       sites.filter((s) => s.reports).length,
@@ -128,6 +202,7 @@ describe('customer-facing writes report the fields they ignored', () => {
   it('CRITICAL every non-exempt route that parses a body also reports unknown fields', () => {
     const missing = sites
       .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMA_NAMES.includes(s.schema))
+      .filter((s) => !KNOWN_UNREPORTED.has(backlogKey(s)))
       .map((s) => `${s.file}:${String(s.line)} (${s.schema})`);
     expect(
       missing,
@@ -136,6 +211,20 @@ describe('customer-facing writes report the fields they ignored', () => {
         'customer gets a resource configured as something they did not ask for, with nothing ' +
         'saying so. Wire reportUnknownRequestFields next to the parse, or add the route to the ' +
         'exemption list here with the reason it belongs there',
+    ).toEqual([]);
+  });
+
+  it('CRITICAL the unreported backlog only ever shrinks, and holds no stale entry. Pinned rather than floored: 34 is the number the widened pattern exposed, and wiring a route means deleting its key in the same commit. An entry that no longer matches an unreported site is worse than none — it reads like a considered decision while silencing whatever next lands under that key.', () => {
+    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(34);
+    const live = new Set(
+      sites
+        .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMA_NAMES.includes(s.schema))
+        .map(backlogKey),
+    );
+    const stale = [...KNOWN_UNREPORTED].filter((k) => !live.has(k)).sort();
+    expect(
+      stale,
+      'these backlog entries no longer name an unreported site — the route was wired or removed, so delete the key and lower the count:',
     ).toEqual([]);
   });
 

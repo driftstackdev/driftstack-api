@@ -40466,3 +40466,53 @@ named rather than counted, because a count stays green when one header is swappe
 **Pin check done the way V-942 taught.** Before committing I looked for pins on the SHAPE of the two
 response blocks I edited, not just their identifiers, and ran every guard mentioning `oauth-client`
 plus the three most likely spec pins. All green.
+
+## V-945 — a coverage guard saw 40 of 84 body-parse sites, because half the codebase says `req` (2026-08-19)
+
+**Found by auditing my own method, not the code.** V-944 showed a line-based grep cannot see a call whose
+argument sits on the next line. I had used line-based patterns throughout this arc, so I re-ran three of
+them whole-file: `reply.type(` found 3 sites against 1 (my V-940 enumeration undercounted, though that
+entry's conclusion came from the spec side and stands), `reply.code(` found 74 against 70, and
+`requireScope(` was sound at 175/175. The four missed status sends — three 201s and a 202 — are all
+correctly declared, so no defect there.
+
+**The transferable risk was repo-side: guards that scan line-by-line.** 109 do; 5 also match a
+call-with-argument. The consequential one is `unknown-request-fields-coverage-invariant`, whose whole
+purpose is catching a customer-facing write that was never wired to the unknown-field reporter — "a
+per-route arm cannot catch this, because an arm has to name a route to test it."
+
+**Its blind spot was not the newline. It was the parameter name.** `PARSE_RE` required
+`request.body`; roughly half this codebase names the Fastify argument `req`. So the guard saw **40 of 84**
+body-parse sites, and **36 non-exempt sites in the invisible half never report**. None of the schemas I
+checked is `.strict()`, so on those routes a mistyped field is stripped and the request answered as
+success — precisely the silent drop the mechanism exists to surface, and the module's own motivating
+example.
+
+**Its population floor could not catch this, and the reason generalises.** The floor stood at 30 and the
+guard saw 40, so it passed. A floor detects a regex matching NOTHING; it cannot detect one matching half
+the population. The guard's own header records an earlier instance of this same class — a draft pattern
+that "silently excluded every route on the session surface" — with the floor added as the fix. The fix did
+not survive the next variant.
+
+**Widened, floor raised to 75, and the 36 recorded as a FALLING ceiling — not triaged.** Each needs a
+per-route decision this sweep cannot make mechanically: several are ANONYMOUS surfaces, where the module's
+own `status-subscribe` exemption reasons that echoing a caller's keys back discloses schema shape on
+exactly the surface that attracts probing. My automated attempt to split anonymous from authenticated
+misread `/v1/agent-sessions/:id/cookies/set` — plainly an authed route — as anonymous, because the
+backward window missed its `requireAuth`. So the classification is not offered as if it were reliable, and
+the list ships as work to be done rather than a verdict.
+
+Keyed by file and schema rather than line, so an edit above a site does not invalidate an entry. The count
+is pinned at 34 keys and may only fall; a staleness arm refuses an entry that no longer names an
+unreported site, because a stale exemption reads like a decision while silencing whatever next lands under
+that key.
+
+**Two proofs.** Narrowing `PARSE_RE` back fails the raised floor with the revealing number — "expected 40
+to be greater than or equal to 75". Simulating a wiring on a backlogged route fails the staleness arm by
+name.
+
+**Open, and worth stating plainly:** 36 body-parse sites on customer-facing routes may be silently
+dropping mistyped fields today. The guard now sees them and will not let the number grow, but reducing it
+is per-route work — signup, login, MFA, magic-link, CLI authorize, OAuth start, crypto checkout,
+agent-session create, profile clone, session proxy — each needing the anonymous-surface judgement made
+deliberately.
