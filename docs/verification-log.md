@@ -43055,3 +43055,48 @@ is what will fail the day someone implements the exemption, which is the right w
 
 `it(` 10 → 11 on the service test, unchanged at 13 and 19 on the two pins. `npm run typecheck` exit 0.
 No new file, so no ratchet change.
+
+## V-1009 — V-817 corrected the header and left the runtime lie, exactly as the sweep predicted (2026-08-19)
+
+Sweep action 13. `scripts/v528-scrub-violators.sh` rewrites V-205 violator commits out of history.
+Its only executed git commands are `git bundle create` and `git filter-repo`; every push is a
+`printf`. The report's warning was specific: **"the header fix alone leaves the runtime lie in
+place."**
+
+That is what happened. V-817 corrected the header comment — line 9 of the file records it — and left
+BOTH operator-facing messages standing:
+
+- dry run: _"Force-push to remote follows automatically after filter-repo completes."_
+- confirm prompt: _"V-205 historical scrub will FORCE-PUSH rewritten history."_
+
+An operator reads the dry run, types the confirmation, and believes the violator commits are gone
+from the remote. Nothing was pushed. "I believed the scrub completed" is the state in which nobody
+goes back and checks.
+
+**A third defect the same shape, one layer down.** The completion block prints
+`git push --force origin main` with no mention that `git filter-repo` has just removed the `origin`
+remote — so the command it hands the operator fails. Verified from the tool rather than the report:
+`git filter-repo --help` describes suppressing "removing of the origin remote" as the NON-default
+case. The script now prints the `git remote add origin` step first.
+
+**Third time in this arc that a correction reached a header and stopped** — after the session-proxy
+SECURITY block (V-1005) and the audit-archive scheduling claim (V-1006). The pattern is consistent
+enough to name: the header is read by whoever EDITS the file, the printf by whoever RUNS it, and the
+second reader is the one making the decision the claim is about.
+
+**Neither runtime message was pinned**, which is why the header fix could pass review — a
+whitespace-tolerant search found both strings in the script and nowhere else, so the two v528 pin
+files stayed green through the lie and stay green through the fix. That is the gap the new guard
+closes.
+
+Built from item 5 of the finding, and scoped to what the operator SEES: it reads `printf`/`echo`
+argument text only, and requires that any script asserting it pushes actually executes a push.
+Comments are excluded on purpose — a corrected file records the claim it used to make, and this very
+file quotes the retracted sentence at line 9, so a matcher that could not tell a retraction from a
+live claim would force the record to be deleted to stay green. That is rule 4 turned into code.
+
+Mutation-proved: reinstating the dry-run sentence flags the script by name, and deleting the
+`git remote add origin` line reds the third arm.
+
+`it(` 3 in the new file. `EXPECTED_TEST_FILES` 2928 → 2929, `_ALL` 3094 → 3095.
+`npm run typecheck` exit 0, `bash -n` clean on the edited script.

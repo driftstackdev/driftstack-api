@@ -123,12 +123,14 @@ if [[ $CONFIRM -eq 0 ]]; then
   printf '\nReplacements that WOULD apply across every commit message:\n\n'
   awk '/^# /{next} /^[ \t]*$/{next} /text\.replace/{print "  " $0}' "$CALLBACK_FILE"
   printf '\nTo execute, re-run with --confirm AND only after V-528 Step 4 done.\n'
-  printf 'Force-push to remote follows automatically after filter-repo completes.\n'
+  printf 'Nothing is pushed: the rewrite is LOCAL and the push commands are printed\n'
+  printf 'for you to run by hand afterwards.\n'
   exit 0
 fi
 
 # Hard confirmation guard (extra prompt — destructive).
-printf '\n⚠️  V-205 historical scrub will FORCE-PUSH rewritten history.\n'
+printf '\n⚠️  V-205 historical scrub REWRITES LOCAL HISTORY IRREVERSIBLY.\n'
+printf '   It does NOT push. The remote is untouched until you push by hand.\n'
 printf '   Repo must already be PRIVATE (V-528 Step 4 done).\n'
 printf '   Type EXACTLY: scrub-violators\n'
 read -r REPLY
@@ -150,7 +152,8 @@ printf 'Out-of-repo backup bundle created: %s\n' "$BACKUP_BUNDLE"
 git filter-repo --commit-callback "$(cat "$CALLBACK_FILE")" --force
 
 printf '\nHistory rewritten. New HEAD: %s\n' "$(git rev-parse HEAD)"
-printf 'To complete, run:\n'
+printf 'To complete, run — note filter-repo REMOVED the origin remote, so re-add it first:\n'
+printf '  git remote add origin <url>   # filter-repo drops it by default\n'
 printf '  git push --force origin main\n'
 printf '  git push --force origin --tags  # if any tags carried violator messages\n'
 printf '\nPre-scrub backup remains at %s; recover via:\n' "$BACKUP_BUNDLE"
