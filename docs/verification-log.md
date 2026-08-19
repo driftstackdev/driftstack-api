@@ -37866,3 +37866,38 @@ designed out rather than repaired afterwards.
 **The row was unpinned**, so instead of a pin proof I proved the thing that matters here: removing
 the V-872 staleness note still fails, i.e. correcting a row did not quietly satisfy the freshness
 requirement. The basis line still reads V-293. **15 of 59 verified; 44 remain.**
+
+## V-878 — surface instrument on the customer dashboard: one correction, four rows earned their status (2026-08-18)
+
+**Surface 2, 8 open rows.** Three were already settled by earlier passes (profile state cleanup and
+usage trends in V-876, invoice history in V-875). Of the remaining five, one is stale.
+
+**Corrected: `/usage summary + visualization`.** `usage.astro` fetches `/v1/usage` totals and
+`/v1/usage/series?days=30` and renders real sparklines, progressively enhanced from an SSG shell.
+The trap was in the file's own comment — "neutral placeholders ('—' totals + flat sparklines)" —
+which describes the pre-fetch placeholder state, not what the customer sees. Read carelessly it
+argues for IN-FLIGHT; read in context it is the opposite. The same comment records that the SSG
+stopped painting fabricated usage numbers in June, which is a good sign about the page rather than
+a bad one.
+
+**Four left, and one of them corrected my own assumption mid-check.** The dashboard has no
+`sessions.astro` or `profiles.astro`, so "Session list + filtering / sorting", "Session detail view"
+and "Profile detail view" looked like they described a surface that does not exist — which would
+have made IN-FLIGHT wrong in the _other_ direction. Then `index.astro` turned out to fetch
+`GET /v1/sessions` and render a session preview. So a partial session surface does exist, filtering
+and sorting do not, and IN-FLIGHT is exactly right. Checking the page list was not enough; the row
+is about a capability, not a file.
+
+**`/billing plan picker + payment methods` deliberately not corrected.** The plan picker ships
+(`select-tier.astro`, linked from `billing.astro`) and payment methods are managed through the
+Stripe portal redirect verified in V-873. Both named capabilities are reachable, so SHIPPED is
+arguable — but "payment methods" could equally mean in-dashboard management, which does not exist.
+Ambiguous rows are where over-claiming starts, and the row costs nothing left as it is.
+
+**Noted for later, not chased:** `billing.astro` tells the customer it manages "subscription,
+payment method, and invoices", while the invoice-history row is confirmed unbuilt (V-875) and
+`billing.ts` has no invoice route. The page's own copy may promise a surface that is not there. That
+is a customer-facing claim rather than a catalog row, so it belongs in its own check.
+
+Width-preserving cells again, so no reflow and no pin churn. The staleness note remains required —
+proved after the edit — and the basis line still reads V-293. **16 of 59 verified; 43 remain.**

@@ -291,7 +291,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 | /api-keys CRUD                              | SHIPPED         | V-270                         | —       | —                                              |
 | /webhooks list + status                     | SHIPPED         | V-282 + V-307b                | —       | —                                              |
 | /webhooks delivery history                  | SHIPPED         | V-307b + V-403                | —       | —                                              |
-| /usage summary + visualization              | IN-FLIGHT       | V-299                         | 4       | —                                              |
+| /usage summary + visualization              | SHIPPED         | V-299                         | —       | —                                              |
 | /usage historical trends + cost projections | DEFERRED        | V-299                         | 6       | —                                              |
 | /billing plan picker + payment methods      | IN-FLIGHT       | V-300                         | 4       | —                                              |
 | /billing portal redirect                    | SHIPPED (V-873) | V-300                         | 3       | —                                              |
