@@ -42,7 +42,10 @@ describe('W222.A admin-api doc parity', () => {
     const docPaths = Array.from(
       doc.matchAll(/<code>(GET|POST|PATCH|DELETE)\s+(\/v1\/admin\/crypto-orders[^<?]*)/g),
     ).map((m) => m[2]!);
-    expect(docPaths.length).toBeGreaterThan(0);
+    expect(
+      docPaths.length,
+      'admin endpoints documented — V-1028 ratchet: this was > 0 against a real 11',
+    ).toBeGreaterThanOrEqual(11);
     const normalise = (p: string) => p.replace(/:[A-Za-z_]+/g, ':*');
     // V-989 — a quoted literal is not a registration. Same correction as the
     // three SDK path guards (V-987/V-988): the message below says "not

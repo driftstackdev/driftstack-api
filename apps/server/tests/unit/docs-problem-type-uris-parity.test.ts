@@ -77,7 +77,10 @@ describe('W202 docs → PROBLEM_TYPES URI parity', () => {
     while ((m = slugRe.exec(ERROR_CODES_DOC)) !== null) {
       docSlugs.add(m[1] as string);
     }
-    expect(docSlugs.size, 'error-codes doc should declare at least one slug').toBeGreaterThan(0);
+    expect(
+      docSlugs.size,
+      'problem-type slugs found in the docs — V-1028 ratchet: this was > 0 against a real 32, so a broken extractor could check one slug and pass',
+    ).toBeGreaterThanOrEqual(32);
     const fake = [...docSlugs].filter((s) => !realSlugs.has(s));
     expect(
       fake,

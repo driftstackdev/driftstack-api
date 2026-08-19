@@ -53,7 +53,10 @@ describe('W684 cross-SDK URL-escape path-traversal-guard parity', () => {
 
   it("CRITICAL sdk-typescript uses encodeURIComponent across resource files. The browser-stdlib encodeURIComponent escapes ALL reserved URL chars including `/`, so it's safe for path-segment interpolation. Drift to encodeURI (which lets `/` through) would let path-traversal injection through.", () => {
     const tsFiles = readDir(TS_RESOURCES, '.ts');
-    expect(tsFiles.length, 'expected TS resource files').toBeGreaterThan(0);
+    expect(
+      tsFiles.length,
+      'TS SDK files walked — V-1028 ratchet: this was > 0 against a real 19, so a walk that found one file would satisfy every arm below',
+    ).toBeGreaterThanOrEqual(19);
 
     let totalCalls = 0;
     for (const f of tsFiles) {

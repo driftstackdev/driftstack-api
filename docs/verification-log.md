@@ -43881,3 +43881,40 @@ RED on the floor. Control 5/5, page restored byte-identical.
 
 `it(` count 4 → 5. No new file, no ratchet change. `apps/server/tests/unit` green: 1935 files,
 20237 passed.
+
+## V-1028 — five more floors measured, and one of my own set twice as slack as the ones I was fixing
+
+V-1026 raised three anti-vacuity floors from `> 10` against real populations near 100. The suite has
+640 such floors, 136 of them `> 0`, so I measured the ones whose subject is a corpus — by asserting
+an impossible value and reading the actual back — rather than guessing which looked weak.
+
+`docs-problem-type-uris-parity` 32 slugs, floor `> 0`
+`cross-sdk-url-escape-parity` 19 files, floor `> 0`
+`admin-panel-token-key-consistency` 12 files, floor `> 0`
+`admin-api-doc-parity` 11 paths, floor `> 0`
+
+All four raised to their measured counts. Three others measured 2, 4 and 4 — a `> 0` floor there is
+barely slack at all, and tightening them would be ceremony.
+
+**`secrecy-assertion-anchors-on-the-secret-invariant` is the one worth reading.** It walks four test
+roots and asserts each contributes more than zero files and more than zero absence-assertions. That is
+a "does this root still exist" check, not a coverage floor: `apps/server/tests/unit` alone holds 1938
+files, so a walk collapsing to ONE file per root satisfies every assertion in that loop while the
+scan it feeds examines almost nothing. This guard exists because three real secrecy assertions were
+found anchored on a public prefix rather than the secret, so its scan going quiet is the failure that
+matters. Corpus-wide floors added: 2372 files and 387 absence-assertions measured, floors set at 2300
+and 350 — tight enough to catch collapse, loose enough not to duplicate the suite's exact file-count
+ratchet.
+
+**I set one of those floors at 200 before measuring it.** The real number is 387, so my own floor had
+nearly 2× slack — the exact defect this entry is about, committed while writing it. Measured and
+raised before the commit. The lesson is not "be careful": it is that a floor written from intuition
+is worth as little as the one it replaces, and the impossible-assert trick costs one vitest run.
+
+Mutation, using the proof shape V-1026 established rather than the one that looks convincing: capping
+the secrecy walk at one file per root reds the corpus floor; capping the docs extractor at one slug
+reds the new floor (32) and passes cleanly under the old one (`> 0`, 2/2 green). That second pair is
+the whole argument for the change.
+
+`it(` counts unchanged (2, 8, 2, 2, 4). No new file, no ratchet change to the suite gate.
+`apps/server/tests/unit` green: 1935 files, 20237 passed.

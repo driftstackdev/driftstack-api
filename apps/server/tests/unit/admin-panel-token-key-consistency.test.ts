@@ -31,7 +31,10 @@ describe('admin-panel token-key consistency', () => {
 
   it('no admin page reads a token-shaped localStorage key OTHER than the canonical one', () => {
     const files = readdirSync(PAGES_DIR).filter((f) => f.endsWith('.astro'));
-    expect(files.length).toBeGreaterThan(0);
+    expect(
+      files.length,
+      'admin-panel files walked — V-1028 ratchet: this was > 0 against a real 12',
+    ).toBeGreaterThanOrEqual(12);
     for (const f of files) {
       const body = read(resolve(PAGES_DIR, f));
       const keys = [...body.matchAll(/getItem\(\s*['"]([^'"]+)['"]\s*\)/g)]

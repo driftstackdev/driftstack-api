@@ -141,6 +141,8 @@ describe('secrecy assertions anchor on the secret, not a prefix of it', () => {
     // stopped being scanned — which is exactly how `tests/unit` sat outside this
     // guard while contributing more absence-assertions than the roots inside it.
     // Asserting PER ROOT makes a narrowed scan fail with the root's name.
+    let totalFiles = 0;
+    let totalAbsences = 0;
     for (const root of TEST_ROOTS) {
       const files = tsFilesUnder(resolve(REPO_ROOT, root));
       const absences = files.reduce(
@@ -155,7 +157,23 @@ describe('secrecy assertions anchor on the secret, not a prefix of it', () => {
         absences,
         `${root} contributed no absence-assertions — it is in TEST_ROOTS but adds nothing`,
       ).toBeGreaterThan(0);
+      totalFiles += files.length;
+      totalAbsences += absences;
     }
+
+    // V-1028 — the per-root floors above only ask whether a root still exists.
+    // `apps/server/tests/unit` alone holds 1938 files, so a walk that collapsed
+    // to one file per root satisfies every assertion in this loop while the
+    // absence-scan below examines almost nothing. These are the corpus-wide
+    // ratchets; they rise when the suite grows, in the same commit.
+    expect(
+      totalFiles,
+      'test files walked across every root — a collapse here makes the absence scan vacuous',
+    ).toBeGreaterThanOrEqual(2300);
+    expect(
+      totalAbsences,
+      'absence-assertions found across every root — the population this guard polices (387 at V-1028; the floor catches collapse, not drift)',
+    ).toBeGreaterThanOrEqual(350);
   });
 
   it('CRITICAL no test asserts a secret is absent using only a PREFIX of that secret. The prefix of a credential is routinely public — `sk-ant-api03-` is in the vendor docs — so such an assertion passes while the entropy leaks.', () => {
