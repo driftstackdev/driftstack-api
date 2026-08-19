@@ -45,7 +45,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { LaunchProfileRequestSchema } from '@driftstack/api-types';
+import { LaunchProfileRequestSchema, ResumeSessionRequestSchema } from '@driftstack/api-types';
 
 const ROUTES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/routes');
 
@@ -84,6 +84,10 @@ const STAFF_EXEMPT_FILES: ReadonlyArray<readonly [string, readonly string[]]> = 
  */
 const EXEMPT_SCHEMAS: ReadonlyArray<readonly [string, unknown]> = [
   ['LaunchProfileRequestSchema', LaunchProfileRequestSchema],
+  // V-976 — wired in V-947 by mistake. `.strict()` means an unknown key is a 400
+  // from the parse, so the reporter placed after it could never have anything to
+  // report. It belongs here, where the strictness that makes it safe is CHECKED.
+  ['ResumeSessionRequestSchema', ResumeSessionRequestSchema],
 ];
 const EXEMPT_SCHEMA_NAMES = EXEMPT_SCHEMAS.map(([name]) => name);
 

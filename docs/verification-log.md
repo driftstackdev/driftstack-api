@@ -41655,3 +41655,36 @@ the other.
 `buildTestApp({ enableAgentRuntime: true })`: with the subsystem gated off the request answers 503 from the
 disabled-variant stub before any query is parsed. The bare fixture would have made the arm assert 400 against
 a route that never runs its parse — green for the wrong reason.
+
+## V-976 — a reporter I wired in V-947 could never have reported anything
+
+**My own defect, found by following a different thread.** Checking which cold body-validation refusals were
+worth closing, I read `ResumeSessionRequestSchema` and saw `.strict()`. The resume route is one of the five
+I wired to `reportUnknownRequestFields` in V-947 — and a strict schema **rejects** an unknown key at the
+parse with a 400 rather than stripping it, so the reporter placed immediately after that parse could never
+have anything to report. Verified rather than reasoned: `safeParse({ challenge_id: 'abc', mistyped: 1 })`
+returns an `unrecognized_keys` failure.
+
+**The guard already had the right home for it, and I walked past it.** `EXEMPT_SCHEMAS` exists for exactly
+this — its comment reads "zod REJECTS an unknown key with a 400 rather than stripping it … The strictness is
+CHECKED below, not taken on trust." V-947 added a reporter where the file's own design says to add an
+exemption.
+
+**Enumerated all ten rather than fixing the one, per the rule that has caught this before.** Of the schemas
+wired in V-947 and V-949 — `CreateAgentSessionRequest`, `Resume`, `transportReportBody`, `CliAuthorizeBind`,
+`MfaStepUp`, `SetCookiesBody`, `NavigateHistoryBody`, `UploadFileBody`, `HandbackBody`, `CloneProfileRequest`
+— **exactly one is strict**. The other nine strip unknown keys, so their reporters are meaningful. Checked
+behaviourally for the api-types ones (probing for an `unrecognized_keys` issue) and by reading the
+declaration for the five route-local ones.
+
+**Fixed as the guard intends:** the dead call removed, the schema added to `EXEMPT_SCHEMAS`, where its
+strictness is verified at runtime rather than trusted. Proof: dropping `.strict()` from the schema and
+rebuilding fails the exemption arm by name — "a schema exempted for being strict now ACCEPTS an unknown
+key". So the exemption cannot outlive the property that justifies it.
+
+**Also cleared on the way, recorded so the area is not re-opened.** `billing-crypto-quote.ts:93` refuses a
+product with no price row, and its comment calls itself defensive against the schema list and the price
+table drifting. That drift is guarded on both edges and the chain closes transitively:
+`billing-crypto-quote-product-list-cross-source-invariant` ties the route's `SUPPORTED_PRODUCTS` to
+`TIER_PRICE_CENTS`, and `the-purchasable-product-set-is-one-set` (V-924) ties `TIER_PRICE_CENTS` to
+`PURCHASABLE_TIERS`. All three lists hold the same six tiers, so the branch is genuinely unreachable.
