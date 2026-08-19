@@ -180,6 +180,9 @@ const isExempt = (file: string): boolean =>
 const PARSE_RE =
   /(\w+Schema)\.(?:safeParse|parse)\(\s*(?:req\.body|request\.body|raw[A-Za-z]*Body)/;
 
+/** The same pattern, global, for the whole-file scan below. */
+const PARSE_RE_GLOBAL = new RegExp(PARSE_RE.source, 'g');
+
 /**
  * Lines after the parse within which the report must appear. The report sits
  * next to the parse in every wired route; the window only has to be wide enough
@@ -200,29 +203,66 @@ interface Site {
   readonly reportedSchema: string | null;
 }
 
+/**
+ * V-969 — matched over the WHOLE FILE rather than line by line.
+ *
+ * `PARSE_RE` spans from the schema name to `req.body`, and prettier splits exactly
+ * that when the schema name is long:
+ *
+ *     const parsed = SomeRatherLongRequestSchema.safeParse(
+ *       req.body ?? {},
+ *     );
+ *
+ * A per-line loop never sees the newline, so the site becomes invisible and the
+ * guard reports one fewer thing to check — silently, and in the direction that
+ * reads as clean. No site is formatted that way today (84 seen either way), so this
+ * is a latent hole rather than a live one; it is closed because the readiness
+ * assessment records this same failure emptying a line-oriented scan twice already,
+ * and because the file's own header describes an earlier pattern that silently
+ * excluded half the route surface.
+ */
 function scan(): Site[] {
   const sites: Site[] = [];
   for (const file of readdirSync(ROUTES_DIR).filter((f) => f.endsWith('.ts'))) {
-    const lines = readFileSync(join(ROUTES_DIR, file), 'utf8').split('\n');
-    lines.forEach((line, i) => {
-      const match = PARSE_RE.exec(line);
-      if (!match) return;
-      const window = lines.slice(i, i + WINDOW);
-      const keysMatch = KNOWN_KEYS_RE.exec(window.join('\n'));
+    const src = readFileSync(join(ROUTES_DIR, file), 'utf8');
+    const lines = src.split('\n');
+    for (const match of src.matchAll(PARSE_RE_GLOBAL)) {
+      const index = match.index ?? 0;
+      const line = src.slice(0, index).split('\n').length;
+      const window = lines.slice(line - 1, line - 1 + WINDOW).join('\n');
+      const keysMatch = KNOWN_KEYS_RE.exec(window);
       sites.push({
         file,
-        line: i + 1,
+        line,
         schema: match[1]!,
-        reports: window.join('\n').includes('reportUnknownRequestFields('),
+        reports: window.includes('reportUnknownRequestFields('),
         reportedSchema: keysMatch ? (keysMatch[1] ?? keysMatch[2] ?? null) : null,
       });
-    });
+    }
   }
   return sites;
 }
 
 describe('customer-facing writes report the fields they ignored', () => {
   const sites = scan();
+
+  it('CRITICAL the parse pattern still matches when prettier splits the call across lines. Asserted against a fixture because no route is formatted that way today — which is exactly why it needs a fixture: a per-line scan reports the same clean number whether the sites are all visible or one has silently left the population. The readiness assessment records this failure emptying a line-oriented scan twice.', () => {
+    const singleLine = 'const parsed = ShortSchema.safeParse(req.body ?? {});';
+    const wrapped = [
+      'const parsed = SomeRatherLongRequestSchema.safeParse(',
+      '  req.body ?? {},',
+      ');',
+    ].join('\n');
+
+    expect([...singleLine.matchAll(PARSE_RE_GLOBAL)].length, 'the single-line form').toBe(1);
+    expect([...wrapped.matchAll(PARSE_RE_GLOBAL)].length, 'the wrapped form').toBe(1);
+    // And the shape a per-line loop would have handled identically, so the arm is
+    // about the WRAPPED case rather than about the pattern in general.
+    expect(
+      wrapped.split('\n').filter((l) => new RegExp(PARSE_RE.source).test(l)).length,
+      'a per-line scan sees the wrapped call not at all — this is the hole being closed',
+    ).toBe(0);
+  });
 
   it('CRITICAL the scan found a real population of body-parsing routes', () => {
     // Without this the regex could drift to match nothing and every assertion

@@ -41435,3 +41435,42 @@ contrast is the failure and nothing else.
 **Fourth finding of the masked shape** (V-961, V-963, V-966, V-967, and now this), and the strongest
 argument yet for the instrument: every one of these sits in a file the suite already touches, so no
 coverage-percentage or file-level count would have pointed at any of them.
+
+## V-969 — the coverage guard's own scan could lose a site to a line break
+
+**Found by my own analysis script being wrong, which is the part worth recording.** Attributing a throw to
+its route, I concluded a guard sat in a customer handler — then noticed the enclosing registration was 22
+lines earlier than my script said. `billing-crypto-orders.ts` registers `GET /v1/billing/crypto-orders` as
+`app.get<{ Querystring: { … } }>(` with the type argument spanning **nine lines**, and my attribution loop
+iterated line by line, so it could not match. The conclusion happened to be right; the method was not.
+
+**That sent me to check whether any committed guard has the same shape, and one does.**
+`unknown-request-fields-coverage-invariant` — the file this session has edited six times — matches
+registrations over the whole file, but scans for body parses **per line**. `PARSE_RE` spans from the schema
+name to `req.body`, and prettier splits exactly that when the name is long:
+
+```
+const parsed = SomeRatherLongRequestSchema.safeParse(
+  req.body ?? {},
+);
+```
+
+**Latent, not live: 84 sites seen either way today.** Closed anyway, because the failure direction is the one
+that reads as clean — the site leaves the population and the guard reports one fewer thing to check without
+failing. The readiness assessment records this same failure emptying a line-oriented scan twice already, and
+this file's own header describes an earlier pattern that silently excluded half the route surface.
+
+**Proved by measurement, after my first two proofs proved nothing.** Wrapping one real call — the profile
+clone parse — across lines: the per-line scan sees **83**, the whole-file scan sees **84**. My first attempt
+had run the guard against the wrapped source and reported "8 passed" for the old version, which is not a
+demonstration at all: losing a site does not make that guard fail, it makes it check less, and the
+population floor of 75 absorbs the loss. The second attempt's mutation did not apply. Only the count
+comparison shows the defect, and only a fixture arm can pin it — a per-line scan finds the wrapped form
+zero times, which the new arm asserts directly.
+
+**Two candidates cleared on the way, recorded so they are not re-read.** `account-bundled-llm.ts:155` is the
+owner-vanished residual class §5f verified; the spend gate above it — `requireBundledLlmTier`, which stops a
+free-tier account opting into company-funded billing — has **3 hits** and a dedicated suite. And the
+inverted-window guard exists in three copies: the customer list route's is covered (1 hit), the admin list
+and admin export copies are not. Left as a stated remainder rather than closed: the rule is proven once, and
+two untested duplicates of a query-validation refusal are a weaker case than anything else on the list.
