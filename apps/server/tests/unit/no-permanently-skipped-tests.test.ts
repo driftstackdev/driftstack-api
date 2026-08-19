@@ -1,6 +1,6 @@
 // No test is skipped unconditionally.
 //
-// A conditional skip is fine and this repo uses ~63 of them: `describe.skipIf`
+// A conditional skip is fine and this repo uses 144 of them: `describe.skipIf`
 // on a missing DATABASE_URL means "this needs Postgres", which is a real,
 // re-evaluated condition. An UNCONDITIONAL `it.skip` is different — it never
 // runs again, on any machine, ever, and the suite reports it as a skip rather
@@ -102,7 +102,11 @@ function permanentSkips(): Skip[] {
 describe('no test is skipped unconditionally', () => {
   it('CRITICAL the scan reaches real test files across every workspace. This case asserts an absence, so a scan that reached nothing would report the repo clean — and an earlier version of this very sweep was scoped to apps/server/tests and missed all eight offenders, which lived in two other apps.', () => {
     const files = allTestFiles();
-    expect(files.length, 'test files found').toBeGreaterThan(1500);
+    expect(
+      files.length,
+      'test files walked — V-1033 ratchet: this was > 1500 against a real 3128, so the scan could ' +
+        'have lost half the suite and still reported every file clean',
+    ).toBeGreaterThanOrEqual(3000);
     for (const app of [
       'apps/server',
       'apps/customer-dashboard',
@@ -143,5 +147,29 @@ describe('no test is skipped unconditionally', () => {
     const skipping = new Set(permanentSkips().map((s) => s.where));
     const stale = [...ALLOWED_PERMANENT_SKIPS.keys()].filter((f) => !skipping.has(f)).sort();
     expect(stale, 'exemption(s) for files that no longer skip anything:').toEqual([]);
+  });
+
+  it('CRITICAL the conditional-skip count in this header is derived. V-1033: it read ~63 against a real 144, which is the shape this suite keeps finding — a number written once, describing a population that kept growing. The figure matters here because the whole argument of this file is that conditional skips are FINE and unconditional ones are not, and a reader checking that trade-off is owed the real size of the thing being permitted.', () => {
+    const conditional = allTestFiles().reduce(
+      (n, file) =>
+        n + [...readFileSync(file, 'utf8').matchAll(/\b(?:describe|it|test)\.skipIf\b/g)].length,
+      0,
+    );
+    expect(
+      conditional,
+      "conditional skips across the walked roots — update the count in this file's header in the " +
+        'same commit that moves it',
+    ).toBeGreaterThanOrEqual(140);
+    const header = readFileSync(
+      resolve(REPO_ROOT, 'apps/server/tests/unit/no-permanently-skipped-tests.test.ts'),
+      'utf8',
+    ).slice(0, 2000);
+    const claimed = /this repo uses (\d+) of them/.exec(header);
+    expect(claimed, 'the header no longer states a conditional-skip count').not.toBeNull();
+    const stated = Number(claimed?.[1] ?? 0);
+    expect(
+      Math.abs(stated - conditional),
+      `the header says ${stated} conditional skips; there are ${conditional}`,
+    ).toBeLessThanOrEqual(10);
   });
 });

@@ -44048,3 +44048,35 @@ minute of my writing it. Narrowed and re-verified.
 
 `it(` count unchanged (10). No new file, no ratchet change. `apps/server/tests/unit` green: 1935
 files, 20240 passed.
+
+## V-1033 — the skip audit, and a floor raise I could not prove was worth it
+
+Pivoted off guard-meta to test hygiene: 113 files and 549 tests are reported skipped by the full
+suite, and a test that never runs is coverage that does not exist. Measured: 144 conditional skips and
+ZERO unconditional ones. The two `.skip` hits my scan found are comments inside
+`no-permanently-skipped-tests` and `sdk-*-server-path-parity` DESCRIBING the pattern, not using it —
+caught before it became a claim, which is the eighth time this arc that a scan matched prose.
+
+The class is already guarded, and well: `no-permanently-skipped-tests` exists because eight
+unconditional skips were once found with no comment explaining any of them, one of which would have
+re-pinned a claim the product had outgrown had anyone un-skipped it.
+
+Two things in that file were wrong, and only one of the fixes is honest to call proven.
+
+**The header count was stale, and that fix is proven.** It read "this repo uses ~63 of them",
+describing the conditional skips it permits. There are 144. The number matters here more than most:
+the whole argument of the file is that conditional skips are FINE and unconditional ones are not, so
+a reader weighing that trade-off is owed the real size of what is being permitted. Corrected, and an
+arm now derives it — the count is recomputed from the walked roots and compared against the figure in
+the header, tolerance 10. Reverting the header to 63 reds it.
+
+**The floor raise is NOT proven, and I am recording that rather than implying otherwise.** The arm
+walked 3128 test files behind `toBeGreaterThan(1500)`, so I raised it to 3000 on the V-1026 reasoning.
+But the mutation that should have justified it — truncating the walk to 1600 files, which passes
+`> 1500` — reds the arm under the OLD floor anyway, because that arm's other assertions notice the
+missing files. So the raise is a defensible tightening with no demonstrated failure it catches. On the
+evidence I have it is tidying, not a fix, and the V-1026 result does not transfer just because the
+shape looks the same.
+
+`it(` count 4 → 5. No new file, no ratchet change to the suite gate. `apps/server/tests/unit` green:
+1935 files, 20241 passed.
