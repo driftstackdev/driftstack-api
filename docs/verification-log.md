@@ -39992,3 +39992,45 @@ Removing a route's rejection message fails the route arm.
 
 **Generated Python models unaffected** — query parameters are operation parameters, not model classes,
 so regenerating produced a timestamp-only diff, restored rather than committed.
+
+## V-934 — the response-mirror surface is clean, and both scanner hits were my own bugs (2026-08-19)
+
+**The last unexplored surface in this family.** 36 `*ResponseOpenApi` mirrors. A phantom RESPONSE
+field is worse than a phantom request field: a customer does not merely fail to send it, they read it
+off an object and get `undefined`. Prior art proves the class is real — `openapi.ts` carries a comment
+recording a fixed instance where the SLA endpoint documented
+`{ window_days, uptime_percent, target_percent }` and "the route has never returned any of those
+three. Not one field name overlapped."
+
+**Two checks, both clean.**
+
+- **7 mirrors have a name-matching api-types schema** and are comparable field-for-field: account
+  rate-limits, profile snapshots, validation schedules, MFA challenge / status / step-up, usage
+  series. All seven match on property set AND required set.
+- **29 solo mirrors** checked for phantom fields: every documented field name is produced somewhere in
+  `apps/server/src`. Zero phantoms.
+
+**The two hits I got were both defects in my own scanner, which is the part worth recording.**
+
+Tightening the phantom check from "anywhere in the server" to "this endpoint's own route file"
+produced two suspects, and verifying each killed it:
+
+1. `OAuthTokenResponseOpenApi` — `token_type` and `expires_in` absent from `routes/oauth.ts`. They are
+   built in `services/oauth.ts:651-652` (`token_type: 'Bearer'`, `expires_in: TOKEN_TTL_SECONDS`) and
+   the route sends the service result. Per-route-file scoping is simply wrong for any handler that
+   returns a service object — which is most of them. Worth noting what nearly happened: these are
+   RFC 6749-required fields on a token response, so "absent" would have read as a serious finding, and
+   the narrow scope invented it.
+2. `StatusResponseOpenApi` — five fields "absent". My mirror-to-endpoint mapper matched blocks
+   containing the NAME AS A SUBSTRING, and `StatusResponseOpenApi` is a substring of
+   `MfaStatusResponseOpenApi`, so it resolved to `/v1/account/mfa` and compared a status-page response
+   against an MFA route. The same containment bug as V-922's `re.test(` match, in a different
+   disguise.
+
+So the broader scan gave the right answer and the "more precise" one gave two wrong ones. That is not
+an argument for loose scanning — it is that scope has to match how the code is actually written, and I
+narrowed on an assumption (handlers build their own responses) that the codebase does not hold.
+
+**No source change.** The surface is closed: request bodies, post-parse handler validation, query
+parameters and now responses have each been swept, with the divergences fixed in V-924 through V-933
+and this one measured clean.
