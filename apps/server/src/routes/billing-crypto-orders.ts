@@ -24,6 +24,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { buildReceiptPdfBytes } from '../lib/receipt-pdf.js';
+import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { CryptoOrder, CryptoOrdersService } from '../services/crypto-orders.js';
 
 export interface RegisterCustomerCryptoOrdersRoutesDeps {
@@ -213,6 +214,20 @@ export function registerCustomerCryptoOrdersRoutes(
       const ctx = requireCtx(req);
       const params = parseOrThrow(GetParams, req.params);
       const body = parseOrThrow(UpdateNoteSchema, req.body);
+      // V-986 — the one plain customer write among the six sites the V-985
+      // widening made visible. The harm here is bounded, and worth stating
+      // rather than overselling: `customer_note` is the only field and it is
+      // REQUIRED, so a mistyped `customer_notes` is a missing required field and
+      // answers 400 already. What this catches is the genuinely unknown key —
+      // a caller sending `{ customer_note, tags }` learns `tags` was ignored
+      // instead of assuming it was stored.
+      reportUnknownRequestFields({
+        body: req.body ?? {},
+        knownKeys: knownRequestKeys(UpdateNoteSchema),
+        reply,
+        logger: req.log,
+        route: 'PATCH /v1/billing/crypto-orders/:order_id',
+      });
       const updated = await deps.service.updateCustomerNote({
         order_id: params.order_id,
         account_id: ctx.account.id,

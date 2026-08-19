@@ -934,6 +934,39 @@ describe('V-666.Q PATCH /v1/billing/crypto-orders/:order_id (customer_note)', ()
     expect(body.customer_note).toBe('invoice 2026-05-42');
   });
 
+  it('V-986 CRITICAL reports an unknown field on the note write, and stays quiet without one. This site was invisible to the coverage invariant until V-985 widened it to the parseOrThrow call form, so nothing had ever checked that this write reports. The second half is the half that matters: an arm that only asserts the header on a typo passes just as well against a route that tags every request, including correct ones.', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_unknown_field_note',
+      account_id: fx.accountId,
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    const tagged = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/billing/crypto-orders/ord_unknown_field_note',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { customer_note: 'invoice 7', tags: ['eu'] },
+    });
+    expect(tagged.statusCode, 'reporting, not rejecting').toBe(200);
+    expect(tagged.headers['x-driftstack-unknown-fields']).toBe('tags');
+    // the write still happened — reporting must not cost the caller the update
+    expect(tagged.json<{ customer_note: string | null }>().customer_note).toBe('invoice 7');
+
+    const clean = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/billing/crypto-orders/ord_unknown_field_note',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { customer_note: 'invoice 8' },
+    });
+    expect(clean.statusCode).toBe(200);
+    expect(
+      clean.headers['x-driftstack-unknown-fields'],
+      'a well-formed note write must not be tagged',
+    ).toBeUndefined();
+  });
+
   it('400 on a note > 500 chars', async () => {
     fx = await buildTestApp();
     await fx.cryptoOrdersService.create({

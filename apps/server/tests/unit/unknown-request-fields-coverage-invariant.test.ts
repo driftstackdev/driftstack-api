@@ -143,9 +143,14 @@ const KNOWN_UNREPORTED: ReadonlySet<string> = new Set([
   // protocol endpoints, where echoing a caller's unknown keys back is an RFC
   // question and not a house style one — `/token`, `/introspect` and `/revoke`
   // are consumed by third-party client libraries whose spare fields are their
-  // business. `billing-crypto-orders.ts (UpdateNoteSchema)` is the one plain
-  // customer write among them and the strongest candidate to wire next.
-  'billing-crypto-orders.ts (UpdateNoteSchema)',
+  // business.
+  //
+  // The sixth, `billing-crypto-orders.ts (UpdateNoteSchema)`, is WIRED as of
+  // V-986 and so is absent from this list. V-985 called it "the strongest
+  // candidate to wire next", which overstated it: `customer_note` is that
+  // schema's only field and it is REQUIRED, so a mistyped `customer_notes` was
+  // already a missing-required-field 400 rather than a silent drop. Wiring it
+  // catches the genuinely unknown key, not the mistyped known one.
   'oauth.ts (ApproveAuthorizationBody)',
   'oauth.ts (ExchangeCodeBody)',
   'oauth.ts (IntrospectBody)',
@@ -384,7 +389,9 @@ describe('customer-facing writes report the fields they ignored', () => {
     // counted, so the 16 was a true count of a set that was missing six members.
     // A rise here is only ever legitimate in the same commit as a widening, and
     // the widening is what makes it visible rather than what causes it.
-    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(22);
+    // V-986 — 22 to 21, and this is the rule working normally: the crypto-order
+    // note write now reports, so its key leaves in the same commit as the wiring.
+    expect(KNOWN_UNREPORTED.size, 'backlog entries — may only fall, never rise').toBe(21);
     const live = new Set(
       sites
         .filter((s) => !isExempt(s.file) && !s.reports && !EXEMPT_SCHEMA_NAMES.includes(s.schema))

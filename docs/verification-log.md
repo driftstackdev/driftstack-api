@@ -42030,3 +42030,49 @@ V-984 edited two pages under `apps/docs` and restored them byte-identical, but *
 restore still moves the mtime**, and that guard compares mtimes rather than content. `git status` was
 clean while the suite was red, which is precisely the state that invites a wrong diagnosis. Mutation
 proofs against any file an mtime guard watches need a rebuild afterwards, not just a restore.
+
+## V-986 — wiring the one site worth wiring, and correcting how I described it (2026-08-19)
+
+The crypto-order note write now reports the keys it ignored, so
+`billing-crypto-orders.ts (UpdateNoteSchema)` leaves the backlog in the same commit as the wiring:
+`KNOWN_UNREPORTED` 22 → 21. That is the rule working normally, as against V-985's rise, which was a
+widening.
+
+**V-985 called this "the strongest candidate to wire next" and that overstated it.** `customer_note`
+is the schema's only field and it is REQUIRED — `.nullable()` permits a null value, not a missing
+key — so a mistyped `customer_notes` was already a missing-required-field `400`, never a silent drop.
+What the wiring actually catches is the genuinely unknown key: a caller sending
+`{ customer_note, tags }` now learns `tags` was ignored instead of assuming it was stored. Worth
+doing, and worth describing accurately; the file's own doctrine is that an entry which reads like a
+considered decision while being wrong is worse than no entry.
+
+Paired proof in `billing-crypto-orders.test.ts`, both halves: the header carries `tags` on a write
+that also still applies the note — reporting must not cost the caller the update — and is **absent**
+on a clean write. The second half is the one that matters, since an arm asserting only the typo case
+passes equally against a route that tags every request including correct ones.
+
+Mutation-proved by deleting the reporter: the integration arm reds on the missing header AND the
+coverage invariant reds with the site back in its missing list. Two independent sentinels for one
+change. Restored byte-identical. The first mutation attempt failed to apply — nested quotes in a
+`perl -0pi -e` expression — and its own assert caught it rather than reporting a false green, which
+is the reason every mutation script here asserts its edit landed.
+
+**A measured negative worth recording so nobody derives it again.** V-984 covered docs→spec and V-847
+covers spec→docs; the third quadrant — registered but in NEITHER the spec nor any doc — was
+unmeasured. It holds **five** routes: `/v1/agent-sessions/:id/gui-control-key`,
+`/v1/agent-sessions/:id/transport-report`, `/v1/auth/oauth-client/callback`,
+`/v1/mac-nodes/:id/control` and `/v1/sessions/:id/gui-input`. None is a forgotten customer endpoint:
+two are desktop-client surfaces behind `controlKeyOrAccountAuth`, one is internal-admin scoped, one
+is a browser redirect target consumed by the SPA, and `gui-input` is gated on `gui_control` — which
+is sweep finding 1 and already an open decision. No defect, no guard added; a guard here would pin
+an audience judgement rather than a fact.
+
+Two claims from V-984 re-verified rather than assumed, since both were generalisations I made from a
+single case: all three unpublished endpoints really are absent from all three SDKs, and
+`docs-response-examples-match-the-spec` really does SKIP them — the schema lookup returns undefined
+for a path the spec does not carry and the loop continues, which that file already counts among its
+skips. Both hold.
+
+`npm run typecheck` exit 0. Full suite at V-985 before this batch: 2981 files passed, 109 skipped
+(3090), 30049 tests passed, 540 skipped, exit 0 — the file count matching `EXPECTED_TEST_FILES_ALL`
+exactly.
