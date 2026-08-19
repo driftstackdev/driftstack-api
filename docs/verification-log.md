@@ -39772,3 +39772,50 @@ without it.
 bounds in V-927, this one), 8 clean. The mechanized comparison I tried first is not usable — it
 compared only 6 of 73 endpoints and two of its three hits were its own extraction bugs, so it is
 abandoned rather than refined, on the V-903 precedent.
+
+## V-929 — the published admin-refund body described a request that could not succeed (2026-08-19)
+
+**The worst mirror divergence in the set.** `POST /v1/admin/accounts/{id}/refund-record` parses with
+`RecordRefundRequestSchema`, which REQUIRES `external_reference` — the Stripe charge / payment_intent
+/ invoice id being refunded, 3–120 chars. The hand-written mirror in `openapi.ts` omitted that field
+entirely. A body built from the published document was missing a required key **every time**, so the
+endpoint answered 400 for the document's own example shape.
+
+Three further errors in the same eight lines:
+
+- it advertised **`stripe_refund_id`**, a field that appears NOWHERE else in the repository — not in
+  the route, not in a schema, not in the admin panel. Verified with a repo-wide search: the only
+  occurrence was the mirror declaring it;
+- it marked `currency` **required**, where the route defaults it to USD;
+- it published a 2000-character `reason` cap against an **enforced 500**.
+
+**Nobody was broken by it, and that is the interesting part.** The admin panel posts
+`external_reference` correctly (`account-detail.astro`), the route works, the integration and e2e
+tests pass. Only the contract was wrong — so the defect was invisible to every test in the repo
+because nothing tested the document. The cost is that the document was unusable for anyone building
+against it: the first integration attempt fails, and the second is written by reading the source
+instead.
+
+**Fixed by pointing the document at the schema rather than at a corrected copy.** Both admin bodies
+now reference `RecordRefundRequestSchema` / `AddSupportNoteRequestSchema` directly. The audit-note
+mirror happened to MATCH its schema exactly, and it was replaced anyway — a matching copy is still a
+copy, and it only stays in step until someone edits one side.
+
+**A third fix, and a keyword instead of a shape change.** `PATCH /v1/account/me/bundled-llm-settings`
+refines "at least one of consent / monthly_cap_usd_cents", which per V-924 never reaches the
+document: the published body had no `required` at all and described `{}` as valid. V-926 solved that
+shape with a union, but this file already records that unions cannot carry `.openapi()` in this
+zod-to-openapi version — a union here would have dropped the `PatchBundledLlmRequest` component name
+the generated Python model is built from. `minProperties: 1` states the same rule, reaches JSON
+Schema, and keeps the component.
+
+**The generated Python models needed no change, checked rather than assumed.** All three bodies are
+inline except the bundled-llm component, and `minProperties` has no Pydantic expression, so
+regenerating produced a timestamp-only diff. Restored to HEAD rather than committing the churn; 365
+Python tests pass.
+
+**Proofs.** Restoring the pre-fix mirror into the document fails three arms by name — the required
+set, the phantom field, and the reason cap. Deleting `minProperties` fails the fourth.
+
+**Mirror tally: 18 hand-checked, 7 divergent, 11 clean.** Remaining: the OAuth-client pair, the
+incident idempotent body, the profile transfer/launch bodies, and the account-organization PUT.

@@ -150,6 +150,8 @@ import {
   PutIncidentResponseSchema,
   ResolveIncidentRequestSchema,
   OpenVpnProxyConfigSchema,
+  RecordRefundRequestSchema,
+  AddSupportNoteRequestSchema,
   WireGuardProxyConfigSchema,
 } from '@driftstack/api-types';
 // S33 2026-07-07 (fable-truth-audit) — the cookie shape the agent-session
@@ -1779,7 +1781,14 @@ function buildRegistry(): OpenAPIRegistry {
       monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000).optional(),
     })
     .describe('At least one of consent / monthly_cap_usd_cents must be present.')
-    .openapi('PatchBundledLlmRequest');
+    // V-929 — `minProperties: 1` states that rule in JSON Schema instead of only
+    // in prose. The route refines it, and per V-924 a refine never reaches the
+    // document, so the published body had no `required` at all and described `{}`
+    // as valid against an endpoint that answers 400 for it. A union would express
+    // it too, but this file already records that unions cannot carry `.openapi()`
+    // in this zod-to-openapi version — that would drop the component name the
+    // generated Python model is built from.
+    .openapi('PatchBundledLlmRequest', { minProperties: 1 });
   const BundledLlmStatusOpenApi = z
     .object({
       consent: z.boolean(),
@@ -2690,9 +2699,10 @@ function buildRegistry(): OpenAPIRegistry {
       404: { description: 'Account not found.', content: problemContent },
     },
   });
-  const AdminAuditNoteRequestOpenApi = z.object({
-    note: z.string().min(1).max(2000),
-  });
+  // V-929 — the real schema, not a copy of it. This mirror happened to match,
+  // but a matching copy is still a copy: the pair only stays in step until
+  // someone edits one side.
+  const AdminAuditNoteRequestOpenApi = AddSupportNoteRequestSchema;
   registerRoute(r, {
     method: 'post',
     path: '/v1/admin/accounts/{id}/audit-note',
@@ -2714,12 +2724,13 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
-  const AdminRefundRecordRequestOpenApi = z.object({
-    amount_cents: z.number().int().positive(),
-    currency: z.string().length(3),
-    reason: z.string().min(1).max(2000),
-    stripe_refund_id: z.string().optional(),
-  });
+  // V-929 — the real schema. The mirror it replaces was wrong in four ways at
+  // once: it omitted `external_reference`, which the route REQUIRES, so a body
+  // built from this document could never succeed; it advertised a
+  // `stripe_refund_id` field that exists nowhere in the codebase; it marked
+  // `currency` required when the route defaults it to USD; and it published a
+  // 2000-character `reason` cap against an enforced 500.
+  const AdminRefundRecordRequestOpenApi = RecordRefundRequestSchema;
   registerRoute(r, {
     method: 'post',
     path: '/v1/admin/accounts/{id}/refund-record',

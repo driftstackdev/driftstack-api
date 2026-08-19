@@ -3098,7 +3098,8 @@
             "maximum": 1000000
           }
         },
-        "description": "At least one of consent / monthly_cap_usd_cents must be present."
+        "description": "At least one of consent / monthly_cap_usd_cents must be present.",
+        "minProperties": 1
       },
       "AccountOrganization": {
         "type": "object",
@@ -19038,6 +19039,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "external_reference": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120
+                  },
                   "amount_cents": {
                     "type": "integer",
                     "exclusiveMinimum": 0
@@ -19050,13 +19056,10 @@
                   "reason": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 2000
-                  },
-                  "stripe_refund_id": {
-                    "type": "string"
+                    "maxLength": 500
                   }
                 },
-                "required": ["amount_cents", "currency", "reason"]
+                "required": ["external_reference", "amount_cents", "reason"]
               }
             }
           }
